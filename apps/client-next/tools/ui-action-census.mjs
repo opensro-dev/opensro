@@ -48,6 +48,7 @@ import { fileURLToPath } from "node:url";
 import { CLIENT_PUBLIC_ROOT } from "../../../scripts/lib/generatedRoot.mjs";
 import { EXPANDED_BUILD } from "../../../scripts/lib/expandedBuild.mjs";
 import { lostNativeRow } from "./census-expanded.mjs";
+import { replacedWindows } from "./replaced-windows.mjs";
 import "../tests/helpers/native-source-loader.mjs";
 import { censusWorkerCount } from "./censusWorkers.mjs";
 import { root } from "./project.mjs";
@@ -59,6 +60,7 @@ const { fortressPacket } = await import( "../src/engine/foundation/gameplay/fort
 const { fortressProductionQuery } = await import(
 	"../src/engine/foundation/gameplay/fortress-production.ts"
 );
+const { academyBootstrap } = await import( "../src/engine/foundation/gameplay/academy.ts" );
 
 const CENSUS_PATH = path.join( root, "tests/runtime/ui-action-census.json" );
 const KEYS = [ "Escape", "Enter", "F1", "F2", "F3", "F4", "KeyR" ];
@@ -233,17 +235,12 @@ const OPENERS = {
 		f.ui.event( { kind: "activate", id: "open-window:Storage" } );
 	},
 	"Academy Matching"( f ) {
-		f.state.gameplay.academy = { member: false, rows: [], request: null, page: 0 };
+		f.state.gameplay.academy = academyBootstrap( { academyMember: false } );
 		f.ui.event( { kind: "activate", id: "open-window:Academy Matching" } );
 	},
 	"Academy honor"( f ) {
 		f.state.gameplay.academy = {
-			member: false,
-			rows: [],
-			request: null,
-			page: 0,
-			pages: 0,
-			result: null,
+			...academyBootstrap( { academyMember: false } ),
 			honorRanks: {
 				rows: [ { ranking: 1, rank: 1, name: "Mentor", level: 60, maxLevel: 80, graduates: 3, guild: "" } ],
 				sequence: 1
@@ -684,8 +681,11 @@ async function main() {
 		console.log( `ui-action-census: up to date (${sceneCount} scenes, ${rowCount} control rows)` );
 		return;
 	}
-	if ( current && EXPANDED_BUILD ) {
-		const lost = lostNativeRow( JSON.parse( current ), table, canonical );
+	// A build that replaces a native window with a later client's is checked
+	// as an expanded one: the window defines its own controls (#3971).
+	const replaced = replacedWindows().map( window => window.controlPrefix );
+	if ( current && (EXPANDED_BUILD || replaced.length > 0) ) {
+		const lost = lostNativeRow( JSON.parse( current ), table, canonical, replaced );
 		if ( lost === undefined ) {
 			console.log( `ui-action-census: every native row survives the expanded build (${rowCount} control rows)` );
 			return;

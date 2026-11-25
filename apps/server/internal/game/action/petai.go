@@ -159,6 +159,17 @@ type petSession struct {
 	roar    *petRoarCast
 	// combat is the attack pet's BATTLE state (petcombat.go); nil follows.
 	combat *petCombatIntent
+	// stallTarget/stallUntilMs pause the un-ordered re-pick of a target
+	// a fight yielded on (petrecovery.go): without the pause, the
+	// mercenary sight acquisition sends the pet straight back. An
+	// admitted owner order on the target clears the pair instead.
+	stallTarget  uint32
+	stallUntilMs int64
+	// followProgress is the follow lane's watchdog (petrecovery.go).
+	followProgress petProgress
+	// notices are frames for the owner a step raised (the obstacle
+	// refusal of an ordered fight), drained by advancePetSession.
+	notices []simulation.Frame
 	// others holds kill-settlement frames for other characters (a party's
 	// shared experience), drained with public by advancePets.
 	others []RecipientFrames
@@ -568,6 +579,8 @@ func (rt *Runtime) advancePetSession(key petOwnerKey, state *petSession, nowMs i
 		if answerStuck != nil {
 			output = append(output, answerStuck()...)
 		}
+		output = append(output, state.notices...)
+		state.notices = nil
 	}()
 	// The session binds the canonical character pointer. Avoid searching the
 	// division's entire saved-character population on every pet tick. The
@@ -680,7 +693,9 @@ func (rt *Runtime) advancePetSession(key petOwnerKey, state *petSession, nowMs i
 	}
 	if rt.companionMovementBlocked(key.division, snapshot, cos) {
 		state.roar = nil
-		rt.cancelPetCombat(key, state, nowMs)
+		// A blocking status pauses the fight; the intent resumes on
+		// expiry (#4214).
+		rt.pausePetCombat(key, state, nowMs)
 		return state.mover.AnyFollower().Stop(nowMs)
 	}
 	block := rt.cosAbnormal(key.division, snapshot.Name, cos.GID)
@@ -734,6 +749,9 @@ func (rt *Runtime) advancePetSession(key petOwnerKey, state *petSession, nowMs i
 		for _, f := range result.Frames {
 			frames = append(frames, simulation.Frame{Opcode: f.Opcode, Payload: f.Payload, Current: f.Current, Scope: f.Scope})
 		}
+		return frames
+	}
+	if frames, done := rt.resolvePetFollow(key, state, snapshot, cos, ref.TidWord, owner, nowMs); done {
 		return frames
 	}
 	if ref.TidWord>>11 >= 3 && ref.TidWord>>11 <= domain.MercenaryBand {
@@ -883,7 +901,9 @@ func (rt *Runtime) companionPresentation(division string, state *petSession, cos
 		}
 		world, _ = state.mover.World(cos.GID)
 		if cos.Mounted {
-			world = rt.Worlds.Snapshot(simulation.WorldKey(division, c.Name), func() simulation.WorldState { return simulation.SeedWorldState(c) })
+			// The tick reads the rider at its own time (liveWorld), not a
+			// re-step of the walk prepare already advanced (2026-11-24 profile).
+			world = rt.liveWorld(simulation.WorldKey(division, c.Name), c, now)
 		}
 	} else {
 		if state.mover.AnyFollower() == nil || cos.GID != state.mover.AnyFollower().GID() || cos.RefObjID != state.refObjID {

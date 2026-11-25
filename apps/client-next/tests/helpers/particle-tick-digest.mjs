@@ -5,7 +5,7 @@ particle-tick-digest.mjs - a digest of every particle graph tick in the catalogu
 
 The oracle for changes to the particle graph tick
 (src/engine/foundation/animation/particle-graph.ts) that must not change
-its results: every effect of /assets/effects/programs.json with a particle
+its results: every published effect program with a particle
 graph runs through three scenarios, and after every call a sha256 takes in
 the whole graph state (clock, random cursor, root, every slot below each
 emitter's slots in use with its links, group totals in group order, the
@@ -36,14 +36,20 @@ An effect whose tick throws keeps the error message in its digest and
 ends that scenario there.
 
 tools/particle-tick-digest.mjs writes tests/fixtures/particle-tick-digest.json;
-tests/runtime/particle-tick-digest.test.mjs holds the tick to it.
+tests/runtime/particle-tick-digest-NN.test.mjs hold the tick to it, one
+path range (shard) each, and particle-tick-digest.test.mjs holds the
+comparison rules and the ranges' coverage.
 
 ===========================================================================
 */
 import "./native-source-loader.mjs";
 import { createHash } from "node:crypto";
+import { existsSync, readFileSync } from "node:fs";
 import { CLIENT_PUBLIC_ROOT } from "../../../../scripts/lib/generatedRoot.mjs";
-import { readPublishedAssetBytesSync } from "../../../../scripts/lib/publishedAsset.mjs";
+import { EXPANDED_BUILD } from "./expanded-build.mjs";
+import { vsroItemGlowRoot } from "../../../../scripts/build/char/equipmentGlowMetadata.mjs";
+import { createCatalogEffects } from "./effect-programs.mjs";
+import { readEffectCatalogSync } from "../../../../scripts/lib/effectCatalog.mjs";
 
 const SOURCE = new URL( "../../src/engine/", import.meta.url );
 
@@ -56,7 +62,6 @@ async function load( path ) {
 	return import( new URL( path, SOURCE ).href );
 }
 
-const { createEffectPrograms } = await load( "runtime/assets/worker/effects/program/program.ts" );
 const { advanceParticleGraph } = await load( "foundation/animation/particle-graph.ts" );
 const { createParticleGraph, ROOT_SLOT, SLOT_ALIVE, SLOT_OCCUPIED, SLOT_RELEASED, SLOT_SNAPSHOT } = await load(
 	"foundation/animation/particle-graph-slots.ts"
@@ -412,25 +417,123 @@ function scenarioDigest( model, path, scenario, table, values ) {
 	return hash.digest( "hex" ).slice( 0, DIGEST_DIGITS );
 }
 
+// The first effect path of shards 2 to 20: ranges over the sorted effect
+// paths, cut so that each shard's tick took about the same time when the
+// catalogue was timed effect by effect (2026-11-21: the whole catalogue
+// 122 s on the measuring workstation, the unsplit test file 125 s there
+// and 280 s in the release's package step; the dear ranges are the
+// system/ fireworks, up to 5 s for one effect). Membership is by path
+// order alone, so an effect the catalogue gains or loses belongs to
+// exactly one shard whatever the fixture holds. Re-cut the ranges the
+// same way when a shard's printed time nears the per-file budget.
+export const PARTICLE_TICK_SHARD_STARTS = [
+	"hiteffect/hit_4_break_a.efp",
+	"map/pokpomulbangul.efp",
+	"monster/eu/skill/skill_hanga_ac2_dust.efp",
+	"monster/eu/skill/skill_tombgeneral_ac1_ground.efp",
+	"monster/skill_bonemage_magicattack_motion.efp",
+	"monster/skill_tombstone_force_shot_01.efp",
+	"skill/china/cold_gigongta_keep_d.efp",
+	"skill/china/lightning_gigongta_keep_c.efp",
+	"skill/china/water_resurrection_effect_b.efp",
+	"skill/europe/cleric_saint_holyword_a.efp",
+	"skill/europe/warlock_blood_touch_hit_a.efp",
+	"skill/europe/wizard_fire_blow_a.efp",
+	"system/firework_star_shower.efp",
+	"system/item_charge_damage_down.efp",
+	"system/item_firework_bomb_g.efp",
+	"system/item_firework_bomb_r.efp",
+	"system/item_firework_bomb_v.efp",
+	"system/item_firework_spin.efp",
+	"system/item_qt_int_01.efp"
+];
+export const PARTICLE_TICK_SHARD_COUNT = PARTICLE_TICK_SHARD_STARTS.length + 1;
+
 /*
 ================
-particleTickDigests
+particleTickShardIndex
 
-{ path: "S1 S2 S3" } for every catalogue effect with a particle graph, in
-catalogue order.
+The shard (0-based) an effect path belongs to: how many shard starts it
+reaches. Every path belongs to exactly one shard, recorded or not.
 ================
 */
-export function particleTickDigests() {
-	const bytes = readPublishedAssetBytesSync( "/assets/effects/programs.json", CLIENT_PUBLIC_ROOT );
-	const catalog = JSON.parse( new TextDecoder().decode( bytes ) );
-	const decoder = createEffectPrograms(), table = particleRandomTable(), values = createValues();
+export function particleTickShardIndex( path ) {
+	let shard = 0;
+	while ( shard < PARTICLE_TICK_SHARD_STARTS.length && PARTICLE_TICK_SHARD_STARTS[shard] <= path ) shard++;
+	return shard;
+}
+
+/*
+================
+tickDigests
+
+{ path: "S1 S2 S3" } for the catalogue effects with a particle graph,
+in catalogue order; one shard's when shard is 0-based, all of them when
+it is negative. The shard is chosen by path before the effect decodes,
+so a shard pays only for its own effects.
+================
+*/
+function tickDigests( shard ) {
+	const published = readEffectCatalogSync( CLIENT_PUBLIC_ROOT );
+	const decoder = createCatalogEffects(), table = particleRandomTable(), values = createValues();
 	const scenarios = SCENARIOS.map( scenarioCalls ), digests = {};
-	for ( const path of Object.keys( catalog.effects ) ) {
-		const model = decoder.decode( bytes, path ).model;
+	for ( const path of Object.keys( published.effects ) ) {
+		if ( shard >= 0 && particleTickShardIndex( path ) !== shard ) continue;
+		const model = decoder.decode( published, path ).model;
 		if ( !model.particleGraph?.length ) continue;
 		digests[path] = scenarios.map( scenario => scenarioDigest( model, path, scenario, table, values ) ).join( " " );
 	}
 	return digests;
+}
+
+/*
+================
+particleTickDigests
+
+The whole catalogue's digests (the fixture tool's table).
+================
+*/
+export function particleTickDigests() {
+	return tickDigests( -1 );
+}
+
+/*
+================
+particleTickShardDigests
+
+One shard's digests from the catalogue this build published.
+================
+*/
+export function particleTickShardDigests( shard ) {
+	return tickDigests( shard );
+}
+
+/*
+================
+particleTickShardExpected
+
+One shard's recorded digests, read from the fixture.
+================
+*/
+export function particleTickShardExpected( shard ) {
+	const recorded = JSON.parse( readFileSync( DIGEST_PATH, "utf8" ) ).effects, expected = {};
+	for ( const path of Object.keys( recorded ) ) {
+		if ( particleTickShardIndex( path ) === shard ) expected[path] = recorded[path];
+	}
+	return expected;
+}
+
+/*
+================
+particleTickAddsEffects
+
+Whether this build adds effects to the native catalogue: the variant,
+or the optional glow import the asset build reads when it is present
+(the test file's ADDS_EFFECTS before the split).
+================
+*/
+export function particleTickAddsEffects() {
+	return EXPANDED_BUILD || existsSync( vsroItemGlowRoot );
 }
 
 /*

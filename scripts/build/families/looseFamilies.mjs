@@ -78,6 +78,10 @@ import {
 } from "../world/assets/copySkyImages.mjs";
 import { publicRoot, retailTextdataRoot } from "../world/paths.mjs";
 import { claimPublicPaths, withPublication } from "../shared/publicationLedger.mjs";
+import {
+	EFFECT_PROGRAM_INDEX,
+	effectProgramIndexFiles
+} from "../../../apps/client-next/src/engine/foundation/assets/effect-programs.ts";
 
 // The CIFButton state family (CIFCloseButton_OnCreate) for the quickslot and return-scroll
 // buttons; none of these ships a _disable.
@@ -188,6 +192,24 @@ async function packedJson( publicPaths ) {
 
 /*
 ================
+effectProgramFiles
+
+The published effect-program closure (#3951): its index, one file per
+effect, one per BMS mesh, and the particle textures they draw. The files
+are plain JSON, packed as the full build packs raw JSON (game-data).
+================
+*/
+async function effectProgramFiles() {
+	const index = await readPublicJson( EFFECT_PROGRAM_INDEX );
+	return [
+		EFFECT_PROGRAM_INDEX,
+		...effectProgramIndexFiles( index ),
+		...new Set( Object.values( index.textures ) )
+	];
+}
+
+/*
+================
 toPublic
 
 The /assets/... path of a file under the public root.
@@ -255,7 +277,7 @@ entityBsrGroup
 ================
 */
 function entityBsrGroup( file ) {
-	if ( file.endsWith( ".gz" ) ) return "game-data";
+	if ( file.endsWith( ".gz" ) || file.endsWith( ".json" ) ) return "game-data";
 	if ( file.endsWith( ".glb" ) || file.endsWith( ".vat.bin" ) ) return "game-models";
 	return imagePackGroup( file );
 }
@@ -290,12 +312,11 @@ async function produceEntityBsr( flags ) {
 	}
 	const dependencies = [ ...new Set( manifests ) ];
 	await refreshPrecompressedSidecars( dependencies.map( publicFile ), { onlyWhenStale: true } );
-	const programs = await readPublicJson( "/assets/effects/programs.json" );
-	const json = [ ...dependencies.filter( url => url.endsWith( ".json" ) ), "/assets/effects/programs.json" ];
+	const json = dependencies.filter( url => url.endsWith( ".json" ) );
 	const other = [
 		...new Set( [
 			...dependencies.filter( url => !url.endsWith( ".json" ) ),
-			...Object.values( programs.textures )
+			...await effectProgramFiles()
 		] )
 	];
 	return {
@@ -505,15 +526,13 @@ export const LOOSE_FAMILIES = {
 		kind: "refresh",
 		label: "effect resources",
 		packFolder: "effects",
-		defaultGroup: file => file.endsWith( ".gz" ) ? "game-data" : imagePackGroup( file ),
+		defaultGroup: file => /\.(?:gz|json)$/.test( file ) ? "game-data" : imagePackGroup( file ),
 		async produce() {
-			const catalog = await readPublicJson( "/assets/effects/programs.json" );
 			const records = await packedJson( [
 				"/assets/skill/effectRecords.json",
-				"/assets/skill/namedEffectRecords.json",
-				"/assets/effects/programs.json"
+				"/assets/skill/namedEffectRecords.json"
 			] );
-			return { files: [ ...records, ...new Set( Object.values( catalog.textures ) ) ] };
+			return { files: [ ...records, ...await effectProgramFiles() ] };
 		}
 	},
 	// The renderer's terrain dependency must be published, not merely present in
@@ -581,7 +600,8 @@ export const LOOSE_FAMILIES = {
 		packFolder: "native-window",
 		defaultGroup: "native-ui",
 		async produce() {
-			const output = execFileSync( pythonExecutable(), [ NATIVE_WINDOW_SCRIPT ], {
+			const python = pythonExecutable();
+			const output = execFileSync( python.command, [ ...python.args, NATIVE_WINDOW_SCRIPT ], {
 				encoding: "utf8",
 				env: process.env
 			} );

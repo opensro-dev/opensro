@@ -39,6 +39,7 @@ import (
 	"opensro.online/server/internal/game/social/crest"
 	"opensro.online/server/internal/game/social/guildwar"
 	"opensro.online/server/internal/game/social/union"
+	"opensro.online/server/internal/game/staff"
 	"opensro.online/server/internal/game/world/fortress"
 	"opensro.online/server/internal/game/world/optionalteleport"
 	"opensro.online/server/internal/game/world/simulation"
@@ -60,18 +61,20 @@ barrier.
 ==================
 */
 type Runtime struct {
-	// Port-only server actors report committed player hits outside the authority door.
 	// ServerActorHit reports a player strike on a RuntimeOnly actor; fatal is
 	// the combat authority's own verdict (the actor's AI keeps a copy of HP).
-	ServerActorHit    func(division, victim, attacker string, damage int, fatal bool, nowMs int64)
-	berserkActors     sync.Map // derived expiry index; character store owns state
-	spiritActors      sync.Map // attached Devil's Spirit lapse index (spiritability.go)
-	battleActors      sync.Map // battle-state expiry index (battlestate.go)
-	cosRefusalLog     sync.Map // cosground.go: cosRefusalKey -> *cosRefusalWindow (refusal log rollup)
-	cosRefusalTotals  sync.Map // cosground.go: cause string -> *atomic.Uint64 (refusal metric)
-	aggressionActors  sync.Map // scheduled counters; character owns aggression entries
-	caravanThiefMarks sync.Map // tradetiers.go (#2958): thief character id -> caravanThiefMark, session only
-	caravanStarDueMs  int64    // tradetiers.go (#2958): next 5-star caravan roster push
+	ServerActorHit          func(division, victim, attacker string, damage int, fatal bool, nowMs int64)
+	berserkActors           sync.Map         // derived expiry index; character store owns state
+	spiritActors            sync.Map         // attached Devil's Spirit lapse index (spiritability.go)
+	battleActors            sync.Map         // battle-state expiry index (battlestate.go)
+	cosRefusalLog           sync.Map         // cosground.go: cosRefusalKey -> *cosRefusalWindow (refusal log rollup)
+	cosRefusalTotals        sync.Map         // cosground.go: cause string -> *atomic.Uint64 (refusal metric)
+	diagnosticRefusalTotals sync.Map         // register.go: DiagnosticRefusal reason -> *atomic.Uint64 (#4222)
+	aggressionActors        sync.Map         // scheduled counters; character owns aggression entries
+	caravanThiefMarks       sync.Map         // tradetiers.go (#2958): thief character id -> caravanThiefMark, session only
+	caravanStarDueMs        int64            // tradetiers.go (#2958): next 5-star caravan roster push
+	hwanRosterDueMs         int64            // hwan.go: next Blue Berserk level roster push
+	hwanRosterSent          map[uint32]uint8 // hwan.go: the levels the last roster push named
 	// instanceWorlds tracks the instanced layers opened on demand
 	// (instance_world.go): the owning lease and deadline per layer.
 	instanceWorlds sync.Map // instanceWorldKey -> trackedInstanceWorld
@@ -85,6 +88,9 @@ type Runtime struct {
 	marketProceedsAt atomic.Int64
 	// gmSpeeds holds each GM's /SETSPEED percent (gmspeed.go), session only.
 	gmSpeeds sync.Map
+	// logoutBlocks holds the characters a GM's /BLOCKLOGOUT keeps in the
+	// world (departure.go), until /ALLOWLOGOUT or a GameWorld restart.
+	logoutBlocks sync.Map
 	// GMSetSpeed admits /SETSPEED (port-only, SRO_GM_SETSPEED; off is native).
 	GMSetSpeed bool
 	// GMItemForge admits /FORGE (port-only, SRO_GM_ITEM_FORGE, issue #1980;
@@ -102,6 +108,14 @@ type Runtime struct {
 	// flagWarLive is the live Capture the Flag match book, keyed by
 	// division (flagwar_match.go).
 	flagWarLive flagWarMatches
+	// Styria is the Styria Clash schedule (port-only, #3648):
+	// SRO_STYRIA_CLASH_START_UTC and SRO_STYRIA_CLASH_MIN_PER_SIDE,
+	// wired from env. Read live by styriaSettings().
+	Styria StyriaSettings
+	// styria is the Styria Clash engine state (registration and
+	// match books), built by ConfigureStyria while SRO_STYRIA_CLASH
+	// is on; nil is the feature off (styria.go).
+	styria *styriaEvent
 	// TeamDeathTownRule sends a team death to the town rule (port-only,
 	// SRO_TEAM_DEATH_REVIVE off; the zero value is native, teamdeath.go).
 	TeamDeathTownRule bool
@@ -278,9 +292,24 @@ type Runtime struct {
 	sookArena *sookArenaRuntime
 	// roc runs the Roc worlds (roc.go); nil with SRO_ROC off.
 	roc *rocRuntime
+	// sanctums runs the temple sanctums' scheduled gates
+	// (temple_sanctum.go); nil with SRO_PHARAOH_TEMPLE off.
+	sanctums *sanctumRuntime
+	// tombGate is the Sarin gate's schedule (tombgate.go); nil with the
+	// shipped tomb off.
+	tombGate *tombGateRuntime
+	// macro opens the SRO Macro settings lane (macro.go); false, the
+	// default, is native: SRO_AUTO_MACRO off.
+	macro bool
 	// muhanChanges is the Muhan change pairing by change NPC codename
 	// (muhan_change.go). Port-only, not native: empty unless SRO_MUHAN is on.
 	muhanChanges map[string]muhanChange
+
+	// rigidScrollReady is the Rigid summon scrolls' family cooltime,
+	// the next usable millisecond by character name (rigidsummonscroll.go,
+	// later-native). Runtime-only, like the native per-user timer:
+	// a relog starts it over.
+	rigidScrollReady map[string]int64
 
 	// NpcSpawn scopes the 0x745A liveness gate's NPC-gid domain to the
 	// same env gates that put the roster on the wire (select.go); tests
@@ -291,6 +320,11 @@ type Runtime struct {
 	// independent copy so tests and future shard configuration cannot mutate
 	// another runtime or bootstrap's object list.
 	NpcRoster []simulation.NpcDef
+
+	// worldNpcs are the static NPCs that stand only in one world
+	// definition's layers (worldnpc.go), the runtime's own copy as for
+	// NpcRoster: the Muhan pairing gives its change NPCs Talk in place.
+	worldNpcs []simulation.WorldNpc
 	portals   *portalCatalog
 	// reverseMapPoints is the reverse return scroll's map table, empty
 	// unless SRO_REVERSE_RETURN_MAP is on (ConfigureReverseReturnMap).
@@ -373,6 +407,8 @@ type Runtime struct {
 	caravanHadTransport map[string]bool
 	// petDiag throttles the attack pet fight log (petdiagnostics.go).
 	petDiag petDiagnostics
+	// petRecovery counts the pets resolved for want of a way (petrecovery.go).
+	petRecovery petRecoveryCounters
 	// placements counts non-walk placements inside a closed object
 	// (placementguard.go).
 	placements  placementGuard
@@ -562,6 +598,21 @@ type Runtime struct {
 	// nothing extra.
 	NameChangeScroll bool
 
+	// MallEarnedTradable is the mall purchase rule (#4133,
+	// SRO_EARNED_SILK_TRADABLE; itemmall.go): a purchase paid wholly
+	// from earned silk delivers a tradable item. The zero value is
+	// native: every mall purchase is account-bound, whatever paid.
+	// Composition assigns EarnedSilkTradableFromEnv, whose shipped
+	// default is on.
+	MallEarnedTradable bool
+
+	// EquipSwitch enables each port-only equipment switch scroll by kind
+	// (SRO_WEAPON_SWITCH_SCROLL, SRO_ARMOR_SWITCH_SCROLL,
+	// SRO_ACCESSORY_SWITCH_SCROLL; commerce/equipswitch.go). A missing
+	// kind, and the nil zero value, is native: the donor item keeps its
+	// unsupported-use answer.
+	EquipSwitch map[commerce.EquipSwitchKind]bool
+
 	// SealDrops counts sealed drops for the weekly board (sealboard.go;
 	// port-only, not native). Nil, the default, counts nothing; the
 	// composition root installs the counter only when EnvSealBoard is on.
@@ -572,6 +623,10 @@ type Runtime struct {
 	// installs platform/jobhonor only when EnvJobHonor is on.
 	JobHonor     JobHonorSink
 	jobHonorRuns honorRuns
+	// JobHonorRoll is the honor ambush's own roll domain (jobhonor.go).
+	// Nil is the secure roll; never the caravan's domain, whose draws
+	// are the native bandits' and fall where they fall natively.
+	JobHonorRoll combat.Roll32767
 
 	// SunDrops counts Sun drops for the #2538 measurement cycle
 	// (sundrops.go; port-only, not native, count-only). Nil, the
@@ -638,6 +693,10 @@ type Runtime struct {
 	// warehouse gold deposit (goldcaps.go; port-only, not native). False is
 	// native: 1,000,000,000 and 100,000,000, with the native u32 offer wire.
 	RaisedGoldCaps bool
+	// StorageGoldDepositLimit is the shard's chosen warehouse deposit cap
+	// (goldcaps.go; port-only, not native). Zero keeps the switch's two
+	// values: 1,000,000,000 with RaisedGoldCaps, else the native 100,000,000.
+	StorageGoldDepositLimit uint64
 	// TeleportGrace makes a teleport arrival untouchable for the revival's
 	// grace (teleportprotection.go; port-only, not native). False is native.
 	TeleportGrace bool
@@ -753,6 +812,14 @@ type Runtime struct {
 	AdvanceQuestItem     func(*enterworld.Character, int64) []wire.Frame
 	ForgetQuestItem      func(*enterworld.Character)
 	UseQuestItem         func(*enterworld.Character, string, simulation.Spawn, int64) ([]wire.Frame, bool)
+	// HwanLevel answers a character's Blue Berserk level (the quest owner's
+	// derived value, quest/hwan_level.go); nil is level 0 (hwan.go).
+	HwanLevel func(*enterworld.Character) uint8
+	// SetHwanLevel is the quest owner's /SETBERSERK seat (hwan.go); nil refuses.
+	SetHwanLevel func(*enterworld.Character, uint8) bool
+	// WalkAllowed is the quest arena's leash for position skills (the same hook movement holds a walk with,
+	// quest/hwan_arena.go): false for a pose the character may not move to; nil allows every pose.
+	WalkAllowed func(*enterworld.Character, simulation.Spawn) bool
 	// CapturedFollowerDied tells a capture-escort quest its captured monster
 	// died (a captured COS); called inside the owner's character door.
 	CapturedFollowerDied        func(*enterworld.Character) []wire.Frame
@@ -836,6 +903,15 @@ type Runtime struct {
 	// LineOfSight). Nil admits every line; the composition root wires it.
 	LineOfSight func(from simulation.Spawn, fromOwner simulation.NavOwner, to simulation.Spawn) bool
 
+	// TalkSight is the NPC talk test (port-only, #4125; owner ruling
+	// 2026-11-23: a native bug is not copied, and natively neither the
+	// client pick nor the server gate tests sight at all). Like
+	// LineOfSight, except a walk that arrives within talk distance also
+	// admits, so a merchant behind her stall counter stays usable while
+	// an NPC behind a wall does not (movement.Runtime.TalkSight). Nil
+	// admits every NPC; the composition root wires it.
+	TalkSight func(from simulation.Spawn, fromOwner simulation.NavOwner, to simulation.Spawn) bool
+
 	// ProposalPending reports an unanswered 0x3393 prompt of any lane for
 	// a character. The native transaction manager holds one per player
 	// (it inserts uniquely), so a second proposal is dropped.
@@ -881,6 +957,17 @@ type Runtime struct {
 	// use, gated by the minimum level alone.
 	StatRecallWindows bool
 
+	// ResetScrolls holds which reset scrolls are on (commerce/resetscrolls.go,
+	// one switch each; port-only, not native). A scroll whose kind is
+	// missing or false is refused and kept.
+	ResetScrolls map[commerce.ResetScrollKind]bool
+
+	// RecallSkills is progression's door-free skill reset
+	// (progression/skillrecall.go): every paid skill forgotten, every
+	// mastery at 0, the SP back. False changes nothing. Nil refuses the
+	// skill reset scroll.
+	RecallSkills func(character *enterworld.Character) (progression.SkillRecall, bool)
+
 	// ApplyDeathPenalty is progression's door-free death updater: the EXP
 	// and SP a death costs (pkdeath.go resolves which). Combat invokes it
 	// from inside the fatal-HP character transaction.
@@ -895,6 +982,10 @@ type Runtime struct {
 	// burst after the authority door closes. Pending pickups use captured
 	// delivery when configured; detached runtimes retain this actor fallback.
 	PushCharacterFrames func(divisionID, characterName string, frames []wire.Frame)
+	// StaffRoster is the division's staff tags and colours (the staff
+	// book plus the host allowlist; staff.go, port-only). Nil sends no
+	// roster, the native behaviour.
+	StaffRoster func(divisionID string) []staff.RosterEntry
 	// PushGuildFrames delivers one member's guild frames: its 0x3B29 deltas
 	// only to a session holding guildID's block, every other frame as
 	// PushCharacterFrames would (guild/baseline.go). Nil falls back to
@@ -952,10 +1043,10 @@ type Runtime struct {
 	// port-only): the Global Chatting line enters it, a GM ban purges the
 	// banned character's lines. Nil keeps both in-game only.
 	PublicChat *chatfeed.Feed
-	// ChatShadowMuted reports a staff shadow-muted account (shadowmute,
+	// ChatShadowMuted reports a staff shadow-muted line, by account or by word (shadowmute,
 	// port-only, not native): its Global Chatting line reaches only
 	// itself. Nil mutes no one.
-	ChatShadowMuted func(accountID string) bool
+	ChatShadowMuted func(accountID, text string) bool
 	// ChatItemLinks is the port-only SRO_CHAT_ITEM_LINKS switch for the
 	// Global Chatting line (globalchat.go); nil keeps the native tail.
 	ChatItemLinks *chat.ItemLinks
@@ -1091,6 +1182,9 @@ type Runtime struct {
 	// instanceInvites holds the unanswered instance invitations, one
 	// per invited party member (instance_invite.go).
 	instanceInvites instanceInviteBook
+	// partySummons holds the unanswered party summon invitations, one
+	// per summoned party member (party_summon.go).
+	partySummons partySummonBook
 	// InstanceEventSink receives instanced-world lifecycle events for
 	// the quest handler registry (instance_events.go); the composition
 	// root points it at the quest runtime's dispatch.
@@ -1135,6 +1229,7 @@ func NewRuntime(deps Dependencies, monsters *simulation.MonsterState) *Runtime {
 		Monsters:           monsters,
 		NpcSpawn:           npcSpawns,
 		NpcRoster:          append([]simulation.NpcDef(nil), npcSpawns.Roster...),
+		worldNpcs:          append([]simulation.WorldNpc(nil), npcSpawns.WorldNpcs...),
 		GachaRoll:          secureGachaRoll,
 		AlchemyRoll:        secureAlchemyRoll,
 		CombatRoll:         combat.SecureRoll32767,

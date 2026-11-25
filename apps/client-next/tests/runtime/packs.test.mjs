@@ -23,7 +23,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { root } from "../../tools/project.mjs";
 import { defined } from "../helpers/defined.mjs";
-import { fixture, sha } from "../helpers/packs-fixture.mjs";
+import { disk, fixture, sha } from "../helpers/packs-fixture.mjs";
 async function load( file ) {
 	return import( sourceFileUrl( path.join( root, file ) ).href );
 }
@@ -215,56 +215,6 @@ test("URL encoded filenames resolve against literal published names", async () =
 	}
 });
 
-function disk( t ) {
-	const rows = new Map();
-	let denied = false, quota = false;
-	// A Cache takes a URL string or a Request (the store's inventory rebuild
-	// passes the Requests keys() returned).
-	const rowKey = request => request instanceof Request ? request.url : String( request );
-	const cache = {
-		async match( url ) {
-			return rows.get( rowKey( url ) )?.clone();
-		},
-		async keys() {
-			return [ ...rows.keys() ].map( url => new Request( url ) );
-		},
-		async delete( url ) {
-			return rows.delete( rowKey( url ) );
-		},
-		async put( url, response ) {
-			if ( denied ) throw Error( "denied" );
-			if ( quota ) {
-				quota = false;
-				throw new DOMException( "full", "QuotaExceededError" );
-			}
-			rows.set( rowKey( url ), new Response( await response.arrayBuffer(), { headers: response.headers } ) );
-		}
-	};
-	const old = Object.getOwnPropertyDescriptor( globalThis, "caches" );
-	Object.defineProperty( globalThis, "caches", {
-		configurable: true,
-		value: {
-			async open() {
-				if ( denied ) throw Error( "denied" );
-				return cache;
-			}
-		}
-	} );
-	t.after( () => {
-		if ( old ) Object.defineProperty( globalThis, "caches", old );
-		else delete globalThis.caches;
-	} );
-	return {
-		rows,
-		cache,
-		deny: () => {
-			denied = true;
-		},
-		quota: () => {
-			quota = true;
-		}
-	};
-}
 test("persistent cache survives owner replacement, validates current manifest and repairs corrupt payloads", async t => {
 	const d = disk( t ), f = fixture(), requests = [];
 	let current = f;
@@ -758,6 +708,8 @@ test("a verified range member is hashed once per admission including a warm pers
 	);
 	await packs.read( new URL( "http://localhost/assets/a.bin" ), 100, new AbortController().signal );
 	await packs.flush();
+	// A lone window admits only the member it demanded: its block's other
+	// member is stored only for another window queued on the block.
 	assert.equal( packs.stats().hashCalls, 1 );
 	assert.equal( packs.stats().hashBytes, 3 );
 	await packs.read( new URL( "http://localhost/assets/a.bin" ), 100, new AbortController().signal );

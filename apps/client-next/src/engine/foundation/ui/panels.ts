@@ -32,6 +32,7 @@ export function uiPanels() {
 		"COS inventory",
 		"Character",
 		"Chat",
+		"Event Calendar",
 		"Experimental",
 		"Fortress war application",
 		"Fortress war schedule",
@@ -42,6 +43,7 @@ export function uiPanels() {
 		"Guild",
 		"Guild tools",
 		"Inventory",
+		"Job Honor Rank",
 		"Job ranking",
 		"Magic Pang",
 		"Magic option",
@@ -55,7 +57,9 @@ export function uiPanels() {
 		"Skin change",
 		"Stall network",
 		"Storage",
-		"System"
+		"Styria Clash",
+		"System",
+		"Unique Status"
 	] as const;
 }
 

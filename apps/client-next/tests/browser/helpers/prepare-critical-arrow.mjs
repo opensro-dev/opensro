@@ -139,7 +139,6 @@ export async function prepareCriticalArrow( name = "asd3" ) {
 			gameplay: __playableRuntime.gameplay(),
 			session: __playableRuntime.sessionState()
 		}) ).catch( () => null );
-		await page.screenshot( { path: out + "/prepare-failure.png" } ).catch( () => {} );
 		throw e;
 	} finally {
 		await page.context().tracing.stop( { path: out + "/prepare-trace.zip" } ).catch( () => {} );

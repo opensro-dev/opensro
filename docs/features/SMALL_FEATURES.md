@@ -189,3 +189,35 @@ Settings:
   boot).
 - Client: Experimental window, Chat tab, "Item links in chat" (on by
   default). Off inserts nothing and shows received links as plain text.
+
+## Quick fuse
+
+In the original client, pressing Fuse in the alchemy window first plays a short
+preparation effect (about 0.8 s, sixteen 50 ms cells) and sends the attempt
+only when it ends; Fuse then ignores presses until the result effect has played.
+That is the default here.
+
+`SRO_QUICK_FUSE=on` (port-only, off by default; read at startup and sent at
+world entry) makes Fuse send the attempt on the press and take the next press as
+soon as the result arrives. The result effect still plays, and a press while an
+attempt is still out is ignored, as before. The server's reinforcement and its
+success rates do not change. This shard deploys it on.
+
+## Storage pages
+
+Natively a storage keeper's warehouse holds 5 pages of 30 slots (150), and
+guild storage opens at guild level 2 with 1 page and grows a page a level to 4
+pages at level 5.
+
+Two port-only settings raise them, read once at startup; unset or `off` is
+native:
+
+- `SRO_STORAGE_PAGES=<5-8>`: the account warehouse's pages.
+- `SRO_GUILD_STORAGE_PAGES=<4-8>`: guild storage's pages at level 5. The lower
+  levels keep the native proportion, rounded up: `8` gives 2, 4, 6 and 8 pages
+  at levels 2 to 5. Level 1 still has no guild storage.
+
+Eight pages (240 slots) is the most either can hold: the storage list carries
+its capacity, row count and every slot number in one byte each. A raised
+account warehouse is saved at its new size and never shrinks, so lowering the
+setting later never strands an item. This shard deploys 8 for both.

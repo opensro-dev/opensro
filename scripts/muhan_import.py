@@ -62,6 +62,7 @@ import cap110_monsters as cap110
 import import_vsro_alexandria as tables
 import jupiter_import as jupiter
 import later_world_import
+import later_world_population
 import sro_pk2
 from prepare_client_resources import write_atomically
 from sro_paths import trees_overlap
@@ -143,7 +144,7 @@ def world_band(code):
 # and carrying its full sequence of waves.
 # ================
 def read_population(source_root):
-	export = later_world_import.read_population(SPEC, source_root)
+	export = later_world_population.read_population(SPEC, source_root)
 	path = Path(source_root) / POPULATION_NAME
 	worlds = export.get("worlds") or {}
 	for world in WAVE_WORLDS:

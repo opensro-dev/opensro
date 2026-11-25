@@ -274,6 +274,27 @@ function priorityWaiting( target ) {
 
 /*
 ================
+isHeldOpenError
+
+True when an exclusive create failed because the lock file is held, not
+because the create itself is broken. EEXIST is the holder's file. On
+Windows a file its holder has just unlinked stays "delete pending" until
+the last handle closes, and opening it then fails EPERM (or EACCES), not
+EEXIST: the lock is still being released, and the next poll retries. CI
+caught a waiter dying on exactly that window (heavyLock.test.mjs, "a
+second acquirer waits").
+================
+*/
+export function isHeldOpenError( error, platform = process.platform ) {
+	const code = error?.code;
+	if ( code === "EEXIST" ) {
+		return true;
+	}
+	return platform === "win32" && (code === "EPERM" || code === "EACCES");
+}
+
+/*
+================
 createExclusive
 
 Create the lock file exclusively with the holder record; false when held.
@@ -284,7 +305,7 @@ function createExclusive( lockPath, record ) {
 	try {
 		fd = fs.openSync( lockPath, "wx" );
 	} catch ( error ) {
-		if ( error?.code === "EEXIST" ) {
+		if ( isHeldOpenError( error ) ) {
 			return false;
 		}
 		throw error;

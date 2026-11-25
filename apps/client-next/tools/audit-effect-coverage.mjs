@@ -5,6 +5,8 @@ import path from "node:path";
 import { createHash } from "node:crypto";
 import { pathToFileURL } from "node:url";
 import { build } from "esbuild";
+import { readEffectCatalogSync, readEffectProgramSync } from "../../../scripts/lib/effectCatalog.mjs";
+import { effectRecordAlias } from "../src/engine/foundation/animation/effect-record-alias.ts";
 const root = path.resolve( import.meta.dirname, ".." ), out = path.join( root, "temp/artifacts/effect-coverage" );
 fs.mkdirSync( out, { recursive: true } );
 const source = path.join( root, "src/engine/runtime/assets/worker/effects/effects.ts" ),
@@ -13,7 +15,6 @@ await build( { entryPoints: [ source ], outfile: modulePath, bundle: true, platf
 const { createEffectDecoder } = await import( pathToFileURL( modulePath ) );
 const assetRoot = CLIENT_PUBLIC_ROOT, read = p => fs.readFileSync( path.join( assetRoot, "assets", p ) );
 const recordBytes = read( "skill/effectRecords.json" ),
-	programBytes = read( "effects/programs.json" ),
 	manifest = JSON.parse( read( "skillfx/manifest.json" ) ),
 	models = manifest.models;
 const decoder = createEffectDecoder(), records = JSON.parse( recordBytes ), catalog = decoder.decode( recordBytes );
@@ -23,10 +24,13 @@ const report = {
 	qualification: "catalog admission inventory; runtime semantics and native pixels require independent tests",
 	inputs: {
 		records: hash( recordBytes ),
-		programs: hash( programBytes ),
+		// Every effect, mesh and texture of the closure, not only its index.
+		programs: hash( JSON.stringify( readEffectCatalogSync( assetRoot ) ) ),
 		decoder: hash( fs.readFileSync( modulePath ) )
 	},
 	records: Object.keys( records ).length,
+	// Basic_Original aliases (effect-record-alias.ts), audited at their original.
+	aliases: 0,
 	stages: 0,
 	actions: {},
 	moves: {},
@@ -50,6 +54,11 @@ for (
 	]
 ) report.inputs[file] = hash( fs.readFileSync( path.join( root, "src/engine", file ) ) );
 for ( const [id, record] of Object.entries( catalog ) ) {
+	// An alias draws through its original's record: audited there, once.
+	if ( effectRecordAlias( records[id] ) !== undefined ) {
+		report.aliases++;
+		continue;
+	}
 	for ( let index = 0; index < record.stages.length; index++ ) {
 		const s = record.stages[index], raw = records[id].authoredStages[index];
 		report.stages++;
@@ -99,7 +108,8 @@ for ( const resource of [ ...paths ].sort() ) {
 			if ( !Object.keys( manifest.weapons ?? {} ).length ) throw Error( "No equipped weapon resource mappings" );
 			row.admission = { kind: "equipped-weapon", references: Object.keys( manifest.weapons ).length };
 		} else if ( resource.endsWith( ".efp" ) ) {
-			const { model, imagePaths } = decoder.model( programBytes, resource );
+			const { bytes, meshes } = readEffectProgramSync( resource, assetRoot );
+			const { model, imagePaths } = decoder.model( decoder.program( bytes ), meshes, resource );
 			const missing = imagePaths.filter( p => !fs.existsSync( path.join( assetRoot, p ) ) );
 			if ( missing.length ) throw Error( "Missing textures: " + missing.join( "," ) );
 			row.admission = { kind: "efp", primitives: model.primitives.length, images: imagePaths.length };
@@ -118,13 +128,13 @@ for ( const resource of [ ...paths ].sort() ) {
 		console.log( "Audited " + report.resources.length + "/" + paths.size + " resources" );
 	}
 }
-decoder.dispose();
 const destination = path.join( out, "report.json" );
 fs.writeFileSync( destination, JSON.stringify( report, null, 2 ) + "\n" );
 console.log(
 	JSON.stringify(
 		{
 			records: report.records,
+			aliases: report.aliases,
 			stages: report.stages,
 			scriptedRecords: scripted.size,
 			knownStageIssues: report.stageIssues.length,

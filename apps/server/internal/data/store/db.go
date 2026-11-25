@@ -75,7 +75,30 @@ CREATE TABLE IF NOT EXISTS mall_accounts (
 ) WITHOUT ROWID;
 `
 
-const dbSchema = mallAccountsSchema + marketSchema + accountStorageSchema + fortressSchema + allianceSchema + guildWarSchema + fortressItemForgeSchema + uniqueKillsSchema + economyLedgerSchema + economyBucketSchema + referralSchema + nameReservationsSchema + silkHistorySchema + tradeHistorySchema + caravanAgentSchema + `
+// mallEarnedSilkSchema is layout 15's wallet half (port-only, #4133):
+// the earned balance beside mall_accounts, whose silk column is granted
+// silk from this layout on. A wallet without a row here holds no earned
+// silk, so every balance that predates the split reads as granted, as
+// the migration rule requires - no existing row is rewritten.
+const mallEarnedSilkSchema = `
+CREATE TABLE IF NOT EXISTS mall_earned_silk (
+  account_id TEXT PRIMARY KEY,
+  earned_silk INTEGER NOT NULL CHECK (earned_silk BETWEEN 0 AND 4294967295)
+) WITHOUT ROWID;
+`
+
+// silkHistoryEarnedSchema is layout 15's history half: the earned part
+// of one silk_history row's silk charge, keyed by that row's seq. A use
+// or credit without a row here spent or granted no earned silk, so rows
+// recorded before the split read as all granted.
+const silkHistoryEarnedSchema = `
+CREATE TABLE IF NOT EXISTS silk_history_earned (
+  seq INTEGER PRIMARY KEY,
+  earned_silk INTEGER NOT NULL CHECK (earned_silk BETWEEN 0 AND 4294967295)
+);
+`
+
+const dbSchema = mallAccountsSchema + mallEarnedSilkSchema + silkHistoryEarnedSchema + marketSchema + accountStorageSchema + fortressSchema + allianceSchema + guildWarSchema + fortressItemForgeSchema + uniqueKillsSchema + economyLedgerSchema + economyBucketSchema + itemLedgerSchema + grantDaySchema + referralSchema + nameReservationsSchema + silkHistorySchema + tradeHistorySchema + caravanAgentSchema + `
 CREATE TABLE IF NOT EXISTS meta (
   key   TEXT PRIMARY KEY,
   value TEXT NOT NULL
@@ -167,10 +190,11 @@ const (
 // guild-war tables for layout 7 and the fortress production table for
 // layout 8, the unique-kill record for layout 9, the economy ledger for
 // layout 10, the name-reservation table for layout 11, the silk-history
-// table for layout 12, the trade-history table for layout 13 and the AI
-// caravan memory and route-heat tables for layout 14 (authority_upgrade.go).
+// table for layout 12, the trade-history table for layout 13, the AI
+// caravan memory and route-heat tables for layout 14 and the earned-silk
+// wallet and silk-history split tables for layout 15 (authority_upgrade.go).
 // The release receiver runs it.
-const CurrentLayoutVersion = 14
+const CurrentLayoutVersion = 15
 
 /*
 ==================

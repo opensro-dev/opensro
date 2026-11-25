@@ -188,7 +188,7 @@ test("pet timers reuse character sweep and expire; event counters do not expire 
 	assert.match( petEffect( guardian, 0, 10 ), /100% HP/ );
 	assert.match( petEffect( guardian, 0, 1 ), /600 s/ );
 	assert.match( petEffect( guardian, 0, 10 ), /300 s/ );
-	for ( const [option, low, high] of [ [ 2, 10, 20 ], [ 3, 20, 30 ] ] ) {
+	for ( const [option, low, high] of [ [ 2, 10, 20 ], [ 3, 30, 30 ] ] ) {
 		const book = defined(
 			PET_DESIGN.treeSkills.find( entry => entry.family === "Guardian's Bond" && entry.option === option )
 		);
@@ -473,11 +473,10 @@ test("Roar I/III gain one metre per effective level and explain cast restriction
 	assert.equal( petRoarRadius( 1, 1 ), 10 );
 	assert.equal( petRoarRadius( 1, 10 ), 19 );
 	assert.equal( petRoarRadius( 2, 1 ), 12 );
-	assert.equal( petRoarRadius( 3, 1 ), 30 );
-	assert.equal( petRoarRadius( 3, 3 ), 32 );
-	assert.equal( petRoarRadius( 3, 10 ), 39 );
+	assert.equal( petRoarRadius( 3, 1 ), 39 );
+	assert.equal( petRoarRadius( 3, 3 ), 41 );
 	const help = petEffect( defined( petSkillDesign( 18 ) ), 0, 1 );
-	assert.match( help, /30 m/ );
+	assert.match( help, /39 m/ );
 	assert.match( help, /1 s cast/ );
 	assert.match( help, /without targets/ );
 	assert.match( help, /Cannot cast in town/ );
@@ -487,15 +486,16 @@ test("Iron Hide tooltips and shieldGauge scale health + shield like League of Le
 	const { shieldGauge } = await import( "../../src/engine/foundation/ui/shield-gauge.ts" );
 	const t1 = petEffect( defined( petSkillDesign( 19 ) ), 20, 1 );
 	const t2 = petEffect( defined( petSkillDesign( 20 ) ), 35, 1 );
-	const t3 = petEffect( defined( petSkillDesign( 21 ) ), 50, 1 );
+	const t3 = petEffect( defined( petSkillDesign( 21 ) ), 63.5, 1 );
 	assert.match( t1, /Shields the bear and its owner for 20% of maximum HP for 5 s\./ );
 	assert.doesNotMatch( t1, /party members/ );
 	assert.match( t2, /Also shields party members within 20 m\./ );
 	assert.doesNotMatch( t2, /explodes/ );
-	assert.match( t3, /explodes within 8 m for 40% of its remaining value/ );
+	assert.match( t3, /explodes within 8 m for 8% of its remaining value/ );
+	assert.match( t3, /Up to 5 monsters per cast\./ );
 	assert.equal( defined( petSkillDesign( 19 ) ).value, 20 );
 	assert.equal( defined( petSkillDesign( 20 ) ).value, 35 );
-	assert.equal( defined( petSkillDesign( 21 ) ).value, 50 );
+	assert.equal( defined( petSkillDesign( 21 ) ).value, 63.5 ); // book III's single rank = former rank 10
 	for ( const id of [ 19, 20, 21 ] ) {
 		const design = petSkillDesign( id );
 		assert.ok( design );
@@ -692,9 +692,9 @@ test("petReference scales maxHp from active Resolve stacks and reverts on expiry
 		skills: []
 	};
 	// Third-party targeted bear without local PetTraining: the native row
-	// (1000) is the base now, Tier 3 (3%/stack) * 10 = +30% -> 1300.
+	// (1000) is the base now, Tier 3 (4%/stack) * 10 = +40% -> 1400.
 	const thirdParty = petReference( baseRef, undefined, { stacks: 10, tier: 3, untilMs: 5000 }, 1000 );
-	assert.equal( thirdParty?.maxHp, 1300 );
+	assert.equal( thirdParty?.maxHp, 1400 );
 	assert.equal( petReference( baseRef, undefined, { stacks: 10, tier: 3, untilMs: 5000 }, 5000 )?.maxHp, 1000 );
 
 	// Owned bear with Unbroken Spirit III (value = 4%/stack) and unbuffed training.stats.maxHp = 1000: 10 stacks -> 1400.

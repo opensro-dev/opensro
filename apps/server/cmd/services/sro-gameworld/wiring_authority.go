@@ -27,6 +27,7 @@ import (
 	"opensro.online/server/internal/game/progression"
 	"opensro.online/server/internal/game/quest"
 	"opensro.online/server/internal/game/social/crest"
+	"opensro.online/server/internal/game/title"
 	"opensro.online/server/internal/game/world/monster"
 	"opensro.online/server/internal/game/world/simulation"
 	"opensro.online/server/internal/platform/readiness"
@@ -67,6 +68,9 @@ type authorityPlane struct {
 	// the Agent API (the /marks/ resolver). Nil when no marks
 	// directory is configured - uploads have nowhere to live.
 	crests *crest.Store
+	// staff is the console's staff book and the host allowlist, already
+	// projected onto the stored characters (wiring_staff.go).
+	staff staffSources
 }
 
 /*
@@ -148,7 +152,16 @@ func loadAuthorityTextdata(devPaths enterworld.DevPaths) (authorityTextdata, err
 	if err := loot.InitCap110(textdataDir, monster.Cap110Enabled()); err != nil {
 		return authorityTextdata{}, err
 	}
+	// Port-only, not native (#4393): after InitCap110, so the level 95-110
+	// seal rows follow whichever ordinary table is installed.
+	loot.InitHighLevelSeals(loot.HighLevelSealsEnabled())
 	if err := loot.InitRoc(textdataDir, monster.RocEnabled()); err != nil {
+		return authorityTextdata{}, err
+	}
+	// Later-native (#3502): the title table every name line resolves
+	// through; no switch, and a missing generated file leaves ids
+	// unresolved (game/title).
+	if err := title.InitTitles(textdataDir); err != nil {
 		return authorityTextdata{}, err
 	}
 	textdata.Items.ApplyAttackPetExpansion()
@@ -270,6 +283,17 @@ func openAuthorityPlane(
 	// created at the 2.5-page inventory base; the world entry raises the
 	// rest (wiring_gameplay.go publishes the same reading to the entry).
 	options.InventoryPages = enterworld.InventoryPagesFromEnv()
+	// Port-only, not native (owner, 2026-11-21): raised account and guild
+	// warehouses (storage_pages.go); unset is native.
+	storagePages, err := storagePagesFromEnv()
+	if err != nil {
+		return authorityPlane{}, err
+	}
+	options.StoragePages = storagePages
+	if storagePages.Personal > 0 || storagePages.Guild > 0 {
+		log.Infof("storage: account warehouse %d pages, level-5 guild warehouse %d pages (%s, %s; 0 is native)",
+			storagePages.Personal, storagePages.Guild, EnvStoragePages, EnvGuildStoragePages)
+	}
 	options.DefaultSkills = enterworld.DefaultSkillSeeder(textdata.Skills)
 	options.DefaultInventory = enterworld.StarterInventorySeeder(
 		characterRoster,
@@ -290,6 +314,32 @@ func openAuthorityPlane(
 	if err != nil {
 		return authorityPlane{}, fmt.Errorf("store: %w", err)
 	}
+	// Before any session: a build that numbered an object afresh (#3994)
+	// leaves stored rows under the old id, so every row, and the companion
+	// it carries (#4019), takes its codename's current one.
+	rebound, err := authorityStore.RebindItemIdentities(ownedShard.ID, store.ObjectIdentities{
+		Item: func(codename string) (uint32, bool) {
+			ref, ok := textdata.Items.ItemRefByCodename(codename)
+			if !ok || ref == nil {
+				return 0, false
+			}
+			return ref.RefObjID, true
+		},
+		Companion: func(codename string) (uint32, bool) {
+			ref, ok := textdata.Items.CharacterRefByCodename(codename)
+			if !ok || ref == nil {
+				return 0, false
+			}
+			return ref.RefObjID, true
+		},
+	})
+	if err != nil {
+		authorityStore.Close()
+		return authorityPlane{}, fmt.Errorf("shard %q item identities: %w", ownedShard.ID, err)
+	}
+	if rebound > 0 {
+		log.Infof("store: %d stored item rows moved to their codename's current id", rebound)
+	}
 	authorityStore.ReapMaturedDeletions()
 	if err := authorityStore.ValidateShardState([]string{ownedShard.ID}); err != nil {
 		authorityStore.Close()
@@ -303,12 +353,11 @@ func openAuthorityPlane(
 			err,
 		)
 	}
-	gmIdentities, err := store.GMCharactersFromEnv()
+	staffSources, err := openStaffSources(authorityStore, ownedShard.ID)
 	if err != nil {
 		authorityStore.Close()
-		return authorityPlane{}, fmt.Errorf("GM allowlist: %w", err)
+		return authorityPlane{}, err
 	}
-	authorityStore.ReconcileGMPrivilege(gmIdentities)
 
 	levelCap, err := progression.LevelCapFromEnv()
 	if err != nil {
@@ -346,16 +395,20 @@ func openAuthorityPlane(
 		CharacterCreationValid: func(character *domain.Character) bool {
 			return enterworld.CharacterCreationValid(character, characterRoster)
 		},
-		CharacterNameAllowed:    textdata.NameFilter.Allowed,
-		ShardID:                 ownedShard.ID,
-		AgentSessionVerifier:    sessionVerifier,
-		PrivateNetwork:          os.Getenv("SRO_GAMEWORLD_PRIVATE_NETWORK") == "1",
-		Readiness:               ready,
-		EnterWorldAuthSecret:    enterWorldSecret,
-		MarksDir:                marksDir,
-		Crests:                  crests,
-		MaintenanceGatePath:     strings.TrimSpace(os.Getenv(agentapi.EnvMaintenanceGate)),
-		MaintenanceMessage:      agentapi.MaintenanceMessageFromEnv(),
+		CharacterNameAllowed: textdata.NameFilter.Allowed,
+		ShardID:              ownedShard.ID,
+		AgentSessionVerifier: sessionVerifier,
+		PrivateNetwork:       os.Getenv("SRO_GAMEWORLD_PRIVATE_NETWORK") == "1",
+		Readiness:            ready,
+		EnterWorldAuthSecret: enterWorldSecret,
+		MarksDir:             marksDir,
+		Crests:               crests,
+		MaintenanceGatePath:  strings.TrimSpace(os.Getenv(agentapi.EnvMaintenanceGate)),
+		MaintenanceMessage:   agentapi.MaintenanceMessageFromEnv(),
+		// The roster publishes the same port-only suit-look rules the
+		// world entry publishes, from the same shard env flags (#4128).
+		JobSuitHidesArmor:       action.JobSuitHidesArmorFromEnv(),
+		MoonlitThiefSuit:        action.MoonlitThiefSuitFromEnv(),
 		AuthoredAreas:           devPaths.AuthoredAreas,
 		BenchmarkFixtureControl: os.Getenv(agentapi.EnvBenchmarkFixtureControl) == "1",
 		LevelCap:                levelCap,
@@ -392,6 +445,7 @@ func openAuthorityPlane(
 		loadQuests: loaded.loadQuests,
 		textdata:   textdata,
 		crests:     crests,
+		staff:      staffSources,
 	}, nil
 }
 

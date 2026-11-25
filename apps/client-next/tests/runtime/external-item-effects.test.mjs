@@ -16,9 +16,10 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { defined } from "../helpers/defined.mjs";
+import { createCatalogEffects } from "../helpers/effect-programs.mjs";
+import { readEffectCatalogSync } from "../../../../scripts/lib/effectCatalog.mjs";
 const { createCharacterEffects } = await import( "../../src/engine/runtime/characters/effects/effects.ts" );
 const { createEffectDecoder } = await import( "../../src/engine/runtime/assets/worker/effects/effects.ts" );
-const { createEffectPrograms } = await import( "../../src/engine/runtime/assets/worker/effects/program/program.ts" );
 const { createPresentationRandom } = await import( "../../src/engine/runtime/random/random.ts" );
 const { createEntities } = await import(
 	"../../src/engine/runtime/simulation/worker/session/world/entities/entities.ts"
@@ -29,7 +30,7 @@ const decoder = createEffectDecoder(),
 	catalog = decoder.decode( read( "skill/effectRecords.json" ) );
 const items = JSON.parse( read( "data/missionPresentation.json" ) ).itemsByRefObjId,
 	drops = JSON.parse( read( "itemdrop/manifest.json" ) ).models;
-const programs = createEffectPrograms(), durations = new Map();
+const programs = createCatalogEffects(), durations = new Map();
 const source = {
 	gid: 17,
 	kind: "player",
@@ -79,7 +80,10 @@ function harness( item, typeFlags = 0x36c, recordOverride ) {
 		if ( !path.includes( "#" ) ) return 1;
 		const efp = decodeURIComponent( path.split( "#" )[1] );
 		if ( !durations.has( efp ) ) {
-			durations.set( efp, programs.decode( read( "effects/programs.json" ), efp ).model.clips[0].duration );
+			durations.set(
+				efp,
+				programs.decode( readEffectCatalogSync( CLIENT_PUBLIC_ROOT ), efp ).model.clips[0].duration
+			);
 		}
 		return durations.get( efp );
 	}

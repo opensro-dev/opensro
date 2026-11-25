@@ -10,6 +10,7 @@ DOF floor.
 ===========================================================================
 */
 import { minimapSameFloor } from "./minimap-floor";
+import { huntingPose } from "@/engine/foundation/gameplay/hunting";
 import { REGION_SIZE, worldDelta } from "@/engine/foundation/world/world-space";
 import type { EntityState } from "@/engine/contracts/world";
 import type { GameplayState, Pose, QuestRecord } from "@/engine/contracts/gameplay";
@@ -246,16 +247,46 @@ export function minimapHunting(
 ): readonly MinimapMarker[] {
 	const result: MinimapMarker[] = [];
 	for ( const point of game?.huntingPoints ?? [] ) {
-		const live = entities.find( e => e.gid === point.gid ), offset = minimapOffset( local, live ?? point, zoom );
+		const live = huntingPose( point, entities ), offset = minimapOffset( local, live, zoom );
 		if ( !offset ) continue;
 		const distance = Math.hypot( ...offset ), scale = distance >= 47 ? 47 / distance : 1;
 		result.push( {
 			x: offset[0] * scale,
 			y: offset[1] * scale,
 			size: 16,
-			rotation: -point.angle * Math.PI * 2 / 65536,
+			rotation: -live.angle * Math.PI * 2 / 65536,
 			path: "/assets/images/Media_extracted/interface/worldmap/wmap_sign_huntingpoint.png"
 		} );
 	}
 	return result;
+}
+
+/*
+================
+minimapWaypoint
+
+Port-only, not native (#3394): the M map guide's picked hunting ground
+as one minimap marker - the hunting point's ring while the point is on
+the radar, the quest edge arrow clamped to the ring while it is off
+it. Callers gate the Experimental row and the floor; this only
+projects the point.
+================
+*/
+export function minimapWaypoint(
+	local: Pose,
+	waypoint: Pick<Pose, "regionId" | "x" | "z">,
+	zoom: number
+): MinimapMarker | null {
+	const offset = minimapOffset( local, waypoint, zoom );
+	if ( !offset ) return null;
+	if ( Math.hypot( ...offset ) < 47 ) {
+		return {
+			x: offset[0],
+			y: offset[1],
+			size: 16,
+			rotation: 0,
+			path: "/assets/images/Media_extracted/interface/worldmap/wmap_sign_huntingpoint.png"
+		};
+	}
+	return minimapEdge( offset, "quest" );
 }

@@ -36,20 +36,6 @@ import (
 
 /*
 ================
-TestCaravanWorldBoundary
-================
-*/
-func TestCaravanWorldBoundary(t *testing.T) {
-	game := &gameplayPlane{items: &action.Runtime{}}
-	for _, world := range []uint32{domain.DefaultWorldInstance, domain.DefaultWorldInstance + 1} {
-		if len(game.worldNpcsForInstance(world)) != 0 {
-			t.Fatal("disabled caravans published NPC stand-ins")
-		}
-	}
-}
-
-/*
-================
 TestCaravanShippedActors
 ================
 */

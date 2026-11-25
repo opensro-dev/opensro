@@ -18,6 +18,7 @@ import (
 
 	"opensro.online/server/internal/game/enterworld"
 	"opensro.online/server/internal/game/item/wire"
+	"opensro.online/server/internal/game/nasrun"
 	"opensro.online/server/internal/testsupport/gamedatatest"
 	"opensro.online/server/internal/testsupport/tier"
 )
@@ -84,9 +85,9 @@ func TestMallCategoriesGearsListOnlyImportedStones(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	// The shipped 91 plus the one imported stone.
-	if len(catalog.Offers) != 92 {
-		t.Fatalf("layout mall with one gears row: %d offers, want 92", len(catalog.Offers))
+	// The 93 layout offers plus the one imported stone.
+	if len(catalog.Offers) != 94 {
+		t.Fatalf("layout mall with one gears row: %d offers, want 94", len(catalog.Offers))
 	}
 	gears := mallOffersOn(catalog, 4, 1)
 	if len(gears) != 1 || gears[0].Code != "PACKAGE_"+stone {
@@ -130,8 +131,8 @@ func TestMallCategoriesGearsAbsentWithoutImport(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(catalog.Offers) != 91 {
-		t.Fatalf("layout mall without gears rows: %d offers, want 91", len(catalog.Offers))
+	if len(catalog.Offers) != 93 {
+		t.Fatalf("layout mall without gears rows: %d offers, want 93", len(catalog.Offers))
 	}
 	if gears := mallOffersOn(catalog, 4, 1); len(gears) != 0 {
 		t.Fatalf("Gears tab holds %+v without the import, want empty", gears)
@@ -142,33 +143,131 @@ func TestMallCategoriesGearsAbsentWithoutImport(t *testing.T) {
 	}
 }
 
+// nasrunStubRefs stages the Devil's Spirit rows as
+// scripts/nasrun_import.py writes them: the six A grade Spirits,
+// the extension gear and Sabakun's jewel over a real item table.
 /*
 ================
-TestMallCategoriesNasrunKindsStayUnlisted
-
-Until the Devil's Spirit port (#3348) lands, Sabakun's jewel and
-the extension gear stay unlisted (#3331): even when a build's item
-table holds their later-client rows, no offer may name them. Listing
-one without the Nasrun system behind it fails here first; #3348
-replaces this test with the listing's own when the system stands.
+nasrunStubRefs
 ================
 */
-func TestMallCategoriesNasrunKindsStayUnlisted(t *testing.T) {
-	tier.Long(t, "Nasrun kinds stay unlisted behind the mall flag")
-	dir := gamedatatest.TextdataDir(t)
-	extra := map[string]*enterworld.ItemRef{}
-	for _, code := range []string{"ITEM_MALL_NASRUN_EXTENSION", "ITEM_ETC_NASRUN_ARCHEMY_UPGRADE_STONE"} {
-		extra[code] = &enterworld.ItemRef{RefObjID: 24395, Codename: code, NameStrID: "SN_" + code,
-			TypeIDs: [4]int64{3, 3, 13, 16}}
+func nasrunStubRefs(dir string) gearsStubRefs {
+	extra := map[string]*enterworld.ItemRef{
+		nasrunGear: {RefObjID: 24415, Codename: nasrunGear, NameStrID: "SN_" + nasrunGear,
+			TypeIDs:           [4]int64{3, 3, 13, 16},
+			NativeFields:      enterworld.NewNativeFields(map[string]float64{"maxStack": 1}),
+			DescriptionSymbol: "SD_" + nasrunGear,
+			Icon:              "icon\\item\\mall\\nasrun_extension.ddj"},
+		nasrunJewel: {RefObjID: 24417, Codename: nasrunJewel, NameStrID: "SN_" + nasrunJewel,
+			TypeIDs:           [4]int64{3, 3, 10, 1},
+			NativeFields:      enterworld.NewNativeFields(map[string]float64{"maxStack": 250}),
+			DescriptionSymbol: "SD_" + nasrunJewel, Icon: "icon\\item\\etc\\nasrun_jewel.ddj"},
 	}
-	refs := gearsStubRefs{base: enterworld.NewTextdataItems(dir), extra: extra}
+	durability := int64(100)
+	for index, spirit := range nasrunSpirits {
+		extra[spirit] = &enterworld.ItemRef{RefObjID: uint32(24409 + index), Codename: spirit, NameStrID: "SN_" + spirit,
+			TypeIDs:           [4]int64{3, 1, 14, 1},
+			NativeFields:      enterworld.NewNativeFields(map[string]float64{"maxStack": 1}),
+			DescriptionSymbol: "SD_" + spirit, Icon: "icon\\item\\mall\\nasrun.ddj",
+			VarianceIntMin1c0: &durability}
+	}
+	return gearsStubRefs{base: enterworld.NewTextdataItems(dir), extra: extra}
+}
+
+/*
+================
+TestMallCategoriesNasrunGoodsListWithTheSystem
+
+The Devil's Spirit system stands now (#3456): with SRO_NASRUN on
+and their imported rows staged, the six Spirits, the extension
+gear and Sabakun's jewel list in Premium's Gears tab (shop 4,
+tab 1), the Spirits and the gear at the later mall's prices
+(150 and 50 silk, #4240 part 4), the jewel at the authored 30,
+all badged new, and the quotes resolve (#3456 step 5; replaces
+the #3331 refusal test, which stood until the system did).
+================
+*/
+func TestMallCategoriesNasrunGoodsListWithTheSystem(t *testing.T) {
+	tier.Long(t, "Nasrun goods list in Premium > Gears with SRO_NASRUN on")
+	t.Setenv(nasrun.Env, "on")
+	dir := gamedatatest.TextdataDir(t)
+	refs := nasrunStubRefs(dir)
 	catalog, err := LoadMall(dir, nil, true, refs)
 	if err != nil {
 		t.Fatal(err)
 	}
+	// The 93 layout offers plus the six Spirits, the gear and the jewel.
+	if len(catalog.Offers) != 101 {
+		t.Fatalf("layout mall with the Nasrun rows: %d offers, want 101", len(catalog.Offers))
+	}
+	wantSilk := map[string]uint32{}
+	for _, spirit := range nasrunSpirits {
+		wantSilk["PACKAGE_"+spirit] = nasrunSpiritSilk
+	}
+	wantSilk["PACKAGE_"+nasrunGear] = nasrunGearSilk
+	wantSilk["PACKAGE_"+nasrunJewel] = nasrunJewelSilk
+	for _, offer := range mallOffersOn(catalog, 4, 1) {
+		want, nasrunGood := wantSilk[offer.Code]
+		if !nasrunGood {
+			continue
+		}
+		delete(wantSilk, offer.Code)
+		if offer.Silk != want || offer.Badge != mallBadgeNew {
+			t.Fatalf("%s = %d silk badged %q, want %d silk badged new",
+				offer.Code, offer.Silk, offer.Badge, want)
+		}
+	}
+	if len(wantSilk) != 0 {
+		t.Fatalf("Gears tab holds no %v", wantSilk)
+	}
+	if err := catalog.Hydrate(refs); err != nil {
+		t.Fatal(err)
+	}
+	listed := *mallOfferNamed(catalog, "PACKAGE_"+nasrunJewel)
+	if len(listed.ItemIDs) != 1 || listed.ItemIDs[0] != 24417 {
+		t.Fatalf("jewel contents = %v, want the imported jewel id", listed.ItemIDs)
+	}
+	quote, err := catalog.Quote(wire.MallPurchase{
+		Group: listed.Group, Shop: listed.Shop, Tab: listed.Tab, Slot: listed.Slot,
+		Package: listed.PackageID, Quantity: 1,
+	})
+	if err != nil || quote.Cost.Silk != nasrunJewelSilk {
+		t.Fatalf("jewel quote = %+v, %v; want %d silk", quote.Cost, err, nasrunJewelSilk)
+	}
+	spirit := *mallOfferNamed(catalog, "PACKAGE_"+nasrunSpirits[0])
+	quote, err = catalog.Quote(wire.MallPurchase{
+		Group: spirit.Group, Shop: spirit.Shop, Tab: spirit.Tab, Slot: spirit.Slot,
+		Package: spirit.PackageID, Quantity: 1,
+	})
+	if err != nil || quote.Cost.Silk != nasrunSpiritSilk {
+		t.Fatalf("spirit quote = %+v, %v; want %d silk", quote.Cost, err, nasrunSpiritSilk)
+	}
+}
+
+/*
+================
+TestMallCategoriesNasrunGoodsOffWithoutTheSystem
+
+The same rows in the table but SRO_NASRUN off: nothing lists, so a
+mall never sells an item the (unported or switched-off) system
+cannot use (#3331).
+================
+*/
+func TestMallCategoriesNasrunGoodsOffWithoutTheSystem(t *testing.T) {
+	tier.Long(t, "Nasrun goods stay unlisted with SRO_NASRUN off")
+	t.Setenv(nasrun.Env, "")
+	dir := gamedatatest.TextdataDir(t)
+	refs := nasrunStubRefs(dir)
+	catalog, err := LoadMall(dir, nil, true, refs)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(catalog.Offers) != 93 {
+		t.Fatalf("layout mall with SRO_NASRUN off: %d offers, want 93", len(catalog.Offers))
+	}
 	for _, offer := range catalog.Offers {
 		if strings.Contains(offer.Code, "NASRUN") {
-			t.Fatalf("flag-on mall lists %s, want the Nasrun kinds unlisted (#3331)", offer.Code)
+			t.Fatalf("mall lists %s with SRO_NASRUN off", offer.Code)
 		}
 	}
 }

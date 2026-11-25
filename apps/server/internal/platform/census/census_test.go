@@ -14,9 +14,13 @@ package census
 
 import (
 	"encoding/json"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
+
+	"opensro.online/server/internal/platform/connjournal"
+	"opensro.online/server/internal/testsupport/wait"
 )
 
 const hourMs = 60 * 60 * 1000
@@ -33,7 +37,7 @@ func span(session, account, character string, started, ended int64, ip, net, cli
 
 // testService is a Service over fixture spans with the fixed clock.
 func testService(spans []Span, chat ChatCounts) *Service {
-	return NewService(func(int64) ([]Span, error) { return spans, nil }, chat,
+	return NewService(func(int64) ([]Span, error) { return spans, nil }, chat, nil,
 		func() time.Time { return testNowTime })
 }
 
@@ -173,7 +177,7 @@ func TestPersonView(t *testing.T) {
 			t.Fatalf("account %s should read online", account.Account)
 		}
 	}
-	if len(person.History) != 3 || person.History[0].Session != "s2" {
+	if len(person.History) != 3 || person.History[0].Started != now-hourMs {
 		t.Fatalf("history: got %+v, want three spans newest first", person.History)
 	}
 	link, linked := findLink(person.PossibleLinks, "acct-a", "acct-c")
@@ -228,5 +232,105 @@ func TestAnswersNeverCarryHashes(t *testing.T) {
 				t.Fatalf("answer leaks %s: %s", secret, body)
 			}
 		}
+	}
+}
+
+/*
+================
+TestPersonViewCarriesTicketHours
+
+Each account of the person carries its trailing day of ticket hours,
+read from the ticket source with the day's start.
+================
+*/
+func TestPersonViewCarriesTicketHours(t *testing.T) {
+	now := nowMs()
+	spans := []Span{span("s1", "acct-a", "Anna", now-hourMs, 0, "ip-h", "net-h", "client-1")}
+	var asked int64
+	tickets := func(account string, sinceMs int64) ([]connjournal.TicketHour, error) {
+		asked = sinceMs
+		if account != "acct-a" {
+			return nil, nil
+		}
+		return []connjournal.TicketHour{{HourMs: now - now%hourMs,
+			TicketCounts: connjournal.TicketCounts{TransportMinted: 40, TransportPaced: 900}}}, nil
+	}
+	service := NewService(func(int64) ([]Span, error) { return spans, nil }, nil, tickets,
+		func() time.Time { return testNowTime })
+	person, found, err := service.Person("Anna")
+	if err != nil || !found {
+		t.Fatalf("person: found=%v err=%v", found, err)
+	}
+	if asked != now-windowDayMs {
+		t.Fatalf("tickets asked from %d, want the trailing day %d", asked, now-windowDayMs)
+	}
+	got := person.Accounts[0].Tickets
+	if len(got) != 1 || got[0].TransportPaced != 900 || got[0].TransportMinted != 40 {
+		t.Fatalf("ticket hours %+v", got)
+	}
+}
+
+/*
+================
+TestJournalRowsMarkSessionsWithoutAUserAgent
+
+Over a real journal: the row a browser opened keeps its fingerprint,
+the row with no User-Agent reads NoUserAgent and no fingerprint.
+================
+*/
+func TestJournalRowsMarkSessionsWithoutAUserAgent(t *testing.T) {
+	journal, err := connjournal.Open(filepath.Join(t.TempDir(), "connections.sqlite"), "global-official",
+		[]byte("census-test-key-32-bytes-exactly!!"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = journal.Close() }()
+	journal.RecordEntered(connjournal.Entry{Session: "browser", Account: "a", Character: "Anna",
+		Transport: "webtransport", UserAgent: "Mozilla/5.0"})
+	journal.RecordEntered(connjournal.Entry{Session: "bare", Account: "b", Character: "Bot", Transport: "websocket"})
+	var spans []Span
+	wait.Eventually(t, 5*time.Second, "both rows written", func() bool {
+		spans, err = JournalRows(journal)(0)
+		return err == nil && len(spans) == 2
+	})
+	byID := map[string]Span{}
+	for _, span := range spans {
+		byID[span.Session] = span
+	}
+	if byID["browser"].NoUserAgent || byID["browser"].Client == "" {
+		t.Fatalf("the browser row %+v", byID["browser"])
+	}
+	if !byID["bare"].NoUserAgent || byID["bare"].Client != "" {
+		t.Fatalf("the bare row %+v", byID["bare"])
+	}
+}
+
+/*
+================
+TestPersonHistoryCarriesSpanActivity
+
+A closed span's traffic summary rides its history entry; an open span
+has none.
+================
+*/
+func TestPersonHistoryCarriesSpanActivity(t *testing.T) {
+	now := nowMs()
+	closed := span("s1", "acct-a", "Anna", now-3*hourMs, now-2*hourMs, "ip-h", "net-h", "client-1")
+	closed.Activity = &connjournal.Activity{FramesIn: 77, FirstHandledMs: 1200,
+		Opcodes: []connjournal.OpcodeActivity{{Opcode: 0x7034, Count: 20, FirstMs: 1200}}}
+	spans := []Span{closed, span("s2", "acct-a", "Anna", now-hourMs, 0, "ip-h", "net-h", "client-1")}
+	person, found, err := testService(spans, nil).Person("Anna")
+	if err != nil || !found {
+		t.Fatalf("person: found=%v err=%v", found, err)
+	}
+	byStart := map[int64]PersonSpan{}
+	for _, entry := range person.History {
+		byStart[entry.Started] = entry
+	}
+	if got := byStart[now-3*hourMs].Activity; got == nil || got.FramesIn != 77 || got.Opcodes[0].Count != 20 {
+		t.Fatalf("closed span activity %+v", got)
+	}
+	if byStart[now-hourMs].Activity != nil {
+		t.Fatal("an open span carried a summary")
 	}
 }

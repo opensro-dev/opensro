@@ -403,7 +403,7 @@ func (c *Catalog) Reinforce(items []inventory.Item, slots []uint8, bonus int, ro
 	if nasrun.IsSpirit(ref.Flags) {
 		return c.reinforceSpirit(out, target, elixir, powder, roll)
 	}
-	if item.Plus >= nativeReinforceCeiling {
+	if item.Plus >= NativeReinforceCeiling {
 		return zero, Refusal(0x0f)
 	}
 	// Port-only, not native: the shard's cap (maxplus.go) refuses with the

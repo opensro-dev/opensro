@@ -16,6 +16,7 @@ import (
 	"opensro.online/server/internal/game/enterworld"
 	"opensro.online/server/internal/game/item/wire"
 	"opensro.online/server/internal/game/siege"
+	"opensro.online/server/internal/game/staff"
 	"opensro.online/server/internal/game/world/instance"
 	"opensro.online/server/internal/game/world/monster"
 	"opensro.online/server/internal/game/world/simulation"
@@ -221,7 +222,7 @@ their 0xB1E1 / 0x3887 replies.
 */
 func TestGMSiegeStructureAndPeriodCommands(t *testing.T) {
 	rt, c, _, jangan := constructionFixture(t)
-	c.GMPrivilege = true
+	c.GMPrivilege, c.GMCapabilities = true, uint32(staff.All)
 	rt.Selected.Clear(testDivision, c.Name)
 	var pushed []wire.Frame
 	rt.PushCharacterFrames = func(_, _ string, frames []wire.Frame) {
@@ -300,7 +301,7 @@ func TestGMSiegeStructureAndPeriodCommands(t *testing.T) {
 	// GATE (0x15) toggles gate state on gateFixture (zone 88) and pushes 0xB1E1.
 	gateRT, gateFortress, _ := gateFixture(t)
 	gateChars := gateRT.deps.(*enterworld.Deps).Characters.(enterworld.StaticCharacterSource)[testDivision]
-	gateChars[0].GMPrivilege = true
+	gateChars[0].GMPrivilege, gateChars[0].GMCapabilities = true, uint32(staff.All)
 	pushed = nil
 	gateRT.PushCharacterFrames = func(_, _ string, frames []wire.Frame) {
 		pushed = append(pushed, frames...)

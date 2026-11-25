@@ -20,6 +20,7 @@ import { experimentalGameplay, experimentalVideo } from "@/engine/foundation/ui/
 import { blindableCharacter, blindableCompanion } from "@/engine/foundation/ui/name-visibility";
 import { sampleWorldClock } from "@/engine/foundation/gameplay/world-clock";
 import { createWorldDoubleClick } from "@/engine/foundation/gameplay/world-double-click";
+import type { UniqueNotifySettings } from "@/engine/foundation/gameplay/unique-status";
 import type { RawInput, WorldClickInput } from "@/engine/contracts/input";
 import { createNavigationStream } from "./navigation/navigation";
 import { createFrontend } from "./frontend/frontend";
@@ -31,11 +32,11 @@ import { createWorldStream } from "./world/world";
 import { createPresentation } from "./presentation/presentation";
 import type { SessionState } from "@/engine/contracts/session";
 import { createAssets } from "./assets/assets";
-import { createReleaseWatch } from "./release/release-watch";
+import { createReleaseWatch, releaseNotice } from "./release/release-watch";
 import { createInput } from "./input/input";
 import { createPlatform } from "./platform/platform";
 import { createBuildInfo } from "./build-info/build-info";
-import { createBugReport, diagnosticActors } from "./bug-report/bug-report";
+import { createBugReport, diagnosticActors, type ReportParts } from "./bug-report/bug-report";
 import type { BugReportField } from "@/engine/contracts/bug-report";
 import { frameProbe } from "./frame-probes";
 import { createFrameWork } from "./frame-work";
@@ -172,10 +173,9 @@ export function startRuntime(
 		const frameWork = createFrameWork();
 		const framePacing = createFramePacing();
 		const simulation = own( createSimulationHost() );
-		// Port-only (#1440): the local player's ground-click walk stepped on the
-		// main thread, behind the Experimental "Instant own movement" row.
+		// Port-only, not native (#1440; owner 2026-11-21: the default, no
+		// row): the local player's ground-click walk stepped on the main thread.
 		const localMover = createLocalMover();
-		let mainThreadOwnWalk = false;
 		// Simulation time zero on the frame clock, from the latest snapshot:
 		// the mover places a worker publication's pose on the frame clock with
 		// it (#1441b).
@@ -224,7 +224,7 @@ export function startRuntime(
 			// goal keeps the presenter: the mover's navigation view covers
 			// one region, and the worker walks those exactly as today.
 			if (
-				seq !== undefined && mainThreadOwnWalk &&
+				seq !== undefined &&
 				command.kind === "gameplay" && command.command.kind === "move"
 			) {
 				const game = presentation.gameplay();
@@ -406,8 +406,6 @@ export function startRuntime(
 			}
 			if ( event.kind === "camera-preferences" ) input.sight( event.value );
 			if ( event.kind === "experimental-preferences" ) {
-				mainThreadOwnWalk = event.value.mainThreadOwnWalk === true;
-				if ( !mainThreadOwnWalk ) localMover.reset();
 				renderer.experimentalVideo( experimentalVideo( event.value ) );
 				assets.hdTextures( event.value.hdTextures );
 				simulation.session( { kind: "experimental-gameplay", value: experimentalGameplay( event.value ) } );
@@ -492,13 +490,46 @@ export function startRuntime(
 		const buildInfo = own(
 			createBuildInfo( apiBase, import.meta.env.SRO_CLIENT_REVISION, import.meta.env.SRO_CLIENT_SUBJECT )
 		);
+		// The reporter's filing lane (#4109): the composed report goes to
+		// the session owner as a command, and the reporter's wait reads
+		// the answer from the session state the host publishes.
+		let bugReportOperation = 0;
 		const bugReport = own(
 			createBugReport( {
 				canvas,
 				apiBase,
+				session: {
+					file: ( parts: ReportParts ): number => {
+						const operationId = ++bugReportOperation;
+						simulation.session( {
+							kind: "bug-report",
+							operationId,
+							description: parts.description,
+							meta: parts.meta,
+							...(parts.diagnostics ? { diagnostics: parts.diagnostics } : {}),
+							...(parts.media ? { mediaField: parts.media.field, media: parts.media.blob } : {})
+						} );
+						return operationId;
+					},
+					wake: () => simulation.delivery(),
+					failed: () => simulation.error() !== null
+				},
 				gpu: () => renderer.adapterFacts(),
 				network: () => simulation.netJournal(),
 				assets: () => assets.snapshot?.(),
+				// An uncaught error never reached an incident, only a bug
+				// report the player had to file, so the stack overflow of
+				// #3684 stayed unlocated for a week (#3425): the first throw
+				// of each distinct failure files one, redacted (journal.ts
+				// uncaughtFailure), with its own frames as the stack.
+				firstError: failure =>
+					sessionCommand( {
+						kind: "client-report",
+						incidentKind: "runtime",
+						code: "uncaught_error",
+						message: failure.message,
+						stack: failure.frames.join( "\n" ) || undefined
+					} ),
 				context: (): readonly BugReportField[] => {
 					const game = presentation.gameplay();
 					const local = game?.localGid ? presentation.read( game.localGid ) : undefined;
@@ -577,7 +608,10 @@ export function startRuntime(
 					pickCrestImage: (): Promise<Uint8Array | null> => platform.pickCrestImage(),
 					playSoundByName: name => audio.playByName( name ),
 					saveExperimental: value => platform.saveExperimentalOptions( value ),
-					saveWindowPositions: value => platform.saveWindowPositions( value )
+					saveWindowPositions: value => platform.saveWindowPositions( value ),
+					uniqueNotifyBook: (): Readonly<Record<string, UniqueNotifySettings>> => platform.uniqueNotifyBook(),
+					saveUniqueNotify: ( character: string, value: UniqueNotifySettings ): void =>
+						platform.saveUniqueNotify( character, value )
 				}
 			} )
 		);
@@ -672,7 +706,7 @@ export function startRuntime(
 					-ARROW_TURN_WORDS_PER_MS :
 					0;
 			const predicted = ( key: "up" | "left" | "right", down: boolean, seq: number | undefined ) => {
-				const drawn = mainThreadOwnWalk && seq !== undefined ?
+				const drawn = seq !== undefined ?
 					characters.drawnPose( presentation.gameplay()?.localGid ?? 0 ) :
 					undefined;
 				if ( seq === undefined || !drawn ) return;
@@ -781,7 +815,7 @@ export function startRuntime(
 						kind: "gameplay",
 						command: { kind: "select", gid: entity.gid }
 					} );
-					const drawn = mainThreadOwnWalk && seq !== undefined ?
+					const drawn = seq !== undefined ?
 						characters.drawnPose( game.localGid ) :
 						undefined;
 					if ( seq !== undefined && drawn ) {
@@ -808,7 +842,7 @@ export function startRuntime(
 						kind: "gameplay",
 						command: { kind: "pickup", gid: entity.gid }
 					} );
-					const drawn = mainThreadOwnWalk && seq !== undefined ?
+					const drawn = seq !== undefined ?
 						characters.drawnPose( game.localGid ) :
 						undefined;
 					if ( seq !== undefined && drawn ) {
@@ -821,7 +855,7 @@ export function startRuntime(
 			const query = renderer.pickGround( x, y );
 			if ( query && game.pose ) {
 				const seq = simulation.session( { kind: "gameplay", command: { kind: "ground-move", query } } );
-				const drawn = mainThreadOwnWalk && seq !== undefined ?
+				const drawn = seq !== undefined ?
 					characters.drawnPose( game.localGid ) :
 					undefined;
 				if ( seq !== undefined && drawn ) localMover.click( { seq, query, drawn, now }, moverWorld() );
@@ -1194,7 +1228,7 @@ export function startRuntime(
 				);
 				const decal = presentation.gameplay()?.selectionDecal;
 				const followed = decal?.kind === "target" ? presentation.read( decal.gid ) : undefined;
-				// Port-only, not native (Experimental "Dungeon character PVS"): the
+				// Port-only, not native (former Experimental "Dungeon character PVS"): the
 				// ring belongs to the published body, so a target standing in a
 				// room this frame's room does not draw shows no ring either.
 				const followedMount = followed?.mountedOn !== undefined ?
@@ -1269,7 +1303,7 @@ export function startRuntime(
 				const moverGid = presentation.gameplay()?.localGid ?? 0;
 				characters.ownMover(
 					moverGid,
-					mainThreadOwnWalk ? moverFrame( now ) : { kind: "idle" },
+					moverFrame( now ),
 					presentation.entities().find( entity => entity.gid === moverGid )?.mountedOn || undefined
 				);
 				characters.step(
@@ -1286,7 +1320,11 @@ export function startRuntime(
 					effectDetail,
 					worldPresented && input.blindHeld(),
 					sessionState?.nativeServerName,
-					normalFortressClothes
+					normalFortressClothes,
+					{
+						jobSuitHidesArmor: sessionState?.jobSuitHidesArmor === true,
+						moonlitThiefSuit: sessionState?.moonlitThiefSuit === true
+					}
 				);
 				markStage( "character-presentation" );
 				ui.mallPreviewState( characters.mallPreviewState() );
@@ -1448,9 +1486,11 @@ export function startRuntime(
 					world.retryTransient();
 					navigation.retryTransient();
 				}
-				releaseWatch.step( now, phaseTrigger || visibleAgain );
-				// A server's 426 is the same news, learned from a refused request.
-				platform.presentUpdate( releaseWatch.newerAvailable() || sessionState?.releaseOutdated === true );
+				// A server's 426 is the same news, learned from a refused request; it
+				// says the server moved, not that the page has (release-watch.ts).
+				const releaseRefused = sessionState?.releaseOutdated === true;
+				releaseWatch.step( now, phaseTrigger || visibleAgain, releaseRefused );
+				platform.presentUpdate( releaseNotice( releaseWatch.newerAvailable(), releaseRefused ) );
 				markStage( "ui" );
 				renderer.setDamageText( characters.damageText() );
 				// Hidden maintenance still acknowledges every ordered publication, but
@@ -1594,7 +1634,7 @@ Frontend: ${frontendState.phase}
 Frontend error: ${frontendState.error ?? "none"}
 Frontend loading: ${frontendState.loadingStatus ?? "none"}; dock ready: ${characters.dockReady()}
 Dock pick: ${lastDockPick}
-Characters: ${renderer.characterStats().actors} actors, ${renderer.characterStats().draws} draws; ${
+Characters: ${renderer.characterStats().actors} actors (${characters.shownCharacters()} shown), ${renderer.characterStats().draws} draws; ${
 						characters.error() ?? "running"
 					}
 Navigation: ${navigation.error() ?? navigation.phase()}; admitted ${presentation.gameplay()?.navigationRegion ?? "none"}

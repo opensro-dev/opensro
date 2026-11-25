@@ -14,6 +14,8 @@ re-entry is published is rolled back; a client never sees half a move.
 package action
 
 import (
+	log "github.com/sirupsen/logrus"
+
 	"opensro.online/server/internal/domain"
 	"opensro.online/server/internal/game/enterworld"
 	"opensro.online/server/internal/game/item/grounditem"
@@ -65,6 +67,7 @@ func (rt *Runtime) relocateCharacter(division string, c *enterworld.Character, l
 		setCharacterWorld(c, arrival.world)
 		return true
 	}) {
+		log.WithFields(log.Fields{"character": name, "label": label}).Info("relocation: not admitted (the destination was refused or the character is being deleted)")
 		return false
 	}
 	rollback := func() {
@@ -76,15 +79,18 @@ func (rt *Runtime) relocateCharacter(division string, c *enterworld.Character, l
 	}
 	membership, moved := rt.moveWorldMembership(division, c, currentWorld, arrival.world)
 	if !moved {
+		log.WithFields(log.Fields{"character": name, "label": label, "from": uint32(currentWorld), "to": uint32(arrival.world)}).Warn("relocation: the world membership move was refused")
 		rollback()
 		return false
 	}
 	destination := arrival.spawn
 	rt.endTransformForLoading(division, c)
 	rt.endPartyAurasForLoading(division, c)
+	rt.endBerserkForLoading(division, c)
 	previousPets := rt.relocateReturningPet(division, c, destination)
 	packets, ok := rt.deps.ReentryPackets(division, name)
 	if !ok || len(packets) == 0 || packets[0].NativeOpcode != enterworld.OpcodeResetClient {
+		log.WithFields(log.Fields{"character": name, "label": label, "region": destination.RegionID, "ok": ok, "packets": len(packets)}).Warn("relocation: the re-entry could not be built")
 		if currentWorld != arrival.world {
 			rt.restorePopulationSession(membership)
 		}
@@ -93,6 +99,9 @@ func (rt *Runtime) relocateCharacter(division string, c *enterworld.Character, l
 		// unfinished loading screen.
 		rollback()
 		return false
+	}
+	if currentWorld != arrival.world {
+		rt.retirePetShields(division, name)
 	}
 	rt.noteTeleportArrival(division, c)
 	rt.bindResidentRegion(key, rt.Now().UnixMilli())

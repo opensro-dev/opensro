@@ -34,8 +34,12 @@ tables already have is left alone.
 ===========================================================================
 """
 from collections import Counter
+import re
 
 import import_vsro_alexandria as stage1
+from pathlib import Path
+
+from variant_files import TEXTDATA, read_vsro_file, replace_file
 
 SERVICE_COLUMN = 0
 ID_COLUMN = 1
@@ -83,6 +87,22 @@ MODEL_COLUMN = 52
 
 
 # ================
+# is_placeholder_text
+#
+# A text cell that carries no text: empty, "0", "xxx", "-" or "null",
+# any case, around whitespace. The asset build's rule
+# (scripts/build/shared/englishCompletions.mjs isPlaceholderText, which
+# refuses an active row whose English is one of these), so an importer
+# that asks "is the English missing?" answers as the build will.
+# ================
+PLACEHOLDER_TEXT = ("", "0", "xxx", "-", "null")
+
+
+def is_placeholder_text(value):
+	return not isinstance(value, str) or value.strip().lower() in PLACEHOLDER_TEXT
+
+
+# ================
 # translation_rows
 #
 # The supplied object's German Tausert cell contains an unquoted newline.
@@ -98,6 +118,23 @@ def translation_rows(raw):
 		else:
 			rows.append(row)
 	return rows
+
+
+# ================
+# owned_name_symbols
+#
+# The name symbols a staged import owns for its off reap: the rows
+# this build added plus the ones a previous build's marker owned,
+# narrowed to the symbols the staged kinds still name - never a row
+# the table already held. A later kind may reuse a symbol the native
+# table or an earlier layer owns (MOB_RM_TAHOMET_ROC names itself
+# SN_MOB_RM_TAHOMET), and the reap drops every owned symbol, so
+# claiming that row would strip a name this build never added
+# (#3762, #3767).
+# ================
+def owned_name_symbols(added_rows, prior_symbols, named_symbols):
+	added = {row[1] for row in added_rows if len(row) > 1}
+	return sorted((added | set(prior_symbols)) & set(named_symbols))
 
 
 # ================
@@ -206,6 +243,40 @@ def append_rows(raw, rows):
 	if not text.endswith("\n"):
 		text += "\r\n"
 	return b"\xff\xfe" + (text.lstrip("\ufeff") + table_text(rows)).encode("utf-16-le")
+
+
+# A text record starts on a "<digits>\t" line and a "//" line ends it
+# without joining any record; every other line, blank ones included,
+# continues the record above it (a multi-line message). Lines end at LF
+# only. The asset build splits the text tables by this rule
+# (textResources.mjs splitTextDataRecords), so a record dropped here is
+# exactly a record the build would have read (#4177, #4362).
+RECORD_START = re.compile(r"\d+\t")
+RECORD_LINE = re.compile(r"[^\n]*\n|[^\n]+")
+
+
+# ================
+# without_rows
+#
+# The UTF-16 table without the records of the given keys (column 1).
+# Every other byte stays as it was: the rows are not re-encoded. Split
+# into lines and joined back with CRLF, a table's multi-line messages
+# lose their bare LFs and blank lines, and the asset build's English
+# coverage then finds them stale.
+# ================
+def without_rows(raw, keys):
+	if not keys:
+		return raw
+	kept, dropping = [], False
+	for line in RECORD_LINE.findall(stage1.decode_table(raw).lstrip("\ufeff")):
+		if RECORD_START.match(line):
+			columns = line.split("\t")
+			dropping = len(columns) > 1 and columns[1].strip() in keys
+		elif line.strip().startswith("//"):
+			dropping = False
+		if not dropping:
+			kept.append(line)
+	return b"\xff\xfe" + "".join(kept).encode("utf-16-le")
 
 
 # ================
@@ -363,3 +434,41 @@ def merge_npc_tables(native, vsro, regions, native_text):
 		"shopGroups": [row[3] for row in groups], "shopsSkipped": sorted(set(skipped)),
 		"effects": len(effects), "texts": len(texts), "restoredPositions": restored_positions
 	}
+
+
+#============================================================================
+# The NPC step
+#============================================================================
+
+
+# The VSRO characterdata files (characterdata.txt lists them).
+VSRO_CHARACTER_FILES = (5000, 10000, 15000, 20000, 25000, 30000, 35000, 40000, 45000)
+
+
+# ================
+# add_npcs
+# ================
+def add_npcs(vsro_root, native, out, regions):
+	"""
+	Write the city's NPCs: characterdata rows converted to the v1.150 layout,
+	positions, talk rows, shops on native stores, sizes and texts. Returns a
+	summary. The texts are added to the textdataname.txt the earlier steps left.
+	"""
+	textdata = Path("Media_extracted") / TEXTDATA
+	names = ("npcpos.txt", "npcchat.txt", "refshopgroup.txt", "refmappingshopgroup.txt", "refshop.txt", "skilleffect.txt")
+	tables = {name: (native / textdata / name).read_bytes() for name in names}
+	tables[CHARACTER_TARGET] = (native / textdata / CHARACTER_TARGET).read_bytes()
+	tables["characters"] = [
+		path.read_bytes() for path in sorted((native / textdata).glob("characterdata_*.txt"))
+	]
+	vsro = {name: read_vsro_file(vsro_root, "Media", TEXTDATA + name) for name in tuple(n for n in names if n != "refshop.txt")}
+	vsro["textdata_object.txt"] = read_vsro_file(vsro_root, "Media", TEXTDATA + "textdata_object.txt")
+	vsro["characters"] = [
+		read_vsro_file(vsro_root, "Media", TEXTDATA + f"characterdata_{start}.txt")
+		for start in VSRO_CHARACTER_FILES
+	]
+	base_text = (out / textdata / "textdataname.txt").read_bytes()
+	merged, summary = merge_npc_tables(tables, vsro, regions, base_text)
+	for name, content in merged.items():
+		replace_file(out / textdata / name, content)
+	return summary

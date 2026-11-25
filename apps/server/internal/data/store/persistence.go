@@ -40,10 +40,12 @@ commitLocked for a caller that acts on the outcome.
 ================
 */
 func (s *Store) commitCheckedLocked(label string) error {
-	s.noteGoldLocked(label)
+	// Every door noted its rows when it finished (finishDoorLocked); a
+	// door still open here is a writer that never finished one.
+	s.closeUnclosedDoorLocked()
 	// Every record this commit carries moves its write epoch, so a
-	// writer outside the scoped doors (the guild, camp and trade
-	// doors mark the change set directly) retires exactly its own
+	// writer outside the door lifecycle (the ownership transfer marks
+	// the change set directly) retires exactly its own
 	// records' cached copies; the scoped doors also count at mutation
 	// time, which is what retires a deferred write before its flush.
 	if s.changes.all {
@@ -332,10 +334,17 @@ func (s *Store) commitTxLocked(phases *commitPhaseDurations, rows *commitRowCoun
 		}
 	}
 
+	// The commit check: every staged character's change must be what its
+	// noted rows say (ledger_door.go); what they do not explain is written
+	// as undeclared beside them.
+	s.reconcileStagedLocked(stagedRows)
 	if err := flushLedgerTx(tx, s.ledger.pending); err != nil {
 		return err
 	}
 	if err := flushLedgerItemsTx(tx, s.ledger.items); err != nil {
+		return err
+	}
+	if err := flushItemLedgerTx(tx, s.items.pending); err != nil {
 		return err
 	}
 	// The trade rows noted by this attempt's doors ride the same
@@ -370,8 +379,10 @@ func (s *Store) commitTxLocked(phases *commitPhaseDurations, rows *commitRowCoun
 	// The whole dirty set is written: rows a deferred door left are on disk.
 	s.batch.pending = false
 	s.countLedgerRows(s.ledger.pending)
+	s.countUndeclaredItemRows(s.items.pending)
 	s.ledger.pending = nil
 	s.ledger.items = nil
+	s.items.pending = nil
 	s.forgetPendingTrades(len(trades))
 
 	if ground != nil {

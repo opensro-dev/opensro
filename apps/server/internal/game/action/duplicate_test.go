@@ -16,6 +16,7 @@ import (
 	"opensro.online/server/internal/domain"
 	"opensro.online/server/internal/game/enterworld"
 	"opensro.online/server/internal/game/item/wire"
+	"opensro.online/server/internal/game/staff"
 	"opensro.online/server/internal/game/world/simulation"
 )
 
@@ -169,7 +170,7 @@ func TestDuplicateRefusesSomePlayers(t *testing.T) {
 		code  uint16
 	}{
 		{"above level 60", func(a *enterworld.Character) { level := int64(61); a.Level = &level }, 0x3035},
-		{"a GM", func(a *enterworld.Character) { a.GMPrivilege = true }, 0x3039},
+		{"a GM", func(a *enterworld.Character) { a.GMPrivilege, a.GMCapabilities = true, uint32(staff.All) }, 0x3039},
 		{"a murderer", func(a *enterworld.Character) { a.PK = &domain.PKRecord{Penalty: 1} }, 0x3039},
 		{"a rider", func(a *enterworld.Character) { a.ActiveCOS = &enterworld.CharacterCOS{Summoned: true, Mounted: true} }, 0x3039},
 	} {

@@ -8,8 +8,9 @@ and record the replay (bugreport.Settings); it answers even when the
 feature is off, so the client can stay quiet instead of failing.
 
 POST accepts one report from a logged-in browser and posts it to Discord.
-The account, division and character come from the session cookies, never
-from the body. Pacing is checked before the body is read so a refused
+The account, division and character come from the reporter's session -
+the login cookie's, or the session token the in-game client presents -
+never from the body. Pacing is checked before the body is read so a refused
 player does not upload a video for nothing.
 
 An upload can take longer than the Agent's server-wide read timeout (a
@@ -73,7 +74,7 @@ func (server *Server) submitBugReport(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "multipart required", http.StatusUnsupportedMediaType)
 		return
 	}
-	identity, _, ok := server.resolveBrowserIdentity(r)
+	identity, ok := server.bugReportIdentity(w, r)
 	if !ok {
 		writeJSON(w, http.StatusUnauthorized, map[string]any{"ok": false, "code": "UNAUTHORIZED"})
 		return
@@ -134,4 +135,40 @@ func (server *Server) submitBugReport(w http.ResponseWriter, r *http.Request) {
 	delivered = true
 	log.Infof("agent: bug report %s from %s delivered (message %s)", reportID, identity.accountID, id)
 	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "id": id})
+}
+
+/*
+================
+bugReportIdentity
+
+Who files this report (#4109). A presented session token governs, as on
+the incident lane: the in-game client files through its session owner,
+whose token is the credential its game session was admitted with, while
+the login cookie is only the browser's copy of that same session - set
+once at login, never renewed, and erasable by another tab - so it can
+be gone under a player still in the world, whom the cookie lane then
+told to log in. Without a presented token the cookie names the
+reporter, as before (a report from the title screens). A presented
+session that is not live is refused, never traded for the cookie. On
+the token lane the browser's cookie copy is re-issued at the token's
+own expiry, so a filing heals the copy a cleared tab lost and a later
+reload resumes. The character hint rides along when the browser still
+holds it; it is a hint, never a credential.
+================
+*/
+func (server *Server) bugReportIdentity(w http.ResponseWriter, r *http.Request) (browserIdentity, bool) {
+	scheme, token, presented := strings.Cut(strings.TrimSpace(r.Header.Get("Authorization")), " ")
+	if presented && strings.EqualFold(scheme, "Bearer") && strings.TrimSpace(token) != "" {
+		token = strings.TrimSpace(token)
+		claims, ok := server.bearerClaims(r)
+		definition, live := server.liveSession(claims)
+		if !ok || !live {
+			return browserIdentity{}, false
+		}
+		server.setBrowserSessionUntil(w, r, token, claims.ExpiresAt)
+		return browserIdentity{token: token, accountID: claims.AccountID, definition: definition,
+			character: server.browserCharacterHint(r)}, true
+	}
+	identity, _, ok := server.resolveBrowserIdentity(r)
+	return identity, ok
 }

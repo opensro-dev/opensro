@@ -141,6 +141,12 @@ SyncTrainingCampHonorBuffs
 Reconciles a character's active Honor Rank buffs (20160..20163) against
 their camp's EvaluationRank (or 0 when unranked / not a camp master) and
 publishes the resulting attached/ended effect and stat frames.
+
+Two honors feed this one buff set: the camp's (native, the caller's
+rank) and the job honor tier's (port-only, #3530: the tier held for the
+job the character is dressed as). The stronger rank wins, so neither
+lane can strip the other's grant; with SRO_JOB_HONOR off the job side
+contributes nothing and this is the camp's native reconcile alone.
 ================
 */
 func (rt *Runtime) SyncTrainingCampHonorBuffs(division string, charID int64, evaluationRank uint8) {
@@ -154,6 +160,7 @@ func (rt *Runtime) SyncTrainingCampHonorBuffs(division string, charID int64, eva
 	if c == nil {
 		return
 	}
+	evaluationRank = strongerHonorRank(evaluationRank, rt.jobHonorTierRank(c))
 	want := HonorBuffSkillIDsForRank(evaluationRank)
 	wantSet := make(map[uint32]bool, len(want))
 	for _, id := range want {

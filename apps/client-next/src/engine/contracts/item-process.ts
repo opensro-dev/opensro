@@ -52,6 +52,9 @@ export interface AlchemyState {
 	// When the held reinforcement's prepare effect started (62AFA0); absent
 	// once the request is sent.
 	readonly preparing?: number;
+	// The server's port-only SRO_QUICK_FUSE rule (alchemy.ts quickFuse):
+	// Fuse sends at once and the window never waits out its effects.
+	readonly quick?: boolean;
 	readonly visible: boolean;
 	readonly pending: boolean;
 	readonly mode: AlchemyMode;

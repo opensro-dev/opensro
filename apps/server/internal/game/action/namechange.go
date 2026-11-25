@@ -178,7 +178,10 @@ func (rt *Runtime) finishNameChangeUse(divisionID string, character *enterworld.
 	outcome, err := rt.deps.QueueCharacterRename(divisionID, character, name, nowMs)
 	if err != nil {
 		*result = itemUseFailure(wire.ErrCodeInvalidRequest)
-		result.DiagnosticRefusal = "item-use: rename queue door failed: " + err.Error()
+		// The error goes to the log: the refusal reason is a counter key
+		// (countDiagnosticRefusal) and stays a fixed literal.
+		log.Warnf("action: rename queue for %q in %s failed: %v", character.Name, divisionID, err)
+		result.DiagnosticRefusal = "item-use: rename queue door failed"
 		return
 	}
 	switch outcome {

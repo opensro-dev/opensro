@@ -5,13 +5,11 @@ apps/client-next/src/engine/contracts/damage-text.ts
 apps/client-next/src/engine/contracts/effective-hp.ts
 apps/client-next/src/engine/contracts/footprint.ts
 apps/client-next/src/engine/contracts/frontend.ts
-apps/client-next/src/engine/contracts/message.ts
 apps/client-next/src/engine/contracts/model.ts
 apps/client-next/src/engine/contracts/navigation.ts
 apps/client-next/src/engine/contracts/presentation-random.ts
 apps/client-next/src/engine/foundation/animation/action-time.ts
 apps/client-next/src/engine/foundation/animation/animation-activation.ts
-apps/client-next/src/engine/foundation/animation/animation-dispatch.ts
 apps/client-next/src/engine/foundation/animation/avatar-override.ts
 apps/client-next/src/engine/foundation/animation/body-shape.ts
 apps/client-next/src/engine/foundation/animation/bsr-particle-transform.ts
@@ -19,7 +17,6 @@ apps/client-next/src/engine/foundation/animation/combat-stance.ts
 apps/client-next/src/engine/foundation/animation/disappear.ts
 apps/client-next/src/engine/foundation/animation/effect-material.ts
 apps/client-next/src/engine/foundation/animation/effect-script.ts
-apps/client-next/src/engine/foundation/animation/equipment-particles.ts
 apps/client-next/src/engine/foundation/animation/fortress-appearance.ts
 apps/client-next/src/engine/foundation/animation/ground-visual.ts
 apps/client-next/src/engine/foundation/animation/hawk.ts
@@ -54,14 +51,10 @@ apps/client-next/src/engine/foundation/gameplay/chat-blocks.ts
 apps/client-next/src/engine/foundation/gameplay/chat-feedback.ts
 apps/client-next/src/engine/foundation/gameplay/cos-behavior.ts
 apps/client-next/src/engine/foundation/gameplay/equipment-drop.ts
-apps/client-next/src/engine/foundation/gameplay/feedback-levels.ts
-apps/client-next/src/engine/foundation/gameplay/game-options.ts
 apps/client-next/src/engine/foundation/gameplay/guide.ts
-apps/client-next/src/engine/foundation/gameplay/hunting.ts
 apps/client-next/src/engine/foundation/gameplay/item-activation.ts
 apps/client-next/src/engine/foundation/gameplay/item-tooltip-reference.ts
 apps/client-next/src/engine/foundation/gameplay/merchant-branches.ts
-apps/client-next/src/engine/foundation/gameplay/native-notice.ts
 apps/client-next/src/engine/foundation/gameplay/party-notices.ts
 apps/client-next/src/engine/foundation/gameplay/player-stats.ts
 apps/client-next/src/engine/foundation/gameplay/quest.ts
@@ -96,9 +89,7 @@ apps/client-next/src/engine/foundation/ui/chat-scrollbar.ts
 apps/client-next/src/engine/foundation/ui/disconnect-dialog.ts
 apps/client-next/src/engine/foundation/ui/extended-quickslot.ts
 apps/client-next/src/engine/foundation/ui/frame-ring.ts
-apps/client-next/src/engine/foundation/ui/hit-test.ts
 apps/client-next/src/engine/foundation/ui/input-options.ts
-apps/client-next/src/engine/foundation/ui/item-equipment-overlay.ts
 apps/client-next/src/engine/foundation/ui/item-tooltip-recovery.ts
 apps/client-next/src/engine/foundation/ui/loading-presentation.ts
 apps/client-next/src/engine/foundation/ui/main-popup.ts
@@ -109,7 +100,6 @@ apps/client-next/src/engine/foundation/ui/message-tips.ts
 apps/client-next/src/engine/foundation/ui/minimap-catalog.ts
 apps/client-next/src/engine/foundation/ui/minimap-zoom.ts
 apps/client-next/src/engine/foundation/ui/money-presentation.ts
-apps/client-next/src/engine/foundation/ui/notice-text.ts
 apps/client-next/src/engine/foundation/ui/progression-bars.ts
 apps/client-next/src/engine/foundation/ui/quest-guide.ts
 apps/client-next/src/engine/foundation/ui/quest-time.ts
@@ -121,7 +111,6 @@ apps/client-next/src/engine/foundation/ui/skill-layout.ts
 apps/client-next/src/engine/foundation/ui/skill-tooltip-data.ts
 apps/client-next/src/engine/foundation/ui/stretch-ring.ts
 apps/client-next/src/engine/foundation/ui/vertical-spin.ts
-apps/client-next/src/engine/foundation/ui/vital-warning.ts
 apps/client-next/src/engine/runtime/assets/worker/entry.ts
 apps/client-next/src/engine/runtime/assets/worker/model/model.ts
 apps/client-next/src/engine/runtime/assets/world-lease.ts
@@ -147,7 +136,6 @@ apps/client-next/tests/browser/audio-loop.test.mjs
 apps/client-next/tests/browser/background-resume.test.mjs
 apps/client-next/tests/browser/baroi-moving-target.test.mjs
 apps/client-next/tests/browser/beta-performance.test.mjs
-apps/client-next/tests/browser/beta-release-live.test.mjs
 apps/client-next/tests/browser/blocking.test.mjs
 apps/client-next/tests/browser/buff-dismiss.test.mjs
 apps/client-next/tests/browser/champion-material.test.mjs
@@ -158,9 +146,6 @@ apps/client-next/tests/browser/character-texture-live.test.mjs
 apps/client-next/tests/browser/cosmetics.test.mjs
 apps/client-next/tests/browser/creation-body-shape.test.mjs
 apps/client-next/tests/browser/crests-war-buffs.test.mjs
-apps/client-next/tests/browser/cursor-click.test.mjs
-apps/client-next/tests/browser/cursor-focus.test.mjs
-apps/client-next/tests/browser/cursor.test.mjs
 apps/client-next/tests/browser/damage-occlusion.test.mjs
 apps/client-next/tests/browser/death-movement-live.test.mjs
 apps/client-next/tests/browser/deferred-particles.test.mjs
@@ -221,7 +206,6 @@ apps/client-next/tests/browser/quest-progress.test.mjs
 apps/client-next/tests/browser/quickslot-inventory.test.mjs
 apps/client-next/tests/browser/rebirth-self-selection-live.test.mjs
 apps/client-next/tests/browser/region-music-live.test.mjs
-apps/client-next/tests/browser/restart-live.test.mjs
 apps/client-next/tests/browser/return-scroll-live.test.mjs
 apps/client-next/tests/browser/return-scroll-presentation.test.mjs
 apps/client-next/tests/browser/ring-equip-live.test.mjs
@@ -253,7 +237,6 @@ apps/client-next/tests/browser/window-chrome-live.test.mjs
 apps/client-next/tests/browser/world-admission.test.mjs
 apps/client-next/tests/browser/world-character-lighting.test.mjs
 apps/client-next/tests/browser/world-chat.test.mjs
-apps/client-next/tests/browser/world-cursor.test.mjs
 apps/client-next/tests/browser/world-foliage-region.test.mjs
 apps/client-next/tests/browser/world-gestures.test.mjs
 apps/client-next/tests/browser/world-lifecycle.test.mjs
@@ -345,12 +328,10 @@ scripts/test/assets/pythonRun.test.mjs
 scripts/test/assets/rebuildLockInterop.test.mjs
 scripts/test/assets/skillPaneImageReferences.test.mjs
 scripts/test/lib/generatedAssetTestMode.mjs
-scripts/test/mission/effectProgramClosure.test.mjs
 scripts/test/mission/minimapArtCoverage.test.mjs
 scripts/test/mission/missionMinimapBuild.test.mjs
 scripts/test/suites/cif.mjs
 scripts/test/suites/index.mjs
 scripts/test/suites/region.mjs
-scripts/test/suites/world.mjs
 scripts/test/world/authoredWorldRegionResources.test.mjs
 scripts/test/world/worldMapImageReferences.test.mjs

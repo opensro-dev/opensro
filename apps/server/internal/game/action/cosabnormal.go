@@ -476,7 +476,7 @@ func (o *cosAbnormalOwner) Hit(source uint32, credited bool, damage uint32, reas
 	if credited && enterworld.CharacterAlive(o.c) {
 		o.public = append(o.public, o.rt.enterBattleState(o.division, o.c, o.now)...)
 	}
-	if o.sources[source].killer.monster != nil && o.rt.petShieldRecipientAllowed(o.c) {
+	if o.sources[source].killer.monster != nil && o.rt.petShieldRecipientAllowed(o.division, o.c) {
 		damage = o.rt.absorbPetShield(o.division, pet.GID, damage, o.now)
 	}
 	pet.CurrentHP -= vitals.HitDebit(pet.CurrentHP, damage)

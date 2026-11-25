@@ -63,6 +63,10 @@ type Session struct {
 
 	hub *Hub
 
+	// activity counts the current census span's traffic
+	// (session_activity.go); untouched while no census is installed.
+	activity spanActivity
+
 	// account is the admitted account, stored once by admitAccountSession
 	// before the session dispatches; nil for sessions attached without a
 	// HELLO admission (in-process tests).
@@ -636,6 +640,7 @@ func (s *Session) detachGen(gen int, cause error) {
 		s.expireTimer = time.AfterFunc(grace, func() { s.expireIfDetached() })
 	}
 	s.recordHistoryLocked("detached", cause)
+	s.hub.metrics.closeCauses.note("detached", cause)
 	s.cond.Broadcast()
 	s.mu.Unlock()
 	s.hub.metrics.detaches.Add(1)
@@ -692,6 +697,7 @@ func (s *Session) closeNow(cause error) (bool, error) {
 		cause = *s.closeReason
 	}
 	s.recordHistoryLocked("ended", cause)
+	s.hub.metrics.closeCauses.note("ended", cause)
 	conn := s.conn
 	s.conn = nil
 	s.attached = false
@@ -798,6 +804,9 @@ func (s *Session) readLoop(conn Conn, gen int, ctx context.Context) {
 		}
 		s.hub.metrics.framesIn.Add(1)
 		s.hub.metrics.bytesIn.Add(uint64(f.EncodedLen()))
+		if s.hub.Census != nil {
+			s.activity.noteFrame()
+		}
 		s.mu.Lock()
 		current := !s.closed && gen == s.gen
 		if current {

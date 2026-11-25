@@ -15,7 +15,13 @@ Thanks for helping rebuild Silkroad Online! OpenSRO is a full client and server,
    - A claim lasts 72 hours. Pushing to a pull request that links the issue keeps it alive, and commenting `/claim` again renews it by hand.
    - Comment `/unclaim` if you stop. An idle claim is released on its own once it expires.
    - One account holds at most two claims at a time. Finish or `/unclaim` one before you claim a third.
+     An issue your own open pull request already links (`Fixes #N`) does not count: claim it past the cap, and it takes no slot.
    - Investigation work counts. Claim the issue before you start reading the binaries.
+5. **Read the priority labels as player impact.** The label is set on the issue by the impact on players, not by the size of the fix or who writes it:
+   - `priority: critical`: players can't get in, get thrown out, or a live event is wrong. It goes in the next release, and an open critical regression holds the release.
+   - `priority: high`: work the team takes before anything else.
+   - `priority: medium`: scheduled backlog, after the highs.
+   - `priority: low`: nice to have, with no player impact waiting.
 
 ---
 
@@ -122,6 +128,9 @@ Also:
   this are kept with the operator's release tooling (F6's COS bag cap
   broke a strict decoder).
 - **Link the issue or bug report** (for example `BUG-064`) it fixes.
+- **Name every open item's issue.** Anything the body lists as not ported,
+  left open or not covered names the issue that tracks it, or says why it
+  needs none (done since, native has none, owner's decision).
 - **Mark non-native behaviour** and name its flag (section 3).
 - Keep secrets out of commits and pull requests: tokens, passwords, webhook URLs.
 

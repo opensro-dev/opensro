@@ -28,13 +28,14 @@ if os.environ.get("REVTOOL_HOME"):
 try:
 	import revtool  # noqa: E402
 	import revtool_rizin as rz  # noqa: E402
+	import revtool_seed  # noqa: E402
 	_MISSING = ""
 except ImportError as exc:
 	# revtool.py lands with its own port; until then (and on any
 	# machine without it) this suite skips instead of erroring, so a
 	# clean checkout stays green. Where revtool lives (REVTOOL_HOME
 	# pointing at it) the suite runs in full below.
-	revtool = rz = None
+	revtool = rz = revtool_seed = None
 	_MISSING = f"revtool is not importable here: {exc}"
 
 
@@ -93,6 +94,10 @@ class FakeRizin:
 
 	def func_ops(self, va):
 		return list(OPS_402A70) if va == 0x402A70 else []
+
+	def containing_function(self, va):
+		# sub_402a70's canned body spans 0x402A70..0x402A7F.
+		return 0x402A70 if 0x402A70 <= va < 0x402A80 else None
 
 	def xrefs_to(self, va):
 		if va == 0x401100:
@@ -234,12 +239,24 @@ class TestSpelling(unittest.TestCase):
 		self.assertEqual(fallback, "sub_401100(int32_t arg_4h)")
 
 	def test_normalize_line(self):
-		data = {0xF5B3D8: "data_f5b3d8"}
-		self.assertEqual(rz.normalize_line("call fcn.00401100", data),
+		tokens = ({}, {0xF5B3D8: "data_f5b3d8"})
+		self.assertEqual(rz.normalize_line("call fcn.00401100", tokens),
 		                 "call sub_401100")
-		self.assertEqual(rz.normalize_line("mov dword [0xf5b3d8], eax", data),
+		self.assertEqual(rz.normalize_line("mov dword [0xf5b3d8], eax", tokens),
 		                 "mov dword [data_f5b3d8], eax")
-		self.assertEqual(rz.normalize_line("cmp eax, 0x80", data), "cmp eax, 0x80")
+		self.assertEqual(rz.normalize_line("cmp eax, 0x80", tokens), "cmp eax, 0x80")
+
+	def test_normalize_line_names_an_indexed_call_target(self):
+		# rizin prints its own flag; the index holds the seed's name for it.
+		tokens = ({0x964B60: "Seed_NamedHelper"}, {})
+		self.assertEqual(rz.normalize_line("call fcn.00964b60", tokens),
+		                 "call Seed_NamedHelper")
+		# A seeded project's flag already reads `sub_`; it is named too, and
+		# an unindexed or suffixed token keeps its spelling.
+		self.assertEqual(rz.normalize_line("call sub_964b60", tokens),
+		                 "call Seed_NamedHelper")
+		self.assertEqual(rz.normalize_line("call sub_401000", tokens), "call sub_401000")
+		self.assertEqual(rz.normalize_line("call sub_401000_1", tokens), "call sub_401000_1")
 
 
 @unittest.skipIf(_MISSING, _MISSING)
@@ -277,6 +294,19 @@ class TestCommands(unittest.TestCase):
 		self.assertIn("call HelperFree", out)       # rename applied
 		self.assertIn("data_f5b3d8", out)            # known datum spelled
 		self.assertIn("renamed in this view", out)
+
+	def test_view_resolves_an_address_inside_a_function(self):
+		# A strings/byte-search hit is an interior address: view shows the
+		# function that holds it, and says so; an address no function
+		# holds is still refused.
+		con, binary, _tmp = self.open_seeded()
+		args = make_args(target="0x402a78", binary=binary, raw=True)
+		rc, out = capture(rz.cmd_view, args, con, FakeRizin())
+		self.assertEqual(rc, 0)
+		self.assertIn("call fcn.00401100", out)
+		args = make_args(target="0x403000", binary=binary, raw=True)
+		rc, _out = capture(rz.cmd_view, args, con, FakeRizin())
+		self.assertEqual(rc, 1)
 
 	def test_view_raw_keeps_rizin_spelling(self):
 		con, binary, _tmp = self.open_seeded()
@@ -316,6 +346,87 @@ class TestCommands(unittest.TestCase):
 		rc, out = capture(revtool.cmd_find, args, con)
 		self.assertEqual(rc, 0)
 		self.assertIn("sub_402a70", out)
+
+	def write_stale_project(self, tmp, binary):
+		"""A project whose seed record predates the manifest pin."""
+		rzdb = os.path.join(tmp, "contributor.rzdb")
+		binary_sha = revtool.sha256_file(binary)
+		revtool_seed.record_applied_seed(
+			rzdb, "cd" * 32, "revtool-seed-client.xz",
+			{"binary_sha256": binary_sha, "target": "client"})
+		manifest = os.path.join(tmp, "seed-manifest.json")
+		with open(manifest, "w", encoding="utf-8") as fh:
+			json.dump({
+				"tag": "revtool-seed-2026-11-13",
+				"assets": [{"target": "client",
+							"file": "revtool-seed-client.xz",
+							"sha256": "ef" * 32, "bytes": 1,
+							"binary_sha256": binary_sha, "functions": 1,
+							"ledger_lines": 1}]}, fh)
+		return rzdb, manifest
+
+	def test_find_warns_when_the_project_seed_is_stale(self):
+		con, binary, tmp = self.open_seeded()
+		db = os.path.join(tmp, "revtool.db")
+		rzdb, manifest = self.write_stale_project(tmp, binary)
+		args = make_args(
+			db=db, binary=binary, rzdb=rzdb, pattern="NoSuchName", limit=40)
+		with mock.patch.object(revtool_seed, "_default_manifest",
+							   return_value=manifest):
+			rc, out = capture(rz.cmd_find, args, con, None)
+		self.assertEqual(rc, 0)
+		self.assertIn("(no matches)", out)
+		self.assertIn("project seeded from", out)
+		self.assertIn("re-run seed apply", out)
+		# A hit stays silent: the warning qualifies an empty answer only.
+		args = make_args(
+			db=db, binary=binary, rzdb=rzdb, pattern="402a70", limit=40)
+		with mock.patch.object(revtool_seed, "_default_manifest",
+							   return_value=manifest):
+			rc, out = capture(rz.cmd_find, args, con, None)
+		self.assertEqual(rc, 0)
+		self.assertIn("sub_402a70", out)
+		self.assertNotIn("project seeded from", out)
+
+	def test_index_warns_when_the_project_seed_is_stale(self):
+		con, binary, tmp = self.open_seeded()
+		db = os.path.join(tmp, "revtool.db")
+		rzdb, manifest = self.write_stale_project(tmp, binary)
+		fake = FakeRizin()
+		fake.rzdb = rzdb
+		args = make_args(db=db, binary=binary, refs="none")
+		with mock.patch.object(revtool_seed, "_default_manifest",
+							   return_value=manifest):
+			rc, out = capture(rz.cmd_index, args, con, fake)
+		self.assertEqual(rc, 0)
+		self.assertIn("indexed 2 functions (0 named)", out)
+		self.assertIn("project seeded from", out)
+
+	def test_seen_and_note_run_without_rizin(self):
+		# view's label-debt footer sends the reader to `seen`/`note`;
+		# both must exist on this CLI with the dump CLI's shapes (#4043).
+		con, binary, tmp = self.open_seeded()
+		db = os.path.join(tmp, "revtool.db")
+		rc, out = capture(
+			rz.main, ["--db", db, "seen", "sub_402a70",
+					  "widget sizing pass; extent unmeasured"])
+		self.assertEqual(rc, 0)
+		self.assertIn("triaged sub_402a70", out)
+		rc, out = capture(
+			rz.main, ["--db", db, "note", "add", "sub_402a70",
+					  "CORRECTION: not the widget constructor"])
+		self.assertEqual(rc, 0)
+		self.assertIn("note [", out)
+		rc, out = capture(
+			rz.main, ["--db", db, "note", "list", "sub_402a70"])
+		self.assertEqual(rc, 0)
+		self.assertIn("widget sizing pass", out)
+		self.assertIn("CORRECTION: not the widget constructor", out)
+		# The anti-garbage floor applies here too: a stub body is refused.
+		err = io.StringIO()
+		with contextlib.redirect_stderr(err):
+			rc, _out = capture(rz.main, ["--db", db, "seen", "sub_402a70", "short"])
+		self.assertEqual(rc, 1)
 
 	def test_index_note_names_a_loaded_project(self):
 		con, binary, tmp = self.open_seeded()

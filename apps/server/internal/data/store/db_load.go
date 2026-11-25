@@ -22,8 +22,9 @@ import (
 StoreReadHeadroom
 
 How many store versions past its own this binary opens (#3091, part 2
-of #3082). 0 until part 4 (#3093) turns it on, which keeps today's
-rule: exactly CurrentVersion. A store inside the window may only carry
+of #3082), turned on at 2 by part 4 (#3093): a release window may hold
+two additive steps, so a misclassified step reaches at most two
+releases back. A store inside the window may only carry
 additive steps (#3092); its newer top-level record fields survive this
 binary's writes (json.go, #3090), its meta stamps never go down
 (Store.schemaStamp, stampVersionTx), and the tables its newer layout
@@ -35,7 +36,7 @@ so far rode on a schema step (layouts 8 through 12 came with schemas
 21, 22, 25, 33 and 39), so K schema steps hold at most K layout bumps.
 ================
 */
-const StoreReadHeadroom = 0
+const StoreReadHeadroom = 2
 
 // StoreReadMaxVersion is the newest schema this binary opens: the top of
 // the read window, as the release contract publishes it.
@@ -109,6 +110,9 @@ func loadDB(db *sql.DB, current int, currentLayout int, headroom int) (*loadedDB
 		if err := validateEconomyLedger(db); err != nil {
 			return nil, fmt.Errorf("validating economy ledger: %w", err)
 		}
+		if err := validateItemLedger(db); err != nil {
+			return nil, fmt.Errorf("validating item ledger: %w", err)
+		}
 	}
 	if currentLayout >= 11 {
 		if err := validateNameReservations(db); err != nil {
@@ -123,6 +127,16 @@ func loadDB(db *sql.DB, current int, currentLayout int, headroom int) (*loadedDB
 	if currentLayout >= 13 {
 		if err := validateTradeHistory(db); err != nil {
 			return nil, fmt.Errorf("validating trade history: %w", err)
+		}
+	}
+	// Each validator runs from the layout that creates its tables: the
+	// offline upgrader loads an older source at its own layout.
+	if currentLayout >= 15 {
+		if err := validateEarnedSilk(db); err != nil {
+			return nil, fmt.Errorf("validating earned silk: %w", err)
+		}
+		if err := validateSilkHistoryEarned(db); err != nil {
+			return nil, fmt.Errorf("validating silk history: %w", err)
 		}
 	}
 	out := &loadedDB{

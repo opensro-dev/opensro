@@ -245,6 +245,74 @@ func TestDonateGuildPointsAtomicDoor(t *testing.T) {
 	}
 }
 
+// TestCreditGuildPointsAccrualDoor pins the passive-accrual credit
+// (issue #4051): the credit half of the donation door with NO SP debit
+// - GP and DonatedGP rise in one commit, SP is bit-identical, a member
+// with no SP field at all still credits, and the refusal arms (unknown
+// guild, non-member, zero amount, u32 wrap) mutate nothing.
+func TestCreditGuildPointsAccrualDoor(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	clock := newTestClock()
+
+	s := openTest(t, dir, clock)
+	leader := guildTestCharacter("gpacclead")
+	member := guildTestCharacter("gpaccmate")
+	if err := s.CreateCharacter(testDivision, "test-account", leader); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.CreateCharacter(testDivision, "test-account", member); err != nil {
+		t.Fatal(err)
+	}
+	guildID, _, _ := seedTestGuild(t, s, leader, member)
+	s.MutateCharacter(member, "gp-accrual-seed-sp", func() { member.SkillPoints = int64Ptr(500) })
+
+	credit, refusal := s.Guilds().CreditGuildPoints(testDivision, member.ID, 120)
+	if refusal.Refused() {
+		t.Fatal("accrual credit door refused a valid credit")
+	}
+	if credit.Snapshot.Guild.GP != 1620 {
+		t.Errorf("new guild GP = %d, want 1500+120", credit.Snapshot.Guild.GP)
+	}
+	if credit.Donor.DonatedGP != 720 {
+		t.Errorf("new donated GP = %d, want 600+120", credit.Donor.DonatedGP)
+	}
+	if member.SkillPoints == nil || *member.SkillPoints != 500 {
+		t.Errorf("member SP = %v, want the untouched 500 (accrual never debits)", member.SkillPoints)
+	}
+
+	// Refusal arms leave both GP planes untouched.
+	refusals := []struct {
+		name   string
+		charID int64
+		amount uint32
+	}{
+		{"non-member character", leader.ID + member.ID + 100, 10},
+		{"zero amount", member.ID, 0},
+		{"u32 wrap", member.ID, 0xffffffff},
+	}
+	for _, tc := range refusals {
+		if _, refusal := s.Guilds().CreditGuildPoints(testDivision, tc.charID, tc.amount); !refusal.Refused() {
+			t.Errorf("%s: door accepted", tc.name)
+		}
+	}
+	guild, members, _ := s.Guilds().Guild(testDivision, guildID)
+	if guild.GP != 1620 || members[1].DonatedGP != 720 {
+		t.Errorf("GP after refusals = %d/%d, want 1620/720", guild.GP, members[1].DonatedGP)
+	}
+
+	// The ONE commit persisted both sides: reopen and re-read.
+	s.Close()
+	reopened := openTest(t, dir, clock)
+	guild2, members2, ok := reopened.Guilds().Guild(testDivision, guildID)
+	if !ok {
+		t.Fatal("guild lost across reopen")
+	}
+	if guild2.GP != 1620 || members2[1].DonatedGP != 720 {
+		t.Errorf("reopened GP = %d/%d, want 1620/720", guild2.GP, members2[1].DonatedGP)
+	}
+}
+
 func TestGuildPersistsAcrossReopen(t *testing.T) {
 	t.Parallel()
 	dir := t.TempDir()

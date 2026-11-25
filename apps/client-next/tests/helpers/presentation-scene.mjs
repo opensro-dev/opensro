@@ -36,6 +36,7 @@ import {
 	walk
 } from "../../tools/perf/presentation/session-builder.mjs";
 import { goldDropModels } from "./gold-drop-models.mjs";
+import { effectProgramHeader, effectProgramFile } from "../../src/engine/foundation/assets/effect-programs.ts";
 
 const GLB_MAGIC = 0x46546c67, GLB_JSON = 0x4e4f534a, GLB_BINARY = 0x004e4942;
 const FLOAT = 5126, UNSIGNED_INT = 5125;
@@ -359,7 +360,12 @@ export function sceneSources() {
 		children: [],
 		globalData: { totalFrames: 20, parameters: [] }
 	};
-	json( "/assets/effects/programs.json", { framesPerSecond: 20, effects: { [GLOW]: { scale: 1, root: anchor } } } );
+	json( effectProgramFile( GLOW ), {
+		...effectProgramHeader(),
+		effect: { scale: 1, root: anchor },
+		meshes: [],
+		textures: {}
+	} );
 	for ( const body of Object.values( BODIES ) ) sources.set( body.glb, glb( "body", PLAYER_CLIPS ) );
 	for ( const part of [ ...ITEMS.map( item => item[4] ), ...DEFAULT_WEAR, "moonlit", "ally", "arena", "hwan" ] ) {
 		sources.set( `/assets/char/scene/${part}.glb`, glb( part, PART_CLIPS ) );

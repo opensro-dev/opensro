@@ -21,7 +21,12 @@ export function cosGroundRequest( record: CosRecord, kind: "pickup" | "drop", ta
 
 // A server grant into the pet bag (0xB06D type 0x15): the same record
 // shape as a pet ground pickup, minus the ground it came from.
-export function cosGrantResult( record: CosRecord, p: Uint8Array, refs: ReadonlyMap<number, number> ): CosRecord {
+export function cosGrantResult(
+	record: CosRecord,
+	p: Uint8Array,
+	refs: ReadonlyMap<number, number>,
+	rentRefs: ReadonlySet<number> = new Set()
+): CosRecord {
 	if (
 		p.length < 7 || p[0] !== 1 || p[1] !== 0x15 ||
 		viewOf( p ).getUint32( 2, true ) !== record.gid || !record.inventory
@@ -32,7 +37,7 @@ export function cosGrantResult( record: CosRecord, p: Uint8Array, refs: Readonly
 		return record;
 	}
 	if ( slot >= record.status ) throw Error( "COS grant slot exceeds capacity" );
-	const decoded = decodeInventoryItem( p, 7, refs );
+	const decoded = decodeInventoryItem( p, 7, refs, undefined, rentRefs );
 	if ( !decoded.item || decoded.next !== p.length ) throw Error( "Invalid COS grant item" );
 	return {
 		...record,
@@ -56,7 +61,12 @@ export function cosRemovalResult( record: CosRecord, p: Uint8Array ): CosRecord 
 	return { ...record, inventory: record.inventory.filter( row => row.slot !== slot ) };
 }
 
-export function cosGroundResult( record: CosRecord, p: Uint8Array, refs: ReadonlyMap<number, number> ): CosRecord {
+export function cosGroundResult(
+	record: CosRecord,
+	p: Uint8Array,
+	refs: ReadonlyMap<number, number>,
+	rentRefs: ReadonlySet<number> = new Set()
+): CosRecord {
 	if (
 		p.length < 7 || p[0] !== 1 || ![ 0x11, 0x12 ].includes( p[1]! ) ||
 		viewOf( p ).getUint32( 2, true ) !== record.gid || !record.inventory
@@ -73,7 +83,7 @@ export function cosGroundResult( record: CosRecord, p: Uint8Array, refs: Readonl
 		return record;
 	}
 	if ( slot >= record.status ) throw Error( "COS pickup slot exceeds capacity" );
-	const decoded = decodeInventoryItem( p, 7, refs );
+	const decoded = decodeInventoryItem( p, 7, refs, undefined, rentRefs );
 	if ( !decoded.item || decoded.next !== p.length ) throw Error( "Invalid COS pickup item" );
 	return {
 		...record,

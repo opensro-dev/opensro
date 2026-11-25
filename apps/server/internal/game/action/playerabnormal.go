@@ -543,7 +543,7 @@ func (o *playerAbnormalOwner) Hit(source uint32, credited bool, damage uint32, r
 		return
 	}
 	remaining := int64(o.CurrentHP())
-	if o.sources[source].killer.monster != nil && o.rt.petShieldRecipientAllowed(o.c) {
+	if o.sources[source].killer.monster != nil && o.rt.petShieldRecipientAllowed(o.division, o.c) {
 		damage = o.rt.absorbPetShield(o.division, enterworld.ObjectIDForCharacter(o.c), damage, o.now)
 	}
 	if o.sources[source].killer.monster != nil {

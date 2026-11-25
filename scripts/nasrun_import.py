@@ -239,17 +239,15 @@ def add_nasrun(vsro_root, native, output):
 
 		rows = select_rows(shared.read_item_tables(read_later))
 		codes = [row[items.CODENAME] for row in rows]
-		# Identities stand above every published row of the merged item
-		# tables (the variant's accumulated shards), as the gears stones'.
-		occupied = set()
 		for path in sorted(text_root.glob("itemdata*.txt")):
 			if sro_pk2.fold_ascii(path.name) in (ITEM_SHARD, "itemdata.txt"):
 				continue
 			for row in tables.table_rows(path.read_bytes()):
-				if len(row) > items.CODENAME and row[items.SERVICE] == "1":
-					occupied.add(int(row[items.IDENTITY]))
-					if row[items.CODENAME] in codes:
-						raise ValueError(f"Nasrun row {row[items.CODENAME]} already stands in the item tables")
+				if len(row) > items.CODENAME and row[items.SERVICE] == "1" and row[items.CODENAME] in codes:
+					raise ValueError(f"Nasrun row {row[items.CODENAME]} already stands in the item tables")
+		# Identities stand above every object row of the tree, items and
+		# characters alike (#3994).
+		occupied = published_ids.occupied_objects(text_root, (ITEM_SHARD,))
 		allocated = published_ids.allocate(published_ids.OBJECTS, occupied, codes, prior.get("items", {}))
 		staged = []
 		for row in rows:
@@ -383,6 +381,11 @@ def remove_skills(output, prior, marker, shard, manifest):
 # name texts and icons, or reap a previous import. The rows are the
 # VSRO client's as authored; only the id changes.
 # ================
+# The later clients' active-Spirit icon edge: a 512x32 sheet of sixteen
+# 32x32 cells (item-slot-effects.ts spiritActiveOverlay).
+SPIRIT_EDGE_SHEET = "icon/item/etc/icon_edge_nasrun.ddj"
+
+
 def add_nasrun_skills(vsro_root, native, output):
 	native, output = Path(native).resolve(), Path(output).resolve()
 	if trees_overlap(native, output):
@@ -440,6 +443,9 @@ def add_nasrun_skills(vsro_root, native, output):
 		if missing_names:
 			raise ValueError(f"missing Nasrun skill names: {sorted(missing_names)}")
 		icons = {("Media", "icon/" + shared.normalized_path(row[SKILL_ICON])) for row in staged}
+		# The worn, awake Spirit's icon edge (#4384): the later clients
+		# animate it over the Spirit's avatar socket (item-slot-effects.ts).
+		icons.add(("Media", SPIRIT_EDGE_SHEET))
 		assets = shared.copy_resource_closure(icons, native, output, archives)
 	write_atomically(shard, cap110.encode_rows(staged))
 	write_atomically(name_path, merged_names)

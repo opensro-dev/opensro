@@ -21,7 +21,10 @@ placement of the same region and uid (3334 rows, all DECO rows joined;
 measured on the pinned archives). This import copies the members of the
 layers the later client ships switched off into the variant's own .o2
 files, records which (region, uid) belongs to which layer in
-Map_extracted/layerobject.json, and copies the resources they draw.
+Map_extracted/layerobject.json, and copies the resources they draw. A
+region the variant imports whole from the later map (Baghdad) already
+holds its members as plain placements: those are tagged where they
+stand, never copied again, or the plain copy would show in every season.
 
 Inference (no v1.696 client executable is available to read): a layer
 row's id is the event group the server switches with the entered tail and
@@ -46,7 +49,7 @@ import struct
 from contextlib import ExitStack
 from pathlib import Path
 
-import build_alexandria_variant as variant
+import variant_files as variant
 import import_vsro_alexandria as tables
 import sro_pk2
 from cap110_item_import import FOLDERS, copy_resource_closure, normalized_path
@@ -185,6 +188,22 @@ def catalog_paths(rows):
 
 
 # ================
+# held_placement
+#
+# Whether the variant's own record is this later member already: a
+# region the variant imports whole from the later map (Baghdad and the
+# other later regions) carries the later file's seasonal members as
+# plain placements. The same key, object and position say it is the
+# same placement; a native record that merely shares the uid is not.
+# ================
+def held_placement(held, later_path, record, rows):
+	if held is None or held[0] not in rows:
+		return False
+	match = CATALOG_PATH.search(rows[held[0]])
+	return match is not None and match.group(1).lower() == later_path.lower() and held[1:4] == record[1:4]
+
+
+# ================
 # strip_previous
 # ================
 def strip_previous(out, report):
@@ -227,19 +246,22 @@ def import_layers(map_data, map_index, out):
 	head, rows = variant.catalog_lines(catalog.read_bytes())
 	paths = catalog_paths(rows)
 
-	# Every placement uid the variant already uses, per owning region.
-	targets, taken = {}, {}
+	# Every placement uid the variant already uses, per owning region, and
+	# each region file's own records by key.
+	targets, taken, held = {}, {}, {}
 	for later_key in sorted(region_files(map_index)):
 		target = out / "Map_extracted" / str(later_key[0]) / f"{later_key[1]}.o2"
 		if target.is_file():
 			targets[later_key] = (target, read_o2(target.read_bytes(), str(target)))
+			held[later_key] = {}
 			for records in targets[later_key][1]:
 				for record in records:
 					region, uid = record_key(record)
 					taken.setdefault(region, set()).add(uid)
+					held[later_key][(region, uid)] = record
 
 	object_ids, uids, resources = {}, {}, set()
-	files, placements, absent, added_objects = {}, set(), set(), 0
+	files, placements, absent, added_objects, tagged = {}, set(), set(), 0, 0
 	for later_key, entry in sorted(region_files(map_index).items()):
 		inserted = []
 		later_groups = read_o2(sro_pk2.payload(map_data, entry), entry.path)
@@ -253,8 +275,15 @@ def import_layers(map_data, map_index, out):
 					absent.add(f"{later_key[0]}/{later_key[1]}")
 					continue
 				object_id = record[0]
+				path = CATALOG_PATH.search(later_rows[object_id]).group(1)
+				if held_placement(held[later_key].get(key), path, record, rows):
+					# Tag the variant's own record; a second copy under a new
+					# uid would leave this one drawn in every season.
+					resources.add(("Data", normalized_path(path)))
+					placements.add((key[0], key[1], layer))
+					tagged += 1
+					continue
 				if object_id not in object_ids:
-					path = CATALOG_PATH.search(later_rows[object_id]).group(1)
 					known = paths.get(path.lower())
 					if known is None:
 						known = max(rows) + 1
@@ -293,6 +322,7 @@ def import_layers(map_data, map_index, out):
 		"layers": sorted(wanted),
 		"placements": len(placements),
 		"records": sum(len(keys) for keys in files.values()),
+		"recordsTagged": tagged,
 		"regionFiles": len(files),
 		"objectsAdded": added_objects,
 		"objectsUsed": len(resources),

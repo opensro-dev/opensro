@@ -207,6 +207,15 @@ export interface ChatLine {
 }
 /*
 ================
+InventorySortContainer
+
+Port-only, not native (SRO_INVENTORY_SORT): what a sort
+rearranges. "storage" is the open warehouse, personal or guild.
+================
+*/
+export type InventorySortContainer = "bag" | "storage" | "cos";
+/*
+================
 GameplayCommand
 
 Closed intent vocabulary accepted by the simulation command owner. Server
@@ -251,6 +260,17 @@ export type GameplayCommand =
 	| {
 		readonly kind: "auto-potion-save";
 		readonly settings: import("@/engine/foundation/gameplay/auto-potion").AutoPotionSettings;
+	}
+	// Port-only (#3907): an SRO Macro switch or save (0x7554).
+	| {
+		readonly kind: "macro-switch";
+		readonly macro: import("@/engine/foundation/gameplay/sro-macro").MacroKind;
+		readonly on: boolean;
+	}
+	| {
+		readonly kind: "macro-save";
+		readonly macro: import("@/engine/foundation/gameplay/sro-macro").MacroKind;
+		readonly settings: import("@/engine/foundation/gameplay/sro-macro").MacroSettings;
 	}
 	| { readonly kind: "rebirth"; readonly choice: 1 | 2; }
 	// An arrow key's press or release (#1574): Up walks the facing, Left and
@@ -391,7 +411,9 @@ export type GameplayCommand =
 	| { readonly kind: "mastery-train"; readonly id: number; }
 	| { readonly kind: "quickslot-bind"; readonly slot: number; readonly skillId: number; }
 	| { readonly kind: "quest-abandon"; readonly refId: number; }
-	| { readonly kind: "quest-reward"; readonly refId: number; }
+	// picks: the reward window's chosen item RefObjIDs (a selection quest's
+	// claim); absent for a plain kind-2 claim.
+	| { readonly kind: "quest-reward"; readonly refId: number; readonly picks?: readonly number[]; }
 	| {
 		readonly kind: "chat";
 		readonly channel: number;
@@ -460,6 +482,11 @@ export type GameplayCommand =
 		// drop-action gate (594980) that owns the free-battle warning.
 		readonly activation?: boolean;
 	}
+	// Port-only, not native (SRO_INVENTORY_SORT): sort the bag,
+	// the open warehouse (personal or guild) or a companion's bag with
+	// ordinary moves, one at a time (inventory-sort-run.ts). gid names the
+	// companion.
+	| { readonly kind: "inventory-sort"; readonly container: InventorySortContainer; readonly gid?: number; }
 	| {
 		readonly kind: "item-use";
 		readonly slot: number;
@@ -477,12 +504,17 @@ export type GameplayCommand =
 		readonly reverseChoice?: number;
 		// The port-only map choice's point id (reverse-return-map.ts).
 		readonly reverseMapPoint?: number;
+		// The party member a party move names, by gid (reverse-user-point.ts).
+		readonly reversePartyGid?: number;
 		// The name-change scroll's new name (#1689, port-only): the entry
 		// window's text, carried raw in the use tail.
 		readonly renameName?: string;
 		// The crest delete's confirmed use (#2282): the confirm box
 		// (0x16/0x19) already asked, so the use goes out as composed.
 		readonly crestDelete?: boolean;
+		// The weapon switch box's kind (port-only, weapon-switch.ts): the
+		// target weapon's new fourth TypeID; targetSlot names the weapon.
+		readonly weaponKind?: number;
 	}
 	| {
 		readonly kind: "crest-register";
@@ -506,7 +538,14 @@ export type GameplayCommand =
 	// Port-only caravan hire window (caravan-hire.ts): refresh, hire or lead, and close.
 	| { readonly kind: "caravan-hire"; readonly operation: 0 | 1 | 2; readonly stars: number; readonly name: string; }
 	| { readonly kind: "caravan-hire-close"; }
-	| { readonly kind: "arena-decision"; readonly operation: 0 | 1 | 2; readonly id: string; }
+	| { readonly kind: "arena-decision"; readonly operation: 0 | 1 | 2 | 5; readonly id: string; }
+	| {
+		readonly kind: "arena-decision";
+		readonly operation: 4;
+		readonly id: string;
+		readonly source: number;
+		readonly destination: number;
+	}
 	| { readonly kind: "npc-withdraw"; }
 	| { readonly kind: "npc-event-exchange"; }
 	| { readonly kind: "npc-choice"; readonly choice: number; }
@@ -545,7 +584,15 @@ export interface InventoryItem {
 		}[];
 	};
 	readonly transformRefObjId?: number;
+	// A rented row's deletion deadline in unix milliseconds (native
+	// _RentItemInfo PeriodEndTime, #4240); absent on every other row.
+	// The tooltip's Time Remains counts down from it.
+	readonly rentExpiresUnixMs?: number;
 	readonly name?: string;
+	// The reference's codename, as the server's reference rows name it;
+	// the port-only scrolls that are build-staged items (their RefObjID is
+	// the build's) are known by it (weapon-switch.ts, race-switch.ts).
+	readonly codename?: string;
 	// The reference row's authored itemdata fields (the same record
 	// the tooltip reference carries), so activation rules can read
 	// them - the mall-use gate reads canUse (token 24).
@@ -658,6 +705,8 @@ export interface CosRecord {
 	readonly level?: number;
 	readonly satiety?: number;
 	readonly commandMode?: number;
+	// The GID the owner last ordered this attack pet onto (0x769E tag 2; #4222).
+	readonly assistTarget?: number;
 	readonly name?: string;
 	readonly inventorySlot?: number;
 }
@@ -826,10 +875,29 @@ export interface GameplayState extends MoverPublication {
 	// Port-only (#3358): the shown Contributor character names
 	// (contributor-titles.ts), under SRO_CONTRIBUTOR_TITLES.
 	readonly contributorTitles?: readonly string[];
+	// Port-only (staff-roster.ts): the staff roster and this character's
+	// capability bits; absent or empty on a shard without staff.
+	readonly staffRoster?: readonly import("@/engine/foundation/gameplay/staff-roster").StaffRosterEntry[];
+	readonly staffCapabilities?: number;
 	// Port-only damage ranking of the latest unique kill (unique-rank.ts).
 	readonly uniqueDamageRank?: import("./unique-rank").UniqueDamageRank | null;
+	// Port-only job honor board and own standing (job-honor.ts), under SRO_JOB_HONOR.
+	readonly jobHonor?: import("./job-honor").JobHonorFeed | null;
+	// Port-only (#3648): the Styria Clash standing (styria.ts) and its
+	// latched result, under SRO_STYRIA_CLASH.
+	readonly styria?: import("./styria").StyriaFeed | null;
+	readonly styriaResult?: import("./styria").StyriaFeed | null;
+	// Port-only (#3530): the tier titles' roster (job-honor-tiers.ts) -
+	// the held tier (1 Silver, 2 Gold, 3 King) by character name, under
+	// SRO_JOB_HONOR.
+	readonly jobHonorTiers?: ReadonlyMap<string, number>;
+	readonly uniqueStatus?: import("./unique-status").UniqueStatusFeed | null;
 	// Port-only most-wanted state of the local player (most-wanted.ts).
 	readonly mostWanted?: import("./most-wanted").MostWantedState;
+	// Port-only Blue Berserk level of the local player (hwan-level.ts); absent at 0.
+	readonly hwanLevel?: number;
+	// Port-only Blue Berserk level of every player told (hwan-level.ts), by object id.
+	readonly hwanLevels?: Readonly<Record<number, number>>;
 	// Port-only wolf skill tree of the pet window's wolf (pet-training.ts).
 	readonly petTraining?: PetTraining;
 	readonly arenaChest?: ArenaChest;
@@ -863,14 +931,25 @@ export interface GameplayState extends MoverPublication {
 	// Port-only (#3163): the cargo's stars and the gold short of the
 	// next star, published with the star answer under SRO_TRADE_TIERS.
 	readonly tradeProgress?: { readonly stars: number; readonly gap: number; };
+	// The Server Mission the v1.696 client's CNIFServerEvent shows (native:
+	// a later native client's window), set by 0x34F2 (server-event.ts).
+	readonly serverEventGauge?: { readonly id: number; readonly count: number; readonly goal: number; };
 	readonly eventGroups?: Readonly<Record<number, number>>;
 	readonly eligibility?: { readonly gm: boolean; readonly pcRoomEvent: boolean; };
 	// Port-only: a GM's compact console catalogues, resent until the UI
 	// acknowledges them so no first-publication race can lose the list.
 	readonly gmCatalog?: import("@/engine/foundation/gameplay/gm-command").GmCatalog;
 	readonly autoPotion?: import("@/engine/foundation/gameplay/auto-potion").AutoPotionSettings;
+	// Port-only (#3907): the SRO Macro settings the server replayed under
+	// SRO_AUTO_MACRO (sro-macro.ts); absent on a shard without it.
+	readonly sroMacro?: import("@/engine/foundation/gameplay/sro-macro").MacroSettings;
 	readonly storage?: import("@/engine/foundation/gameplay/storage-room").StorageRoom | null;
 	readonly playerModels?: readonly import("@/engine/foundation/gameplay/skin-change").PlayerModel[];
+	// The local player's sex selector (its model reference's +0x1AC):
+	// the wearer value the native 789C60 compares an item's ReqGender
+	// against, read off the live actor's model. Undefined until the
+	// local actor and its model are known.
+	readonly localSex?: number;
 	readonly job?: import("@/engine/foundation/gameplay/job-guild").LocalJob;
 	// The cached job rank lists and the one whose window last opened.
 	readonly jobRanks?: import("@/engine/foundation/gameplay/job-guild").JobRanks;
@@ -917,12 +996,21 @@ export interface GameplayState extends MoverPublication {
 	readonly alexandria?: boolean;
 	// Port-only SRO_RAISED_GOLD_CAPS: the stall and warehouse deposit caps are raised.
 	readonly raisedGoldCaps?: boolean;
+	// Port-only SRO_RAISED_GOLD_CAPS: the shard's chosen warehouse deposit
+	// cap, published at world entry; absent keeps the native deposit cap.
+	readonly storageGoldDepositLimit?: number;
+	// Port-only SRO_INVENTORY_SORT, published at world entry: the bag, the
+	// warehouses and companion bags carry a sort button (inventory-sort-run.ts).
+	readonly inventorySort?: boolean;
 	// The Experimental "Homing projectiles" row (port-only, default off):
 	// target-bone projectiles re-read the victim's socket in flight instead of
 	// flying to the launch-captured endpoint (effects.ts).
 	readonly homingProjectiles?: boolean;
 	// The server's port-only SRO_REVERSE_RETURN_MAP option is on (reverse-return-map.ts).
 	readonly reverseMapPoints?: readonly import("@/engine/foundation/gameplay/reverse-return-map").ReverseMapPoint[];
+	// The owner's enrolled reverse return location, told on the port-only
+	// 0x3FCE frame (reverse-user-point.ts); absent while none is enrolled.
+	readonly reverseUserPoint?: import("@/engine/foundation/gameplay/reverse-user-point").ReverseUserPoint;
 	// The shard's configured character level cap, published at world entry
 	// (level-cap.ts): the party form and the quest guide bound their level
 	// windows by it. Absent means the native cap (foundation/gameplay/level-cap.ts).
@@ -978,6 +1066,8 @@ export interface GameplayState extends MoverPublication {
 	readonly skillIndex?: ReadonlyMap<number, import("@/engine/foundation/gameplay/skill-catalog").SkillMetadata>;
 	readonly progression?: import("@/engine/foundation/gameplay/progression").Progression;
 	readonly skills?: readonly number[];
+	// Port-only (SRO_NASRUN, #4384): the worn Devil's Spirit's lent skills.
+	readonly spiritSkills?: readonly number[];
 	readonly quickSlots?: readonly import("@/engine/foundation/gameplay/quickslots").QuickSlot[];
 	readonly cosRecords?: readonly CosRecord[];
 	readonly selectedCosGid?: number;
@@ -990,6 +1080,9 @@ export interface GameplayState extends MoverPublication {
 	readonly quests?: readonly QuestRecord[];
 	readonly questProgress?: readonly QuestProgressEvent[];
 	readonly questPending?: number;
+	// The last refused reward claim (result 2, with the server's reason
+	// byte); the HUD answers it with the reward error line.
+	readonly questRefusal?: { readonly refId: number; readonly reason: number; };
 	readonly questGathering?: QuestGathering;
 	readonly inventorySlotCount?: number;
 	readonly equipmentSlotCount?: number;
@@ -1059,6 +1152,9 @@ export interface GameplayState extends MoverPublication {
 	readonly avatarInventory?: readonly InventoryItem[];
 	readonly inventory: readonly InventoryItem[];
 	readonly inventoryPending: boolean;
+	// Port-only, not native: the container a sort is rearranging
+	// (inventory-sort-run.ts), absent when none is.
+	readonly inventorySorting?: InventorySortContainer;
 	// Port-only diagnostics: the bag slots each inventory answer changed,
 	// flattened rows (foundation/gameplay/inventory-journal.ts).
 	readonly inventoryJournal?: readonly number[];

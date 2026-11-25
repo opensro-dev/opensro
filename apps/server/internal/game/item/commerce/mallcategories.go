@@ -37,19 +37,21 @@ later-client import, so a catalogue built without it lists none of
 them rather than refusing the boot (Imported below). The summon
 scrolls stand in Premium's Others tab below: the three shipped
 ITEM_ETC_E050729_SUMMON*_SCROLL rows no native family serves, priced
-30 silk for one soldier and 60 for two, badged new; their use is
+30 silk (1 and 5 people use) and 60 (2 people use), badged new;
+they summon strong monsters (#4030), and their use is
 action/summonscroll.go, behind this same setting.
 
-Three screenshot kinds are not listed yet (#3331, recorded in
-docs/features/GEARS-STONES.md). Sabakun's jewel and the extension
-gear have rows in the pinned later clients and the ISRO-R backup,
-but both serve only the Devil's Spirit - a wearable, awakening
-clock and alchemy line this port does not have yet. The owner's
-call (2026-11-12) is to port that system first (#3348) and list
-both with it; until then a listing would sell items that cannot be
-used. The Joon and Firespirits summon scrolls of HOT shop >
-Halloween Exclusive have no row in any source this build reads and
-wait for one; no rows are invented.
+The Devil's Spirit family was held back on the same evidence
+(#3331): its goods serve only the Spirit, and a listing would have
+sold items that cannot be used. The owner's call (2026-11-12) was
+to port that system first (#3348) and list the family with it. The
+system stands now (#3456), so with SRO_NASRUN on the six Spirits,
+the extension gear and Sabakun's jewel list in Premium > Gears
+(nasrunGoods) at the later mall's prices where it has them; off,
+or without their imported rows, the tab is exactly as shipped. The Joon and
+Firespirits summon scrolls of HOT shop > Halloween Exclusive have
+no row in any source this build reads and wait for one; no rows
+are invented.
 
 ===========================================================================
 */
@@ -63,6 +65,7 @@ import (
 	"strings"
 
 	"opensro.online/server/internal/game/enterworld"
+	"opensro.online/server/internal/game/nasrun"
 )
 
 // EnvMallCategories names the setting: "on" authors the later mall's
@@ -100,6 +103,12 @@ type mallCategoryGood struct {
 	// import authors: without its row the listing is skipped, not
 	// refused, so a build without the archive boots the rest.
 	Imported bool
+	// Nasrun marks a Devil's Spirit good (#3456 step 5): it lists
+	// only while SRO_NASRUN stands. The rows ride the import like
+	// every other optional row, but a listing without the socket,
+	// awakening clock and alchemy behind it would sell an item that
+	// cannot be used (#3331), so the runtime switch gates it too.
+	Nasrun bool
 }
 
 // ModelSwitcherItems are the sixteen weapon model switchers the later
@@ -172,10 +181,59 @@ func gearsStoneGoods() []mallCategoryGood {
 	return goods
 }
 
+// The Devil's Spirit prices. The v1.696 mall sells each Spirit at
+// 150 silk on its MALL_PREMIUM_NASRUN tab (packages 51522-51527,
+// one per Spirit) and the extension gear at 50 on
+// MALL_PREMIUM_NASRUN_ETC (package 51528): the later mall's own
+// refpricepolicyofitem silk rows (#4240 part 4). No later package
+// sells Sabakun's jewel - the later mall's remaining Nasrun package
+// sells an upgrade scroll for gold, an item this build does not
+// import - so the jewel keeps the authored 30 of the Gears tab's
+// tier, retunable in this place.
+const (
+	nasrunSpiritSilk = 150
+	nasrunGearSilk   = 50
+	nasrunJewelSilk  = 30
+)
+
+/*
+================
+nasrunGoods
+
+The Devil's Spirit in Premium > Gears (#3456 step 5, #4240
+part 4): the six A grade Spirits at the later mall's 150 silk, the
+extension gear at its 50 and Sabakun's jewel at the authored 30
+(above), each its own package, badged new. All ride SRO_NASRUN
+twice over: their rows only exist when the import staged them
+(Imported), and the mall lists them only while the system stands
+(Nasrun) - until the Spirit's socket, awakening clock and alchemy
+were ported, a listing would have sold items that cannot be used
+(#3331). The same goods also sell on the honor shops' second tabs
+for tokens (nasrungoods.go); the mall listing is the silk door the
+later mall shows. The S grade _UNIQUE pair is not sold, as on the
+token door: the later mall lists it only as a Premium Mall copy,
+and that shop is never ported (owner decision on #4240), so the
+silk mall never carries it.
+================
+*/
+func nasrunGoods() []mallCategoryGood {
+	goods := make([]mallCategoryGood, 0, len(nasrunSpirits)+2)
+	for _, spirit := range nasrunSpirits {
+		goods = append(goods, mallCategoryGood{Tab: "MALL_PREMIUM_GEARS", Package: "PACKAGE_" + spirit,
+			Item: spirit, Silk: nasrunSpiritSilk, Badge: mallBadgeNew, Imported: true, Nasrun: true})
+	}
+	goods = append(goods,
+		mallCategoryGood{Tab: "MALL_PREMIUM_GEARS", Package: "PACKAGE_" + nasrunGear,
+			Item: nasrunGear, Silk: nasrunGearSilk, Badge: mallBadgeNew, Imported: true, Nasrun: true},
+		mallCategoryGood{Tab: "MALL_PREMIUM_GEARS", Package: "PACKAGE_" + nasrunJewel,
+			Item: nasrunJewel, Silk: nasrunJewelSilk, Badge: mallBadgeNew, Imported: true, Nasrun: true})
+	return goods
+}
+
 // mallCategoryGoods is the layout's whole stock: the authored rows
 // below plus the gears stones' and the model switchers' generated
 // listings.
-var mallCategoryGoods = slices.Concat(mallLayoutGoods, gearsStoneGoods(), modelSwitcherGoods(), petScrollGoods())
+var mallCategoryGoods = slices.Concat(mallLayoutGoods, gearsStoneGoods(), nasrunGoods(), modelSwitcherGoods(), petScrollGoods())
 
 var mallLayoutGoods = []mallCategoryGood{
 	// Halloween Exclusive: the two attachment pieces; Models: the
@@ -188,7 +246,8 @@ var mallLayoutGoods = []mallCategoryGood{
 	{Tab: "MALL_HOT_MODELS", Package: "PACKAGE_ITEM_MALL_AVATAR_M_HALLOWEEN_HAT", Badge: mallBadgeHot},
 	{Tab: "MALL_HOT_MODELS", Package: "PACKAGE_ITEM_MALL_AVATAR_W_HALLOWEEN_HAT", Badge: mallBadgeHot},
 	// The summon scrolls (issue #3257): shipped items no native
-	// family serves; one soldier for 30 silk, two for 60, badged new.
+	// family serves, monster summons for 1, 2 and 5 people (#4030):
+	// 30 silk, 60 for the 2 people scroll, 30 for 5, badged new.
 	// Their use is action/summonscroll.go behind this same setting.
 	{Tab: "MALL_PREMIUM_OTHERS", Package: "PACKAGE_ITEM_ETC_E050729_SUMMON_SCROLL",
 		Item: "ITEM_ETC_E050729_SUMMON_SCROLL", Silk: 30, Badge: mallBadgeNew},
@@ -226,37 +285,62 @@ func modelSwitcherGoods() []mallCategoryGood {
 	return goods
 }
 
-// PetScrollItems are the summon scrolls of the pet kinds the later
-// sources import (#3328: scripts/pet_import.py): the fox, an attack
-// (growth) pet, and the winter snowman, a pickup pet with an event
-// copy of its scroll. Each names its kind in itemdata column 119, so
-// the persistent summoner serves it once the import wrote its rows.
+// PetScrollItems are the summon scrolls of the pet kinds the mall
+// sells: the fox, an attack (growth) pet, and the winter snowman, a
+// pickup pet with an event copy of its scroll, both imported from the
+// later sources (#3328: scripts/pet_import.py), plus the kangaroo, a
+// growth pet, and the pegasus, a vehicle, whose rows the native tree
+// already carries (#4240 part 3). Each names its kind in itemdata
+// column 119, so the persistent summoner serves it once its rows are
+// in the tree.
 var PetScrollItems = []string{
 	"ITEM_COS_P_FOX_SCROLL",
 	"ITEM_COS_P_WINTER_SNOWMAN_SCROLL",
 	"ITEM_COS_P_WINTER_SNOWMAN_EVENT_SCROLL",
+	"ITEM_COS_P_KANGAROO_SCROLL",
+	"ITEM_COS_C_PEGASUS_SCROLL",
 }
+
+// The shipped mall's pet tiers: every growth (attack) pet scroll is
+// 130 silk (bear, kangaroo, penguin, raven), every silk pickup pet 88
+// (cat, brownie, pink pig, rabbit) and every vehicle scroll 1
+// (scarabaeus, tiger, ostrich). The v1.696 client sells its winter
+// snowman at the same 88 and its whole vehicle tab at the same 1; its
+// fox has no real price (a 9999999 placeholder), so the fox takes its
+// kind's tier, while its kangaroo is a real 130 and its pegasus a
+// real 1.
+const (
+	growthPetScrollSilk  = 130
+	pickupPetScrollSilk  = 88
+	vehiclePetScrollSilk = 1
+)
 
 /*
 ================
 petScrollGoods
 
-One Pet-shop listing per imported pet scroll, in the tabs the shipped
-mall keeps for its own kinds: growth pets in MALL_PET_A_GROWTH, the
-silk pickup pets in MALL_PET_B_SILK. The later mall's growth scrolls
-share the summon scrolls' 30-silk tier here. The rows only exist when
-the optional pet import wrote them (Imported), so a build without a
-later source lists none and still boots.
+One Pet-shop listing per pet scroll the later mall sells, in the tabs
+the shipped mall keeps for its own kinds and at their tier: growth
+pets in MALL_PET_A_GROWTH, the silk pickup pets in MALL_PET_B_SILK,
+vehicles in MALL_PET_C_VEHICLE. The event copy of the snowman scroll
+has no mall row in the v1.696 client, so it is not listed. The
+kangaroo's and the pegasus's packages already stand in the tree's own
+data (at these same prices), so the layout only lists them; the rows
+stand only when the item is in the tree (Imported), so a build
+without the fox's and snowman's later source lists neither of those
+and still boots.
 ================
 */
 func petScrollGoods() []mallCategoryGood {
 	return []mallCategoryGood{
 		{Tab: "MALL_PET_A_GROWTH", Package: "PACKAGE_ITEM_COS_P_FOX_SCROLL",
-			Item: "ITEM_COS_P_FOX_SCROLL", Silk: 30, Badge: mallBadgeNew, Imported: true},
+			Item: "ITEM_COS_P_FOX_SCROLL", Silk: growthPetScrollSilk, Badge: mallBadgeNew, Imported: true},
 		{Tab: "MALL_PET_B_SILK", Package: "PACKAGE_ITEM_COS_P_WINTER_SNOWMAN_SCROLL",
-			Item: "ITEM_COS_P_WINTER_SNOWMAN_SCROLL", Silk: 30, Badge: mallBadgeNew, Imported: true},
-		{Tab: "MALL_PET_B_SILK", Package: "PACKAGE_ITEM_COS_P_WINTER_SNOWMAN_EVENT_SCROLL",
-			Item: "ITEM_COS_P_WINTER_SNOWMAN_EVENT_SCROLL", Silk: 30, Badge: mallBadgeNew, Imported: true},
+			Item: "ITEM_COS_P_WINTER_SNOWMAN_SCROLL", Silk: pickupPetScrollSilk, Badge: mallBadgeNew, Imported: true},
+		{Tab: "MALL_PET_A_GROWTH", Package: "PACKAGE_ITEM_COS_P_KANGAROO_SCROLL",
+			Item: "ITEM_COS_P_KANGAROO_SCROLL", Silk: growthPetScrollSilk, Badge: mallBadgeNew, Imported: true},
+		{Tab: "MALL_PET_C_VEHICLE", Package: "PACKAGE_ITEM_COS_C_PEGASUS_SCROLL",
+			Item: "ITEM_COS_C_PEGASUS_SCROLL", Silk: vehiclePetScrollSilk, Badge: mallBadgeNew, Imported: true},
 	}
 }
 
@@ -290,6 +374,17 @@ Recommended picks) must already be listed; they gain no row. Returns
 each authored package's badge for LoadMall to stamp on its one offer.
 A layout package whose data is missing refuses the boot naming the
 setting, like a bad extra-goods entry.
+
+A good the layout would author (Item set) whose package the data
+already carries is sold as the data has it: the layout writes no second
+package and keeps the data's price, and only lists it in its layout tab
+with its badge. Since #4241 the build imports the v1.696 mall row for
+the winter snowman scroll (MALL_PET_B_SILK, 88 silk, the layout's own
+tab and price), and authoring it again refused the GameWorld boot
+("already has package data"). A later native row wins over the
+layout's stand-in. The data's own mall listing was removed with the
+others above, so the layout's row is its one listing. The layout
+naming one package in two tabbed goods is still refused.
 ================
 */
 func addMallCategoryRows(tables map[string][][]string, refs enterworld.ItemRefSource) (map[string]string, error) {
@@ -369,8 +464,18 @@ func addMallCategoryRows(tables map[string][][]string, refs enterworld.ItemRefSo
 		}
 	}
 	badges := map[string]string{}
+	laidOut := map[string]bool{}
 	for _, good := range mallCategoryGoods {
+		if good.Tab != "" {
+			if laidOut[good.Package] {
+				return nil, fmt.Errorf("%s: the layout lists %s twice", EnvMallCategories, good.Package)
+			}
+			laidOut[good.Package] = true
+		}
 		if good.Imported && !itemRefPresent(refs, good.Item) {
+			continue
+		}
+		if good.Nasrun && !nasrun.Enabled(os.Getenv(nasrun.Env)) {
 			continue
 		}
 		if good.Badge != "" {
@@ -382,10 +487,7 @@ func addMallCategoryRows(tables map[string][][]string, refs enterworld.ItemRefSo
 			}
 			continue
 		}
-		if good.Item != "" {
-			if authored[good.Package] {
-				return nil, fmt.Errorf("%s: %s already has package data", EnvMallCategories, good.Package)
-			}
+		if good.Item != "" && !authored[good.Package] {
 			entry := MallExtraGood{Tab: good.Tab, Package: good.Package, Item: good.Item, Silk: good.Silk}
 			if err := authorMallPackage(tables, entry, refs, uint32(nextPackageID)); err != nil {
 				return nil, err

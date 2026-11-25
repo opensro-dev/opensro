@@ -87,3 +87,11 @@ func TestSummonDefaultTacticsNormalChampionAndOriginalFallback(t *testing.T) {
 		t.Fatal("invented missing native tactics")
 	}
 }
+
+func TestUniqueSummonPolicyCoversTheRigidKinds(t *testing.T) {
+	for _, codename := range []string{"MOB_EU_KERBEROS_L2", "MOB_AM_IVY_L2", "MOB_TQ_BLACKSNAKE_L2", "MOB_TQ_BLACKSNAKE_L3"} {
+		if UniqueSummonPolicy(codename) != SummonByHealthBand {
+			t.Fatalf("%s policy = %d, want health band", codename, UniqueSummonPolicy(codename))
+		}
+	}
+}

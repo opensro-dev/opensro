@@ -21,6 +21,7 @@ import {
 	equipmentParticleCatalog,
 	publishEquipmentParticleMetadata
 } from "../../../../scripts/build/char/equipmentParticles.mjs";
+import { readEffectCatalogSync } from "../../../../scripts/lib/effectCatalog.mjs";
 async function load( entry ) {
 	return import( sourceFileUrl( entry ).href );
 }
@@ -127,7 +128,7 @@ test("equipment particle lifetime survives cold resources and retires on replace
 });
 test("every authored active special-state item has reachable effects and real private sockets on every admitted body", () => {
 	const roster = readPublishedAssetJsonSync( "/assets/char/roster.json", publicRoot ),
-		programs = readPublishedAssetJsonSync( "/assets/effects/programs.json", publicRoot ),
+		programs = readEffectCatalogSync( publicRoot ),
 		catalog = equipmentParticleCatalog(),
 		cache = new Map();
 	let cases = 0;
@@ -244,6 +245,107 @@ test("a shoulder garment's ambient set rides its private branch onto the wearer"
 });
 /*
 ================
+static avatar ambient particles
+
+ITEM_MALL_AVATAR_W_HALLOWEEN_ATTACH's published shape (24155): a dress
+avatar whose resource authors its ambient set on its private branch bones
+(Bone01 and Bone03 here), started through the same ModDataParticle kind-2
+path as a garment's. The avatar loop must attach the branch on the
+avatar's own socket and start the set there; an avatar without a
+published branch attaches and starts none.
+================
+*/
+const HALLOWEEN_ATTACH = 24155, HALLOWEEN_SLOT = 1;
+function halloweenDress( withBranch ) {
+	const ambient = [ {
+		kind: 2,
+		stateId: -1,
+		animationSetName: "ambient",
+		entries: [ "Bone01", "Bone03" ].map( boneName => ({
+			effectPath: "system\\avatar_w_halloween.efp",
+			boneName,
+			vector3c: [ 0, 0, 0 ],
+			field00: 0,
+			field4c: 0,
+			flag53: 0,
+			flags50: [ 0, 0, 0 ]
+		}) )
+	} ];
+	return {
+		equipment: {
+			[HALLOWEEN_ATTACH]: {
+				slot: null,
+				avatarSlot: HALLOWEEN_SLOT,
+				armorClass: 0,
+				thiefSuit: false,
+				visualMask: 1280,
+				visualPriority: 90,
+				model: "res/item/avatar/avatar_w_halloween_attach.bsr",
+				source: null,
+				bodies: {
+					CH_W: {
+						glb: "/assets/char/equipment/halloween.glb",
+						parts: [ "AV0" ],
+						...(withBranch ?
+							{
+								branches: [ {
+									part: "AV0",
+									attachBone: "Bip01",
+									nodes: [ node( "Bone01", -1 ), node( "Bone03", -1 ) ],
+									particleModifiers: ambient
+								} ]
+							} :
+							{})
+					}
+				}
+			}
+		}
+	};
+}
+test("a static worn avatar's ambient set rides its private branch onto the wearer", () => {
+	const dress = halloweenDress( true ), entry = dress.equipment[HALLOWEEN_ATTACH].bodies.CH_W;
+	const assembleAvatar = d =>
+		assembleEquipmentAppearance( {
+			resource: { codename: "CHAR_CH_WOMAN_ADVENTURER" },
+			dress: d,
+			equipment: [],
+			avatars: [ { refObjId: HALLOWEEN_ATTACH } ],
+			hwanHair: false,
+			mounted: false,
+			weaponHidden: false,
+			attachmentsHidden: false,
+			fortressIndex: -1,
+			player: true,
+			ownerless: false,
+			committedWear: [],
+			freezeWear: true
+		} );
+	validateEquipmentBranches( entry.branches );
+	const assembly = assembleAvatar( dress );
+	const part = assembly.parts.find( p => p.model === entry.glb );
+	assert.deepEqual( part.branches, { slot: HALLOWEEN_SLOT, entries: entry.branches } );
+	assert.deepEqual( assembly.particles.map( p => [ p.effectPath, p.bone, p.source ] ).sort(), [
+		[ "system/avatar_w_halloween.efp", equipmentSocket( HALLOWEEN_SLOT, "AV0", "Bone01" ), "equipment" ],
+		[ "system/avatar_w_halloween.efp", equipmentSocket( HALLOWEEN_SLOT, "AV0", "Bone03" ), "equipment" ]
+	] );
+	const pose = createCharacterPose( {
+		nodes: appendEquipmentSockets( [ node( "Bip01", -1, [ 0, 150, 0 ] ) ], entry.branches, HALLOWEEN_SLOT ),
+		clips: [],
+		primitives: [],
+		images: []
+	} );
+	pose.evaluate( "", 0 );
+	for ( const particle of assembly.particles ) {
+		const matrix = pose.socket( particle.bone );
+		assert.ok( matrix && [ ...matrix ].every( Number.isFinite ), particle.bone );
+	}
+	// Without a published branch the same avatar attaches and starts none.
+	const bare = assembleAvatar( halloweenDress( false ) );
+	assert.deepEqual( bare.particles, [] );
+	assert.equal( bare.parts.find( p => p.model === entry.glb ).branches, undefined );
+});
+/*
+================
 decodePublished
 
 One decoded published character GLB, cached per test.
@@ -289,7 +391,7 @@ turns the crystal bones the particles sit on.
 */
 test( "every equipment ambient set is published with its garment and reachable programs", NATIVE_ONLY, () => {
 	const roster = readPublishedAssetJsonSync( "/assets/char/roster.json", publicRoot ),
-		programs = readPublishedAssetJsonSync( "/assets/effects/programs.json", publicRoot ),
+		programs = readEffectCatalogSync( publicRoot ),
 		ambient = equipmentAmbientParticles(),
 		models = new Map();
 	let branches = 0, animated = 0;

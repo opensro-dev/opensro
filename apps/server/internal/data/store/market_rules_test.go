@@ -19,6 +19,7 @@ import (
 	"testing"
 
 	"opensro.online/server/internal/domain"
+	"opensro.online/server/internal/platform/sqlitecol"
 )
 
 // testOfferRules adds an offer cap to the listing rules.
@@ -108,7 +109,7 @@ func TestMarketGoldSaleOwesTheListingCharacter(t *testing.T) {
 	if err != nil || !sale.Unpaid || sale.SellerChar != seller.ID || sale.To != domain.MarketToWarehouse {
 		t.Fatalf("sale = %+v, %v", sale, err)
 	}
-	if storage, _ := readAccountStorage(s.syncDBLocked(), marketSeller); storage.Gold != 0 {
+	if storage, _ := s.readAccountStorage(s.syncDBLocked(), marketSeller); storage.Gold != 0 {
 		t.Fatalf("the seller's warehouse got %d gold", storage.Gold)
 	}
 	owed, err := s.MarketOwedCharacters()
@@ -175,7 +176,7 @@ func TestMarketBuyIntoTheBag(t *testing.T) {
 	if len(buyer.MissionInventory) != 1 || buyer.MissionInventory[0].Slot != 20 || *buyer.Gold != 12345-1000 {
 		t.Fatalf("the buyer's record = %+v, gold %d", buyer.MissionInventory, *buyer.Gold)
 	}
-	if storage, _ := readAccountStorage(s.syncDBLocked(), marketBuyer); len(storage.Rows) != 0 {
+	if storage, _ := s.readAccountStorage(s.syncDBLocked(), marketBuyer); len(storage.Rows) != 0 {
 		t.Fatalf("the bag buy also filled the warehouse: %+v", storage.Rows)
 	}
 	if n := swordCount(t, s, seller, buyer); n != 1 {
@@ -370,7 +371,7 @@ func TestMarketOrphanedProceedsGoToTheWarehouse(t *testing.T) {
 	if paid, err := s.SettleOrphanedMarketProceeds(10); err != nil || paid != 1 {
 		t.Fatalf("orphan pass = %d, %v", paid, err)
 	}
-	if storage, _ := readAccountStorage(s.syncDBLocked(), marketSeller); storage.Gold != 990 {
+	if storage, _ := s.readAccountStorage(s.syncDBLocked(), marketSeller); storage.Gold != 990 {
 		t.Fatalf("the seller's warehouse gold = %d", storage.Gold)
 	}
 	if paid, _ := s.SettleOrphanedMarketProceeds(10); paid != 0 {
@@ -408,8 +409,8 @@ INSERT INTO market_sales VALUES (1, 'a', 2, 'gold', 100, 1, 5);`); err != nil {
 		}
 	}
 	for _, c := range marketColumns {
-		if present, err := tableHasColumn(db, c.table, c.column); err != nil || !present {
-			t.Fatalf("%s.%s missing: %v", c.table, c.column, err)
+		if present, err := sqlitecol.Has(db, c.Table, c.Name); err != nil || !present {
+			t.Fatalf("%s.%s missing: %v", c.Table, c.Name, err)
 		}
 	}
 	var unpaid int

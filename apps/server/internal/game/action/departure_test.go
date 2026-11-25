@@ -193,6 +193,46 @@ func TestDepartureCancelEndsTheCountdown(t *testing.T) {
 
 /*
 ================
+TestLogoutBlockHoldsTheCharacter
+
+A GM's /BLOCKLOGOUT ends a running countdown and refuses logout and
+restart with the in-battle code until /ALLOWLOGOUT lifts it.
+================
+*/
+func TestLogoutBlockHoldsTheCharacter(t *testing.T) {
+	c := testCharacter()
+	rt, _ := newTestRuntime(c, testItems())
+	rt.Now = func() time.Time { return time.UnixMilli(1000) }
+	srv := wireStartServer(t, rt)
+	client := wireConnect(t, srv, testDivision, c.Name)
+	session, _ := srv.Hub.Session(client.sessionID)
+	session.TryMarkWorldReady()
+
+	client.send(t, opDepartureRequest, []byte{1})
+	client.expectFrame(t, opDepartureResponse, []byte{departureResultOK, departureSeconds, 1})
+	if !rt.SetLogoutBlockGM(testDivision, c.Name, true) || rt.SetLogoutBlockGM(testDivision, c.Name, true) {
+		t.Fatal("the block did not report one change")
+	}
+	client.expectFrame(t, opDepartureCancelResponse, []byte{departureResultOK})
+	rt.TickHook()(6000)
+	select {
+	case <-session.Done():
+		t.Fatal("a held character's countdown closed the session")
+	default:
+	}
+	for _, mode := range []byte{1, 2} {
+		client.send(t, opDepartureRequest, []byte{mode})
+		client.expectFrame(t, opDepartureResponse, []byte{departureResultError, departureRefusedInBattle})
+	}
+	if !rt.SetLogoutBlockGM(testDivision, c.Name, false) || rt.SetLogoutBlockGM(testDivision, c.Name, false) {
+		t.Fatal("the release did not report one change")
+	}
+	client.send(t, opDepartureRequest, []byte{1})
+	client.expectFrame(t, opDepartureResponse, []byte{departureResultOK, departureSeconds, 1})
+}
+
+/*
+================
 TestDepartureFollowsTheNativeBattleRules
 
 The reference server's logout request: ordinary battle still logs out; in battle

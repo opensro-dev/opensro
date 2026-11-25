@@ -4,8 +4,9 @@
 layout_steps_test.go - an additive layout step is created at boot, and
 only that
 
-Part 5 of #3082 (#3094). StoreReadHeadroom is 0 until part 4, so the
-boot tests open with the package-only wider window (Options.readHeadroom)
+Part 5 of #3082 (#3094). StoreReadHeadroom is 2 since part 4 (#3093);
+the boot tests still open with the package-only wider window
+(Options.readHeadroom)
 on a store as the layout-before binary left it: the current file with
 the current layout's tables dropped and its layout stamped one lower.
 The class tests run every additive step's statement against an empty
@@ -246,9 +247,9 @@ func TestBootCreatesAnAdditiveLayoutsEmptyTables(t *testing.T) {
 ================
 TestBootLayoutOutsideTheWindowRefuses
 
-Today's window (headroom 0) creates nothing and refuses an older layout
-as before; a one-wide window refuses a store two layouts back. Both
-leave the file as it was.
+The production window (headroom 2 since #3093) creates nothing and
+refuses a store one layout past it; a wider test window refuses a
+store past itself. Both leave the file as it was.
 ================
 */
 func TestBootLayoutOutsideTheWindowRefuses(t *testing.T) {
@@ -258,8 +259,8 @@ func TestBootLayoutOutsideTheWindowRefuses(t *testing.T) {
 		layout   int
 		headroom int
 	}{
-		{"today's window", CurrentLayoutVersion - 1, 0},
-		{"two layouts back, one-wide window", CurrentLayoutVersion - 2, 1},
+		{"production window", CurrentLayoutVersion - StoreReadHeadroom - 1, 0},
+		{"past a wider window", CurrentLayoutVersion - StoreReadHeadroom - 2, StoreReadHeadroom + 1},
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			t.Parallel()
@@ -345,13 +346,13 @@ func TestBootRefusesANewTableThatHoldsRows(t *testing.T) {
 	dir, clock := t.TempDir(), newTestClock()
 	s := openTest(t, dir, clock)
 	s.Close()
-	execAuthority(t, dir, "INSERT INTO caravan_agent_memories (division, agent_name, player_name, trust_score, kills, deaths, gold_stolen, last_region, last_note, updated_at_ms) VALUES ('global-official', 'Trader', 'asd2fixture', 0, 0, 0, 0, 0, '', 1)")
+	execAuthority(t, dir, "INSERT INTO mall_earned_silk (account_id, earned_silk) VALUES ('asd2fixture', 1)")
 	rewriteDatabaseMeta(t, dir, metaKeyLayoutVersion, CurrentLayoutVersion-1)
-	if _, err := openWithHeadroom(t, dir, clock, 1); !isVersionMismatch(err) || !strings.Contains(err.Error(), "caravan_agent_memories") {
-		t.Fatalf("open = %v, want an incompatible-schema refusal naming caravan_agent_memories", err)
+	if _, err := openWithHeadroom(t, dir, clock, 1); !isVersionMismatch(err) || !strings.Contains(err.Error(), "mall_earned_silk") {
+		t.Fatalf("open = %v, want an incompatible-schema refusal naming mall_earned_silk", err)
 	}
-	if got := rowRecord(t, dir, "SELECT count(*) FROM caravan_agent_memories"); got != "1" {
-		t.Fatalf("caravan_agent_memories holds %s rows", got)
+	if got := rowRecord(t, dir, "SELECT count(*) FROM mall_earned_silk"); got != "1" {
+		t.Fatalf("mall_earned_silk holds %s rows", got)
 	}
 	if got := metaStamp(t, dir, metaKeyLayoutVersion); got != strconv.Itoa(CurrentLayoutVersion-1) {
 		t.Fatalf("layout stamp = %s", got)

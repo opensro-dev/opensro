@@ -334,10 +334,10 @@ type Ticker struct {
 	Push   Pusher
 	Roster []NpcDef
 	// WorldNpcs names the runtime objects standing in one world instance
-	// (a quest instance's exit gate, action/questgate.go). They join the
+	// (quest gates and static world NPCs, action/worldnpc.go). They join the
 	// static roster in that world's sessions' NPC scope pass only. Nil
 	// means none.
-	WorldNpcs func(world uint32) []NpcDef
+	WorldNpcs func(division string, world uint32) []NpcDef
 	// RosterAt: Roster or its seasonal look variant (npc_looks.go).
 	RosterAt func(nowMs int64) []NpcDef
 	Interval time.Duration
@@ -365,6 +365,11 @@ type Ticker struct {
 	// before a peer's spawn row names those items (peervis.go); nil sends
 	// none.
 	ItemReferences func(ids []uint32) []Frame
+	// Parties returns the division's live parties as member-gid groups
+	// (peer_visibility.go). It is consulted only while a GM-invisible
+	// character is in the division; nil means no party knowledge, and an
+	// invisible character is then shown to no other player.
+	Parties func(division string) []PeerParty
 	// StallReport is how long a tick runs before the watchdog logs what it
 	// is doing (tick_watchdog.go). Values <= 0 use DefaultTickStallReport.
 	StallReport time.Duration
@@ -439,6 +444,7 @@ type divisionTickState struct {
 	npcScope            NpcScopeBuffer
 	shownPeers          map[string]map[uint32]bool
 	peerPaths           map[string]map[uint32]peerPath
+	peerResync          map[uint32]peerResyncState
 	peerReferences      map[string]map[uint32]bool
 	peerVisibilityKeys  []peerVisibilityKey
 	peerVisibilityValid bool
@@ -921,7 +927,7 @@ func (t *Ticker) runSessionLegs(state *divisionTickState, session SessionSnapsho
 
 	// All authored NPCs (including ferry managers and city gates) must enter
 	// and leave with the viewer throughout travel, not only during login.
-	roster := t.sessionRoster(session.WorldInstance, nowMs)
+	roster := t.sessionRoster(session.DivisionID, session.WorldInstance, nowMs)
 	// The legs of one division run in order on one worker, so the
 	// division's scope scratch is free to carry from session to session;
 	// the push below copies the frames before it returns.
@@ -939,6 +945,10 @@ func (t *Ticker) runSessionLegs(state *divisionTickState, session SessionSnapsho
 
 	// Legs 2+3: the other-player movement broadcast (peer_motion.go).
 	t.runPeerMovement(state, session, nowMs)
+
+	// Leg 4: the 5 s position resync for this session's own character
+	// (position_resync.go).
+	t.runPeerResync(state, session, nowMs)
 }
 
 /*

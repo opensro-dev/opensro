@@ -14,13 +14,14 @@ import { test } from "node:test";
 const commerce = await import( "../../src/engine/foundation/gameplay/commerce-controls.ts" );
 
 test("every commerce control the server sends is admitted, and nothing else", () => {
-	for ( const opcode of [ 11, 12, 13, 14, 15, 16, 17, 18, 19, 20 ] ) {
+	for ( const opcode of [ 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21 ] ) {
 		assert.ok( commerce.isWorldControl( opcode ), String( opcode ) );
 	}
-	for ( const opcode of [ 4, 10, 21, 255 ] ) assert.ok( !commerce.isWorldControl( opcode ), String( opcode ) );
+	for ( const opcode of [ 4, 10, 22, 255 ] ) assert.ok( !commerce.isWorldControl( opcode ), String( opcode ) );
 	assert.equal( commerce.MALL_CATALOG_CONTROL, 15, "the server's opMallCatalog (itemmall.go)" );
 	assert.equal( commerce.MALL_BALANCE_CONTROL, 17, "the server's opMallBalance (betasilk.go)" );
 	assert.equal( commerce.MALL_SILK_HISTORY_CONTROL, 18, "the server's opMallSilkHistory (itemmall.go)" );
 	assert.equal( commerce.CREST_UPLOAD_CONTROL, 19, "the server's opCrestRegister (crestregister.go)" );
 	assert.equal( commerce.MARKET_CONTROL, 20, "the server's opMarket (market.go)" );
+	assert.equal( commerce.SKILL_RECALL_CONTROL, 21, "the server's SkillRecallControl (progression/skillrecall.go)" );
 });

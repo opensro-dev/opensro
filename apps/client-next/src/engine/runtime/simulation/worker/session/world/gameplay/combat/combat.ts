@@ -33,7 +33,11 @@ import {
 import type { CastState } from "@/engine/contracts/gameplay";
 import { castPhase, damageTicks, skillPulse } from "@/engine/foundation/gameplay/combat-result";
 import { MAX_OPEN_CASTS, openCastOverflow } from "@/engine/foundation/gameplay/open-casts";
-import { TARGET_INTERACT_OPCODE } from "@/engine/contracts/opcodes";
+import {
+	OBJECT_POSITION_UPDATE_OPCODE,
+	OBJECT_SOURCE_MOVE_OPCODE,
+	TARGET_INTERACT_OPCODE
+} from "@/engine/contracts/opcodes";
 import { viewOf } from "@/engine/foundation/binary/byte-view";
 /*
 ================
@@ -540,7 +544,7 @@ export function createCombat(
 				}
 				return true;
 			}
-			if ( op === 0x30e3 ) {
+			if ( op === OBJECT_SOURCE_MOVE_OPCODE || op === OBJECT_POSITION_UPDATE_OPCODE ) {
 				huntingPoints = huntingMovement( huntingPoints, p );
 				return false;
 			}

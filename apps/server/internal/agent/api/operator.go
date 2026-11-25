@@ -17,6 +17,7 @@ import (
 	"crypto/sha256"
 	"crypto/subtle"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"os"
@@ -41,6 +42,13 @@ var operatorRequestID = regexp.MustCompile(`^[a-zA-Z0-9_-]{16,80}$`)
 // conduct action cites one, so the audit names the rule, not only staff
 // prose (#2671).
 var operatorClause = regexp.MustCompile(`^[A-Za-z0-9.-]{1,16}$`)
+
+// operatorMaxCapabilities bounds a staff grant's capability list.
+const operatorMaxCapabilities = 64
+
+// operatorConsoleRoles are the console roles a staff action may carry
+// (the console's edge identity proves which one signed in).
+var operatorConsoleRoles = map[string]bool{"operator": true, "approver": true}
 
 // operatorMaxMuteMinutes bounds one chat mute at 30 days
 // (moderation.MaxMuteDuration); longer is an account block.
@@ -72,6 +80,39 @@ type PlayerOperation struct {
 	// named character's guild crest, "union" for the crest of the
 	// union that guild stands in (#2282).
 	Crest string `json:"crest,omitempty"`
+	// Role and Capabilities are a staff-grant's role id and capability
+	// ids (package staff). ConsoleRole is the signed-in staff member's
+	// console role, which every staff action carries: only "approver"
+	// may add an elevated capability, and the staff book enforces it.
+	Role         string   `json:"role,omitempty"`
+	Capabilities []string `json:"capabilities,omitempty"`
+	ConsoleRole  string   `json:"consoleRole,omitempty"`
+	// StaffRole is a staff-role operation's role, added or edited. The
+	// endpoint carries it whole; the staff book owns its shape and rules
+	// (this package may not import game code: internal/gates).
+	StaffRole json.RawMessage `json:"staffRole,omitempty"`
+}
+
+// ErrForbidden marks an operation the signed-in console role may not
+// perform (a staff grant's elevated capability from an operator); the
+// endpoint answers 403 for it.
+var ErrForbidden = errors.New("agentapi: forbidden for this console role")
+
+/*
+================
+StaffOperations
+
+The console's staff surface (port-only; owner decision 2026-11-23):
+Read lists the roles, the capability table and the grants; Grant adds or
+replaces one character's grant, Revoke ends it, SetRole adds or edits a
+role. Each applies to the live world at once.
+================
+*/
+type StaffOperations struct {
+	Read    func() (any, error)
+	Grant   func(PlayerOperation) (any, error)
+	Revoke  func(PlayerOperation) (any, error)
+	SetRole func(PlayerOperation) (any, error)
 }
 
 /*
@@ -115,6 +156,8 @@ type PlayerOperations struct {
 	// crest of the union that guild stands in, reverting it to none
 	// (#2282); the game world audits the removal itself.
 	RemoveCrest func(PlayerOperation) (any, error)
+	// Staff is the staff-grant surface; nil refuses every staff action.
+	Staff *StaffOperations
 }
 
 /*
@@ -185,6 +228,19 @@ func (endpoint *operatorEndpoint) ServeHTTP(w http.ResponseWriter, r *http.Reque
 	}
 	endpoint.mu.Lock()
 	defer endpoint.mu.Unlock()
+	if r.Method == http.MethodGet && r.URL.Query().Get("staff") != "" {
+		if endpoint.config.Staff == nil {
+			http.Error(w, "staff grants are not enabled", http.StatusNotFound)
+			return
+		}
+		result, err := endpoint.config.Staff.Read()
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusServiceUnavailable)
+			return
+		}
+		writeJSON(w, http.StatusOK, result)
+		return
+	}
 	if r.Method == http.MethodGet {
 		result, err := endpoint.config.Read(r.URL.Query().Get("character"))
 		if err != nil {
@@ -201,7 +257,7 @@ func (endpoint *operatorEndpoint) ServeHTTP(w http.ResponseWriter, r *http.Reque
 	var request PlayerOperation
 	if err := decodeJSONRequest(http.MaxBytesReader(w, r.Body, operatorBodyLimit), &request); err != nil ||
 		!operatorRequestID.MatchString(request.ID) || len(request.Operator) == 0 || len(request.Operator) > 80 ||
-		len(request.Character) == 0 || len(request.Character) > 64 || len(strings.TrimSpace(request.Reason)) < 5 || len(request.Reason) > 500 {
+		(len(request.Character) == 0) != (request.Action == "staff-role") || len(request.Character) > 64 || len(strings.TrimSpace(request.Reason)) < 5 || len(request.Reason) > 500 {
 		http.Error(w, "invalid player operation", http.StatusBadRequest)
 		return
 	}
@@ -220,6 +276,16 @@ func (endpoint *operatorEndpoint) ServeHTTP(w http.ResponseWriter, r *http.Reque
 	}
 	if request.Action != "adjust-gold" && request.Gold != 0 {
 		http.Error(w, "a gold amount belongs to adjust-gold only", http.StatusBadRequest)
+		return
+	}
+	staffAction := strings.HasPrefix(request.Action, "staff-")
+	if staffAction != (request.ConsoleRole != "") || (staffAction && !operatorConsoleRoles[request.ConsoleRole]) {
+		http.Error(w, "a staff action needs the console role; other actions take none", http.StatusBadRequest)
+		return
+	}
+	if (request.Action != "staff-grant" && (request.Role != "" || len(request.Capabilities) != 0)) ||
+		(request.Action != "staff-role" && request.StaffRole != nil) || len(request.Capabilities) > operatorMaxCapabilities {
+		http.Error(w, "staff fields belong to their staff action only", http.StatusBadRequest)
 		return
 	}
 	operation := endpoint.config.Rescue
@@ -291,6 +357,28 @@ func (endpoint *operatorEndpoint) ServeHTTP(w http.ResponseWriter, r *http.Reque
 			return
 		}
 		operation = endpoint.config.RemoveCrest
+	case "staff-grant", "staff-revoke", "staff-role":
+		hooks := endpoint.config.Staff
+		if hooks == nil || request.Town != 0 || len(request.Items) != 0 || request.Silk != 0 {
+			http.Error(w, "invalid "+request.Action, http.StatusBadRequest)
+			return
+		}
+		switch request.Action {
+		case "staff-grant":
+			if request.Role == "" {
+				http.Error(w, "a staff grant needs a role", http.StatusBadRequest)
+				return
+			}
+			operation = hooks.Grant
+		case "staff-revoke":
+			operation = hooks.Revoke
+		default:
+			if len(request.StaffRole) == 0 {
+				http.Error(w, "a staff-role action needs the role", http.StatusBadRequest)
+				return
+			}
+			operation = hooks.SetRole
+		}
 	default:
 		http.Error(w, "unknown player operation", http.StatusBadRequest)
 		return
@@ -299,7 +387,12 @@ func (endpoint *operatorEndpoint) ServeHTTP(w http.ResponseWriter, r *http.Reque
 		http.Error(w, "request already recorded; inspect player before submitting another operation", http.StatusConflict)
 		return
 	}
-	before, err := endpoint.config.Read(request.Character)
+	// A role edit names no character: its "before" is the staff list.
+	read := func() (any, error) { return endpoint.config.Read(request.Character) }
+	if request.Action == "staff-role" {
+		read = endpoint.config.Staff.Read
+	}
+	before, err := read()
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusNotFound)
 		return
@@ -316,6 +409,10 @@ func (endpoint *operatorEndpoint) ServeHTTP(w http.ResponseWriter, r *http.Reque
 	}
 	if err := endpoint.audit(outcome); err != nil {
 		http.Error(w, "operation outcome audit failed; inspect player before retrying", http.StatusServiceUnavailable)
+		return
+	}
+	if errors.Is(operationErr, ErrForbidden) {
+		http.Error(w, operationErr.Error(), http.StatusForbidden)
 		return
 	}
 	if operationErr != nil {

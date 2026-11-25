@@ -152,6 +152,7 @@ func (rt *Runtime) applyInventoryMove(
 			rt.deps.ItemReferences(),
 			character,
 			rt.FortressGuildRole,
+			rt.Now().Unix(),
 		)
 
 		stackCap := uint16(1)

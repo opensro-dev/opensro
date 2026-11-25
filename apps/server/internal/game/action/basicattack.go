@@ -722,7 +722,7 @@ func (rt *Runtime) pursuitSteerDue(intent basicAttackIntent, worldKey string, sn
 	if !intent.HasApproach {
 		return true
 	}
-	world := rt.Worlds.Snapshot(worldKey, func() simulation.WorldState { return simulation.SeedWorldState(snapshot) })
+	world := rt.liveWorld(worldKey, snapshot, nowMs)
 	approachInFlight := world.MovingAt(nowMs)
 	targetMoved := simulation.WorldDistance2D(intent.ApproachTargetSample, target) > 0.01
 	young := nowMs-intent.ApproachIssuedAtMs < attackPursuitResteerMinMs
@@ -865,7 +865,7 @@ func (rt *Runtime) enterBasicAttackRange(
 	nowMs int64,
 	doors characterDoors,
 ) (OpResult, bool) {
-	world := rt.Worlds.Snapshot(worldKey, func() simulation.WorldState { return simulation.SeedWorldState(snapshot) })
+	world := rt.liveWorld(worldKey, snapshot, nowMs)
 	live := world.LiveSpawnAt(nowMs)
 	heading, hasHeading := simulation.HeadingFromMovement(live, target)
 	needsCorrection := world.MoveSegment.Valid() || (hasHeading && live.Angle != heading)

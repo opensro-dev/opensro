@@ -69,9 +69,16 @@ var janganElixirGoods = []janganGood{
 	{"ITEM_ETC_ARCHEMY_REINFORCE_RECIPE_ACCESSARY_B", 1000000},
 }
 
-// Degree 9 Lucky Powder, owner 2026-10-13 at A_09's native price; it
-// closes the elixirs tab (the powders of "elixirs and powders").
-var janganPowderGood = janganGood{"ITEM_ETC_ARCHEMY_REINFORCE_PROB_UP_A_09", 54469}
+// The Lucky Powders that close the elixirs tab (the powders of "elixirs
+// and powders"), each at its own itemdata price. Degree 9: owner
+// 2026-10-13. Degrees 10 and 11: owner 2026-11-25, after players found no
+// shop selling them - no native gold shop carries a degree 10 or 11 powder,
+// so degree 10-11 gear had no reinforcement elixir to buy.
+var janganPowderGoods = []janganGood{
+	{"ITEM_ETC_ARCHEMY_REINFORCE_PROB_UP_A_09", 54469},
+	{"ITEM_ETC_ARCHEMY_REINFORCE_PROB_UP_A_10", 63656},
+	{"ITEM_ETC_ARCHEMY_REINFORCE_PROB_UP_A_11", 70875},
+}
 
 // The degree 9 attribute stones, owner 2026-10-13 at 2,000,000 on the
 // grocer's alchemy tab; here they are the attribute stones tab.
@@ -111,11 +118,13 @@ var janganGrocerMagicStones = []janganGood{
 	{"ITEM_ETC_ARCHEMY_MAGICSTONE_ZOMBIE_09", 2000000},
 }
 
-// The smith's five stones (owner 2026-10-13, prices 2026-10-18); they move
+// The smith's stones (owner 2026-10-13, prices 2026-10-18; the degree 10
+// Steady stone owner 2026-11-25 at the degree 9 price); they move
 // to the grocer's alchemy stones tab behind hers, at the same prices.
 var janganSmithMagicStones = []janganGood{
 	{"ITEM_ETC_ARCHEMY_MAGICSTONE_LUCK_09", 5000000},
 	{"ITEM_ETC_ARCHEMY_MAGICSTONE_SOLID_09", 5000000},
+	{"ITEM_ETC_ARCHEMY_MAGICSTONE_SOLID_10", 5000000},
 	{"ITEM_ETC_ARCHEMY_MAGICSTONE_ASTRAL_09", 50000000},
 	{"ITEM_ETC_ARCHEMY_MAGICSTONE_ATHANASIA_09", 25000000},
 	{"ITEM_ETC_ARCHEMY_MAGICSTONE_REPAIR_09", 5000000},
@@ -220,13 +229,13 @@ func janganGrocerDefault() string {
 janganAlchemyTabGoods
 
 The three tabs' custom goods as extra goods on the reserved tab names:
-the elixir recipes and the powder, the attribute stones, and the magic
+the elixir recipes and the powders, the attribute stones, and the magic
 stones (the grocer's, then the smith's at their prices).
 ================
 */
 func janganAlchemyTabGoods() []ExtraGood {
 	var goods []ExtraGood
-	for _, good := range append(append([]janganGood{}, janganElixirGoods...), janganPowderGood) {
+	for _, good := range append(append([]janganGood{}, janganElixirGoods...), janganPowderGoods...) {
 		goods = append(goods, ExtraGood{Tab: janganElixirsTab, Codename: good.codename, Price: good.price})
 	}
 	for _, good := range janganAttrStoneGoods {

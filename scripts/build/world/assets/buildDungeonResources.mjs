@@ -16,7 +16,7 @@ import { refreshPrecompressedSidecars } from "../../generatedManifestSidecars.mj
 import { sha256Hex } from "../../shared/hash.mjs";
 import { BinaryReader } from "../../shared/jmxBinaryReader.mjs";
 import { writeJsonIfChanged } from "../../shared/jsonOut.mjs";
-import { notedExists as exists, notedReadFile as readFile } from "../io.mjs";
+import { notedExists as exists, notedReadFile as readFile, resolveOnDiskPath } from "../io.mjs";
 import { parseJmxBmsStaticMesh, parseJmxResourceBsr } from "../objects/formats.mjs";
 import { extractedRoot, normalizeAssetPath, publicRoot, toHex16 } from "../paths.mjs";
 import { readDungeonInfoRows } from "./dungeonInfo.mjs";
@@ -47,7 +47,11 @@ export async function buildDungeonResourceManifest( options = {} ) {
 			continue;
 		}
 		seenDofNames.add( normalizedName );
-		const sourcePath = resolveDofPath( dofRoot, entry.dofName );
+		// dungeoninfo.txt names the DOF with its authored case while the
+		// extracted tree keeps the folded form: record (and read) the
+		// on-disk spelling, which only differs on a case-sensitive file
+		// system (#3962).
+		const sourcePath = await resolveOnDiskPath( resolveDofPath( dofRoot, entry.dofName ) );
 		const bytes = await readFile( sourcePath );
 		const presentation = readDofPresentation( bytes, sourcePath );
 		const waterSurfaces = await resolveDungeonWater(

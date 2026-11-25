@@ -16,6 +16,7 @@ import type { PortalCatalog } from "@/engine/foundation/gameplay/portal";
 import type { TooltipMastery } from "@/engine/foundation/ui/mastery-tooltip";
 import type { MallNotify } from "@/engine/foundation/ui/mall-notify";
 import type { EventInterfaceData } from "@/engine/foundation/ui/event-interface";
+import type { RenewalMallData } from "@/engine/foundation/ui/renewal-mall";
 import type { JobExpThresholds } from "@/engine/foundation/gameplay/player-info-job";
 import type { TooltipSkillCatalog } from "@/engine/foundation/ui/skill-tooltip-data";
 import type { ActionSlot } from "@/engine/foundation/ui/action-layout";
@@ -51,6 +52,9 @@ export interface HudData {
 	// CIFEventInterface's three layouts (547750); PC-room and winter are
 	// null when the later import never published them.
 	readonly eventInterface: EventInterfaceData;
+	// The later client's renewal mall window, the desktop Item Mall;
+	// null when the later import never published it.
+	readonly renewalMall: RenewalMallData | null;
 	// config\command.txt: the debug console's command names by id (68D9C0).
 	readonly commandTable: ReadonlyMap<string, number>;
 	// config\cameradata.txt rows: the /cw* waypoint store's keyframes (#1716).
@@ -190,9 +194,6 @@ export interface UiFrame {
 	pressed: string | null;
 	hover: string | null;
 	focus: string | null;
-	// The Experimental "Fit window labels" row; absent reads as off (a
-	// window's admission fits its text with it, ui-glyphs resolveTextOverlaps).
-	fitWindowLabels?(): boolean;
 }
 
 /*
@@ -201,8 +202,8 @@ UiAuthoredFrame
 
 The frame the authored widgets (authored.ts) draw into: the whole text
 owner (widths, line height and SML2 layout besides quads), the system-text
-catalogue, the button art family of a texture and the Experimental "Fit
-window labels" and "Grey disabled tabs" preferences. The coordinator's drawFrame is one.
+catalogue and the button art family of a texture. The coordinator's
+drawFrame is one.
 ================
 */
 export interface UiAuthoredFrame extends UiFrame {
@@ -221,6 +222,4 @@ export interface UiAuthoredFrame extends UiFrame {
 	};
 	copy( key: string ): string;
 	buttonFamily( texture: string ): readonly string[];
-	fitWindowLabels(): boolean;
-	greyDisabledTabs(): boolean;
 }

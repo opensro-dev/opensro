@@ -31,8 +31,8 @@
 // # Startup and failure
 //
 // Production startup accepts CurrentVersion and CurrentLayoutVersion, and
-// the StoreReadHeadroom newer versions of each (0 today: exactly the
-// current ones). A newer store's stamps are never lowered. A store up to
+// the StoreReadHeadroom newer versions of each (2 since #3093). A newer
+// store's stamps are never lowered. A store up to
 // StoreReadHeadroom layouts older gains those layouts' empty tables at
 // boot when every step between is additive (layout_steps.go); no
 // existing table or row is touched. Incompatible pre-release stores are

@@ -60,7 +60,11 @@ func TestSookChestCashoutAndDeath(t *testing.T) {
 		} else {
 			rt.HandleArenaDecision(testDivision, c, append([]byte{1}, []byte(id)...))
 		}
-		if c.SookChest != nil || domain.CharacterWorldInstance(c) != domain.DefaultWorldInstance || goldOf(c) != beforeGold+10000 {
+		reward := uint64(40_000_000)
+		if dead {
+			reward = 10_000
+		}
+		if c.SookChest != nil || domain.CharacterWorldInstance(c) != domain.DefaultWorldInstance || goldOf(c) != beforeGold+reward {
 			t.Fatal("end did not settle and return")
 		}
 		want := beforeBag
@@ -71,7 +75,7 @@ func TestSookChestCashoutAndDeath(t *testing.T) {
 			t.Fatal("death/claim inventory policy")
 		}
 		rt.HandleArenaDecision(testDivision, c, append([]byte{1}, []byte(id)...))
-		if goldOf(c) != beforeGold+10000 || len(c.MissionInventory) != want {
+		if goldOf(c) != beforeGold+reward || len(c.MissionInventory) != want {
 			t.Fatal("duplicate decision paid twice")
 		}
 	}
@@ -134,6 +138,100 @@ func TestSookChestAtomicClaim(t *testing.T) {
 	}
 	if _, fault := rt.claimSookChest(c); fault == "" || len(c.MissionInventory) != 3 {
 		t.Fatal("claim paid twice")
+	}
+}
+
+/*
+================
+TestSookChestTakeAllFallsBackToDrag
+================
+*/
+func TestSookChestTakeAllFallsBackToDrag(t *testing.T) {
+	c := instanceWorldTestCharacter(11, "TakeAllFallback")
+	rt, _ := sookFixture(t, c)
+	rt.enterSookArena(testDivision, c)
+	run := rt.sookRun(testDivision, c)
+	c.InventorySize = 15
+	occupied, first, second := chestTestReward(), chestTestReward(), chestTestReward()
+	occupied.Slot, second.Slot = 13, 1
+	c.MissionInventory = []domain.InventoryRow{occupied}
+	c.SookChest.Items = []domain.InventoryRow{first, second}
+	c.SookChest.Stage, c.SookChest.Checkpoint = 2, true
+	run.program.PausedAt = rt.Now().UnixMilli()
+	id, gold := c.SookChest.ID, goldOf(c)
+	drag := func(chestID string, source, target byte) {
+		rt.HandleArenaDecision(testDivision, c, append([]byte{arenaTakeItem, source, target}, chestID...))
+	}
+	drag(id, 0, 14)
+	rt.HandleArenaDecision(testDivision, c, append([]byte{arenaDiscard}, id...))
+	if len(c.MissionInventory) != 1 || len(c.SookChest.Items) != 2 {
+		t.Fatal("checkpoint preview was claimable before cashout")
+	}
+	var chestPayload []byte
+	rt.PushCharacterFrames = func(_, _ string, sent []wire.Frame) {
+		for _, frame := range sent {
+			if frame.Opcode == opArenaChest {
+				chestPayload = frame.Payload
+			}
+		}
+	}
+	rt.HandleArenaDecision(testDivision, c, append([]byte{arenaTakeAll}, id...))
+	if c.SookChest == nil || !c.SookChest.Pending || !c.SookChest.GoldPaid || c.SookArenaActive ||
+		len(c.SookChest.Items) != 2 || len(c.MissionInventory) != 1 || goldOf(c) != gold+70_000_000 {
+		t.Fatal("take all did not cash out and keep the full chest in town")
+	}
+	var chest arenaProjection
+	if err := json.Unmarshal(chestPayload, &chest); err != nil ||
+		chest.Phase != "claimable" || len(chest.Items) != 2 || chest.Error == "" {
+		t.Fatalf("expected the full claimable chest with a bag-space notice: %+v, %v", chest, err)
+	}
+	before := domain.CloneCharacter(c)
+	drag("stale", 0, 14)
+	drag(id, 0, 0)
+	drag(id, 0, 13)
+	if !reflect.DeepEqual(before.MissionInventory, c.MissionInventory) || !reflect.DeepEqual(before.SookChest, c.SookChest) {
+		t.Fatal("stale or invalid drops changed inventory or chest")
+	}
+	rt.HandleArenaDecision(testDivision, c, append([]byte{arenaTakeAll}, id...))
+	if !reflect.DeepEqual(before.MissionInventory, c.MissionInventory) || !reflect.DeepEqual(before.SookChest, c.SookChest) {
+		t.Fatal("take all partially granted into a full bag")
+	}
+	drag(id, 0, 14)
+	drag(id, 0, 14)
+	if len(c.MissionInventory) != 2 || c.MissionInventory[1].Slot != 14 ||
+		len(c.SookChest.Items) != 1 || c.SookChest.Items[0].Slot != 1 || goldOf(c) != gold+70_000_000 {
+		t.Fatal("drag did not honor the exact destination and preserve the other slot")
+	}
+	c.InventorySize = 16
+	drag(id, 1, 15)
+	drag(id, 1, 15)
+	if c.SookChest != nil || len(c.MissionInventory) != 3 || goldOf(c) != gold+70_000_000 {
+		t.Fatal("last reward or retry settled incorrectly")
+	}
+}
+
+/*
+================
+TestSookChestDiscardRemainder
+================
+*/
+func TestSookChestDiscardRemainder(t *testing.T) {
+	c := instanceWorldTestCharacter(11, "DiscardChest")
+	rt, _ := sookFixture(t, c)
+	picked := chestTestReward()
+	picked.Slot = 13
+	c.MissionInventory = []domain.InventoryRow{picked}
+	c.SookChest = &domain.ArenaChest{ID: "saved", Stage: 3, Pending: true, Items: []domain.InventoryRow{chestTestReward()}}
+	gold := goldOf(c)
+	rt.HandleArenaDecision(testDivision, c, append([]byte{arenaDiscard}, "other"...))
+	if c.SookChest == nil || goldOf(c) != gold {
+		t.Fatal("stale discard consumed rewards")
+	}
+	for range 2 {
+		rt.HandleArenaDecision(testDivision, c, append([]byte{arenaDiscard}, "saved"...))
+	}
+	if c.SookChest != nil || !reflect.DeepEqual(c.MissionInventory, []domain.InventoryRow{picked}) || goldOf(c) != gold+100_000_000 {
+		t.Fatal("discard lost the picked reward or failed to settle gold once")
 	}
 }
 
@@ -314,7 +412,7 @@ func TestSookStageRewardBundleBoundsAndNativeReferences(t *testing.T) {
 	rt.deps.(*enterworld.Deps).Items = items
 	n := uint32(0)
 	rt.DropRoll = func() (uint32, error) { n = (n*1103515245 + 12345) & 0x7fff; return n, nil }
-	for stage, b := range [][2]int{{3, 7}, {8, 15}, {18, 28}, {32, 45}, {50, 70}} {
+	for stage, b := range [][2]int{{9, 13}, {13, 20}, {20, 30}, {33, 46}, {50, 70}} {
 		c.SookChest.Items = make([]domain.InventoryRow, arenaChestLimit)
 		for i := range c.SookChest.Items {
 			c.SookChest.Items[i].Codename = "PREVIOUS_STAGE"

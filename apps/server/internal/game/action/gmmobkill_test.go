@@ -17,6 +17,7 @@ import (
 
 	"opensro.online/server/internal/game/enterworld"
 	"opensro.online/server/internal/game/item/wire"
+	"opensro.online/server/internal/game/staff"
 	"opensro.online/server/internal/game/world/instance"
 	"opensro.online/server/internal/game/world/simulation"
 )
@@ -42,7 +43,7 @@ newMobKillFixture
 func newMobKillFixture(t *testing.T) *mobKillFixture {
 	t.Helper()
 	rt, clock, gm, target := newCombatTestRuntime(t, 1)
-	gm.GMPrivilege = true
+	gm.GMPrivilege, gm.GMCapabilities = true, uint32(staff.All)
 	if err := rt.admitPopulationSession(testDivision, gm.Name, 1); err != nil {
 		t.Fatal(err)
 	}
@@ -158,7 +159,7 @@ func TestGMMobKillRefusals(t *testing.T) {
 		if f.rt.KillGMMonster(testDivision, f.gm.Name, f.gid, rewards) {
 			t.Fatal("a non-GM killed a monster")
 		}
-		f.gm.GMPrivilege = true
+		f.gm.GMPrivilege, f.gm.GMCapabilities = true, uint32(staff.All)
 		if row, _ := f.rt.Monsters.Get(testDivision, f.gid); row.CurrentHP == 0 {
 			t.Fatal("a refused command changed the monster")
 		}

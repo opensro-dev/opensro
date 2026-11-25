@@ -288,14 +288,25 @@ EquipmentGroup
 ================
 */
 func EquipmentGroup(level uint8, rare bool, roll uint32) (int, bool) {
+	return equipment.equipmentGroup(level, rare, roll)
+}
+
+/*
+================
+equipmentGroup
+
+EquipmentGroup against one catalog.
+================
+*/
+func (c equipmentCatalog) equipmentGroup(level uint8, rare bool, roll uint32) (int, bool) {
 	kind := 0
 	if rare {
 		kind = 1
 	}
-	if level == 0 || int(level) > len(equipment.classes[kind]) || roll >= 1_000_000 {
+	if level == 0 || int(level) > len(c.classes[kind]) || roll >= thresholdScale {
 		return 0, false
 	}
-	return groupAt(equipment.classes[kind][level-1], roll)
+	return groupAt(c.classes[kind][level-1], roll)
 }
 
 /*

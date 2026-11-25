@@ -6,8 +6,10 @@ loader.ts - the asset worker's request dispatcher
 Receives load, cancel and install requests from the main thread. Each load
 reads verified bytes through the pack reader, decodes them for the
 requested kind (image, model, character, world, effects, navigation) and
-transfers the result back. Foreground loads hold one of four capacity
-slots; the background installer runs only while none is held.
+transfers the result back. Foreground loads hold one of the capacity
+slots foundation/assets/asset-slots.ts counts (four for the streams, one
+the interface lane always has); the background installer runs only while
+none is held.
 
 Demand and execution are separate counts. A cancellation is acknowledged
 ("released") when it is received: nothing is delivered for the id again
@@ -22,10 +24,17 @@ cancellation is admitted as the drain settles, never refused.
 
 import { decodeGuildCrest } from "@/engine/foundation/ui/guild-crest";
 import { assetRequestBudget } from "@/engine/foundation/assets/asset-budget";
+import { assetSlotsFree } from "@/engine/foundation/assets/asset-slots";
 import { prepareWorldScene, worldSceneTransfers } from "@/engine/foundation/rendering/world-scene";
 import { createNavigationResources } from "./navigation/navigation";
 import { decodeDxt1 } from "@/engine/foundation/assets/dds";
 import { createEffectDecoder } from "./effects/effects";
+import {
+	EFFECT_MESH_BYTES,
+	EFFECT_PROGRAM_PREFIX,
+	effectMeshFile,
+	effectProgramFile
+} from "@/engine/foundation/assets/effect-programs";
 import {
 	decodeNativeTexture,
 	NATIVE_TEXTURE_MIME,
@@ -36,6 +45,7 @@ import { pngBytes, DECODED_IMAGE_BYTES } from "@/engine/foundation/assets/image-
 import { createWorldDecoder } from "./world/world";
 import { createModelDecoder } from "./model/model";
 import { AssetAbsentError, createPacks } from "./packs/packs";
+import { createPackMirror } from "@/engine/foundation/assets/pack-mirror";
 import { createBackgroundInstaller } from "./install";
 import { pageEntryBundle } from "@/engine/foundation/assets/page-entry";
 import { readBytes } from "@/engine/foundation/assets/read-bytes";
@@ -61,8 +71,6 @@ const DOWNLOAD_RETRY_DELAYS_MS = [ 250, 1000 ] as const;
 // one that never delivers still fails after the three attempts above.
 const DOWNLOAD_NO_PROGRESS_MS = 15000;
 const TRANSIENT_HTTP_STATUS = new Set( [ 408, 429, 500, 502, 503, 504 ] );
-// Stands in for the effect catalog's bytes once the decoder holds it parsed.
-const PARSED_EFFECT_CATALOG = new Uint8Array( 0 );
 // Stands in for a world bundle's bytes once they are parsed.
 const RELEASED_WORLD_BYTES = new Uint8Array( 0 );
 /*
@@ -120,18 +128,18 @@ export function createLoader( send: ( result: AssetWorkerMessage, transfer: Tran
 	// Demand can be cancelled immediately; execution holds capacity until its
 	// promise settles, including native decodes that AbortSignal cannot stop.
 	// pending maps every live demand (waiting or executing) to its controller;
-	// active counts only the executions holding a capacity slot.
+	// active maps only the executions holding a capacity slot to their request.
 	const pending = new Map<number, AbortController>();
-	const active = new Set<AbortController>();
+	const active = new Map<AbortController, Extract<AssetRequest, { kind: "load"; }>>();
 	// Demand admitted while every execution slot is held. A waiting entry
 	// owns nothing but its controller; it starts as an execution settles.
 	const waiting: {
 		request: Extract<AssetRequest, { kind: "load"; }>;
 		controller: AbortController;
 	}[] = [];
-	// The effect program catalog is parsed once and kept parsed (program.ts);
-	// its 40 MB of source bytes are needed only for that first parse.
-	let disposed = false, effectCatalogParsed = false;
+	// An effect request reads its own published file and that file's meshes
+	// (#3951); nothing of one effect is kept for the next.
+	let disposed = false;
 	const files = new Map<string, number>(), readyFiles = new Set<string>();
 	let bytesRead = 0;
 	// The watchdog's per-job notes. Bytes cannot be attributed to one load:
@@ -174,8 +182,74 @@ export function createLoader( send: ( result: AssetWorkerMessage, transfer: Tran
 		try {
 			return run();
 		} finally {
-			for ( const restart of stallWindows ) restart();
+			restartStallWindows();
 		}
+	}
+	/*
+	================
+	restartStallWindows
+
+	Every in-flight download's stall window starts over: the span that
+	just ended parked the loop for its whole length, so the silence in
+	it was never time a download could have used.
+	================
+	*/
+	function restartStallWindows() {
+		for ( const restart of stallWindows ) restart();
+	}
+	/*
+	================
+	decodeWorld
+
+	Drive one world decode (world.ts decodeSteps) to its scene. At
+	each of the decode's yields the worker's message loop gets a turn
+	(decodeTurn), so a cancel posted during a minutes-long city decode
+	is read and the decode abandoned instead of outliving the caller's
+	acknowledgement window (#3998). The synchronous spans between the
+	turns still park the loop, so when the decode settles every
+	in-flight download's stall window restarts, as after a syncWork
+	span (#2862).
+	================
+	*/
+	async function decodeWorld(
+		steps: Generator<void, import("@/engine/contracts/scene").WorldScene>,
+		signal: AbortSignal
+	): Promise<import("@/engine/contracts/scene").WorldScene> {
+		try {
+			let step = steps.next();
+			while ( !step.done ) {
+				await decodeTurn( signal );
+				step = steps.next();
+			}
+			return step.value;
+		} finally {
+			restartStallWindows();
+		}
+	}
+	/*
+	================
+	decodeTurn
+
+	One turn of the worker's message loop between two decode spans,
+	and no further span once the decode's job was cancelled meanwhile.
+	A MessageChannel round trip is a task, not a timer: the queued
+	cancel is read during the turn, so its abort lands here instead of
+	after the whole decode. Both ports close before the promise
+	settles, so a long decode leaks no ports.
+	================
+	*/
+	function decodeTurn( signal: AbortSignal ): Promise<void> {
+		signal.throwIfAborted();
+		return new Promise<void>( ( resolve, reject ) => {
+			const channel = new MessageChannel();
+			channel.port1.onmessage = () => {
+				channel.port1.close();
+				channel.port2.close();
+				if ( signal.aborted ) reject( signal.reason );
+				else resolve();
+			};
+			channel.port2.postMessage( undefined );
+		} );
 	}
 	/*
 	================
@@ -312,6 +386,19 @@ export function createLoader( send: ( result: AssetWorkerMessage, transfer: Tran
 		activeDownloads++;
 		markFetching();
 		const partial: PartialRead = { chunks: [], size: 0, whole: null };
+		// The desktop launcher's copy first, once and without retries: any
+		// failure there is the network's read to make (pack-mirror.ts). Its
+		// bytes are checked by their owners exactly as the network's are.
+		const mirrored = mirror.url( url );
+		if ( mirrored !== null ) {
+			try {
+				return await downloadAttempt( { url: mirrored, limit, signal, range, partial } );
+			} catch ( error ) {
+				signal.throwIfAborted();
+				mirror.missed( error );
+				forgetPartial( partial );
+			}
+		}
 		// failures counts the retries spent since the read last moved
 		// further; reached is the furthest byte any attempt kept.
 		let failures = 0, reached = 0;
@@ -572,6 +659,8 @@ export function createLoader( send: ( result: AssetWorkerMessage, transfer: Tran
 		}
 		return response.headers.get( "etag" );
 	}
+	// The desktop launcher's local pack copy, set by the page (pack-mirror.ts).
+	const mirror = createPackMirror();
 	const packs = createPacks( download, activity, hdAvailability, packGone, liveManifestValidator );
 	// The texture variant this device is served (texture-variants.ts): the
 	// page answers once its device knows its features; native texture reads
@@ -619,16 +708,23 @@ export function createLoader( send: ( result: AssetWorkerMessage, transfer: Tran
 	================
 	pump
 
-	Start waiting demand while an execution slot is free. Called when
-	demand arrives and whenever an execution settles; a cancelled waiter
-	is skipped (its demand already left with the acknowledgement).
+	Start waiting demand while an execution slot is free for its lane
+	(foundation/assets/asset-slots.ts, the rule the main thread admits by).
+	The oldest admissible waiter goes first, so an interface load passes
+	stream loads queued behind a draining cancellation. Called when demand
+	arrives and whenever an execution settles; a cancelled waiter is
+	dropped (its demand already left with the acknowledgement).
 	================
 	*/
 	function pump() {
-		while ( !disposed && waiting.length && active.size < 4 ) {
-			const next = waiting.shift()!;
+		while ( !disposed && waiting.length ) {
+			const index = waiting.findIndex( entry =>
+				entry.controller.signal.aborted || assetSlotsFree( entry.request.lane, active.values() ) > 0
+			);
+			if ( index < 0 ) return;
+			const next = waiting.splice( index, 1 )[0]!;
 			if ( next.controller.signal.aborted ) continue;
-			active.add( next.controller );
+			active.set( next.controller, next.request );
 			void load( next.request, next.controller );
 		}
 	}
@@ -657,10 +753,15 @@ export function createLoader( send: ( result: AssetWorkerMessage, transfer: Tran
 				throw new Error( "Invalid asset URL" );
 			}
 			primaryVerified = url.pathname.startsWith( "/assets/" );
-			let bytes = request.decode === "effect" && effectCatalogParsed ?
-				PARSED_EFFECT_CATALOG :
-				primaryVerified ?
-				await packs.read( url, request.limit, controller.signal ) :
+			// An effect is named by its model address; its bytes are its own
+			// published file (foundation/assets/effect-programs.ts).
+			if ( request.decode === "effect" && !(url.pathname + "#").startsWith( EFFECT_PROGRAM_PREFIX ) ) {
+				throw new Error( "Invalid effect program address" );
+			}
+			const effectPath = request.decode === "effect" ? decodeURIComponent( url.hash.slice( 1 ) ) : "";
+			const source = request.decode === "effect" ? new URL( effectProgramFile( effectPath ), url.origin ) : url;
+			let bytes = primaryVerified ?
+				await packs.read( source, request.limit, controller.signal ) :
 				await download( url.href, request.limit, controller.signal );
 			job.primaryDone = true;
 			// The primary bytes are in. The decoding mark still waits for
@@ -733,15 +834,16 @@ export function createLoader( send: ( result: AssetWorkerMessage, transfer: Tran
 					if ( part === "terrain" ) {
 						const terrain = await worlds.resolveTerrain( bytes, readWorldResource, url.pathname );
 						if ( disposed || controller.signal.aborted || pending.get( request.id ) !== controller ) return;
-						const prepared = syncWork( () =>
-							prepareWorldScene(
-								worlds.decode( terrain, false, {
-									origin,
-									part,
-									onProgress: noteDecodeWork
-								} )
-							)
+						const decoded = await decodeWorld(
+							worlds.decodeSteps( terrain, false, {
+								origin,
+								part,
+								onProgress: noteDecodeWork,
+								signal: controller.signal
+							} ),
+							controller.signal
 						);
+						const prepared = syncWork( () => prepareWorldScene( decoded ) );
 						decodeBase = decodeUnits;
 						send( { kind: "world", id: request.id, prepared }, worldSceneTransfers( prepared.scene ) );
 						pending.delete( request.id );
@@ -799,12 +901,14 @@ export function createLoader( send: ( result: AssetWorkerMessage, transfer: Tran
 					// The decode closures below capture the bundle: narrowing
 					// does not reach into them, so name the non-null value.
 					const resolvedBundle = resolved;
-					let scene = syncWork( () =>
-						worlds.decode( resolvedBundle, request.decode === "frontend-world", {
+					let scene = await decodeWorld(
+						worlds.decodeSteps( resolvedBundle, request.decode === "frontend-world", {
 							origin,
 							part,
-							onProgress: noteDecodeWork
-						} )
+							onProgress: noteDecodeWork,
+							signal: controller.signal
+						} ),
+						controller.signal
 					);
 					decodeBase = decodeUnits;
 					const propsPath = new URLSearchParams( url.hash.slice( 1 ) ).get( "props" );
@@ -826,8 +930,8 @@ export function createLoader( send: ( result: AssetWorkerMessage, transfer: Tran
 							if ( prop.name === "idol_lizard" ) continue;
 							if ( prop.scale !== 1 ) throw Error( "Unsupported interface model scale" );
 							const region = resolvedBundle.source.sectorX | (resolvedBundle.source.sectorY << 8);
-							const product = syncWork( () =>
-								worlds.decode(
+							const product = await decodeWorld(
+								worlds.decodeSteps(
 									{
 										source: resolvedBundle.source,
 										terrain: { blocks: [] },
@@ -838,8 +942,9 @@ export function createLoader( send: ( result: AssetWorkerMessage, transfer: Tran
 										}
 									},
 									true,
-									{ onProgress: noteDecodeWork }
-								)
+									{ onProgress: noteDecodeWork, signal: controller.signal }
+								),
+								controller.signal
 							);
 							decodeBase = decodeUnits;
 							added.push(
@@ -873,8 +978,19 @@ export function createLoader( send: ( result: AssetWorkerMessage, transfer: Tran
 				} else if ( request.decode === "character" || request.decode === "effect" ) {
 					let model: import("@/engine/contracts/character").CharacterSource;
 					if ( request.decode === "effect" ) {
-						const decoded = effects.model( bytes, decodeURIComponent( url.hash.slice( 1 ) ) ), raw = [];
-						effectCatalogParsed = true;
+						const program = effects.program( bytes );
+						// Every mesh at once, each under its own cap; the order is the file's.
+						const meshBytes = await Promise.all(
+							program.meshes.map( key =>
+								packs.read(
+									new URL( effectMeshFile( key ), url.origin ),
+									EFFECT_MESH_BYTES,
+									controller.signal
+								)
+							)
+						);
+						const meshes = effects.meshes( program, meshBytes );
+						const decoded = effects.model( program, meshes, effectPath ), raw = [];
 						let size = 0;
 						for ( const path of decoded.imagePaths ) {
 							if ( !path.startsWith( "/assets/" ) || path.includes( ".." ) ) {
@@ -1101,6 +1217,10 @@ export function createLoader( send: ( result: AssetWorkerMessage, transfer: Tran
 				packs.hdTextures( request.format );
 				return;
 			}
+			if ( request.kind === "pack-mirror" ) {
+				mirror.set( request.origin );
+				return;
+			}
 			if (
 				pending.has( request.id ) || !Number.isSafeInteger( request.limit ) ||
 				request.limit < 1 || request.limit > assetRequestBudget( request.decode )
@@ -1128,8 +1248,6 @@ export function createLoader( send: ( result: AssetWorkerMessage, transfer: Tran
 			if ( progressTimer !== null ) clearTimeout( progressTimer );
 			progressTimer = null;
 			animationCatalogs.clear();
-			effectCatalogParsed = false;
-			effects.dispose();
 			installer.dispose();
 			wakeIdleWaiters();
 			packs.dispose();

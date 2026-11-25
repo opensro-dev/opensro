@@ -77,6 +77,11 @@ func (rt *Runtime) deathKind(division string, victim *enterworld.Character, kill
 	if killer.player != nil && rt.flagWarHostile(division, victim, killer.player) {
 		return pk.DeathSpecialWorld
 	}
+	// Port-only (#3648): a Styria Clash kill between entered
+	// opponents settles the same way (styria_score.go).
+	if killer.player != nil && rt.styriaHostile(division, victim, killer.player) {
+		return pk.DeathSpecialWorld
+	}
 	switch {
 	case killer.monster != nil:
 		m := killer.monster

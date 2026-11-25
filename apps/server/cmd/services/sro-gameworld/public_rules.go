@@ -26,14 +26,20 @@ import (
 	"opensro.online/server/internal/game/caravanai"
 	"opensro.online/server/internal/game/companion"
 	"opensro.online/server/internal/game/enterworld"
+	"opensro.online/server/internal/game/gmcommand"
 	"opensro.online/server/internal/game/item/alchemy"
 	"opensro.online/server/internal/game/item/commerce"
+	"opensro.online/server/internal/game/item/loot"
+	"opensro.online/server/internal/game/macro"
 	"opensro.online/server/internal/game/nasrun"
 	"opensro.online/server/internal/game/progression"
+	"opensro.online/server/internal/game/quest"
 	"opensro.online/server/internal/game/social/chat"
 	"opensro.online/server/internal/game/social/contributor"
+	"opensro.online/server/internal/game/social/eventbot"
 	"opensro.online/server/internal/game/sookarena"
 	"opensro.online/server/internal/game/tunables"
+	"opensro.online/server/internal/game/uniquestatus"
 	"opensro.online/server/internal/game/world/alexandria"
 	"opensro.online/server/internal/game/world/climate"
 	"opensro.online/server/internal/game/world/monster"
@@ -56,10 +62,12 @@ var unlistedSettings = map[string]string{
 	progression.EnvSoOkChristmasGifts:     "a tuning of the Christmas event rule, not a rule of its own",
 	action.EnvGMSetSpeed:                  "a GM command, not a rule players meet",
 	action.EnvGMItemForge:                 "a GM command, not a rule players meet",
+	gmcommand.EnvGMModeration:             "GM moderation commands, not a rule players meet",
 	monster.EnvTrainingDummy:              "GM-only training targets",
 	simulation.EnvBetaUniqueRespawn:       "unique monster spawn timing is not published",
 	simulation.EnvJanganCaveRespawn:       "spawn timing is not published",
 	"SRO_MAINTENANCE_MESSAGE":             "the refusal code during a release window, not a rule players meet",
+	"SRO_COMING_SOON_SHARDS":              "coming-soon shards on the title server list, not a rule players meet",
 	contributor.EnvContributorTitles:      "a title over Discord contributors' names, not a rule players meet",
 	companion.EnvPetInventoryPages:        "the older shared value the grab pet and transport bag rules fall back to",
 	// The tunables a rule's own text shows (game/tunables).
@@ -105,17 +113,26 @@ var unlistedSettings = map[string]string{
 	// Build-time inputs (#1745): the variant build's import tools read
 	// them when the server data is built; the GameWorld reads neither,
 	// so there is no running rule for the page to state.
-	"SRO_CAP110_ITEMS":  "degree-11 equipment build input, consumed when the server data is built",
-	"SRO_HONOR_GOODS":   "honor store goods build input, consumed when the server data is built",
-	"SRO_CAP110_SKILLS": "degree-11 skill build input, consumed when the server data is built",
+	"SRO_CAP110_ITEMS":          "degree-11 equipment build input, consumed when the server data is built",
+	"SRO_HONOR_GOODS":           "honor store goods build input, consumed when the server data is built",
+	"SRO_ALEXANDRIA_PORT_STOCK": "Alexandria shop stock build input, consumed when the server data is built",
+	"SRO_CAP110_SKILLS":         "degree-11 skill build input, consumed when the server data is built",
+	"SRO_CAP110_QUESTS":         "Blue Berserk quest build input, consumed when the server data is built",
+	// Operator knobs of the Blue Berserk quests (quest/hwanknobs.go): they tune
+	// a quest roll or a quest drop; the unset value is the original.
+	quest.EnvHwanNiyaCaptureRates: "operator odds of the Niya trap quest's capture roll",
+	quest.EnvHwanSunRelic:         "operator odds of the Sun God relic dig",
+	quest.EnvHwan3FastDrop:        "operator switch for faster Alexandria ostracon drops",
 	// Cosmetic item rows the variant build imports; the GameWorld reads no
 	// such switch, the items simply exist in the built data.
 	"SRO_MALL_AVATARS": "mall avatar build input, consumed when the server data is built",
-	// The Styria Clash arena map (#3272 slice 1): the variant build merges
-	// its ground; nothing links to it and the GameWorld reads no switch
-	// until the Battle Arena engine (#3648) makes it a rule.
+	// The Styria Clash arena (#3272): the variant build merges its
+	// ground and the GameWorld runs the Battle Arena engine (#3648)
+	// behind the same switch - the arena manager takes applications
+	// and matches move to world 107. The registration and score
+	// screens are the epic's last slice, so the setting is stated.
 	"SRO_REFERRALS":    "the website's referral page shows its own numbers from the referral route",
-	"SRO_STYRIA_CLASH": "Styria Clash arena map build input; players cannot reach it until #3648",
+	"SRO_STYRIA_CLASH": "Styria Clash: the arena ground (build) and its match engine; players cannot reach it until #3648",
 	"SRO_CONSIGNMENT":  "the market pages state their own fee, duration and listing cap",
 	// Staff telemetry (#1639): name-free kill and EXP rates for the
 	// staff console; players never meet it.
@@ -131,6 +148,22 @@ var unlistedSettings = map[string]string{
 
 /*
 ================
+equipSwitchOn
+
+Whether the equipment switch scroll behind one flag is on.
+================
+*/
+func equipSwitchOn(env string) bool {
+	for _, scroll := range commerce.EquipSwitchScrolls {
+		if scroll.Env == env {
+			return commerce.EquipSwitchEnabledFromEnv(scroll)
+		}
+	}
+	return false
+}
+
+/*
+================
 publicRules
 
 Built once at boot: the switches are read from the environment at startup,
@@ -140,6 +173,7 @@ so the list cannot change while the GameWorld runs.
 func publicRules() publicstats.RulesResponse {
 	silkRate, _ := action.BetaSilkFromEnv()
 	silkActiveOnly, _ := action.BetaSilkActiveOnlyFromEnv()
+	earnedTradable, _ := action.EarnedSilkTradableFromEnv()
 	stackSizes, _ := enterworld.StackSizesFromEnv()
 	alchemyRates, _ := alchemy.ReinforceRatesFromEnv()
 	alchemyMaxPlus, _ := alchemy.ReinforceMaxPlusFromEnv()
@@ -149,6 +183,10 @@ func publicRules() publicstats.RulesResponse {
 	dropMix, _ := progression.BetaDropMixFromEnv()
 	growth := progression.BetaGrowthFromEnv()
 	betaMastery, _ := progression.BetaMasteryFromEnv()
+	betaMasteryNow := "The native race-specific mastery totals apply."
+	if betaMastery > 0 {
+		betaMasteryNow = fmt.Sprintf("Every character may train masteries up to a total of %d; each mastery's own limits stay.", betaMastery)
+	}
 	betaMasteryEarly, _ := enterworld.BetaMasteryEarlyFromEnv()
 	levelCap, _ := progression.LevelCapFromEnv()
 	pharaohGear, _ := monster.PharaohGearRateFromEnv()
@@ -159,12 +197,21 @@ func publicRules() publicstats.RulesResponse {
 	hideAlexandriaD11, _ := commerce.AlexandriaHideD11GoodsFromEnv()
 	thiefCartTownAreasOn, _ := townarea.ThiefCartTownAreasFromEnv()
 	petPages, _ := companion.PetInventoryPagesFromEnv()
+	storagePages, _ := storagePagesFromEnv()
 	mallGoods, _ := commerce.MallExtraGoodsFromEnv()
 	mallCategoriesOn, _ := commerce.MallCategoriesFromEnv()
 	rideFactor, rideOn, _ := enterworld.MallRideSpeedFromEnv()
 	flagWar, _ := action.FlagWarSettingsFromEnv()
 	settings := tunables.Current()
 	testKills := settings.Int(tunables.MostWantedTestKills)
+	alchemyMaxPlusNow := fmt.Sprintf("The native +%d reinforcement ceiling applies.", alchemy.NativeReinforceCeiling)
+	if alchemyMaxPlus > 0 {
+		alchemyMaxPlusNow = fmt.Sprintf("Reinforcement stops at +%d.", alchemyMaxPlus)
+	}
+	eventBotNow := "Nobody answers to the name EventBot; no automated chat events run."
+	if eventbot.EnabledFromEnv() {
+		eventBotNow = "EventBot announces the schedule file's chat events, takes entries and answers by whisper, draws each round's winner and pays the file's item prize (audited, capped per account per day)."
+	}
 	return publicstats.RulesResponse{
 		Rules: []publicstats.Rule{
 			{Flag: caravanai.EnvAICaravans, On: caravanai.ConfigFromEnv().Enabled,
@@ -209,8 +256,12 @@ func publicRules() publicstats.RulesResponse {
 				Why:    "The way to the Roc, the later clients' Roc mountain boss, opens one step at a time."},
 			{Flag: monster.EnvArabia, On: monster.ArabiaEnabled(),
 				Native: "There is no Arabia.",
-				Now:    "The Arabia continent opens east of Jangan: Baghdad town, its three fields and Petra, and the Baghdad dungeon, hunting grounds of monsters at levels 120 to 130.",
+				Now:    "The Arabia continent opens east of Jangan: Baghdad town, its three fields and Petra, hunting grounds of monsters at levels 120 to 130.",
 				Why:    "Higher hunting grounds for the optional expansion's upper levels."},
+			{Flag: monster.EnvBaghdadDungeon, On: monster.BaghdadDungeonEnabled(),
+				Native: "There is no Baghdad dungeon.",
+				Now:    "The Baghdad dungeon opens from the city's own portals: a shared dungeon of monsters at levels 120 to 130 beneath Baghdad.",
+				Why:    "The dungeon half of the Arabia expansion, opened apart from the continent."},
 			{Flag: monster.EnvConstantinople, On: monster.ConstantinopleEnabled(),
 				Native: "Constantinople has no fortress; Jangan's is the only fortress war.",
 				Now:    "The Constantinople fortress stands west of the city with its gates, towers and fort stone, and joins the fortress war beside Jangan's.",
@@ -219,10 +270,6 @@ func publicRules() publicstats.RulesResponse {
 				Native: "Hotan's fortress holds no fortress war.",
 				Now:    "The Hotan fortress joins the fortress war with its fort stone, gates and towers, and its official stands at the fortress.",
 				Why:    "A fortress the later client fights over, for guilds in the west."},
-			{Flag: monster.EnvBanditFortress, On: monster.BanditFortressEnabled(),
-				Native: "The Bandit fortress near Jangan holds no fortress war.",
-				Now:    "The Bandit fortress near Jangan joins the fortress war with its fort stone and gates, at a lower application fee than Jangan's.",
-				Why:    "A smaller fortress the later client fights over, for guilds not ready for Jangan."},
 			{Flag: monster.EnvCap110Qinshi, On: monster.QinshiEnabled(),
 				Native: "The Qin-Shi Emperor Tomb holds its v1.150 monsters.",
 				Now:    "The tomb's upper floors also hold the later database's level 81-110 monsters.",
@@ -263,6 +310,14 @@ func publicRules() publicstats.RulesResponse {
 				Native: "Growth pets use their original skills and stats.",
 				Now:    "Bear, wolf, penguin and crow have two active and three passive skill rows. Monster equipment drops can also yield same-degree pet gear with up to six bonuses; the database controls its relative drop chance.",
 				Why:    "Owner-approved attack-pet expansion; competitive and instanced worlds keep original stats."},
+			{Flag: EnvStoragePages, On: storagePages.Personal > 0,
+				Native: "A storage keeper's warehouse holds 5 pages (150 slots).",
+				Now:    storagePagesNow("The warehouse", storagePages.Personal),
+				Why:    "Requested by players and approved by the owner: more storage without an expansion item."},
+			{Flag: EnvGuildStoragePages, On: storagePages.Guild > 0,
+				Native: "Guild storage opens at guild level 2 with 1 page and grows one page a level to 4 pages at level 5.",
+				Now:    guildStoragePagesNow(storagePages),
+				Why:    "Requested by players and approved by the owner: guild storage that keeps up with the larger warehouse."},
 			{Flag: companion.EnvGrabPetInventoryPages, On: petPages.Grab > 0,
 				Native: "A grab pet's bag holds 28 slots.",
 				Now:    petInventoryPagesNow("grab pet", petPages.Grab),
@@ -305,7 +360,7 @@ func publicRules() publicstats.RulesResponse {
 				Why:    "Beta balance, so testers can try seal gear."},
 			{Flag: progression.EnvBetaMastery, On: betaMastery > 0,
 				Native: "The total of all mastery levels is capped at 300 for Chinese characters and at twice the level, up to 240, for Europeans.",
-				Now:    fmt.Sprintf("Every character may train masteries up to a total of %d; each mastery's own limits stay.", betaMastery),
+				Now:    betaMasteryNow,
 				Why:    "Testers can try every mastery tree on one character."},
 			{Flag: enterworld.EnvBetaMasteryEarly, On: betaMasteryEarly && betaMastery == 0,
 				Native: "The total of all mastery levels is capped at 300 for Chinese characters and at twice the level, up to 240, for Europeans.",
@@ -336,6 +391,10 @@ func publicRules() publicstats.RulesResponse {
 				Native: "A unique's equipment is rolled from the table of the unique's own level.",
 				Now:    "A unique within ten levels of the highest installed loot level rolls its equipment from that level: degree 9 with the native catalog, degree 11 with the cap-110 catalog installed. Every other unique keeps its own level's table.",
 				Why:    "Opt-in beta tuning, so the endgame uniques pay the endgame table; off keeps the native equipment table for every unique."},
+			{Flag: loot.EnvHighLevelSeals, On: loot.HighLevelSealsEnabled(),
+				Native: "Monsters above level 94 never drop sealed (SoX) equipment: no rare row exists past level 94.",
+				Now:    "Monsters of level 95-110 can drop a Seal of Star item of the degree their level drops, at the level-94 rate (about 0.27% of equipment drops).",
+				Why:    "Opt-in tuning so the endgame field has a seal roll; off keeps the native table."},
 			{Flag: progression.EnvUniqueSealDrops, On: progression.UniqueRulesFromEnv().SealDrops,
 				Native: "A unique drops sealed (SoX) equipment only from its ordinary rare roll, without a guaranteed seal reward.",
 				Now:    "Every unique kill leaves one Seal of Star of the top degree and one Seal of Moon on a kill in ten. No Seal of Sun is guaranteed; it drops only from the ordinary rare roll.",
@@ -357,6 +416,7 @@ func publicRules() publicstats.RulesResponse {
 				Now:    "No monster drops an item above degree 9: equipment, elixirs, Lucky Powder, stones, tablets or elements. Every degree-9-and-below drop keeps its chance, and items already owned are kept.",
 				Why:    "The level cap stays 90 while community polls decide what the new areas drop; this keeps new degree-10 gear out of the economy until they close."},
 			{Flag: nasrun.Env, On: nasrun.Enabled(os.Getenv(nasrun.Env)), Native: "Avatar storage holds four avatars: hat, dress, attachment and flag.", Now: "A fifth avatar socket holds a Devil's Spirit.", Why: "Optional port-only step toward the later Devil's Spirit (#3456)."},
+			{Flag: macro.Env, On: macro.Enabled(os.Getenv), Native: "The game has no macro window: only the v1.150 auto-potion.", Now: "The server keeps each character's SRO Macro settings (auto-potion, auto-skill and auto-hunt) and their on/off states, and returns them at every login.", Why: "Optional port-only step toward the later official SRO Macro (#3907)."},
 			{Flag: sookarena.Env, On: sookarena.Enabled(os.Getenv(sookarena.Env)), Native: "Event So-ok offers no solo survival arena.", Now: "Three private survival entries per account per UTC day, shared by its characters, five stages, fivefold EXP/SP and checkpoint reward chests.", Why: "Optional port-only survival event."},
 			{Flag: progression.EnvHalloweenEvent, On: progression.HalloweenEventFromEnv().ActiveAt(time.Now()),
 				Native: "No Halloween event runs: monsters drop no jewelry boxes and So-ok offers no gift exchange.",
@@ -379,6 +439,10 @@ func publicRules() publicstats.RulesResponse {
 				Native: "Silk is bought for the account.",
 				Now:    "The hourly silk counts only while you play: each action keeps it going for ten minutes.",
 				Why:    "A character left idle in town earned as much as one playing."},
+			{Flag: action.EnvEarnedSilkTradable, On: earnedTradable,
+				Native: "Item Mall purchases are bound to the account.",
+				Now:    "Silk you earn by playing is its own balance, spent first: an item it pays for whole can be traded. Anything the starter, a grant or a referral paid for stays bound. The mall shows both balances and says which way a buy lands before you confirm.",
+				Why:    "Retail binds mall items because its silk is bought with money; ours is earned by playing, so earned silk buys tradable goods. Granted silk cannot be farmed into tradable items."},
 			{Flag: enterworld.EnvBetaStarterKit, On: enterworld.BetaStarterKitEnabled(),
 				Native: "Characters start with the retail creation items only.",
 				Now:    "Every character also holds a return scroll and a speed scroll that are never used up.",
@@ -399,11 +463,15 @@ func publicRules() publicstats.RulesResponse {
 				Native: "A new character carries one page of 32 bag slots, and the six expansion quests add 16 more.",
 				Now:    "A new character carries two and a half pages (80 bag slots), and the expansion quests still add their 16, reaching the full three pages. Turning the rule off is native only for what new characters start with: a character already raised keeps its larger bag and every item in it.",
 				Why:    "Owner decision 2026-11-07 (#2769): players found the expansion quests not worth half a page."},
-			{Flag: action.EnvRaisedGoldCaps, On: action.RaisedGoldCapsFromEnv(),
+			{Flag: action.EnvRaisedGoldCaps, On: action.RaisedGoldCapsFromEnv() || action.StorageGoldDepositLimitFromEnv() != action.NativeStorageGoldDepositLimit,
 				Native: "A stall offer asks at most 1,000,000,000 gold, and one warehouse gold deposit moves at most 100,000,000.",
 				Now: fmt.Sprintf("A stall offer asks at most %s gold, and one warehouse gold deposit moves at most %s.",
-					groupedGold(int64(action.RaisedStallPriceLimit)), groupedGold(int64(action.RaisedStorageGoldDepositLimit))),
+					groupedGold(int64(action.StallPriceLimitFromEnv())), groupedGold(int64(action.StorageGoldDepositLimitFromEnv()))),
 				Why: "Large trades and shared warehouse funds needed more room than the original's caps allowed; the original caps return with one setting."},
+			{Flag: action.EnvInventorySort, On: action.InventorySortFromEnv(),
+				Native: "Items stay where the player put them; the bag, the warehouse and a pet's bag are tidied by hand, one drag at a time.",
+				Now:    "A button beside the close button of the inventory, the warehouse, the guild warehouse and a pet's bag merges partial stacks and orders the items by kind. It makes the same moves a player's drags would, one at a time, and the server checks each one.",
+				Why:    "A convenience the original never had; it stays off unless the shard turns it on."},
 			{Flag: action.EnvReverseReturnMap, On: action.ReverseReturnMapFromEnv(),
 				Native: "The reverse return scroll offers the last recall point and the last death point.",
 				Now:    "It also offers places on the map: the later client's own list when the server imported it, else town gates and unique monster areas.",
@@ -436,6 +504,26 @@ func publicRules() publicstats.RulesResponse {
 				Native: "A character's name never changes.",
 				Now:    "The Item Mall sells a name-change scroll for 500 silk; the new name applies at the next login, renames cool down for 30 days, and the old name stays reserved for 90 days.",
 				Why:    "Owner decision (#1689): a paid, rate-limited way to fix a name."},
+			{Flag: commerce.EnvStatResetScroll, On: commerce.ResetScrollEnabledFromEnv(commerce.ResetScrolls[commerce.StatReset]),
+				Native: "Stat points come back only through the level-tier recall scrolls.",
+				Now:    "The Item Mall sells a Stat Recall (All Levels) for 690 silk: every stat point you spent comes back, at any level.",
+				Why:    "Owner decision (2026-11-21): one stat reset for every level."},
+			{Flag: commerce.EnvSkillResetScroll, On: commerce.ResetScrollEnabledFromEnv(commerce.ResetScrolls[commerce.SkillReset]),
+				Native: "Skill and mastery points come back one rank at a time, for gold and restoration potions.",
+				Now:    "The Item Mall sells a Scroll of Skill Restore for 690 silk: every skill is forgotten, every mastery goes back to 0 and every spent point comes back.",
+				Why:    "Owner decision (2026-11-21): a full build change for silk."},
+			{Flag: commerce.EnvWeaponSwitchScroll, On: equipSwitchOn(commerce.EnvWeaponSwitchScroll),
+				Native: "A weapon keeps its kind for good.",
+				Now:    "The Item Mall sells a weapon switch scroll for 1490 silk: use it on a weapon in the bag to turn it into another kind, Chinese or European, of the same degree, grade and seal; its plus and blue options are kept.",
+				Why:    "Owner decision: try another build without farming the weapon again."},
+			{Flag: commerce.EnvArmorSwitchScroll, On: equipSwitchOn(commerce.EnvArmorSwitchScroll),
+				Native: "Armor and shields keep their race for good.",
+				Now:    "The Item Mall sells an armor switch scroll for 990 silk: use it on armor or a shield in the bag to turn it into the same piece of the other race (robe and garment, light armor and protector, heavy armor and armor); its plus and blue options are kept.",
+				Why:    "Owner decision (2026-11-21): change race without farming the gear again."},
+			{Flag: commerce.EnvAccessorySwitchScroll, On: equipSwitchOn(commerce.EnvAccessorySwitchScroll),
+				Native: "Accessories keep their race for good.",
+				Now:    "The Item Mall sells an accessory switch scroll for 990 silk: use it on an earring, necklace or ring in the bag to turn it into the same accessory of the other race; its plus and blue options are kept.",
+				Why:    "Owner decision (2026-11-21): change race without farming the gear again."},
 			{Flag: simulation.EnvBetaPlayerMap, On: simulation.BetaPlayerMapEnabled(),
 				Native: "The world map shows only your own position.",
 				Now:    "The world map also shows other players.",
@@ -454,7 +542,7 @@ func publicRules() publicstats.RulesResponse {
 				Why:    "Players asked for it; the original rates return with one setting."},
 			{Flag: alchemy.EnvReinforceMaxPlus, On: alchemyMaxPlus > 0,
 				Native: "Items can be reinforced far beyond +11.",
-				Now:    fmt.Sprintf("Reinforcement stops at +%d.", alchemyMaxPlus),
+				Now:    alchemyMaxPlusNow,
 				Why:    "The success table ends at +11; the cap keeps gear in the balanced range."},
 			{Flag: action.EnvTeamDeathRevive, On: !teamDeathRevive,
 				Native: "A death in a free battle or the arena revives on the spot, at any level.",
@@ -540,6 +628,10 @@ func publicRules() publicstats.RulesResponse {
 				Native: "Only a revival makes you briefly untouchable; a scroll, gate or move arrives as attackable as you left.",
 				Now:    "After a return scroll, reverse return scroll, gate or move, you are untouchable for 6 seconds (11 in a fortress war) once loading ends: monsters ignore you and you cannot attack.",
 				Why:    "Requested so a slow load cannot end with monsters already attacking; the original returns with one setting."},
+			{Flag: action.EnvQuickFuse, On: action.QuickFuseFromEnv(),
+				Native: "Fuse plays a short preparation effect (about 0.8 s) before the attempt is sent, and the window takes no new press until the result effect has played.",
+				Now:    "Fuse sends the attempt at once and takes the next press as soon as the result arrives; the effects still play.",
+				Why:    "Requested so repeated fusing is not slowed by the animation; the success rates are unchanged, and the original timing returns with one setting."},
 			{Flag: action.EnvJobSuitHidesArmor, On: action.JobSuitHidesArmorFromEnv(),
 				Native: "Only a thief suit hides the armour worn under it; trader and hunter suits are drawn over it.",
 				Now:    "Trader and hunter suits hide worn armour too.",
@@ -578,6 +670,10 @@ func publicRules() publicstats.RulesResponse {
 				Native: "When a unique dies, the shard is told only who killed it.",
 				Now:    "Everyone who damaged it also sees the twelve players who did the most damage, with each one's share and party place, and their own place.",
 				Why:    "So every attacker sees what their part was. Off by default; the original notice alone is the native setting."},
+			{Flag: eventbot.EnvEventBot, On: eventbot.EnabledFromEnv(),
+				Native: "Nobody answers to the name EventBot; the original runs no automated chat events.",
+				Now:    eventBotNow,
+				Why:    "Automated chat events from the shard's schedule file, with drawn winners and audited item prizes. Off by default; the original silence is the native setting."},
 			{Flag: movement.EnvCaveSeamStep, On: movement.CaveSeamStepFromEnv(),
 				Native: "A monster chasing you through a cave can get stuck pacing at a few doorways.",
 				Now:    "It steps through those doorways and keeps following.",
@@ -668,9 +764,13 @@ func publicRules() publicstats.RulesResponse {
 				Why:    "Owner report (#2852); the original banner-only win returns with one setting."},
 			{Flag: action.EnvAnnouncePlusFail, On: action.AnnouncementsFromEnv().PlusFail,
 				Native: "A failed reinforcement is private.",
-				Now: fmt.Sprintf("Everyone sees \"<alias> failed +N on <item>: destroyed\", \"saved by Immortal\" or \"dropped to +M\" for a failed reinforce attempted at +%d or above, for players who opted in on the account page, named by job alias (\"a player\" when they set none), never by character name.",
+				Now: fmt.Sprintf("Everyone sees \"<alias> failed +N on <item>: destroyed\", \"saved by Immortal\" or \"dropped to +M\" for a failed reinforce attempted at +%d or above, for every player who has not opted out on the account page or with /plusfail off, named by job alias (\"a player\" when they set none), never by character name.",
 					action.AnnouncementsFromEnv().PlusFailMin),
-				Why: "Owner report (#2852), keeping the break notice's alias rule (#1738); the original silence returns with one setting, and the opt-in stays off until a player turns it on."},
+				Why: "Owner report (#2852), made an opt-out for every player by the owner's decision (#3682), keeping the break notice's alias rule (#1738); the original silence returns with one setting, and a single player's silence returns with their opt-out."},
+			{Flag: uniquestatus.EnvUniqueStatus, On: uniquestatus.Enabled(os.Getenv),
+				Native: "No window lists the uniques; a spawn or a kill is announced as it happens and then is gone.",
+				Now:    "The Unique Status window (Experimental row) lists every unique with its level, Alive or Dead, and for the dead when it died (server time) and who killed it - the same states and kill record as the public API's uniques page. A player can mark uniques to be told in game, and in the browser, when they spawn or die.",
+				Why:    "Feature request (#3531), so hunters can see which uniques are up without leaving the game; the original silence returns with one setting, and no respawn timing is ever shown."},
 			{Flag: action.EnvJobKillNoticeRepeat, On: action.AnnouncementsFromEnv().JobKillRepeat,
 				Native: fmt.Sprintf("The same two players' job kills are announced at most once every %d minutes.",
 					settings.Int(tunables.JobKillRepeatMinutes)),

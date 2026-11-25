@@ -11,6 +11,10 @@ import {
 	monsterPortraitReferences,
 	monsterPortraitRendererFingerprint
 } from "../../build/char/buildMonsterPortraitAssets.mjs";
+import {
+	EFFECT_PROGRAM_INDEX,
+	effectProgramFile
+} from "../../../apps/client-next/src/engine/foundation/assets/effect-programs.ts";
 
 test("native reference joins preserve aliases, material variants and missing models", () => {
 	const manifest = {
@@ -43,10 +47,13 @@ test("effect-only program and texture changes invalidate a monster still's cache
 		resources: { yeoha: { glb: "/assets/npc/yeoha.glb" } }
 	};
 	const texture = "/assets/images/Particles_extracted/textures/luster.png";
-	const programs = {
-		effects: { "monster/luster_green.efp": { scale: 1 } },
+	const index = {
+		effects: [ "monster/luster_green.efp" ],
+		nativeUnavailable: { effects: [] },
+		meshes: [],
 		textures: { "textures/luster.png": texture }
 	};
+	const program = { effect: { scale: 1 } };
 	let textureBytes = Buffer.from( "original texture" );
 	/*
 	================
@@ -56,14 +63,15 @@ test("effect-only program and texture changes invalidate a monster still's cache
 	================
 	*/
 	const readAsset = async file => {
-		if ( file === "/assets/effects/programs.json" ) return Buffer.from( JSON.stringify( programs ) );
+		if ( file === EFFECT_PROGRAM_INDEX ) return Buffer.from( JSON.stringify( index ) );
+		if ( file === effectProgramFile( "monster/luster_green.efp" ) ) return Buffer.from( JSON.stringify( program ) );
 		if ( file === texture ) return textureBytes;
 		return Buffer.from( "unchanged model and presentation" );
 	};
 	const original = await monsterPortraitRendererFingerprint( manifest, readAsset );
-	programs.effects["monster/luster_green.efp"].scale = 2;
+	program.effect.scale = 2;
 	assert.notEqual( await monsterPortraitRendererFingerprint( manifest, readAsset ), original );
-	programs.effects["monster/luster_green.efp"].scale = 1;
+	program.effect.scale = 1;
 	textureBytes = Buffer.from( "changed texture" );
 	assert.notEqual( await monsterPortraitRendererFingerprint( manifest, readAsset ), original );
 	textureBytes = Buffer.from( "original texture" );

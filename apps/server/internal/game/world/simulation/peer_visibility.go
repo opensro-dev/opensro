@@ -25,7 +25,28 @@ package simulation
 
 import (
 	"opensro.online/server/internal/game/item/wire"
+	"opensro.online/server/internal/game/title"
 )
+
+// gmInvisibleBodyStatus is the body byte the GM /INVISIBLE toggle sets:
+// domain.GMToggleBodyStatus names the value 4 only at that producer. The
+// v1.150 client never hides this byte itself (its concealment evaluation
+// aggregates hide levels for the skill hide states only), so who may see
+// the character is decided by who receives its spawn: its current party.
+const gmInvisibleBodyStatus = 4
+
+/*
+================
+PeerParty
+
+One live party as the peer-visibility leg needs it: a stable identity
+(Order) and the member gids (PlayerObjectID space).
+================
+*/
+type PeerParty struct {
+	Order   uint64
+	Members []uint32
+}
 
 /*
 ================
@@ -38,14 +59,22 @@ Otherwise crossers are the sessions whose block changed, by index. The
 keys are updated either way.
 ================
 */
-func (state *divisionTickState) peerVisibilityChanges(sessions []SessionSnapshot, now int64, live map[string]bool) (full bool, crossers []int) {
+func (state *divisionTickState) peerVisibilityChanges(sessions []SessionSnapshot, now int64, live map[string]bool, partyOf map[uint32]uint64) (full bool, crossers []int) {
 	previous := len(state.peerVisibilityKeys)
 	full = !state.peerVisibilityValid || previous != len(sessions)
 	crossers = state.crossers[:0]
 	state.faceless = state.faceless[:0]
 	for i := range sessions {
 		s := &sessions[i]
-		key := peerVisibilityKey{s.SessionID, s.CharacterID, peerInterestKey{s.DivisionID, s.WorldInstance, peerInterestBlock(s.World.LiveSpawnAt(now))}, s.Appearance != nil, live[s.SessionID]}
+		key := peerVisibilityKey{
+			session:    s.SessionID,
+			character:  s.CharacterID,
+			interest:   peerInterestKey{s.DivisionID, s.WorldInstance, peerInterestBlock(s.World.LiveSpawnAt(now))},
+			appearance: s.Appearance != nil,
+			live:       live[s.SessionID],
+			invisible:  s.NativeBodyStatus == gmInvisibleBodyStatus,
+			party:      partyOf[PlayerObjectID(s.CharacterID)],
+		}
 		if s.Appearance == nil {
 			// A viewer the block index does not hold (it holds peers).
 			state.faceless = append(state.faceless, i)
@@ -81,13 +110,22 @@ peerVisibilityKey.sees
 
 Whether the viewer keyed viewer is shown the player keyed peer: another
 session of the same division and instance, with an appearance, in an
-adjacent block. The relation the block index's candidates walk.
+adjacent block. The relation the block index's candidates walk. A
+GM-invisible peer narrows the relation to its own party: partyless
+viewers and other parties do not see it, and the exception ends when
+the party does (either stamp 0, or the stamps differing).
 ================
 */
 func (viewer peerVisibilityKey) sees(peer peerVisibilityKey) bool {
-	return viewer.session != peer.session && peer.appearance &&
-		viewer.interest.division == peer.interest.division && viewer.interest.world == peer.interest.world &&
-		viewer.interest.block.Adjacent(peer.interest.block)
+	if viewer.session == peer.session || !peer.appearance ||
+		viewer.interest.division != peer.interest.division || viewer.interest.world != peer.interest.world ||
+		!viewer.interest.block.Adjacent(peer.interest.block) {
+		return false
+	}
+	if peer.invisible && (peer.party == 0 || peer.party != viewer.party) {
+		return false
+	}
+	return true
 }
 
 /*
@@ -101,7 +139,7 @@ self on the local plane and the remote view must never carry it.
 ================
 */
 func (t *Ticker) runPeerVisibility(state *divisionTickState, nowMs int64, sessions []SessionSnapshot, live map[string]bool) {
-	full, crossers := state.peerVisibilityChanges(sessions, nowMs, live)
+	full, crossers := state.peerVisibilityChanges(sessions, nowMs, live, t.peerPartyStamps(sessions))
 	if !full && len(crossers) == 0 {
 		return
 	}
@@ -125,6 +163,49 @@ func (t *Ticker) runPeerVisibility(state *divisionTickState, nowMs int64, sessio
 
 /*
 ================
+Ticker.peerPartyStamps
+
+The party stamp (PeerParty.Order) of every partied gid in the sessions'
+divisions, or nil when no session is GM-invisible: party membership
+only feeds the visibility keys while an invisible peer is around, so
+the common tick pays one body-byte read per session and no allocation.
+An unwired Parties seam also reads as nil: with no party knowledge an
+invisible peer is shown to no other player.
+================
+*/
+func (t *Ticker) peerPartyStamps(sessions []SessionSnapshot) map[uint32]uint64 {
+	invisible := false
+	for i := range sessions {
+		if sessions[i].NativeBodyStatus == gmInvisibleBodyStatus {
+			invisible = true
+			break
+		}
+	}
+	if !invisible || t.Parties == nil {
+		return nil
+	}
+	var stamps map[uint32]uint64
+	queried := make(map[string]bool)
+	for i := range sessions {
+		division := sessions[i].DivisionID
+		if queried[division] {
+			continue
+		}
+		queried[division] = true
+		for _, party := range t.Parties(division) {
+			for _, gid := range party.Members {
+				if stamps == nil {
+					stamps = make(map[uint32]uint64)
+				}
+				stamps[gid] = party.Order
+			}
+		}
+	}
+	return stamps
+}
+
+/*
+================
 Ticker.refreshPeerView
 
 One viewer's shown set made exact: every candidate of its 3x3 shown,
@@ -139,9 +220,10 @@ func (t *Ticker) refreshPeerView(state *divisionTickState, index peerInterestInd
 		state.liveGids = make(map[uint32]bool)
 	}
 	clear(state.liveGids)
+	viewerKey := state.peerVisibilityKeys[viewerIndex]
 	for _, peerIndex := range state.candidates {
 		peer := &sessions[peerIndex]
-		if peer.SessionID == viewer.SessionID {
+		if !viewerKey.sees(state.peerVisibilityKeys[peerIndex]) {
 			continue
 		}
 		gid := PlayerObjectID(peer.CharacterID)
@@ -233,6 +315,16 @@ func (t *Ticker) showPeerTo(state *divisionTickState, viewer, peer *SessionSnaps
 		Opcode:  wire.OpSingleObjectSpawn,
 		Payload: BuildPeerSpawnRow(appearance, gid, pose),
 	})
+	// The worn title rides its own frame behind the row (game/title):
+	// the native client reads the id off the spawn stream, but a grown
+	// row would fail older tabs' length-strict decoder at this spawn.
+	if appearance.TitleID != 0 {
+		frames = append(frames, Frame{
+			ScopeGID: gid, ScopeVisible: true,
+			Opcode:  title.OpPeerTitle,
+			Payload: title.EncodePeerTitle(gid, appearance.TitleID),
+		})
+	}
 	if peer.NativeBodyStatus != 0 {
 		frames = append(frames, Frame{Opcode: wire.OpObjectStateRefresh, Payload: (wire.ObjectStateRefresh{Gid: gid, StateType: wire.StateChannelBody, Value: peer.NativeBodyStatus}).Encode()})
 	}

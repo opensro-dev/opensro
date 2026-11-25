@@ -83,6 +83,18 @@ export type RuntimePhase = "starting" | "running" | "failed" | "disposed";
 
 /*
 ================
+ReleaseNotice
+
+The release-skew prompt (runtime/release/release-watch.ts releaseNotice):
+none; "updating" while the server refuses this page and no newer page is
+served yet; "newer" offers Refresh to a page still playing; "reload" is a
+refused page whose newer release is served.
+================
+*/
+export type ReleaseNotice = "none" | "updating" | "newer" | "reload";
+
+/*
+================
 RenderFrameProbe
 
 Optional synchronous measurements supplied by the frame owner. Renderer
@@ -203,6 +215,13 @@ export interface Platform extends Disposable {
 	saveAudioOptions( value: import("@/engine/foundation/audio/options").AudioOptions ): void;
 	saveChatBlocks( value: readonly string[] ): void;
 	saveExperimentalOptions( value: import("@/engine/foundation/ui/experimental-options").ExperimentalOptions ): void;
+	uniqueNotifyBook(): Readonly<
+		Record<string, import("@/engine/foundation/gameplay/unique-status").UniqueNotifySettings>
+	>;
+	saveUniqueNotify(
+		character: string,
+		value: import("@/engine/foundation/gameplay/unique-status").UniqueNotifySettings
+	): void;
 	/** /cwsave's browser form: download the waypoint store's text as cw.txt (#1716). */
 	saveCameraWaypoints( text: string ): void;
 	/** The crest register's image pick (#2282): the chosen file's bytes, or null on cancel. */
@@ -217,12 +236,12 @@ export interface Platform extends Disposable {
 	presentUi( state: import("./ui").UiSemantics ): void;
 	// Release skew (runtime/release/release-watch.ts): the entry bundle this page
 	// loaded (null outside a release build), a one-shot "tab visible again"
-	// trigger, and the refresh offer once a newer release is live.
+	// trigger, and the update prompt (ReleaseNotice).
 	runningEntry(): string | null;
 	visibilityReturned(): boolean;
 	/** Consumes a browser online event independently of tab visibility. */
 	connectionReturned(): boolean;
-	presentUpdate( newer: boolean ): void;
+	presentUpdate( notice: ReleaseNotice ): void;
 	presentTelemetry( sample: FrameTelemetry ): void;
 	diagnosticsActive(): boolean;
 	/** Holds the tab awake (no background freeze) while a world session is live. */
@@ -253,22 +272,13 @@ export interface Renderer extends Disposable {
 	experimentalVideo( value: import("@/engine/foundation/ui/experimental-options").ExperimentalVideo ): void;
 	// Port-only, not native: whether the Experimental enchant sparks are on.
 	enchantSparks?(): boolean;
-	// Port-only, not native: whether characters and effects share one
-	// nearest-first actor room (Experimental; the original has no cap).
-	sharedActorRoom?(): boolean;
 	// Port-only, not native: whether holding V also hides other players'
 	// companions (Experimental, off by default).
 	vHidesCompanions?(): boolean;
-	// Port-only, not native (#3547): whether a wing dress's flight drops
-	// its fallback footsteps (Experimental, on by default).
-	silentWingFlight?(): boolean;
-	// Port-only, not native (Experimental "Dungeon character PVS", on by
-	// default): whether dungeon character PVS and floor admission are on.
-	dungeonCharacterPvs?(): boolean;
 	// Port-only, not native: whether a character in dungeon room `block` is
 	// hidden because the room the local player stands in (`activeBlock`, the
-	// same frame's navigation block) does not draw it (Experimental
-	// "Dungeon character PVS", on by default; off is the native frame).
+	// same frame's navigation block) does not draw it (owner 2026-11-21:
+	// the default, no row).
 	dungeonBlockHides?( block: number, activeBlock?: number ): boolean;
 	setSelectionDecal(
 		value: { readonly pose: import("./gameplay").Pose; readonly slot: 0 | 1 | 2 | 3; } | null

@@ -212,15 +212,13 @@ test("the modify window shows the level x 50,000 cost row (645E90 mode 1)", () =
 	}
 });
 
-for ( const fit of [ true, false ] ) {
-	test(`the Check caption ${fit ? "fits its plate" : "stays native with the row off"} (port-only Fit window labels)`, () => {
-		const { f, step } = aliasWindow();
-		try {
-			f.ui.event( /** @type {any} */ ({ kind: "experimental-preferences", value: { fitWindowLabels: fit } }) );
-			const check = step().get( "job-alias-check" );
-			assert.equal( check?.label, fit ? "Check" : "Check for duplicate entries" );
-		} finally {
-			f.dispose();
-		}
-	});
-}
+// Port-only, not native (owner 2026-11-21: the default, no row): the
+// original draws "Check for duplicate entries" past its plate.
+test("the Check caption fits its plate", () => {
+	const { f, step } = aliasWindow();
+	try {
+		assert.equal( step().get( "job-alias-check" )?.label, "Check" );
+	} finally {
+		f.dispose();
+	}
+});

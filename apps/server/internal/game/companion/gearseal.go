@@ -17,7 +17,7 @@ SealTier
 */
 func SealTier(id uint32) int {
 	tier := int(id%100) / 10
-	if id < 30100 || id > 30399 || tier > 3 || id%10 < 1 || id%10 > 9 {
+	if id < 30100 || id > 30399 || tier > 3 {
 		return 0
 	}
 	return tier

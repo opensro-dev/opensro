@@ -87,6 +87,22 @@ type Runtime struct {
 	ivy3 ivy3Programme
 	// goria7 is the GORIA 7 programme's state (goria7.go).
 	goria7 goria7Programme
+	// hwan is the Blue Berserk arenas' state (hwan_arena.go).
+	hwan hwanProgramme
+	// HwanLevelFrames builds the frames that announce a raised Blue Berserk
+	// level (port-only, not native); the composition root wires it to the
+	// action lane, which knows the character's world identity. Nil in
+	// detached tests: the level still rises, nothing is announced.
+	HwanLevelFrames func(c *enterworld.Character) []wire.Frame
+	// SelectedMonster answers the codename and position of the monster the
+	// character has selected (the Mountain Essence acts on it); the composition
+	// root wires it to the action lane. Nil refuses the tool.
+	SelectedMonster func(c *enterworld.Character) (string, simulation.Spawn, bool)
+	// hwanGM holds the levels /SETBERSERK set (hwan_level.go).
+	hwanGM hwanOverrides
+	// Hwan holds the operator knobs of the Blue Berserk quests (hwanknobs.go).
+	// The zero value is the original behaviour.
+	Hwan HwanKnobs
 }
 
 /*
@@ -150,7 +166,7 @@ func BuildActiveQuestRecord(def *Definition, progress uint32) enterworld.ActiveQ
 		def, _ = definitionAtStage(def, 0)
 	}
 	if def.Objective == ObjectiveParallel {
-		record := enterworld.ActiveQuestRecord{RefID: def.RefID, Stage: def.stageIndex, U08: repeatTitleByte(def, 0), Flags: 0x08 | 0x10, U10: def.KindByte}
+		record := enterworld.ActiveQuestRecord{RefID: def.RefID, Stage: def.stageIndex, U08: repeatTitleByte(def, 0), Flags: 0x08 | 0x10, U10: def.windowKindByte()}
 		for i := 0; i < missionCount(def); i++ {
 			record.Contents = append(record.Contents, BuildActiveQuestRecord(missionDefinition(def, i), 0).Contents...)
 		}
@@ -186,7 +202,7 @@ func BuildActiveQuestRecord(def *Definition, progress uint32) enterworld.ActiveQ
 		Stage:    def.stageIndex,
 		U08:      repeatTitleByte(def, 0),
 		Flags:    0x08 | 0x10,
-		U10:      def.KindByte,
+		U10:      def.windowKindByte(),
 		Contents: []enterworld.ActiveQuestContentsNode{node},
 	}
 }
@@ -382,6 +398,7 @@ func (rt *Runtime) StartQuest(character *enterworld.Character, codename string) 
 		acceptanceItems = append(acceptanceItems, rahid6AcceptanceItems(def)...)
 		acceptanceItems = append(acceptanceItems, easteu21AcceptanceItems(def)...)
 		acceptanceItems = append(acceptanceItems, ivy3AcceptanceItems(def)...)
+		acceptanceItems = append(acceptanceItems, specAcceptanceGrants(def)...)
 		supply, suppliesTraps := captureSupplyForQuest(def.Codename)
 		suppliesTraps = suppliesTraps && !supply.afterCompletion
 		if suppliesTraps {
@@ -548,7 +565,8 @@ func (rt *Runtime) OptionsForNpc(character *enterworld.Character, npcCodename st
 		}
 		if active && rewardNpcMatches(def, npcCodename) && (def.Objective == ObjectiveTalk || objectiveMet(character, def, character.ActiveQuests[activeQuestIndex(character, def.RefID)])) {
 			if len(def.RewardChoices) > 0 {
-				completes = append(completes, rewardChoiceOptions(def, country)...)
+				// A selection quest claims in the reward window, never
+				// at the NPC (the later client's CIFQuestReward).
 				continue
 			}
 			completes = append(completes, NpcOption{
@@ -606,6 +624,10 @@ func (rt *Runtime) OptionsForNpc(character *enterworld.Character, npcCodename st
 				completes = append(completes, entry)
 				continue
 			}
+			if entry, offered := rt.hwanEntryOption(character, def, npcCodename); offered {
+				completes = append(completes, entry)
+				continue
+			}
 			if supply, available := rt.captureSupplyOption(character, def, npcCodename); available {
 				completes = append(completes, supply)
 				continue
@@ -658,33 +680,60 @@ func (rt *Runtime) CompleteTalkQuest(character *enterworld.Character, codename s
 
 /*
 ================
+rewardRefusal
+
+The reward answer a refused selection carries: [2, reason] in the
+native acknowledgement grammar (decodeQuestAcknowledgement), with the
+v1.188 server's reasons (rewardRefusalUnknown / rewardRefusalCount).
+Unmapped failures stay handler errors; the hub answers those [2, 0].
+================
+*/
+func rewardRefusal(reason uint8) OpResult {
+	return OpResult{Frames: []wire.Frame{{Opcode: 0xb29a, Payload: []byte{2, reason}}}}
+}
+
+/*
+================
 HandleRewardSelect
 
-Only kind-2 quests admit the native reward-window request. Acknowledge after
-the reward transaction so failed or replayed requests cannot signal success.
+The reward-window request: kind-2 quests, and selection quests with
+their pick (wire.go). A selection quest without a pick, or a pick the
+row refuses, answers the native refusal and settles nothing.
+Acknowledge after the reward transaction so failed or replayed
+requests cannot signal success.
 ================
 */
 func (rt *Runtime) HandleRewardSelect(character *enterworld.Character, payload []byte) (OpResult, error) {
-	refID, err := DecodeQuestRefRequest(payload)
+	refID, picks, err := DecodeQuestRewardRequest(payload)
 	if err != nil {
 		return OpResult{}, err
 	}
 	def, ok := rt.Defs.ByRefID(refID)
 	if !ok {
-		return OpResult{}, fmt.Errorf("quest reward: id %d has no loaded definition", refID)
+		return rewardRefusal(rewardRefusalUnknown), nil
 	}
-	if def.KindByte != 2 {
-		return OpResult{}, fmt.Errorf("quest reward: %s (id %d) is kind %d - only kind 2 opens the reward window", def.Codename, refID, def.KindByte)
+	if def.KindByte != 2 && len(def.RewardChoices) == 0 {
+		return OpResult{}, fmt.Errorf("quest reward: %s (id %d) is kind %d - only kind 2 and selection quests open the reward window", def.Codename, refID, def.KindByte)
+	}
+	var choices []int
+	if len(def.RewardChoices) > 0 {
+		resolved, reason, ok := resolveRewardPicks(def, enterworld.NativeCountryByte9C(character), picks)
+		if !ok {
+			return rewardRefusal(reason), nil
+		}
+		choices = resolved
+	} else if len(picks) > 0 {
+		return rewardRefusal(rewardRefusalCount), nil
 	}
 
-	result, err := rt.completeReward(character, def)
+	result, err := rt.completeRewardPicks(character, def, choices)
 	if err != nil {
 		return result, err
 	}
 	// CPSMission_OnQuestAcceptResponse0xB29A consumes successful B29A and
 	// triggers SND_QUEST. The
 	// journal delta alone cannot acknowledge the native reward operation.
-	ack := append([]byte{1}, payload...)
+	ack := wire.NewWriter(5).U8(1).U32(refID).Payload()
 	result.Frames = append(result.Frames, wire.Frame{Opcode: 0xb29a, Payload: ack})
 	return result, nil
 }
@@ -709,19 +758,20 @@ and exchange quantities are rechecked inside the same character door.
 ================
 */
 func (rt *Runtime) completeRewardAt(character *enterworld.Character, def *Definition, expectedStage *uint16, npc string) (OpResult, error) {
-	return rt.completeRewardChoice(character, def, expectedStage, npc, noRewardChoice)
+	return rt.settleReward(character, def, expectedStage, npc, nil, false)
 }
 
 /*
 ================
-completeRewardChoice
+completeRewardPicks
 
-completeRewardAt with the picked reward choice (noRewardChoice for a quest
-without choices). A selection quest refuses any completion without one.
+completeReward with the reward window's picked choices (nil for a quest
+without choices). A selection quest refuses any completion without its
+SelectionCnt picks.
 ================
 */
-func (rt *Runtime) completeRewardChoice(character *enterworld.Character, def *Definition, expectedStage *uint16, npc string, choice int) (OpResult, error) {
-	return rt.settleReward(character, def, expectedStage, npc, choice, false)
+func (rt *Runtime) completeRewardPicks(character *enterworld.Character, def *Definition, picks []int) (OpResult, error) {
+	return rt.settleReward(character, def, nil, "", picks, false)
 }
 
 /*
@@ -734,23 +784,33 @@ character holds, so every other rule (inventory room, experience, history,
 stage advance) still runs through the one owner.
 ================
 */
-func (rt *Runtime) settleReward(character *enterworld.Character, def *Definition, expectedStage *uint16, npc string, choice int, force bool) (OpResult, error) {
+func (rt *Runtime) settleReward(character *enterworld.Character, def *Definition, expectedStage *uint16, npc string, picks []int, force bool) (OpResult, error) {
 	refID := def.RefID
-	if force && choice == noRewardChoice {
-		choice = firstOfferedChoice(def, enterworld.NativeCountryByte9C(character))
+	if force && len(picks) == 0 {
+		picks = firstOfferedChoices(def, enterworld.NativeCountryByte9C(character))
 	}
-	if len(def.RewardChoices) > 0 && !rewardChoiceOffered(def, enterworld.NativeCountryByte9C(character), choice) {
-		return OpResult{}, fmt.Errorf("quest reward: %s needs one of its %d reward choices", def.Codename, len(def.RewardChoices))
+	if len(def.RewardChoices) > 0 {
+		if len(picks) != def.RewardSelectionCount {
+			return OpResult{}, fmt.Errorf("quest reward: %s needs %d of its %d reward choices, got %d picks", def.Codename, def.RewardSelectionCount, len(def.RewardChoices), len(picks))
+		}
+		seen := make(map[int]bool, len(picks))
+		for _, pick := range picks {
+			if seen[pick] || !rewardChoiceOffered(def, enterworld.NativeCountryByte9C(character), pick) {
+				return OpResult{}, fmt.Errorf("quest reward: %s needs %d of its %d reward choices", def.Codename, def.RewardSelectionCount, len(def.RewardChoices))
+			}
+			seen[pick] = true
+		}
 	}
-	if len(def.RewardChoices) == 0 && choice != noRewardChoice {
+	if len(def.RewardChoices) == 0 && len(picks) > 0 {
 		return OpResult{}, fmt.Errorf("quest reward: %s offers no reward choice", def.Codename)
 	}
-	if (len(def.RewardItems) != 0 || len(def.RewardChoices) != 0 || collectsItems(def)) && rt.PlanInventory == nil {
+	if (len(def.RewardItems) != 0 || len(def.RewardChoices) != 0 || collectsItems(def) || len(def.ClearOnEnd) != 0) && rt.PlanInventory == nil {
 		return OpResult{}, fmt.Errorf("quest reward: %s requires an item reward owner", def.Codename)
 	}
 	var refusal error
 	var goldFrame *wire.Frame
 	var capacityFrame *wire.Frame
+	var hwanFrames []wire.Frame
 	var experienceFrames []wire.Frame
 	var inventoryFrames []wire.Frame
 	var objectiveFrames []wire.Frame
@@ -809,8 +869,11 @@ func (rt *Runtime) settleReward(character *enterworld.Character, def *Definition
 			refusal = fmt.Errorf("quest reward: completed quest wire capacity reached")
 			return false
 		}
+		hwanBefore := rt.HwanLevel(character)
 		var inventoryRows []enterworld.InventoryRow
-		if len(def.RewardItems) > 0 || len(def.RewardChoices) > 0 || collectsItems(def) {
+		// The gold the quest pays for held items is read before they are taken.
+		rewardGold := def.RewardGold + heldItemGold(character, def)
+		if len(def.RewardItems) > 0 || len(def.RewardChoices) > 0 || collectsItems(def) || len(def.ClearOnEnd) > 0 {
 			count, err := resuscitationExchangeCount(character, def)
 			if err != nil {
 				refusal = err
@@ -837,11 +900,12 @@ func (rt *Runtime) settleReward(character *enterworld.Character, def *Definition
 			consume = append(consume, ivy3CompletionCleanup(character, def)...)
 			consume = append(consume, optionalMissionCleanup(character, def)...)
 			consume = append(consume, questItemCleanup(character, def, consume)...)
+			consume = append(consume, clearOnEndAmounts(character, def)...)
 			if force {
 				consume = clampToHeld(character, consume)
 			}
 			var grants []inventory.ItemAmount
-			for _, r := range rewardItemsWithChoice(def, choice) {
+			for _, r := range rewardItemsWithChoices(def, picks) {
 				grants = append(grants, inventory.ItemAmount{Codename: rewardItemForCharacter(character, r.ItemCodename), Count: r.Count * count})
 			}
 			inventoryRows, inventoryFrames, err = rt.PlanInventory(character, consume, grants)
@@ -894,12 +958,17 @@ func (rt *Runtime) settleReward(character *enterworld.Character, def *Definition
 			// Finishing a superseded chain completes the quest that replaced it.
 			creditPredecessorCompletions(character, rt.Defs)
 			forgetQuests(character, def.completeForgetsIDs)
+			// The Blue Berserk level is paid with the completion (the reward row's
+			// Hwan column); the character store door is held here.
+			if rt.HwanLevelFrames != nil && rt.HwanLevel(character) > hwanBefore {
+				hwanFrames = rt.HwanLevelFrames(character)
+			}
 		}
 		objectiveFrames, _ = rt.applyInventoryChange(character)
-		if def.RewardGold > 0 || turnInGold > 0 {
+		if rewardGold > 0 || turnInGold > 0 {
 			// The fee leaves after the reward is paid (as the server's
 			// EXINVENTORY_3 talk does), checked above.
-			balance := creditGold(character.Gold, def.RewardGold) - turnInGold
+			balance := creditGold(character.Gold, rewardGold) - turnInGold
 			character.Gold = &balance
 			goldFrame = &wire.Frame{
 				Opcode:  wire.OpPointsUpdate,
@@ -945,6 +1014,7 @@ func (rt *Runtime) settleReward(character *enterworld.Character, def *Definition
 	frames = append(inventoryFrames, frames...)
 	frames = append(frames, objectiveFrames...)
 	frames = append(frames, experienceFrames...)
+	frames = append(frames, hwanFrames...)
 	// The server's POTION_3 end talk sends its notice before it completes
 	// and pays the quest.
 	if advanced == nil && def.CompleteNoticeSymbol != "" {

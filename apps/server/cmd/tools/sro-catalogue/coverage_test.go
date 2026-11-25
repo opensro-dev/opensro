@@ -386,10 +386,12 @@ func TestModelledSettingsMoveTheOutput(t *testing.T) {
 	// over the shipped data can show, and the test that proves the
 	// reader instead. Every other modelled setting flips above.
 	flipUnitProven := map[string]string{
+		"SRO_HIGH_LEVEL_SEALS":          "the rows are pinned by the loot package's TestHighLevelSealsFillOnlyTheEmptyRowsWithTheLevelsStar and the env read by its TestHighLevelSealsFromEnv; the shipped fixture has no monster above level 94, so no drop table can differ",
 		"SRO_CAP110_LEVEL100":           "the level-100 slice's admission is pinned by the monster package's TestCap110Level100SliceFollowsItsFlag; over the shipped data the cap-110 build refuses before the slice can differ",
 		"SRO_PHARAOH_TOMB_GEAR_RATE":    "the modelled counts are pinned by the catalogue package's TestPharaohGearRateScalesTheTombDrops and the env read by the monster package's TestAppendPharaohTombReadsTheGearRate; over the shipped data the tomb build refuses before the rate can differ",
 		"SRO_ALEXANDRIA_HIDE_D11_GOODS": "the withholding is pinned by the commerce package's TestWithholdAlexandriaD11 and the env read by its TestAlexandriaHideD11GoodsFromEnv; over the shipped data no Alexandria shop tab exists, so no shop output can differ",
 		"SRO_EXPORT_WORLD":              "the admission is pinned by the monster package's TestAppendExportWorldAdmitsOnlyTheIndex and the exportworld package's TestLoadAdmitsWhatTheManifestNames; over the shipped data no area is packed, so no monster output can differ",
+		"SRO_BAGHDAD_DUNGEON":           "the dungeon slice's admission is pinned by the monster package's TestArabiaDungeonFollowsItsOwnSwitch and TestBaghdadDungeonFlagWords; over the shipped data the arabia population is absent, so the catalogue build refuses before the slice can differ",
 	}
 	flipped := map[string]bool{}
 	for _, flip := range flips {

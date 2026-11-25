@@ -32,7 +32,7 @@ test('Karakoram ice supports the player and resident Penons',{timeout:150000,ski
    const moved=await capture('moved-on-ice');assert.equal(moved.pose.y,800);await page.screenshot({path:out+'/moved.png'});
   }
   evidence.wire=await page.evaluate(()=>__pursuit.events.filter(e=>e.kind==='wire'));assert.deepEqual(evidence.errors,[]);evidence.verdict=baseline?'BASELINE REPRODUCED':'PASS SUCCESS';
- }catch(error){evidence.error=String(error);if(page){await capture('failure').catch(()=>{});await page.screenshot({path:out+'/failure.png'}).catch(()=>{});}throw error;}
+ }catch(error){evidence.error=String(error);if(page){await capture('failure').catch(()=>{});}throw error;}
  finally{
   if(tracing)await page.context().tracing.stop({path:out+'/trace.zip'});
   if(page)await page.evaluate(()=>__playableRuntime.session({kind:'logout'})).catch(()=>{});if(browser)await browser.close();

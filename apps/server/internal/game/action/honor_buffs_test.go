@@ -11,9 +11,12 @@ package action
 import (
 	"reflect"
 	"testing"
+	"time"
 
+	"opensro.online/server/internal/domain"
 	"opensro.online/server/internal/game/enterworld"
 	"opensro.online/server/internal/game/item/wire"
+	"opensro.online/server/internal/platform/jobhonor"
 )
 
 /*
@@ -176,5 +179,105 @@ func TestHonorStoreShopBuyRequiresGoldAndHonorPoints(t *testing.T) {
 	res = trade(t, rt, c, wire.ItemMoveRequest{MovementType: wire.MoveTypeShopBuy, NpcGID: 17, ShopTab: 0, ShopSlot: 2, Quantity: 1})
 	if goldOf(c) != 600 || honorBalance != 30 || len(c.MissionInventory) != 1 {
 		t.Fatalf("settled state: gold=%d honor=%d inv=%d, want 600/30/1", goldOf(c), honorBalance, len(c.MissionInventory))
+	}
+}
+
+// tierSink is a job honor sink holding a fixed tier, for the tier
+// buff fold: nothing ever scores into it.
+type tierSink struct{ tier int }
+
+/*
+================
+tierSink.AwardJobHonor
+================
+*/
+func (s tierSink) AwardJobHonor(string, int64, int, int, time.Time) int { return 0 }
+
+/*
+================
+tierSink.HeldTier
+================
+*/
+func (s tierSink) HeldTier(int64, int) int { return s.tier }
+
+/*
+================
+TestTheTierRankMapping
+================
+*/
+func TestTheTierRankMapping(t *testing.T) {
+	for tier, want := range map[int]uint8{
+		jobhonor.TierKing: 1, jobhonor.TierGold: 2, jobhonor.TierSilver: 3,
+		jobhonor.TierNone: 0, 99: 0,
+	} {
+		if got := jobHonorTierBuffRank(tier); got != want {
+			t.Fatalf("tier %d grants rank %d, want %d", tier, got, want)
+		}
+	}
+	for _, tc := range []struct{ a, b, want uint8 }{
+		{0, 0, 0}, {0, 3, 3}, {2, 0, 2}, {1, 3, 1}, {3, 2, 2}, {4, 4, 4},
+	} {
+		if got := strongerHonorRank(tc.a, tc.b); got != tc.want {
+			t.Fatalf("stronger(%d, %d) = %d, want %d", tc.a, tc.b, got, tc.want)
+		}
+	}
+}
+
+/*
+================
+TestAJobTierGrantsItsAcademyBuffWhileDressed
+
+The fold (#3530): a Silver tier holder dressed as a trader carries
+the Silver buff set with no camp rank at all; undressed it carries
+nothing; a stronger camp rank still wins over the tier.
+================
+*/
+func TestAJobTierGrantsItsAcademyBuffWhileDressed(t *testing.T) {
+	rt, _, char, _ := newPvpPair(t)
+	skills := rt.deps.SkillData().(staticSkillSource)
+	for _, code := range []string{
+		"SKILL_TC_COPPER_BUFF_01",
+		"SKILL_TC_SILVER_BUFF_01",
+		"SKILL_TC_GOLD_BUFF_01",
+		"SKILL_TC_CROWN_BUFF_01",
+	} {
+		row := shippedOffense(t, code)
+		skills[row.ID] = row
+	}
+	rt.JobHonor = tierSink{tier: jobhonor.TierSilver}
+	have := func() map[uint32]bool {
+		out := map[uint32]bool{}
+		for _, e := range rt.effects.Snapshot(testDivision, char.Name) {
+			if isHonorBuffSkillID(e.SkillID) {
+				out[e.SkillID] = true
+			}
+		}
+		return out
+	}
+
+	// Undressed, the tier grants nothing.
+	rt.SyncTrainingCampHonorBuffs(testDivision, char.ID, 0)
+	if got := have(); len(got) != 0 {
+		t.Fatalf("undressed tier holder carries %v", got)
+	}
+
+	// Dressed as a trader, the Silver tier's set lands (20160, 20161).
+	char.MissionInventory = []domain.InventoryRow{{Slot: enterworld.JobSuitSlot,
+		TypeFlags: wire.PackTypeFlags(3, 1, 7, domain.JobTrader), StackCount: 1}}
+	rt.SyncTrainingCampHonorBuffs(testDivision, char.ID, 0)
+	if got := have(); !got[HonorBuffCopperSkillID] || !got[HonorBuffSilverSkillID] || got[HonorBuffGoldSkillID] || got[HonorBuffCrownSkillID] {
+		t.Fatalf("dressed Silver holder carries %v, want copper+silver", got)
+	}
+
+	// A stronger camp rank (King) wins over the Silver tier.
+	rt.SyncTrainingCampHonorBuffs(testDivision, char.ID, 1)
+	if got := have(); !got[HonorBuffCrownSkillID] {
+		t.Fatalf("camp King over tier Silver carries %v, want the crown set", got)
+	}
+
+	// Back to the tier alone, the crown retires again.
+	rt.SyncTrainingCampHonorBuffs(testDivision, char.ID, 0)
+	if got := have(); got[HonorBuffCrownSkillID] || !got[HonorBuffSilverSkillID] {
+		t.Fatalf("tier alone again carries %v, want copper+silver", got)
 	}
 }

@@ -50,9 +50,9 @@ These are inferences and port choices, not native evidence:
   stone (`ITEM_MALL_NASRUN_ARCHEMY_MAGICSTONE_UMDU`) names `MATTR_NASRUN_UMDU`, which has no row in the
   v1.150 magicoption table.
 - **Built since (#3456).** The socket (#3477), the awakening clock (#3622), the unique-kill tokens (#3710), the
-  token shop (#3741) and Nasrun alchemy (below).
-- **Still open (#3456).** The extension gear's use, the lucky drops, and the awakening skill whose tiers read the
-  Spirit's plus (the +3 and +6 damage steps); until that skill is ported a Spirit's plus changes nothing.
+  token shop (#3741), Nasrun alchemy (below), what the plus gives (below), the extension gear (below), the
+  lucky drops (below) and the mall listing (below).
+- **Still open (#3456).** The client step that shows the lent skills.
 
 ## Nasrun alchemy (#3456 step 3c)
 
@@ -109,8 +109,30 @@ awakening (`internal/game/action/spiritextend.go`, `internal/game/nasrun/extensi
   (2026-11-16). The VSRO row's own Param1 is four weeks with no ceiling, and it is not used.
 - Refusals use the v1.188 codes: a slot outside the bag (0x1882), no Spirit there (3), a Spirit never woken
   (0x18F8). The ceiling has no native code and answers the generic refusal.
+- The worn Spirit is refused properly (#3909): the later client stops the use before sending and prints
+  `UIIT_MSG_NASRUN_WEAR_EXTENSION_ITEM_NOT_USE` ("You cannot use this while you are wearing it.", imported into
+  the text build). This port's client refuses it the same way at the drop and at the armed cursor. The server
+  keeps the reference's bag-only read: a sender without that gate gets the slot refusal (0x1882).
 - Every honor shop's second tab sells the gear twice: for 10 tokens and for 5,000,000 gold, the owner's upkeep price.
 - The Spirits and the gear are staged bound, as v1.150's own honor goods: no trade, merchant sale, warehouse or drop
   (CanTrade, CanSell, CanBorrow, CanDrop all 0).
 - The v1.188 server also sends 0x3078 {2, slot, seconds left}, which the v1.150 client has no handler for, so the
   port sends the use answer alone.
+
+## The lucky drops (#3456 step 3d)
+
+With `SRO_NASRUN` on, each eligible contributor to a unique kill rolls a Devil's Spirit and Sabakun's jewel into
+their bag, beside the token award (`internal/game/action/nasrun_drops.go`, odds in `internal/game/nasrun/drops.go`):
+
+- A Spirit at 0.25 % on an easy unique and 0.5 % on a hard one; the jewel at 2 % on both. The families are the
+  token ones, below the level band and one per account, as for the tokens.
+- The Spirit is the plain A grade row of the winner's sex; the colours stay a shop choice.
+- No cap and nothing saved: the roll is per kill, and a full bag keeps neither prize - the notice travels only
+  for an item that landed.
+
+## The mall listing (#3456 step 5)
+
+With `SRO_NASRUN` on, Sabakun's jewel and the extension gear list in the Item Mall's Premium > Gears tab through
+the gears-stones layout (`internal/game/item/commerce/mallcategories.go`, `nasrunGoods`), at the tab's 30-silk
+tier, badged new - the silk door beside the token shop's honor tabs. The listing stands only while the system
+does: off, or with the items' rows unstaged, the catalogue is the shipped 91 offers exactly (#3331).

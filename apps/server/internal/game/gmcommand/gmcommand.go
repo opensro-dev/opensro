@@ -32,6 +32,10 @@ type Outcome struct {
 	// PrivilegeDenied marks a command from a character without GMPrivilege:
 	// silent on the wire, but an operator audit event (register.go).
 	PrivilegeDenied bool
+	// Notice, when non-nil, is a 0x3667 notice line register.go sends to
+	// every world-ready session of the sender's division (/NOTICE,
+	// notice.go).
+	Notice []byte
 }
 
 func refused(reason string) Outcome {
@@ -70,7 +74,25 @@ func HandleGmCommand(deps Dependencies, presence PresenceView, divisionID string
 	if err != nil {
 		return refused(err.Error())
 	}
+	// Port-only, not native (owner decision 2026-11-23): a staff grant
+	// opens only its ticked commands (capability.go). The sender is the
+	// live record, so a revoke or an unticked box applies right here.
+	if !capabilityAllows(sender, request.Subcmd) {
+		return Outcome{Ack: EncodeRequestFailure(request),
+			Refusal: fmt.Sprintf("gmcommand: subcommand 0x%02X not in %s's staff grant", request.Subcmd, sender.Name)}
+	}
+	return dispatchGmCommand(deps, presence, divisionID, sender, payload, request, status)
+}
 
+/*
+================
+dispatchGmCommand
+
+Runs one admitted request (payload is its raw body): the sender is a GM whose grant carries the
+subcommand's capability.
+================
+*/
+func dispatchGmCommand(deps Dependencies, presence PresenceView, divisionID string, sender *enterworld.Character, payload []byte, request Request, status []BodyStatusCommands) Outcome {
 	switch request.Subcmd {
 	case SubWarp:
 		if len(status) > 0 {
@@ -198,6 +220,10 @@ func HandleGmCommand(deps Dependencies, presence PresenceView, divisionID string
 		return handleBan(deps, presence, divisionID, sender, request, status)
 	case SubRecallGuild:
 		return handleRecallGuild(divisionID, sender, request, status)
+	case SubChatMute, SubChatUnmute, SubShadowMute, SubShadowUnmute, SubBlockLogout, SubAllowLogout:
+		return handleModeration(deps, divisionID, sender, request, status)
+	case SubNotice:
+		return handleNotice(divisionID, sender, request)
 	case SubLieName, SubRealName:
 		return handleWho(deps, presence, divisionID, request)
 	case SubFindUser:
@@ -215,6 +241,26 @@ func HandleGmCommand(deps Dependencies, presence PresenceView, divisionID string
 			}
 		}
 		return Outcome{Ack: []byte{AckResultFail, SubGrantSilk}, Refusal: "silk-grant-refused"}
+	case SubSetBerserk:
+		// The port's /SETBERSERK (action/hwan.go): the ack echoes the level now in force.
+		if len(status) > 0 && status[0] != nil && request.Name != "" {
+			if owner, ok := status[0].(interface {
+				SetGMBerserkLevel(string, string, string, uint8) bool
+			}); ok && owner.SetGMBerserkLevel(divisionID, sender.Name, request.Name, request.BerserkLevel) {
+				return Outcome{Ack: wire.NewWriter(3).U8(AckResultOK).U8(SubSetBerserk).U8(request.BerserkLevel).Payload()}
+			}
+		}
+		return Outcome{Ack: []byte{AckResultFail, SubSetBerserk}, Refusal: "set-berserk-refused"}
+	case SubSetGauge:
+		// The port's /SETGAUGE (action/hwan.go): the ack echoes the balls now in the gauge.
+		if len(status) > 0 && status[0] != nil && request.Name != "" {
+			if owner, ok := status[0].(interface {
+				SetGMBerserkGauge(string, string, string, uint8) bool
+			}); ok && owner.SetGMBerserkGauge(divisionID, sender.Name, request.Name, request.GaugeBalls) {
+				return Outcome{Ack: wire.NewWriter(3).U8(AckResultOK).U8(SubSetGauge).U8(request.GaugeBalls).Payload()}
+			}
+		}
+		return Outcome{Ack: []byte{AckResultFail, SubSetGauge}, Refusal: "set-gauge-refused"}
 	case SubSetSpeed:
 		// The port's /SETSPEED (action/gmspeed.go): the ack echoes the percent.
 		if len(status) > 0 && status[0] != nil {

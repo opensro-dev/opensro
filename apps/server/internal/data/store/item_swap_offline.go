@@ -94,6 +94,55 @@ func swapRows(character, container string, rows []domain.InventoryRow, swap Item
 
 /*
 ================
+swapHeldCompanion
+
+A companion held outside any row (the active record alone, a mercenary)
+as the row a swap function reads: a row carrying only the companion, so
+a swap keyed on the item's codename leaves it, and one that rewrites a
+row's summon (the identity rebind) reaches it. Its container rows are
+walked after. Returns the record to keep: the swapped copy, or pet.
+================
+*/
+func swapHeldCompanion(character, container string, pet *domain.CharacterCOS, swap ItemSwapFunc, out *[]ItemSwap) (*domain.CharacterCOS, error) {
+	next, changed, err := swap(domain.InventoryRow{Summon: pet})
+	if err != nil {
+		return nil, fmt.Errorf("%s %s (%s): %w", character, container, pet.Codename, err)
+	}
+	if changed && next.Summon != nil {
+		*out = append(*out, ItemSwap{Character: character, Container: container, From: pet.Codename, To: next.Summon.Codename})
+		pet = next.Summon
+	}
+	if pet.Container != nil {
+		if err := swapRows(character, fmt.Sprintf("companion %d", pet.RefObjID), pet.Container.Rows, swap, out); err != nil {
+			return nil, err
+		}
+	}
+	return pet, nil
+}
+
+/*
+================
+activeSeat
+
+The index of the row that seats c's active record, or -1: a restore
+adoption leaves the one record in both places (cosrestore.go), and a
+snapshot keeps that seat (domain pinCloneActiveSeat).
+================
+*/
+func activeSeat(c *domain.Character) int {
+	if c == nil || c.ActiveCOS == nil {
+		return -1
+	}
+	for i := range c.MissionInventory {
+		if c.MissionInventory[i].Summon == c.ActiveCOS {
+			return i
+		}
+	}
+	return -1
+}
+
+/*
+================
 swapScope
 
 The containers one run covers. Each storage carries the label its rows are
@@ -249,6 +298,7 @@ func groundRow(item domain.GroundItemRecord) domain.InventoryRow {
 		MagicOptions: item.MagicOptions,
 		Data:         item.Data,
 		ForgeBound:   item.ForgeBound,
+		EarnedBought: item.EarnedBought,
 	}
 }
 
@@ -284,6 +334,7 @@ func applyGroundRow(item *domain.GroundItemRecord, row domain.InventoryRow) erro
 	item.MagicOptions = row.MagicOptions
 	item.Data = row.Data
 	item.ForgeBound = row.ForgeBound
+	item.EarnedBought = row.EarnedBought
 	return nil
 }
 
@@ -343,6 +394,7 @@ func (s *Store) swapItemsOfflineLocked(division string, scope swapScope, swap It
 		name := selected.Name
 		next := selected.Snapshot()
 		before := len(out)
+		seat := activeSeat(next)
 		// Equipped sockets and the bag share one row list (slot 0-12 worn).
 		if err := swapRows(name, "inventory", next.MissionInventory, swap, &out); err != nil {
 			return nil, err
@@ -353,17 +405,31 @@ func (s *Store) swapItemsOfflineLocked(division string, scope swapScope, swap It
 			}
 		}
 		// Dormant records sit in their summoner rows, which swapRows walks
-		// above (and in storage below). The active pet and mercenaries are
-		// held outside any row; an active record also seated in its row is
-		// already swapped there, so it is not counted again. Captured pets
-		// and broods are never stored, so an offline run has none.
-		for _, pet := range append([]*domain.CharacterCOS{next.ActiveCOS}, next.Mercenaries...) {
-			if pet == nil || pet.Container == nil {
-				continue
-			}
-			if err := swapRows(name, fmt.Sprintf("companion %d", pet.RefObjID), pet.Container.Rows, swap, &out); err != nil {
+		// above (and in storage below). An active record seated in its row
+		// is that row's record: it follows the row's swap and is not
+		// counted again, or the one companion would become two records
+		// under one GID (#3129). The active record held alone and the
+		// mercenaries are walked here. Captured pets and broods are never
+		// stored, so an offline run has none.
+		if seat >= 0 {
+			next.ActiveCOS = next.MissionInventory[seat].Summon
+		} else if next.ActiveCOS != nil {
+			held, err := swapHeldCompanion(name, "active companion", next.ActiveCOS, swap, &out)
+			if err != nil {
 				return nil, err
 			}
+			next.ActiveCOS = held
+		}
+		next.Mercenaries = append([]*domain.CharacterCOS(nil), next.Mercenaries...)
+		for i, soldier := range next.Mercenaries {
+			if soldier == nil {
+				continue
+			}
+			held, err := swapHeldCompanion(name, "mercenary", soldier, swap, &out)
+			if err != nil {
+				return nil, err
+			}
+			next.Mercenaries[i] = held
 		}
 		// The survival arena's rolled chest (domain.ArenaChest) keeps its
 		// items on the character until they are claimed, across a full bag
@@ -383,7 +449,7 @@ func (s *Store) swapItemsOfflineLocked(division string, scope swapScope, swap It
 		}
 	}
 	for _, owner := range scope.accounts {
-		stored, err := readAccountStorage(s.syncDBLocked(), owner.account)
+		stored, err := s.readAccountStorage(s.syncDBLocked(), owner.account)
 		if err != nil {
 			return nil, err
 		}
@@ -425,7 +491,7 @@ func (s *Store) swapItemsOfflineLocked(division string, scope swapScope, swap It
 	if s.commitFail != nil {
 		return nil, s.commitFail
 	}
-	tx, err := s.beginCharacterTxLocked()
+	tx, err := s.beginCharacterTxLocked("item-swap-offline")
 	if err != nil {
 		return nil, err
 	}

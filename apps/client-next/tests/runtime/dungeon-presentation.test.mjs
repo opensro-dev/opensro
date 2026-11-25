@@ -199,6 +199,7 @@ import {
 	parseJmxVisualEffect,
 	collectJmxEffectTexturePaths
 } from "../../../../scripts/build/effects/parseJmxVisualEffect.mjs";
+import { createCatalogEffects } from "../helpers/effect-programs.mjs";
 
 const { createWorldDecoder } = await import(
 	sourceFileUrl( "src/engine/runtime/assets/worker/world/world.ts" ).href
@@ -219,9 +220,6 @@ const { createNavigationStream } = await import(
 );
 const { WORLD_SCENE_BYTES, worldSceneBytes } = await import(
 	sourceFileUrl( "src/engine/foundation/rendering/world-scene.ts" ).href
-);
-const { createEffectPrograms } = await import(
-	sourceFileUrl( "src/engine/runtime/assets/worker/effects/program/program.ts" ).href
 );
 
 /*
@@ -525,7 +523,7 @@ test(
 				textures
 			} )
 		);
-		const effectDecoder = createEffectPrograms();
+		const effectDecoder = createCatalogEffects();
 		for ( const effectPath of uniqueEfps ) {
 			const res = effectDecoder.decode( catalogBytes, effectPath );
 			assert.ok( res.model.primitives.length > 0, effectPath );

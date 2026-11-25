@@ -383,5 +383,6 @@ export async function buildEquipmentVisuals( dress, options = {} ) {
 	await publishEquipmentParticleMetadata( metadata );
 	dress.specialGlows = metadata.specialGlows;
 	dress.enchantSparks = metadata.enchantSparks;
+	dress.avatarEffects = metadata.avatarEffects;
 	return out;
 }

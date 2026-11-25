@@ -34,9 +34,6 @@ const (
 	petDiagnosticQuietMs = 30000
 	// petDiagnosticMaxKeys bounds the throttle table; it is cleared when full.
 	petDiagnosticMaxKeys = 4096
-	// petApproachStallMs is how long a pursuit may last without reaching
-	// strike range before it is reported.
-	petApproachStallMs = 3000
 )
 
 /*
@@ -115,16 +112,19 @@ func (rt *Runtime) countPetTargetEnded(order bool, reason string) {
 Runtime.PetCombatCounters
 
 The metrics' pet_combat block: orders and fights that ended on a dead or
-departed target since start, by reason.
+departed target since start, by reason, and the pets resolved for want of
+a way (petrecovery.go), by kind and region.
 ================
 */
 func (rt *Runtime) PetCombatCounters() map[string]uint64 {
-	return map[string]uint64{
+	out := map[string]uint64{
 		"order_refused.target_died": rt.petDiag.orderTargetDied.Load(),
 		"order_refused.target_gone": rt.petDiag.orderTargetGone.Load(),
 		"fight_ended.target_died":   rt.petDiag.fightTargetDied.Load(),
 		"fight_ended.target_gone":   rt.petDiag.fightTargetGone.Load(),
 	}
+	rt.petRecovery.into(out)
+	return out
 }
 
 /*

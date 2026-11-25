@@ -21,6 +21,7 @@ import { advanceOrb, type OrbMover, type OrbPoint } from "@/engine/foundation/an
 import { createPresentationIds } from "@/engine/foundation/animation/presentation-ids";
 import { radians } from "@/engine/foundation/math/angles";
 import { worldAudioPosition } from "@/engine/foundation/world/world-space";
+import { effectProgramModel } from "@/engine/foundation/assets/effect-programs";
 
 /*
 ================
@@ -34,8 +35,7 @@ export function createOrbs(
 ) {
 	const launch = [ "hwan_g", "hwan_y", "hwan_v", "hwan_g" ],
 		indraft = [ "hwn_blue_indraft", "hwn_red_indraft", "hwn_violet_indraft", "hwn_blue_indraft" ];
-	const model = ( name: string ) =>
-		"/assets/effects/programs.json#" + encodeURIComponent( "battle/" + name + ".efp" );
+	const model = ( name: string ) => effectProgramModel( "battle/" + name + ".efp" );
 	let authoritative = 0, displayed = 0, waiting = 0;
 
 	/*

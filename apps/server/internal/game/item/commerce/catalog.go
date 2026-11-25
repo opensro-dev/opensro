@@ -31,6 +31,11 @@ type Content struct {
 	Variance   uint64
 	Data       uint32
 	Magic      []uint64
+	// RentMinutes is the item's rental period in minutes (v1.696
+	// refrentitem RentTime, issue #4240): 0 = not a rental. The grant
+	// stamps the item's expiry from it (grant.go). Only mall packages
+	// carry it; NPC templates never name a rent term.
+	RentMinutes uint32
 }
 
 /*
@@ -212,7 +217,7 @@ func Load(dir string, refs enterworld.ItemRefSource) (*Catalog, error) {
 		if blocked[r[3]] || len(rows) == 0 || (goldPrice == 0 && guildPointPrice == 0 && honorPrice == 0) || refs == nil {
 			continue
 		}
-		contents, err := packageContents(rows, refs)
+		contents, err := packageContents(rows, refs, rentTerms{})
 		if err != nil {
 			continue
 		}

@@ -3,10 +3,11 @@
 
 muhan_change_test.go - the Muhan change NPCs (port-only, #3349)
 
-Talk at a paired change NPC casts its BUFF01 (msch word 7) with the form
-as the context RefObj, which fills the transform block as a mask does;
-without the pairing the NPC is an ordinary nest entity and nothing
-changes. The install refuses a pairing that does not resolve.
+A change NPC is an arena world NPC (worldnpc.go). Talk at a paired one
+casts its BUFF01 (msch word 7) with the form as the context RefObj, which
+fills the transform block as a mask does; without the pairing it offers
+nothing and nothing changes. The install refuses a pairing that does not
+resolve, and a world NPC stands only in its own world definition.
 
 ===========================================================================
 */
@@ -18,14 +19,17 @@ import (
 	"strings"
 	"testing"
 
+	"opensro.online/server/internal/domain"
 	"opensro.online/server/internal/game/enterworld"
 	"opensro.online/server/internal/game/item/wire"
+	"opensro.online/server/internal/game/world/instance"
 	"opensro.online/server/internal/game/world/monster"
 	"opensro.online/server/internal/game/world/simulation"
 )
 
 const (
 	changeNpcRef   = 3000
+	changeNpcGID   = 241000
 	changeFormRef  = 3001
 	changeSkillID  = 34606
 	changeNpcCode  = "NPC_MUHAN_CHANGE_SOLO_75_A"
@@ -39,35 +43,33 @@ const (
 ==================
 changeFixture
 
-The combat fixture with one change NPC nested beside the player, its
-form and its BUFF01: the shipped mask skill under the Muhan codename
-with msch word 7, as the v1.696 rows carry it. paired installs the
-pairing; formLevel sets the form's level against the caster's 1.
+The combat fixture with one change NPC standing beside the player as a
+world NPC of the player's own world, its form in the monster template
+and its BUFF01: the shipped mask skill under the Muhan codename with
+msch word 7, as the v1.696 rows carry it. paired installs the pairing;
+formLevel sets the form's level against the caster's 1.
 ==================
 */
-func changeFixture(t *testing.T, paired bool, formLevel uint8) (*Runtime, *enterworld.Character, monster.Instance) {
+func changeFixture(t *testing.T, paired bool, formLevel uint8) (*Runtime, *enterworld.Character, simulation.NpcDef) {
 	t.Helper()
 	rt, clock, c, _ := newCombatTestRuntime(t, 100000)
 	c.BattleUntilMs = 0
 
-	npc := monster.MonsterRef{RefObjID: changeNpcRef, Codename: changeNpcCode, Level: 1, MaxHP: 100, BodyRadius: 6}
 	form := monster.MonsterRef{
 		RefObjID: changeFormRef, Codename: changeFormCode, Level: formLevel,
 		MaxHP: 100, BodyRadius: 6, WalkSpeed: changeFormWalk, RunSpeed: changeFormRun,
 	}
-	spawn := monster.SpawnPoint{RefObjID: changeNpcRef, RegionID: 0x62A8, X: 963, Y: 20, Z: 458}
-	monsters := simulation.NewMonsterState(monster.TemplateFromParts(
-		map[uint32]monster.MonsterRef{npc.RefObjID: npc, form.RefObjID: form},
-		[]monster.NestRow{{SpawnPoint: spawn, RetailEvidence: true, MaxCount: 1}},
-	))
+	monsters := simulation.NewMonsterState(monster.TemplateFromParts(map[uint32]monster.MonsterRef{form.RefObjID: form}, nil))
 	monsters.SetTimeSource(clock.Now)
 	monsters.StartDivision(testDivision)
-	monsters.AdvancePopulation(monsters.CurrentTimeMillis())
 	rt.Monsters = monsters
-	instances := monsters.InstancesInRegions(testDivision, []uint16{0x62A8})
-	if len(instances) != 1 {
-		t.Fatalf("%d nest entities", len(instances))
+
+	npc := simulation.NpcDef{
+		ObjectID: changeNpcGID, RefObjID: changeNpcRef, TidWord: 0x0146, Codename: changeNpcCode,
+		AuthoredSpawn: true, Spawn: simulation.Spawn{RegionID: 0x62A8, X: 963, Y: 20, Z: 458},
 	}
+	rt.NpcSpawn.Enabled = true
+	rt.worldNpcs = []simulation.WorldNpc{{World: instance.ID(domain.CharacterWorldInstance(c)).Definition(), Npc: npc}}
 
 	skills := rt.deps.SkillData().(staticSkillSource)
 	mask, ok := shippedSkills(t).SkillByCodename("SKILL_ETC_TRANS_MONSTER_01")
@@ -87,8 +89,19 @@ func changeFixture(t *testing.T, paired bool, formLevel uint8) (*Runtime, *enter
 			t.Fatal(err)
 		}
 	}
-	rt.Selected.Set(testDivision, c.Name, instances[0].Gid)
-	return rt, c, instances[0]
+	return rt, c, npc
+}
+
+/*
+==================
+selectChangeNpc
+
+Selects the change NPC through the select handler and returns its answer.
+==================
+*/
+func selectChangeNpc(t *testing.T, rt *Runtime, c *enterworld.Character) []wire.Frame {
+	t.Helper()
+	return rt.HandleObjectSelect(testDivision, c, wire.NewWriter(4).U32(changeNpcGID).Payload()).Frames
 }
 
 /*
@@ -105,13 +118,13 @@ func TestMuhanChangeTalkBecomesTheForm(t *testing.T) {
 	var pushed []wire.Frame
 	rt.PushDivisionPeerFrames = func(_ string, _ string, frames []wire.Frame) { pushed = append(pushed, frames...) }
 
-	selected := rt.muhanChangeSelect(testDivision, c, npc.Gid)
-	want := wire.EncodeNpcObjectSelectResult(npc.Gid, simulation.NpcTalkFlagTalk, 0)
+	selected := selectChangeNpc(t, rt, c)
+	want := wire.EncodeNpcObjectSelectResult(npc.ObjectID, simulation.NpcTalkFlagTalk, 0)
 	if len(selected) != 1 || !bytes.Equal(selected[0].Payload, want) {
 		t.Fatalf("select %+v, want the NPC result offering Talk", selected)
 	}
 
-	frames, refusal := rt.HandleNpcAction(testDivision, c, wire.NewWriter(8).U32(npc.Gid).U32(simulation.NpcTalkFlagTalk).Payload())
+	frames, refusal := rt.HandleNpcAction(testDivision, c, wire.NewWriter(8).U32(npc.ObjectID).U32(simulation.NpcTalkFlagTalk).Payload())
 	if refusal != "" {
 		t.Fatalf("talk refused: %s", refusal)
 	}
@@ -167,10 +180,11 @@ func TestMuhanChangeRefusals(t *testing.T) {
 		{name: "shop", level: 1, mask: simulation.NpcTalkFlagShop},
 	} {
 		rt, c, npc := changeFixture(t, true, tc.level)
+		selectChangeNpc(t, rt, c)
 		if tc.setup != nil {
 			tc.setup(c)
 		}
-		frames, refusal := rt.HandleNpcAction(testDivision, c, wire.NewWriter(8).U32(npc.Gid).U32(tc.mask).Payload())
+		frames, refusal := rt.HandleNpcAction(testDivision, c, wire.NewWriter(8).U32(npc.ObjectID).U32(tc.mask).Payload())
 		if refusal == "" || c.TransformRefObjID != 0 {
 			t.Errorf("%s: admitted, transform %d", tc.name, c.TransformRefObjID)
 			continue
@@ -193,22 +207,47 @@ func TestMuhanChangeRefusals(t *testing.T) {
 
 /*
 ==================
-TestMuhanChangeOffIsAnOrdinaryNestEntity
+TestMuhanChangeOffOffersNothing
 
-Without the pairing (SRO_MUHAN off) a change NPC selects with its HP
-like any nest entity and a Talk at it changes nothing.
+Without the pairing (SRO_MUHAN off) a change NPC offers no function and
+a Talk at it changes nothing.
 ==================
 */
-func TestMuhanChangeOffIsAnOrdinaryNestEntity(t *testing.T) {
+func TestMuhanChangeOffOffersNothing(t *testing.T) {
 	rt, c, npc := changeFixture(t, false, 1)
-	if frames := rt.muhanChangeSelect(testDivision, c, npc.Gid); frames != nil {
-		t.Fatalf("unpaired select answered %+v", frames)
+	selected := selectChangeNpc(t, rt, c)
+	if want := wire.EncodeNpcObjectSelectResult(npc.ObjectID, 0, 0); len(selected) != 1 || !bytes.Equal(selected[0].Payload, want) {
+		t.Fatalf("unpaired select answered %+v, want the NPC result offering nothing", selected)
 	}
-	if _, refusal := rt.HandleNpcAction(testDivision, c, wire.NewWriter(8).U32(npc.Gid).U32(simulation.NpcTalkFlagTalk).Payload()); refusal == "" {
+	if _, refusal := rt.HandleNpcAction(testDivision, c, wire.NewWriter(8).U32(npc.ObjectID).U32(simulation.NpcTalkFlagTalk).Payload()); refusal == "" {
 		t.Fatal("unpaired talk was admitted")
 	}
 	if c.TransformRefObjID != 0 {
 		t.Fatalf("transform %d without the pairing", c.TransformRefObjID)
+	}
+}
+
+/*
+==================
+TestWorldNpcStandsInItsOwnWorldOnly
+
+A world NPC of another definition is neither published to this world
+nor selectable from it; its own world publishes it.
+==================
+*/
+func TestWorldNpcStandsInItsOwnWorldOnly(t *testing.T) {
+	rt, c, npc := changeFixture(t, true, 1)
+	own := domain.CharacterWorldInstance(c)
+	if npcs := rt.WorldNpcs("", own); len(npcs) != 1 || npcs[0].ObjectID != npc.ObjectID {
+		t.Fatalf("own world publishes %+v, want the change NPC", npcs)
+	}
+	rt.worldNpcs[0].World++
+	if npcs := rt.WorldNpcs("", own); len(npcs) != 0 {
+		t.Fatalf("another world's NPC published here: %+v", npcs)
+	}
+	if selected := selectChangeNpc(t, rt, c); len(selected) == 1 &&
+		bytes.Equal(selected[0].Payload, wire.EncodeNpcObjectSelectResult(npc.ObjectID, simulation.NpcTalkFlagTalk, 0)) {
+		t.Fatal("another world's NPC was selectable here")
 	}
 }
 

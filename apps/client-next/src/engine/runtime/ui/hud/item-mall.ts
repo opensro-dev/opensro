@@ -10,7 +10,13 @@ and purchase completion. Closing a dialog never retries a purchase.
 */
 
 import type { MallOffer, MallState, MallPreviewState } from "@/engine/contracts/item-mall";
-import { mallCategories, mallCategoriesLater, MALL_ROWS_PER_PAGE } from "@/engine/foundation/ui/item-mall-layout";
+import {
+	mallCategories,
+	mallCategoriesLater,
+	MALL_PAGE_SIZE_LIMIT,
+	MALL_ROWS_PER_PAGE
+} from "@/engine/foundation/ui/item-mall-layout";
+import { renewalGoodsCells } from "@/engine/foundation/ui/renewal-mall";
 import type { MallPurchase } from "@/engine/foundation/gameplay/item-mall-wire";
 
 /*
@@ -23,12 +29,28 @@ export function createItemMall() {
 	let category = -1;
 	let tab = 0;
 	let page = 0;
+	// The first sub tab the renewal window's scrolled tab row draws
+	// (issue #4093); the view clamps it to the category's tabs.
+	let tabFirst = 0;
 	// Port-only (issue #3257): the later category rail is in force only
 	// while the Experimental mall categories row is on, and the item
 	// search text the rail's search field edits. Native browsing never
 	// touches either.
 	let categoriesLater = false;
 	let search = "";
+	// The later client's renewal mall window, the desktop default when
+	// its import is published (owner 2026-11-20). It browses the later
+	// rail, opens a popup per goods card (popup is its index on the page,
+	// -1 none) and its main page lists the badged goods. Off is the
+	// classic window.
+	let renewal = false;
+	let popup = -1;
+	// The renewal window's search field edits a draft; its Search button
+	// (or Enter) applies it as the search above.
+	let searchDraft = "";
+	// The client's text table: offer names are text keys, and a search
+	// matches what the player reads, never the key.
+	let names: Readonly<Record<string, string>> = {};
 	let pageSize = MALL_ROWS_PER_PAGE;
 	let selected: MallOffer | null = null;
 	let quantity = 1;
@@ -90,7 +112,7 @@ export function createItemMall() {
 		if ( question.offers.some( offer => !currentOffer( offer, state ) ) ) return false;
 		const silk = question.offers.reduce( ( sum, offer ) => sum + offer.silk, 0 );
 		const gift = question.offers.reduce( ( sum, offer ) => sum + offer.giftSilk, 0 );
-		return points <= state.points && points <= pointLimit() && silk - points <= state.silk &&
+		return points <= state.points && points <= pointLimit() && silk - points <= state.silk + state.earnedSilk &&
 			gift <= state.giftSilk;
 	}
 
@@ -108,16 +130,20 @@ export function createItemMall() {
 	================
 	*/
 	function categories() {
-		return categoriesLater ? mallCategoriesLater() : mallCategories();
+		return categoriesLater || renewal ? mallCategoriesLater() : mallCategories();
 	}
 
 	function reset() {
 		visible = false;
 		category = -1;
 		tab = 0;
+		tabFirst = 0;
 		page = 0;
 		categoriesLater = false;
 		search = "";
+		searchDraft = "";
+		renewal = false;
+		popup = -1;
 		pageSize = MALL_ROWS_PER_PAGE;
 		selected = null;
 		pointDialog = false;
@@ -157,6 +183,7 @@ export function createItemMall() {
 			visible = false;
 			compactView = "shop";
 			selected = null;
+			popup = -1;
 			pointDialog = false;
 			silkOpen = false;
 			silkComboOpen = false;
@@ -192,12 +219,16 @@ export function createItemMall() {
 		browse( index: number, nextTab = 0 ) {
 			if ( !Number.isInteger( index ) || index < -1 || index >= categories().length ) return;
 			if ( !Number.isInteger( nextTab ) || nextTab < 0 ) return;
+			// A tab of the open category keeps the row where it stands.
+			if ( index !== category ) tabFirst = 0;
 			category = index;
 			compactView = "shop";
 			tab = nextTab;
 			page = 0;
 			search = "";
+			searchDraft = "";
 			selected = null;
+			popup = -1;
 			pointDialog = false;
 			silkOpen = false;
 			silkComboOpen = false;
@@ -214,12 +245,60 @@ export function createItemMall() {
 		*/
 		setCategoriesLater( on: boolean ) {
 			if ( on === categoriesLater ) return;
+			const before = categories();
 			categoriesLater = on;
+			// Under the renewal window both settings name the later rail.
+			if ( categories() === before ) return;
 			category = -1;
 			tab = 0;
+			tabFirst = 0;
 			page = 0;
 			search = "";
+			searchDraft = "";
 			selected = null;
+			popup = -1;
+		},
+		/*
+		================
+		setRenewal
+
+		Whether the renewal window is the one drawn, as the renderer decides
+		it each frame. The renewal window always browses the later rail, so a
+		switch restarts browsing at its main page, as a rail switch does.
+		================
+		*/
+		setRenewal( on: boolean ) {
+			if ( on === renewal ) return;
+			renewal = on;
+			category = -1;
+			tab = 0;
+			tabFirst = 0;
+			page = 0;
+			search = "";
+			searchDraft = "";
+			selected = null;
+			popup = -1;
+		},
+		/*
+		================
+		openPopup
+
+		A renewal goods card's popup (buy, preview, basket); index is the
+		card's place on the current page. A second click on the same card
+		closes it.
+		================
+		*/
+		openPopup( index: number ) {
+			if ( !Number.isInteger( index ) || index < 0 || index >= pageSize ) return;
+			popup = popup === index ? -1 : index;
+		},
+		/*
+		================
+		closePopup
+		================
+		*/
+		closePopup() {
+			popup = -1;
 		},
 		/*
 		================
@@ -233,6 +312,44 @@ export function createItemMall() {
 			if ( typeof text !== "string" ) return;
 			search = text.slice( 0, 32 );
 			page = 0;
+			popup = -1;
+		},
+		/*
+		================
+		setNames
+
+		The client's text table, as the renderer holds it; search and the
+		renewal grid's pairing read offer names through it.
+		================
+		*/
+		setNames( table: Readonly<Record<string, string>> ) {
+			names = table;
+		},
+		/*
+		================
+		setSearchDraft
+
+		The renewal search field's text, at most 32 characters; the list
+		changes only when applySearch takes it.
+		================
+		*/
+		setSearchDraft( text: string ) {
+			if ( typeof text !== "string" ) return;
+			searchDraft = text.slice( 0, 32 );
+		},
+		/*
+		================
+		applySearch
+
+		The renewal Search button (and Enter in its field): the draft
+		becomes the search, from the first page. An empty draft clears the
+		search and returns the list to the category (or the main page).
+		================
+		*/
+		applySearch() {
+			search = searchDraft.trim();
+			page = 0;
+			popup = -1;
 		},
 		/*
 		================
@@ -268,12 +385,25 @@ export function createItemMall() {
 		},
 		/*
 		================
+		scrollTabs
+
+		Starts the renewal window's scrolled tab row at first (issue
+		#4093). The selected tab stays selected wherever the row stands.
+		================
+		*/
+		scrollTabs( first: number ) {
+			if ( !Number.isInteger( first ) || first < 0 ) return;
+			tabFirst = first;
+		},
+		/*
+		================
 		paginate
 		================
 		*/
 		paginate( next: number, count: number ) {
 			if ( !Number.isInteger( next ) || !Number.isInteger( count ) || count < 0 ) return;
 			page = Math.max( 0, Math.min( Math.ceil( count / pageSize ) - 1, next ) );
+			popup = -1;
 		},
 		/*
 		================
@@ -281,11 +411,14 @@ export function createItemMall() {
 
 		Presentation only: keep the first visible offer on rotation. Action indices
 		continue to address read().offers, including purchases and basket changes.
+		The classic window shows six rows; the renewal grid shows ten cards.
 		================
 		*/
 		setPageSize( count: number ) {
-			if ( !Number.isInteger( count ) || count < 1 || count > MALL_ROWS_PER_PAGE ) return;
+			if ( !Number.isInteger( count ) || count < 1 || count > MALL_PAGE_SIZE_LIMIT ) return;
+			if ( count === pageSize ) return;
 			page = Math.floor( page * pageSize / count );
+			popup = -1;
 			pageSize = count;
 		},
 		/*
@@ -315,6 +448,7 @@ export function createItemMall() {
 		*/
 		choose( offer: MallOffer ) {
 			if ( awaiting || queue.length || question ) return;
+			popup = -1;
 			selected = offer;
 			pointDialog = false;
 			quantity = 1;
@@ -373,7 +507,10 @@ export function createItemMall() {
 				quantity > current.purchaseLimit || points > state.points || points > current.silk * quantity ||
 				points !== 0 && !current.allowsPoints
 			) return null;
-			if ( selected.silk * quantity - points > state.silk || selected.giftSilk * quantity > state.giftSilk ) {
+			if (
+				selected.silk * quantity - points > state.silk + state.earnedSilk ||
+				selected.giftSilk * quantity > state.giftSilk
+			) {
 				return null;
 			}
 			return { ...selected, quantity, points };
@@ -403,21 +540,40 @@ export function createItemMall() {
 			// The Recommended tab is the later client's own (issue
 			// #3257): it lists no tab of the catalogue's, it gathers
 			// the offers badged "recommended" from every tab.
-			const virtual = categoriesLater && key === "MALL_HOT" && tabs.length > 0;
+			const later = categoriesLater || renewal;
+			const virtual = later && key === "MALL_HOT" && tabs.length > 0;
 			const shown = virtual ?
 				[ ...tabs, { shop: -1, tab: -1, category: "MALL_HOT", label: "UIIT_STT_SILKMALL_FAVORITE" } ] :
 				tabs;
 			const current = shown[tab];
+			// The renewal main page (no category, no search) lists every
+			// badged offer: the later mall's front page shows its new, hot
+			// and recommended goods. INFERENCE: no v1.188 binary is at hand;
+			// the badges are the catalogue's own (SRO_MALL_CATEGORIES).
+			const front = renewal && category === -1 && search === "";
 			const offers = state?.offers.filter( offer =>
-				key === "basket" ?
+				front ?
+					offer.badge !== undefined :
+					key === "basket" ?
 					basket.has( offer.packageId ) :
 					search !== "" ?
-					offer.name.toLowerCase().includes( search.toLowerCase() ) :
+					(names[offer.name] ?? offer.name).toLowerCase().includes( search.toLowerCase() ) :
 					current && current.shop < 0 ?
 					offer.badge === "recommended" :
 					current && offer.shop === current.shop && offer.tab === current.tab
 			) ?? [];
-			const currentPage = Math.min( page, Math.max( 0, Math.ceil( offers.length / pageSize ) - 1 ) );
+			// The renewal grid pages by its cells (gendered pairs keep their
+			// rows, so a cell may stand empty); the classic window by offers.
+			const cells = renewal ? renewalGoodsCells( offers, names ) : null;
+			const total = cells ? cells.length : offers.length;
+			const currentPage = Math.min( page, Math.max( 0, Math.ceil( total / pageSize ) - 1 ) );
+			const pageCells = cells?.slice( currentPage * pageSize, (currentPage + 1) * pageSize );
+			const pageOffers = pageCells ?
+				pageCells.filter( index => index >= 0 ).map( index => offers[index]! ) :
+				offers.slice( currentPage * pageSize, (currentPage + 1) * pageSize );
+			// grid[cell] is the cell's index into the page's offers, or -1.
+			let next = 0;
+			const grid = pageCells ? pageCells.map( index => index >= 0 ? next++ : -1 ) : null;
 			return {
 				question,
 				silk: { open: silkOpen, period: silkPeriod, comboOpen: silkComboOpen },
@@ -433,18 +589,23 @@ export function createItemMall() {
 				pointDraft,
 				visible,
 				categories: list,
-				categoriesLater,
+				categoriesLater: later,
+				renewal,
+				popup,
 				search,
+				searchDraft,
 				category,
 				tab,
+				tabFirst,
 				page: currentPage,
 				pageSize,
 				selected,
 				quantity,
 				points,
 				tabs: shown,
-				count: offers.length,
-				offers: offers.slice( currentPage * pageSize, (currentPage + 1) * pageSize )
+				count: total,
+				offers: pageOffers,
+				grid
 			};
 		},
 		/*
@@ -515,6 +676,7 @@ export function createItemMall() {
 		*/
 		wear( offer: MallOffer, state: MallState ) {
 			if ( !this.canWear( offer, state ) ) return;
+			popup = -1;
 			worn.set( offer.tab, offer );
 		},
 		/*
@@ -564,6 +726,7 @@ export function createItemMall() {
 		*/
 		askReserve( offer: MallOffer ) {
 			if ( awaiting || queue.length ) return;
+			popup = -1;
 			selected = null;
 			points = 0;
 			pointDialog = false;
@@ -633,7 +796,7 @@ export function createItemMall() {
 			const current = currentOffer( next, state );
 			if (
 				!current || current.silk !== next.silk || current.giftSilk !== next.giftSilk ||
-				current.silk - next.points > state.silk || current.giftSilk > state.giftSilk ||
+				current.silk - next.points > state.silk + state.earnedSilk || current.giftSilk > state.giftSilk ||
 				next.points > state.points
 			) {
 				queue = [];

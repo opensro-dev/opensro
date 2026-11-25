@@ -50,6 +50,6 @@ test('authenticated minimap and production GPU marker passes use retail assets',
   await page.screenshot({path:dir+'/visible-resource-error.png'});
   await page.evaluate(async()=>{delete __minimap.state.resourceError;await __minimap.settle();});
   assert.deepEqual(errors,[]);await writeFile(dir+'/incident.json',JSON.stringify({verdict:'PASS SUCCESS',live,markers,quest,dungeon,edge,detail,errors},null,2));
- }catch(error){await page.screenshot({path:dir+'/failure.png'});await writeFile(dir+'/failure.json',JSON.stringify({error:String(error),errors,state:await page.evaluate(()=>({session:window.__playableRuntime?.sessionState(),output:document.querySelector('output')?.textContent}))},null,2));throw error;}
+ }catch(error){await writeFile(dir+'/failure.json',JSON.stringify({error:String(error),errors,state:await page.evaluate(()=>({session:window.__playableRuntime?.sessionState(),output:document.querySelector('output')?.textContent}))},null,2));throw error;}
  finally{try{if(tracing)await page.context().tracing.stop({path:dir+'/trace.zip'});}finally{await browser.close();}}
 });

@@ -142,7 +142,9 @@ func (rt *Runtime) advancePetJudged(key petOwnerKey, state *petSession, facts *p
 	}
 	if rt.cosMovementBlockedKeyed(state.judgedCosAbnormalKey(key.division, state.character.Name, key.gid)) {
 		state.roar = nil
-		rt.cancelPetCombat(key, state, nowMs)
+		// A blocking status pauses the fight; the intent resumes on
+		// expiry (#4214).
+		rt.pausePetCombat(key, state, nowMs)
 		return state.mover.AnyFollower().Stop(nowMs), true
 	}
 	block := rt.cosAbnormalKeyed(state.judgedCosAbnormalKey(key.division, state.character.Name, pet.GID))
@@ -169,6 +171,11 @@ func (rt *Runtime) advancePetJudged(key petOwnerKey, state *petSession, facts *p
 	// tick abstains on exactly the gate the step relocates on and the
 	// copy publishes the respawn as before.
 	if !monster.FollowLocationCompatible(state.mover.AnyFollower().Position(nowMs).RegionID, ownerWorld.LiveSpawnAt(nowMs).RegionID) {
+		return nil, false
+	}
+	// A stuck follower relocates (petrecovery.go), which publishes from the
+	// pet record: abstain on that gate too, and the copy path relocates.
+	if _, stuck := rt.petFollowStuck(state, ref.TidWord, ownerWorld.LiveSpawnAt(nowMs), nowMs); stuck {
 		return nil, false
 	}
 	if ref.TidWord>>11 >= 3 && ref.TidWord>>11 <= domain.MercenaryBand {

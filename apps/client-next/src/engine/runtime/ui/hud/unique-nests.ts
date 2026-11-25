@@ -37,6 +37,8 @@ export function createUniqueNestsHud(
 	assets: Pick<AssetOwner, "available" | "request" | "take" | "cancel">,
 	base: string
 ) {
+	// Interface lane: loads only while the M window's unique spawns box is
+	// ticked, so the player waits on it (#3977).
 	let load: Load = { kind: "idle" };
 	return {
 		/*
@@ -47,10 +49,12 @@ export function createUniqueNestsHud(
 		================
 		*/
 		step( needed: boolean ) {
-			if ( load.kind === "idle" && needed && assets.available() > 0 ) {
+			if ( load.kind === "idle" && needed && assets.available( "interface" ) > 0 ) {
 				load = {
 					kind: "loading",
-					id: assets.request( new URL( UNIQUE_NESTS_PATH, base ).href, UNIQUE_NESTS_BYTES_LIMIT )
+					id: assets.request( new URL( UNIQUE_NESTS_PATH, base ).href, UNIQUE_NESTS_BYTES_LIMIT, undefined, {
+						lane: "interface"
+					} )
 				};
 			}
 			if ( load.kind !== "loading" ) return false;

@@ -320,6 +320,17 @@ function coneVector(
 }
 /*
 ================
+scaleVector
+
+An unturned authored length in the program's unit (ParticleGraphState unit).
+================
+*/
+function scaleVector( vector: ParticleVector, unit: number ): void {
+	if ( unit === 1 ) return;
+	for ( let i = 0; i < 3; i++ ) vector[i] = Math.fround( vector[i]! * unit );
+}
+/*
+================
 sampleParticle
 
 A program's birth sample (CRT draws from table after index) into out, and
@@ -332,7 +343,8 @@ export function sampleParticle(
 	table: Float32Array,
 	index: number,
 	transform: ArrayLike<number> | undefined,
-	out: ParticleSample
+	out: ParticleSample,
+	unit = 1
 ): number {
 	const position = out.position, velocity = out.velocity, scale = out.scale, at = out.at, cone = out.work;
 	for ( let i = 0; i < 3; i++ ) {
@@ -356,7 +368,9 @@ export function sampleParticle(
 				const x = position[at]!, y = position[at + 1]!, z = position[at + 2]!;
 				length = 0 + x * x + y * y + z * z;
 			} while ( length > 1 );
-			for ( let i = 0; i < 3; i++ ) position[at + i] = Math.fround( position[at + i]! * program.sphere[i]! );
+			for ( let i = 0; i < 3; i++ ) {
+				position[at + i] = Math.fround( position[at + i]! * program.sphere[i]! * unit );
+			}
 		}
 		if ( op === "SetGraphRandomScale" && program.scale ) {
 			index = (index + 1) % table.length;
@@ -371,6 +385,7 @@ export function sampleParticle(
 				true,
 				cone
 			);
+			if ( program.coneFlags !== 2 || !transform ) scaleVector( cone, unit );
 			for ( let i = 0; i < 3; i++ ) velocity[at + i] = cone[i]!;
 		}
 		if ( op === "ConeForce" && program.coneForce ) {
@@ -382,11 +397,13 @@ export function sampleParticle(
 				true,
 				cone
 			);
+			if ( program.coneForceFlags !== 2 || !transform ) scaleVector( cone, unit );
 			for ( let i = 0; i < 3; i++ ) velocity[at + i] = Math.fround( velocity[at + i]! + cone[i]! );
 		}
 		if ( op === "SetConePos" && program.conePos ) {
 			const turned = program.conePosFlags === 2 || program.conePosFlags === 7;
 			index = coneVector( program.conePos, table, index, turned ? transform : undefined, false, cone );
+			if ( !turned || !transform ) scaleVector( cone, unit );
 			if ( program.conePosFlags === 7 && transform ) {
 				for ( let i = 0; i < 3; i++ ) cone[i] = Math.fround( cone[i]! + transform[12 + i]! );
 			}

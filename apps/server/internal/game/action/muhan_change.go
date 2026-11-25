@@ -18,10 +18,11 @@ an indirect skill whose context carries the form, exactly as a filled
 mask capsule casts its skill (transform.go). The form then fills the
 transform block, and every end path a mask has ends it too.
 
-This module owns the pairing table and the two hooks: the select answer
-(select.go) and the Talk request (npcaction.go). The change NPC itself
-stays the nest's entity in its own arena world: all eight arenas share
-region 27091, so a static roster NPC would stand in every one of them.
+This module owns the pairing table and the Talk it gives: at install the
+paired NPCs offer Talk, and a Talk request at one (npcaction.go) is the
+change. The change NPC is an arena world NPC (worldnpc.go, loaded by
+simulation/muhan_npcs.go), so select and the function request find it,
+check its range and answer it as any roster NPC.
 
 ===========================================================================
 */
@@ -58,10 +59,11 @@ ConfigureMuhanTransforms
 
 Called once at startup, after monster wiring, with the pairing the boot
 loaded (monster.LoadMuhanTransforms; nil while SRO_MUHAN is off, which
-leaves the runtime native). Every row must resolve: the NPC and the form
-in the monster template, the skill in the skill table carrying msch word
-7. A row that does not refuses the boot, as the NPC and wave loaders do;
-a change NPC that cannot change must not reach gameplay.
+leaves the runtime native). Every row must resolve: the NPC among the
+arena world NPCs, the form in the monster template, the skill in the
+skill table carrying msch word 7. A row that does not refuses the boot,
+as the NPC and wave loaders do; a change NPC that cannot change must not
+reach gameplay. Each paired NPC then offers Talk, its one function.
 ================
 */
 func (rt *Runtime) ConfigureMuhanTransforms(rows []monster.MuhanTransform) error {
@@ -71,22 +73,16 @@ func (rt *Runtime) ConfigureMuhanTransforms(rows []monster.MuhanTransform) error
 	if rt.Monsters == nil {
 		return fmt.Errorf("muhan transforms: no monster population")
 	}
-	source, ok := rt.deps.SkillData().(interface {
-		SkillByCodename(string) (enterworld.SkillRow, bool)
-	})
-	if !ok {
-		return fmt.Errorf("muhan transforms: the skill table has no codename lookup")
-	}
 	changes := make(map[string]muhanChange, len(rows))
 	for _, row := range rows {
-		if _, found := rt.Monsters.ReferenceByCodename(row.NpcCodename); !found {
-			return fmt.Errorf("muhan transforms: npc %s is not in the population", row.NpcCodename)
+		if !rt.worldNpcNamed(row.NpcCodename) {
+			return fmt.Errorf("muhan transforms: npc %s stands in no arena world", row.NpcCodename)
 		}
 		form, found := rt.Monsters.ReferenceByCodename(row.MonsterCodename)
 		if !found {
 			return fmt.Errorf("muhan transforms: form %s is not in the population", row.MonsterCodename)
 		}
-		skill, found := source.SkillByCodename(row.SkillCodename)
+		skill, found := rt.skillByCodename(row.SkillCodename)
 		if !found {
 			return fmt.Errorf("muhan transforms: skill %s is not in the skill table", row.SkillCodename)
 		}
@@ -95,90 +91,47 @@ func (rt *Runtime) ConfigureMuhanTransforms(rows []monster.MuhanTransform) error
 		}
 		changes[row.NpcCodename] = muhanChange{skill: skill, form: form}
 	}
+	for index := range rt.worldNpcs {
+		if _, paired := changes[rt.worldNpcs[index].Npc.Codename]; paired {
+			rt.worldNpcs[index].Npc.TalkFlags = simulation.NpcTalkFlagTalk
+		}
+	}
 	rt.muhanChanges = changes
 	return nil
 }
 
 /*
 ================
-muhanChangeAt
+worldNpcNamed
 
-The pairing of the change NPC with this object id, when the id names a
-live change NPC in the viewer's own world and visibility ring (the
-monster lookup select uses). False while no pairing is installed.
+Whether any world NPC carries this codename.
 ================
 */
-func (rt *Runtime) muhanChangeAt(division string, c *enterworld.Character, gid uint32) (muhanChange, monster.Instance, bool) {
-	if len(rt.muhanChanges) == 0 || rt.Monsters == nil {
-		return muhanChange{}, monster.Instance{}, false
+func (rt *Runtime) worldNpcNamed(codename string) bool {
+	for index := range rt.worldNpcs {
+		if rt.worldNpcs[index].Npc.Codename == codename {
+			return true
+		}
 	}
-	instance, ok := rt.characterMonster(division, c, gid)
-	if !ok {
-		return muhanChange{}, monster.Instance{}, false
-	}
-	change, ok := rt.muhanChanges[instance.Ref.Codename]
-	return change, instance, ok
-}
-
-/*
-================
-muhanChangeWithinRange
-
-The native NPC hit range (npcHitRange), measured from the caster's live
-pose to where the change NPC stands now.
-================
-*/
-func (rt *Runtime) muhanChangeWithinRange(division string, c *enterworld.Character, instance monster.Instance) bool {
-	now := rt.Now().UnixMilli()
-	viewer := rt.liveSpawn(simulation.WorldKey(division, c.Name), c, now)
-	station := monster.Pose{RegionID: instance.Spawn.RegionID, X: instance.Spawn.X, Y: instance.Spawn.Y, Z: instance.Spawn.Z}
-	if live := rt.monsterSpawn(division, instance.Gid, now); live.RegionID != 0 {
-		station = monster.Pose{RegionID: live.RegionID, X: live.X, Y: live.Y, Z: live.Z}
-	}
-	distance := monster.NativeActorDistance(
-		monster.Pose{RegionID: viewer.RegionID, X: viewer.X, Y: viewer.Y, Z: viewer.Z},
-		station,
-	)
-	return !(npcHitRange < distance)
-}
-
-/*
-================
-muhanChangeSelect
-
-The select answer for a change NPC: the NPC select result offering
-Talk, its one function, where any other nest entity answers with its
-HP. Nil when the object is not a change NPC.
-================
-*/
-func (rt *Runtime) muhanChangeSelect(division string, c *enterworld.Character, gid uint32) []wire.Frame {
-	if _, _, ok := rt.muhanChangeAt(division, c, gid); !ok {
-		return nil
-	}
-	return []wire.Frame{{
-		Opcode:  wire.OpObjectSelectResult,
-		Payload: wire.EncodeNpcObjectSelectResult(gid, simulation.NpcTalkFlagTalk, 0),
-	}}
+	return false
 }
 
 /*
 ================
 handleMuhanChangeTalk
 
-A function request at a change NPC. Only Talk is offered; it casts the
-paired skill as the capsule does (useMonsterCapsule): the msch gate with
-the form as the context RefObj, then the effect, then the hide ends.
-A refusal answers the skill's 0xB070 error and the 0xB338 kind-2
-refusal, so the client's pending function request always retires. The
-caller holds the division lock and has checked the selection.
+A function request at a change NPC, after the caller's NPC checks
+(selection, the offered Talk, the hit range). Talk casts the paired
+skill as the capsule does (useMonsterCapsule): the msch gate with the
+form as the context RefObj, then the effect, then the hide ends. A
+refusal answers the skill's 0xB070 error and the 0xB338 kind-2 refusal,
+so the client's pending function request always retires. The caller
+holds the division lock.
 ================
 */
-func (rt *Runtime) handleMuhanChangeTalk(division string, c *enterworld.Character, change muhanChange, instance monster.Instance, mask uint32) ([]wire.Frame, string) {
+func (rt *Runtime) handleMuhanChangeTalk(division string, c *enterworld.Character, change muhanChange, npc simulation.NpcDef, mask uint32) ([]wire.Frame, string) {
 	if mask != simulation.NpcTalkFlagTalk {
-		return npcFunctionRefusal(npcFunctionNotOffered), fmt.Sprintf("change NPC %s offers only Talk, not 0x%X", instance.Ref.Codename, mask)
-	}
-	if !rt.muhanChangeWithinRange(division, c, instance) {
-		return npcFunctionTooFar(), fmt.Sprintf("change NPC %s is beyond its interaction range", instance.Ref.Codename)
+		return npcFunctionRefusal(npcFunctionNotOffered), fmt.Sprintf("change NPC %s offers only Talk, not 0x%X", npc.Codename, mask)
 	}
 	var frames []wire.Frame
 	refusal := ""

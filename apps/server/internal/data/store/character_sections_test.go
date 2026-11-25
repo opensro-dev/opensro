@@ -128,7 +128,7 @@ func TestCommitWritesChangedSectionsByteIdentical(t *testing.T) {
 		{"inventory", func(c *domain.Character) { c.MissionInventory[0].StackCount = 5 }},
 		{"skills", func(c *domain.Character) { c.Skills = append(c.Skills, 777) }},
 		{"social", func(c *domain.Character) { c.Friends = append(c.Friends, domain.FriendRecord{ID: 9, Name: "pal"}) }},
-		{"rest", func(c *domain.Character) { c.BreakNotice = true }},
+		{"rest", func(c *domain.Character) { c.BreakNotice = true; c.PlusFailOptOut = true }},
 		{"identity", func(c *domain.Character) { c.AnimationSetName = "other" }},
 	}
 	for _, mutation := range mutations {
@@ -321,7 +321,7 @@ func TestDoorTransactionRollbackRetainsNothing(t *testing.T) {
 	c, copy := stageCommittedCopy(t, s)
 	key := committedCharacterKey{division: testDivision, id: c.ID}
 
-	tx, err := s.beginCharacterTxLocked()
+	tx, err := s.beginCharacterTxLocked("test-own-tx")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -444,7 +444,7 @@ func TestDoorTransactionDeleteDropsCopy(t *testing.T) {
 	c, _ := stageCommittedCopy(t, s)
 	key := committedCharacterKey{division: testDivision, id: c.ID}
 
-	tx, err := s.beginCharacterTxLocked()
+	tx, err := s.beginCharacterTxLocked("test-own-tx")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -475,7 +475,7 @@ func TestDoorTransactionSkipsUnchangedRow(t *testing.T) {
 	key := committedCharacterKey{division: testDivision, id: c.ID}
 	before := readCharacterRecordRaw(t, s, testDivision, strings.ToLower(c.Name))
 
-	tx, err := s.beginCharacterTxLocked()
+	tx, err := s.beginCharacterTxLocked("test-own-tx")
 	if err != nil {
 		t.Fatal(err)
 	}

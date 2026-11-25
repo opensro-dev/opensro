@@ -251,24 +251,6 @@ func (game *gameplayPlane) wireCaravanChat() {
 
 /*
 ================
-worldNpcsForInstance
-
-Returns the quest-gate NPCs. Caravans use the separate player appearance lane.
-================
-*/
-func (game *gameplayPlane) worldNpcsForInstance(worldInstance uint32) []simulation.NpcDef {
-	var out []simulation.NpcDef
-	if game.items != nil {
-		out = game.items.QuestGateNpcs(worldInstance)
-	}
-	if worldInstance != domain.DefaultWorldInstance || game.caravanAgents == nil || !game.caravanAgents.Enabled() {
-		return out
-	}
-	return out
-}
-
-/*
-================
 caravanAgentsTick
 
 Advances the shard's AI Caravan & Thief agents every 100ms on the
@@ -709,7 +691,7 @@ caravanHireLabel / caravanHireService
 The specialty shops (Hunters and Traders) and the Thief Den's buyer
 (Thieves) offer one hire row. It is the first row of the NPC's own menu
 (action.OpCaravanHireNpc, sent at select), not a conversation row; the
-client opens the hire window with 0x7FC3 operation 0. caravanHireService
+client opens the hire window with 0x7FCF operation 0. caravanHireService
 still answers a conversation row from an older client.
 ================
 */
@@ -742,9 +724,9 @@ func (game *gameplayPlane) caravanHireService(character *enterworld.Character, c
 ================
 caravanHireWindow / caravanHireRequest
 
-The hire window (port-only 0x3FC3): every agent hired where the player
+The hire window (port-only 0x3FCF): every agent hired where the player
 stands, available ones first, with the Trader goods choices. The request
-(0x7FC3) refreshes it or hires one agent and answers with the window again.
+(0x7FCF) refreshes it or hires one agent and answers with the window again.
 ================
 */
 type caravanHireRowJSON struct {

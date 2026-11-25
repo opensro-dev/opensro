@@ -132,11 +132,13 @@ keepFocusOnAltPress), so a field left out here would leave them stale.
 function sameUiControl( x: UiControl, y: UiControl ): boolean {
 	return x === y || x.id === y.id && x.label === y.label && x.kind === y.kind && x.value === y.value &&
 			x.valueText === y.valueText && x.disabled === y.disabled && x.selected === y.selected &&
-			x.multiline === y.multiline && x.whisperTarget === y.whisperTarget && x.textAlign === y.textAlign &&
+			x.multiline === y.multiline && x.thumbDragOnly === y.thumbDragOnly && x.whisperTarget === y.whisperTarget &&
+			x.textAlign === y.textAlign &&
 			x.rightActivate === y.rightActivate && x.helpText === y.helpText && x.captureKeys === y.captureKeys &&
 			x.draggable === y.draggable && x.carry === y.carry && x.inspect === y.inspect &&
 			x.keepFocusOnAltPress === y.keepFocusOnAltPress && x.min === y.min && x.max === y.max &&
-			x.maxLength === y.maxLength && tuple( x.rect, y.rect ) && tuple( x.textInsets, y.textInsets ) &&
+			x.maxLength === y.maxLength && tuple( x.rect, y.rect ) && tuple( x.hitRect, y.hitRect ) &&
+			tuple( x.textInsets, y.textInsets ) &&
 			samePolygon( x.hitPolygon, y.hitPolygon ) && sameHelpSource( x.helpSource, y.helpSource );
 }
 /*

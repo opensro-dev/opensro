@@ -19,6 +19,9 @@ Step 3c: the six MEETROC questdata rows join under their source ids and
 leave by codename when off, restoring the native table byte for byte;
 the quest kinds' committed nests (scripts/data/roc/quest-nests.json)
 become roc-monsters.txt, and a nest naming an unstaged kind refuses.
+
+Step 5d: the eight ARCHEMY exchanges (source ids 377-384) ride the same
+two lists, and their trophies' drops join the rewards file's fixed rules.
 ===========================================================================
 """
 import script_paths  # noqa: F401  (puts scripts/ and its build folders on sys.path, #3410)
@@ -36,6 +39,8 @@ from test_hunting2_import import archive_bytes, later_row, skill_row, utf16  # n
 
 NATIVE_TAHOMET_SYMBOL = "SN_MOB_RM_TAHOMET"
 ROC_SKILL = 7101
+# The summit event's enrage: no kind's skill columns name it (#4054).
+ROC_ENRAGE_SKILL = 7102
 # The key item: its id in the source client, and the one a variant
 # that carries it gives it.
 KEY_ITEM = "ITEM_QNO_RM_MEETROC_6_01"
@@ -44,7 +49,9 @@ VARIANT_KEY_ID = "50100"
 MOUNTAIN_BUILDING = "24296"
 NATIVE_QUEST = ["1", "1", "QTUTORIAL_CH", "1", "x", "SN_QTUTORIAL_CH", "SN_PAY", "xxx", "SN_PAYCON", "SN_NN", "SN_NC"]
 SOURCE_QUEST_IDS = {"QNO_RM_MEETROC_1": "91", "QNO_RM_MEETROC_2": "92", "QNO_RM_MEETROC_6": "96",
-	"QNO_RM_MEETROC_ECT_1": "374", "QNO_RM_MEETROC_ECT_2": "375", "QNO_RM_MEETROC_ECT_3": "376"}
+	"QNO_RM_MEETROC_ECT_1": "374", "QNO_RM_MEETROC_ECT_2": "375", "QNO_RM_MEETROC_ECT_3": "376",
+	"QNO_RM_ARCHEMY_1": "377", "QNO_RM_ARCHEMY_2": "378", "QNO_RM_ARCHEMY_3": "379", "QNO_RM_ARCHEMY_4": "380",
+	"QNO_RM_ARCHEMY_5": "381", "QNO_RM_ARCHEMY_6": "382", "QNO_RM_ARCHEMY_7": "383", "QNO_RM_ARCHEMY_8": "384"}
 
 
 # ================
@@ -72,7 +79,7 @@ def contents_row(code, columns=17):
 
 
 # v1.150 ships the contents rows of MEETROC_1, _2 and _6; the client
-# ships all six.
+# ships all fourteen.
 NATIVE_CONTENTS = [contents_row(code, 13) for code in ("QTUTORIAL_CH", "QNO_RM_MEETROC_1", "QNO_RM_MEETROC_2", "QNO_RM_MEETROC_6")]
 SOURCE_CONTENTS = [contents_row(code) for code in SOURCE_QUEST_IDS]
 GUARDIANS = {"MOB_QT_%02d_ROCKY_CLON2" % n for n in range(1, 8)}
@@ -182,7 +189,8 @@ class RocImportTest(unittest.TestCase):
 			"characterdata.txt": utf16([["characterdata_6000.txt"]]),
 			"characterdata_6000.txt": utf16(rows),
 			"skilldata.txt": utf16([["skilldata_6000.txt"]]),
-			"skilldata_6000.txt": utf16([skill_row(ROC_SKILL, "MSKILL_RM_ROC_TEST")]),
+			"skilldata_6000.txt": utf16([skill_row(ROC_SKILL, "MSKILL_RM_ROC_TEST"),
+				skill_row(ROC_ENRAGE_SKILL, "MSKILL_RM_ROC_ATTACK10")]),
 			"textdata_object.txt": utf16([[str(at), symbol_of(code), "x", "x", code, "f", "x", "a", "b", "c"]
 				for at, code in enumerate(roc.KINDS) if code != "MOB_RM_TAHOMET_ROC"]
 				+ [["1", "SN_STORE_RC_TAHOMET_GATE", "k", "", "", "s", "t", "j", "Summit Gate", "v"]]),
@@ -307,7 +315,8 @@ class RocImportTest(unittest.TestCase):
 			summary = self.run_import(vsro, native, output, pins, "on")
 			self.assertEqual(sorted(summary["characters"]), sorted(roc.KINDS))
 			self.assertTrue(all(identity > 100 for identity in summary["characters"].values()))
-			self.assertEqual(list(summary["skills"]), ["MSKILL_RM_ROC_TEST"])
+			# The enrage is staged by codename: the event casts it, no kind names it.
+			self.assertEqual(sorted(summary["skills"]), ["MSKILL_RM_ROC_ATTACK10", "MSKILL_RM_ROC_TEST"])
 			shard = (text_root / roc.CHARACTER_SHARD).read_bytes().decode("utf-16")
 			converted = [line.split("\t") for line in shard.splitlines() if "\tMOB_RM_ROC\t" in line][0]
 			self.assertEqual(len(converted), 120)
@@ -369,6 +378,9 @@ class RocImportTest(unittest.TestCase):
 			(text_root / "itemdata_110000.txt").write_bytes(utf16([piece]))
 			summary = self.run_import(vsro, native, output, pins, "on")
 			self.assertEqual(summary["rewards"]["random"], 8)
+			# The fixture installs no trophy: all eight drops wait.
+			self.assertEqual(summary["rewards"]["trophies"], 0)
+			self.assertEqual(len(summary["rewards"]["waitingTrophies"]), 8)
 			written = json.loads((text_root / roc.roc_rewards.REWARDS_FILE).read_text(encoding="utf-8"))
 			self.assertEqual({rule["Monster"] for rule in written["Random"]} - set(roc.KINDS), set())
 			self.run_import(vsro, native, output, pins, "")
@@ -381,9 +393,9 @@ class RocImportTest(unittest.TestCase):
 		return [row[2] for row in tables.table_rows((text_root / roc.QUEST_TABLE).read_bytes()) if len(row) > 2]
 
 	# ================
-	# test_on_stages_the_six_quests_under_their_source_ids
+	# test_on_stages_the_chain_quests_under_their_source_ids
 	# ================
-	def test_on_stages_the_six_quests_under_their_source_ids(self):
+	def test_on_stages_the_chain_quests_under_their_source_ids(self):
 		with tempfile.TemporaryDirectory() as root:
 			vsro, native, output, text_root, pins = self.fixture(Path(root))
 			summary = self.run_import(vsro, native, output, pins, "on")
@@ -461,14 +473,15 @@ class RocImportTest(unittest.TestCase):
 	# ================
 	# test_on_stages_only_the_contents_rows_v1150_lacks
 	#
-	# The three ECT rows come from the client, cut to v1.150's thirteen
-	# columns; the native MEETROC_1 row stays as v1.150 ships it.
+	# The ECT and ARCHEMY rows come from the client, cut to v1.150's
+	# thirteen columns; the native MEETROC_1 row stays as v1.150 ships it.
 	# ================
 	def test_on_stages_only_the_contents_rows_v1150_lacks(self):
 		with tempfile.TemporaryDirectory() as root:
 			vsro, native, output, text_root, pins = self.fixture(Path(root))
 			summary = self.run_import(vsro, native, output, pins, "on")
-			ect = ["QNO_RM_MEETROC_ECT_1", "QNO_RM_MEETROC_ECT_2", "QNO_RM_MEETROC_ECT_3"]
+			ect = ["QNO_RM_MEETROC_ECT_1", "QNO_RM_MEETROC_ECT_2", "QNO_RM_MEETROC_ECT_3"] + \
+				[f"QNO_RM_ARCHEMY_{n}" for n in range(1, 9)]
 			self.assertEqual(summary["contents"], ect)
 			rows = tables.table_rows((text_root / roc.CONTENTS_TABLE).read_bytes())
 			self.assertEqual(rows[:len(NATIVE_CONTENTS)], NATIVE_CONTENTS)
@@ -481,7 +494,7 @@ class RocImportTest(unittest.TestCase):
 	def test_a_contents_row_the_client_lacks_refuses(self):
 		with tempfile.TemporaryDirectory() as root:
 			vsro, native, output, text_root, pins = self.fixture(Path(root), contents=SOURCE_CONTENTS[:-1])
-			with self.assertRaisesRegex(ValueError, "row for Roc quest QNO_RM_MEETROC_ECT_3"):
+			with self.assertRaisesRegex(ValueError, "row for Roc quest QNO_RM_ARCHEMY_8"):
 				self.run_import(vsro, native, output, pins, "on")
 
 	# ================
@@ -545,6 +558,48 @@ class RocImportTest(unittest.TestCase):
 			self.run_import(vsro, native, output, pins, "")
 			rows = tables.table_rows((text_root / roc.UI_TABLE).read_bytes())
 			self.assertEqual([row[1] for row in rows], ["UIIT_MSG_QUEST_ROC_BERSERKER_START"])
+
+	# ================
+	# test_a_multi_line_message_keeps_its_bytes
+	#
+	# An earlier layer has written the interface table, with a native
+	# multi-line message: CRLF ends its record, a bare LF and a blank line
+	# sit inside it. On twice and then off, that record's bytes stay as
+	# they were and off gives back the earlier layer's table exactly
+	# (r204's English coverage gate found 12 such messages cut).
+	# ================
+	def test_a_multi_line_message_keeps_its_bytes(self):
+		with tempfile.TemporaryDirectory() as root:
+			vsro, native, output, text_root, pins = self.fixture(Path(root))
+			message = "1\tUIIT_MSG_LONG\tfirst\nsecond\n\nafter a blank\t\t\t\t\t\tEnglish\r\n"
+			earlier = "\ufeff" + "\t".join(NATIVE_UI[0]) + "\r\n" + message
+			(text_root / roc.UI_TABLE).write_bytes(earlier.encode("utf-16-le"))
+			for _ in range(2):
+				self.run_import(vsro, native, output, pins, "on")
+				text = (text_root / roc.UI_TABLE).read_bytes().decode("utf-16")
+				self.assertIn(message, text)
+				self.assertEqual(text.count(AGAIN), 1)
+			self.run_import(vsro, native, output, pins, "")
+			self.assertEqual((text_root / roc.UI_TABLE).read_bytes(), earlier.encode("utf-16-le"))
+
+	# ================
+	# test_a_dropped_record_ends_where_the_build_ends_it
+	#
+	# The records dropped are the ones the asset build reads
+	# (splitTextDataRecords): a bare CR inside a message does not start a
+	# line, so a "<digits>\t" after it stays inside the dropped message,
+	# and a "//" line ends the record, so the comment after it survives.
+	# ================
+	def test_a_dropped_record_ends_where_the_build_ends_it(self):
+		with tempfile.TemporaryDirectory() as root:
+			text_root = Path(root)
+			table = ("\ufeff1\tUIIT_KEEP\tkept\r\n"
+					 "2\tUIIT_DROP\tfirst\r9\tstill the message\r\n"
+					 "// a comment the build skips\r\n"
+					 "3\tUIIT_TAIL\ttail\r\n")
+			(text_root / roc.UI_TABLE).write_bytes(table.encode("utf-16-le"))
+			kept = roc.without_ui_texts(text_root, {"UIIT_DROP"}).decode("utf-16")
+			self.assertEqual(kept, "1\tUIIT_KEEP\tkept\r\n// a comment the build skips\r\n3\tUIIT_TAIL\ttail\r\n")
 
 	# ================
 	# test_a_client_without_the_again_line_refuses

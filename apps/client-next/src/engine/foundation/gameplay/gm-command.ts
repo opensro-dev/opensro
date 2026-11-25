@@ -29,6 +29,36 @@ const MAX_SILK_GRANT = 1_000_000;
 // speed. A bare /SETSPEED asks for normal speed. The server enforces the
 // same range (action/gmspeed.go).
 const GM_SET_SPEED = 0xf1;
+// The port's /SETBERSERK <character> <level> (GM test tooling, not native; action/hwan.go):
+// subcommand 0xF3, a u16-sized ANSI name and a u8 Blue Berserk level 0 to 6 (one digit). The
+// server sets the level for the life of the shard process and tells that character.
+const GM_SET_BERSERK = 0xf3;
+// The port's /SETGAUGE <character> <balls 0-5> (GM test tooling, not native; action/hwan.go):
+// subcommand 0xF4, a u16-sized ANSI name and a u8 count of Berserk gauge balls.
+const GM_SET_GAUGE = 0xf4;
+// The port's moderation commands (not native; the server's
+// gmcommand/moderation.go). Each frame is the subcommand and a u16-sized
+// ANSI name. /MUTE <character> <minutes> <clause> <reason...> adds a u16
+// minutes, a u16-sized clause id and a u16-sized UTF-8 reason;
+// /SHADOWMUTE <character> [note...] adds a u16-sized UTF-8 note. The
+// original client knows /BLOCKLOGOUT and /ALLOWLOGOUT but sends nothing
+// for them (no arm in 509CF0), so the port picks 0xF9 and 0xFA.
+const GM_CHAT_MUTE = 0xf5;
+const GM_CHAT_UNMUTE = 0xf6;
+const GM_SHADOW_MUTE = 0xf7;
+const GM_SHADOW_UNMUTE = 0xf8;
+const GM_BLOCK_LOGOUT = 0xf9;
+const GM_ALLOW_LOGOUT = 0xfa;
+const MAX_MUTE_MINUTES = 0xffff;
+const MAX_MODERATION_TEXT_BYTES = 1024;
+// The port's /NOTICE <text...> (GM tooling, not native; always on, for a
+// GM whose staff grant carries the notice box): subcommand 0xFB and a
+// u16-sized UTF-8 text the server shows in every player's notice banner.
+// The original client has no notice word. The byte bound is the server
+// decoder's; the banner's 100-character limit is the server's to answer,
+// so the GM reads why a long notice was refused.
+const GM_NOTICE = 0xfb;
+const MAX_NOTICE_TEXT_BYTES = 400;
 // The port's /FORGE <CODENAME> [key=value ...] and /FORGE help <CODENAME>
 // (GM tooling, not native; the server's SRO_GM_ITEM_FORGE, off unless a
 // shard enables it): subcommand 0xF2 and a u16-sized ANSI string carrying
@@ -350,6 +380,24 @@ export function gmReply( p: Uint8Array ): GmReply | null {
 		const balance = viewOf( p ).getUint32( 2, true );
 		return { console: true, text: "-> silk granted, balance " + balance };
 	}
+	if ( code === GM_SET_GAUGE ) {
+		// The port's /SETGAUGE answer: the balls now in the gauge, or a refusal.
+		if ( result === 2 ) {
+			if ( p.length !== 2 ) throw Error( "Trailing GM gauge refusal bytes" );
+			return { console: true, text: "Failed. -> gauge change refused" };
+		}
+		if ( p.length !== 3 ) throw Error( "Invalid GM gauge reply" );
+		return { console: true, text: "-> berserk gauge set to " + p[2] };
+	}
+	if ( code === GM_SET_BERSERK ) {
+		// The port's /SETBERSERK answer: the level now in force, or a refusal.
+		if ( result === 2 ) {
+			if ( p.length !== 2 ) throw Error( "Trailing GM berserk refusal bytes" );
+			return { console: true, text: "Failed. -> berserk level change refused" };
+		}
+		if ( p.length !== 3 ) throw Error( "Invalid GM berserk reply" );
+		return { console: true, text: "-> berserk level set to " + p[2] };
+	}
 	if ( code === GM_SET_SPEED ) {
 		// The port's /SETSPEED answer: the percent now in force, or a refusal.
 		if ( result === 2 ) {
@@ -359,6 +407,12 @@ export function gmReply( p: Uint8Array ): GmReply | null {
 		if ( p.length !== 4 ) throw Error( "Invalid GM speed reply" );
 		const percent = viewOf( p ).getUint16( 2, true );
 		return { console: true, text: "-> speed set to " + percent + "%" };
+	}
+	if ( (code >= GM_CHAT_MUTE && code <= GM_ALLOW_LOGOUT) || code === GM_NOTICE ) {
+		// The port's moderation and notice answers carry the server's text
+		// on both results (gmcommand/moderation.go, notice.go), so the GM
+		// always reads why.
+		return { console: true, text: (result === 1 ? "-> " : "Failed. -> ") + string() };
 	}
 	if ( code === GM_FORGE ) {
 		// The port's /FORGE answer: one guide line per ack (the forged
@@ -417,6 +471,103 @@ function sizedNameFrame( subcommand: number, text: string ): WireFrame {
 
 /*
 ================
+sizedText
+
+The u16 length and UTF-8 bytes of a moderation clause, reason or note.
+================
+*/
+function sizedText( text: string ): Uint8Array {
+	const bytes = new TextEncoder().encode( text );
+	const out = new Uint8Array( 2 + bytes.length );
+	new DataView( out.buffer ).setUint16( 0, bytes.length, true );
+	out.set( bytes, 2 );
+	return out;
+}
+
+/*
+================
+moderationFrame
+
+The port's moderation commands, typed in any case. undefined when the
+line is not one of them; null when it is but its arguments are wrong, so
+nothing is sent. The server applies the mute book's own rules (duration,
+clause, reason length) and answers with the reason it refused.
+================
+*/
+function moderationFrame( tokens: string[] ): WireFrame | null | undefined {
+	const word = tokens[0]?.toUpperCase() ?? "";
+	const subcommand = ({
+		"/MUTE": GM_CHAT_MUTE,
+		"/UNMUTE": GM_CHAT_UNMUTE,
+		"/SHADOWMUTE": GM_SHADOW_MUTE,
+		"/UNSHADOWMUTE": GM_SHADOW_UNMUTE,
+		"/BLOCKLOGOUT": GM_BLOCK_LOGOUT,
+		"/ALLOWLOGOUT": GM_ALLOW_LOGOUT
+	} as Record<string, number>)[word];
+	if ( subcommand === undefined ) return undefined;
+	const target = tokens[1] ?? "";
+	if ( !target ) return null;
+	if ( subcommand === GM_CHAT_MUTE ) {
+		if ( tokens.length < 5 || !/^[0-9]+$/.test( tokens[2]! ) ) return null;
+		const minutes = Number( tokens[2] );
+		if ( minutes < 1 || minutes > MAX_MUTE_MINUTES ) return null;
+		const clause = sizedText( tokens[3]! ), reason = sizedText( tokens.slice( 4 ).join( " " ) );
+		if ( reason.length - 2 > MAX_MODERATION_TEXT_BYTES || clause.length - 2 >= MAX_GM_NAME_BYTES ) return null;
+		const name = sizedNameFrame( subcommand, target ).payload;
+		const payload = new Uint8Array( name.length + 2 + clause.length + reason.length );
+		payload.set( name );
+		new DataView( payload.buffer ).setUint16( name.length, minutes, true );
+		payload.set( clause, name.length + 2 );
+		payload.set( reason, name.length + 2 + clause.length );
+		return { opcode: OP_GM_COMMAND, payload };
+	}
+	if ( subcommand === GM_SHADOW_MUTE ) {
+		const note = sizedText( tokens.slice( 2 ).join( " " ) );
+		if ( note.length - 2 > MAX_MODERATION_TEXT_BYTES ) return null;
+		const name = sizedNameFrame( subcommand, target ).payload;
+		const payload = new Uint8Array( name.length + note.length );
+		payload.set( name );
+		payload.set( note, name.length );
+		return { opcode: OP_GM_COMMAND, payload };
+	}
+	return tokens.length === 2 ? sizedNameFrame( subcommand, target ) : null;
+}
+
+// The port's /HWANARENA <ch|eu> (GM test tooling, not native): the same warp /warp sends (GM
+// subcommand 16) to where the Army / Military Test trial's player lands, so a GM can check that the new
+// arena is reachable and walkable. The points mirror the server's arena table (quest/hwan_arena.go, the
+// trials' entry); the server still validates the destination against the terrain and the GM privilege.
+const HWAN_ARENA_WARPS = {
+	ch: [ 22966, 1043, 52, 1087 ],
+	eu: [ 22454, 1195, 91, 653 ]
+} as const;
+
+/*
+================
+warpFrame
+
+The coordinate warp /warp sends: u8 16, u16 region, float32 XYZ, u16 heading; null for a
+value the wire cannot carry.
+================
+*/
+function warpFrame( region: number, x: number, y: number, z: number, heading: number ): WireFrame | null {
+	if (
+		!Number.isInteger( region ) || region <= 0 || region > 65535 ||
+		![ x, y, z ].every( v => Number.isFinite( v ) && Number.isFinite( Math.fround( v ) ) ) ||
+		!Number.isInteger( heading ) || heading < 0 || heading > 65535
+	) return null;
+	const payload = new Uint8Array( 17 ), v = new DataView( payload.buffer );
+	payload[0] = 16;
+	v.setUint16( 1, region, true );
+	v.setFloat32( 3, x, true );
+	v.setFloat32( 7, y, true );
+	v.setFloat32( 11, z, true );
+	v.setUint16( 15, heading, true );
+	return { opcode: OP_GM_COMMAND, payload };
+}
+
+/*
+================
 gmRequest
 
 The verified name and scalar arms of 509CF0. monster resolves a typed
@@ -436,19 +587,16 @@ export function gmRequest(
 	if ( name === "/warp" ) {
 		if ( tokens.length !== 5 ) return null;
 		const [region, x, y, z] = tokens.slice( 1 ).map( Number );
-		if (
-			!Number.isInteger( region ) || region! <= 0 || region! > 65535 ||
-			![ x, y, z ].every( v => Number.isFinite( v ) && Number.isFinite( Math.fround( v! ) ) ) ||
-			!Number.isInteger( heading ) || heading < 0 || heading > 65535
-		) return null;
-		const payload = new Uint8Array( 17 ), v = new DataView( payload.buffer );
-		payload[0] = 16;
-		v.setUint16( 1, region!, true );
-		v.setFloat32( 3, x!, true );
-		v.setFloat32( 7, y!, true );
-		v.setFloat32( 11, z!, true );
-		v.setUint16( 15, heading, true );
-		return { opcode: OP_GM_COMMAND, payload };
+		return warpFrame( region!, x!, y!, z!, heading );
+	}
+	// Any case: the command is port-only. /HWANARENA ch (Army Test) or eu (Military Test).
+	if ( name?.toUpperCase() === "/HWANARENA" ) {
+		const point = tokens.length === 2 ?
+			(HWAN_ARENA_WARPS as Readonly<Record<string, readonly [number, number, number, number]>>)[
+				tokens[1]!.toLowerCase()
+			] :
+			undefined;
+		return point ? warpFrame( point[0], point[1], point[2], point[3], heading ) : null;
 	}
 	// Port-only: dedicated dummy references exist only with SRO_GM_TRAINING_DUMMY on.
 	if ( name?.toUpperCase() === "/TRAININGDUMMY" && tokens.length <= 2 ) {
@@ -522,6 +670,44 @@ export function gmRequest(
 		if ( percent < GM_SPEED_MIN_PERCENT || percent > GM_SPEED_MAX_PERCENT ) return null;
 		const payload = Uint8Array.of( GM_SET_SPEED, 0, 0 );
 		new DataView( payload.buffer ).setUint16( 1, percent, true );
+		return { opcode: OP_GM_COMMAND, payload };
+	}
+	// Any case: the command is port-only. /SETGAUGE <character> <balls 0-5>.
+	if ( name?.toUpperCase() === "/SETGAUGE" ) {
+		if ( tokens.length !== 3 || !/^[0-5]$/.test( tokens[2]! ) ) return null;
+		const bytes = new TextEncoder().encode( tokens[1]! );
+		if ( !bytes.length || bytes.length >= MAX_GM_NAME_BYTES ) throw Error( "Invalid GM name" );
+		const payload = new Uint8Array( 3 + bytes.length + 1 );
+		payload[0] = GM_SET_GAUGE;
+		new DataView( payload.buffer ).setUint16( 1, bytes.length, true );
+		payload.set( bytes, 3 );
+		payload[3 + bytes.length] = Number( tokens[2] );
+		return { opcode: OP_GM_COMMAND, payload };
+	}
+	// Any case: the command is port-only. /SETBERSERK <character> <level 0-6>.
+	if ( name?.toUpperCase() === "/SETBERSERK" ) {
+		if ( tokens.length !== 3 || !/^[0-6]$/.test( tokens[2]! ) ) return null;
+		const bytes = new TextEncoder().encode( tokens[1]! );
+		if ( !bytes.length || bytes.length >= MAX_GM_NAME_BYTES ) throw Error( "Invalid GM name" );
+		const payload = new Uint8Array( 3 + bytes.length + 1 );
+		payload[0] = GM_SET_BERSERK;
+		new DataView( payload.buffer ).setUint16( 1, bytes.length, true );
+		payload.set( bytes, 3 );
+		payload[3 + bytes.length] = Number( tokens[2] );
+		return { opcode: OP_GM_COMMAND, payload };
+	}
+	// Any case: the moderation commands are port-only.
+	const moderation = moderationFrame( tokens );
+	if ( moderation !== undefined ) return moderation;
+	// Any case: the command is port-only. The words are rejoined with one
+	// space, as the moderation reasons are. A bare /NOTICE still sends its
+	// empty text, so the GM reads the server's "type the notice text".
+	if ( name?.toUpperCase() === "/NOTICE" ) {
+		const text = sizedText( tokens.slice( 1 ).join( " " ) );
+		if ( text.length - 2 > MAX_NOTICE_TEXT_BYTES ) return null;
+		const payload = new Uint8Array( 1 + text.length );
+		payload[0] = GM_NOTICE;
+		payload.set( text, 1 );
 		return { opcode: OP_GM_COMMAND, payload };
 	}
 	// Any case: the command is port-only, and players type it as /forge.

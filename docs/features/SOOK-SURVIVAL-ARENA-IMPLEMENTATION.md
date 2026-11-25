@@ -43,7 +43,11 @@ saved claim. Existing characters, carried gear and previously rolled items are
 not rewritten by reward changes.
 
 Normal floor loot is suppressed only in the exact arena lease. EXP/SP/pet EXP
-are 5x. Fresh stage chests contain 3–7/8–15/18–28/32–45/50–70 rows, paged 32 at a time.
+are 5x. Fresh stage chests contain 9–13/13–20/20–30/33–46/50–70 rows, paged 32 at a time.
+Cashing out stages 1–5 pays 40M/70M/100M/130M/150M gold. Death still forfeits the chest and pays the kill-based reward.
+Take all & end run cashes out and collects the chest when it fits. When the bag is too full, the entire chest stays
+available after returning to town, so players can drag individual rewards into bag slots or retry Take all.
+Players can close it to keep the remaining items or confirm Discard rest to leave them behind and start another run.
 Supplies are grains x50 only. No reward pays silk (owner, 2026-11-12).
 Sun chance per gear roll is approximately 0/0/0.05/0.1/0.25%; no guaranteed Sun reward. Saved earlier
 Sun items and supplies are retained. Client item effects use existing native

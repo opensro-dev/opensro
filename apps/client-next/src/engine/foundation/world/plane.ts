@@ -49,8 +49,8 @@ export interface PlaneFeatures {
 	// points are field positions the scroll lands on in the open world; a
 	// cave region is refused when the table is decoded.
 	readonly reverseReturnPoints: boolean;
-	// characterPvs: the port-only dungeon character admission (Experimental
-	// "Dungeon character PVS"), which culls actors in rooms or floors the
+	// characterPvs: the port-only dungeon character admission
+	// (character-selection.ts), which culls actors in rooms or floors the
 	// local player cannot see. Caves only: the open world has no rooms.
 	readonly characterPvs: boolean;
 	// terrainGrid: the outdoor terrain's 20-unit cell grid and the terrain

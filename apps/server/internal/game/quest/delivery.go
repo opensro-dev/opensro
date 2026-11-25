@@ -114,18 +114,14 @@ func (rt *Runtime) AdvanceNpcQuest(c *enterworld.Character, code, npc string) (O
 	if strings.HasPrefix(code, goria7EntryPrefix) {
 		return rt.advanceGoria7Entry(c, npc)
 	}
+	if strings.HasPrefix(code, hwanEntryPrefix) {
+		return rt.advanceHwanEntry(c, code, npc)
+	}
 	if strings.HasPrefix(code, sideTalkPrefix) {
 		return rt.hearSideTalk(c, code, npc)
 	}
 	if strings.HasPrefix(code, handOverPrefix) {
 		return rt.handOverDelivery(c, strings.TrimPrefix(code, handOverPrefix), npc)
-	}
-	if base, choice, picked := parseRewardChoiceToken(code); picked {
-		def, ok := rt.Defs.ByCodename(base)
-		if !ok || !questNpcMatches(def, def.EndNpcCodename, npc) {
-			return OpResult{}, fmt.Errorf("quest %s wrong reward choice NPC", code)
-		}
-		return rt.completeRewardChoice(c, def, nil, npc, choice)
 	}
 	base, stage, staged := parseStageToken(code)
 	def, ok := rt.Defs.ByCodename(base)

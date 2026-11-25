@@ -18,6 +18,7 @@ import (
 	"strconv"
 
 	"opensro.online/server/internal/game/enterworld"
+	"opensro.online/server/internal/game/nasrun"
 )
 
 const mallGroupCode = "GROUP_MALL"
@@ -87,6 +88,59 @@ MallCatalog
 type MallCatalog struct {
 	Tabs   []MallTab
 	Offers []MallPackage
+
+	// rents is the built tree's refrentitem (the listed goods' terms,
+	// written by scripts/later_mall_goods.py): how long a delivered
+	// rental lasts. No table in the tree: no rentals.
+	rents rentTerms
+}
+
+// rentTerms is refrentitem by code: the terms that rent for a period of
+// minutes, and the terms that rent over a fixed begin/end window (no
+// mall good names those; only periods are sold, issue #4240).
+/*
+================
+rentTerms
+================
+*/
+type rentTerms struct {
+	periods map[string]uint32
+	windows map[string]bool
+}
+
+// rentTermColumns is a refrentitem row's code and period cells: the
+// code, the rented item's RefObjID, and RentTime in minutes (0 with a
+// fixed window in the begin/end cells instead).
+const (
+	rentTermCode    = 1
+	rentTermMinutes = 9
+)
+
+/*
+================
+parseRentTerms
+
+Malformed rows are skipped, never priced: a scrap naming such a term
+then fails hydration as a term without a row, which names the data.
+================
+*/
+func parseRentTerms(rows [][]string) rentTerms {
+	terms := rentTerms{periods: map[string]uint32{}, windows: map[string]bool{}}
+	for _, row := range rows {
+		if len(row) <= rentTermMinutes || row[rentTermCode] == "" {
+			continue
+		}
+		minutes, err := strconv.ParseUint(row[rentTermMinutes], 10, 32)
+		if err != nil {
+			continue
+		}
+		if minutes == 0 {
+			terms.windows[row[rentTermCode]] = true
+			continue
+		}
+		terms.periods[row[rentTermCode]] = uint32(minutes)
+	}
+	return terms
 }
 
 /*
@@ -140,6 +194,7 @@ func LoadMall(dir string, extra []MallExtraGood, categories bool, refs enterworl
 	if err := addMallExtraRows(tables, extra, refs); err != nil {
 		return nil, err
 	}
+	dropNasrunMallTables(tables)
 	var badges map[string]string
 	if categories {
 		var err error
@@ -148,16 +203,75 @@ func LoadMall(dir string, extra []MallExtraGood, categories bool, refs enterworl
 			return nil, err
 		}
 	}
+	// refrentitem is the one optional mall table: the native tree has
+	// none, and only the later goods' terms are written into it.
+	if _, err := os.Stat(filepath.Join(dir, "refrentitem.txt")); err == nil {
+		rows, err := mallTable(dir, "refrentitem")
+		if err != nil {
+			return nil, err
+		}
+		for _, row := range rows {
+			if len(row) > 0 && row[0] == "1" {
+				tables["refrentitem"] = append(tables["refrentitem"], row)
+			}
+		}
+	} else if !os.IsNotExist(err) {
+		return nil, err
+	}
 	catalog, err := buildMallCatalog(tables)
 	if err != nil {
 		return nil, err
 	}
+	catalog.rents = parseRentTerms(tables["refrentitem"])
 	// One package keeps one listing (addMallCategoryRows), so a
 	// package's badge stamps its only offer.
 	for index := range catalog.Offers {
 		catalog.Offers[index].Badge = badges[catalog.Offers[index].Code]
 	}
 	return catalog, nil
+}
+
+// nasrunMallTabCodes are the later mall's Devil's Spirit shelves
+// (v1.696 refshoptab 4409/4410), carried into the built tree by
+// scripts/later_mall_goods.py (#4240 part 4).
+var nasrunMallTabCodes = map[string]bool{
+	"MALL_PREMIUM_NASRUN":     true,
+	"MALL_PREMIUM_NASRUN_ETC": true,
+}
+
+/*
+================
+dropNasrunMallTables
+
+Port-only, not native (#4240 part 4). The built tree carries the
+later mall's two Nasrun shelves whenever the build stamped them
+(SRO_NASRUN at build time), but the server owns the same switch at
+run time: while it is off, the shelves and their listings leave
+with it, so a Nasrun build on a native shard still serves the
+v1.150 mall exactly. Runs before the category layout, whose own
+Nasrun goods are gated the same way (mallcategories.go).
+================
+*/
+func dropNasrunMallTables(tables map[string][][]string) {
+	if nasrun.Enabled(os.Getenv(nasrun.Env)) {
+		return
+	}
+	goods := tables["refshopgoods"][:0]
+	for _, row := range tables["refshopgoods"] {
+		if len(row) > 2 && nasrunMallTabCodes[row[2]] {
+			continue
+		}
+		goods = append(goods, row)
+	}
+	tables["refshopgoods"] = goods
+	tabs := tables["refshoptab"][:0]
+	for _, row := range tables["refshoptab"] {
+		if len(row) > 3 && nasrunMallTabCodes[row[3]] {
+			continue
+		}
+		tabs = append(tabs, row)
+	}
+	tables["refshoptab"] = tabs
 }
 
 /*

@@ -1,14 +1,14 @@
 /*
 ===========================================================================
 
-caravan-hire.ts - the AI caravan hire window (port-only 0x3FC3 / 0x7FC3, not native)
+caravan-hire.ts - the AI caravan hire window (port-only 0x3FCF / 0x7FCF, not native)
 
 The server opens and refreshes the window with a JSON body (the agents
 hired where the player stands, available ones first, and a Trader's goods
 choices by star); the window's request is u8 operation (0 refresh,
-1 hire, 2 lead), u8 stars, then the agent's name. 0x3FC4 tells a hirer
+1 hire, 2 lead), u8 stars, then the agent's name. 0x3FD0 tells a hirer
 who leads its hired Traders and who may (itself and them); the party
-board's lead badges send operation 2 with the chosen name. 0x3FC5 follows
+board's lead badges send operation 2 with the chosen name. 0x3FD1 follows
 an NPC select when that NPC hires agents (u32 gid, the row's label); the
 NPC's menu lists that row first and its click sends operation 0. A client
 that predates the frames drops the unknown opcodes.
@@ -17,10 +17,10 @@ that predates the frames drops the unknown opcodes.
 */
 import type { WireFrame } from "@/engine/contracts/network";
 
-export const CARAVAN_HIRE_OPCODE = 0x3fc3;
-export const CARAVAN_HIRE_REQUEST_OPCODE = 0x7fc3;
-export const CARAVAN_LEAD_OPCODE = 0x3fc4;
-export const CARAVAN_HIRE_NPC_OPCODE = 0x3fc5;
+export const CARAVAN_HIRE_OPCODE = 0x3fcf;
+export const CARAVAN_HIRE_REQUEST_OPCODE = 0x7fcf;
+export const CARAVAN_LEAD_OPCODE = 0x3fd0;
+export const CARAVAN_HIRE_NPC_OPCODE = 0x3fd1;
 
 export interface CaravanHireRow {
 	readonly name: string;

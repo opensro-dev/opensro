@@ -20,10 +20,15 @@ import ts from "typescript";
 import { build } from "esbuild";
 import { itemSoundCatalogCurrent } from "./generate-item-sounds.mjs";
 import { gameRoot } from "../../../scripts/build/world/paths.mjs";
+import { pythonExecutable } from "../../../scripts/build/shared/pythonRun.mjs";
+import { readEffectCatalogSync } from "../../../scripts/lib/effectCatalog.mjs";
+import { EFFECT_PROGRAM_INDEX } from "../src/engine/foundation/assets/effect-programs.ts";
 export const root = path.resolve( import.meta.dirname, ".." );
 const hash = b => createHash( "sha256" ).update( b ).digest( "hex" );
 // resolve, not join: the asset paths are absolute (CLIENT_PUBLIC_ROOT).
 const read = p => fs.readFileSync( path.resolve( root, p ) );
+// The input label of the published effect-program closure (its index).
+const EFFECT_PROGRAMS = CLIENT_PUBLIC_ROOT + EFFECT_PROGRAM_INDEX;
 const json = p => JSON.parse( read( p ) );
 const publicRoot = CLIENT_PUBLIC_ROOT;
 const norm = s => s.replaceAll( "\\", "/" ).toUpperCase();
@@ -250,13 +255,16 @@ export async function audit(
 	for (
 		const file of [
 			CLIENT_PUBLIC_ROOT + "/assets/skill/effectRecords.json",
-			CLIENT_PUBLIC_ROOT + "/assets/effects/programs.json",
+			EFFECT_PROGRAMS,
 			CLIENT_PUBLIC_ROOT + "/assets/audio/effectenvsnd.json",
 			CLIENT_PUBLIC_ROOT + "/assets/audio/skilleffectsound.json",
 			CLIENT_PUBLIC_ROOT + "/assets/audio/catalog.json"
 		]
 	) {
-		const bytes = read( file );
+		// The effect programs are one file per effect: walk the whole closure.
+		const bytes = file === EFFECT_PROGRAMS ?
+			Buffer.from( JSON.stringify( readEffectCatalogSync( CLIENT_PUBLIC_ROOT ) ) ) :
+			read( file );
 		inputs[file] = hash( bytes );
 		function visit( value, location ) {
 			if ( typeof value === "string" && /\.(wav|mp3|ogg)$/i.test( value ) ) {
@@ -331,7 +339,9 @@ export async function audit(
 			"tests/runtime/shop.test.mjs",
 			"tests/architecture/audio-parity-audit.test.mjs"
 		], { cwd: root, encoding: "utf8", timeout: 120000, windowsHide: true } );
-		const nativeRun = spawnSync( process.env.SRO_PYTHON ?? (process.platform === "win32" ? "py.exe" : "python3"), [
+		const python = pythonExecutable();
+		const nativeRun = spawnSync( python.command, [
+			...python.args,
 			"tools/verify-native-audio.py",
 			"--binary",
 			path.join( gameRoot, "SRO_Client.exe" ),

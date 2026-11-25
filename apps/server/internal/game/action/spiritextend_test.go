@@ -15,8 +15,10 @@ import (
 	"encoding/binary"
 	"testing"
 
+	"opensro.online/server/internal/domain"
 	"opensro.online/server/internal/game/enterworld"
 	"opensro.online/server/internal/game/item/wire"
+	"opensro.online/server/internal/game/nasrun"
 )
 
 const (
@@ -83,6 +85,11 @@ func TestExtensionGearAddsAWeekAndIsSpent(t *testing.T) {
 	if got, want := c.MissionInventory[0].Data, now+10*extendTestDay; got != want {
 		t.Fatalf("clock %d, want the expiry + 7 days (%d)", got, want)
 	}
+	// The Spirit's new clock reaches its owner with the answer (#4381).
+	clock := wire.ItemDurabilityFrame(extendTestSpiritSlot, now+10*extendTestDay)
+	if !containsFrame(result.Frames[1:], clock) {
+		t.Fatalf("frames = %+v, want %+v after the use answer", result.Frames, clock)
+	}
 	if gearsLeft(c) != 1 {
 		t.Fatalf("gears left %d, want 1", gearsLeft(c))
 	}
@@ -97,22 +104,38 @@ func TestExtensionGearRefusalsKeepTheGear(t *testing.T) {
 	for _, step := range []struct {
 		name   string
 		socket bool
+		worn   bool // the Spirit sits in the avatar storage, not the bag
 		target uint8
 		ahead  int64 // the Spirit's expiry relative to now, in days; 0 is dormant
 		code   uint8
 	}{
-		{"dormant", true, extendTestSpiritSlot, 0, spiritExtendErrAsleep},
-		{"aimed at the gear itself", true, extendTestGearSlot, 3, spiritExtendErrTarget},
-		{"aimed at an empty slot", true, 30, 3, spiritExtendErrTarget},
-		{"aimed outside the bag", true, 5, 3, spiritExtendErrSlot},
-		{"past the ceiling", true, extendTestSpiritSlot, 22, wire.ErrCodeInvalidRequest},
-		{"switch off", false, extendTestSpiritSlot, 3, 0},
+		{"dormant", true, false, extendTestSpiritSlot, 0, spiritExtendErrAsleep},
+		{"aimed at the gear itself", true, false, extendTestGearSlot, 3, spiritExtendErrTarget},
+		{"aimed at an empty slot", true, false, 30, 3, spiritExtendErrTarget},
+		{"aimed outside the bag", true, false, 5, 3, spiritExtendErrSlot},
+		// The v1.188 bag-only read answers the worn aim with the slot
+		// refusal; the client refuses it before sending (#3909).
+		{"aimed at the worn Spirit", true, true, uint8(nasrun.SpiritSlot), 3, spiritExtendErrSlot},
+		{"worn with the switch off", false, true, uint8(nasrun.SpiritSlot), 3, 0},
+		{"past the ceiling", true, false, extendTestSpiritSlot, 22, wire.ErrCodeInvalidRequest},
+		{"switch off", false, false, extendTestSpiritSlot, 3, 0},
 	} {
 		c, rt, request := extendableSpirit(t, step.socket, 0, step.target)
 		if step.ahead != 0 {
 			c.MissionInventory[0].Data = uint32(rt.Now().Unix() + step.ahead*extendTestDay)
 		}
-		before := c.MissionInventory[0].Data
+		spirit := &c.MissionInventory[0]
+		if step.worn {
+			row := *spirit
+			row.Slot = int64(nasrun.SpiritSlot)
+			c.MissionInventory = c.MissionInventory[1:]
+			c.AvatarInventory = &domain.AvatarInventory{
+				Capacity: nasrun.StorageSlots,
+				Rows:     []enterworld.InventoryRow{row},
+			}
+			spirit = &c.AvatarInventory.Rows[0]
+		}
+		before := spirit.Data
 		result := rt.HandleItemUse(testDivision, c, request)
 		if len(result.Frames) == 0 || result.Frames[0].Payload[0] == 1 {
 			t.Fatalf("%s: gear admitted: %+v", step.name, result)
@@ -120,8 +143,8 @@ func TestExtensionGearRefusalsKeepTheGear(t *testing.T) {
 		if step.code != 0 && result.Frames[0].Payload[1] != step.code {
 			t.Fatalf("%s: refusal %#x, want %#x", step.name, result.Frames[0].Payload[1], step.code)
 		}
-		if gearsLeft(c) != 2 || c.MissionInventory[0].Data != before {
-			t.Fatalf("%s: gears %d, clock %d (was %d)", step.name, gearsLeft(c), c.MissionInventory[0].Data, before)
+		if gearsLeft(c) != 2 || spirit.Data != before {
+			t.Fatalf("%s: gears %d, clock %d (was %d)", step.name, gearsLeft(c), spirit.Data, before)
 		}
 	}
 }

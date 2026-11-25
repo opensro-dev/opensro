@@ -15,6 +15,7 @@ focus from a disabled element and never returns it.
 ===========================================================================
 */
 import type { UiBridge, UiControl, UiEvent, UiSemantics } from "@/engine/contracts/ui";
+import { controlHitRect, rangePressOnThumb } from "@/engine/foundation/ui/hit-test";
 import { createLayoutKeys } from "@/engine/foundation/ui/layout-keys";
 import { configureCredentialHints } from "./credential-hints";
 import { createDragShield } from "./drag-shield";
@@ -364,6 +365,44 @@ export function createUiBridge(
 			edit( event.target, event.target.dataset.uiId! );
 		}
 	}, { signal: lifetime.signal } );
+	// A range element's value belongs to its own slider gestures (the drawn
+	// prev/next buttons and the thumb drag): a focused range input also steps
+	// on the mouse wheel, a browser behaviour no window here authors - the
+	// native creation and option sliders take no wheel input. Left through,
+	// scrolling while a creation slider holds focus silently re-picks its
+	// choice (one wheel gesture moved a new character's weapon from the
+	// daggers its player picked to the darkstaff, robe included, #4121).
+	root.addEventListener( "wheel", event => {
+		if ( event.target instanceof HTMLInputElement && event.target.type === "range" ) event.preventDefault();
+	}, { passive: false, signal: lifetime.signal } );
+	// A thumbDragOnly range (creation sliders) takes its value from the
+	// drawn prev/next buttons and the thumb drag alone. A browser answers
+	// a press anywhere else on the invisible groove by jumping the value
+	// to the press point, silently re-picking the choice: a press beside
+	// the thumb moved a new character's weapon off the daggers its player
+	// picked (#4121). Refuse the press before the browser acts on it; it
+	// also leaves the slider unfocused, so no key or wheel gesture can
+	// follow it up.
+	root.addEventListener( "pointerdown", event => {
+		const el = event.target;
+		if ( !(el instanceof HTMLInputElement) || el.type !== "range" || el.disabled ) return;
+		const control = current( el )?.value;
+		if ( !control?.thumbDragOnly ) return;
+		// The thumb is drawn in UI units and the element is that hit width
+		// times the UI scale, so the press is judged in UI units: the grab
+		// covers the drawn thumb at every scale.
+		const box = el.getBoundingClientRect(), units = controlHitRect( control )[2];
+		if ( box.width <= 0 ) return;
+		if (
+			!rangePressOnThumb(
+				Number( el.min || 0 ),
+				Number( el.max || 0 ),
+				Number( el.value || 0 ),
+				units,
+				(event.clientX - box.left) * units / box.width
+			)
+		) event.preventDefault();
+	}, { capture: true, signal: lifetime.signal } );
 	document.addEventListener( "selectionchange", () => {
 		const el = document.activeElement;
 		if ( (el instanceof HTMLInputElement || el instanceof HTMLTextAreaElement) && root.contains( el ) ) {
@@ -911,7 +950,16 @@ export function createUiBridge(
 				}
 				// Match authored edit hit bounds while retaining its text client insets.
 				if ( el instanceof HTMLInputElement || el instanceof HTMLTextAreaElement ) {
-					const align = control.textAlign ?? "center", insets = control.textInsets ?? [ 0, 0, 0, 0 ];
+					// The editor is transparent: the canvas draws its value, and the
+					// browser places the caret by the editor's own text layout. The
+					// layout must therefore start where the drawing starts, or a
+					// click on the drawn glyphs lands at the wrong caret (a click
+					// left of centred text puts the caret at 0, where Backspace
+					// has nothing to delete and only Delete eats forward, #4153).
+					// Native edits draw from the left, so left is the default; a
+					// control whose drawing is centred or right-aligned declares
+					// textAlign, and textInsets carries its drawn offset.
+					const align = control.textAlign ?? "left", insets = control.textInsets ?? [ 0, 0, 0, 0 ];
 					if ( el.style.textAlign !== align ) el.style.textAlign = align;
 					for (
 						const [key, n] of [ [ "paddingLeft", insets[0] ], [ "paddingTop", insets[1] ], [
@@ -969,7 +1017,10 @@ export function createUiBridge(
 				const fontSize = INPUT_FONT_PIXELS * scale + "px";
 				if ( el.style.fontSize !== fontSize ) el.style.fontSize = fontSize;
 				if ( el instanceof HTMLTextAreaElement ) el.style.lineHeight = 16 * scale + "px";
-				const [x, y, w, h] = control.rect,
+				// The element covers the control's hit area, which can be larger
+				// than what it draws (controlHitRect), so the browser's hit test
+				// and topmostControlAt agree.
+				const [x, y, w, h] = controlHitRect( control ),
 					left = box.left + x * scale,
 					top = box.top + y * scale,
 					width = w * scale,

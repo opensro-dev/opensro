@@ -23,6 +23,7 @@ import (
 	"encoding/binary"
 	"fmt"
 	"math"
+	"unicode/utf8"
 
 	"opensro.online/server/internal/game/item/wire"
 )
@@ -124,6 +125,50 @@ const (
 	// ("CODENAME key=value ..." or "help CODENAME"). The forged item is
 	// bound and the lane refuses unless SRO_GM_ITEM_FORGE is enabled.
 	SubForge uint8 = 0xF2
+	// SubSetBerserk is the port's /SETBERSERK name level (GM test tooling, not
+	// native, action/hwan.go): subcmd, u16 len + ANSI name, u8 Blue Berserk level.
+	SubSetBerserk uint8 = 0xF3
+	// SubSetGauge is the port's /SETGAUGE name balls (GM test tooling, not native,
+	// action/hwan.go): subcmd, u16 len + ANSI name, u8 Berserk gauge balls 0 to 5.
+	SubSetGauge uint8 = 0xF4
+
+	// The port's moderation commands (moderation.go; not native - the
+	// v1.150 client composes no frame for any of them). Each carries the
+	// target as a u16-sized ANSI name; the replies carry a u16-sized text
+	// on both results, so the GM always reads why.
+	//
+	// SubChatMute: /MUTE name minutes clause reason - name, u16 minutes,
+	// u16-sized clause id, u16-sized UTF-8 reason.
+	SubChatMute uint8 = 0xF5
+	// SubChatUnmute: /UNMUTE name.
+	SubChatUnmute uint8 = 0xF6
+	// SubShadowMute: /SHADOWMUTE name [note] - name, u16-sized UTF-8 note
+	// (may be empty).
+	SubShadowMute uint8 = 0xF7
+	// SubShadowUnmute: /UNSHADOWMUTE name.
+	SubShadowUnmute uint8 = 0xF8
+	// SubBlockLogout and SubAllowLogout: /BLOCKLOGOUT name and
+	// /ALLOWLOGOUT name. The words are native (textuisystem
+	// SR_IMPLE_COMMAND_BLOCK_LOGOUT / _UNBLOCK_LOGOUT, registered at
+	// client @0x0050e7eb / @0x0050e843), but ChatInput_HandleGmCommand
+	// (client @0x00509cf0..@0x0050cd00) has no arm for them, so the
+	// original sends nothing and the port picks its own bytes.
+	SubBlockLogout uint8 = 0xF9
+	SubAllowLogout uint8 = 0xFA
+
+	// SubNotice is the port's /NOTICE text (notice.go; not native - the
+	// v1.150 client's SR_IMPLE_COMMAND_* table has no notice word, and the
+	// original's notices came from the operator's server tools): subcmd,
+	// u16-sized UTF-8 text. The reply is EncodeModerationReply's.
+	SubNotice uint8 = 0xFB
+
+	// NoticeTextMaxBytes bounds the /NOTICE frame: the banner's
+	// MaxChatNoticeUnits UTF-16 units at four UTF-8 bytes each at most.
+	// The unit limit itself is the handler's, so the GM reads why.
+	NoticeTextMaxBytes = 400
+
+	// ModerationTextMaxBytes bounds a /MUTE reason or /SHADOWMUTE note.
+	ModerationTextMaxBytes = 1024
 
 	// ForgeTextMaxBytes bounds one /FORGE command text (the typed tail the
 	// client composer rejoins): generous for key=value lists, small
@@ -185,6 +230,10 @@ type Request struct {
 	HasName bool
 	// Silk is /SILK's amount.
 	Silk uint32
+	// BerserkLevel is /SETBERSERK's Blue Berserk level.
+	BerserkLevel uint8
+	// GaugeBalls is /SETGAUGE's Berserk gauge balls.
+	GaugeBalls uint8
 	// SpeedPercent is /SETSPEED's percent of the effective speed.
 	SpeedPercent uint16
 	// Forge is /FORGE's command text (the rejoined typed tail).
@@ -198,6 +247,11 @@ type Request struct {
 	FortressID    uint32
 	EventStructID uint32
 	SiegeParam    uint8
+	// Minutes, Clause and Text are the moderation commands' arguments:
+	// /MUTE's duration, cited rule and reason, /SHADOWMUTE's note.
+	Minutes uint16
+	Clause  string
+	Text    string
 }
 
 // nameSubcommands are the subcommands whose payload is a single sized ANSI
@@ -219,6 +273,17 @@ var nameSubcommands = map[uint8]bool{
 	SubMoveToNPC:   true,
 	// SubGrantSilk's name is followed by the u32 amount.
 	SubGrantSilk: true,
+	// SubSetBerserk's name is followed by the u8 level.
+	SubSetBerserk: true,
+	// SubSetGauge's name is followed by the u8 ball count.
+	SubSetGauge: true,
+	// The moderation commands; /MUTE and /SHADOWMUTE carry a tail.
+	SubChatMute:     true,
+	SubChatUnmute:   true,
+	SubShadowMute:   true,
+	SubShadowUnmute: true,
+	SubBlockLogout:  true,
+	SubAllowLogout:  true,
 }
 
 // DecodeGmCommand reads the subcommand byte and, for the name-payload
@@ -276,6 +341,16 @@ func DecodeGmCommand(payload []byte) (Request, error) {
 			}
 		}
 		request.Forge = string(textBytes)
+		return request, nil
+	}
+	if subcmd == SubNotice {
+		// subcmd, u16-sized UTF-8 text, nothing after it.
+		if request.Text, err = sizedText(reader, NoticeTextMaxBytes); err != nil {
+			return Request{}, err
+		}
+		if reader.Remaining() != 0 {
+			return Request{}, fmt.Errorf("gmcommand: trailing /NOTICE bytes")
+		}
 		return request, nil
 	}
 	if subcmd == SubMakeItem {
@@ -430,7 +505,92 @@ func DecodeGmCommand(payload []byte) (Request, error) {
 			return Request{}, fmt.Errorf("gmcommand: trailing /SILK bytes")
 		}
 	}
+	if subcmd == SubSetBerserk {
+		if request.BerserkLevel, err = reader.U8(); err != nil {
+			return Request{}, err
+		}
+		if len(payload) != 3+int(nameLen)+1 {
+			return Request{}, fmt.Errorf("gmcommand: trailing /SETBERSERK bytes")
+		}
+	}
+	if subcmd == SubSetGauge {
+		if request.GaugeBalls, err = reader.U8(); err != nil {
+			return Request{}, err
+		}
+		if len(payload) != 3+int(nameLen)+1 {
+			return Request{}, fmt.Errorf("gmcommand: trailing /SETGAUGE bytes")
+		}
+	}
+	switch subcmd {
+	case SubChatMute:
+		if request.Minutes, err = reader.U16(); err != nil {
+			return Request{}, err
+		}
+		if request.Clause, err = sizedText(reader, GmCommandNameLenBound-1); err != nil {
+			return Request{}, err
+		}
+		if request.Text, err = sizedText(reader, ModerationTextMaxBytes); err != nil {
+			return Request{}, err
+		}
+	case SubShadowMute:
+		if request.Text, err = sizedText(reader, ModerationTextMaxBytes); err != nil {
+			return Request{}, err
+		}
+	}
+	if moderationSubcommand(subcmd) && reader.Remaining() != 0 {
+		return Request{}, fmt.Errorf("gmcommand: trailing bytes after moderation command 0x%02X", subcmd)
+	}
 	return request, nil
+}
+
+/*
+================
+sizedText
+
+A u16-sized UTF-8 string of at most limit bytes, for the moderation
+commands' clause, reason and note.
+================
+*/
+func sizedText(reader *wire.Reader, limit int) (string, error) {
+	size, err := reader.U16()
+	if err != nil {
+		return "", err
+	}
+	if int(size) > limit {
+		return "", fmt.Errorf("gmcommand: text length %d over %d", size, limit)
+	}
+	text, err := reader.Bytes(int(size))
+	if err != nil {
+		return "", err
+	}
+	if !utf8.Valid(text) {
+		return "", fmt.Errorf("gmcommand: text is not UTF-8")
+	}
+	return string(text), nil
+}
+
+/*
+================
+moderationSubcommand
+================
+*/
+func moderationSubcommand(subcmd uint8) bool {
+	return subcmd >= SubChatMute && subcmd <= SubAllowLogout
+}
+
+/*
+================
+EncodeModerationReply
+
+The moderation commands' reply on either result: {result, subcmd, u16
+len + UTF-8 text}. The port's own client prints the text in the GM
+console; the original client never sends these subcommands.
+================
+*/
+func EncodeModerationReply(result, subcmd uint8, text string) []byte {
+	reply := EncodeAckGuide(subcmd, text)
+	reply[0] = result
+	return reply
 }
 
 // EncodeAckGuide renders the 0xB5B6 result-1 body for a subcommand whose OK

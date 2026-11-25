@@ -60,11 +60,18 @@ type QuestMonsterSpawn struct {
 	HasRarity     bool
 	Aggressive    bool
 	TacticsGrade  uint8
+	// AvoidClosedObjects redraws the landing point (up to questSpawnAttempts times) while it is
+	// inside a closed object, so the monster can be hit (port-only, not native: the retail
+	// scripts take their first draw). Ignored until SetSpawnClosedObjectCheck is wired.
+	AvoidClosedObjects bool
 	// AnnounceUnique is the v1.188 in-layer spawner's announce argument
 	// (it passes 1 to the monster factory): a rarity-3 kind tells the
 	// division it appeared.
 	AnnounceUnique bool
 }
+
+// questSpawnAttempts bounds the redraws of an AvoidClosedObjects spawn; the last draw stands.
+const questSpawnAttempts = 24
 
 // eventAggressiveSight is the sight an event monster forced aggressive
 // gets when its tactics name none: the temptation fallback's 100.
@@ -89,6 +96,22 @@ func (s *MonsterState) SpawnQuestMonster(request QuestMonsterSpawn) bool {
 
 /*
 ================
+QuestMonsterSpawn.atNamedPoint
+
+Whether the monster lands on the point the owner named, with no radius
+sample. A cave floor refuses the outdoor radius sample (PlaneFeatures.
+QuestMonsterSpawns), but a named point samples nothing: it is grounded as
+a cave nest's own respawn is (the same normalize and ground pair), which
+is how the temple's Haroeris lands in his sanctum (action/
+temple_sanctum.go).
+================
+*/
+func (request QuestMonsterSpawn) atNamedPoint() bool {
+	return request.FixedPosition && request.RadiusMin == 0 && request.RadiusSpan == 0
+}
+
+/*
+================
 SpawnQuestMonsterGID
 
 SpawnQuestMonster, answering the landed monster's gid for an owner that
@@ -96,7 +119,7 @@ follows it (action/pandorabox.go's waves).
 ================
 */
 func (s *MonsterState) SpawnQuestMonsterGID(request QuestMonsterSpawn) (uint32, bool) {
-	if !FeaturesAt(request.Position.RegionID).QuestMonsterSpawns {
+	if !FeaturesAt(request.Position.RegionID).QuestMonsterSpawns && !request.atNamedPoint() {
 		return 0, false
 	}
 	ref, exists := s.ReferenceByCodename(request.Codename)
@@ -109,18 +132,29 @@ func (s *MonsterState) SpawnQuestMonsterGID(request QuestMonsterSpawn) (uint32, 
 	if state == nil || s.counter >= domain.MaxMonsterGIDCounter {
 		return 0, false
 	}
-	angleFraction := float32(float64(s.randomWord()) / nativeRandomMaximum)
-	angle := float64(float32(float64(angleFraction) * nativeCircleRadians))
-	radiusFraction := float32(float64(s.randomWord()) / nativeRandomMaximum)
-	radius := float64(float32(float64(radiusFraction)*request.RadiusSpan + request.RadiusMin))
 	center := request.Position
-	spawn := normalizeGeneratedMonsterSpawn(monster.SpawnPoint{
-		RefObjID: ref.RefObjID, RegionID: center.RegionID,
-		X: center.X + math.Cos(angle)*radius, Y: center.Y, Z: center.Z + math.Sin(angle)*radius,
-	})
-	spawn, valid := s.resolveSpawnGround(spawn, center.Y)
-	if !valid {
-		return 0, false
+	var (
+		angle float64
+		spawn monster.SpawnPoint
+	)
+	for attempt := 1; ; attempt++ {
+		angleFraction := float32(float64(s.randomWord()) / nativeRandomMaximum)
+		angle = float64(float32(float64(angleFraction) * nativeCircleRadians))
+		radiusFraction := float32(float64(s.randomWord()) / nativeRandomMaximum)
+		radius := float64(float32(float64(radiusFraction)*request.RadiusSpan + request.RadiusMin))
+		spawn = normalizeGeneratedMonsterSpawn(monster.SpawnPoint{
+			RefObjID: ref.RefObjID, RegionID: center.RegionID,
+			X: center.X + math.Cos(angle)*radius, Y: center.Y, Z: center.Z + math.Sin(angle)*radius,
+		})
+		grounded, valid := s.resolveSpawnGround(spawn, center.Y)
+		if !valid {
+			return 0, false
+		}
+		spawn = grounded
+		if !request.AvoidClosedObjects || s.closedObject == nil || attempt >= questSpawnAttempts ||
+			!s.closedObject(Spawn{RegionID: spawn.RegionID, X: spawn.X, Y: spawn.Y, Z: spawn.Z}) {
+			break
+		}
 	}
 	s.counter++
 	actor := monster.Instance{
@@ -166,7 +200,7 @@ func (s *MonsterState) SpawnQuestMonsterGID(request QuestMonsterSpawn) (uint32, 
 	state.listRegionGid(spawn.RegionID, actor.Gid)
 	armLifetimeLocked(state, actor, request.NowMs)
 	armQuestLifetimeLocked(state, actor.Gid, request.NowMs+request.LifetimeMs, request.LifetimeMs > 0)
-	if request.AnnounceUnique && actor.Rarity()&15 == 3 {
+	if request.AnnounceUnique && actor.IsUnique() {
 		state.uniqueNotices = append(state.uniqueNotices, uniqueNotice(uniqueNoticeAppear, ref.RefObjID, ""))
 		state.markUniqueSpawn(ref.RefObjID, spawn.RegionID, request.NowMs)
 	}

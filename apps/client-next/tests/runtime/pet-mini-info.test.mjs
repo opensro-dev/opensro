@@ -50,8 +50,10 @@ test("gauges follow 6B34C0", () => {
 		{ stacks: 10, tier: 3, untilMs: 5000 },
 		1000
 	);
-	// The native row (1000) is the base; ten Resolve stacks project 1300 HP.
-	assert.equal( resolved?.hp, Math.fround( 128 / 1300 ) );
+	// The native row (1000) is the base. The tier-3 Unbroken Spirit book is
+	// one rank carrying the former rank-10 value, 4% a stack (#3892,
+	// petdesign.json), so ten Resolve stacks project 1400 HP.
+	assert.equal( resolved?.hp, Math.fround( 128 / 1400 ) );
 });
 
 test("the HP caution blinks while 0 < HP <= 30%", () => {

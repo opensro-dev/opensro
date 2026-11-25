@@ -26,10 +26,12 @@ func signalKinds(entry SessionSignals) map[string]float64 {
 	return kinds
 }
 
-// sessionByID finds one session in the answer.
-func sessionByID(answer Signals, session string) SessionSignals {
+// sessionAt finds one session in the answer by its character and start:
+// the answer names sessions by per-answer labels, never by the journal's
+// session name (sessionLabels).
+func sessionAt(answer Signals, character string, started int64) SessionSignals {
 	for _, entry := range answer.Sessions {
-		if entry.Session == session {
+		if entry.Character == character && entry.Started == started {
 			return entry
 		}
 	}
@@ -70,7 +72,7 @@ func TestSignalsOnSyntheticSessions(t *testing.T) {
 		t.Fatal("open sessions must sort first")
 	}
 
-	long := signalKinds(sessionByID(answer, "s-long"))
+	long := signalKinds(sessionAt(answer, "Grinder", now-9*hourMs))
 	if long["long-session"] != 9 {
 		t.Fatalf("long session: got %v, want long-session 9", long)
 	}
@@ -81,14 +83,14 @@ func TestSignalsOnSyntheticSessions(t *testing.T) {
 		t.Fatal("nine hours read as always-on")
 	}
 
-	camp := signalKinds(sessionByID(answer, "s-camp-1"))
+	camp := signalKinds(sessionAt(answer, "Camper", now-21*hourMs))
 	if camp["always-on"] != 21 || camp["long-session"] != 20 {
 		t.Fatalf("camper's long span: got %v, want always-on 21 and long-session 20", camp)
 	}
 	if _, fired := camp["chat-silent"]; !fired {
 		t.Fatal("twenty silent hours did not fire chat-silent")
 	}
-	campOpen := signalKinds(sessionByID(answer, "s-camp-2"))
+	campOpen := signalKinds(sessionAt(answer, "Camper", now-hourMs))
 	if _, fired := campOpen["always-on"]; !fired {
 		t.Fatal("the camper's open hour lost the account's always-on")
 	}
@@ -96,7 +98,7 @@ func TestSignalsOnSyntheticSessions(t *testing.T) {
 		t.Fatal("a one-hour span fired chat-silent")
 	}
 
-	human := signalKinds(sessionByID(answer, "s-human"))
+	human := signalKinds(sessionAt(answer, "Talker", now-4*hourMs))
 	if len(human) != 0 {
 		t.Fatalf("an ordinary chatty session fired %v", human)
 	}
@@ -139,5 +141,34 @@ func TestSignalsWithoutChatEvidence(t *testing.T) {
 	}
 	if noChat.ChatOK {
 		t.Fatal("no chat source read as OK")
+	}
+}
+
+/*
+================
+TestSignalsFlagSessionsWithoutAUserAgent
+
+A session that presented no User-Agent fires no-user-agent and is
+counted; a browser session beside it fires nothing.
+================
+*/
+func TestSignalsFlagSessionsWithoutAUserAgent(t *testing.T) {
+	now := nowMs()
+	bare := span("s-bare", "acct-bot", "Scripted", now-hourMs, 0, "ip-a", "net-a", "")
+	bare.NoUserAgent = true
+	spans := []Span{bare, span("s-browser", "acct-human", "Talker", now-hourMs, 0, "ip-b", "net-b", "client-b")}
+	chat := func(int64, int64) (map[string]int, error) { return map[string]int{"talker": 3}, nil }
+	answer, err := testService(spans, chat).Signals()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if answer.NoUserAgent != 1 {
+		t.Fatalf("noUserAgent = %d, want 1", answer.NoUserAgent)
+	}
+	if kinds := signalKinds(sessionAt(answer, "Scripted", now-hourMs)); kinds["no-user-agent"] != 1 {
+		t.Fatalf("the bare session fired %v", kinds)
+	}
+	if kinds := signalKinds(sessionAt(answer, "Talker", now-hourMs)); len(kinds) != 0 {
+		t.Fatalf("a browser session fired %v", kinds)
 	}
 }

@@ -22,14 +22,24 @@ consumes it, so a 404 that is not a release (a lost file) costs one check. The
 frame clock drives it; it owns no timer. A page without a hashed entry (a
 development server) never checks.
 
+A server that refuses this page's protocol (426) while the live page still
+names this page's entry is a coordinated publish between its two switches:
+the server is new, the page is not yet. A reload then would load the same
+outdated page and be refused again, so the watch says "updating" (no
+Refresh button) and checks every RELEASE_OUTDATED_GAP_MS. Once the live
+page moves, the refused page reloads on its own: its session is already
+refused, so the reload drops nothing (releaseNotice).
+
 ===========================================================================
 */
 
 import type { AssetOwner } from "@/engine/contracts/assets";
+import type { ReleaseNotice } from "@/engine/contracts/runtime";
 
 export const RELEASE_CHECK_INTERVAL_MS = 10 * 60 * 1000;
 export const RELEASE_TRIGGER_GAP_MS = 30 * 1000;
 export const RELEASE_STALE_GAP_MS = 5 * 1000;
+export const RELEASE_OUTDATED_GAP_MS = 3 * 1000;
 const RELEASE_PAGE_BYTES = 256 * 1024;
 // Leave foreground loads a slot; the check is never urgent.
 const RELEASE_MIN_FREE_SLOTS = 2;
@@ -50,10 +60,11 @@ export function createReleaseWatch( assets: AssetOwner, pageUrl: string, running
 		================
 		step
 
-		Called once per frame with the frame time and whether a trigger fired.
+		Called once per frame with the frame time, whether a trigger fired and
+		whether the server refuses this page's release (426).
 		================
 		*/
-		step( nowMs: number, triggered: boolean ) {
+		step( nowMs: number, triggered: boolean, outdated = false ) {
 			if ( runningEntry === null || newer ) return;
 			if ( assets.takeReleaseStale?.() ) stalePending = true;
 			if ( job !== null ) {
@@ -67,11 +78,13 @@ export function createReleaseWatch( assets: AssetOwner, pageUrl: string, running
 				) newer = true;
 				return;
 			}
-			// A stale file means the scene in hand cannot finish: check now.
-			const stale = stalePending && nowMs - lastCheckMs >= RELEASE_STALE_GAP_MS;
+			// A stale file means the scene in hand cannot finish, and a refused
+			// release cannot play at all: check now, with a single free slot.
+			const urgent = outdated && nowMs - lastCheckMs >= RELEASE_OUTDATED_GAP_MS ||
+				stalePending && nowMs - lastCheckMs >= RELEASE_STALE_GAP_MS;
 			const due = nowMs - lastCheckMs >= RELEASE_CHECK_INTERVAL_MS ||
 				triggered && nowMs - lastCheckMs >= RELEASE_TRIGGER_GAP_MS;
-			if ( stale ? assets.available() < 1 : !due || assets.available() < RELEASE_MIN_FREE_SLOTS ) return;
+			if ( urgent ? assets.available() < 1 : !due || assets.available() < RELEASE_MIN_FREE_SLOTS ) return;
 			lastCheckMs = nowMs;
 			stalePending = false;
 			job = assets.request( pageUrl, RELEASE_PAGE_BYTES, "release" );
@@ -92,4 +105,23 @@ export function createReleaseWatch( assets: AssetOwner, pageUrl: string, running
 			job = null;
 		}
 	};
+}
+
+/*
+================
+releaseNotice
+
+What the page shows for a release skew. `newer` is the watch's verdict (the
+live page names another entry); `outdated` is the server's 426.
+
+- newer, refused: "reload". Nothing is left to keep, so the page reloads.
+- newer, still served: "newer". The player is mid-session; Refresh is
+  their click.
+- refused, no newer page yet: "updating". The publish has switched the
+  server and not yet the page; a reload would only be refused again.
+================
+*/
+export function releaseNotice( newer: boolean, outdated: boolean ): ReleaseNotice {
+	if ( newer ) return outdated ? "reload" : "newer";
+	return outdated ? "updating" : "none";
 }

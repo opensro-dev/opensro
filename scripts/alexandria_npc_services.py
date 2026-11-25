@@ -132,7 +132,7 @@ def merge_shops(native, later, item_codes, npc_codes):
 # honor_items.py derived.
 # ================
 def add_services(vsro_root, native, output, port_stock=False, honor_goods=False):
-	from build_alexandria_variant import TEXTDATA, read_vsro_file, replace_file
+	from variant_files import TEXTDATA, read_vsro_file, replace_file
 	root = output / "Media_extracted" / TEXTDATA
 	native_root = native / "Media_extracted" / TEXTDATA
 	characters = [r for p in root.glob("characterdata_*.txt") for r in tables.table_rows(p.read_bytes())]

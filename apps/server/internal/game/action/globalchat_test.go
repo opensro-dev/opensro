@@ -221,7 +221,7 @@ func TestGlobalChattingRecordsTheLineOnlyOnceTheUseCommits(t *testing.T) {
 		pushed := false
 		rt.PushShardPeerFrames = func(string, string, []wire.Frame) { pushed = true }
 		if trial.muted {
-			rt.ChatShadowMuted = func(string) bool { return true }
+			rt.ChatShadowMuted = func(_, text string) bool { return text == "Hello, Silk Road" }
 		}
 		row := -1
 		for i, r := range c.MissionInventory {

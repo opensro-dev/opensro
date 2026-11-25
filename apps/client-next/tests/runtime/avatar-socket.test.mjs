@@ -57,3 +57,16 @@ test("storage slot 4 holds only the Spirit, and the Spirit only slot 4", () => {
 	assert.equal( socket.avatarSlotFits( HAT, -1 ), false );
 	assert.equal( socket.avatarSlotFits( SPIRIT, 4.5 ), false );
 });
+
+test("only a never-used Spirit is dormant: its use wakes it before it can be worn (#4364)", () => {
+	// A Spirit's data word is its expiry in unix seconds once woken.
+	const woken = 1764000000;
+	assert.equal( socket.isDormantSpirit( SPIRIT, 0 ), true );
+	assert.equal( socket.isDormantSpirit( SPIRIT, woken ), false );
+	// A lapsed Spirit keeps its word: it is not dormant and takes no second use.
+	assert.equal( socket.isDormantSpirit( SPIRIT, 1 ), false );
+	// No v1.150 avatar is ever dormant, whatever its durability field holds.
+	for ( const item of [ HAT, DRESS, ATTACHMENT, FLAG, SWORD ] ) {
+		assert.equal( socket.isDormantSpirit( item, 0 ), false );
+	}
+});

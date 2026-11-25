@@ -49,11 +49,11 @@ test("companion auto-potion defaults on; a saved record without the key keeps it
 		assert.equal( experimentalOptions( value ).transportAutoPotion, true, JSON.stringify( value ) );
 	}
 	assert.equal( experimentalOptions( { transportAutoPotion: false } ).transportAutoPotion, false );
-	const saved = experimentalOptions( { chatTimestamps: true, skyDetail: true, confirmGuildBan: false } );
+	const saved = experimentalOptions( { chatTimestamps: true, skyDetail: true, shortNotices: false } );
 	assert.equal( saved.transportAutoPotion, true );
 	assert.equal( saved.chatTimestamps, true );
 	assert.equal( saved.skyDetail, true );
-	assert.equal( saved.confirmGuildBan, false );
+	assert.equal( saved.shortNotices, false );
 });
 
 test("only an explicit boolean enables chat timestamps", () => {
@@ -89,12 +89,7 @@ test("every video stage defaults off and only an explicit true enables it", () =
 		smoothCamera: true,
 		// Enchant sparks are on by default (owner 2026-10-17).
 		enchantSparks: true,
-		// The shared actor room is on by default (owner 2026-10-14).
-		sharedActorRoom: true,
-		vHidesCompanions: false,
-		dungeonCharacterPvs: true,
-		// Silent wing flight is on by default (owner 2026-11-15, #3547).
-		silentWingFlight: true
+		vHidesCompanions: false
 	} );
 	for (
 		const key of [
@@ -347,10 +342,10 @@ test("the predicted run-up defaults on and reaches only the worker's slice", () 
 		breakNotices: true,
 		highlightEventNotices: true,
 		homingProjectiles: false,
-		smartPetPickup: true,
 		sunDropMarker: false,
 		warpArrivalSound: false,
 		christmasCarols: true,
+		sroMacro: true,
 		petPickupKinds: undefined
 	} );
 	for ( const value of [ 1, "true", null, {} ] ) {
@@ -366,10 +361,10 @@ test("the predicted run-up defaults on and reaches only the worker's slice", () 
 		breakNotices: true,
 		highlightEventNotices: true,
 		homingProjectiles: false,
-		smartPetPickup: true,
 		sunDropMarker: false,
 		warpArrivalSound: false,
 		christmasCarols: true,
+		sroMacro: true,
 		petPickupKinds: undefined
 	} );
 	assert.equal( "predictedRunUp" in experimentalVideo( on ), false );
@@ -454,53 +449,75 @@ test("HD textures are off unless explicitly true, so an old profile never downlo
 	assert.equal( experimentalOptions( { hdTextures: true } ).hdTextures, true );
 });
 
-test("a profile saved before the flip loads with WebTransport on; a choice under the current key is kept", () => {
-	const { storedExperimentalOptions, EXPERIMENTAL_STORAGE_KEY, PREVIOUS_EXPERIMENTAL_STORAGE_KEY } =
-		experimentalModule;
+test("profiles saved before the flips load with WebTransport and the SRO Macro on; a choice under the current key is kept", () => {
+	const {
+		storedExperimentalOptions,
+		EXPERIMENTAL_STORAGE_KEY,
+		PREVIOUS_EXPERIMENTAL_STORAGE_KEY,
+		FIRST_EXPERIMENTAL_STORAGE_KEY
+	} = experimentalModule;
 	const storageOf = entries => {
 		const saved = new Map( entries );
 		return { getItem: key => saved.get( key ) ?? null };
 	};
-	// Saved before the flip (platform.ts wrote the whole options object,
-	// so a Confirm under the old default stored webTransport: false):
-	// the flip reaches it, and its other choices carry over.
+	// Saved before the macro flip under the previous key (platform.ts
+	// wrote the whole options object, so a save under the old default
+	// stored sroMacro: false): the flip reaches it, its other choices
+	// carry over, and a webTransport choice stored under that key (made
+	// under the already-flipped rule) is kept as written.
 	const before = storedExperimentalOptions( storageOf( [
-		[ PREVIOUS_EXPERIMENTAL_STORAGE_KEY, JSON.stringify( { webTransport: false, chatTimestamps: true } ) ]
+		[
+			PREVIOUS_EXPERIMENTAL_STORAGE_KEY,
+			JSON.stringify( { sroMacro: false, webTransport: false, chatTimestamps: true } )
+		]
 	] ) );
-	assert.equal( before.options.webTransport, true );
+	assert.equal( before.options.sroMacro, true );
+	assert.equal( before.options.webTransport, false );
 	assert.equal( before.options.chatTimestamps, true );
-	assert.ok( before.raw && typeof before.raw === "object" && !("webTransport" in before.raw) );
-	// Stored under the current key after the flip: an explicit off stays off.
+	assert.ok( before.raw && typeof before.raw === "object" && !("sroMacro" in before.raw) );
+	// Saved before both flips under the oldest key: both rows take the
+	// new defaults, and the other choices carry over.
+	const oldest = storedExperimentalOptions( storageOf( [
+		[
+			FIRST_EXPERIMENTAL_STORAGE_KEY,
+			JSON.stringify( { webTransport: false, sroMacro: false, chatTimestamps: true } )
+		]
+	] ) );
+	assert.equal( oldest.options.webTransport, true );
+	assert.equal( oldest.options.sroMacro, true );
+	assert.equal( oldest.options.chatTimestamps, true );
+	assert.ok(
+		oldest.raw && typeof oldest.raw === "object" && !("webTransport" in oldest.raw) &&
+			!("sroMacro" in oldest.raw)
+	);
+	// Stored under the current key after the flips: explicit offs stay off.
 	const after = storedExperimentalOptions( storageOf( [
 		[ PREVIOUS_EXPERIMENTAL_STORAGE_KEY, JSON.stringify( { chatTimestamps: true } ) ],
-		[ EXPERIMENTAL_STORAGE_KEY, JSON.stringify( { webTransport: false } ) ]
+		[ EXPERIMENTAL_STORAGE_KEY, JSON.stringify( { webTransport: false, sroMacro: false } ) ]
 	] ) );
 	assert.equal( after.options.webTransport, false );
-	// The current key wins even when the previous one is also present.
+	assert.equal( after.options.sroMacro, false );
+	// The current key wins even when both older keys are also present.
 	const both = storedExperimentalOptions( storageOf( [
-		[ PREVIOUS_EXPERIMENTAL_STORAGE_KEY, JSON.stringify( { webTransport: false, chatTimestamps: false } ) ],
-		[ EXPERIMENTAL_STORAGE_KEY, JSON.stringify( { webTransport: false, chatTimestamps: true } ) ]
+		[
+			FIRST_EXPERIMENTAL_STORAGE_KEY,
+			JSON.stringify( { webTransport: false, sroMacro: false, chatTimestamps: false } )
+		],
+		[ PREVIOUS_EXPERIMENTAL_STORAGE_KEY, JSON.stringify( { sroMacro: false, chatTimestamps: false } ) ],
+		[
+			EXPERIMENTAL_STORAGE_KEY,
+			JSON.stringify( { webTransport: false, sroMacro: false, chatTimestamps: true } )
+		]
 	] ) );
 	assert.equal( both.options.webTransport, false );
+	assert.equal( both.options.sroMacro, false );
 	assert.equal( both.options.chatTimestamps, true );
-});
-
-test("the shared actor room is on unless explicitly false, and reaches the renderer's video options", () => {
-	for ( const value of [ undefined, null, {}, { sharedActorRoom: 1 }, { sharedActorRoom: "false" } ] ) {
-		assert.equal( experimentalOptions( value ).sharedActorRoom, true );
-	}
-	const off = experimentalOptions( { sharedActorRoom: false } );
-	assert.equal( off.sharedActorRoom, false );
-	assert.equal( experimentalVideo( off ).sharedActorRoom, false );
-	assert.equal( experimentalVideo( experimentalOptions( {} ) ).sharedActorRoom, true );
-});
-
-test("grey disabled tabs is on unless explicitly false and stays out of the renderer's video options", () => {
-	for ( const value of [ undefined, null, {}, { greyDisabledTabs: 1 }, { greyDisabledTabs: "false" } ] ) {
-		assert.equal( experimentalOptions( value ).greyDisabledTabs, true );
-	}
-	assert.equal( experimentalOptions( { greyDisabledTabs: false } ).greyDisabledTabs, false );
-	assert.equal( "greyDisabledTabs" in experimentalVideo( experimentalOptions( {} ) ), false );
+	// The previous key wins over the oldest one.
+	const chained = storedExperimentalOptions( storageOf( [
+		[ FIRST_EXPERIMENTAL_STORAGE_KEY, JSON.stringify( { chatTimestamps: false } ) ],
+		[ PREVIOUS_EXPERIMENTAL_STORAGE_KEY, JSON.stringify( { chatTimestamps: true } ) ]
+	] ) );
+	assert.equal( chained.options.chatTimestamps, true );
 });
 
 test("job kill notices are on unless explicitly false and reach the worker's gameplay slice", () => {
@@ -554,24 +571,6 @@ test("V hides pets and transports only when explicitly on, and reaches the rende
 	assert.equal( on.vHidesCompanions, true );
 	assert.equal( experimentalVideo( on ).vHidesCompanions, true );
 	assert.ok( EXPERIMENTAL_TABS.some( tab => experimentalRows( tab ).some( row => row.key === "vHidesCompanions" ) ) );
-});
-
-test("fit window labels is on unless explicitly false and stays out of the worker's slices", () => {
-	for ( const value of [ undefined, null, {}, { fitWindowLabels: 1 }, { fitWindowLabels: "false" } ] ) {
-		assert.equal( experimentalOptions( value ).fitWindowLabels, true );
-	}
-	assert.equal( experimentalOptions( { fitWindowLabels: false } ).fitWindowLabels, false );
-	assert.equal( "fitWindowLabels" in experimentalVideo( experimentalOptions( {} ) ), false );
-	assert.equal( "fitWindowLabels" in experimentalGameplay( experimentalOptions( {} ) ), false );
-});
-
-test("drop on bag tabs is on unless explicitly false and stays out of the worker's slices", () => {
-	for ( const value of [ undefined, null, {}, { dropOnBagTab: 1 }, { dropOnBagTab: "false" } ] ) {
-		assert.equal( experimentalOptions( value ).dropOnBagTab, true );
-	}
-	assert.equal( experimentalOptions( { dropOnBagTab: false } ).dropOnBagTab, false );
-	assert.equal( "dropOnBagTab" in experimentalVideo( experimentalOptions( {} ) ), false );
-	assert.equal( "dropOnBagTab" in experimentalGameplay( experimentalOptions( {} ) ), false );
 });
 
 test("exchange click shortcuts are on unless explicitly false and stay out of the worker's slices", () => {
@@ -634,19 +633,6 @@ test("pet panel click-to-open defaults on (BUG-086) and stays out of the worker'
 	);
 });
 
-test("smart pet pickup defaults on unless explicitly false and reaches the worker's gameplay slice", () => {
-	for ( const value of [ undefined, null, {}, { smartPetPickup: 1 }, { smartPetPickup: "false" } ] ) {
-		const options = experimentalOptions( value );
-		assert.equal( options.smartPetPickup, true );
-		assert.equal( experimentalGameplay( options ).smartPetPickup, true );
-		assert.equal( "smartPetPickup" in experimentalVideo( options ), false );
-	}
-	const off = experimentalOptions( { smartPetPickup: false } );
-	assert.equal( off.smartPetPickup, false );
-	assert.equal( experimentalGameplay( off ).smartPetPickup, false );
-	assert.ok( EXPERIMENTAL_TABS.some( tab => experimentalRows( tab ).some( row => row.key === "smartPetPickup" ) ) );
-});
-
 test("the expanded world map has no option and no row; the server's switch owns it", () => {
 	for ( const value of [ undefined, {}, { expandedWorldMap: true } ] ) {
 		assert.equal( "expandedWorldMap" in experimentalOptions( value ), false );
@@ -671,19 +657,6 @@ test("interpolated own movement has no option, no row, and no video slice (#1564
 	);
 });
 
-test("main-thread own movement defaults on, turns off only on an explicit false, and stays out of the worker's and renderer's slices", () => {
-	for ( const value of [ undefined, null, {}, { mainThreadOwnWalk: 1 }, { mainThreadOwnWalk: "false" } ] ) {
-		const options = experimentalOptions( value );
-		assert.equal( options.mainThreadOwnWalk, true );
-		assert.equal( "mainThreadOwnWalk" in experimentalGameplay( options ), false );
-		assert.equal( "mainThreadOwnWalk" in experimentalVideo( options ), false );
-	}
-	assert.equal( experimentalOptions( { mainThreadOwnWalk: false } ).mainThreadOwnWalk, false );
-	assert.ok(
-		EXPERIMENTAL_TABS.some( tab => experimentalRows( tab ).some( row => row.key === "mainThreadOwnWalk" ) )
-	);
-});
-
 test("quest target markers default off (tracked quest only) and stay out of the worker's slices", () => {
 	for ( const value of [ undefined, null, {}, { questTrackerMarkers: 1 }, { questTrackerMarkers: "true" } ] ) {
 		const options = experimentalOptions( value );
@@ -695,6 +668,20 @@ test("quest target markers default off (tracked quest only) and stay out of the 
 	assert.equal( on.questTrackerMarkers, true );
 	assert.ok(
 		EXPERIMENTAL_TABS.some( tab => experimentalRows( tab ).some( row => row.key === "questTrackerMarkers" ) )
+	);
+});
+
+test("the guide waypoint default is off and stays out of the worker's slices (#3394)", () => {
+	for ( const value of [ undefined, null, {}, { guideWaypoint: 1 }, { guideWaypoint: "true" } ] ) {
+		const options = experimentalOptions( value );
+		assert.equal( options.guideWaypoint, false );
+		assert.equal( "guideWaypoint" in experimentalGameplay( options ), false );
+		assert.equal( "guideWaypoint" in experimentalVideo( options ), false );
+	}
+	const on = experimentalOptions( { guideWaypoint: true } );
+	assert.equal( on.guideWaypoint, true );
+	assert.ok(
+		EXPERIMENTAL_TABS.some( tab => experimentalRows( tab ).some( row => row.key === "guideWaypoint" ) )
 	);
 });
 

@@ -17,6 +17,7 @@ import (
 
 	"opensro.online/server/internal/game/enterworld"
 	"opensro.online/server/internal/game/item/wire"
+	"opensro.online/server/internal/game/staff"
 	"opensro.online/server/internal/game/world/simulation"
 	"opensro.online/server/internal/testsupport/wait"
 	"opensro.online/server/internal/transport"
@@ -249,7 +250,7 @@ func TestPickupEntryLoadingSceneReceivesCommittedGrant(t *testing.T) {
 				}
 				var frames []transport.Frame
 				if gm {
-					h.character.GMPrivilege = true
+					h.character.GMPrivilege, h.character.GMCapabilities = true, uint32(staff.All)
 					h.deps.CanEnterWorldRegion = func(*enterworld.Character, uint16) bool { return true }
 					h.deps.SpawnTerrainHeight = func(uint16, float64, float64) (float64, bool) { return 20, true }
 					pose := simulation.SeedWorldState(h.character).Spawn

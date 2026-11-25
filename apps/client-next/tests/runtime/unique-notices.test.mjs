@@ -273,3 +273,20 @@ test("kinds 0x14 and 0x15 count the Roc down as the later client shows them", as
 		assert.ok( notice === null || !notice.key.startsWith( "UIIT_MSG_QUEST_ROC" ), String( kind ) );
 	}
 });
+test("kinds 0x10 and 0x11 announce the Sarin gate as the later client shows them", async () => {
+	const copy = JSON.parse(
+		await readFile( CLIENT_PUBLIC_ROOT + "/assets/text/textuisystem.en.json", "utf8" )
+	).entries;
+	// v1.696 0xDA07B8 and 0xDA082B: the banner and the chat line.
+	for (
+		const [kind, key] of [
+			[ 0x10, "UIIT_TQ_F4_TELEPORT_OPEN" ],
+			[ 0x11, "UIIT_TQ_F4_TELEPORT_CLOSE" ]
+		]
+	) {
+		const notice = defined( uniqueNotice( 0x3058, Uint8Array.of( kind ), refs ) );
+		assert.equal( notice.key, key );
+		assert.equal( notice.banner, true );
+		assert.ok( copy[key], `${key} has v1.150 text` );
+	}
+});

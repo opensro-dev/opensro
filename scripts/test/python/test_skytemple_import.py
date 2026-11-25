@@ -83,8 +83,10 @@ def media_archive(files):
 	builder.blocks[root] = [(1, b"server_dep", server, 0)]
 	builder.blocks[server] = [(1, b"silkroad", silkroad, 0)]
 	builder.blocks[silkroad] = [(1, b"textdata", textdata, 0)]
-	builder.blocks[textdata] = [(2, name.encode("ascii"), *builder.add_payload(raw)) for name, raw in files.items()]
-	return builder.build()
+	chains = {}
+	items = [(2, name.encode("ascii"), *builder.add_payload(raw)) for name, raw in files.items()]
+	chained_folder(builder, items, chains, textdata)
+	return builder.build(chains)
 
 
 # ================
@@ -507,7 +509,8 @@ class SkytempleImportTest(unittest.TestCase):
 
 			shard = read_rows(text / sky.CHARACTER_SHARD)
 			self.assertEqual(len(shard), 1)
-			self.assertEqual((shard[0][1], shard[0][2], len(shard[0])), ("101", "MOB_SKYTEMPLE_A_TEST", 120))
+			# Above every object row, the native gate building's 2094 too (#3994).
+			self.assertEqual((shard[0][1], shard[0][2], len(shard[0])), ("2095", "MOB_SKYTEMPLE_A_TEST", 120))
 			population = json.loads((text / sky.POPULATION_FILE).read_text())
 			self.assertEqual([row["RegionID"] for row in population["Rows"]], [21209, region_id(225, 92)])
 			gates = {row[2]: row for row in read_rows(text / "teleportdata.txt")}
@@ -550,6 +553,31 @@ class SkytempleImportTest(unittest.TestCase):
 			self.assertFalse(any(row[2].startswith("RN_OTHER_SKYTEMPLE") for row in regions))
 			names = {row[1] for row in read_rows(text / "textdataname.txt") if len(row) > 1}
 			self.assertNotIn("SN_MOB_SKYTEMPLE_A_TEST", names)
+
+	# ================
+	# test_earlier_layer_name_row_survives_the_strip
+	#
+	# A name row an earlier layer added already stands in the table
+	# and the temple kind names its symbol: this build appends no
+	# row for it, so it owns nothing of it, and the flag-off strip
+	# leaves the earlier layer's row standing (#3767).
+	# ================
+	def test_earlier_layer_name_row_survives_the_strip(self):
+		with tempfile.TemporaryDirectory() as tmp:
+			native, output, source = build_trees(Path(tmp))
+			text = output / sky.TEXT_ROOT
+			rows = read_rows(text / "textdataname.txt")
+			rows.append(["1", "SN_MOB_SKYTEMPLE_A_TEST", "x", "", "", "Earlier Beast", "", "", "", "", ""])
+			write_table(text, "textdataname.txt", rows)
+			closure = FakeClosure()
+			with mock.patch.dict(os.environ, {sky.FLAG: "1"}):
+				sky.add_skytemple(native, output, source, closure)
+			marker = json.loads((output / sky.MARKER).read_text(encoding="utf-8"))
+			self.assertNotIn("SN_MOB_SKYTEMPLE_A_TEST", marker["nameSymbols"])
+			with mock.patch.dict(os.environ, {sky.FLAG: "off"}):
+				sky.add_skytemple(native, output, source, closure)
+			names = {row[1] for row in read_rows(text / "textdataname.txt") if len(row) > 1}
+			self.assertIn("SN_MOB_SKYTEMPLE_A_TEST", names)
 
 	# ================
 	# test_off_without_marker_is_a_noop

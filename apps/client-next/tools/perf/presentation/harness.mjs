@@ -31,7 +31,9 @@ import { readFileSync, existsSync, statSync } from "node:fs";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
 
-// assets.ts REQUEST_CAPACITY: the asset owner's foreground slots.
+// The stream lane's slots (ASSET_STREAM_SLOTS, foundation/assets/asset-slots.ts),
+// which character loads use. Kept here, not imported: the harness replays
+// older trees too, and they have no asset-slots.ts.
 const REQUEST_CAPACITY = 4;
 // assets.ts request()'s default byte limit.
 const DEFAULT_REQUEST_LIMIT = 16 << 20;
@@ -45,10 +47,7 @@ const VIEW_ASPECT = 16 / 9;
 // explicit false turns these off, vHidesCompanions only an explicit true on.
 const EXPERIMENTAL_DEFAULTS = {
 	enchantSparks: true,
-	sharedActorRoom: true,
-	vHidesCompanions: false,
-	dungeonCharacterPvs: true,
-	silentWingFlight: true
+	vHidesCompanions: false
 };
 // The renderer port calls that leave the presentation, and how each is
 // recorded. A model or clip is recorded by what the presentation chose
@@ -179,7 +178,7 @@ delivery, as the worker decodes them.
 */
 function createPublishedAssets( source, decoders, record ) {
 	const jobs = new Map(), files = new Map();
-	let nextId = 0, frame = 0, programsParsed = false;
+	let nextId = 0, frame = 0;
 	/*
 	================
 	read
@@ -215,7 +214,11 @@ function createPublishedAssets( source, decoders, record ) {
 	================
 	*/
 	function resolve( job ) {
-		const url = new URL( job.url ), pathname = decodeURIComponent( url.pathname );
+		const url = new URL( job.url ), effect = decodeURIComponent( url.hash.slice( 1 ) );
+		// An effect's bytes are its own published file, as the worker reads them.
+		const pathname = job.decode === "effect" ?
+			decoders.effectFiles.program( effect ) :
+			decodeURIComponent( url.pathname );
 		if ( !pathname.startsWith( "/assets/" ) || pathname.includes( ".." ) ) {
 			return { kind: "error", error: "Invalid asset URL" };
 		}
@@ -229,12 +232,16 @@ function createPublishedAssets( source, decoders, record ) {
 				return character( decoders.models.character( decoders.models.decode( bytes.slice() ) ) );
 			}
 			if ( job.decode === "effect" ) {
-				// The worker parses the program catalog once and keeps it.
-				const decoded = decoders.effects.model(
-					programsParsed ? new Uint8Array( 0 ) : bytes,
-					decodeURIComponent( url.hash.slice( 1 ) )
+				const program = decoders.effects.program( bytes );
+				const meshes = decoders.effects.meshes(
+					program,
+					program.meshes.map( key => {
+						const data = read( decoders.effectFiles.mesh( key ) );
+						if ( !data ) throw Error( `Effect mesh absent: ${key}` );
+						return data;
+					} )
 				);
-				programsParsed = true;
+				const decoded = decoders.effects.model( program, meshes, effect );
 				const raw = decoded.imagePaths.map( image => {
 					const pixels = read( image );
 					if ( !pixels ) throw Error( `Effect image absent: ${image}` );
@@ -337,6 +344,10 @@ export async function createPresentationHarness( root, session, options = {} ) {
 	const { createModelDecoder } = await rootModule( root, src + "runtime/assets/worker/model/model.ts" );
 	const { createEffectDecoder } = await rootModule( root, src + "runtime/assets/worker/effects/effects.ts" );
 	const { decodeNativeTexture } = await rootModule( root, src + "foundation/assets/native-texture.ts" );
+	const { effectMeshFile, effectProgramFile } = await rootModule(
+		root,
+		src + "foundation/assets/effect-programs.ts"
+	);
 	const { worldAudioPosition } = await rootModule( root, src + "foundation/world/world-space.ts" );
 	const { viewProjection } = await rootModule( root, src + "foundation/rendering/world-math.ts" );
 	const settings = session.settings ?? {};
@@ -355,7 +366,12 @@ export async function createPresentationHarness( root, session, options = {} ) {
 	}
 	const random = createPresentationRandom( session.seed >>> 0 );
 	const world = createPresentation();
-	const decoders = { models: createModelDecoder(), effects: createEffectDecoder(), decodeNativeTexture };
+	const decoders = {
+		models: createModelDecoder(),
+		effects: createEffectDecoder(),
+		effectFiles: { program: effectProgramFile, mesh: effectMeshFile },
+		decodeNativeTexture
+	};
 	const assets = createPublishedAssets( options.source ?? publishedFiles( CLIENT_PUBLIC_ROOT ), decoders, record );
 	// What the renderer's last frame left for the presentation to read.
 	const view = { camera: null, listener: null };
@@ -413,10 +429,7 @@ export async function createPresentationHarness( root, session, options = {} ) {
 			presentationCamera: () => view.camera,
 			audioListener: () => view.listener,
 			enchantSparks: () => experimental.enchantSparks,
-			sharedActorRoom: () => experimental.sharedActorRoom,
 			vHidesCompanions: () => experimental.vHidesCompanions,
-			silentWingFlight: () => experimental.silentWingFlight,
-			dungeonCharacterPvs: () => experimental.dungeonCharacterPvs,
 			dungeonBlockHides: () => false,
 			scenery: () => null,
 			setFootprints() {},

@@ -48,8 +48,7 @@ import sro_pk2
 from convert_images import save_image_payload
 from import_vsro_alexandria import archive_index, table_rows
 from import_vsro_tomb_minimap import ddj_payload
-from pin_file import read_pin_field
-from prepare_client_resources import file_digest
+from pin_file import require_pinned_archive
 from sro_paths import PUBLIC_ROOT
 
 V1696_ENV = "SRO_V1696_ROOT"
@@ -91,6 +90,14 @@ ART = (
 	"guide/gd_contents_lamp",
 	"guide/gd_index_button_open",
 	"guide/gd_index_button_close",
+	# The Server Mission gauge (CNIFServerEvent, res_ui/nifserverevent.2dt):
+	# the client's later-art widget beside the guide (server-event-hud.ts).
+	"event/winter_count_wind",
+	"event/winter_count_gage",
+	"event/winter_count_snow",
+	"event/winter_count_close",
+	"event/winter_count_close_focus",
+	"event/winter_count_close_press",
 )
 
 
@@ -105,16 +112,7 @@ ART = (
 # The v1.696 Media.pk2 against its pin, before a byte of it is read.
 # ================
 def verify_media(root):
-	archives = read_pin_field(PIN_FILE, PIN_FORMAT, "archives")
-	if "Media" not in archives:
-		raise SystemExit(f"{PIN_FILE} pins no Media.pk2")
-	path = Path(root) / "Media.pk2"
-	if not path.is_file():
-		raise SystemExit(f"{path} not found; {V1696_ENV} must be the pinned v1.696 client folder")
-	actual = file_digest(path)
-	if actual != archives["Media"]:
-		raise SystemExit(f"{path} does not match the pinned v1.696 Media.pk2 (sha256 {actual})")
-	return path
+	return require_pinned_archive(PIN_FILE, PIN_FORMAT, root, "Media", f"{V1696_ENV} must be the pinned v1.696 client folder")
 
 
 # ================
@@ -368,8 +366,28 @@ def write_mask(raw, colours, target):
 	# copyExternalImageToTexture (WebKit bug 296208).
 	image = Image.new("RGBA", (width, height), (255, 255, 255, 255))
 	image.putalpha(Image.frombytes("L", (width, height), alpha))
+	publish_if_changed(target, lambda staged: image.save(staged, "PNG"))
+
+
+# ================
+# publish_if_changed
+#
+# Writes one public file through write(staged path) and keeps the old file,
+# mtime and all, when the bytes are the same. The interface lane publishes
+# the native gd_contents_lamp and gd_index_button_open before this importer
+# replaces them, and its memo replays only while their size and mtime hold:
+# a rewrite of the same bytes reran that lane on every other build (r204m2,
+# "output .../gd_contents_lamp.png changed").
+# ================
+def publish_if_changed(target, write):
 	target.parent.mkdir(parents=True, exist_ok=True)
-	image.save(target)
+	staged = target.with_name(target.stem + ".staged" + target.suffix)
+	write(staged)
+	if target.is_file() and target.read_bytes() == staged.read_bytes():
+		staged.unlink()
+		return False
+	os.replace(staged, target)
+	return True
 
 
 # ================
@@ -399,8 +417,8 @@ def publish_masks(archive, monsters):
 def publish_art(archive):
 	for name in ART:
 		target = IMAGES / f"{name}.png"
-		target.parent.mkdir(parents=True, exist_ok=True)
-		save_image_payload(ddj_payload(archive.read(f"interface/{name}.ddj")), target, target)
+		payload = ddj_payload(archive.read(f"interface/{name}.ddj"))
+		publish_if_changed(target, lambda staged: save_image_payload(payload, staged, staged))
 
 
 #============================================================================

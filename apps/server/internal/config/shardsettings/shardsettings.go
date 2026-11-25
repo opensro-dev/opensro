@@ -60,6 +60,9 @@ const (
 	ValueBetaSilk
 	// ValueBetaGrowthBands is progression.ParseGrowthBands's band list.
 	ValueBetaGrowthBands
+	// ValueHwanKnob is quest.HwanKnobsFromEnv's parser for the setting's own
+	// variable (the Blue Berserk quest knobs).
+	ValueHwanKnob
 )
 
 /*
@@ -90,6 +93,11 @@ var Settings = []Setting{
 	// (1..200).
 	{Env: "SRO_SOOK_CHECKPOINT_SECONDS", NomadVar: "sook_checkpoint_seconds", Default: "300"},
 	{Env: "SRO_SOOK_CHEST_CAPACITY", NomadVar: "sook_chest_capacity", Default: "200"},
+	// Port-only, not native: the v1.696 SRO Macro settings lane (0x7554,
+	// 0xB554, 0x3555; internal/game/macro, #3907). Off sends nothing.
+	// Owner, 2026-11-21: on in the next release. Off is native in code;
+	// on is this shard's deployed value.
+	{Env: "SRO_AUTO_MACRO", NomadVar: "auto_macro", Default: "on"},
 	// The catalogue publishes the expansion's derived pet-gear drops
 	// while it runs (items.json's petGear rows, droptables.json's
 	// petGear rule), so it is a catalogue setting (#2542).
@@ -112,6 +120,11 @@ var Settings = []Setting{
 	{Env: "SRO_LEVEL_CAP", NomadVar: "level_cap", Default: "90", Catalogue: true},
 	// Port-only, not native: database-authored Alexandria field population.
 	{Env: "SRO_CAP110_MONSTERS", NomadVar: "cap110_monsters", Default: "off", Catalogue: true},
+	// Port-only, not native (owner 2026-11-25, #4393: "default off, and
+	// off on server"): monsters of level 95-110 roll a Seal of Star of
+	// their level's degree at the native level-94 rare rate
+	// (loot/highlevelseals.go). Natively no rare row exists above 94.
+	{Env: "SRO_HIGH_LEVEL_SEALS", NomadVar: "high_level_seals", Default: "off", Catalogue: true},
 	// Port-only, not native: the level-100 slice of that population,
 	// admitted for hunting separately (#1741); switches on with the
 	// cap-110 catalogue (#1607).
@@ -133,7 +146,24 @@ var Settings = []Setting{
 	// Build time only: honor_items.py and honor_shops.py read it when the
 	// server data is built. Degrees 10-11 need SRO_CAP110_ITEMS too.
 	{Env: "SRO_HONOR_GOODS", NomadVar: "honor_goods", Default: "off"},
+	// Port-only, not native (#2846; owner 2026-11-25, on): the Alexandria
+	// variant's shops stock the port's own degree 10-11 goods - the full
+	// degree 10-11 alchemy band and its gear passes - instead of only what
+	// one official source had active. Build time only:
+	// build_alexandria_variant.py reads it when the server data is built.
+	{Env: "SRO_ALEXANDRIA_PORT_STOCK", NomadVar: "alexandria_port_stock", Default: "off"},
 	{Env: "SRO_CAP110_SKILLS", NomadVar: "cap110_skills", Default: "off"},
+	// Port-only, not native: the Blue Berserk quest chains (the 95/100
+	// Army and Military Tests and the Alexandria 105/110 steps) with what
+	// exists only for them. Consumed at build time (cap110_quest_*.py read
+	// it with SRO_LEVEL_CAP=110); the built quest tables are the switch the
+	// GameWorld sees. Server only: the catalogue reads the built data.
+	{Env: "SRO_CAP110_QUESTS", NomadVar: "cap110_quests", Default: "off"},
+	// Port-only, not native: operator knobs of those quests (quest/hwanknobs.go).
+	// Unset is the original behaviour; a malformed value refuses the boot.
+	{Env: "SRO_HWAN_NIYA_CAPTURE_RATES", NomadVar: "hwan_niya_capture_rates", Default: "", Validation: ValueHwanKnob},
+	{Env: "SRO_HWAN_SUN_RELIC", NomadVar: "hwan_sun_relic", Default: "", Validation: ValueHwanKnob},
+	{Env: "SRO_HWAN_3_FAST_DROP", NomadVar: "hwan_3_fast_drop", Default: "off", Validation: ValueHwanKnob},
 	// Port-only, not native: the later client's mall avatars (outfits, hats,
 	// attachments). Cosmetic, so the owner approved it on by default
 	// (2026-11-04). Build time only, like the two above: mall_avatar_import.py
@@ -174,6 +204,12 @@ var Settings = []Setting{
 	// continent rides the Alexandria variant build; the switch admits
 	// their kinds here. "off" is native.
 	{Env: "SRO_ARABIA", NomadVar: "arabia", Default: "off", Catalogue: true},
+	// Port-only, not native: the Baghdad dungeon and its boss lair
+	// (worlds 112/113), split out of SRO_ARABIA so a shard opens the
+	// dungeon apart from the continent (#4134). The import still rides
+	// the Arabia build; this switch registers the dungeon worlds and
+	// admits their nests and gates. "off" is native.
+	{Env: "SRO_BAGHDAD_DUNGEON", NomadVar: "baghdad_dungeon", Default: "off", Catalogue: true},
 	// Port-only, not native: the Jupiter field population and its world
 	// (#3267). Build and server read the same switch; off leaves every
 	// imported row out of the build and the population unread.
@@ -192,11 +228,12 @@ var Settings = []Setting{
 	// (#3270). Build and server read the same switch; off leaves
 	// every imported row out of the build and the population unread.
 	{Env: "SRO_HUNTING2", NomadVar: "hunting2", Default: "off", Catalogue: true},
-	// Port-only, not native: the Styria Clash arena map (#3272): its four
-	// regions' terrain and navmesh from the v1.696 client. Build only for
-	// now: no server code reads it until the Battle Arena engine (#3648)
-	// lands behind the same switch. Not a catalogue setting: the map
-	// adds no monsters or worlds. "off" is native.
+	// Port-only, not native: the Styria Clash arena (#3272): its four
+	// regions' terrain and navmesh from the v1.696 client at build, and
+	// the Battle Arena engine (#3648) on the server - the arena manager,
+	// registration, teams and the match instance in world 107. Build and
+	// server read the same switch. Not a catalogue setting: the map
+	// adds no monsters. "off" is native.
 	{Env: "SRO_STYRIA_CLASH", NomadVar: "styria_clash", Default: "off"},
 	// Port-only, not native: AI caravan and thief agents on the Jangan -
 	// Donwhang - Hotan highway (#3650, epic #3704). Slice 1 sends no
@@ -212,11 +249,12 @@ var Settings = []Setting{
 	// the build and the fortress unregistered. Not a catalogue setting:
 	// the catalogue publishes no fortress state.
 	{Env: "SRO_FORT_CONSTANTINOPLE", NomadVar: "fort_constantinople", Default: "off"},
-	// Port-only, not native: the Bandit and Hotan fortresses from the
-	// v1.188 client (enterworld/fortressdata.go, #3886), one switch each.
-	// Build and server read the same switch; off leaves every imported
-	// row out of the build. Not catalogue settings, as Constantinople.
-	{Env: "SRO_FORT_BIJEOKDAN", NomadVar: "fort_bijeokdan", Default: "off"},
+	// Port-only, not native: the Hotan fortress from the v1.188 client
+	// (enterworld/fortressdata.go, #3886). Build and server read the
+	// same switch; off leaves every imported row out of the build. Not
+	// a catalogue setting, as Constantinople. The Bandit fortress has
+	// no row here: it is later-native content the game ships (#3586),
+	// so it stands in every build and needs no switch.
 	{Env: "SRO_FORT_HOTAN", NomadVar: "fort_hotan", Default: "off"},
 	// Port-only, not native: the export-world areas from the pinned
 	// content archive (#3329). Build and server read the same switch;
@@ -237,6 +275,12 @@ var Settings = []Setting{
 	// Port-only, not native: the Christmas event's snow and town
 	// decoration (progression/christmas.go). Off is native.
 	{Env: "SRO_CHRISTMAS_EVENT", NomadVar: "christmas_event", Default: "off"},
+	// Port-only, not native (#3533): the EventBot host for automated
+	// chat events (social/eventbot). Off is native: nobody answers to
+	// the name EventBot and nothing is announced. The schedule file
+	// itself is named by SRO_EVENT_BOT_FILE, an operator path rather
+	// than a shard rule, like the maintenance gate's file.
+	{Env: "SRO_EVENT_BOT", NomadVar: "event_bot", Default: "off"},
 	{Env: "SRO_CHRISTMAS_EVENT_WINDOW", NomadVar: "christmas_event_window", Default: ""},
 	// Port-only, not native: which Christmas event the switch runs,
 	// "winter" (Winter Princess and Knights) or "so_ok_2006" (So-Ok's Christmas Gift,
@@ -253,12 +297,23 @@ var Settings = []Setting{
 	{Env: "SRO_BETA_SILK", NomadVar: "beta_silk", Default: "off", Validation: ValueBetaSilk},
 	{Env: "SRO_MALL_STARTER_SILK", NomadVar: "mall_starter_silk", Default: "700"},
 	{Env: "SRO_BETA_SILK_ACTIVE_ONLY", NomadVar: "beta_silk_active_only", Default: "off", Validation: ValueSwitch},
+	// Port-only, not native (#4133, owner decision 2026-11-23): an Item
+	// Mall purchase paid wholly from earned silk is tradable. "off" is
+	// native: every mall item stays bound, whatever paid for it.
+	{Env: "SRO_EARNED_SILK_TRADABLE", NomadVar: "earned_silk_tradable", Default: "on"},
 	// Port-only, not native: maintenance refusals answer MAINTENANCE instead
 	// of SHARD_OFFLINE (#2331). The one value fills both jobs: sro-nomad
 	// passes it to the Agent too (agentVariables), so the two can never
 	// answer different codes in the same window. Both read it with
 	// agentapi.MaintenanceMessageFromEnv (on, 1 or true).
 	{Env: "SRO_MAINTENANCE_MESSAGE", NomadVar: "maintenance_message", Default: "off"},
+	// Port-only, not native (#3925): announced-but-unopened shards (the
+	// catalog's disabled entries) also list on the Agent's title server
+	// list as coming soon, carrying no transport URL. Only the Agent
+	// reads it (agentVariables); the GameWorld job carries the value
+	// inertly like every table row. agentapi.ComingSoonShardsFromEnv
+	// (on, 1 or true).
+	{Env: "SRO_COMING_SOON_SHARDS", NomadVar: "coming_soon_shards", Default: "off"},
 	// Grab and growth pets at four fifths of their run speed (#320): never
 	// deployed, so the deployment default stays native.
 	{Env: "SRO_PET_PACING", NomadVar: "pet_pacing", Default: "off"},
@@ -271,6 +326,11 @@ var Settings = []Setting{
 	{Env: "SRO_PET_INVENTORY_PAGES", NomadVar: "pet_inventory_pages", Default: "on"},
 	{Env: "SRO_GRAB_PET_INVENTORY_PAGES", NomadVar: "grab_pet_inventory_pages", Default: ""},
 	{Env: "SRO_TRANSPORT_PET_INVENTORY_PAGES", NomadVar: "transport_pet_inventory_pages", Default: ""},
+	// Owner, 2026-11-21: eight warehouse pages, and eight guild storage
+	// pages at level 5 scaled down the levels (domain/storagepages.go).
+	// Unset or "off" is native in code; "8" is this shard's deployed value.
+	{Env: "SRO_STORAGE_PAGES", NomadVar: "storage_pages", Default: "8"},
+	{Env: "SRO_GUILD_STORAGE_PAGES", NomadVar: "guild_storage_pages", Default: "8"},
 	{Env: "SRO_STORAGE_AUTO_STACK", NomadVar: "storage_auto_stack", Default: "on"},
 	// Owner, 2026-11-07: Alt+click links an item into a chat line. Off is
 	// native: chat lines are text only. The limit is a tunable (game/tunables).
@@ -285,6 +345,11 @@ var Settings = []Setting{
 	{Env: "SRO_FAST_DEN_RETURN", NomadVar: "fast_den_return", Default: "on"},
 	// Port-only, off by default: a unique's attackers see its damage ranking.
 	{Env: "SRO_UNIQUE_DAMAGE_RANK", NomadVar: "unique_damage_rank", Default: "off"},
+	// Port-only, not native (#3531): the in-game Unique Status window's
+	// feed - every unique's alive/dead state, death time and killer,
+	// composed from the same owners as the public API's uniques page
+	// (game/uniquestatus). Off, no frame is ever sent.
+	{Env: "SRO_UNIQUE_STATUS", NomadVar: "unique_status", Default: "off"},
 	// Owner, 2026-10-15: a login inside a closed object (a tree trunk) is
 	// rescued to the nearest open ground.
 	{Env: "SRO_CLOSED_OBJECT_RESCUE", NomadVar: "closed_object_rescue", Default: "on"},
@@ -325,6 +390,18 @@ var Settings = []Setting{
 	// Owner, 2026-10-27: the name-change scroll (#1689, port-only, not
 	// native; "off" is native: the scroll is neither sold nor usable).
 	{Env: "SRO_NAME_CHANGE_SCROLL", NomadVar: "name_change_scroll", Default: "off"},
+	// Owner, 2026-11-21: the stat and skill reset scrolls (port-only, not
+	// native; "off" is native: the scroll is neither sold nor usable).
+	{Env: "SRO_STAT_RESET_SCROLL", NomadVar: "stat_reset_scroll", Default: "off"},
+	{Env: "SRO_SKILL_RESET_SCROLL", NomadVar: "skill_reset_scroll", Default: "off"},
+	// Owner, 2026-11-04: the weapon switch scroll (port-only, not native;
+	// "off" is native: the scroll is neither sold nor usable).
+	{Env: "SRO_WEAPON_SWITCH_SCROLL", NomadVar: "weapon_switch_scroll", Default: "off"},
+	// Owner, 2026-11-21: the armor and accessory switch scrolls (port-
+	// only, not native; "off" is native: the scroll is neither sold nor
+	// usable).
+	{Env: "SRO_ARMOR_SWITCH_SCROLL", NomadVar: "armor_switch_scroll", Default: "off"},
+	{Env: "SRO_ACCESSORY_SWITCH_SCROLL", NomadVar: "accessory_switch_scroll", Default: "off"},
 	// Owner, 2026-10-25: count kills and EXP per online hour by level
 	// band for the staff console (#1639, port-only, not native; "off"
 	// counts nothing and the economy route answers 404).
@@ -432,6 +509,10 @@ var Settings = []Setting{
 	// player's destroyed reinforcement item is announced by job alias.
 	// Off is native, in code and in the deployed default alike.
 	{Env: "SRO_ALCHEMY_BREAK_NOTICE", NomadVar: "alchemy_break_notice", Default: "off"},
+	// Owner, 2026-11-21: Fuse sends at once, with no wait for the alchemy
+	// window's effects (action/quickfuse.go). Off is native in code; on
+	// is this shard's deployed value.
+	{Env: "SRO_QUICK_FUSE", NomadVar: "quick_fuse", Default: "on"},
 	// Owner report, 2026-11-08 (#2852): a Magic Pop win also posts an
 	// Event-feed line naming the winner; the native win banner is
 	// unchanged. Off is native, in code and in the deployed default.
@@ -456,8 +537,13 @@ var Settings = []Setting{
 	{Env: "SRO_TRADE_JOB_HUNTER_PERCENT_CAP", NomadVar: "trade_job_hunter_percent_cap", Default: "60"},
 	// Port-only, not native: a 10,000,000,000 stall price and a
 	// 1,000,000,000 warehouse gold deposit replace the native
-	// 1,000,000,000 and 100,000,000 caps. "off" is native.
+	// 1,000,000,000 and 100,000,000 caps. "off" is native; a bare
+	// number instead names the warehouse deposit cap alone.
 	{Env: "SRO_RAISED_GOLD_CAPS", NomadVar: "raised_gold_caps", Default: "off"},
+	// Port-only, not native (owner, 2026-11-22): a sort button on the bag,
+	// the warehouses and companion bags that sends ordinary item moves.
+	// "off" is native.
+	{Env: "SRO_INVENTORY_SORT", NomadVar: "inventory_sort", Default: "off"},
 	{Env: "SRO_REVERSE_RETURN_MAP", NomadVar: "reverse_return_map", Default: ""},
 	{Env: "SRO_HUNTING_GUIDE", NomadVar: "hunting_guide", Default: ""},
 	{Env: "SRO_GM_SETSPEED", NomadVar: "gm_setspeed", Default: "on"},
@@ -466,6 +552,10 @@ var Settings = []Setting{
 	// enable it. Forged items are bound, so an enabled shard can only
 	// mint items its GMs cannot move into the economy.
 	{Env: "SRO_GM_ITEM_FORGE", NomadVar: "gm_item_forge", Default: "off"},
+	// Port-only, not native (owner, 2026-11-23): the GM's in-game /MUTE,
+	// /UNMUTE, /BLOCKLOGOUT and /ALLOWLOGOUT (gmcommand/moderation.go).
+	// "off" is native; /SHADOWMUTE is always on.
+	{Env: "SRO_GM_MODERATION", NomadVar: "gm_moderation", Default: "off"},
 	{Env: "SRO_ALCHEMY_RATES", NomadVar: "alchemy_rates", Default: "on", Catalogue: true},
 	// Owner, 2026-10-18: reversed the 2026-10-13 +11 cap; the deployment
 	// default stays native ("off", ceiling 250).
@@ -610,8 +700,9 @@ var Settings = []Setting{
 	// Port-only, not native: every Silk Road town gate (Jangan, Donwhang,
 	// Hotan, Samarkand, Constantinople) also leads straight to the other
 	// four, for the native chain's 5000 gold per gate skipped. "off" is
-	// native.
-	{Env: "SRO_CROSS_CITY_TELEPORT", NomadVar: "cross_city_teleport", Default: "off"},
+	// native in code. Owner, 2026-11-21: on in the next release; on is
+	// this shard's deployed value.
+	{Env: "SRO_CROSS_CITY_TELEPORT", NomadVar: "cross_city_teleport", Default: "on"},
 	// The Alexandria city of a build_alexandria_variant.py game root: its
 	// regions, gates and NPCs (port-only, not native; internal/game/world/
 	// alexandria). "off" is native and hides them from a variant's data;

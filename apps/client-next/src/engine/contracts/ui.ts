@@ -9,6 +9,7 @@ control metadata and resolves those gestures against the current view.
 */
 import type { BugReportControl } from "./bug-report";
 import type { ExperimentalOptions } from "../foundation/ui/experimental-options";
+import type { UniqueNotifySettings } from "../foundation/gameplay/unique-status";
 import type { WindowPositions } from "../foundation/ui/window-positions";
 import type { SessionState } from "./session";
 import type { GameplayState } from "./gameplay";
@@ -31,7 +32,7 @@ export interface UiTextLayout {
 	// enter a neighbouring text box; null when no glyph of it fits, absent
 	// when the text fits its box.
 	readonly fitted?: UiQuad | null;
-	// Port-only (the Experimental "Fit window labels"): the text on two
+	// Port-only (the former Experimental "Fit window labels"): the text on two
 	// lines inside its box's columns, tried before the shortened run;
 	// absent when the text has no space or a line would not fit.
 	readonly wrapped?: UiQuad;
@@ -40,7 +41,7 @@ export interface UiTextLayout {
 	// job ranking's 56-pixel head); tried after a label's slide.
 	readonly narrow?: UiQuad;
 	// A label (an authored static's text key, not a value in its field)
-	// may be slid or kept whole past its box under "Fit window labels".
+	// may be slid or kept whole past its box by the label fitting.
 	readonly label?: boolean;
 }
 /*
@@ -166,6 +167,10 @@ UiControl
 export interface UiControl {
 	// Optional convex hit outline in the same absolute UI coordinates as rect.
 	readonly hitPolygon?: readonly (readonly [number, number])[];
+	// Optional pointer area larger than rect, in the same coordinates: the
+	// control takes presses and drops there while drawing in rect (a bag
+	// cell's share of the gap to its neighbours). controlHitRect reads it.
+	readonly hitRect?: UiRect;
 	readonly multiline?: boolean;
 	readonly valueText?: string;
 	readonly whisperTarget?: string;
@@ -187,6 +192,11 @@ export interface UiControl {
 	// through an Alt press on another control, so an Alt+click on an item
 	// links it into the line being typed (chat-link-hud.ts).
 	readonly keepFocusOnAltPress?: boolean;
+	// A range only its thumb's drag may move: the bridge refuses a press
+	// on the groove, which a browser answers by jumping the value to the
+	// press point. The drawn prev/next buttons still step the choice
+	// (creation sliders, #4121).
+	readonly thumbDragOnly?: boolean;
 	readonly min?: number;
 	readonly max?: number;
 	readonly maxLength?: number;
@@ -351,6 +361,11 @@ export interface UiExtensions {
 	playSoundByName?: ( name: string ) => void;
 	saveExperimental?: ( value: ExperimentalOptions ) => void;
 	saveWindowPositions?: ( value: WindowPositions ) => void;
+	// Port-only (#3531): the Unique Status window's per-character notify
+	// book as loaded by the page, and the sink its Save button writes
+	// through. Both absent leaves the window its in-memory defaults.
+	uniqueNotifyBook?: () => Readonly<Record<string, UniqueNotifySettings>>;
+	saveUniqueNotify?: ( character: string, value: UniqueNotifySettings ) => void;
 	// Where the Item Mall notice's closes are remembered (mall-notice-memory.ts)
 	// and the release they belong to. The page leaves both out: localStorage
 	// and the build's stamped revision are used.

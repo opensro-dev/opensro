@@ -18,7 +18,7 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import { defined } from "../helpers/defined.mjs";
 const { createChat } = await import( "../../src/engine/runtime/simulation/worker/session/world/gameplay/chat/chat.ts" ),
-	{ createQuests } = await import(
+	{ createQuests, MAX_QUESTS } = await import(
 		"../../src/engine/runtime/simulation/worker/session/world/gameplay/quests/quests.ts"
 	),
 	{ decodeQuest } = await import( "../../src/engine/foundation/gameplay/quest.ts" );
@@ -27,9 +27,27 @@ test("login quest owner preserves every published reference and resets stale req
 	const catalog = JSON.parse( await readFile( CLIENT_PUBLIC_ROOT + "/assets/data/questData.json", "utf8" ) );
 	const ids = [ ...new Set( catalog.rows.map( line => Number( line.split( "\t" )[0] ) ) ) ];
 	assert.ok( ids.length > 200, "exercise the full published catalog, not starter fixtures" );
+	// One login holds at most MAX_QUESTS active quests; an expanded build
+	// publishes more (the Arabia quests), so every id is walked in logins of
+	// that size, each with the whole catalog completed.
+	for ( let first = 0; first < ids.length; first += MAX_QUESTS ) {
+		loginRoundTrip( ids.slice( first, first + MAX_QUESTS ), ids );
+	}
+});
+
+/*
+================
+loginRoundTrip
+
+One login snapshot with these quests active and every catalog id completed:
+it restores exactly, survives a stale request and a retired acknowledgement,
+and a bad final row cannot partially replace it.
+================
+*/
+function loginRoundTrip( active, ids ) {
 	// These are serialization fixtures, not claims about each quest script. The
 	// login adapter must preserve unimplemented IDs and every optional wire field.
-	const activeQuests = ids.map( refId => ({
+	const activeQuests = active.map( refId => ({
 		refId,
 		u08: 2,
 		u09: 1,
@@ -50,7 +68,7 @@ test("login quest owner preserves every published reference and resets stale req
 	q.bootstrap( snapshot() );
 	assert.deepEqual( q.state().quests, activeQuests );
 	assert.deepEqual( q.state().completedQuests, ids );
-	q.request( ids.at( -1 ), true );
+	q.request( active.at( -1 ), true );
 	q.clear();
 	q.bootstrap( snapshot() );
 	assert.equal( q.state().questPending, 0 );
@@ -62,7 +80,7 @@ test("login quest owner preserves every published reference and resets stale req
 	invalid.character.activeQuests.at( -1 ).targetIds = [ -1 ];
 	assert.throws( () => q.bootstrap( invalid ) );
 	assert.deepEqual( q.state(), before, "bad final row cannot partially replace login state" );
-});
+}
 test("chat uses UTF-16 units and native keyed acknowledgements without optimistic echo", () => {
 	const sent = [], chat = createChat( f => sent.push( f ) );
 	chat.bootstrap( { character: { name: "Me" } } );

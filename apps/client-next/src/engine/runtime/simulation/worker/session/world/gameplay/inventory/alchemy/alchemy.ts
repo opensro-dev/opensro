@@ -57,7 +57,22 @@ export function createAlchemy() {
 	let outcomes = 0;
 	// The reinforcement request held while the prepare effect plays.
 	let prepared: { readonly opcode: number; readonly payload: Uint8Array; } | null = null;
+	// The server's port-only SRO_QUICK_FUSE rule (quickFuse); false is native.
+	let quick = false;
 	return {
+		/*
+		================
+		quickFuse
+
+		The server's port-only rule, from the world-entry bootstrap: with it
+		a reinforcement is sent on the press instead of after the prepare
+		effect, and the window publishes quick so the UI takes the next
+		press once the answer is in, not after the result effect.
+		================
+		*/
+		quickFuse( on: boolean ) {
+			quick = on;
+		},
 		/*
 		================
 		open
@@ -116,7 +131,11 @@ export function createAlchemy() {
 				throw Error( "Alchemy target must be equipment" );
 			}
 			if ( process ) {
-				if ( mode === "dissolve" && quantity !== 1 ) throw Error( "Dissolve has no quantity field" );
+				// 6220A0 window mode 2 sends a dissolve through Enchant7549 as
+				// {n, s0, s1}: the frame has no quantity field, so the window's
+				// count edit (the All button sums the staged stacks) never reaches
+				// the wire and never refuses the request. One request, one step.
+				const steps = mode === "dissolve" ? 1 : quantity;
 				if ( mode === "advanced" && quantity !== 1 ) throw Error( "Tablet manufacture requires quantity one" );
 				const available = mode === "compound" ?
 					selected.reduce(
@@ -127,7 +146,7 @@ export function createAlchemy() {
 					) :
 					items.get( selected[0]! )!.quantity;
 				if (
-					!Number.isSafeInteger( quantity ) || quantity < 1 || quantity > 0xffffffff || quantity > available
+					!Number.isSafeInteger( steps ) || steps < 1 || steps > 0xffffffff || steps > available
 				) {
 					throw Error( "Invalid compound quantity" );
 				}
@@ -155,8 +174,8 @@ export function createAlchemy() {
 					error: null,
 					slot: selected[0]!,
 					designated,
-					remaining: quantity,
-					total: quantity,
+					remaining: steps,
+					total: steps,
 					lockUntil: now + 2000,
 					locked: true,
 					cancelled: false
@@ -170,8 +189,8 @@ export function createAlchemy() {
 					...selected
 				] );
 			// 62AFA0 holds the request until the prepare effect has played
-			// (prepare); the window stays busy from the press on.
-			prepared = { opcode, payload };
+			// (prepare); the window stays busy from the press on. Under the
+			// quick rule it goes now, and only the answer keeps it busy.
 			state = {
 				visible: true,
 				pending: true,
@@ -180,8 +199,10 @@ export function createAlchemy() {
 				error: null,
 				slot: selected[0]!,
 				designated,
-				preparing: now
+				...(quick ? {} : { preparing: now })
 			};
+			if ( quick ) return { opcode, payload };
+			prepared = { opcode, payload };
 			return null;
 		},
 		/*
@@ -262,7 +283,7 @@ export function createAlchemy() {
 		state
 		================
 		*/
-		state: () => state,
+		state: (): AlchemyState => quick ? { ...state, quick } : state,
 		/*
 		================
 		reset

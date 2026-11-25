@@ -49,6 +49,7 @@ func (rt *Runtime) MonsterActionTickHook() simulation.TickHook {
 		defer rt.endTickSnapshots()
 		if rt.Monsters != nil {
 			rt.Monsters.AdvanceSummons(nowMs)
+			rt.Monsters.AdvanceMonsterStackingEffects(nowMs)
 		}
 		out := rt.retireMonsterSelfEffects(nowMs)
 		out = append(out, rt.advanceMonsterCasts(nowMs)...)
@@ -153,10 +154,13 @@ func (rt *Runtime) TickHook() simulation.TickHook {
 		step("advanceGuildVotes", func() { rt.advanceGuildVotes(nowMs) })
 		step("advanceHalloweenWaves", rt.advanceHalloweenWaves)
 		step("advanceWinterMissions", rt.advanceWinterMissions)
+		frames("drainWinterGauge", rt.drainWinterGauge)
 		step("advancePandoraBoxes", rt.advancePandoraBoxes)
 		frames("advanceEventGroups", rt.advanceEventGroups)
 		frames("advanceWeather", rt.advanceWeather)
 		frames("advanceRoc", rt.advanceRoc)
+		step("advanceTempleSanctums", func() { rt.advanceTempleSanctums(nowMs) })
+		frames("advanceTombGate", rt.advanceTombGate)
 		// Retirement is presentation-only. Reward state was already committed
 		// by the fatal hit, while the zero-HP source remains resolvable through
 		// the authored death-animation completion.
@@ -242,6 +246,9 @@ func (rt *Runtime) TickHook() simulation.TickHook {
 		step("retireActionSessions", func() { out = append(out, rt.retireActionSessions()...) })
 		frames("advanceFlagWar", rt.advanceFlagWar)
 		frames("advanceFlagWarMatches", rt.advanceFlagWarMatches)
+		// Port-only (#3648): the Styria Clash schedule and matches;
+		// a nil step while SRO_STYRIA_CLASH is off.
+		frames("advanceStyriaClash", rt.advanceStyriaClash)
 		// After every step that can change a monster's HP or status, so
 		// the vitals a holder receives carry this tick's changes
 		// (monstervitals.go).

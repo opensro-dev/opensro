@@ -25,7 +25,11 @@ import {
 } from "@/engine/foundation/gameplay/concealment";
 import { partyMembers, partyPortraitGid } from "@/engine/foundation/ui/party-overlay";
 import { radians } from "@/engine/foundation/math/angles";
-import { CHARACTER_ACTORS } from "@/engine/foundation/animation/character-budget";
+import {
+	CHARACTER_ACTORS,
+	MODEL_PARTICLE_ACTORS,
+	RENDERED_ACTORS
+} from "@/engine/foundation/animation/character-budget";
 import { disappearActor } from "@/engine/foundation/animation/disappear";
 import { hiddenSilkCos } from "@/engine/foundation/ui/name-visibility";
 import type { ModelParticle } from "@/engine/foundation/animation/model-particles";
@@ -296,9 +300,18 @@ interface EmissionBindings {
 presentEmission
 
 Opacity and holder replacement precede particle publication, as in the parent.
+The model particles (a Seal item's glow, a garment's ambient set) take, in
+holder order (the local player first, then nearest first,
+character-selection.ts), their own MODEL_PARTICLE_ACTORS plus whatever the
+scene leaves free, up to RENDERED_ACTORS in all. A crowd and its loot fill the
+scene's CHARACTER_ACTORS and used to leave them no slot at all; a sparse scene
+still shows every glow, as before the reserved room. What follows them
+shares the scene's room, less the glows that spilled into it. Returns how
+many model particles sit outside the scene's room (at most
+MODEL_PARTICLE_ACTORS; publishCharacters leaves them out of it too).
 ================
 */
-export function presentEmission( frame: EmissionFrame, bindings: EmissionBindings ) {
+export function presentEmission( frame: EmissionFrame, bindings: EmissionBindings ): number {
 	const { entities, next, seconds, hideSilkCos, particleHolders, animationHolders, frameWork } = frame;
 	const { resources, renderer, modelEmission, animationEmission, scenery, entityLod, applySpawnFades } = bindings;
 	for ( const entity of entities ) {
@@ -309,22 +322,29 @@ export function presentEmission( frame: EmissionFrame, bindings: EmissionBinding
 	}
 	applySpawnFades( entities, next, seconds );
 	for ( const holder of particleHolders ) holder.actor = next.get( holder.actor.gid )!;
+	let modelParticles = 0;
 	for (
 		const actor of modelEmission.step(
 			particleHolders,
 			seconds,
 			resources.ready,
-			CHARACTER_ACTORS - next.size,
+			RENDERED_ACTORS - next.size,
 			gid => frameWork?.level() && next.get( gid )?.animationLod?.optional ? 1 : entityLod.fraction( gid )
 		)
-	) next.set( actor.gid, actor );
+	) {
+		next.set( actor.gid, actor );
+		modelParticles++;
+	}
+	// Only the reserved share stands outside the scene's room; glows past it
+	// took free scene slots, so what follows counts them.
+	const reserved = Math.min( modelParticles, MODEL_PARTICLE_ACTORS );
 	for ( const holder of animationHolders ) holder.actor = next.get( holder.actor.gid )!;
 	for (
 		const actor of animationEmission.step(
 			animationHolders,
 			seconds,
 			resources.ready,
-			CHARACTER_ACTORS - next.size,
+			CHARACTER_ACTORS - (next.size - reserved),
 			renderer.presentationNight?.() ?? true,
 			( gid, actor ) => {
 				if ( !actor ) return renderer.characterParticleSnapshot( gid );
@@ -344,9 +364,10 @@ export function presentEmission( frame: EmissionFrame, bindings: EmissionBinding
 			renderer.scenery?.() ?? null,
 			seconds,
 			resources.ready,
-			CHARACTER_ACTORS - next.size
+			CHARACTER_ACTORS - (next.size - reserved)
 		)
 	) next.set( actor.gid, actor );
+	return reserved;
 }
 
 /*
@@ -360,6 +381,9 @@ interface PortraitFrame {
 	readonly next: Map<number, CharacterActor>;
 	readonly seconds: number;
 	readonly blindHeld: boolean;
+	// The model particles presentEmission published into next: outside
+	// the scene's room.
+	readonly modelParticles: number;
 }
 
 /*
@@ -394,7 +418,7 @@ Borrow only the mall mannequin operations this publication phase consumes.
 interface PortraitBindings {
 	readonly renderer: Pick<
 		Renderer,
-		"setCharacterAssembly" | "setCharacterActors" | "vHidesCompanions" | "enchantSparks" | "silentWingFlight"
+		"setCharacterAssembly" | "setCharacterActors" | "vHidesCompanions" | "enchantSparks"
 	>;
 	readonly resources: PortraitResources;
 	readonly portraitEmission: Pick<ReturnType<typeof createModelEmission>, "step">;
@@ -430,7 +454,7 @@ export function publishCharacters(
 	published: PortraitCatalog,
 	bindings: PortraitBindings
 ) {
-	const { local, gameplay, next, seconds, blindHeld } = frame;
+	const { local, gameplay, next, seconds, blindHeld, modelParticles } = frame;
 	const { catalog, dress, manifest } = published;
 	const { renderer, resources, mallPreview, portraitEmission } = bindings;
 	// 5BAF70 -> 5B9DF0 builds a slot-owned preview from the roster model.
@@ -469,7 +493,7 @@ export function publishCharacters(
 				glow ? [ glow ] : [],
 				seconds,
 				resources.ready,
-				CHARACTER_ACTORS - next.size - portraits.length
+				CHARACTER_ACTORS - (next.size - modelParticles) - portraits.length
 			)
 		);
 	}

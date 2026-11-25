@@ -22,7 +22,31 @@ const { decodeMapIcons, worldMapImagePaths, worldMapPageAt, worldMapPages } = aw
 );
 
 const COPY = { UIIT_PAG_WORLDMAP: "Entire map", UIIT_PAG_LOCALMAP: "Regional map", UIIT_STT_JANGAN: "Jangan" };
-const STRINGS = { SN_FORTRESS_JANGAN: "Jangan Fortress" };
+const STRINGS = { SN_FORTRESS_JANGAN: "Jangan Fortress", SN_FORTRESS_BIJEOKDAN: "Bandit Fortress" };
+// localinfo 91009, one of the two fort_small_worldmap icons the v1.188
+// table opens page 1002 with (the row the Bandit import publishes, #3586).
+const BANDIT_ICON = [
+	"91009",
+	"2",
+	"interface\\worldmap\\map\\fort_small_worldmap.ddj",
+	"",
+	"",
+	"",
+	"1002",
+	"0",
+	"162",
+	"93",
+	"28",
+	"16",
+	"20",
+	"32",
+	"0",
+	"0",
+	"0",
+	"0",
+	"0",
+	"1"
+];
 // localinfo 91006, one of the three fort_worldmap icons (destination 1001).
 const FORT_ICON = [
 	"91006",
@@ -132,6 +156,23 @@ test("the fortress page is drawable but never picked by position", () => {
 	assert.equal( worldMapPageAt( { regionId: 70 * 256 + 71, x: 900, y: 0, z: 900, angle: 0 } ), 0 );
 	// A town still picks itself.
 	assert.equal( worldMapPageAt( { regionId: 97 * 256 + 168, x: 960, y: 0, z: 960, angle: 0 } ), 1 );
+});
+
+test("the Bandit fortress icon opens the Bandit fortress page, captioned by its object text", () => {
+	const { hud, frame } = mapHud( [ BANDIT_ICON ] );
+	try {
+		const world = frame();
+		const icon = world.controls.find( row => row.id === "map-town:1002" );
+		assert.ok( icon, "the fort_small_worldmap icon is a hit target" );
+		assert.equal( icon.label, "Bandit Fortress" );
+		hud.activate( "map-town:1002", POSE );
+		assert.equal( frame().caption, "Regional map - Bandit Fortress" );
+		const page = worldMapPages().find( row => row.id === 1002 );
+		assert.ok( page );
+		assert.ok( worldMapImagePaths().some( path => path.endsWith( "map_fort_bijuckdan.png" ) ) );
+	} finally {
+		hud.dispose();
+	}
 });
 
 test("the three fortress icons are three distinct controls that each open the fortress page", () => {

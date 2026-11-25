@@ -39,6 +39,23 @@ const (
 	OpStorageList        uint16 = 0x321A
 )
 
+// OpStorageCapacity announces a live capacity change: 0x3092
+// [u8 kind][u8 capacity], kind 1 the bag (research/investigations/
+// items/native-audit-rows-20261031.md, row 26).
+const OpStorageCapacity uint16 = 0x3092
+
+// StorageCapacityInventory is 0x3092's kind byte for the bag.
+const StorageCapacityInventory uint8 = 1
+
+/*
+================
+EncodeStorageCapacity
+================
+*/
+func EncodeStorageCapacity(kind, capacity uint8) []byte {
+	return []byte{kind, capacity}
+}
+
 const (
 	MoveTypeStorage             uint8 = 0x01
 	MoveTypeStorageDeposit      uint8 = 0x02

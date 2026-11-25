@@ -88,13 +88,13 @@ func (w *betaWiringWallet) CreditBetaSilk(_ string, amount, cap uint32) (domain.
 PurchaseMall
 ================
 */
-func (w *betaWiringWallet) PurchaseMall(c *domain.Character, cost domain.MallBalance, grant func([]domain.InventoryRow) ([]domain.InventoryRow, error)) (domain.MallBalance, error) {
+func (w *betaWiringWallet) PurchaseMall(c *domain.Character, cost domain.MallBalance, grant func(rows []domain.InventoryRow, earnedOnly bool) ([]domain.InventoryRow, error)) (domain.MallBalance, error) {
 	w.mu.Lock()
 	defer w.mu.Unlock()
 	if cost.Silk > w.silk {
 		return domain.MallBalance{}, domain.MallInsufficientCurrency{}
 	}
-	rows, err := grant(c.MissionInventory)
+	rows, err := grant(c.MissionInventory, false)
 	if err != nil {
 		return domain.MallBalance{}, err
 	}
@@ -285,7 +285,7 @@ func TestBetaSilkWiringPublicationBarrier(t *testing.T) {
 				var balance domain.MallBalance
 				var err error
 				if purchase {
-					balance, err = game.betaSilk.PurchaseMall(character, domain.MallBalance{Silk: 30}, func(rows []domain.InventoryRow) ([]domain.InventoryRow, error) { return rows, nil })
+					balance, err = game.betaSilk.PurchaseMall(character, domain.MallBalance{Silk: 30}, func(rows []domain.InventoryRow, _ bool) ([]domain.InventoryRow, error) { return rows, nil })
 				} else {
 					balance, err = game.betaSilk.MallBalance(character)
 				}

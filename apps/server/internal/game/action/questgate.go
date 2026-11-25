@@ -16,6 +16,12 @@ spawns it (SpawnQuestExitGate) and removes it when the layer closes
 that world's sessions only (QuestGateNpcs); select (questGateSelect)
 and 0x7495 type 3 (handleQuestGate) answer for it.
 
+The book also holds the gates other owners place at a fixed point with
+a fixed destination and a building of their own: the Roc worlds' (roc.go)
+and the temple sanctums' (temple_sanctum.go). A gate that stands in the
+persistent world names its division, since that world's id is the same
+in every division; an instance layer's gate needs none.
+
 Client wire, from the v1.150 client's readers:
 
 	select answer  [u8 1][u32 gid][u32 flags 0x8000000][u8 rows]
@@ -74,10 +80,12 @@ const (
 ================
 questGateBuilding
 
-The INS_QUEST_TELEPORT row: its identity, type word and bounds.
+A gate's teleportbuilding row (INS_QUEST_TELEPORT, or a temple
+teleporter): its code, identity, type word and bounds.
 ================
 */
 type questGateBuilding struct {
+	code      string
 	ref       uint32
 	nameStrID string
 	tid       uint16
@@ -96,27 +104,28 @@ height column 49 and radius column 50.
 */
 func questGateBuildingRow(r []string) (*questGateBuilding, error) {
 	if len(r) < 51 {
-		return nil, fmt.Errorf("teleportbuilding %s row is truncated", questGateCodename)
+		return nil, fmt.Errorf("teleportbuilding gate row is truncated")
 	}
+	code := r[2]
 	ref64, e := strconv.ParseUint(r[1], 10, 32)
 	ref := uint32(ref64)
 	if e != nil || ref == 0 {
-		return nil, fmt.Errorf("teleportbuilding %s identity", questGateCodename)
+		return nil, fmt.Errorf("teleportbuilding %s identity", code)
 	}
 	tid := uint16(0)
 	for j, col := range []int{7, 8, 9, 10, 11, 12} {
 		v, e := strconv.ParseUint(r[col], 10, 16)
 		if e != nil {
-			return nil, fmt.Errorf("teleportbuilding %s TypeID", questGateCodename)
+			return nil, fmt.Errorf("teleportbuilding %s TypeID", code)
 		}
 		tid |= uint16(v) << []uint{0, 1, 2, 5, 7, 11}[j]
 	}
 	height, e1 := strconv.ParseFloat(r[49], 64)
 	radius, e2 := strconv.ParseFloat(r[50], 64)
 	if e1 != nil || e2 != nil || height <= 0 || radius <= 0 {
-		return nil, fmt.Errorf("teleportbuilding %s bounds", questGateCodename)
+		return nil, fmt.Errorf("teleportbuilding %s bounds", code)
 	}
-	return &questGateBuilding{ref: ref, nameStrID: r[5], tid: tid, height: height, radius: radius}, nil
+	return &questGateBuilding{code: code, ref: ref, nameStrID: r[5], tid: tid, height: height, radius: radius}, nil
 }
 
 /*
@@ -129,11 +138,19 @@ One raised gate: where it stands, the world it stands in and its rows.
 type questGate struct {
 	gid   uint32
 	world instance.ID
-	spawn simulation.Spawn
-	rows  []uint8
-	// to is a fixed destination (the Roc worlds' gates, roc.go); nil
-	// sends the row's last recall point.
+	// division scopes a gate standing in the persistent world, whose id
+	// every division shares; empty for an instance layer's gate.
+	division string
+	spawn    simulation.Spawn
+	rows     []uint8
+	// to is a fixed destination (the Roc worlds' and the temple's
+	// gates); nil sends the row's last recall point.
 	to *travelPoint
+	// building is the gate's own object; nil is INS_QUEST_TELEPORT.
+	building *questGateBuilding
+	// label names a persistent-world gate's move in the store and the
+	// log (travelFixedGate).
+	label string
 }
 
 /*
@@ -185,26 +202,74 @@ func (rt *Runtime) spawnExitGate(world instance.ID, fell simulation.Spawn, to *t
 	if roll == nil {
 		roll = rand.Float64
 	}
+	if len(book.byGID) >= questGateGIDSpan {
+		return 0, false
+	}
+	spawn := fell
+	spawn.X += roll()*questGateOffsetSpan + questGateOffsetMin
+	spawn.Z += roll()*questGateOffsetSpan + questGateOffsetMin
+	spawn.Angle = uint16(roll() * 65536)
+	return book.add(questGate{world: world, spawn: spawn, rows: []uint8{questGateRecallPoint}, to: to})
+}
+
+/*
+================
+placeGate
+
+Stands a gate exactly at a point, with its own building and a fixed
+destination, for an owner that places it by data rather than beside a
+fallen boss (temple_sanctum.go). False when the gid band is full.
+================
+*/
+func (rt *Runtime) placeGate(gate questGate) (uint32, bool) {
+	if gate.building == nil || gate.to == nil {
+		return 0, false
+	}
+	gate.rows = []uint8{questGateRecallPoint}
+	book := &rt.questGates
+	book.mu.Lock()
+	defer book.mu.Unlock()
+	return book.add(gate)
+}
+
+/*
+================
+questGateBook.add
+
+Gives a gate the next free gid of the band and files it. The caller
+holds the book's lock.
+================
+*/
+func (book *questGateBook) add(gate questGate) (uint32, bool) {
 	if book.byGID == nil {
 		book.byGID = map[uint32]questGate{}
 	}
 	if len(book.byGID) >= questGateGIDSpan {
 		return 0, false
 	}
-	gid := uint32(0)
-	for gid == 0 {
+	for gate.gid == 0 {
 		candidate := questGateGIDBase + book.next%questGateGIDSpan
 		book.next++
 		if _, used := book.byGID[candidate]; !used {
-			gid = candidate
+			gate.gid = candidate
 		}
 	}
-	spawn := fell
-	spawn.X += roll()*questGateOffsetSpan + questGateOffsetMin
-	spawn.Z += roll()*questGateOffsetSpan + questGateOffsetMin
-	spawn.Angle = uint16(roll() * 65536)
-	book.byGID[gid] = questGate{gid: gid, world: world, spawn: spawn, rows: []uint8{questGateRecallPoint}, to: to}
-	return gid, true
+	book.byGID[gate.gid] = gate
+	return gate.gid, true
+}
+
+/*
+================
+removeGate
+
+Takes down one gate by gid.
+================
+*/
+func (rt *Runtime) removeGate(gid uint32) {
+	book := &rt.questGates
+	book.mu.Lock()
+	defer book.mu.Unlock()
+	delete(book.byGID, gid)
 }
 
 /*
@@ -229,21 +294,32 @@ func (rt *Runtime) RemoveQuestExitGates(world instance.ID) {
 ================
 QuestGateNpcs
 
-The gates standing in one world, as the NPC defs the ticker's scope pass
-publishes to that world's sessions.
+The gates standing in one division's world, as the NPC defs the
+ticker's scope pass publishes to that world's sessions.
 ================
 */
-func (rt *Runtime) QuestGateNpcs(world uint32) []simulation.NpcDef {
+func (rt *Runtime) QuestGateNpcs(division string, world uint32) []simulation.NpcDef {
 	book := &rt.questGates
 	book.mu.Lock()
 	defer book.mu.Unlock()
 	var out []simulation.NpcDef
 	for _, gate := range book.byGID {
-		if uint32(gate.world) == world {
+		if gate.standsIn(division, world) {
 			out = append(out, rt.questGateDef(gate))
 		}
 	}
 	return out
+}
+
+/*
+================
+questGate.standsIn
+
+Whether the gate stands in this division's world.
+================
+*/
+func (gate questGate) standsIn(division string, world uint32) bool {
+	return uint32(gate.world) == world && (gate.division == "" || gate.division == division)
 }
 
 /*
@@ -254,12 +330,15 @@ A gate as an NPC def: a teleport-gate object holding service 0x1C.
 ================
 */
 func (rt *Runtime) questGateDef(gate questGate) simulation.NpcDef {
-	building := rt.portals.questGate
+	building := gate.building
+	if building == nil {
+		building = rt.portals.questGate
+	}
 	return simulation.NpcDef{
 		ObjectID:      gate.gid,
 		RefObjID:      building.ref,
 		TidWord:       building.tid,
-		Codename:      questGateCodename,
+		Codename:      building.code,
 		NameStrID:     building.nameStrID,
 		AuthoredSpawn: true,
 		Spawn:         gate.spawn,
@@ -278,7 +357,7 @@ second result reports a gate gid at all (a gate in another world is
 still the gate band's, never another owner's object).
 ================
 */
-func (rt *Runtime) questGateFor(c *enterworld.Character, gid uint32) (questGate, bool, bool) {
+func (rt *Runtime) questGateFor(division string, c *enterworld.Character, gid uint32) (questGate, bool, bool) {
 	book := &rt.questGates
 	book.mu.Lock()
 	gate, ok := book.byGID[gid]
@@ -286,7 +365,7 @@ func (rt *Runtime) questGateFor(c *enterworld.Character, gid uint32) (questGate,
 	if !ok {
 		return questGate{}, false, false
 	}
-	return gate, uint32(gate.world) == domain.CharacterWorldInstance(c), true
+	return gate, gate.standsIn(division, domain.CharacterWorldInstance(c)), true
 }
 
 /*
@@ -299,11 +378,11 @@ caller holds the division lock.
 ================
 */
 func (rt *Runtime) questGateSelect(divisionID string, c *enterworld.Character, gid uint32) (SelectOutcome, bool) {
-	gate, here, isGate := rt.questGateFor(c, gid)
+	gate, here, isGate := rt.questGateFor(divisionID, c, gid)
 	if !isGate {
 		return SelectOutcome{}, false
 	}
-	if !here || rt.portals == nil || rt.portals.questGate == nil {
+	if !here || rt.portals == nil || gate.building == nil && rt.portals.questGate == nil {
 		return SelectOutcome{
 			Refusal: fmt.Sprintf("gate gid %d stands in another world", gid),
 			Frames:  []wire.Frame{{Opcode: wire.OpObjectSelectResult, Payload: wire.EncodeObjectSelectRefusal(selectObjectNotFound)}},
@@ -346,7 +425,7 @@ func (rt *Runtime) handleQuestGate(division string, c *enterworld.Character, gid
 	if selected, ok := rt.Selected.Get(division, c.Name); !ok || selected != gid {
 		return portalFailure(2)
 	}
-	gate, here, _ := rt.questGateFor(c, gid)
+	gate, here, _ := rt.questGateFor(division, c, gid)
 	if !here {
 		return portalFailure(2)
 	}
@@ -367,7 +446,7 @@ func (rt *Runtime) handleQuestGate(division string, c *enterworld.Character, gid
 		return portalFailure(2)
 	}
 	if gate.to != nil {
-		if !rt.leaveRocLayer(division, c, *gate.to, "roc-gate", rt.handlerDoors()) {
+		if !rt.travelFixedGate(division, c, gate) {
 			return portalFailure(errCodeGateMoveFailed)
 		}
 		return OpResult{Frames: rt.questTeleportFrames(c, gateInstanceTravel, gid)}
@@ -382,4 +461,21 @@ func (rt *Runtime) handleQuestGate(division string, c *enterworld.Character, gid
 		return portalFailure(errCodeGateMoveFailed)
 	}
 	return OpResult{Frames: rt.questTeleportFrames(c, gateInstanceTravel, gid)}
+}
+
+/*
+================
+travelFixedGate
+
+The move through a gate with a fixed destination. A gate standing in the
+persistent world (a temple sanctum's) is a plain relocation there; an
+instance layer's gate (the Roc's) leaves the layer, with its leave event.
+The caller holds the division lock.
+================
+*/
+func (rt *Runtime) travelFixedGate(division string, c *enterworld.Character, gate questGate) bool {
+	if gate.division != "" {
+		return rt.relocateCharacter(division, c, gate.label, func() (travelPoint, bool) { return *gate.to, true })
+	}
+	return rt.leaveRocLayer(division, c, *gate.to, "roc-gate", rt.handlerDoors())
 }

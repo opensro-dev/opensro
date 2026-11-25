@@ -92,7 +92,7 @@ WHERE seller_char = ? AND unpaid = 1 ORDER BY at_ms, listing_id`, c.ID)
 		}
 		balance += paid
 	}
-	tx, err := s.beginCharacterTxLocked()
+	tx, err := s.beginCharacterTxLocked("market-proceeds")
 	if err != nil {
 		return nil, err
 	}
@@ -100,10 +100,6 @@ WHERE seller_char = ? AND unpaid = 1 ORDER BY at_ms, listing_id`, c.ID)
 	committed := *c
 	committed.Gold = &balance
 	if err := tx.upsertCharacter(division, &committed); err != nil {
-		return nil, err
-	}
-	settle, err := s.ledgerOwnTxLocked(tx.Tx, "market-proceeds", division, c, balance)
-	if err != nil {
 		return nil, err
 	}
 	for _, sale := range sales {
@@ -115,7 +111,6 @@ WHERE seller_char = ? AND unpaid = 1 ORDER BY at_ms, listing_id`, c.ID)
 		return nil, err
 	}
 	c.Gold = &balance
-	settle()
 	return sales, nil
 }
 
@@ -164,7 +159,7 @@ WHERE sale.unpaid = 1 ORDER BY sale.at_ms, sale.listing_id`)
 	rows.Close()
 	paid := 0
 	for _, o := range orphans {
-		storage, err := readAccountStorage(db, o.account)
+		storage, err := s.readAccountStorage(db, o.account)
 		if err != nil {
 			return paid, err
 		}

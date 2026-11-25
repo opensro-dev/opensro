@@ -141,9 +141,19 @@ func (api *API) handleCharacterList(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 	})
-	writeCharacterRosterResponse(w, map[string]interface{}{
+	// The shard's port-only suit-look rules ride the roster so the
+	// character-select dock applies them exactly as the world does
+	// (#4128); absent is native, as the world entry publishes them.
+	body := map[string]interface{}{
 		"action": 2, "nativeResult": 1, "characters": rows,
-	})
+	}
+	if api.jobSuitHidesArmor {
+		body["jobSuitHidesArmor"] = true
+	}
+	if api.moonlitThiefSuit {
+		body["moonlitThiefSuit"] = true
+	}
+	writeCharacterRosterResponse(w, body)
 }
 
 /*
@@ -565,7 +575,7 @@ func (api *API) handleEnterWorldToken(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusOK, map[string]interface{}{"ok": false, "code": "BAD_REQUEST"})
 		return
 	}
-	if !admitTicket(w, api.enterWorldTickets, requestAccountID(r)) {
+	if !api.admitTicket(w, TicketEnterWorld, requestAccountID(r)) {
 		return
 	}
 	// Lazy reap first, like every character read on this surface: a
@@ -602,6 +612,7 @@ func (api *API) handleEnterWorldToken(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	api.recordIssuedTicket(requestAccountID(r), token, expiresAt)
+	api.noteTicket(requestAccountID(r), TicketEnterWorld, true)
 	writeJSON(w, http.StatusOK, map[string]interface{}{
 		"ok":            true,
 		"token":         token,

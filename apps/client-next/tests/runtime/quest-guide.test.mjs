@@ -16,11 +16,13 @@ import { pathToFileURL as sourceFileUrl } from "node:url";
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
+import { readdirSync, readFileSync } from "node:fs";
 import { createHash } from "node:crypto";
 import { questGuideRecords } from "../../../../scripts/build/shared/questGuideRecords.mjs";
 import { completeGuideTitles, GUIDE_TITLE_COMPLETIONS } from "../../../../scripts/build/shared/textResources.mjs";
-import { readLocalizedTextDataRowsSync } from "../../../../scripts/build/shared/textDataIo.mjs";
+import { readLocalizedTextDataRowsSync, readTextDataRowsSync } from "../../../../scripts/build/shared/textDataIo.mjs";
 import { textDataDir } from "../../../../scripts/build/shared/resourceIo.mjs";
+import { extractedRoot } from "../../../../scripts/build/world/paths.mjs";
 import path from "node:path";
 
 const { decodeQuestGuide, questGuideRows } = await import(
@@ -49,13 +51,116 @@ function catalog( records ) {
 		]
 	};
 }
+/*
+================
+importedQuests
+
+The quest symbols later-world imports added to questdata, read from each
+enabled import's marker in the extraction (the Roc's MEETROC and ARCHEMY
+chain, roc_import.py step 3c). The native capture predates them, so the
+guide equals the capture plus exactly these.
+================
+*/
+function importedQuests() {
+	const symbols = new Set();
+	for ( const marker of enabledMarkers() ) {
+		if ( Array.isArray( marker.quests ) ) {
+			for ( const symbol of marker.quests ) symbols.add( symbol );
+		}
+	}
+	return symbols;
+}
+
+/*
+================
+importedGuideRows
+
+The gameguidedata ids the enabled imports added (the Arabia quest tables:
+30 region heads and 82 quest articles). The native capture predates them,
+so the catalog equals the native articles plus exactly these.
+================
+*/
+function importedGuideRows() {
+	const ids = new Set();
+	for ( const marker of enabledMarkers() ) {
+		for ( const id of marker.rows?.["gameguidedata.txt"] ?? [] ) ids.add( Number( id ) );
+	}
+	return ids;
+}
+
+/*
+================
+importedGuideTextKeys
+
+The text keys the imported guide rows name (gameguidedata columns 5 and 6,
+the same columns the builder publishes), less any a native row also names:
+named, every one; required, the ones the client must find (each title, and
+the body of a depth-1 article; a region head shows no body, and 340000
+"Lamp of Wish 1" names one no later client wrote).
+================
+*/
+function importedGuideTextKeys() {
+	const ids = importedGuideRows(), named = new Set(), required = new Set(), native = new Set();
+	for ( const fields of readTextDataRowsSync( path.join( textDataDir, "gameguidedata.txt" ) ) ) {
+		if ( fields[0] !== "1" || Number( fields[1] ) < 100000 ) continue;
+		if ( !ids.has( Number( fields[1] ) ) ) {
+			native.add( fields[5] ).add( fields[6] );
+			continue;
+		}
+		named.add( fields[5] ).add( fields[6] );
+		required.add( fields[6] );
+		if ( fields[3] === "1" ) required.add( fields[5] );
+	}
+	const own = keys => new Set( [ ...keys ].filter( key => !native.has( key ) ) );
+	return { named: own( named ), required: own( required ) };
+}
+
+/*
+================
+enabledMarkers
+
+Every enabled import marker in the extraction.
+================
+*/
+function enabledMarkers() {
+	return readdirSync( extractedRoot )
+		.filter( name => /^\.opensro-.+\.json$/.test( name ) )
+		.map( name => JSON.parse( readFileSync( path.join( extractedRoot, name ), "utf8" ) ) )
+		.filter( marker => marker.enabled === true );
+}
+
+/*
+================
+questLevels
+
+Each quest symbol's level, from the guide projection with no cap: the row
+parse is the producer's own (questGuideRecords), so only its cut at
+guideLevelCap is under test.
+================
+*/
+function questLevels() {
+	const read = name => readTextDataRowsSync( path.join( textDataDir, name ) );
+	const records = questGuideRecords( read( "questdata.txt" ), read( "questcontentsdata.txt" ), Infinity );
+	return new Map( records.map( record => [ record.symbol, record.level ] ) );
+}
 const children = rows => rows.filter( r => r.depth === 1 );
 
 test("raw guide projection matches native capture; published captions apply explicit localization corrections", async () => {
 	const native = JSON.parse( await readFile( "tests/fixtures/quest-guide-retail.json", "utf8" ) );
 	const data = JSON.parse( await readFile( CLIENT_PUBLIC_ROOT + "/assets/data/questData.json", "utf8" ) );
 	assert.equal( native.binarySha256, "375e868234437e815af8ce9289ddea7ec9144430f4ea24e32988a6d6c9dd108a" );
-	assert.deepEqual( data.guideRecords, native.records );
+	const imported = importedQuests();
+	assert.deepEqual( data.guideRecords.filter( record => !imported.has( record.symbol ) ), native.records );
+	// ...plus exactly the imported quests the guide's level cap admits: an
+	// import whose reachable quests never reached the guide must fail here,
+	// not pass as a native guide, and one above the cap (the Arabia quests,
+	// 121-130, on a cap-90 shard) must stay out.
+	assert.ok( Number.isSafeInteger( data.guideLevelCap ), "questData names the level cap its guide was cut at" );
+	const guided = new Set( data.guideRecords.map( record => record.symbol ) );
+	const levels = questLevels();
+	const admitted = symbol => levels.get( symbol ) <= data.guideLevelCap;
+	assert.deepEqual( [ ...imported ].filter( symbol => admitted( symbol ) && !guided.has( symbol ) ), [] );
+	assert.deepEqual( [ ...imported ].filter( symbol => !admitted( symbol ) && guided.has( symbol ) ), [] );
 	// This oracle comes from ReadProcessMemory of the hash-bound original client.
 	// Never overwrite it with hashes of our generated/localized product output.
 	const raw = {};
@@ -88,7 +193,16 @@ test("raw guide projection matches native capture; published captions apply expl
 			return [ key, completion === undefined ? value : completion.replaceAll( "\\n", "\n" ) ];
 		} )
 	);
-	assert.deepEqual( data.guideTextEntries, completeGuideTitles( localized ) );
+	// The texts the imported guide rows name (their titles and bodies) come
+	// on top of the native ones, and each must be published.
+	const importedKeys = importedGuideTextKeys();
+	assert.deepEqual(
+		Object.fromEntries(
+			Object.entries( data.guideTextEntries ).filter( ( [key] ) => !importedKeys.named.has( key ) )
+		),
+		completeGuideTitles( localized )
+	);
+	assert.deepEqual( [ ...importedKeys.required ].filter( key => !(key in data.guideTextEntries) ), [] );
 });
 
 test("guide title completions fill only untranslated cells and never shadow shipped English", () => {
@@ -114,8 +228,12 @@ test("quest dictionary groups carry corrected English region titles, never 0 or 
 		load( "data/questData.json" )
 	] );
 	const c = decodeQuestGuide( guide, quests );
-	const groups = c.articles.filter( a => a.depth === 0 ).map( a => a.title );
-	assert.deepEqual( [ ...groups ].sort(), [
+	const imported = importedGuideRows();
+	const heads = c.articles.filter( a => a.depth === 0 );
+	const groups = heads.map( a => a.title );
+	// The native groups exactly; an import's region heads (the Arabia
+	// quests') come on top and must read as titles too.
+	assert.deepEqual( heads.filter( a => !imported.has( a.id ) ).map( a => a.title ).sort(), [
 		"Asia Minor",
 		"Central Asia",
 		"Constantinople",
@@ -247,8 +365,12 @@ test("retail catalog admits every authored quest article with full body and corr
 		load( "text/texthelp.en.json" )
 	] );
 	const c = decodeQuestGuide( guide, quests );
-	assert.equal( c.articles.length, 200 );
-	assert.equal( c.articles.filter( a => a.depth === 1 ).length, 190 );
+	// The 200 native articles, and every article an import added on top.
+	const imported = importedGuideRows();
+	const native = c.articles.filter( a => !imported.has( a.id ) );
+	assert.equal( native.length, 200 );
+	assert.equal( native.filter( a => a.depth === 1 ).length, 190 );
+	assert.deepEqual( [ ...imported ].filter( id => !c.articles.some( a => a.id === id ) ), [] );
 	const tutorial = c.records.find( r => r.symbol === "QTUTORIAL_CH" ),
 		smith = c.records.find( r => r.symbol === "QNO_CH_SMITH_1" );
 	assert.ok( smith.prerequisites.includes( tutorial.id ) );

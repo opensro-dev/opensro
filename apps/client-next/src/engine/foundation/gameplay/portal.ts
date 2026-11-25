@@ -15,7 +15,9 @@ import { PORTAL_RESULT_OPCODE } from "@/engine/contracts/opcodes";
 export type PortalId = number & { readonly __portalId: unique symbol; };
 export interface PortalCatalog {
 	readonly destinations: readonly { id: PortalId; ref: number; name: string; code: string; }[];
-	readonly links: readonly { source: PortalId; target: PortalId; fee: number; }[];
+	// minLevel: the link's required level (its kind-1 condition's
+	// minimum, published by buildTeleportDataAsset); 0 = unrestricted.
+	readonly links: readonly { source: PortalId; target: PortalId; fee: number; minLevel: number; }[];
 }
 /*
 ================
@@ -50,13 +52,16 @@ export function decodePortalCatalog( value: unknown ): PortalCatalog {
 		if ( !r ) throw Error( "Invalid portal link" );
 		const source = integer( r.sourceId, 1 ) as PortalId,
 			target = integer( r.destinationId, 1 ) as PortalId,
-			fee = integer( r.fee );
+			fee = integer( r.fee ),
+			// A catalogue published before #4136 carries no level: it
+			// decodes as unrestricted rather than failing the load.
+			minLevel = r.minLevel === undefined ? 0 : integer( r.minLevel );
 		const key = source + ":" + target;
 		if ( !ids.has( source ) || !ids.has( target ) || seen.has( key ) ) {
 			throw Error( "Unresolved/duplicate portal link" );
 		}
 		seen.add( key );
-		return { source, target, fee };
+		return { source, target, fee, minLevel };
 	} );
 	return { destinations, links };
 }
@@ -66,10 +71,16 @@ PORTAL_GROUPS
 
 Port-only, not native: destinations a gate folds under one row whose
 click opens their own page (SRO_JANGAN_TOMB_TELEPORT, the Jangan gate's
-Qin-Shi Tomb floors); End conversation closes it as any menu. Only a
+Qin-Shi Tomb floors; SRO_SKYTEMPLE, the four Sky Temple fields the
+Jangan gate offers); End conversation closes it as any menu. Only a
 gate outside the group folds: the tomb's own gates keep the native flat
 menu. No retail link leads from outside the tomb to a GATE_JINSI_ row,
-so a native catalogue never folds.
+nor to a GATE_OTHER_SKYTEMPLE_ row, so a native catalogue never folds.
+
+A group's row reads its caption text key, or its label, port-only
+English, when no table holds a fitting key (caption is then ""). The fields' own names all read "Shambhala (...)" or
+"Temple of Destruction" (RN_OTHER_SKYTEMPLE_*_01) and no table holds a
+bare "Shambhala", so the Sky Temple row's word is authored.
 
 corners tells apart the rows that share one zone name: floor 4's four
 corner passages all read SN_ZONE_26004, so each shows as
@@ -81,12 +92,19 @@ const PORTAL_GROUPS = [ {
 	key: "qinshi-tomb",
 	codePrefix: "GATE_JINSI_",
 	caption: "SN_ZONE_23001",
+	label: "",
 	corners: {
 		126: "Northeast",
 		127: "Southeast",
 		128: "Southwest",
 		129: "Northwest"
 	}
+}, {
+	key: "sky-temple",
+	codePrefix: "GATE_OTHER_SKYTEMPLE_",
+	caption: "",
+	label: "Shambhala",
+	corners: {}
 } ] as const;
 
 /*
@@ -131,7 +149,7 @@ export function portalMenu(
 		if ( (group?.key ?? "") !== open ) {
 			if ( group && !open && !shown.has( group.key ) ) {
 				shown.add( group.key );
-				rows.push( { id: "npc-portal-group:" + group.key, label: copy( group.caption ) } );
+				rows.push( { id: "npc-portal-group:" + group.key, label: group.label || copy( group.caption ) } );
 			}
 			continue;
 		}
@@ -152,18 +170,38 @@ export function portalMenu(
 }
 /*
 ================
+PORTAL_LEVEL_REFUSAL_CODE
+
+The 0xB495 refusal byte a link's kind-1 level condition answers with
+(category 13 code 21 in native-notice-data.ts).
+================
+*/
+const PORTAL_LEVEL_REFUSAL_CODE = 0x15;
+/*
+================
 portalNotice
 
 75B930 -> 689420 category 13. Preserve silent native codes and route
 authored refusals through the shared guide/banner owner.
+
+Port-only, not native (#4136, owner decision 2026-11-23, default on):
+when the answer refuses for level and the request's link requirement
+was noted (gameplay's gate-travel note), the notice carries the
+required level as a suffix the one text formatter appends after the
+native line. A refusal with nothing noted (a walk-in gate, whose link
+this client never chose) keeps the native line alone.
 ================
 */
-export function portalNotice( opcode: number, p: Uint8Array ): SystemNotice | null {
+export function portalNotice( opcode: number, p: Uint8Array, requiredLevel = 0 ): SystemNotice | null {
 	if ( opcode !== PORTAL_RESULT_OPCODE ) return null;
 	if ( p[0] === 1 ) {
 		if ( p.length !== 1 ) throw Error( "Invalid portal success" );
 		return null;
 	}
 	if ( p.length !== 2 || p[0] !== 2 ) throw Error( "Invalid portal refusal" );
-	return constantNativeNotice( 13, p[1]! );
+	const notice = constantNativeNotice( 13, p[1]! );
+	if ( notice && p[1] === PORTAL_LEVEL_REFUSAL_CODE && requiredLevel > 0 ) {
+		return { ...notice, suffix: " [Lv: " + requiredLevel + "]" };
+	}
+	return notice;
 }

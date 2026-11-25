@@ -632,6 +632,11 @@ func deploymentForJobVersion(
 /*
 ================
 waitForJobAllocations
+
+Return once the job serves its new version (handover.go): every desired
+allocation running at it, nothing older alive, held for the job's
+min_healthy_time. Healthy at promotion is not done: the standby has not
+taken over yet (r203, 2026-11-20).
 ================
 */
 func (client *nomadClient) waitForJobAllocations(
@@ -643,6 +648,7 @@ func (client *nomadClient) waitForJobAllocations(
 	if expected < 1 {
 		return fmt.Errorf("nomad job %s has no desired allocations", *job.ID)
 	}
+	watch := handoverWatch{hold: handoverHold(job)}
 	var waitIndex uint64
 	var lastStatus string
 	for {
@@ -676,29 +682,14 @@ func (client *nomadClient) waitForJobAllocations(
 		if metadata != nil && metadata.LastIndex > waitIndex {
 			waitIndex = metadata.LastIndex
 		}
-		healthy := 0
-		for _, allocation := range allocations {
-			if allocation.JobVersion != version ||
-				allocation.DesiredStatus != nomad.AllocDesiredStatusRun ||
-				allocation.ClientStatus != nomad.AllocClientStatusRunning ||
-				allocation.DeploymentStatus == nil ||
-				allocation.DeploymentStatus.Healthy == nil ||
-				!*allocation.DeploymentStatus.Healthy {
-				continue
-			}
-			healthy++
-		}
-		status := fmt.Sprintf(
-			"%d/%d healthy running allocation(s) at version %d",
-			healthy,
-			expected,
-			version,
-		)
+		verdict := judgeAllocations(allocations, version, expected)
+		status := verdict.String()
 		if status != lastStatus {
 			fmt.Printf("Nomad job %s: %s\n", *job.ID, status)
 			lastStatus = status
 		}
-		if healthy == expected {
+		if watch.observe(verdict, time.Now()) {
+			fmt.Printf("Nomad job %s: handover held for %s\n", *job.ID, watch.hold)
 			return nil
 		}
 		if err := ctx.Err(); err != nil {

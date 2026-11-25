@@ -13,6 +13,7 @@ import (
 	"net/http/httptest"
 	"strconv"
 	"testing"
+	"time"
 )
 
 /*
@@ -98,6 +99,79 @@ func TestLayeredRegionPlacementsReloadProtocol16Tabs(t *testing.T) {
 
 /*
 ================
+TestEveryServedProtocolPasses
+
+Every protocol from Oldest to Current reaches the handler: a release that
+keeps an older client served must not turn it away (r204k locked every
+protocol-19 client out although 20 changed nothing it reads).
+================
+*/
+func TestEveryServedProtocolPasses(t *testing.T) {
+	if Oldest > Current {
+		t.Fatalf("Oldest %d is newer than Current %d", Oldest, Current)
+	}
+	for protocol := Oldest; protocol <= Current; protocol++ {
+		if reached, recorder := serve(t, http.MethodPost, strconv.Itoa(protocol)); !reached {
+			t.Fatalf("served protocol %d refused with %d", protocol, recorder.Code)
+		}
+	}
+}
+
+/*
+================
+TestPreRentLegClientsAreRefused
+
+Protocol 21 writes the rent leg on every row of a rental reference; a
+protocol-19 or 20 tab has no such decode and would be refused entry
+(S2) on a permanent rental-kind avatar, so it gets the 426 that reloads it.
+================
+*/
+func TestPreRentLegClientsAreRefused(t *testing.T) {
+	for _, protocol := range []string{"19", "20"} {
+		if reached, recorder := serve(t, http.MethodPost, protocol); reached || recorder.Code != http.StatusUpgradeRequired {
+			t.Fatalf("protocol %s served; it cannot read the rent leg", protocol)
+		}
+	}
+}
+
+/*
+================
+TestRefusalsAreSummarisedByDeclaredValue
+
+One summary per interval names each refused declaration, and the
+counts start again after it.
+================
+*/
+func TestRefusalsAreSummarisedByDeclaredValue(t *testing.T) {
+	var l refusalLog
+	start := time.Unix(1000, 0)
+	l.note("19", start)
+	l.note("19", start.Add(time.Second))
+	l.note("", start.Add(2*time.Second))
+	if l.counts["19"] != 2 || l.counts["none"] != 1 {
+		t.Fatalf("counts %v, want 19:2 none:1", l.counts)
+	}
+	l.note("19", start.Add(refusalLogInterval))
+	if len(l.counts) != 0 {
+		t.Fatalf("counts %v after the summary, want empty", l.counts)
+	}
+	// Client text that is not a number never becomes a field key.
+	for _, forged := range []string{"19 x=1", "1\nfake", "abc"} {
+		l.note(forged, start.Add(refusalLogInterval+time.Second))
+	}
+	if len(l.counts) != 1 || l.counts["other"] != 3 {
+		t.Fatalf("counts %v, want other:3", l.counts)
+	}
+	for i := 0; i < maxRefusalKinds+3; i++ {
+		l.note(strconv.Itoa(i), start.Add(refusalLogInterval+time.Second))
+	}
+	if len(l.counts) > maxRefusalKinds {
+		t.Fatalf("%d declared kinds counted, want at most %d", len(l.counts), maxRefusalKinds)
+	}
+}
+
+/*
+================
 TestAnyOtherDeclarationIsRefusedAsOutdated
 
 Browsers older than the handshake declare nothing; a stale or garbled
@@ -105,7 +179,7 @@ declaration is no better. Each is told which protocol the server speaks.
 ================
 */
 func TestAnyOtherDeclarationIsRefusedAsOutdated(t *testing.T) {
-	for _, declared := range []string{"", strconv.Itoa(Current - 1), strconv.Itoa(Current + 1), "three"} {
+	for _, declared := range []string{"", strconv.Itoa(Oldest - 1), strconv.Itoa(Current + 1), "three"} {
 		reached, recorder := serve(t, http.MethodGet, declared)
 		if reached || recorder.Code != http.StatusUpgradeRequired {
 			t.Fatalf("declared %q: reached %v, status %d; want refused with 426", declared, reached, recorder.Code)

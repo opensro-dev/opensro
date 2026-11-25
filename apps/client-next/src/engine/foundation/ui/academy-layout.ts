@@ -5,8 +5,9 @@ academy-layout.ts - the academy matching window (ifmentormatch)
 
 Projects the matching window over the academy listing state: its chrome,
 the search row (name edit, honor grade and recruitment combo boxes), the
-sortable column heads, the listing slots and the page arrows. The window
-owner in ui.ts feeds it the state and draws what it returns.
+sortable column heads, the listing slots, the page arrows and the list
+scrollbar. The window owner in ui.ts feeds it the state and draws what it
+returns.
 
 ===========================================================================
 */
@@ -24,6 +25,11 @@ import { academyCanJoin, type AcademyState } from "@/engine/foundation/gameplay/
 import type { GlyphStyle } from "@/engine/foundation/rendering/ui-glyphs";
 
 const ROOT = "/assets/images/Media_extracted/interface/ifcommon/";
+const CHAT = "/assets/images/Media_extracted/interface/chattingwnd/";
+// The authored scrollbar's thumb travel inside its strip: 232 minus the
+// two 15px arrow buttons and the 16px thumb. ui.ts inverts a thumb drag
+// with the same span.
+export const ACADEMY_SCROLL_TRAVEL_PX = 186;
 // A fitted search label keeps this far from the control on its left.
 const SEARCH_LABEL_GAP = 2;
 // The pitch of a fitted search label's two lines (face 0 and 1 ink is
@@ -49,8 +55,8 @@ export interface AcademyFilter {
 ================
 AcademyLayoutArgs
 
-fitLabels is the Experimental "Fit window labels" row (port-only; off
-draws the original): column heads wider than their plate take the narrow
+Port-only, not native (the former Experimental "Fit window labels";
+owner 2026-11-21: the default, no row): column heads wider than their plate take the narrow
 face and the search labels fit the room left of them.
 ================
 */
@@ -78,7 +84,6 @@ export interface AcademyLayoutArgs {
 	readonly pressed: string | null;
 	readonly filter?: AcademyFilter;
 	readonly level?: number;
-	readonly fitLabels?: boolean;
 }
 
 /*
@@ -122,7 +127,10 @@ export function academyLayout( args: AcademyLayoutArgs ) {
 		GDR_MENTORMATCH_JOIN_BTN: "academy-join",
 		GDR_MENTORMATCH_UPDATE_BTN: "academy-refresh",
 		GDR_MENTORMATCH_SEARCH_BTN: "academy-search",
-		GDR_MENTORMATCH_WHISPER_BTN: "academy-whisper"
+		GDR_MENTORMATCH_WHISPER_BTN: "academy-whisper",
+		GDR_MENTORMATCH_REGISTER_BTN: "academy-register",
+		GDR_MENTORMATCH_MODIFY_BTN: "academy-modify",
+		GDR_MENTORMATCH_DELETE_BTN: "academy-delete"
 	};
 	const background = ( type: string ) => [ "CIFFrame", "CIFStretchWnd", "CIFNormalTile" ].includes( type ) ? 0 : 1;
 	for ( const node of Object.values( data.mentor ).sort( ( a, b ) => background( a.type ) - background( b.type ) ) ) {
@@ -150,18 +158,18 @@ export function academyLayout( args: AcademyLayoutArgs ) {
 					(header ? "academy-sort:" + node.name.replace( "GDR_MENTORMATCH_SLOTLIST_", "" ) : undefined),
 				disabled = !id || !!state.request ||
 					id === "academy-join" && !academyCanJoin( state, selected, level ) ||
-					id === "academy-whisper" && !state.rows.some( row => row.id === selected );
+					id === "academy-whisper" && !state.rows.some( row => row.id === selected ) ||
+					id === "academy-register" && !!state.own ||
+					(id === "academy-modify" || id === "academy-delete") && !state.own;
 			const variants = (header ? [ "", "_focus", "_press", "" ] : [ "", "_focus", "_press", "_disable" ]).map(
 				s => node.texture.replace( ".png", s + ".png" )
 			);
 			paths.push( ...variants );
 			image( variants[disabled ? 3 : pressed === id ? 2 : hover === id ? 1 : 0]!, r );
 			const caption = data.strings[node.text] ?? node.text;
-			// Port-only (fitLabels): a head wider than its plate ("Graduates"
-			// on 48 pixels runs into "Member") takes the narrow face.
-			const fontIndex = args.fitLabels ?
-				narrowFace( caption, r[2], node.fontIndex, args.measure ) :
-				node.fontIndex;
+			// Port-only: a head wider than its plate ("Graduates" on 48
+			// pixels runs into "Member") takes the narrow face.
+			const fontIndex = narrowFace( caption, r[2], node.fontIndex, args.measure );
 			quads.push(
 				...text( caption, r, r, disabled ? [ .5, .5, .5, 1 ] : node.color, { fontIndex, hAlign: 1, vAlign: 1 } )
 			);
@@ -219,8 +227,8 @@ export function academyLayout( args: AcademyLayoutArgs ) {
 	quads.push( ...text( filter.name, edit, edit, white, { overflow: "clip" } ) );
 	for (
 		const [id, dx, skin, disabled] of [
-			[ "academy-prev", 360, "left", !!state.request || state.page === 0 ],
-			[ "academy-next", 394, "right", !!state.request || state.page + 1 >= state.pages ]
+			[ "academy-prev", 360, "left", !!state.request || state.page <= 1 ],
+			[ "academy-next", 394, "right", !!state.request || state.page >= state.pages ]
 		] as const
 	) {
 		const arrows = [ "", "_focus", "_press", "_disable" ].map( s => ROOT + "com_" + skin + "_arrow" + s + ".png" );
@@ -236,8 +244,54 @@ export function academyLayout( args: AcademyLayoutArgs ) {
 		} );
 	}
 	quads.push(
-		...text( String( state.page + 1 ), [ x + 376, y + 441, 18, 12 ], clip, white, { fontIndex: 2, hAlign: 1 } )
+		...text( String( state.page ), [ x + 376, y + 441, 18, 12 ], clip, white, { fontIndex: 2, hAlign: 1 } )
 	);
+	// The authored CIFVerticalScroll strip at the list's right edge, in the
+	// stock CIFVerticalScroll faces (chat-scrollbar.ts): the thumb rides
+	// the strip by page, and its arrows step a page like the spin buttons.
+	const scrollNode = data.mentor.GDR_MENTORMATCH_SCROLL;
+	if ( scrollNode ) {
+		const r = authoredRect( scrollNode, x, y ),
+			span = Math.max( 1, state.pages - 1 ),
+			fraction = state.pages > 1 ? (state.page - 1) / span : 0,
+			thumbY = r[1] + 15 + Math.round( fraction * ACADEMY_SCROLL_TRAVEL_PX );
+		image( ROOT + "com_scroll_bar.png", r );
+		const scrollButton = (
+			id: string,
+			label: string,
+			path: string,
+			rect: UiRect,
+			disabled: boolean,
+			draggable = false
+		) => {
+			const variants = [ "", "_focus", "_press" ].map( s => path.replace( ".png", s + ".png" ) );
+			paths.push( ...variants );
+			image( variants[disabled ? 0 : pressed === id ? 2 : hover === id ? 1 : 0]!, rect );
+			controls.push( { id, label, kind: "button", rect, disabled, draggable } );
+		};
+		scrollButton(
+			"academy-scroll-up",
+			"Previous page",
+			CHAT + "chat_arrow_up.png",
+			[ r[0], r[1], 15, 15 ],
+			!!state.request || state.page <= 1
+		);
+		scrollButton(
+			"academy-scroll-down",
+			"Next page",
+			CHAT + "chat_arrow_down.png",
+			[ r[0], r[1] + r[3] - 15, 15, 15 ],
+			!!state.request || state.page >= state.pages
+		);
+		scrollButton(
+			"academy-scroll-thumb",
+			"Page",
+			ROOT + "com_scroll_button.png",
+			[ r[0], thumbY, 15, 16 ],
+			!!state.request || state.pages <= 1,
+			true
+		);
+	}
 	for ( const which of [ 1, 2 ] ) {
 		const node = data.mentor["GDR_MENTORMATCH_SEARCH_COMBOBOX" + which]!,
 			r = authoredRect( node, x, y ),
@@ -291,7 +345,7 @@ export function academyLayout( args: AcademyLayoutArgs ) {
 ================
 staticText
 
-A static's label. Port-only (fitLabels): a right-aligned search label
+A static's label. Port-only: a right-aligned search label
 wider than its 35-pixel box ("Honor Grade" over the name edit,
 "Recruitment Condition" cut to "Recr...") takes the room back to the
 control on its left, on one or two lines, in its face or the narrow one.
@@ -301,7 +355,7 @@ function staticText( args: AcademyLayoutArgs, node: AuthoredControl, r: UiRect )
 	const data = args.data, clip = args.clip, text = args.text, measure = args.measure;
 	const value = data.strings[node.text] ?? node.text,
 		style = { fontIndex: node.fontIndex, hAlign: node.hAlign, vAlign: node.vAlign };
-	const search = !!args.fitLabels && node.hAlign === 2 && node.name.startsWith( "GDR_MENTORMATCH_SEARCH_" );
+	const search = node.hAlign === 2 && node.name.startsWith( "GDR_MENTORMATCH_SEARCH_" );
 	if ( !search || measure( value, node.fontIndex ) <= r[2] ) return text( value, r, clip, node.color, style );
 	const room = searchLabelRoom( data.mentor, node ), fitted = fitLines( value, room, node.fontIndex, measure );
 	if ( !fitted ) return text( value, r, clip, node.color, style );

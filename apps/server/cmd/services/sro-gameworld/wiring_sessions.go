@@ -36,6 +36,8 @@ func (game *gameplayPlane) installSessionLifecycle(hub *transport.Hub, authority
 	hub.SetStoreLockMetrics(func() any { return authorityStore.LockTiming() })
 	// Attack pet fights that ended on a dead or departed target (petdiagnostics.go).
 	hub.SetPetCombatMetrics(game.items.PetCombatCounters)
+	// DiagnosticRefusal reasons a request returned (register.go, #4222).
+	hub.SetDiagnosticRefusalMetrics(game.items.DiagnosticRefusalCounters)
 	// Players a non-walk path placed inside a closed object (placementguard.go).
 	hub.SetPlacementMetrics(game.items.PlacementCounters)
 	game.deps.LockPublication = game.items.LockPublication
@@ -124,6 +126,7 @@ func (game *gameplayPlane) worldBound(
 	game.items.AbandonExchange(divisionID, character.Name)
 	game.items.AbandonStall(divisionID, character.Name)
 	game.items.DropInstanceInvite(divisionID, character.Name)
+	game.items.DropPartySummon(divisionID, character.Name)
 	game.mentorInvites.WorldBound(session, divisionID, character)
 	var guildID int64
 	var cooldown []wire.Frame
@@ -167,6 +170,9 @@ func (game *gameplayPlane) sessionClosed(session *transport.Session, cause error
 
 	character, divisionID, bound := enterworld.SessionCharacter(game.deps, session)
 	if bound {
+		// The closing member's un-credited hunted GP lands on their
+		// current guild (issue #4051), or is dropped when guildless.
+		game.gpAccrual.SessionClosed(divisionID, character.ID)
 		// Port-only (#2675): the session's last time-online credit. The
 		// record's anchor makes this safe against an evicted duplicate
 		// session closing after its replacement: only un-credited time
@@ -178,6 +184,7 @@ func (game *gameplayPlane) sessionClosed(session *transport.Session, cause error
 		game.items.AbandonExchange(divisionID, character.Name)
 		game.items.AbandonStall(divisionID, character.Name)
 		game.items.DropInstanceInvite(divisionID, character.Name)
+		game.items.DropPartySummon(divisionID, character.Name)
 		game.items.DropDisconnectedCargo(divisionID, character.Name, session.ID, cause)
 		game.items.ForgetCharacterSession(divisionID, character.Name, session.ID)
 		authorityStore.ReleaseCommittedCopy(divisionID, character.ID)

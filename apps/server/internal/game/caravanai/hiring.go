@@ -219,7 +219,7 @@ toggleLeadLocked / setLeadLocked / LeadState
 
 Who leads a hirer's hired Traders: the hirer itself (the Traders follow
 it) or one of them (the rest follow that Trader, which drives the run).
-!leed toggles the hirer; the party board's lead button (0x7FC3
+!leed toggles the hirer; the party board's lead button (0x7FCF
 operation 2) names any of them. With no choice the first hired Trader in
 party order leads.
 ================

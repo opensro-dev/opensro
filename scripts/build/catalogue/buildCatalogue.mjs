@@ -14,8 +14,9 @@ usage: node scripts/build/catalogue/buildCatalogue.mjs [--release <id>] [--out <
 (--out writes the catalogue somewhere else, for a trial run; the inputs
 always come from the generated tree. --since is the previous release's
 commit: notes.json lists the player notes of the merges after it.
---portraits draws each monster's portrait through the client's viewer,
-which must already be served at that URL, e.g. http://127.0.0.1:5173/.)
+--portraits takes each monster's portrait from the published still family
+(/assets/npc/hunting-portraits/, drawn by the asset build's viewer pass)
+of the release served at that URL, e.g. http://127.0.0.1:5173/.)
 
 ===========================================================================
 */
@@ -30,8 +31,9 @@ import { fileURLToPath } from "node:url";
 import { buildStatePath, clientPublicPath, generatedPath } from "../../lib/generatedRoot.mjs";
 import { sharedCacheEnvironment } from "../../lib/goEnvironment.mjs";
 import { runPython } from "../shared/pythonRun.mjs";
+import { fillFormerIds, readFormerIds } from "./formerIds.mjs";
 import { playerNotes } from "./playerNotes.mjs";
-import { renderPortraits } from "./renderPortraits.mjs";
+import { publishedPortraits } from "./publishedPortraits.mjs";
 
 // The client's TypeScript loads through the loader above, so these import
 // late: an item's tooltip as the game prints it, and the website's bundle.
@@ -398,7 +400,7 @@ async function main() {
 		const monsters = readJSON( path.join( work, "monsters.json" ) );
 		const portraitPairs = [];
 		if ( options.portraits ) {
-			const { drawn, failed } = await renderPortraits( {
+			const { drawn, failed } = await publishedPortraits( {
 				viewerBase: options.portraits,
 				monsters: monsters.monsters,
 				workDir: path.join( work, "portraits" )
@@ -415,6 +417,7 @@ async function main() {
 				);
 			}
 		}
+		fillFormerIds( monsters.monsters, await readFormerIds() );
 		writeFileSync( path.join( out, "monsters.json" ), JSON.stringify( monsters ) + "\n" );
 		const atlas = readJSON( path.join( work, "atlas.json" ) );
 		const tiles = atlasTiles( out );

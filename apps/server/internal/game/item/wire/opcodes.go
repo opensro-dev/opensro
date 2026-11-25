@@ -67,6 +67,11 @@ const (
 	// OpObjectSourceMove repositions a remote entity. Handler: the
 	// client's CPSMission_OnEntitySpeedMode0x30E3.
 	OpObjectSourceMove uint16 = 0x30E3
+	// OpObjectPositionUpdate is the server's periodic position resync
+	// for one character (simulation/position_resync.go): the 0x30E3
+	// payload layout under its own opcode, so the client applies it
+	// as a source reseed, never as a stop.
+	OpObjectPositionUpdate uint16 = 0x3028
 	// OpObjectSourceCorrection hard-corrects a remote entity's position.
 	// Handler: the client's CPSMission_OnEntityMoveUpdate0xB2F5.
 	OpObjectSourceCorrection uint16 = 0xB2F5
@@ -137,6 +142,11 @@ const (
 	// ErrCodeStorageFull is UIIT_MSG_STRGERR_INVENTORY_FULL (01:07): the bag
 	// genuinely has no free slot.
 	ErrCodeStorageFull uint8 = 0x07
+	// ErrCodeStorageOperationBlocked is
+	// UIIT_MSG_STRGERR_STORAGE_OPERATION_BLOCKED (01:34, "You cannot move
+	// items or trade at the moment."): the guild warehouse answers it
+	// when the acting member does not hold the room (#3568).
+	ErrCodeStorageOperationBlocked uint8 = 0x34
 	// ErrCodeSpiritAsleep is the v1.188 server's 0x18F9 (port-only behind
 	// SRO_NASRUN, nasrun/clock.go): a Devil's Spirit that is dormant or
 	// whose awakening has lapsed cannot be worn. The v1.150 notice table

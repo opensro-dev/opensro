@@ -59,6 +59,15 @@ const CHAT_STRIP_FRAME = 62;
 const CHAT_STRIP_ROW = 56;
 const CHAT_STRIP_INPUT = 20;
 const PARTY_CHAT_GAP = 4;
+// The quest detail page's default body color (the native quest texts' own 255,44,15,1 as ARGB).
+const QUEST_DETAIL_TEXT: UiQuad["color"] = [ 44 / 255, 15 / 255, 1 / 255, 1 ];
+// The selection reward layout on the contents plate (#3920): the body
+// band, then the value rows, then one row per pickable choice.
+const REWARD_BODY_HEIGHT = 84;
+const REWARD_CHOICE_ROW = 36;
+// A Berserk body that returns within this long of vanishing, with the minute not yet spent, is the same Berserk.
+const BERSERK_RESUME_WINDOW_MS = 30000;
+const BERSERK_RESUME_ELAPSED_MS = 59000;
 // The overhead job mark sits 4 px past the name board, which reaches 1.5 px
 // past the text (the beginner mark mirrors it at -21.5 = -20 - 1.5).
 const JOB_MARK_GAP = 5.5;
@@ -75,9 +84,21 @@ import {
 	AVATAR_STORAGE_SLOTS,
 	avatarSocket,
 	isAvatarItem,
+	isDormantSpirit,
+	isSpiritItem,
 	SPIRIT_SLOT,
 	SPIRIT_SOCKET
 } from "@/engine/foundation/gameplay/avatar-socket";
+import {
+	SPIRIT_SKILL_SLOT_BG_SIZE,
+	SPIRIT_SKILL_SLOT_BG_X,
+	SPIRIT_SKILL_SLOT_BG_Y,
+	SPIRIT_SKILL_SLOT_SIZE,
+	SPIRIT_SKILL_SLOT_X,
+	SPIRIT_SKILL_SLOT_Y,
+	SPIRIT_SKILL_STRIP_RECT,
+	SPIRIT_SOCKET_RECT
+} from "@/engine/foundation/gameplay/spirit-skills";
 import { ACTION_FORTRESS_RETURN } from "@/engine/foundation/gameplay/fortress-return";
 import {
 	FRIEND_LIST_LIMIT,
@@ -98,7 +119,8 @@ import {
 import {
 	companionItemTargetCommand,
 	armsItemTargetCursor,
-	isReverseReturnScroll
+	isReverseReturnScroll,
+	spiritExtensionWornNotice
 } from "@/engine/foundation/gameplay/cos-item-use";
 import {
 	createStoragePanel,
@@ -120,6 +142,8 @@ import {
 } from "@/engine/foundation/gameplay/storage-room";
 import { berserkHud, berserkEntryFlash } from "@/engine/foundation/ui/berserk-hud";
 import { resolveTextOverlaps } from "@/engine/foundation/rendering/ui-glyphs";
+import { hwanSkin } from "@/engine/foundation/gameplay/hwan-skin";
+import { questLocationTargets } from "@/engine/foundation/ui/quest-locations";
 import { portalMenu } from "@/engine/foundation/gameplay/portal";
 import { restoreSlotEntry } from "@/engine/foundation/gameplay/commerce";
 import { equipmentDropSlot } from "@/engine/foundation/gameplay/equipment-drop";
@@ -135,6 +159,7 @@ import {
 	minimapOffset,
 	minimapEdge,
 	minimapHunting,
+	minimapWaypoint,
 	questMarkerTargets
 } from "@/engine/foundation/ui/minimap-markers";
 import { createMinimapResources } from "./hud/minimap";
@@ -167,7 +192,14 @@ import { createGmHelper, GM_HELPER_HEIGHT, GM_HELPER_ROWS, GM_HELPER_ROW_HEIGHT 
 import type { GmCatalog } from "@/engine/foundation/gameplay/gm-command";
 import { gmLocalCommand } from "@/engine/foundation/gameplay/gm-local-commands";
 import { SkillSlot_Resolve } from "./hud/skill-slot";
-import { ACADEMY_OPEN_LEVEL, academyJoinLabel, academyRank } from "@/engine/foundation/gameplay/academy";
+import {
+	ACADEMY_DETAIL_MAX_LENGTH,
+	ACADEMY_KIND_GUARDIAN,
+	ACADEMY_KIND_STUDENT,
+	ACADEMY_OPEN_LEVEL,
+	academyJoinLabel,
+	academyRank
+} from "@/engine/foundation/gameplay/academy";
 import { createWindowPlacement } from "./hud/window-placement";
 import { createItemMall } from "./hud/item-mall";
 import {
@@ -184,11 +216,20 @@ import {
 	mallPageNumberPresentation,
 	pageManagerLayout,
 	mallCurrencyRows,
+	mallPurchaseOutcomeText,
 	mallQuestionLayout,
 	mallSilkPeriodTexts,
 	mallSilkHistoryDate,
 	MALL_ROWS_PER_PAGE
 } from "@/engine/foundation/ui/item-mall-layout";
+import {
+	RENEWAL_GOODS_PER_PAGE,
+	RENEWAL_MALL_HEIGHT,
+	RENEWAL_MALL_WIDTH,
+	renewalMallOrigin,
+	renewalNameLayout
+} from "@/engine/foundation/ui/renewal-mall";
+import { renewalMallPictures, renewalMallView } from "./hud/renewal-mall-view";
 import {
 	quickslotCooldownQuads,
 	quickslotItemCooldownQuads,
@@ -225,10 +266,13 @@ import {
 	createNoticeBanner,
 	noticeTiming,
 	notificationBannerPaths,
+	centreBannerPaths,
 	noticeBannerRow
 } from "./hud/unique-banner";
 import { createQuestBanner, questBannerPaths } from "./hud/quest-banner";
 import { createQuestTimers } from "./hud/quest-timers";
+import { createQuestList } from "./hud/quest-list";
+import { createResLayoutResources } from "./res-layout/res-layout-resources";
 import { createCompanionPotions } from "./hud/companion-potions";
 import { createAutoPotionInput } from "./hud/auto-potion-input";
 import { createCosHud } from "./hud/cos-hud";
@@ -246,6 +290,35 @@ import {
 } from "./hud/compact-hud";
 import { fitUiGroup } from "@/engine/foundation/ui/layout";
 import { createExperimentalHud, experimentalRows, experimentalTabs } from "./hud/experimental-hud";
+import { createEventCalendarHud } from "./hud/event-calendar-hud";
+import { createMaintenanceNoticeHud } from "./hud/maintenance-notice-hud";
+import { createJobHonorHud } from "./hud/job-honor-hud";
+import {
+	JOB_HONOR_HEIGHT,
+	JOB_HONOR_ROWS,
+	JOB_HONOR_WIDTH,
+	jobHonorPictures,
+	jobHonorView
+} from "./hud/job-honor-view";
+import type { JobHonorPeriod, JobHonorTab } from "@/engine/foundation/ui/job-honor";
+import { honorRows } from "@/engine/foundation/ui/job-honor";
+import { createStyriaHud } from "./hud/styria-hud";
+import {
+	STYRIA_HEIGHT,
+	STYRIA_STRIP_HEIGHT,
+	STYRIA_STRIP_WIDTH,
+	STYRIA_WIDTH,
+	styriaPictures,
+	styriaStripOps,
+	styriaView
+} from "./hud/styria-view";
+import { styriaConversationChoices } from "@/engine/foundation/ui/styria";
+import {
+	EVENT_CALENDAR_HEIGHT,
+	EVENT_CALENDAR_WIDTH,
+	eventCalendarPictures,
+	eventCalendarView
+} from "./hud/event-calendar-view";
 import {
 	EXPERIMENTAL_DESCRIPTION_WIDTH,
 	EXPERIMENTAL_HEAD_HEIGHT,
@@ -424,9 +497,30 @@ import { textAllowed } from "@/engine/foundation/ui/character-create";
 import { createGrantPowerHud, GRANT_RIGHTS } from "./hud/grant-power-hud";
 import { compositeItemCaption, compositeItemLayout, createCompositeItemHud } from "./hud/composite-item-hud";
 import { createUniqueRankHud } from "./hud/unique-rank-hud";
+import { createUniqueStatusHud, notifyBrowserUnique } from "./hud/unique-status-hud";
+import { UNIQUE_STATUS_HEIGHT, UNIQUE_STATUS_WIDTH, uniqueStatusView } from "./hud/unique-status-view";
+import {
+	createServerEventHud,
+	gaugeRatio,
+	gaugeText,
+	SERVER_EVENT_ART,
+	SERVER_EVENT_TEXT_COLOR,
+	serverEventLayout
+} from "./hud/server-event-hud";
+import {
+	createSroMacroHud,
+	MACRO_GUIDE_ICON_PATH,
+	MACRO_GUIDE_ICON_X_INSET,
+	MACRO_GUIDE_ICON_Y,
+	MACRO_ID,
+	macroAcquiredSkills
+} from "./hud/sro-macro-hud";
+import { drawSroMacro, type MacroPaint, macroPotionStock } from "./hud/sro-macro-window";
 import { createMarketHud, MARKET_BAG_FIRST_SLOT, MARKET_HOTKEY_VK } from "./hud/market-hud";
 import { drawMarketWindow, type MarketPaint } from "./hud/market-window";
 import { uniqueRankLines } from "@/engine/foundation/gameplay/unique-rank";
+import { uniqueStatusAlertText } from "@/engine/foundation/gameplay/unique-status";
+import type { UniqueStatusFlip, UniqueStatusTab } from "@/engine/foundation/gameplay/unique-status";
 import {
 	allianceButtons,
 	allianceGuildCountText,
@@ -503,7 +597,8 @@ import {
 	equipmentSlotMirror,
 	itemIsMallItem,
 	itemIsRare,
-	itemSlotBlockedOverlay
+	itemSlotBlockedOverlay,
+	itemSlotExchangeOverlay
 } from "@/engine/foundation/ui/item-slot-effects";
 import {
 	COS_CLASS_ATTACK,
@@ -541,6 +636,7 @@ import {
 	HUD_TOOLS_HEIGHT
 } from "@/engine/foundation/ui/cos-command";
 import { questObjectivePresentation } from "@/engine/foundation/ui/quest-presentation";
+import { questTrackerPlacement, questTrackerSize } from "@/engine/foundation/ui/quest-list";
 import { uniqueBannerQuads } from "@/engine/foundation/ui/unique-banner";
 import { nearestGroundItem } from "@/engine/foundation/gameplay/ground-item";
 import {
@@ -583,8 +679,11 @@ import { mouseModeLabel } from "@/engine/foundation/ui/mouse-modes";
 import { tooltipDescription } from "@/engine/foundation/ui/tooltip-description";
 import { tooltipItems, actionTooltipKey } from "@/engine/foundation/ui/tooltip-target";
 import { AUTO_SELECT_ACTION_ID, offeredActions } from "@/engine/foundation/ui/action-layout";
-import { itemTooltip } from "@/engine/foundation/ui/item-tooltip";
+import { itemTooltip, weaponTypeSymbol } from "@/engine/foundation/ui/item-tooltip";
+import { wearerSex } from "@/engine/foundation/ui/item-equipment-overlay";
 import { itemTooltipSet, tooltipSetViewer } from "@/engine/foundation/ui/item-tooltip-set";
+import { isWeaponSwitchScroll, weaponRaceName } from "@/engine/foundation/gameplay/weapon-switch";
+import { raceSwitchKindOf } from "@/engine/foundation/gameplay/race-switch";
 import { commerceTooltip, mallTooltipRows } from "@/engine/foundation/ui/commerce-tooltip";
 import { effectivePartyOptions } from "@/engine/foundation/ui/party-options";
 import { monsterPartyNameplate } from "@/engine/foundation/ui/monster-nameplate";
@@ -625,6 +724,8 @@ import {
 } from "@/engine/foundation/ui/buff-viewer";
 import { matchingSlots } from "@/engine/foundation/ui/matching-slots";
 import {
+	BRIGHTNESS_STEP_DEFAULT,
+	brightnessStepKeys,
 	defaultVideoOptions,
 	DEFAULT_FRAME_LIMIT,
 	frameLimits,
@@ -672,9 +773,13 @@ import {
 	companionOwnerNameplate,
 	CONTRIBUTOR_TITLE_COLOR,
 	overheadLayout,
+	titledDisplayName,
 	titledNameRow,
+	TITLE_NAME_GAP,
+	visibleTitleFormat,
 	withoutBoardPass
 } from "@/engine/foundation/ui/overhead-layout";
+import { staffBoardName } from "@/engine/foundation/gameplay/staff-roster";
 import { vitalWarning } from "@/engine/foundation/ui/vital-warning";
 import {
 	beginnerMarkShown,
@@ -731,7 +836,13 @@ import { feedbackLevels } from "@/engine/foundation/gameplay/feedback-levels";
 import { systemMessageLayout } from "@/engine/foundation/ui/system-message-layout";
 import { verticalSpinChrome } from "@/engine/foundation/ui/vertical-spin";
 import { stretchRing } from "@/engine/foundation/ui/stretch-ring";
-import { comboListLayout } from "@/engine/foundation/ui/combo-box";
+import {
+	comboListLayout,
+	POPUP_LIST_HOVER_BAR,
+	POPUP_LIST_HOVER_TEXT,
+	POPUP_LIST_PRESSED_TEXT,
+	popupListRowBar
+} from "@/engine/foundation/ui/combo-box";
 import { chatLayout, sunDropChatColor } from "@/engine/foundation/ui/chat-layout";
 import { expandedWorldMapOn, worldMapFrame, worldMapImagePaths, worldMapQuads } from "@/engine/foundation/ui/world-map";
 import {
@@ -743,7 +854,7 @@ import {
 } from "@/engine/foundation/ui/hud-readouts";
 import { hudTooltipKey, sideBubble, tooltipBubble } from "@/engine/foundation/ui/helper-bubble";
 import { playerAbilityValues } from "@/engine/foundation/gameplay/player-stats";
-import { academyLayout } from "@/engine/foundation/ui/academy-layout";
+import { ACADEMY_SCROLL_TRAVEL_PX, academyLayout } from "@/engine/foundation/ui/academy-layout";
 import { createGuideResources } from "./guide/resources";
 import { createQuestInfo } from "./hud/quest-info";
 import {
@@ -908,9 +1019,25 @@ import {
 	resurrectionNoteColor,
 	resurrectionQuestion
 } from "@/engine/foundation/ui/resurrection-proposal";
-import { createInstancePrompt, instanceBoxLayout, instanceQuestion } from "@/engine/foundation/ui/instance-proposal";
+import { createInstancePrompt, instanceQuestion } from "@/engine/foundation/ui/instance-proposal";
+import {
+	createPartySummonPrompt,
+	partySummonBoxLayout,
+	partySummonQuestion,
+	partySummonWindowLayout,
+	PARTY_SUMMON_POSSIBLE
+} from "@/engine/foundation/ui/party-summon";
+import { createPartySummonHud } from "./hud/party-summon-hud";
 import { markupLines, messageBoxLines, textMessageBoxLayout } from "@/engine/foundation/ui/text-message-box";
-import { systemMenu, SYSTEM_MENU_HEIGHT, EXPERIMENTAL_MENU_ID } from "@/engine/foundation/ui/system-menu";
+import {
+	systemMenu,
+	systemMenuHeight,
+	EXPERIMENTAL_MENU_ID,
+	EVENT_CALENDAR_MENU_ID,
+	MARKET_MENU_ID,
+	UNIQUE_STATUS_MENU_ID,
+	JOB_HONOR_MENU_ID
+} from "@/engine/foundation/ui/system-menu";
 import {
 	bagTabRow,
 	GACHA_BAG_CELL_SHIFT,
@@ -977,8 +1104,10 @@ const EXPERIMENTAL_HEAD_TEXT_INSET = 12;
 // The ON / OFF word: gold when on, grey when off.
 const EXPERIMENTAL_ON_COLOR = [ 1, 0.85, 0.54, 1 ] as const;
 const EXPERIMENTAL_OFF_COLOR = [ 0.55, 0.55, 0.5, 1 ] as const;
-// No video option combo is open (slot -1 is the screen-size combo).
+// No video option combo is open (slot -1 is the screen-size combo;
+// slot -2 is the later client's brightness spin, #3908).
 const VIDEO_COMBO_CLOSED = -99;
+const VIDEO_BRIGHTNESS_SLOT = -2;
 const VIDEO_FRAME_LIMIT_SLOT = -3;
 const VIDEO_VISIBLE_ROWS = 6;
 const VIDEO_SCROLL_MAX = videoRows().length + 1 - VIDEO_VISIBLE_ROWS;
@@ -987,11 +1116,50 @@ const ROOT = "/assets/images/Media_extracted/",
 	BUTTON = ROOT + "interface/ifcommon/com_button.png";
 // 683B40 assigns the notice root this texture after creating it.
 const MALL_NOTICE_FRAME = ROOT + "interface/mall/mall_communicate.png";
+// A disabled renewal mall button's picture: the later art has no disable
+// face for every button, so the base face is drawn dimmed.
+const RENEWAL_DISABLED = [ 0.5, 0.5, 0.5, 1 ] as const;
+// How far below its box a card name's second line may draw: the font's
+// descenders (g, p, y) under a 13-pixel pitch. The price row starts 7
+// pixels below the box.
+const RENEWAL_NAME_DESCENT = 4;
 const PARTS = frameParts();
 // The Contributor login prompt's copy (port-only, not native; owner
 // 2026-11-14): the client has no text rows for it, so hudCopy serves
 // these keys. The account names stay off the wire, so the prompt names
 // no account.
+// The Styria Clash windows' copy (port-only, not native; #3648 slice
+// 5): the client has no text rows for the arena, so hudCopy serves
+// these keys. The wordings the later client's own tables evidence
+// are carried as they stand ("Styria Clash", "Join Styria Clash",
+// "Cancel Registration", "Registration completed.", "Styria Clash
+// Results", "Styria Clash Rewards", "Skill exp : %d"); the rest is
+// the port's English for the manager's rules.
+const STYRIA_COPY: Readonly<Record<string, string>> = {
+	UIIT_STT_ARENA_JOB_WAR: "Styria Clash",
+	UIIT_PORT_STYRIA_APPLY: "Join Styria Clash",
+	UIIT_PORT_STYRIA_CANCEL: "Cancel Registration",
+	UIIT_PORT_STYRIA_PROMPT:
+		"Hunters and Thieves fight over the treasure of Styria. The side holding more treasure when the clock ends wins.",
+	UIIT_PORT_STYRIA_WAITING: "Waiting for the arena...",
+	UIIT_PORT_STYRIA_DESC:
+		"Earn points by opening treasure boxes and\ndefeating the opposing team. The side with\nmore points when the clock ends wins.",
+	UIIT_PORT_STYRIA_OPENS_IN: "Registration opens in",
+	UIIT_PORT_STYRIA_STARTS_IN: "Starts in",
+	UIIT_PORT_STYRIA_APPLICANTS: "Applicants",
+	UIIT_PORT_STYRIA_YOUR_SIDE: "Your side",
+	UIIT_PORT_STYRIA_APPLIED: "Registration completed.",
+	UIIT_PORT_STYRIA_SUIT_HINT: "Wear a job suit to fight for its side.",
+	UIIT_PORT_STYRIA_TIME_LEFT: "Time left",
+	UIIT_PORT_STYRIA_RESULT: "Styria Clash Results",
+	UIIT_PORT_STYRIA_REWARDS: "Styria Clash Rewards",
+	UIIT_PORT_STYRIA_SKILL_EXP: "Skill exp : %d",
+	UIIT_PORT_STYRIA_JOB_EXP: "Job EXP : %d",
+	UIIT_PORT_STYRIA_WIN: "Victory",
+	UIIT_PORT_STYRIA_LOSE: "Defeat",
+	UIIT_PORT_STYRIA_DRAW: "Draw",
+	UIIT_PORT_STYRIA_CONFIRM: "Confirm"
+};
 const CONTRIBUTOR_PROMPT_COPY: Readonly<Record<string, string>> = {
 	UIIT_PORT_CONTRIBUTOR_TITLE: "Contributor title",
 	UIIT_PORT_CONTRIBUTOR_ELSEWHERE: "Your Contributor title is on another of your accounts.\nMove it to this account?",
@@ -1019,11 +1187,24 @@ const PARTY_MATCH_CURRENT_COLOR: UiQuad["color"] = [ 135 / 255, 233 / 255, 1, 1 
 const BUG_COMMAND = /^\/bug(?:\s+|$)/i;
 const BUG_REPORTS_DISABLED = "Bug reports are disabled on this server.";
 const BUG_REPORTS_UNAVAILABLE = "Connecting to the bug reporter; the report window opens as soon as it answers.";
+// Port-only (#3907): shown when the under-minimap CIFMacroSystemGuide click
+// cannot open (Experimental row off, or the shard never replayed SRO_AUTO_MACRO).
+const MACRO_UNAVAILABLE = "The SRO Macro is not available on this server.";
 // The skin change scroll's window (CIFChangePlayerModel).
 const SKIN_PANEL = "Skin change";
 // CIFWholeChat, the Global Chatting item's window, and its line's edit box.
 const GLOBAL_CHAT_PANEL = "Global chat";
 const GLOBAL_CHAT_TEXT = "wholechat-text";
+// The weapon switch box (port-only, weapon-switch.ts): its race and kind
+// rows' control prefixes, the kind step's Back, and its English lines.
+const WEAPON_SWITCH_RACE_PREFIX = "weapon-switch-race:";
+const WEAPON_SWITCH_KIND_PREFIX = "weapon-switch:";
+// The race switch confirmation's question (port-only, race-switch.ts).
+const RACE_SWITCH_QUESTION = "Switch this item to the other race?";
+const WEAPON_SWITCH_BACK = "Back";
+const WEAPON_SWITCH_TITLE = "Weapon Switch";
+const WEAPON_SWITCH_RACE_QUESTION = "Choose the race of the new weapon.";
+const WEAPON_SWITCH_QUESTION = "Choose the new kind of weapon.";
 // The name-change scroll's entry window (#1689, port-only): the
 // CIFWholeChat frame under its own title and edit box.
 const RENAME_PANEL = "Name change";
@@ -1115,11 +1296,12 @@ const INVENTORY_POPUP_PANELS: readonly string[] = [
 	"COS inventory",
 	"Storage"
 ];
+// Quests is not one: the quest list window (#4245) stands outside the main
+// popup, so a stall opening the inventory tab leaves it open.
 const MAIN_POPUP_PANELS: readonly string[] = [
 	"Character",
 	"Party",
 	"Skills",
-	"Quests",
 	"Actions",
 	"Academy",
 	...INVENTORY_POPUP_PANELS
@@ -1134,7 +1316,7 @@ const STALL_TAB_X = 0x1c, STALL_TAB_Y = 0x56, STALL_TAB_W = 0x50, STALL_TAB_H = 
 // The buyback strip's art (com_redeem_window) starts this far left of its
 // first slot; a fitted "Repurchase" ends this far before the art.
 const BUYBACK_STRIP_INSET = 4, BUYBACK_LABEL_GAP = 2;
-// Port-only, not native ("Fit window labels"): the merchant's buyback
+// Port-only, not native (label fitting): the merchant's buyback
 // label where no face fits "Repurchase" beside the strip (#3728).
 const BUYBACK_SHORT_LABEL = "Buy back";
 // A fitted Item Mall bag count starts this far right of its bag icon and
@@ -1147,6 +1329,18 @@ const BUTTON_FOCUS = BUTTON.replace( ".png", "_focus.png" ),
 const CLOSE = ROOT + "interface/ifcommon/com_windowclose.png",
 	CLOSE_PRESS = CLOSE.replace( ".png", "_press.png" ),
 	CLOSE_FOCUS = CLOSE.replace( ".png", "_focus.png" );
+// Port-only, not native (SRO_INVENTORY_SORT): the target
+// window's dark "D" button (16x16, the close button's size) in its three
+// faces, drawn this far left of a container window's close button, on its
+// row.
+const INVENTORY_SORT_FACES = [
+	ROOT + "interface/ifcommon/com_d_windowclose.png",
+	ROOT + "interface/ifcommon/com_d_windowclose_focus.png",
+	ROOT + "interface/ifcommon/com_d_windowclose_press.png"
+] as const;
+const INVENTORY_SORT_SIZE = 16, INVENTORY_SORT_CLOSE_GAP = 2;
+// Each window's sort control is this prefix plus its container.
+const INVENTORY_SORT_ID = "inventory-sort:";
 
 /*
 ================
@@ -1283,6 +1477,19 @@ function pictureClip( face: string, rect: UiRect ): NonNullable<UiQuad["mask"]> 
 createUi
 ================
 */
+/*
+================
+authoredEditAlign
+
+The editor alignment for an authored horizontal alignment (0 left, 1
+centre, 2 right). The editor is transparent over the canvas drawing, so
+its text layout must start where the drawing does (#4153).
+================
+*/
+function authoredEditAlign( hAlign: number ): "left" | "center" | "right" {
+	return hAlign === 2 ? "right" : hAlign === 1 ? "center" : "left";
+}
+
 export function createUi( ports: UiPorts ) {
 	const defaults = defaultUiPorts();
 	const assets = ports.assets,
@@ -1305,6 +1512,45 @@ export function createUi( ports: UiPorts ) {
 		extensions = ports.extensions ?? defaults.extensions;
 	const bugReport = extensions.bugReport;
 	const experimental = createExperimentalHud();
+	// Port-only, not native (#3532): the Event Calendar's feed state.
+	const eventCalendar = createEventCalendarHud();
+	// Port-only (#3925): the title screens' maintenance notice feed.
+	const maintenanceHud = createMaintenanceNoticeHud();
+	// Port-only, not native (#3530): the Job Honor Rank window's state.
+	const jobHonor = createJobHonorHud();
+	// Port-only, not native (#3648): the Styria Clash windows' state,
+	// and whether the manager's conversation stood open last frame
+	// (the registration window opens on its edge).
+	const styria = createStyriaHud();
+	let styriaConversationWasOpen = false;
+	// The System menu's extra rows: one menu id per Experimental row
+	// that adds an entry, in the order the entries stack (#3532's
+	// calendar, then #3531's Unique Status, then #3529's market, then
+	// #3530's honor rank). Each entry names its label and the click it
+	// sends: a panel window's open route, or the market's own toggle
+	// (activateMarket's "system-menu-market"), the market being a
+	// window of its own and not a panel. The next entry is one more
+	// row here.
+	const SYSTEM_MENU_ENTRIES: Readonly<Record<number, { label: string; action: string; }>> = {
+		[EVENT_CALENDAR_MENU_ID]: { label: "Event Calendar", action: "open-window:Event Calendar" },
+		[UNIQUE_STATUS_MENU_ID]: { label: "Unique Status", action: "open-window:Unique Status" },
+		[MARKET_MENU_ID]: { label: "Consignment Market", action: "system-menu-market" },
+		[JOB_HONOR_MENU_ID]: { label: "Job Honor Rank", action: "open-window:Job Honor Rank" }
+	};
+
+	/*
+	================
+	systemMenuExtras
+	================
+	*/
+	function systemMenuExtras(): readonly number[] {
+		const extras: number[] = [];
+		if ( experimental.state().saved.eventCalendar ) extras.push( EVENT_CALENDAR_MENU_ID );
+		if ( experimental.state().saved.uniqueStatus ) extras.push( UNIQUE_STATUS_MENU_ID );
+		if ( experimental.state().saved.consignmentMarket ) extras.push( MARKET_MENU_ID );
+		if ( experimental.state().saved.jobHonor ) extras.push( JOB_HONOR_MENU_ID );
+		return extras;
+	}
 	const companionPotions = createCompanionPotions( pageStorage() );
 	let consolePhase: 0 | 1 | 2 | 3 = 0, consoleY = -112, consoleLast = 0, consoleText = "", gmObserved = 0;
 	let consoleHistory: string[] = [], consoleHistoryIndex = 0;
@@ -1441,7 +1687,7 @@ export function createUi( ports: UiPorts ) {
 	const combatGlyphPaths = damageTextAssets();
 	let buffTick = -1;
 	// Derived two-state presentation clock; body channel 4 remains authoritative.
-	let berserkActor = 0, berserkStarted = 0, berserkFrame = -1, berserkDisplayed = 0;
+	let berserkActor = 0, berserkStarted = 0, berserkLostAt = -1, berserkFrame = -1, berserkDisplayed = 0;
 	let equipmentWarningPhase = 0, equipmentWarningDue = 0, equipmentWarningVisible = false;
 	// Low HP/MP caution atlas (100 ms cells) animates on retained world frames too.
 	let cautionVisible = false, cautionFrame = -1;
@@ -1623,7 +1869,10 @@ export function createUi( ports: UiPorts ) {
 	================
 	*/
 	function alchemyFusing() {
-		return !!view?.gameplay?.inventoryPending || alchemyEffect !== null;
+		// The server's port-only quick rule (alchemy.ts quickFuse) waits for
+		// the answer only, never for the result effect.
+		const waitsForEffect = alchemyEffect !== null && view?.gameplay?.alchemy?.quick !== true;
+		return !!view?.gameplay?.inventoryPending || waitsForEffect;
 	}
 	const fortressStaffHud = createFortressStaffHud();
 	const unionHud = createUnionHud();
@@ -1635,6 +1884,15 @@ export function createUi( ports: UiPorts ) {
 	const compositeItemHud = createCompositeItemHud();
 	// Port-only, not native: a unique kill's damage ranking (SRO_UNIQUE_DAMAGE_RANK).
 	const uniqueRankHud = createUniqueRankHud();
+	const uniqueStatusHud = createUniqueStatusHud( () => extensions.uniqueNotifyBook?.() ?? {} );
+	// Port-only (#3531): the Unique Status window's last drawn list (its
+	// wheel and thumb drag find it here) and the server clock's base: the
+	// last feed's server time and the local time it landed, so the Died
+	// column's "ago" runs between updates.
+	// The v1.696 client's Server Mission gauge (CNIFServerEvent, 0x34F2): native, no row.
+	const serverEventHud = createServerEventHud();
+	// Port-only, not native (#3907): the v1.696 SRO Macro windows (SRO_AUTO_MACRO).
+	const sroMacroHud = createSroMacroHud();
 	// Port-only, not native (SRO_CONSIGNMENT, #3529): the consignment market.
 	const marketHud = createMarketHud();
 	const guildManagerHud = createGuildManagerHud();
@@ -1654,6 +1912,10 @@ export function createUi( ports: UiPorts ) {
 	const regionBanner = createRegionBanner();
 	// The level-up quest notice (hud/quest-info.ts): icon, then window.
 	const questInfo = createQuestInfo();
+	// The quest list window owns its native-layout instances once its
+	// layouts decode; null until then keeps the Quests panel empty
+	// while the layout demand is in flight (#4245).
+	let questList: ReturnType<typeof createQuestList> | null = null;
 	const hudMessages = createHudMessages( chooseTip );
 	const speech = createSpeech();
 	let academyWasVisible = false;
@@ -1663,6 +1925,7 @@ export function createUi( ports: UiPorts ) {
 	const academyHud = createAcademyHud();
 	const hud = createHudResources( assets, base ),
 		guideResources = createGuideResources( assets, base ),
+		resLayoutResources = createResLayoutResources( assets, base ),
 		minimapResources = createMinimapResources( assets, base ),
 		stallCategories = createStallNetworkCategories( assets, base );
 	const npcPanel = createNpcPanel(), windowPlacement = createWindowPlacement();
@@ -1670,6 +1933,28 @@ export function createUi( ports: UiPorts ) {
 	const storagePanel = createStoragePanel();
 	const resurrectionPrompt = createResurrectionPrompt();
 	const instancePrompt = createInstancePrompt();
+	/*
+	================
+	instanceBoxFrame
+
+	The quest instance prompt's frame: the simple message box around its
+	question (7644E0 -> 6888C0), wrapped and measured as simpleMessageBox
+	draws it, so the drag moves the box the draw shows.
+	================
+	*/
+	const instanceQuestionText = () => hudCopy( instanceQuestion()[0]! );
+	const instanceBoxFrame = ( width: number, height: number, position: readonly [number, number] | null ) =>
+		textMessageBoxLayout(
+			width,
+			height,
+			messageBoxLines( [ instanceQuestionText() ], value => text.run( value ).width ).map( value =>
+				text.run( value ).width
+			),
+			position
+		).frame;
+	// The party summon window and its invitation box (#3918).
+	const partySummonPrompt = createPartySummonPrompt();
+	const partySummonHud = createPartySummonHud();
 	const itemMall = createItemMall();
 	// CIFMallNotifyWnd (mall-notify.ts): "pending" until the session's first
 	// world entry decides it, as 683B40's +0x6FC latch; then shown or closed.
@@ -1691,6 +1976,8 @@ export function createUi( ports: UiPorts ) {
 	let academySelection = 0, academySort = "ID_BTN", academyAscending = true;
 	let academyName = "", academyGrade = 5, academyKind = 2, academyCombo = 0;
 	let academyFilter = { name: "", grade: 5, kind: 2 };
+	let academyDialog: "register" | "modify" | null = null;
+	let academyForm = { recruit: ACADEMY_KIND_STUDENT, detail: "" };
 	let guideSidebar = false, guideTab: "general" | "events" | "quests" = "general", guideIndexScroll = 0;
 	const guideGroups = new Set<number>();
 	let guideEvent = 0, guideObserved = 0, guideRequested = 0, guidePending = 0, guideScroll = 0;
@@ -1728,7 +2015,7 @@ export function createUi( ports: UiPorts ) {
 	// keeps it when the current room has none (865690 returns null).
 	let minimapRoomName = "";
 	let abilityDetails = false, mapWorldLoading = false;
-	const title = createTitleUi( assets, base, () => experimental.state().saved.fitWindowLabels );
+	const title = createTitleUi( assets, base );
 	let serverList = false,
 		serverDraft = "",
 		serverOffset = 0,
@@ -1874,6 +2161,9 @@ export function createUi( ports: UiPorts ) {
 		carried: NonNullable<typeof carriedItem>,
 		game: UiView["gameplay"] | undefined
 	) {
+		if ( carried.source.startsWith( "arena-chest-item:" ) ) {
+			return game?.arenaChest?.items.find( row => row.slot === carried.slot );
+		}
 		if ( carried.source.startsWith( "storage-slot:" ) ) {
 			return game?.storage?.items.find( row => row.slot === carried.slot );
 		}
@@ -2011,6 +2301,8 @@ export function createUi( ports: UiPorts ) {
 	const masteryByTab = new Map<number, number>();
 	let selectedSkill = 0, skillPage = 0, hotbarPage = 0, trainingMode = false, clearHotbar = false;
 	let carriedShortcut: { id: string; x: number; y: number; } | null = null;
+	// Port-only (#3907): a bound SRO Macro potion icon lifted for drag-out clear.
+	let carriedMacroPotion: { id: string; icon: string | undefined; x: number; y: number; } | null = null;
 	let quickslotTime = 0, quickslotTick = -1;
 	let extVertical = true,
 		extDouble = true,
@@ -2116,6 +2408,9 @@ export function createUi( ports: UiPorts ) {
 	}
 	const expandedQuests = new Set<number>();
 	let selectedQuest = 0, trackedQuest = 0, confirmAbandon = false, questPage = 0, chatPage = 0;
+	// The reward window's pick (chosen item RefObjIDs) and its take-reward
+	// confirm (#3920), plus the refusal line last answered.
+	let rewardPicks: readonly number[] = [], confirmReward = false, rewardRefusalKey = "";
 	let chatText = "", chatTarget = "", chatChannel = 1, chatFeedbackObserved = 0;
 	let caretDue = 0, caretVisible = true;
 	let focusRevision = 0;
@@ -2226,9 +2521,18 @@ export function createUi( ports: UiPorts ) {
 		if ( key === "UIIT_PORT_SOOK_ARENA" ) return "Survival Arena (5 stages, EXP/SP x5)";
 		// The caravan hire rows and answers (port-only) carry their own text.
 		if ( key.startsWith( "UIIT_PORT_CARAVAN:" ) ) return key.slice( "UIIT_PORT_CARAVAN:".length );
+		// Later-native (#3502): the two title-indicator labels are the
+		// later client's own option rows; the v1.150 system-text
+		// catalogue has no such codes, so the text is carried here in
+		// the catalogue's own "Indicate ..." voice.
+		if ( key === "UIIT_STT_CHAR_TITLE_SIGN" ) return "Indicate own title";
+		if ( key === "UIIT_STT_OTHER_TITLE_SIGN" ) return "Indicate other titles";
 		// The Contributor login prompt (port-only, contributor-titles.ts).
 		const contributorCopy = CONTRIBUTOR_PROMPT_COPY[key];
 		if ( contributorCopy ) return contributorCopy;
+		// The Styria Clash windows and manager rows (port-only, #3648).
+		const styriaCopy = STYRIA_COPY[key];
+		if ( styriaCopy ) return styriaCopy;
 		return hud.data()?.strings[key] ?? "";
 	}
 	/*
@@ -2502,7 +2806,10 @@ export function createUi( ports: UiPorts ) {
 		if ( panel && !next ) sound( "close" );
 		if ( !next ) {
 			for ( const owner of admittedWindows.keys() ) {
-				if ( questDetails && (owner === "quest-details" || owner === "quest-abandon") ) continue;
+				if (
+					questDetails &&
+					(owner === "quest-details" || owner === "quest-abandon" || owner === "quest-reward-confirm")
+				) continue;
 				admittedWindows.delete( owner );
 			}
 		} else if ( !(isMainPopupPage( panel ) && isMainPopupPage( next )) ) {
@@ -2559,8 +2866,9 @@ export function createUi( ports: UiPorts ) {
 		}
 		if ( next === "Academy Matching" ) {
 			academySelection = 0;
+			academyDialog = null;
 			if ( view?.gameplay?.academy && !view.gameplay.academy.request ) {
-				sendGameplay( { kind: "academy-page", page: 0 } );
+				sendGameplay( { kind: "academy-page", page: 1 } );
 			}
 		}
 		// 69C150 sounds the resulting visible window, including a hotkey retarget.
@@ -2727,6 +3035,15 @@ export function createUi( ports: UiPorts ) {
 			avatars = game.avatarInventory ?? [],
 			item = (equip ? bag : avatars).find( i => i.slot === source );
 		if ( !item || !isAvatarItem( item.typeFlags ) ) return;
+		// Port-only (SRO_NASRUN, #4364): a Spirit arrives dormant and the
+		// server wears only an awake one, so an equip gesture on a dormant
+		// Spirit sends the use that wakes it (the v1.188 server's 3/1/14/1
+		// use path); the next gesture wears it. Inference: the later
+		// clients wake it the same way, by using it from the bag.
+		if ( equip && isDormantSpirit( item.typeFlags, item.durability ) ) {
+			useInventorySlot( item.slot );
+			return;
+		}
 		const socket = avatarSocket( item.typeFlags );
 		if ( equip ) {
 			if ( avatars.some( i => avatarSocket( i.typeFlags ) === socket ) ) {
@@ -2775,13 +3092,19 @@ export function createUi( ports: UiPorts ) {
 			const item = view?.gameplay?.inventory.find( row => row.slot === command.slot );
 			// 572858 dispatches hotbar items through the same cursor arming as
 			// an inventory activation. A confirmed use already has its target.
+			// Port-only: the weapon and race switch scrolls arm the same
+			// cursor; their box's pick carries the target, so it uses
+			// straight through.
 			if (
-				item && armsItemTargetCursor( item.typeFlags ) && command.summonerSlot === undefined &&
-				command.revivalSlot === undefined && command.targetSlot === undefined
+				item && (armsItemTargetCursor( item.typeFlags ) || isWeaponSwitchScroll( item.codename ) ||
+					raceSwitchKindOf( item.codename ) !== null) &&
+				command.summonerSlot === undefined && command.revivalSlot === undefined &&
+				command.targetSlot === undefined
 			) {
 				if ( item.slot < 13 || view?.gameplay?.inventoryPending ) return;
 				carriedItem = null;
 				carriedShortcut = null;
+				carriedMacroPotion = null;
 				inventorySlot = -1;
 				repairHud.disarm();
 				cosHud.armItemTarget( item );
@@ -2913,11 +3236,24 @@ export function createUi( ports: UiPorts ) {
 	================
 	*/
 	function activateMarket( id: string ): boolean {
+		// The System menu's row (port-only, #3529): choosing it leaves the
+		// menu, as every other row does, then toggles the window like the
+		// button beside FPS. (Not "market-menu": market-hud routes its own
+		// "market-menu:" dropdown ids.)
+		if ( id === "system-menu-market" ) {
+			setPanel( "" );
+			id = "market-toggle";
+		}
 		// The HUD button beside FPS (platform.ts) toggles the window from
 		// anywhere in the world; the storage keeper's row opens it too.
 		if ( id === "market-toggle" && marketHud.isOpen() ) id = "market-close";
 		if ( id === "market-open" || id === "market-toggle" ) {
 			if ( view?.session?.phase !== "world" || view.gameplay?.consignment !== true ) return true;
+			// The market is a window of its own, not an NPC page: opening it
+			// ends the NPC interaction as closing the shop does (npc-close).
+			// Hiding the menu alone left the conversation open, so the
+			// panel stayed hidden and the keeper's next click showed no rows.
+			if ( view.gameplay.npcConversation ) sendGameplay( { kind: "npc-close" } );
 			npcPanel.hide();
 			sendMarket( marketHud.open() );
 			dirty = true;
@@ -2963,7 +3299,10 @@ export function createUi( ports: UiPorts ) {
 	*/
 	function executeSkill( id: number ) {
 		const game = view?.gameplay;
-		if ( !game?.skills?.includes( id ) || hud.data()?.tooltipSkills.get( id )?.basicActivity === 0 ) return;
+		// Port-only (SRO_NASRUN, #4384): a worn Spirit's lent skills cast as learned.
+		if ( !game ) return;
+		const castable = game.skills?.includes( id ) || game.spiritSkills?.includes( id );
+		if ( !castable || hud.data()?.tooltipSkills.get( id )?.basicActivity === 0 ) return;
 		sendGameplay( { kind: "skill", skillId: id, ...(game.target ? { gid: game.target } : {}) } );
 	}
 	/*
@@ -3652,9 +3991,10 @@ export function createUi( ports: UiPorts ) {
 		}
 		return true;
 	}
+	const arenaDiscard = { chestID: "" };
 	function activate( id: string ) {
 		if ( activateCaravanHire( id ) ) return;
-		if ( id.startsWith( "market-" ) && activateMarket( id ) ) return;
+		if ( (id.startsWith( "market-" ) || id === "system-menu-market") && activateMarket( id ) ) return;
 		if ( id === "arena-prev" || id === "arena-next" ) {
 			arenaPage = Math.max(
 				0,
@@ -3667,10 +4007,28 @@ export function createUi( ports: UiPorts ) {
 			return;
 		}
 		if ( id === "arena-close" ) {
+			arenaDiscard.chestID = "";
 			sendGameplay( { kind: "arena-dismiss" } );
 			return;
 		}
+		if ( id === "arena-inventory" ) {
+			setPanel( "Inventory", "toggle" );
+			return;
+		}
+		if ( id === "arena-discard" ) {
+			const chest = view?.gameplay?.arenaChest;
+			if ( chest?.phase !== "claimable" ) return;
+			if ( arenaDiscard.chestID === chest.id ) {
+				arenaDiscard.chestID = "";
+				sendGameplay( { kind: "arena-decision", operation: 5, id: chest.id } );
+			} else {
+				arenaDiscard.chestID = chest.id;
+			}
+			dirty = true;
+			return;
+		}
 		if ( (id === "arena-claim" || id === "arena-continue") && view?.gameplay?.arenaChest ) {
+			arenaDiscard.chestID = "";
 			if ( id === "arena-continue" ) {
 				arenaHiddenID = view.gameplay.arenaChest.id;
 				dirty = true;
@@ -3728,6 +4086,36 @@ export function createUi( ports: UiPorts ) {
 				extensions.saveExperimental?.( experimental.confirm() );
 				setPanel( "" );
 			} else if ( id === "experimental-cancel" ) setPanel( "" );
+			dirty = true;
+			return;
+		}
+		if ( panel === "Event Calendar" && id.startsWith( "event-calendar-event:" ) ) {
+			const [day, index] = id.slice( "event-calendar-event:".length ).split( ":" ).map( Number );
+			const event = eventCalendar.state().week[day!]?.events[index!];
+			if ( event ) eventCalendar.select( event );
+			dirty = true;
+			return;
+		}
+		if ( panel === "Styria Clash" && id === "styria-dismiss" ) {
+			// Port-only (#3648): the result window's Confirm.
+			styria.dismissResult();
+			setPanel( "" );
+			dirty = true;
+			return;
+		}
+		if ( panel === "Job Honor Rank" && id.startsWith( "job-honor-" ) ) {
+			const honorState = jobHonor.state( Date.now() );
+			if ( id.startsWith( "job-honor-tab:" ) ) {
+				jobHonor.selectTab( id.slice( "job-honor-tab:".length ) as JobHonorTab );
+			} else if ( id.startsWith( "job-honor-period:" ) ) {
+				jobHonor.selectPeriod( id.slice( "job-honor-period:".length ) as JobHonorPeriod );
+			} else if ( id.startsWith( "job-honor-page:" ) ) {
+				const rows = honorState.feed ? honorRows( honorState.feed, honorState.tab, honorState.period ) : [];
+				jobHonor.turnPage(
+					Number( id.slice( "job-honor-page:".length ) ),
+					Math.max( 1, Math.ceil( rows.length / JOB_HONOR_ROWS ) )
+				);
+			}
 			dirty = true;
 			return;
 		}
@@ -3847,10 +4235,31 @@ export function createUi( ports: UiPorts ) {
 			dirty = true;
 			return;
 		}
+		// Port-only, not native: the renewal window's goods card popup.
+		if ( id.startsWith( "item-mall-popup:" ) ) {
+			itemMall.openPopup( Number( id.slice( "item-mall-popup:".length ) ) );
+			dirty = true;
+			return;
+		}
+		if ( id === "item-mall-search-find" ) {
+			itemMall.applySearch();
+			dirty = true;
+			return;
+		}
+		if ( id === "item-mall-popup-close" ) {
+			itemMall.closePopup();
+			dirty = true;
+			return;
+		}
 
 		if ( id.startsWith( "item-mall-tab:" ) && view?.gameplay ) {
 			const state = itemMall.read( view.gameplay.itemMall );
 			itemMall.browse( state.category, Number( id.slice( "item-mall-tab:".length ) ) );
+			dirty = true;
+			return;
+		}
+		if ( id.startsWith( "item-mall-tab-scroll:" ) ) {
+			itemMall.scrollTabs( Number( id.slice( "item-mall-tab-scroll:".length ) ) );
 			dirty = true;
 			return;
 		}
@@ -3995,6 +4404,7 @@ export function createUi( ports: UiPorts ) {
 		if ( withdrawal.confirming() ) return;
 		if ( practice && !id.startsWith( "skill-confirm-" ) ) return;
 		if ( confirmAbandon && !id.startsWith( "quest-abandon-" ) ) return;
+		if ( confirmReward && !id.startsWith( "quest-reward-" ) ) return;
 		const phase = view.session?.phase ?? "signed-out";
 		if ( npcPanel.event( { kind: "activate", id } ) ) {
 			dirty = true;
@@ -4131,11 +4541,23 @@ export function createUi( ports: UiPorts ) {
 		if ( id.startsWith( "npc-portal:" ) ) {
 			const conversation = view.gameplay?.npcConversation;
 			if ( conversation && conversation.phase === "menu" ) {
+				const target = Number( id.slice( 11 ) );
+				// Port-only, not native (#4136): the clicked link's own
+				// required level rides the command (never the wire) so
+				// a level refusal can name it; unrestricted links and
+				// an unloaded catalogue note nothing.
+				const portals = hud.data()?.portals,
+					npc = view?.entities.find( e => e.gid === conversation.gid ),
+					source = portals?.destinations.find( d => d.ref === npc?.refObjId ),
+					minLevel = source ?
+						(portals?.links.find( l => l.source === source.id && l.target === target )?.minLevel ?? 0) :
+						0;
 				sendGameplay( {
 					kind: "travel-gate",
 					gid: conversation.gid,
 					type: 2,
-					target: Number( id.slice( 11 ) )
+					target,
+					...(minLevel > 0 ? { minLevel } : {})
 				} );
 			}
 			return;
@@ -4474,7 +4896,10 @@ export function createUi( ports: UiPorts ) {
 			}
 		} else if ( id.startsWith( "option-video-combo:" ) ) {
 			const n = Number( id.slice( 19 ) );
-			if ( n === -1 || n === VIDEO_FRAME_LIMIT_SLOT || videoRows().some( r => r.slot === n ) ) {
+			if (
+				n === -1 || n === VIDEO_BRIGHTNESS_SLOT || n === VIDEO_FRAME_LIMIT_SLOT ||
+				videoRows().some( r => r.slot === n )
+			) {
 				videoCombo = videoCombo === n ?
 					VIDEO_COMBO_CLOSED :
 					n;
@@ -4484,6 +4909,9 @@ export function createUi( ports: UiPorts ) {
 			if ( Number( slot ) === VIDEO_FRAME_LIMIT_SLOT ) {
 				const frameLimit = frameLimits()[Number( value )];
 				if ( frameLimit !== undefined ) videoDraft = { ...videoDraft, frameLimit };
+			} else if ( Number( slot ) === VIDEO_BRIGHTNESS_SLOT ) {
+				const brightness = Number( value );
+				if ( brightnessStepKeys()[brightness] ) videoDraft = { ...videoDraft, brightness };
 			} else if ( Number( slot ) === -1 ) {
 				const size = displaySizes()[Number( value )];
 				if ( size ) {
@@ -4700,6 +5128,15 @@ export function createUi( ports: UiPorts ) {
 			sendGameplay( { kind: "resurrection-consent", accept: id === "resurrection-accept" } );
 		} else if ( id === "instance-accept" || id === "instance-refuse" ) {
 			sendGameplay( { kind: "instance-consent", accept: id === "instance-accept" } );
+		} else if ( id === "party-summon-accept" || id === "party-summon-refuse" ) {
+			sendGameplay( { kind: "party-summon-answer", accept: id === "party-summon-accept" } );
+		} else if ( id === "party-summon-open" ) {
+			partySummonHud.request();
+			sendGameplay( { kind: "party-summon-roster" } );
+		} else if ( id === "party-summon" ) {
+			sendGameplay( { kind: "party-summon" } );
+		} else if ( id === "party-summon-close" ) {
+			partySummonHud.close();
 		} else if ( id === "party-invite" && view.gameplay?.target ) {
 			sendGameplay( {
 				kind: "party-invite",
@@ -4735,15 +5172,12 @@ export function createUi( ports: UiPorts ) {
 			// 5E4C30 slot 2 → 703DD0 sends the ban on the click. With no member
 			// selected nothing happens; the worker refuses the master or oneself
 			// (guildBanRefused) with its 0x10 notice, before any question.
-			// Port-only, not native: the Experimental "Confirm guild ban" row
-			// (on by default, the owner's choice 2026-10-15) asks first.
+			// Port-only, not native (owner 2026-10-15; the default with no row
+			// since 2026-11-21): Withdraw asks first.
 			const social = view.gameplay?.social;
 			const member = social?.guild?.members.find( m => m.id === socialMember );
 			if ( !member ) return;
-			if (
-				experimental.state().saved.confirmGuildBan &&
-				!guildBanRefused( social?.guild ?? null, social?.localName ?? "", member.name )
-			) confirmSocial = id;
+			if ( !guildBanRefused( social?.guild ?? null, social?.localName ?? "", member.name ) ) confirmSocial = id;
 			else sendGameplay( { kind: "guild-kick", name: member.name } );
 		} else if ( [ "party-kick", "guild-leave", "guild-dissolve" ].includes( id ) ) {
 			// The question box below (socialQuestion) asks first.
@@ -5169,14 +5603,29 @@ export function createUi( ports: UiPorts ) {
 			skillScroll = 0;
 		} else if ( id === "skill-scroll-up" || id === "skill-scroll-down" ) {
 			skillScroll = Math.max( 0, skillScroll + (id.endsWith( "up" ) ? -1 : 1) );
-		} else if ( id.startsWith( "quest-track:" ) ) {
-			const idn = Number( id.slice( 12 ) );
-			if ( view.gameplay?.quests?.some( q => q.refId === idn ) ) trackedQuest = trackedQuest === idn ? 0 : idn;
-		} else if ( id.startsWith( "quest-expand:" ) ) {
-			const idn = Number( id.slice( 13 ) );
-			if ( expandedQuests.has( idn ) ) expandedQuests.delete( idn );
-			else expandedQuests.add( idn );
-			selectedQuest = idn;
+		} else if ( id.startsWith( "quest-list-track:" ) ) {
+			questList?.handleControl( id );
+		} else if ( id.startsWith( "quest-list-content:" ) ) {
+			const refId = Number( id.slice( 19 ) ), quest = view.gameplay?.quests?.find( q => q.refId === refId );
+			if ( quest && [ 1, 2, 7, 8 ].includes( quest.u10 ?? 0 ) ) {
+				selectedQuest = refId;
+				questDetailScroll = 0;
+				questDetails = true;
+				confirmAbandon = false;
+			}
+		} else if ( id.startsWith( "quest-list-locate:" ) ) {
+			const refId = Number( id.slice( 18 ) ),
+				quest = view.gameplay?.quests?.find( q => q.refId === refId ),
+				target = quest?.targetIds[0] !== undefined ?
+					minimapResources.positions()?.get( quest.targetIds[0] ) :
+					undefined;
+			if ( quest && target ) {
+				questList?.locateQuest( refId );
+				mapHud.locate( target );
+				setPanel( "Map" );
+			}
+		} else if ( id.startsWith( "quest-tracker-fold:" ) ) {
+			questList?.toggleFolded( Number( id.slice( 19 ) ) );
 		} else if ( id === "quest-scroll-up" || id === "quest-scroll-down" ) {
 			questPage = Math.max( 0, questPage + (id.endsWith( "up" ) ? -1 : 1) );
 		} else if ( id.startsWith( "skill-learn:" ) ) practice = { mode: PRACTICE_SKILL, id: Number( id.slice( 12 ) ) };
@@ -5244,7 +5693,37 @@ export function createUi( ports: UiPorts ) {
 			else if ( which === 2 && index !== undefined && index >= 0 && index <= 2 ) academyKind = index;
 			academyCombo = 0;
 		} else if ( id === "academy-join" ) sendGameplay( { kind: "academy-join", id: academySelection } );
-		else if ( id === "academy-refresh" || id === "academy-prev" || id === "academy-next" ) {
+		else if ( id === "academy-register" || id === "academy-modify" ) {
+			const own = view.gameplay?.academy?.own;
+			academyDialog = id === "academy-modify" ? "modify" : "register";
+			academyForm = academyDialog === "modify" && own ?
+				{ recruit: own.kind, detail: own.detail } :
+				{ recruit: ACADEMY_KIND_STUDENT, detail: "" };
+		} else if ( id === "academy-delete" ) sendGameplay( { kind: "academy-delete" } );
+		else if ( id === "academy-form-cancel" ) {
+			academyDialog = null;
+			focus = null;
+		} else if ( id.startsWith( "academy-form-kind:" ) ) {
+			academyForm.recruit = Number( id.slice( 18 ) );
+		} else if ( id === "academy-form-confirm" ) {
+			if ( academyDialog && academyForm.detail.length ) {
+				sendGameplay( {
+					kind: academyDialog === "modify" ? "academy-modify" : "academy-register",
+					recruit: academyForm.recruit,
+					detail: academyForm.detail
+				} );
+				academyDialog = null;
+				focus = null;
+			}
+		} else if ( id === "academy-scroll-up" || id === "academy-scroll-down" ) {
+			const a = view.gameplay?.academy;
+			if ( a && !a.request ) {
+				sendGameplay( {
+					kind: "academy-page",
+					page: id === "academy-scroll-up" ? Math.max( 1, a.page - 1 ) : a.page + 1
+				} );
+			}
+		} else if ( id === "academy-refresh" || id === "academy-prev" || id === "academy-next" ) {
 			const a = view.gameplay?.academy;
 			if ( a ) {
 				sendGameplay( {
@@ -5408,6 +5887,8 @@ export function createUi( ports: UiPorts ) {
 				questDetailScroll = 0;
 				questDetails = true;
 				confirmAbandon = false;
+				confirmReward = false;
+				rewardPicks = [];
 			}
 		} else if ( id === "quest-abandon" ) confirmAbandon = true;
 		else if ( id === "quest-abandon-yes" ) {
@@ -5415,10 +5896,44 @@ export function createUi( ports: UiPorts ) {
 			confirmAbandon = false;
 			questDetails = false;
 		} else if ( id === "quest-abandon-no" ) confirmAbandon = false;
-		else if ( id === "quest-reward" ) {
-			sendGameplay( { kind: "quest-reward", refId: selectedQuest } );
+		else if ( id.startsWith( "quest-choice:" ) ) {
+			// Toggle one pick. The cap refuses with the window's own line
+			// (the later client's "You cannot select more."); the choice
+			// list itself comes from the quest's reward block.
+			const choiceId = Number( id.slice( 13 ) ),
+				reward = guideResources.data()?.questPresentation.records[selectedQuest]?.reward;
+			if ( reward && reward.choices.some( choice => choice.refId === choiceId ) ) {
+				if ( rewardPicks.includes( choiceId ) ) {
+					rewardPicks = rewardPicks.filter( picked => picked !== choiceId );
+				} else if ( rewardPicks.length >= reward.selectionCount ) {
+					hudMessages.append( hudCopy( "UIIT_STT_QUESTREWARD_MSG03" ), 0xffff7070 );
+				} else {
+					rewardPicks = [ ...rewardPicks, choiceId ];
+				}
+			}
+		} else if ( id === "quest-reward" ) {
+			const reward = guideResources.data()?.questPresentation.records[selectedQuest]?.reward;
+			if ( reward ) {
+				// The window's own prompts: none picked, then not all picked,
+				// then the take-reward confirm.
+				if ( rewardPicks.length === 0 ) {
+					hudMessages.append( hudCopy( "UIIT_STT_QUESTREWARD_MSG01" ), 0xffff7070 );
+				} else if ( rewardPicks.length < reward.selectionCount ) {
+					hudMessages.append( hudCopy( "UIIT_STT_QUESTREWARD_MSG04" ), 0xffff7070 );
+				} else {
+					confirmReward = true;
+				}
+			} else {
+				sendGameplay( { kind: "quest-reward", refId: selectedQuest } );
+				questDetails = false;
+			}
+		} else if ( id === "quest-reward-yes" ) {
+			sendGameplay( { kind: "quest-reward", refId: selectedQuest, picks: rewardPicks } );
+			confirmReward = false;
 			questDetails = false;
-		} else if (
+			rewardPicks = [];
+		} else if ( id === "quest-reward-no" ) confirmReward = false;
+		else if (
 			id === "chat-send" && BUG_COMMAND.test( chatText.slice( chatTabPrefix( chatTab ).length ) )
 		) {
 			// /bug opens the bug reporter (issue #90); it is never sent as chat.
@@ -5432,6 +5947,14 @@ export function createUi( ports: UiPorts ) {
 			focusRequest = { id: null, revision: ++focusRevision, caret: 0 };
 			dirty = true;
 			return;
+		} else if ( id === "sro-macro-icon" ) {
+			// Port-only (#3907): CIFMacroSystemGuide (0xab9080 / MACRO_GUIDE_ID).
+			if (
+				!sroMacroHud.toggleMenu( view.gameplay?.sroMacro, experimental.state().saved.sroMacro )
+			) {
+				hudMessages.append( MACRO_UNAVAILABLE );
+			}
+			dirty = true;
 		} else if (
 			id === "chat-send" && premiumCommand( chatText.slice( chatTabPrefix( chatTab ).length ), hudCopy )
 		) {
@@ -5479,6 +6002,29 @@ export function createUi( ports: UiPorts ) {
 		} else if ( id === "reverse-scroll-map" ) {
 			// Port-only: the box hands the scroll to the world map.
 			if ( reverseMapOffered() && reverseScrollHud.openMap( view ) ) setPanel( "Map" );
+			dirty = true;
+		} else if ( id === "reverse-scroll-party" ) {
+			// Later-native (#3903): the box hands the scroll to the party window.
+			reverseScrollHud.openParty( view );
+			dirty = true;
+		} else if ( id === "reverse-scroll-user" ) {
+			// Later-native (#3903): the box hands the scroll to the user window.
+			reverseScrollHud.openUser( view );
+			dirty = true;
+		} else if ( id.startsWith( "reverse-party:" ) ) {
+			const command = reverseScrollHud.chooseParty( Number( id.slice( "reverse-party:".length ) ), view );
+			if ( command ) sendGameplay( command );
+			dirty = true;
+		} else if ( id === "reverse-user-enroll" ) {
+			const command = reverseScrollHud.enroll( view );
+			if ( command ) sendGameplay( command );
+			dirty = true;
+		} else if ( id === "reverse-user-move" ) {
+			const command = reverseScrollHud.chooseUser( view );
+			if ( command ) sendGameplay( command );
+			dirty = true;
+		} else if ( id === "reverse-window-close" ) {
+			reverseScrollHud.back();
 			dirty = true;
 		} else if ( id.startsWith( "reverse-map-point:" ) ) {
 			const point = reverseScrollHud.mapping() ?
@@ -5532,6 +6078,53 @@ export function createUi( ports: UiPorts ) {
 		} else if ( id === "unique-rank-ok" || id === "unique-rank-close" ) {
 			uniqueRankHud.close();
 			dirty = true;
+		} else if ( id.startsWith( "unique-status-" ) ) {
+			// Port-only (#3531): the window's clicks; the page keeps the
+			// two platform calls a Save can ask for.
+			const action = uniqueStatusHud.click( id );
+			if ( action ) {
+				if ( action.save ) extensions.saveUniqueNotify?.( uniqueStatusHud.character(), action.save );
+				if (
+					action.askPermission && typeof Notification !== "undefined" &&
+					Notification.permission === "default"
+				) {
+					void Notification.requestPermission();
+				}
+				dirty = true;
+			}
+		} else if ( id === "server-event-close" ) {
+			serverEventHud.close();
+		} else if ( id.startsWith( MACRO_ID ) || id === "sro-macro-close" ) {
+			const game = view.gameplay;
+			// Carried bag item on a potion row or Weapon / Shield slot: only
+			// the admitted class binds. Other classes are refused — end the
+			// carry (a kept refuse ghost stuck over the macro window).
+			const carried = carriedItem && !carriedItem.avatar ?
+				game?.inventory?.find( item => item.slot === carriedItem!.slot ) :
+				undefined;
+			if ( carried && sroMacroHud.isPotionItemSlot( id ) ) {
+				sroMacroHud.bindItem( id, carried );
+				carriedItem = null;
+				dirty = true;
+			} else if ( carried && sroMacroHud.isGearItemSlot( id ) ) {
+				sroMacroHud.bindGear( id, carried );
+				carriedItem = null;
+				dirty = true;
+			} else {
+				const commands = sroMacroHud.click(
+					id === "sro-macro-close" ? MACRO_ID + "close" : id,
+					game?.sroMacro,
+					macroAcquiredSkills(
+						game?.skills ?? [],
+						game?.skillIndex,
+						hud.data()?.skillUi.skills
+					),
+					game?.inventory ?? [],
+					game?.skillIndex
+				);
+				for ( const command of commands ) sendGameplay( command );
+				dirty = true;
+			}
 		} else if ( id === "chat-send" && !view.gameplay?.chat?.pending ) {
 			const draft = composeChat(
 				panel === "Chat" ?
@@ -5621,6 +6214,15 @@ export function createUi( ports: UiPorts ) {
 			setPanel( "" );
 			leaveRequested = true;
 			commands( { kind: "exit" } );
+		} else if ( id.startsWith( INVENTORY_SORT_ID ) ) {
+			// Port-only, not native (SRO_INVENTORY_SORT): the
+			// button names its container; a companion's is the bound one.
+			const container = id.slice( INVENTORY_SORT_ID.length );
+			if (
+				view.gameplay?.inventorySort && !view.gameplay.inventorySorting &&
+				!view.gameplay.inventoryPending &&
+				(container === "bag" || container === "storage" || container === "cos")
+			) sendGameplay( { kind: "inventory-sort", container, gid: container === "cos" ? cosGid : undefined } );
 		} else if ( closedPanel( id ) !== undefined || id === "companion-close" || id === "potion-cancel" ) {
 			confirmDrop = "";
 			confirmAbandon = false;
@@ -5991,14 +6593,15 @@ export function createUi( ports: UiPorts ) {
 			}
 		} else if ( id === "drop-gold" && view.gameplay && (goldDialog === "deposit" || goldDialog === "withdraw") ) {
 			// 59A430 caps warehouse deposits at min(carriedGold, 100_000_000);
-			// SRO_RAISED_GOLD_CAPS raises the deposit cap to 1,000,000,000.
+			// SRO_RAISED_GOLD_CAPS raises the deposit cap, to 1,000,000,000
+			// or the shard's published value.
 			// 59C510 closes the modal without sending when amount <= 0, as the
 			// exchange branch above does: an unsendable amount used to leave
 			// the dialog sitting open with no answer (BR-261022-2026-ED06).
 			const amount = Number( goldAmount ),
 				balance = goldDialog === "withdraw" ? view.gameplay.storage?.gold : view.gameplay.progression?.gold,
 				cap = goldDialog === "deposit" ?
-					Number( storageGoldDepositLimit( view.gameplay.raisedGoldCaps === true ) ) :
+					Number( storageGoldDepositLimit( view.gameplay.storageGoldDepositLimit ) ) :
 					0xffffffff;
 			if ( !/^\d+$/.test( goldAmount ) || amount === 0 ) {
 				goldDialog = false;
@@ -6442,6 +7045,7 @@ export function createUi( ports: UiPorts ) {
 			if ( event.kind === "drag-cancel" ) {
 				if ( carriedItem?.source === event.id ) carriedItem = null;
 				if ( carriedShortcut?.id === event.id ) carriedShortcut = null;
+				if ( carriedMacroPotion?.id === event.id ) carriedMacroPotion = null;
 				// Port-only, not native: a cancelled Experimental drag (pointercancel,
 				// blur) never reaches drag-end, so its travel would otherwise carry
 				// into the next press and swallow that row's click.
@@ -6453,7 +7057,10 @@ export function createUi( ports: UiPorts ) {
 				if ( event.kind === "edit" && view?.gameplay?.itemMall ) {
 					const state = itemMall.read( view.gameplay.itemMall );
 					if ( event.id === "item-mall-search" ) {
-						itemMall.setSearch( event.value );
+						// The renewal field edits a draft its Search button applies;
+						// the classic later rail searches as it is typed.
+						if ( state.renewal ) itemMall.setSearchDraft( event.value );
+						else itemMall.setSearch( event.value );
 					}
 					if ( event.id === "item-mall-point-value" && /^\d{0,10}$/.test( event.value ) ) {
 						itemMall.editPointDraft( Number( event.value ), view.gameplay.itemMall );
@@ -6471,6 +7078,12 @@ export function createUi( ports: UiPorts ) {
 					activate( "item-mall-close" );
 					return;
 				}
+				// Enter applies the renewal window's search draft, as its
+				// Search button does.
+				if ( event.kind === "key" && event.code === "Enter" && itemMall.read().renewal ) {
+					activate( "item-mall-search-find" );
+					return;
+				}
 				if ( event.kind === "key" && event.code === "Escape" ) {
 					activate(
 						itemMall.read().pointDialog ?
@@ -6479,8 +7092,21 @@ export function createUi( ports: UiPorts ) {
 							"item-mall-question-cancel" :
 							itemMall.read().selected ?
 							"item-mall-cancel" :
+							itemMall.read().popup >= 0 ?
+							"item-mall-popup-close" :
 							"item-mall-close"
 					);
+					return;
+				}
+				// Enter in the focused renewal search field reaches this gate as
+				// the platform's submit, not as a key event (the key path above
+				// only fires while the canvas holds the keys): it applies the
+				// draft, as the Search button does (#4153).
+				if (
+					event.kind === "activate" && event.id === "submit" && focus === "item-mall-search" &&
+					itemMall.read().renewal
+				) {
+					activate( "item-mall-search-find" );
 					return;
 				}
 				if ( event.kind === "activate" && event.id.startsWith( "item-mall" ) ) {
@@ -6535,14 +7161,25 @@ export function createUi( ports: UiPorts ) {
 				) return;
 			}
 			if ( reverseScrollHud.reconcile( view ) ) dirty = true;
-			if ( reverseScrollHud.active() ) {
+			if ( reverseScrollHud.active() || reverseScrollHud.party() || reverseScrollHud.user() ) {
+				const inBox = reverseScrollHud.active();
 				const boxControl = ( id: string | null ) =>
 					id !== null &&
-					[ "reverse-scroll:2", "reverse-scroll:3", "reverse-scroll-map", "reverse-scroll-cancel" ].includes(
-						id
-					);
+					(inBox ?
+						[
+							"reverse-scroll:2",
+							"reverse-scroll:3",
+							"reverse-scroll-map",
+							"reverse-scroll-party",
+							"reverse-scroll-user",
+							"reverse-scroll-cancel"
+						].includes( id ) :
+						id === "reverse-window-close" || id === "reverse-user-enroll" ||
+						id === "reverse-user-move" || id.startsWith( "reverse-party:" ));
 				if ( event.kind === "key" && event.code === "Escape" ) {
-					reverseScrollHud.close();
+					// Escape leaves a sub-window for the box, and the box for the world.
+					if ( inBox ) reverseScrollHud.close();
+					else reverseScrollHud.back();
 					dirty = true;
 				} else if ( event.kind === "activate" && boxControl( event.id ) ) {
 					activate( event.id );
@@ -7228,6 +7865,37 @@ export function createUi( ports: UiPorts ) {
 				}
 				if ( event.kind !== "hover" ) return;
 			}
+			if ( cosHud.targetUseBox() === "weapon-switch" ) {
+				// Port-only: the weapon switch box asks the race, then the
+				// kind; its refuse button is Cancel on the race step and Back
+				// on the kind step. Escape ends the use; Enter picks nothing.
+				if ( event.kind === "activate" && event.id === "weapon-switch-cancel" ) {
+					if ( !cosHud.backWeaponRace() ) cosHud.takeTargetUse();
+					dirty = true;
+					return;
+				}
+				if ( event.kind === "key" && event.code === "Escape" ) {
+					cosHud.takeTargetUse();
+					dirty = true;
+					return;
+				}
+				if ( event.kind === "activate" && event.id.startsWith( WEAPON_SWITCH_RACE_PREFIX ) ) {
+					cosHud.chooseWeaponRace( Number( event.id.slice( WEAPON_SWITCH_RACE_PREFIX.length ) ) );
+					dirty = true;
+					return;
+				}
+				if ( event.kind === "activate" && event.id.startsWith( WEAPON_SWITCH_KIND_PREFIX ) ) {
+					const command = cosHud.chooseWeaponKind(
+						Number( event.id.slice( WEAPON_SWITCH_KIND_PREFIX.length ) )
+					);
+					if ( command && view?.session?.phase === "world" && !view.gameplay?.inventoryPending ) {
+						sendGameplay( command );
+					}
+					dirty = true;
+					return;
+				}
+				if ( event.kind !== "hover" ) return;
+			}
 			if ( cosHud.targetUse() !== null ) {
 				if (
 					event.kind === "key" && event.code === "Escape" ||
@@ -7288,6 +7956,26 @@ export function createUi( ports: UiPorts ) {
 						dirty = true;
 					}
 					return;
+				}
+				if ( event.kind === "activate" && event.id.startsWith( "avatar:" ) ) {
+					// The armed cursor aimed at the avatar window: the
+					// bag-target path never sees it. The extension gear on
+					// the worn Spirit is refused here and the cursor comes
+					// down, as a serviced target use does; any other armed
+					// click on an avatar keeps the fall-through below.
+					const source = cosHud.itemTargetSource(),
+						worn = view?.gameplay?.avatarInventory?.find( row =>
+							avatarSocket( row.typeFlags ) === Number( event.id.slice( 7 ) )
+						);
+					if ( source && worn && spiritExtensionWornNotice( source.typeFlags, worn.typeFlags ) !== null ) {
+						hudMessages.append(
+							hudCopy( "UIIT_MSG_NASRUN_WEAR_EXTENSION_ITEM_NOT_USE" ),
+							0xffff7070
+						);
+						cosHud.takeTargetUse();
+						dirty = true;
+						return;
+					}
 				}
 				if (
 					event.kind === "drag" || event.kind === "drag-end" || event.kind === "double-activate"
@@ -7498,6 +8186,18 @@ export function createUi( ports: UiPorts ) {
 					!(request ? event.id.startsWith( "party-answer:" ) : event.id.startsWith( "party-form-" ))
 				) return;
 			}
+			if ( academyDialog ) {
+				if ( event.kind === "key" ) {
+					if ( event.code === "Escape" ) activate( "academy-form-cancel" );
+					else if ( event.code === "Enter" && !composing ) activate( "academy-form-confirm" );
+					return;
+				}
+				if (
+					event.kind === "scroll" || event.kind === "drag" || event.kind === "drag-end" ||
+					event.kind === "double-activate"
+				) return;
+				if ( "id" in event && event.id !== null && !event.id.startsWith( "academy-form-" ) ) return;
+			}
 			if ( shopDialog && panel === "Shop" ) {
 				if (
 					event.kind === "edit" && event.id === "shop-quantity" &&
@@ -7606,6 +8306,19 @@ export function createUi( ports: UiPorts ) {
 				fortressProductionHud.scroll( Math.sign( event.delta ), fortressProductionItems().length );
 				dirty = true;
 				return;
+			}
+			if ( event.kind === "scroll" && sroMacroHud.state().window === "options" ) {
+				const acquired = controls.find( c => c.id === MACRO_ID + "wheel:acquired" );
+				const use = controls.find( c => c.id === MACRO_ID + "wheel:use" );
+				const zone = acquired && containsPoint( acquired.rect, event.x, event.y ) ?
+					"acquired" as const :
+					use && containsPoint( use.rect, event.x, event.y ) ?
+					"use" as const :
+					null;
+				if ( zone && sroMacroHud.scroll( zone, Math.sign( event.delta ) ) ) {
+					dirty = true;
+					return;
+				}
 			}
 			if ( event.kind === "scroll" && panel === "Experimental" ) {
 				experimental.scroll( Math.sign( event.delta ), experimentalRange( view?.session ) );
@@ -7801,6 +8514,21 @@ export function createUi( ports: UiPorts ) {
 				dirty = true;
 				return;
 			}
+			if ( event.kind === "drag" && event.id === "academy-scroll-thumb" && panel === "Academy Matching" ) {
+				const a = view?.gameplay?.academy;
+				if ( a && !a.request && a.pages > 1 ) {
+					const target = Math.max(
+						1,
+						Math.min(
+							a.pages,
+							Math.round( a.page + event.dy * (a.pages - 1) / ACADEMY_SCROLL_TRAVEL_PX )
+						)
+					);
+					if ( target !== a.page ) sendGameplay( { kind: "academy-page", page: target } );
+				}
+				dirty = true;
+				return;
+			}
 			if ( event.kind === "scroll" && consolePhase !== 0 && gmHelper.active() ) {
 				if ( event.x >= 0 && event.x <= 600 && event.y >= consoleY && event.y <= consoleY + GM_HELPER_HEIGHT ) {
 					gmHelper.move( Math.sign( event.delta ) * 3 );
@@ -7834,6 +8562,16 @@ export function createUi( ports: UiPorts ) {
 							down = controls.find( c => c.id === "magic-option-down" );
 						if ( up && down ) magicOptionHud.drag( event.dy, down.rect[1] - up.rect[1] - 32, count );
 					}
+					dirty = true;
+					return;
+				}
+			}
+			if (
+				(event.kind === "scroll" || event.kind === "drag" || event.kind === "drag-end") &&
+				panel === "Unique Status"
+			) {
+				// Port-only (#3531): the list's wheel and thumb live in the hud.
+				if ( uniqueStatusHud.pointer( event ) ) {
 					dirty = true;
 					return;
 				}
@@ -7972,7 +8710,10 @@ export function createUi( ports: UiPorts ) {
 			if (
 				event.kind === "key" &&
 				view?.gameplay?.arenaChest?.phase === "checkpoint"
-			) return;
+			) {
+				if ( virtualKey( event.code ) === bindings.keys[1] ) activate( "arena-inventory" );
+				return;
+			}
 			if (
 				event.kind === "key" && event.code === "Escape" &&
 				(view?.gameplay?.arenaChest?.phase === "claimable" ||
@@ -8022,10 +8763,39 @@ export function createUi( ports: UiPorts ) {
 				dirty = true;
 				return;
 			}
+			if ( event.kind === "key" && event.code === "Escape" && sroMacroHud.state().window !== "none" ) {
+				sroMacroHud.close();
+				dirty = true;
+				return;
+			}
 			// Port-only (#3529): Escape closes the market's box, then the market.
 			if ( event.kind === "key" && event.code === "Escape" && marketHud.isOpen() ) {
 				activateMarket( marketHud.state().dialog ? "market-dialog-cancel" : "market-close" );
 				return;
+			}
+			if ( event.kind === "drag" && event.id === "quest-list-drag" && view ) {
+				// The window's own placement frame keeps the dragged
+				// origin (hud/window-placement), as the other window
+				// drags do; the tracker stays where its rule places it.
+				windowPlacement.drag( "quest-list", event.dx, event.dy );
+				dirty = true;
+				return;
+			}
+			if ( event.kind === "scroll" ) {
+				// Wheel lines over the quest list scroll its rows
+				// (the layout's scrollbar region claims the wheel like
+				// the old page's scrollbar did).
+				const hit = () => {
+					const rect = windowPlacement.read( "quest-list" );
+					return panel === "Quests" && rect &&
+						event.x >= rect[0] + 236 && event.x < rect[0] + 800 &&
+						event.y >= rect[1] + 60 && event.y < rect[1] + 350;
+				};
+				if ( hit() ) {
+					questList?.scrollBy( Math.sign( event.delta ) );
+					dirty = true;
+					return;
+				}
 			}
 			if ( questDetails && event.kind === "drag" && event.id === "quest-detail-drag" && view ) {
 				questPosition = [
@@ -8142,9 +8912,46 @@ export function createUi( ports: UiPorts ) {
 				}
 				return;
 			}
+			// Port-only (#3907): lift a bound SRO Macro potion or Weapon /
+			// Shield for drag-out clear.
+			if (
+				event.kind === "drag" &&
+				(sroMacroHud.isPotionItemSlot( event.id ) || sroMacroHud.isGearItemSlot( event.id ))
+			) {
+				const source = controls.find( c => c.id === event.id && c.draggable && !c.disabled );
+				if ( source ) {
+					const prior = carriedMacroPotion?.id === event.id ?
+						carriedMacroPotion :
+						{
+							id: event.id,
+							icon: (() => {
+								if ( !view?.gameplay ) return undefined;
+								if ( sroMacroHud.isGearItemSlot( event.id ) ) {
+									const bag = sroMacroHud.gearBagSlot( event.id );
+									const item = bag ?
+										view.gameplay.inventory?.find( row => row.slot === bag ) :
+										undefined;
+									return item ? iconPath( item.icon ) ?? undefined : undefined;
+								}
+								const ref = sroMacroHud.potionItemRef( event.id );
+								if ( !ref ) return undefined;
+								return macroPotionStock( view.gameplay.inventory ?? [], iconPath ).get( ref )?.icon;
+							})(),
+							x: source.rect[0] + source.rect[2] / 2,
+							y: source.rect[1] + source.rect[3] / 2
+						};
+					carriedMacroPotion = { ...prior, x: prior.x + event.dx, y: prior.y + event.dy };
+					dirty = true;
+				}
+				return;
+			}
 			// The shortcut this drag carried, whether or not its slot is still drawn.
 			const carried = event.kind === "drag-end" && carriedShortcut?.id === event.id;
-			if ( event.kind === "drag-end" ) carriedShortcut = null;
+			const carriedMacro = event.kind === "drag-end" && carriedMacroPotion?.id === event.id;
+			if ( event.kind === "drag-end" ) {
+				carriedShortcut = null;
+				carriedMacroPotion = null;
+			}
 			if ( event.kind === "drag-end" && event.id === "ext-drag" ) {
 				persistQuickslots();
 				return;
@@ -8173,6 +8980,57 @@ export function createUi( ports: UiPorts ) {
 			}
 			if ( event.kind === "drag-end" && view?.gameplay ) {
 				const target = topmostControlAt( controls, event.x, event.y );
+				// Port-only (#3907): releasing a bound potion or Weapon /
+				// Shield away from its cell clears it (CIFSlot drag-out).
+				// Dropping a potion back on the same cell keeps it; on
+				// another potion row moves.
+				if (
+					carriedMacro || sroMacroHud.isPotionItemSlot( event.id ) ||
+					sroMacroHud.isGearItemSlot( event.id )
+				) {
+					if ( sroMacroHud.isGearItemSlot( event.id ) ) {
+						if ( !target || target.id !== event.id ) sroMacroHud.clearGear( event.id );
+						dirty = true;
+						return;
+					}
+					if ( target && sroMacroHud.isPotionItemSlot( target.id ) && target.id !== event.id ) {
+						const ref = sroMacroHud.potionItemRef( event.id );
+						const stock = ref ?
+							view.gameplay.inventory?.find( row => row.refObjId === ref && row.slot >= 13 ) :
+							undefined;
+						// Re-admit with the bag stack's typeFlags (0xdafff0). A
+						// refused move keeps the source; no bag stack transfers
+						// the already-bound RefItem without a TypeId re-check.
+						if ( stock ) {
+							if ( sroMacroHud.bindItem( target.id, stock ) ) sroMacroHud.clearItem( event.id );
+						} else if ( ref ) sroMacroHud.transferItem( event.id, target.id );
+					} else if ( !target || target.id !== event.id ) {
+						sroMacroHud.clearItem( event.id );
+					}
+					dirty = true;
+					return;
+				}
+				// Port-only (#3907): a hotbar item dropped on an SRO Macro
+				// potion row or Weapon / Shield slot binds when admitted.
+				if (
+					target &&
+					(sroMacroHud.isPotionItemSlot( target.id ) || sroMacroHud.isGearItemSlot( target.id )) &&
+					event.id.startsWith( "hotbar:" ) && (carried || controls.some( c => c.id === event.id ))
+				) {
+					const binding = view.gameplay.quickSlots?.find( row =>
+						row.slot === Number( event.id.slice( 7 ) ) && row.kind !== 0
+					);
+					const bagSlot = binding ? quickSlotItemSlot( binding ) : null;
+					const item = bagSlot !== null ?
+						view.gameplay.inventory?.find( row => row.slot === bagSlot ) :
+						undefined;
+					if ( item ) {
+						if ( sroMacroHud.isPotionItemSlot( target.id ) ) sroMacroHud.bindItem( target.id, item );
+						else sroMacroHud.bindGear( target.id, item );
+					}
+					dirty = true;
+					return;
+				}
 				if ( target?.id.startsWith( "hotbar:" ) ) {
 					const slot = Number( target.id.slice( 7 ) ),
 						source = controls.find( c => c.id === event.id && c.draggable && !c.disabled );
@@ -8213,6 +9071,22 @@ export function createUi( ports: UiPorts ) {
 				) {
 					carriedItem = null;
 					dirty = true;
+				}
+				if ( event.id.startsWith( "arena-chest-item:" ) ) {
+					arenaDiscard.chestID = "";
+					const game = view?.gameplay, chest = game?.arenaChest;
+					const target = topmostControlAt( controls, event.x, event.y );
+					const source = Number( event.id.slice( 17 ) );
+					const destination = target?.id.startsWith( "slot:" ) ? Number( target.id.slice( 5 ) ) : -1;
+					if (
+						chest?.phase === "claimable" && !game?.inventoryPending && target && !target.disabled &&
+						destination >= (game?.equipmentSlotCount ?? 13) && chest.items.some( item =>
+							item.slot === source
+						)
+					) {
+						sendGameplay( { kind: "arena-decision", operation: 4, id: chest.id, source, destination } );
+					}
+					return;
 				}
 				// Port-only: a worn wolf gear piece dragged onto a bag slot comes off.
 				if ( event.id.startsWith( "pet-gear:" ) && view?.gameplay && !view.gameplay.inventoryPending ) {
@@ -8361,6 +9235,18 @@ export function createUi( ports: UiPorts ) {
 						}
 						return;
 					}
+					// Port-only (#3907): a bag item on an SRO Macro potion row
+					// or Weapon / Shield slot binds only when admitted. A
+					// refused drop ends the carry like any other miss —
+					// restoring it left a stuck ghost over the macro window.
+					if ( item && target && sroMacroHud.isPotionItemSlot( target.id ) ) {
+						sroMacroHud.bindItem( target.id, item );
+						return;
+					}
+					if ( item && target && sroMacroHud.isGearItemSlot( target.id ) ) {
+						sroMacroHud.bindGear( target.id, item );
+						return;
+					}
 					// CIFExchange: a bag item dropped on the own side goes on the table.
 					if ( item && target && !target.disabled && target.id.startsWith( "exchange-my:" ) ) {
 						stageExchangeItem( item );
@@ -8464,6 +9350,20 @@ export function createUi( ports: UiPorts ) {
 						return;
 					}
 					if ( target?.id.startsWith( "avatar:" ) ) {
+						// The extension gear dropped on the avatar window
+						// while a Spirit is worn is refused with its line;
+						// the drop equips nothing and sends nothing.
+						if (
+							item && view?.gameplay?.avatarInventory?.some( row =>
+								spiritExtensionWornNotice( item.typeFlags, row.typeFlags ) !== null
+							)
+						) {
+							hudMessages.append(
+								hudCopy( "UIIT_MSG_NASRUN_WEAR_EXTENSION_ITEM_NOT_USE" ),
+								0xffff7070
+							);
+							return;
+						}
 						moveAvatar( true, carried.slot );
 						return;
 					}
@@ -8504,12 +9404,10 @@ export function createUi( ports: UiPorts ) {
 						dirty = true;
 						return;
 					}
-					// Port-only (Experimental "Drop on bag tabs"): a drop on the other
-					// page's tab sends the item to that page's first free slot.
-					if (
-						item && target?.id.startsWith( "inventory-page:" ) && !target.disabled &&
-						experimental.state().saved.dropOnBagTab
-					) {
+					// Port-only, not native (owner 2026-11-21: the default, no row): a
+					// drop on the other page's tab sends the item to that page's first
+					// free slot; the original's tabs answer a press only.
+					if ( item && target?.id.startsWith( "inventory-page:" ) && !target.disabled ) {
 						const page = Number( target.id.slice( 15 ) ),
 							destination = bagTabDropSlot(
 								game.inventory,
@@ -8706,7 +9604,7 @@ export function createUi( ports: UiPorts ) {
 			}
 			if (
 				event.kind === "drag" && ITEM_SLOT_PREFIXES.some( prefix => event.id.startsWith( prefix ) ) &&
-				ITEM_CARRY_PANELS.includes( panel )
+				(ITEM_CARRY_PANELS.includes( panel ) || event.id.startsWith( "arena-chest-item:" ))
 			) {
 				const node = controls.find( c => c.id === event.id && !c.disabled && c.draggable );
 				if ( !node ) return;
@@ -8765,12 +9663,30 @@ export function createUi( ports: UiPorts ) {
 				return;
 			}
 			if ( event.kind === "drag" && event.id === "instance-drag" && view ) {
-				const layout = instanceBoxLayout( view.width, view.height, instancePrompt.position() ),
-					next = instanceBoxLayout( view.width, view.height, [
+				const frame = instanceBoxFrame( view.width, view.height, instancePrompt.position() ),
+					next = instanceBoxFrame( view.width, view.height, [ frame[0] + event.dx, frame[1] + event.dy ] );
+				instancePrompt.place( [ next[0], next[1] ] );
+				dirty = true;
+				return;
+			}
+			if ( event.kind === "drag" && event.id === "party-summon-drag" && view ) {
+				const layout = partySummonBoxLayout( view.width, view.height, partySummonPrompt.position() ),
+					next = partySummonBoxLayout( view.width, view.height, [
 						layout.frame[0] + event.dx,
 						layout.frame[1] + event.dy
 					] );
-				instancePrompt.place( [ next.frame[0], next.frame[1] ] );
+				partySummonPrompt.place( [ next.frame[0], next.frame[1] ] );
+				dirty = true;
+				return;
+			}
+			if ( event.kind === "drag" && event.id === "party-summon-window-drag" && view ) {
+				const rows = view.gameplay?.social?.summon?.rows.length ?? 0,
+					layout = partySummonWindowLayout( view.width, view.height, rows, partySummonHud.position() ),
+					next = partySummonWindowLayout( view.width, view.height, rows, [
+						layout.frame[0] + event.dx,
+						layout.frame[1] + event.dy
+					] );
+				partySummonHud.place( [ next.frame[0], next.frame[1] ] );
 				dirty = true;
 				return;
 			}
@@ -8818,10 +9734,11 @@ export function createUi( ports: UiPorts ) {
 				return;
 			}
 			if ( event.kind === "drag" && event.id === "system-drag" && panel === "System" ) {
+				const menuHeight = systemMenuHeight( systemMenuExtras().length );
 				systemX = Math.max( 0, Math.min( (view?.width ?? 214) - 214, (systemX ?? 0) + event.dx ) );
 				systemY = Math.max(
 					0,
-					Math.min( (view?.height ?? SYSTEM_MENU_HEIGHT) - SYSTEM_MENU_HEIGHT, (systemY ?? 0) + event.dy )
+					Math.min( (view?.height ?? menuHeight) - menuHeight, (systemY ?? 0) + event.dy )
 				);
 				dirty = true;
 				return;
@@ -9221,9 +10138,10 @@ export function createUi( ports: UiPorts ) {
 					!controls.some( c => c.id === event.id && c.rightActivate && !c.disabled )
 				) return;
 				// 564030 cancels an active carry before dispatching the pressed icon.
-				if ( carriedItem || carriedShortcut || clearHotbar ) {
+				if ( carriedItem || carriedShortcut || carriedMacroPotion || clearHotbar ) {
 					carriedItem = null;
 					carriedShortcut = null;
+					carriedMacroPotion = null;
 					clearHotbar = false;
 					dirty = true;
 					return;
@@ -9375,6 +10293,8 @@ export function createUi( ports: UiPorts ) {
 					else if ( key === "min" || key === "max" ) {
 						partyForm[key] = event.value.replace( /[^0-9]/g, "" ).slice( 0, 3 );
 					}
+				} else if ( event.id === "academy-form-detail" ) {
+					academyForm.detail = event.value.slice( 0, ACADEMY_DETAIL_MAX_LENGTH );
 				} else if ( event.id === "experimental-ui-scale" && panel === "Experimental" ) {
 					// Port-only, not native: the range control reports the slider's
 					// stop; the draft helper snaps or rejects it.
@@ -9439,7 +10359,7 @@ export function createUi( ports: UiPorts ) {
 					// (0x5f5e100). SRO_RAISED_GOLD_CAPS raises that cap.
 					const raw = event.value.replace( /[^0-9]/g, "" ).slice( 0, 20 ),
 						carried = BigInt( view?.gameplay?.progression?.gold ?? 0 ),
-						depositCap = storageGoldDepositLimit( view?.gameplay?.raisedGoldCaps === true ),
+						depositCap = storageGoldDepositLimit( view?.gameplay?.storageGoldDepositLimit ),
 						limit = goldDialog === "withdraw" ?
 							BigInt( view?.gameplay?.storage?.gold ?? 0 ) :
 							goldDialog === "deposit" && carried > depositCap ?
@@ -9908,7 +10828,7 @@ export function createUi( ports: UiPorts ) {
 				const game = next.gameplay, references = hud.data()?.cosReferences, clock = next.simulationTimeMs ?? 0;
 				const potionState = companionPotions.state(), potionSettings = potionState.saved;
 				const potionBlocked = transportPotionBlocked( game ) || itemMall.isOpen() ||
-					!!(carriedItem || carriedShortcut);
+					!!(carriedItem || carriedShortcut || carriedMacroPotion);
 				const potionRetrying = potionState.lastSentMs !== undefined && clock >= potionState.lastSentMs &&
 					clock - potionState.lastSentMs < TRANSPORT_POTION_RETRY_MS;
 				let use: { readonly slot: number; readonly companionGid?: number; } | null = null;
@@ -10057,7 +10977,8 @@ export function createUi( ports: UiPorts ) {
 				view?.blindHeld !== next.blindHeld
 			) dirty = true;
 			if (
-				focus === "chat-text" || focus === "gm-input" || focus === "gold-amount" || focus === "shop-quantity"
+				focus === "chat-text" || focus === "gm-input" || focus === "gold-amount" || focus === "shop-quantity" ||
+				focus === "item-mall-search"
 			) {
 				if ( !caretDue ) {
 					caretDue = now + 200;
@@ -10080,6 +11001,44 @@ export function createUi( ports: UiPorts ) {
 			}
 			const guideNeeded = next.session?.phase === "world";
 			if ( guideResources.step( guideNeeded, next.gameplay?.levelCap ) ) dirty = true;
+			// The native quest list window's layouts (issue #4245):
+			// demand while the world is up (the tracker can show at any
+			// time), build the owner once they decode, feed it the view.
+			if ( next.session?.phase === "world" ) {
+				if ( resLayoutResources.step( true ) ) dirty = true;
+				if ( !questList && resLayoutResources.data() ) {
+					const layouts = resLayoutResources.data()!;
+					questList = createQuestList( layouts.questList, layouts.questMiniList );
+				}
+				if ( questList ) {
+					questList.observe( {
+						quests: next.gameplay?.quests ?? [],
+						presentation: guideResources.data()?.questPresentation,
+						playerLevel: next.gameplay?.progression?.level ?? 0,
+						timers: questTimers
+					} );
+					const lut = questList.tracked();
+					if ( lut.length === 0 ) trackedQuest = 0;
+					else if ( !lut.includes( trackedQuest ) ) trackedQuest = lut[0]!;
+					// The owner's answers the callers must service:
+					// the helper-full refusal posts the helper copy as
+					// a system message; content/locate are serviced at
+					// the control click itself.
+					for ( const action of questList.actions() ) {
+						if ( action.kind === "helper-full" ) {
+							hudMessages.append( hudCopy( "UIIT_CTL_QUEST_HELPER_FULL" ), 0xffff7070 );
+						}
+					}
+					// A refused reward claim answers with the window's error
+					// line, once per refusal.
+					const refusal = next.gameplay?.questRefusal,
+						refusalKey = refusal ? refusal.refId + ":" + refusal.reason : "";
+					if ( refusalKey && refusalKey !== rewardRefusalKey ) {
+						rewardRefusalKey = refusalKey;
+						hudMessages.append( hudCopy( "UIIT_STT_QUESTREWARD_ERROR" ), 0xffff7070 );
+					}
+				}
+			}
 			guildManagerHud.observeSoldiers(
 				next.session?.phase === "world" && next.gameplay?.npcConversation?.phase === "menu" ?
 					next.gameplay.npcConversation.gid :
@@ -10288,8 +11247,14 @@ export function createUi( ports: UiPorts ) {
 				next.entities.find( e => e.gid === next.gameplay?.localGid && e.appearanceState?.[2] === 1 )?.gid ?? 0 :
 				0;
 			if ( berserkGid !== berserkActor ) {
+				// A region change drops the local entity for a moment while the server's
+				// Berserk runs on: when it returns before the minute could have ended, the
+				// gauge resumes where it was instead of restarting full (port presentation).
+				const resumed = berserkGid && berserkLostAt >= 0 && now - berserkLostAt < BERSERK_RESUME_WINDOW_MS &&
+					berserkLostAt - berserkStarted < BERSERK_RESUME_ELAPSED_MS;
+				if ( !berserkGid ) berserkLostAt = now;
+				else if ( !resumed ) berserkStarted = now;
 				berserkActor = berserkGid;
-				berserkStarted = now;
 				dirty = true;
 			}
 			const nextBerserkFrame = berserkActor ? Math.floor( Math.min( 63000, now - berserkStarted ) / 50 ) : -1;
@@ -10461,6 +11426,11 @@ export function createUi( ports: UiPorts ) {
 			resurrectionPrompt.sync( proposer );
 			const instanceLeader = phase === "world" || retainedWorld ? next.gameplay?.social?.instance?.gid ?? 0 : 0;
 			instancePrompt.sync( instanceLeader );
+			const summonLeader = phase === "world" || retainedWorld ? next.gameplay?.social?.summonPrompt?.gid ?? 0 : 0;
+			partySummonPrompt.sync( summonLeader );
+			if ( partySummonHud.sync( phase === "world" || retainedWorld ? next.gameplay?.social : null ) ) {
+				dirty = true;
+			}
 			if ( phase !== "disconnected" ) disconnectPosition = null;
 			const gachaVisible = phase === "world" && !!next.gameplay?.gacha?.visible;
 			if ( gachaVisible && !gachaWasVisible ) {
@@ -10523,7 +11493,8 @@ export function createUi( ports: UiPorts ) {
 			else {
 				// 572770 reads the selected/dragged control; 561D50 checks the
 				// Item Mall child (69B2E0), not arbitrary nonmodal windows.
-				const blocked = !!(carriedItem || carriedShortcut), itemMallOpen = itemMall.isOpen();
+				const blocked = !!(carriedItem || carriedShortcut || carriedMacroPotion),
+					itemMallOpen = itemMall.isOpen();
 				if ( autoPotionInput.sync( blocked, itemMallOpen ) ) {
 					sendGameplay( { kind: "auto-potion-input", blocked, itemMallOpen } );
 				}
@@ -10537,6 +11508,71 @@ export function createUi( ports: UiPorts ) {
 				phase === "world" &&
 				uniqueRankHud.reconcile( next.gameplay, experimental.state().saved.uniqueDamageRank )
 			) dirty = true;
+			if ( phase === "world" ) {
+				// Port-only (#3531): the Unique Status alerts. The notify
+				// list belongs to the character in the world; a marked
+				// unique's spawn (and death, when allowed) raises the
+				// in-game line and, once the player allowed it on Save,
+				// the browser's notification. (The panel itself follows
+				// the menu's gating, like the Event Calendar's.)
+				uniqueStatusHud.attach( next.session?.character ?? "" );
+				const alertFlips = uniqueStatusHud.reconcile(
+					next.gameplay?.uniqueStatus,
+					experimental.state().saved.uniqueStatus
+				);
+				for ( const flip of alertFlips ) {
+					sendGameplay( {
+						kind: "local-notice",
+						notice: { key: "", value: 0, text: uniqueStatusAlertText( flip ) }
+					} );
+					notifyBrowserUnique( flip, uniqueStatusHud.savedSettings().browser );
+					dirty = true;
+				}
+			}
+			// Port-only (#3532): the calendar fetches only while its panel is open.
+			eventCalendar.frame( apiBase, Date.now(), panel === "Event Calendar" );
+			// Port-only (#3530): the honor window reads the worker's feed
+			// while the row is on; off, the feed is dropped.
+			jobHonor.reconcile(
+				phase === "world" ? next.gameplay?.jobHonor : null,
+				experimental.state().saved.jobHonor,
+				Date.now()
+			);
+			// Port-only (#3648): the Styria windows read the worker's
+			// feed; a fresh result opens its window once, and the
+			// manager's conversation opening raises the registration.
+			styria.reconcile(
+				phase === "world" ? next.gameplay?.styria : null,
+				phase === "world" ? next.gameplay?.styriaResult : null,
+				Date.now()
+			);
+			if ( styria.resultPending() ) {
+				styria.markResultShown();
+				if ( panel !== "Styria Clash" ) setPanel( "Styria Clash" );
+			}
+			const styriaChoicesNow = styriaConversationChoices(
+				phase === "world" ? next.gameplay?.npcConversation : undefined
+			);
+			const styriaConversationOpen = styriaChoicesNow.apply !== undefined ||
+				styriaChoicesNow.cancel !== undefined;
+			if ( styriaConversationOpen && !styriaConversationWasOpen && panel !== "Styria Clash" ) {
+				setPanel( "Styria Clash" );
+			}
+			styriaConversationWasOpen = styriaConversationOpen;
+			if ( phase === "signed-out" || phase === "character-select" ) serverEventHud.reset();
+			if ( phase === "world" ) {
+				const before = serverEventHud.shown();
+				serverEventHud.reconcile( next.gameplay?.serverEventGauge );
+				if ( serverEventHud.shown() !== before ) dirty = true;
+			}
+			// Port-only (#3907): the macro windows close with the row or the world.
+			if ( sroMacroHud.state().window !== "none" ) {
+				sroMacroHud.reconcile(
+					phase === "world" ? next.gameplay?.sroMacro : undefined,
+					experimental.state().saved.sroMacro
+				);
+				if ( sroMacroHud.state().window === "none" ) dirty = true;
+			}
 			// Port-only (#3529): the market closes with the world, or when the
 			// shard does not run it; a write's answer refreshes what it changed.
 			if ( marketHud.isOpen() && (phase !== "world" || next.gameplay?.consignment !== true) ) {
@@ -10599,9 +11635,16 @@ export function createUi( ports: UiPorts ) {
 					persistWindowPositions();
 					guildWarHud.reset( true );
 					uniqueRankHud.reset();
+					uniqueStatusHud.reset();
+					eventCalendar.reset();
+					jobHonor.reset();
+					styria.reset();
+					styriaConversationWasOpen = false;
+					sroMacroHud.reset();
 					windowPlacement.reset();
 					itemMall.reset();
 					carriedShortcut = null;
+					carriedMacroPotion = null;
 					if ( panel === "Option" ) audioPreference( audioSaved, false );
 					chatFeedbackObserved = -1;
 					focusRequest = undefined;
@@ -10773,13 +11816,14 @@ export function createUi( ports: UiPorts ) {
 				hover,
 				focus,
 				copy: hudCopy,
-				buttonFamily: hud.buttonFamily,
-				fitWindowLabels: () => experimental.state().saved.fitWindowLabels,
-				greyDisabledTabs: () => experimental.state().saved.greyDisabledTabs
+				buttonFamily: hud.buttonFamily
 			};
 			const itemSlots: ItemSlotContext = {
 				gameplay: next.gameplay,
-				gender: next.session?.characters?.find( row => row.name === next.session?.character )?.gender,
+				sex: wearerSex(
+					next.gameplay?.localSex,
+					next.session?.characters?.find( row => row.name === next.session?.character )?.gender
+				),
 				simulationTimeMs: next.simulationTimeMs ?? 0,
 				warningPhase: equipmentWarningPhase,
 				iconPath,
@@ -11229,8 +12273,14 @@ export function createUi( ports: UiPorts ) {
 			function drawTransientBanners( top?: number ) {
 				// Port-only (#1976): only a seal drop's notice takes its
 				// tier's weight (noticeBannerRow); every other notice on
-				// this row keeps the native plate untouched.
-				const noticeRow = noticeBannerRow( notificationBanner );
+				// this row keeps the native plate untouched. A reinforcement
+				// success wears the later client's violet plate (#3260)
+				// while its art is published, at that client's y 190
+				// (CENTRE_ROW_Y, BUG-100).
+				const noticeRow = noticeBannerRow(
+					notificationBanner,
+					centreBannerPaths.every( p => !!resources.size( p ) )
+				);
 				const rows = [
 					{
 						value: uniqueBanner.value( hudCopy ),
@@ -11245,7 +12295,7 @@ export function createUi( ports: UiPorts ) {
 						value: notificationBanner.value( hudCopy ),
 						alpha: notificationBanner.alpha(),
 						paths: noticeRow.paths,
-						y: 100,
+						y: noticeRow.y,
 						color: noticeRow.color,
 						textRgb: noticeRow.textRgb,
 						frame: noticeRow.frame
@@ -11262,6 +12312,9 @@ export function createUi( ports: UiPorts ) {
 				];
 				if ( top !== undefined ) rows.sort( ( a, b ) => a.y - b.y );
 				let bottom = top ?? 0;
+				// The centre plate's art loads ahead of the first success
+				// line, the way the notice art does through its own row.
+				paths.push( ...centreBannerPaths );
 				for ( const row of rows ) {
 					paths.push( ...row.paths );
 					if ( row.alpha <= 0 ) continue;
@@ -11457,7 +12510,7 @@ export function createUi( ports: UiPorts ) {
 					...(native ?
 						{
 							textInsets: node.client,
-							textAlign: hAlign === 2 ? "right" : hAlign === 1 ? "center" : "left"
+							textAlign: authoredEditAlign( hAlign )
 						} :
 						{})
 				} );
@@ -11820,6 +12873,39 @@ export function createUi( ports: UiPorts ) {
 			}
 			/*
 			================
+			inventorySortButton
+
+			Port-only, not native (SRO_INVENTORY_SORT): the sort
+			button of a container's window, left of its close button at
+			(closeX, closeY). It shows pressed while that container is sorted
+			and is disabled while any is. The control is placed whether or not
+			the art has loaded, so it never drops from under the cursor.
+			================
+			*/
+			function inventorySortButton(
+				closeX: number,
+				closeY: number,
+				container: import("@/engine/contracts/gameplay").InventorySortContainer
+			) {
+				if ( !view?.gameplay?.inventorySort ) return;
+				const id = INVENTORY_SORT_ID + container,
+					running = view?.gameplay?.inventorySorting,
+					sorting = running === container,
+					face = INVENTORY_SORT_FACES[sorting || (pressed === id && hover === id) ? 2 : hover === id ? 1 : 0],
+					r: UiRect = [
+						closeX - INVENTORY_SORT_CLOSE_GAP - INVENTORY_SORT_SIZE,
+						closeY,
+						INVENTORY_SORT_SIZE,
+						INVENTORY_SORT_SIZE
+					];
+				paths.push( ...INVENTORY_SORT_FACES );
+				const drawn = resources.has( face ) ? face : INVENTORY_SORT_FACES[0];
+				if ( resources.has( drawn ) ) image( r, drawn );
+				blocks.push( r );
+				controls.push( { id, label: "Sort", rect: r, kind: "button", disabled: running !== undefined } );
+			}
+			/*
+			================
 			mainPopup
 			================
 			*/
@@ -11842,6 +12928,7 @@ export function createUi( ports: UiPorts ) {
 					py + 10,
 					page === "Inventory" && panel !== "Inventory" ? "companion-close" : panelCloseId( page )
 				);
+				if ( page === "Inventory" ) inventorySortButton( px + 362, py + 10, "bag" );
 				quads.push(
 					...text.quads( hudCopy( caption ), [ px + 10, py + 12, 367, 12 ], full, white, {
 						hAlign: 1,
@@ -11865,7 +12952,8 @@ export function createUi( ports: UiPorts ) {
 			const x = Math.max( 0, Math.round( (w - 380) / 2 ) ), y = Math.max( 0, Math.round( (h - 520) / 2 ) );
 			const operationStatus = next.frontend?.creation?.status ?? next.frontend?.status;
 			diagnosticError = next.worldError ?? next.resourceError ?? next.session?.error ?? game?.error ??
-				game?.chat?.error ?? next.frontend?.error ?? guideResources.error() ?? minimapResources.error() ??
+				game?.chat?.error ?? next.frontend?.error ?? guideResources.error() ?? resLayoutResources.error() ??
+				minimapResources.error() ??
 				hud.error() ?? text.error() ?? resources.error() ?? null;
 			// CPSTitle 73E7B0 replaces timer 1000 with a 15000 ms deadline. A camera
 			// phase never renews it; 7425E0 retires the title process after its fade.
@@ -11966,6 +13054,11 @@ export function createUi( ports: UiPorts ) {
 			const worldVisible = (phase === "world" || retainedWorld) && !loading && next.worldReady &&
 				(!next.frontend || next.frontend.phase === "world");
 			worldShown = worldVisible;
+			// Port-only (#3925): the maintenance notice reads the schedule
+			// only while the title screens are up and its row is on.
+			const noticeOn = experimental.state().saved.maintenanceNotice;
+			maintenanceHud.frame( apiBase, now, noticeOn && !worldVisible );
+			const maintenanceLine = noticeOn ? maintenanceHud.notice() ?? undefined : undefined;
 			if ( !(phase === "world" || retainedWorld) ) windowWarm.reset();
 			// One unseen window build per idle frame; see window-warm.ts.
 			const warming = windowWarm.begin(
@@ -12013,7 +13106,8 @@ export function createUi( ports: UiPorts ) {
 							offset: serverOffset,
 							now,
 							message: error,
-							credentialsLocked: loginReplyPending || phase === "authenticating"
+							credentialsLocked: loginReplyPending || phase === "authenticating",
+							notice: maintenanceLine
 						},
 						roster,
 						selectedCharacter
@@ -12045,7 +13139,8 @@ export function createUi( ports: UiPorts ) {
 						offset: serverOffset,
 						now,
 						message: error,
-						credentialsLocked: loginReplyPending || phase === "authenticating"
+						credentialsLocked: loginReplyPending || phase === "authenticating",
+						notice: maintenanceLine
 					},
 					roster,
 					selectedCharacter
@@ -12311,18 +13406,27 @@ export function createUi( ports: UiPorts ) {
 								(hudCopy( "UIIT_STT_LV_LEVEL" ) || "Lv %d").replace( "%d", String( level ) )
 							);
 						}
+						// Port-only: a Blue Berserk draws the gauge in its blue art (hwan-skin.ts).
+						// The blue file is requested like any gauge picture; until it is loaded (or if a
+						// build does not publish it) the plain one draws.
+						const blue = ( path: string ) => {
+							const art = hwanSkin( path, game?.hwanLevel );
+							if ( art === path ) return path;
+							paths.push( art );
+							return resources.has( art ) ? art : path;
+						};
 						if ( berserkActor ) {
 							const animation = berserkHud( now - berserkStarted ),
-								burn = ROOT + "interface/playerminiinfo/pmi_jahwan_burn.png",
+								burn = blue( ROOT + "interface/playerminiinfo/pmi_jahwan_burn.png" ),
 								size = resources.size( burn );
 							paths.push( burn );
 							for ( let i = 0; i < 5; i++ ) {
-								const circle = p["GDR_PMI_CIRCLE" + i]!;
-								if ( resources.has( circle.texture ) && animation.circles[i]! > 0 ) {
+								const circle = p["GDR_PMI_CIRCLE" + i]!, circleArt = blue( circle.texture );
+								if ( resources.has( circleArt ) && animation.circles[i]! > 0 ) {
 									rect(
 										authoredRect( circle, px, py ),
 										[ 1, 1, 1, animation.circles[i]! ],
-										circle.texture,
+										circleArt,
 										circle.uv
 									);
 								}
@@ -12342,18 +13446,32 @@ export function createUi( ports: UiPorts ) {
 								}
 							}
 							for ( const name of [ "GDR_PMI_HWAN_EFF_FACE", "GDR_PMI_HWAN_EFF_GLOW" ] ) {
-								const n = p[name]!;
-								if ( resources.has( n.texture ) && animation.glow > 0 ) {
-									rect( authoredRect( n, px, py ), [ 1, 1, 1, animation.glow ], n.texture, n.uv );
+								const n = p[name]!, art = blue( n.texture );
+								if ( resources.has( art ) && animation.glow > 0 ) {
+									rect( authoredRect( n, px, py ), [ 1, 1, 1, animation.glow ], art, n.uv );
 								}
 							}
 						} else {for ( let i = 0; i < Math.min( 5, gauge?.displayed ?? 0 ); i++ ) {
-								authoredImage( p["GDR_PMI_CIRCLE" + (4 - i)]!, px, py );
+								const circle = p["GDR_PMI_CIRCLE" + (4 - i)]!, art = blue( circle.texture );
+								// The filled ball is requested like any gauge picture: on a cold cache (first login
+								// after clearing site data) it was drawn before it loaded and the rings stayed empty
+								// until a refresh.
+								paths.push( art );
+								authoredImage( circle, px, py, art );
 							}}
 						if (
 							gauge?.displayed === 5 &&
 							next.entities.find( e => e.gid === game?.localGid )?.appearanceState?.[2] !== 1
-						) authoredButton( p.GDR_PMI_BTN_JAHWAN!, px, py, "berserk", "Berserk" );
+						) {
+							const plain = p.GDR_PMI_BTN_JAHWAN!;
+							authoredButton(
+								{ ...plain, texture: blue( plain.texture ) },
+								px,
+								py,
+								"berserk",
+								"Berserk"
+							);
+						}
 						if ( (game?.progression?.statPoints ?? 0) > 0 ) {
 							authoredButton(
 								p.GDR_PMI_BTN_STATUP!,
@@ -12917,6 +14035,8 @@ export function createUi( ports: UiPorts ) {
 					key.push( experimental.state().saved.eventChatTab );
 					// Port-only (#3358): the contributor roster retags lines.
 					key.push( ...(game?.contributorTitles ?? []) );
+					// Port-only (staff-roster.ts): a grant or role edit retags lines.
+					for ( const entry of game?.staffRoster ?? [] ) key.push( entry.name, entry.tag, entry.chatColor );
 					// Port-only item links: the row and the input's labels change the layout.
 					key.push( chatLinksOn() );
 					key.push( ...chatLinkHud.labels( "chat-text" ) );
@@ -12938,6 +14058,7 @@ export function createUi( ports: UiPorts ) {
 							chatLayout( {
 								chatTimestamps: experimental.state().saved.chatTimestamps,
 								contributorTitles: game?.contributorTitles,
+								staffRoster: game?.staffRoster,
 								noticeLinks: experimental.state().saved.noticeLinks,
 								chatItemLinks: chatLinksOn(),
 								inputLabels: chatLinkHud.labels( "chat-text" ),
@@ -13846,6 +14967,7 @@ export function createUi( ports: UiPorts ) {
 					hover,
 					hudData,
 					trackedQuest,
+					locatedQuest: questList?.lastLocated() ?? undefined,
 					minimapResources,
 					caveMaps: minimapResources.caveMaps(),
 					mapTeleport,
@@ -13915,7 +15037,27 @@ export function createUi( ports: UiPorts ) {
 							const offset = minimapOffset( pose, target, minimapZoom );
 							if ( offset ) markers.push( minimapEdge( offset, "quest" ) );
 						}
+						// Port-only: the spot a quest tool is used at (quest-locations.ts).
+						for (
+							const spot of questLocationTargets(
+								game?.quests,
+								experimental.state().saved.questTrackerMarkers
+							)
+						) {
+							if ( !minimapSameFloor( pose, spot, game ?? null ) ) continue;
+							const offset = minimapOffset( pose, spot, minimapZoom );
+							if ( offset ) markers.push( minimapEdge( offset, "quest" ) );
+						}
 						markers.push( ...minimapHunting( pose, game, next.entities, minimapZoom ) );
+						// Port-only, not native (#3394): the M map guide's
+						// picked hunting ground also on the minimap.
+						if ( experimental.state().saved.guideWaypoint ) {
+							const waypoint = mapHud.guideWaypoint();
+							if ( waypoint && minimapSameFloor( pose, waypoint, game ?? null ) ) {
+								const marker = minimapWaypoint( pose, waypoint, minimapZoom );
+								if ( marker ) markers.push( marker );
+							}
+						}
 						for ( const marker of markers ) {
 							sprite(
 								[
@@ -13986,15 +15128,16 @@ export function createUi( ports: UiPorts ) {
 					// Clamp at render like the drag does: a position stored on a
 					// larger viewport must not strand the menu off screen after
 					// the window shrinks.
+					const menuHeight = systemMenuHeight( systemMenuExtras().length );
 					const sx = Math.max( 0, Math.min( w - 214, systemX ?? Math.trunc( (w - 214) / 2 ) ) ),
 						sy = Math.max(
 							0,
-							Math.min( h - SYSTEM_MENU_HEIGHT, systemY ?? Math.trunc( (h - SYSTEM_MENU_HEIGHT) / 2 ) )
+							Math.min( h - menuHeight, systemY ?? Math.trunc( (h - menuHeight) / 2 ) )
 						);
 					systemX = sx;
 					systemY = sy;
 					const authored = hudData.windows.ifsystemwnd!,
-						layout = systemMenu( authored, sx, sy ),
+						layout = systemMenu( authored, sx, sy, systemMenuExtras() ),
 						inner = authored.GDR_SYSTEM_FRAME!,
 						tile = authored.GDR_SYSTEM_BGTILE!;
 					blocks.push( layout.frame );
@@ -14031,7 +15174,10 @@ export function createUi( ports: UiPorts ) {
 					);
 					closeButton( sx + 188, sy + 10, panelCloseId( "System" ) );
 					for ( const node of layout.buttons ) {
-						const id = node.id === EXPERIMENTAL_MENU_ID ? "open-window:Experimental" : node.id === 10 ?
+						const entry = SYSTEM_MENU_ENTRIES[node.id];
+						const id = node.id === EXPERIMENTAL_MENU_ID ? "open-window:Experimental" : entry ?
+							entry.action :
+							node.id === 10 ?
 							"open-window:Option" :
 							node.id === 11 ?
 							"open-window:Game Guide" :
@@ -14043,10 +15189,163 @@ export function createUi( ports: UiPorts ) {
 							sx,
 							sy,
 							id,
-							node.id === EXPERIMENTAL_MENU_ID ? "Experimental" : hudCopy( node.text )
+							node.id === EXPERIMENTAL_MENU_ID ?
+								"Experimental" :
+								entry ?
+								entry.label :
+								hudCopy( node.text )
 						);
 					}
 					endWindow( admission );
+				}
+				if ( panel === "Event Calendar" && hudData ) {
+					const admission = beginWindow();
+					// Port-only, not native (#3532): the window's drawing is
+					// hud/event-calendar-view.ts's ops; admission, the chrome
+					// and the op-to-quad loop stay here.
+					const [px, py] = windowOrigin( "Event Calendar", [
+						(w - EVENT_CALENDAR_WIDTH) / 2,
+						(h - EVENT_CALENDAR_HEIGHT) / 2,
+						EVENT_CALENDAR_WIDTH,
+						EVENT_CALENDAR_HEIGHT
+					] );
+					windowBox( "Event Calendar", px, py, EVENT_CALENDAR_WIDTH, EVENT_CALENDAR_HEIGHT );
+					closeButton( px + EVENT_CALENDAR_WIDTH - 26, py + 10, panelCloseId( "Event Calendar" ) );
+					const ops = eventCalendarView( {
+						origin: [ px, py ],
+						tile: hudData.windows.ifoption!.GDR_OPTION_BGTILE!.texture,
+						state: eventCalendar.state(),
+						serverNowMs: eventCalendar.serverNowMs( Date.now() )
+					} );
+					paths.push( ...eventCalendarPictures( ops ) );
+					for ( const op of ops ) {
+						if ( op.kind === "tile" ) {
+							quads.push( ...normalTile( op.rect, op.path, resources.size( op.path ), full ) );
+						} else if ( op.kind === "rect" ) {
+							rect( op.rect, op.color );
+						} else if ( op.kind === "text" ) {
+							quads.push( ...text.quads( op.value, op.rect, full, op.color, {
+								hAlign: op.hAlign,
+								vAlign: op.vAlign
+							} ) );
+						} else {
+							if ( op.texture && resources.has( op.texture ) ) rect( op.rect, op.color, op.texture );
+							controls.push( {
+								id: op.id,
+								label: op.label,
+								rect: op.rect,
+								kind: "button",
+								selected: op.selected,
+								disabled: false
+							} );
+						}
+					}
+					endWindow( admission );
+				}
+				if ( panel === "Job Honor Rank" && hudData ) {
+					const admission = beginWindow();
+					// Port-only, not native (#3530): the window's drawing is
+					// hud/job-honor-view.ts's ops; admission, the chrome and
+					// the op-to-quad loop stay here.
+					const [px, py] = windowOrigin( "Job Honor Rank", [
+						(w - JOB_HONOR_WIDTH) / 2,
+						(h - JOB_HONOR_HEIGHT) / 2,
+						JOB_HONOR_WIDTH,
+						JOB_HONOR_HEIGHT
+					] );
+					windowBox( "Job Honor Rank", px, py, JOB_HONOR_WIDTH, JOB_HONOR_HEIGHT );
+					closeButton( px + JOB_HONOR_WIDTH - 26, py + 10, panelCloseId( "Job Honor Rank" ) );
+					const ops = jobHonorView( {
+						origin: [ px, py ],
+						tile: hudData.windows.ifoption!.GDR_OPTION_BGTILE!.texture,
+						state: jobHonor.state( Date.now() )
+					} );
+					paths.push( ...jobHonorPictures( ops ) );
+					for ( const op of ops ) {
+						if ( op.kind === "tile" ) {
+							quads.push( ...normalTile( op.rect, op.path, resources.size( op.path ), full ) );
+						} else if ( op.kind === "rect" ) {
+							rect( op.rect, op.color );
+						} else if ( op.kind === "text" ) {
+							quads.push( ...text.quads( op.value, op.rect, full, op.color, {
+								hAlign: op.hAlign,
+								vAlign: op.vAlign
+							} ) );
+						} else {
+							if ( op.texture && resources.has( op.texture ) ) rect( op.rect, op.color, op.texture );
+							controls.push( {
+								id: op.id,
+								label: op.label,
+								rect: op.rect,
+								kind: "button",
+								selected: op.selected,
+								disabled: false
+							} );
+						}
+					}
+					endWindow( admission );
+				}
+				if ( panel === "Styria Clash" && hudData ) {
+					const admission = beginWindow();
+					// Port-only, not native (#3648 slice 5): the window's
+					// drawing is hud/styria-view.ts's ops; admission, the
+					// chrome and the op-to-quad loop stay here.
+					const [px, py] = windowOrigin( "Styria Clash", [
+						(w - STYRIA_WIDTH) / 2,
+						(h - STYRIA_HEIGHT) / 2,
+						STYRIA_WIDTH,
+						STYRIA_HEIGHT
+					] );
+					windowBox( "Styria Clash", px, py, STYRIA_WIDTH, STYRIA_HEIGHT );
+					closeButton( px + STYRIA_WIDTH - 26, py + 10, panelCloseId( "Styria Clash" ) );
+					const ops = styriaView( {
+						origin: [ px, py ],
+						tile: hudData.windows.ifoption!.GDR_OPTION_BGTILE!.texture,
+						state: styria.state( Date.now() ),
+						copy: hudCopy,
+						choices: styriaConversationChoices( next.gameplay?.npcConversation )
+					} );
+					paths.push( ...styriaPictures( ops ) );
+					for ( const op of ops ) {
+						if ( op.kind === "tile" ) {
+							quads.push( ...normalTile( op.rect, op.path, resources.size( op.path ), full ) );
+						} else if ( op.kind === "rect" ) {
+							rect( op.rect, op.color );
+						} else if ( op.kind === "text" ) {
+							quads.push( ...text.quads( op.value, op.rect, full, op.color, {
+								hAlign: op.hAlign,
+								vAlign: op.vAlign
+							} ) );
+						} else {
+							if ( op.texture && resources.has( op.texture ) ) rect( op.rect, op.color, op.texture );
+							controls.push( {
+								id: op.id,
+								label: op.label,
+								rect: op.rect,
+								kind: "button",
+								selected: op.selected,
+								disabled: false
+							} );
+						}
+					}
+					endWindow( admission );
+				}
+				// Port-only (#3648 slice 5): the score strip over the
+				// world while a Styria match runs.
+				if ( hudData && phase === "world" ) {
+					const strip = styriaStripOps( {
+						origin: [ (w - STYRIA_STRIP_WIDTH) / 2, 10 ],
+						state: styria.state( Date.now() )
+					} );
+					for ( const op of strip ) {
+						if ( op.kind === "rect" ) rect( op.rect, op.color );
+						else if ( op.kind === "text" ) {
+							quads.push( ...text.quads( op.value, op.rect, full, op.color, {
+								hAlign: op.hAlign,
+								vAlign: op.vAlign
+							} ) );
+						}
+					}
 				}
 				if ( panel === "Auto Potion" && hudData ) {
 					const admission = beginWindow();
@@ -15024,12 +16323,15 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 							label: hudCopy( page.GDR_OPT_VIDEO_ST_SS!.text ),
 							disabled: false
 						}, {
-							slot: -2,
+							// The later client's brightness spin (GDR_OPT_VIDEO_SP_BR,
+							// #3908): five steps, the video draft's choice among
+							// them presented by the device's gamma stage.
+							slot: VIDEO_BRIGHTNESS_SLOT,
 							r: authoredRect( page.GDR_OPT_VIDEO_SP_BR!, ox, oy ),
-							entries: [ "UIIT_STT_NORMAL" ],
-							selected: 0,
+							entries: brightnessStepKeys(),
+							selected: videoDraft.brightness ?? BRIGHTNESS_STEP_DEFAULT,
 							label: hudCopy( page.GDR_OPT_VIDEO_ST_BR!.text ),
-							disabled: true
+							disabled: false
 						} );
 						for (
 							const [i, row] of rows.slice( Math.round( videoScroll ), Math.round( videoScroll ) + 6 )
@@ -15093,7 +16395,8 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 							);
 						}
 						const open = combos.find( c =>
-							c.slot === videoCombo && (c.slot >= -1 || c.slot === VIDEO_FRAME_LIMIT_SLOT)
+							c.slot === videoCombo &&
+							(c.slot >= -1 || c.slot === VIDEO_FRAME_LIMIT_SLOT || c.slot === VIDEO_BRIGHTNESS_SLOT)
 						);
 						if ( open ) {
 							const r = open.r, list: UiRect = [ r[0], r[1] + 20, r[2], open.entries.length * 18 ];
@@ -15900,6 +17203,19 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 						controls = drawFrame.controls = controls.filter( c => c.id.startsWith( "party-setting" ) );
 						blocks.push( full );
 					}
+					// The party summon entry (#3918, port-drawn): the
+					// authored party window has no free control, so the
+					// leader's Summon rides as a tab under the window's
+					// frame; it asks the server for the roster.
+					if ( social?.leader && social.self === social.leader && !partySettings ) {
+						button(
+							"party-summon-open",
+							hudCopy( "UIIT_CTL_PARTY_SUMMON" ),
+							px + 8,
+							py + popup.frame[3] + 4,
+							96
+						);
+					}
 				}
 				if (
 					INVENTORY_POPUP_PANELS.includes( panel ) &&
@@ -15960,7 +17276,7 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 					itemSlot
 					================
 					*/
-					function itemSlot( slot: number, r: UiRect, enabled: boolean, empty?: string ) {
+					function itemSlot( slot: number, r: UiRect, enabled: boolean, empty?: string, hitRect?: UiRect ) {
 						const item = game?.inventory.find( i => i.slot === slot );
 						// 596190: while slot 6's weapon grips two-handed and slot 7 is
 						// empty, slot 7 mirrors the weapon's icon under int_effect and
@@ -15985,6 +17301,7 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 							label: item?.name ??
 								(slot < 13 ? "Equipment slot " + slot : "Empty bag slot " + (slot - 13)),
 							rect: r,
+							hitRect,
 							kind: "button",
 							// 699359: a move while one is pending is dropped (highlights reset);
 							// native slots stay enabled, so hover and tooltips keep working.
@@ -16012,7 +17329,9 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 						}
 						itemCount( item, r );
 					}
-					for ( const s of slots.slots ) itemSlot( s.slot, s.rect, s.enabled );
+					// Port-only (BUG-092): a cell also takes its half of the gap to its
+					// neighbours, so a drop between two cells lands in the nearer one.
+					for ( const s of slots.slots ) itemSlot( s.slot, s.rect, s.enabled, undefined, s.hitRect );
 					// 5952F9/59530D explicitly draw hidden equipment children 4 then 5.
 					const ef = Object.values( equipment ).find( n => n.id === 4 )!,
 						eb = Object.values( equipment ).find( n => n.id === 5 )!;
@@ -16071,29 +17390,97 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 						const sockets = Object.values( equipment ).filter( n => n.id >= 113 && n.id <= 116 )
 							.sort( ( a, b ) => a.id - b.id )
 							.map( node => ({ type: node.id - 112, r: authoredRect( node, ex, ey ) }) );
-						// Port-only, not native (SRO_NASRUN, #3456): a worn Devil's Spirit
-						// gets a fifth socket one socket pitch past the flag's. The
-						// v1.150 layout has no node for it; only a server with the
-						// switch on stores a Spirit, so a native shard draws four.
-						if (
-							sockets.length === 4 &&
-							game?.avatarInventory?.some( i => avatarSocket( i.typeFlags ) === SPIRIT_SOCKET )
-						) {
-							const third = sockets[2]!, fourth = sockets[3]!;
+						// Port-only, not native (SRO_NASRUN, #3456, #4384): a Devil's
+						// Spirit, worn or carried, gets the later clients' fifth socket
+						// under the dress (GDR_AVATAR_SLOT_05, spirit-skills.ts), so a
+						// player holding one sees where it goes (#4364). The v1.150
+						// layout has no node for it; only a server with the switch on
+						// grants a Spirit, so a native shard draws four.
+						const spiritShown = sockets.length === 4 && (
+							game?.avatarInventory?.some( i => isSpiritItem( i.typeFlags ) ) ||
+							game?.inventory.some( i => isSpiritItem( i.typeFlags ) )
+						);
+						if ( spiritShown ) {
 							sockets.push( {
 								type: SPIRIT_SOCKET,
 								r: [
-									fourth.r[0] * 2 - third.r[0],
-									fourth.r[1] * 2 - third.r[1],
-									fourth.r[2],
-									fourth.r[3]
+									ex + SPIRIT_SOCKET_RECT[0],
+									ey + SPIRIT_SOCKET_RECT[1],
+									SPIRIT_SOCKET_RECT[2],
+									SPIRIT_SOCKET_RECT[3]
 								]
+							} );
+						}
+						// Port-only (SRO_NASRUN, #4384): the worn Spirit's lent skills in
+						// the later clients' strip under its socket (GDR_AVATAR_SKILL_WND,
+						// CIFEquipSkillSlotWnd). A slot casts its skill on a right-click
+						// and drags to the hotbar, as the skill window's do; the strip
+						// is empty while no awake Spirit is worn.
+						// The strip's slot backgrounds show with the Spirit's socket,
+						// empty or filled, as the avatar sockets do: one per lent
+						// skill and at least one (the owner's reference screenshots).
+						const slotBackground = ROOT + "interface/pet/pt_block02.png";
+						if ( spiritShown ) {
+							paths.push( slotBackground );
+							const shownSlots = Math.max( 1, game?.spiritSkills?.length ?? 0 );
+							for ( const x of SPIRIT_SKILL_SLOT_BG_X.slice( 0, shownSlots ) ) {
+								if ( !resources.has( slotBackground ) ) break;
+								rect(
+									[
+										ex + SPIRIT_SKILL_STRIP_RECT[0] + x,
+										ey + SPIRIT_SKILL_STRIP_RECT[1] + SPIRIT_SKILL_SLOT_BG_Y,
+										SPIRIT_SKILL_SLOT_BG_SIZE,
+										SPIRIT_SKILL_SLOT_BG_SIZE
+									],
+									white,
+									slotBackground
+								);
+							}
+						}
+						for ( const [index, skillId] of (game?.spiritSkills ?? []).entries() ) {
+							const x = SPIRIT_SKILL_SLOT_X[index];
+							if ( x === undefined ) break;
+							const skill = training.skill( skillId ),
+								r: UiRect = [
+									ex + SPIRIT_SKILL_STRIP_RECT[0] + x,
+									ey + SPIRIT_SKILL_STRIP_RECT[1] + SPIRIT_SKILL_SLOT_Y,
+									SPIRIT_SKILL_SLOT_SIZE,
+									SPIRIT_SKILL_SLOT_SIZE
+								],
+								icon = iconPath( skill?.icon );
+							if ( icon ) {
+								paths.push( icon );
+								if ( resources.has( icon ) ) rect( r, white, icon );
+							}
+							// The cooldown sweep the hotbar and the skill window draw.
+							if ( skill ) {
+								paths.push( ...quickslotTimerPaths() );
+								quads.push(
+									...quickslotCooldownQuads(
+										game?.skillCooldowns ?? [],
+										skill.id,
+										skill.cooldownGroup ?? 0,
+										quickslotTime,
+										r,
+										full
+									).filter( q => resources.has( q.texture ) )
+								);
+							}
+							const active = (hudData.tooltipSkills.get( skillId )?.basicActivity ?? 0) !== 0;
+							controls.push( {
+								id: "skill:" + skillId,
+								label: skill ? localization.text( skill.nameSymbol, skill.name ) : "Spirit skill",
+								rect: r,
+								kind: "button",
+								rightActivate: active,
+								draggable: active,
+								inspect: experimental.state().saved.touchInspect
 							} );
 						}
 						for ( const { type, r } of sockets ) {
 							const item = game?.avatarInventory?.find( i => avatarSocket( i.typeFlags ) === type ),
 								path = ROOT + "interface/equipment/equip_slot_" +
-									[ "helm", "cloth", "pandernt", "plag", "helm" ][type - 1] + ".png";
+									[ "helm", "cloth", "pandernt", "plag", "extraneous" ][type - 1] + ".png";
 							paths.push( path );
 							if ( resources.has( path ) ) {
 								rect( [ r[0] - 4, r[1] - 4, 40, 40 ], white, path );
@@ -16564,102 +17951,24 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 					// never replay the primary popup's controls into this second window.
 					endWindow( admission, restoring ? "withdrawal" : "primary" );
 				}
-				if ( panel === "Quests" && hudData ) {
+				if ( panel === "Quests" && questList ) {
+					// The native quest list window (issue #4245): the
+					// later client's CNIFQuest layout, drawn standalone
+					// at its own placement frame. The old authored-page
+					// content stays absent once the layout stream runs:
+					// its rows are this window's CNIFQuestSlot rows.
 					const admission = beginWindow(),
-						popup = mainPopupGeometry( "Quests", hudData.windows.ifmainpopup!, w, h, popupPosition ),
-						[px, py] = popup.frame,
-						[ox, oy] = popup.pane,
-						page = hudData.windows.ifquest!,
-						main = hudData.windows.ifquestslotmain!,
-						sub = hudData.windows.ifquestslotsub!,
-						blank = hudData.windows.ifquestslot!;
-					mainPopup( "Quests", popup );
-					for ( const node of authoredPaintOrder( page ) ) {
-						authoredChrome(
-							node,
-							ox,
-							oy
-						);
-					}
-					const rows: (readonly [NonNullable<NonNullable<typeof game>["quests"]>[number], number])[] = [];
-					for ( const q of game?.quests ?? [] ) {
-						rows.push( [ q, -1 ] );
-						if ( expandedQuests.has( q.refId ) ) q.contents.forEach( ( _, i ) => rows.push( [ q, i ] ) );
-					}
-					questPage = Math.min( questPage, Math.max( 0, rows.length - 12 ) );
-					const bounds = authoredRect( page.GDR_QUEST_SCROLLMGR!, ox, oy );
-					for ( let i = 0; i < 12; i++ ) {
-						const sx = bounds[0], sy = bounds[1] + i * 27, row = rows[Math.floor( questPage ) + i];
-						if ( !row ) {
-							authoredImage( blank.GDR_QUESTSLOT_EMPTY_WND!, sx, sy );
-							continue;
-						}
-						const [q, content] = row;
-						if ( content >= 0 ) {
-							const objective = questObjectivePresentation(
-								q.contents[content]!,
-								guideResources.data()?.questPresentation.text ?? {}
-							);
-							authoredImage( sub.GDR_QUESTSLOT_SUB_WND!, sx, sy );
-							authoredText(
-								{ ...sub.GDR_QUESTSLOT_SUB_CONTENTS!, color: objective.color },
-								sx,
-								sy,
-								objective.description
-							);
-							authoredText(
-								{ ...sub.GDR_QUESTSLOT_SUB_STATUS!, color: objective.color },
-								sx,
-								sy,
-								hudCopy( objective.statusKey )
-							);
-							continue;
-						}
-						authoredImage( main.GDR_QUESTSLOT_MAIN_WND!, sx, sy );
-						const bar = main.GDR_QUESTLOST_MAIN_TITLE_BAR!,
-							path = ROOT + "interface/quest/qst_colorbar_" +
-								([ "blue", "green", "red", "lightgreen" ][q.u09] ?? "blue") + ".png";
-						paths.push( path );
-						if ( resources.has( path ) ) rect( authoredRect( bar, sx, sy ), white, path );
-						if ( trackedQuest === q.refId ) authoredImage( main.GDR_QUESTLOST_MAIN_SELECTED_BAR!, sx, sy );
-						const meta = guideResources.data()?.questPresentation.records[q.refId],
-							title = meta?.title ?? "";
-						authoredText(
-							main.GDR_QUESTSLOT_TITLE!,
-							sx,
-							sy,
-							title + " (" + (q.u08 & 15) + "/" + (q.u08 >>> 4) + ")"
-						);
-						controls.push( {
-							id: "quest-track:" + q.refId,
-							label: title,
-							kind: "button",
-							rect: authoredRect( bar, sx, sy ),
-							selected: trackedQuest === q.refId
-						} );
-						authoredText( main.GDR_QUESTSLOT_REMAIN_TIME!, sx, sy, questTimers.text( q, hudCopy ) );
-						const arrow = {
-							...main.GDR_QUESTSLOT_MAIN_DROPDOWN_BTN!,
-							texture: ROOT + "interface/ifcommon/com_qst_" +
-								(expandedQuests.has( q.refId ) ? "down" : "right") + "arrow_button.png"
-						};
-						authoredButton( arrow, sx, sy, "quest-expand:" + q.refId, title );
-						authoredButton( main.GDR_QUESTSLOT_MAIN_CONTENT_BTN!, sx, sy, "quest:" + q.refId, title );
-					}
-					const scroll = chatScrollbar(
-						"quest-scroll",
-						optionListTrack( bounds, 0, 0 ),
-						Math.max( 12, rows.length ),
-						12,
-						Math.max( 0, rows.length - 12 ) - questPage,
-						resources.size,
-						full,
-						hover,
-						pressed
-					);
-					paths.push( ...scroll.paths );
-					quads.push( ...scroll.quads );
-					controls.push( ...scroll.controls );
+						placed = windowPlacement.frame( "quest-list", [ 198, 193, 624, 369 ], [ w, h ] );
+					blocks.push( [ placed[0], placed[1], placed[2], placed[3] ] );
+					closeButton( placed[0] + placed[2] - 19, placed[1] + 2, panelCloseId( "Quests" ) );
+					controls.push( {
+						id: "quest-list-drag",
+						label: "Move quest list",
+						kind: "button",
+						draggable: true,
+						rect: placed
+					} );
+					questList.drawList( drawFrame, placed[0], placed[1], hudCopy, questTimers );
 					endWindow( admission );
 				}
 				if ( questDetails && hudData ) {
@@ -16685,17 +17994,106 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 					authoredText( page.GDR_QUESTREWARD_TITLE!, px, py, meta?.rewardTitle ?? "" );
 					if ( q ) {
 						const r = authoredRect( page.GDR_QUESTREWARD_CONTENTS!, px, py );
-						const result = text.guide(
-							guideTokens( meta?.rewardBody ?? "" ),
-							[ r[0], r[1] - questDetailScroll, r[2], r[3] ],
-							r,
-							gold,
-							resources.size
-						);
-						questDetailMax = Math.max( 0, result.height - r[3] );
-						questDetailScroll = Math.min( questDetailScroll, questDetailMax );
-						quads.push( ...result.quads );
-						paths.push( ...result.paths );
+						if ( meta?.reward ) {
+							// A selection quest (#3920): the body keeps the top
+							// of the contents plate, then the six value rows,
+							// then the pickable choices (icon, name, count);
+							// the scroll track walks the choice list. The
+							// layout is the later client's CIFQuestReward
+							// drawn on the v1.150 plate.
+							const reward = meta.reward;
+							const body = text.guide(
+								guideTokens( meta.rewardBody ),
+								[ r[0], r[1], r[2], REWARD_BODY_HEIGHT ],
+								[ r[0], r[1], r[2], REWARD_BODY_HEIGHT ],
+								QUEST_DETAIL_TEXT,
+								resources.size
+							);
+							quads.push( ...body.quads );
+							paths.push( ...body.paths );
+							const values: readonly (readonly [string, number])[] = [
+								[ "UIIT_STT_QUESTREWARD_GOLD", reward.gold ],
+								[ "UIIT_STT_QUESTREWARD_EXP", reward.exp ],
+								[ "UIIT_STT_QUESTREWARD_SP", reward.skillPoints ],
+								[ "UIIT_STT_QUESTREWARD_SPEXP", reward.skillExp ],
+								[ "UIIT_STT_QUESTREWARD_AP", reward.ap ],
+								[ "UIIT_STT_QUESTREWARD_JOBEXP", reward.jobExp ]
+							];
+							values.forEach( ( [key, amount], i ) => {
+								const column = i % 2 ? 150 : 0,
+									row = Math.floor( i / 2 ),
+									y = r[1] + REWARD_BODY_HEIGHT + 8 + row * 15;
+								quads.push( ...text.quads(
+									hudCopy( key ),
+									[ r[0] + column, y, 64, 13 ],
+									full,
+									QUEST_DETAIL_TEXT,
+									{ hAlign: 0, vAlign: 0 }
+								) );
+								quads.push( ...text.quads(
+									String( amount ),
+									[ r[0] + column + 66, y, 74, 13 ],
+									full,
+									QUEST_DETAIL_TEXT,
+									{ hAlign: 2, vAlign: 0 }
+								) );
+							} );
+							const listTop = r[1] + REWARD_BODY_HEIGHT + 58,
+								listHeight = r[1] + r[3] - listTop;
+							questDetailMax = Math.max(
+								0,
+								reward.choices.length * REWARD_CHOICE_ROW - listHeight
+							);
+							questDetailScroll = Math.min( questDetailScroll, questDetailMax );
+							reward.choices.forEach( ( choice, i ) => {
+								const row: UiRect = [
+									r[0],
+									listTop + i * REWARD_CHOICE_ROW - questDetailScroll,
+									r[2],
+									REWARD_CHOICE_ROW - 4
+								];
+								if ( row[1] + row[3] < listTop || row[1] > r[1] + r[3] ) return;
+								const picked = rewardPicks.includes( choice.refId );
+								if ( picked ) {
+									rect( row, [ 1, 156 / 255, 104 / 255, 0.45 ] );
+								}
+								const icon = choice.icon ? iconPath( choice.icon ) : undefined;
+								if ( icon ) {
+									paths.push( icon );
+									if ( resources.has( icon ) ) {
+										rect( [ row[0] + 2, row[1] + 2, 28, 28 ], white, icon );
+									}
+								}
+								quads.push( ...text.quads(
+									choice.count > 1 ? `${choice.name} x${choice.count}` : choice.name,
+									[ row[0] + 38, row[1], row[2] - 38, row[3] ],
+									full,
+									QUEST_DETAIL_TEXT,
+									{ hAlign: 0, vAlign: 1 }
+								) );
+								controls.push( {
+									id: "quest-choice:" + choice.refId,
+									label: choice.name,
+									rect: row,
+									kind: "button"
+								} );
+							} );
+						} else {
+							// The default color of a body without its own font tag. Every v1.150 quest text sets
+							// 255,44,15,1 itself; the later client's strings (the cap-110 chains) leave the
+							// section bodies to the default, which must read on the parchment.
+							const result = text.guide(
+								guideTokens( meta?.rewardBody ?? "" ),
+								[ r[0], r[1] - questDetailScroll, r[2], r[3] ],
+								r,
+								QUEST_DETAIL_TEXT,
+								resources.size
+							);
+							questDetailMax = Math.max( 0, result.height - r[3] );
+							questDetailScroll = Math.min( questDetailScroll, questDetailMax );
+							quads.push( ...result.quads );
+							paths.push( ...result.paths );
+						}
 					}
 					const give = page.GDR_QUESTREWARD_GIVEUP!,
 						caption = hudCopy( q?.u10 === 2 ? "UIIT_STT_QUEST_REWARD" : "UIIT_STT_QUEST_GIVEUP" );
@@ -16748,6 +18146,16 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 					// world. 62D260 resizes the frame per row count; the ring
 					// follows.
 					const infoFrame = hudData.root.GDR_QUESTINFO!;
+					// The window's own surface goes first: a control stacks by
+					// its push order, so a surface pushed after the frame covered
+					// its close button and the window closed only on a reload.
+					controls.push( {
+						id: "quest-info-drag",
+						label: "Move quest info",
+						kind: "button",
+						draggable: true,
+						rect: [ px, py, QUEST_INFO_WINDOW_WIDTH, infoHeight ]
+					} );
 					nativeFrame(
 						{
 							...infoFrame,
@@ -16758,13 +18166,6 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 						"",
 						"quest-info-close"
 					);
-					controls.push( {
-						id: "quest-info-drag",
-						label: "Move quest info",
-						kind: "button",
-						draggable: true,
-						rect: [ px, py, QUEST_INFO_WINDOW_WIDTH, infoHeight ]
-					} );
 					for ( const node of authoredPaintOrder( infoPage ) ) authoredChrome( node, px, py );
 					// 62D260: up to three rows at the native pitch, a tiled
 					// divider under each shown row but the last.
@@ -16804,7 +18205,7 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 							ox,
 							oy,
 							value: entry.condition,
-							clipToControl: experimental.state().saved.fitWindowLabels ? true : "clip",
+							clipToControl: true,
 							label: true
 						} );
 					}
@@ -16816,6 +18217,24 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 						);
 					}
 					endWindow( infoAdmission, "quest-info" );
+				}
+				if ( questList?.trackedCount() ) {
+					// The HUD mini tracker (issue #4245): tracked
+					// quests at the right edge from y=267, stepping
+					// around the windows already occupying the screen.
+					const entries = questList.trackerEntries( hudCopy ), [, height] = questTrackerSize( entries, 30 );
+					const obstacles = [ ...admittedWindows.values() ].flatMap( win => win.blocks );
+					const beside = obstacles.filter( r => r[0] + r[2] >= w - 324 ),
+						above = obstacles.filter( r => !(r[0] + r[2] >= w - 324) );
+					const [tx, ty] = questTrackerPlacement( {
+						screenWidth: w,
+						screenHeight: h,
+						width: 324,
+						height,
+						beside,
+						above
+					} );
+					questList.drawTracker( drawFrame, tx, ty, hudCopy );
 				}
 				if ( practice && panel === "Skills" && hudData ) {
 					const mastery = practice.mode === PRACTICE_MASTERY,
@@ -16969,6 +18388,20 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 					} );
 					endWindow( admission, "quest-abandon" );
 				}
+				if ( confirmReward && questDetails ) {
+					controls = drawFrame.controls = [];
+					const admission = beginWindow();
+					blocks.push( full );
+					// The take-reward confirm asks the window's own line
+					// (the later client's "Will you take this reward?").
+					simpleMessageBox( {
+						title: hudCopy( "UIIT_STT_AGREEMENT_BOX" ),
+						lines: [ hudCopy( "UIIT_STT_QUESTREWARD_MSG02" ) ],
+						yes: "quest-reward-yes",
+						no: "quest-reward-no"
+					} );
+					endWindow( admission, "quest-reward-confirm" );
+				}
 				const compositePackage = compositeItemHud.packageId(),
 					compositeRoot = hudData?.root.GDR_COMPOSITE_ITEM,
 					compositeNodes = hudData?.windows.ifcompositeitemwnd;
@@ -17051,6 +18484,37 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 						caretVisible
 					} );
 				}
+				const macroHud = sroMacroHud.state();
+				if ( macroHud.window !== "none" && game?.sroMacro ) {
+					// Port-only (#3907): the macro windows draw with this module's primitives.
+					const macroPaint: MacroPaint = {
+						beginWindow: frame => frameDraw.beginWindow( frame ),
+						endWindow: ( frame, mark, owner ) => frameDraw.endWindow( frame, mark, owner ),
+						windowOrigin: ( frame, spec ) => frameDraw.windowOrigin( frame, spec ),
+						windowBox: ( frame, spec ) => frameDraw.windowBox( frame, spec ),
+						closeButton: ( frame, x, y, id ) => frameDraw.closeButton( frame, x, y, id ),
+						button: ( frame, spec ) => frameDraw.button( frame, spec ),
+						rect: ( frame, spec ) => frameDraw.rect( frame, spec ),
+						image: ( frame, spec ) => frameDraw.image( frame, spec )
+					};
+					drawSroMacro( drawFrame, macroPaint, {
+						hud: macroHud,
+						live: game.sroMacro,
+						acquired: macroAcquiredSkills(
+							game.skills ?? [],
+							game.skillIndex,
+							hud.data()?.skillUi.skills
+						).map( skill => ({
+							...skill,
+							// skillUi / NameSymbol → "Castle shield"; Codename is a fallback.
+							name: hudCopy( skill.nameSymbol ?? skill.name )
+						}) ),
+						skillIndex: game.skillIndex,
+						potionStock: macroPotionStock( game.inventory ?? [], iconPath ),
+						inventory: game.inventory ?? [],
+						iconPath
+					} );
+				}
 				const uniqueRank = uniqueRankHud.state();
 				if ( uniqueRank && game ) {
 					// Port-only, not native (unique-rank-hud.ts): place, name, damage,
@@ -17117,6 +18581,79 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 					button( "unique-rank-ok", hudCopy( "UIIT_CTL_CONFIRM" ), px + (width - 120) / 2, py + height - 40 );
 					endWindow( admission, "unique-rank" );
 				}
+				const uniqueStatusState = uniqueStatusHud.state();
+				if ( panel === "Unique Status" && game ) {
+					// Port-only, not native (#3531): the window is drawn from the
+					// operations unique-status-view.ts shapes; this loop only
+					// paints them with the ordinary window primitives.
+					const feed = next.gameplay?.uniqueStatus ?? null;
+					const admission = beginWindow();
+					const statusView = uniqueStatusView( {
+						origin: windowOrigin( "UniqueStatus", [
+							(w - UNIQUE_STATUS_WIDTH) / 2,
+							Math.max( 0, (h - UNIQUE_STATUS_HEIGHT) / 3 ),
+							UNIQUE_STATUS_WIDTH,
+							UNIQUE_STATUS_HEIGHT
+						] ),
+						feed,
+						tab: uniqueStatusState.tab,
+						firstRow: uniqueStatusState.firstRow,
+						draft: uniqueStatusHud.draft(),
+						dirty: uniqueStatusHud.dirty(),
+						hover,
+						serverNowMs: uniqueStatusHud.serverNowMs( feed, next.simulationTimeMs ?? 0 )
+					} );
+					uniqueStatusHud.noteDrawn( statusView.list );
+					for ( const op of statusView.ops ) {
+						if ( op.kind === "box" ) {
+							windowBox( op.title, op.rect[0], op.rect[1], op.rect[2], op.rect[3] );
+							closeButton(
+								op.rect[0] + op.rect[2] - 26,
+								op.rect[1] + 10,
+								panelCloseId( "Unique Status" )
+							);
+						} else if ( op.kind === "button" ) {
+							button( op.id, op.label, op.rect[0], op.rect[1], op.rect[2], op.disabled, op.selected );
+						} else if ( op.kind === "image" ) {
+							image( op.rect, op.path );
+						} else if ( op.kind === "text" ) {
+							quads.push(
+								...text.quads( op.value, op.rect, op.rect, op.color, {
+									hAlign: op.hAlign,
+									vAlign: op.vAlign,
+									overflow: "ellipsis"
+								} )
+							);
+						} else if ( op.kind === "rect" ) {
+							rect( op.rect, op.color );
+						} else if ( op.kind === "hit" ) {
+							controls.push( {
+								id: op.id,
+								label: op.label,
+								kind: "button",
+								rect: op.rect,
+								selected: op.selected
+							} );
+						} else if ( op.kind === "scrollbar" ) {
+							const bar = chatScrollbar(
+								op.id,
+								op.rect,
+								op.total,
+								op.page,
+								op.value,
+								resources.size,
+								full,
+								hover,
+								pressed
+							);
+							paths.push( ...bar.paths );
+							quads.push( ...bar.quads );
+							controls.push( ...bar.controls );
+							uniqueStatusHud.noteDrawn( statusView.list, bar.travel );
+						}
+					}
+					endWindow( admission, "unique-status" );
+				}
 				// The bag scroll's box (561D50 opens type 0x21 at 562251) and
 				// 6AD990's type 0x24 box are one box: 52F460 runs 53259C for both,
 				// the reverse return's two points and Cancel.
@@ -17129,7 +18666,16 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 					controls = drawFrame.controls = [];
 					// Port-only: the scroll's box grows a map row when it is offered.
 					const mapRow = reverseScrollHud.active() && reverseMapOffered();
-					const admission = beginWindow(), box = reverseReturnLayout( w, h, mapRow ? 3 : 2 );
+					// Later-native (#3903): the scroll's box grows the user row,
+					// and the party row only while another member exists
+					// (#4391: the v1.696 party window's show is state-gated,
+					// sub_E11F40, so an empty member window is never offered;
+					// the premium box keeps its two).
+					const userRow = reverseScrollHud.active(),
+						partyRow = userRow && reverseScrollHud.partyOffered( game );
+					const laterRows = (userRow ? 1 : 0) + (partyRow ? 1 : 0);
+					const admission = beginWindow(),
+						box = reverseReturnLayout( w, h, 2 + (mapRow ? 1 : 0) + laterRows );
 					blocks.push( full );
 					paths.push( ...partyProposalAssets() );
 					quads.push(
@@ -17158,15 +18704,16 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 							{ hAlign: 1, vAlign: 0 }
 						)
 					);
+					let pointRow = 0;
 					authoredLabeledButton(
-						reverseReturnButton( box.points[0]! ),
+						reverseReturnButton( box.points[pointRow++]! ),
 						0,
 						0,
 						reverseBox.prefix + REVERSE_RETURN_LAST_RECALL,
 						hudCopy( "UIIT_MSG_ITEM_USE_REVERSE_PORTAL_RETRUN_TO_LAST_RETURN" )
 					);
 					authoredLabeledButton(
-						reverseReturnButton( box.points[1]! ),
+						reverseReturnButton( box.points[pointRow++]! ),
 						0,
 						0,
 						reverseBox.prefix + REVERSE_RETURN_LAST_DEATH,
@@ -17174,11 +18721,29 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 					);
 					if ( mapRow ) {
 						authoredLabeledButton(
-							reverseReturnButton( box.points[2]! ),
+							reverseReturnButton( box.points[pointRow++]! ),
 							0,
 							0,
 							"reverse-scroll-map",
-							"Move to a location on the map."
+							hudCopy( "UIIT_CLT_REVERSE_RETRUN_SCROLL_TO_APPOINT_CHANGE" )
+						);
+					}
+					if ( partyRow ) {
+						authoredLabeledButton(
+							reverseReturnButton( box.points[pointRow++]! ),
+							0,
+							0,
+							"reverse-scroll-party",
+							hudCopy( "UIIT_CLT_REVERSE_RETRUN_SCROLL_PARTY_MOVE" )
+						);
+					}
+					if ( userRow ) {
+						authoredLabeledButton(
+							reverseReturnButton( box.points[pointRow++]! ),
+							0,
+							0,
+							"reverse-scroll-user",
+							hudCopy( "UIIT_CLT_REVERSE_RETRUN_SCROLL_USER_APPOINT" )
 						);
 					}
 					// 5327AE captions id 201 UIO_COMMON_CTL_CANCEL; the port's text
@@ -17191,6 +18756,139 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 						hudCopy( "UIIT_CTL_CANCEL" )
 					);
 					endWindow( admission, "premium-reverse-return" );
+				}
+				// Later-native (#3903): the party window the box's party row
+				// opens (v1.696 CNIFReversePortalParty, 0x2ca): one button
+				// per member but the player; the member is the answer.
+				if ( reverseScrollHud.party() ) {
+					controls = drawFrame.controls = [];
+					const members = (game?.social?.members ?? []).filter( member => member.id !== game?.localGid );
+					const admission = beginWindow(),
+						box = reverseReturnLayout( w, h, Math.max( 1, members.length ) );
+					blocks.push( full );
+					paths.push( ...partyProposalAssets() );
+					quads.push(
+						...frameRing(
+							box.frame,
+							MESSAGE_FRAME,
+							PARTS.map( p => resources.size( MESSAGE_FRAME + p + ".png" ) ),
+							full
+						)
+					);
+					quads.push( ...normalTile( box.background, MESSAGE_TILE, resources.size( MESSAGE_TILE ), full ) );
+					quads.push(
+						...text.quads( hudCopy( "UIIT_PAG_REVERSE_RETRUN_SCROLL_PARTY_MOVE" ), box.title, full, white, {
+							hAlign: 1,
+							vAlign: 0
+						} )
+					);
+					members.forEach( ( member, index ) => {
+						authoredLabeledButton(
+							reverseReturnButton( box.points[index]! ),
+							0,
+							0,
+							"reverse-party:" + member.id,
+							member.name
+						);
+					} );
+					authoredLabeledButton(
+						reverseReturnButton( box.refuse ),
+						0,
+						0,
+						"reverse-window-close",
+						hudCopy( "UIIT_CTL_CANCEL" )
+					);
+					endWindow( admission, "reverse-party" );
+				}
+				// Later-native (#3903): the user settings window the box's
+				// user row opens (v1.696 CNIFReversePortalUserSave, 0x2cb).
+				// The later client splits enroll and move into their own
+				// windows; this one panel carries both buttons, the
+				// overwrite question and the no-location line.
+				if ( reverseScrollHud.user() ) {
+					controls = drawFrame.controls = [];
+					const saved = game?.reverseUserPoint;
+					const admission = beginWindow(), box = reverseReturnLayout( w, h, 2 );
+					blocks.push( full );
+					paths.push( ...partyProposalAssets() );
+					quads.push(
+						...frameRing(
+							box.frame,
+							MESSAGE_FRAME,
+							PARTS.map( p => resources.size( MESSAGE_FRAME + p + ".png" ) ),
+							full
+						)
+					);
+					quads.push( ...normalTile( box.background, MESSAGE_TILE, resources.size( MESSAGE_TILE ), full ) );
+					quads.push(
+						...text.quads(
+							hudCopy( "UIIT_PAG_REVERSE_RETRUN_SCROLL_USER_APPOINT_SELECTION" ),
+							box.title,
+							full,
+							white,
+							{ hAlign: 1, vAlign: 0 }
+						)
+					);
+					if ( reverseScrollHud.confirmEnroll() ) {
+						quads.push(
+							...text.quads(
+								hudCopy( "UIIT_MSG_REVERSE_RETRUN_SCROLL_USER_APPOINT_SELECTION_RE_CHECK" ),
+								box.question,
+								full,
+								white,
+								{ hAlign: 1, vAlign: 0 }
+							)
+						);
+					} else {
+						const intro = hudCopy(
+							"UIIT_MSG_REVERSE_RETRUN_SCROLL_USER_APPOINT_SELECTION_INTRODUCTION"
+						).split( "\n" );
+						intro.forEach( ( line, index ) => {
+							quads.push(
+								...text.quads(
+									line,
+									[ box.question[0], box.question[1] - 6 + index * 16, box.question[2], 16 ],
+									full,
+									white,
+									{ hAlign: 1, vAlign: 0 }
+								)
+							);
+						} );
+					}
+					authoredLabeledButton(
+						reverseReturnButton( box.points[0]! ),
+						0,
+						0,
+						"reverse-user-enroll",
+						hudCopy( "UIIT_CLT_REVERSE_RETRUN_SCROLL_USER_APPOINT_BUTTON" )
+					);
+					if ( saved ) {
+						authoredLabeledButton(
+							reverseReturnButton( box.points[1]! ),
+							0,
+							0,
+							"reverse-user-move",
+							hudCopy( "UIIT_CLT_REVERSE_RETRUN_SCROLL_USER_MOVE" )
+						);
+					} else {
+						quads.push(
+							...text.quads(
+								hudCopy( "UIIT_MSG_REVERSE_RETRUN_SCROLL_USER_MOVE_INTRODUCTION_1" ),
+								box.points[1]!,
+								full,
+								white,
+								{ hAlign: 1, vAlign: 0 }
+							)
+						);
+					}
+					authoredLabeledButton(
+						reverseReturnButton( box.refuse ),
+						0,
+						0,
+						"reverse-window-close",
+						hudCopy( "UIIT_CTL_CANCEL" )
+					);
+					endWindow( admission, "reverse-user" );
 				}
 				if ( panel === "Blocking" && hudData ) {
 					const admission = beginWindow(),
@@ -18059,6 +19757,7 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 						page = storagePanel.page( capacity ),
 						slotIds = Array.from( { length: STORAGE_PAGE_SLOTS }, ( _, i ) => storageSlotControlId( i ) );
 					nativeFrame( root, px, py, hudCopy( root.text ), panelCloseId( "Storage" ) );
+					if ( room?.phase === "open" ) inventorySortButton( px + root.rect[2] - 26, py + 10, "storage" );
 					// Slots, the spinner, the gold amount and the money button are live.
 					nativePage( layout, px, py, [ ...slotIds, 10, 11, 13 ] );
 					for ( let i = 0; i < STORAGE_PAGE_SLOTS; i++ ) {
@@ -18787,7 +20486,7 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 								const value = slot[node.id];
 								if ( value === undefined ) continue;
 								// The title of level ("Apprentice Merchant" in 82 pixels)
-								// is fitted as a label under "Fit window labels" rather
+								// is fitted as a label by the label fitting rather
 								// than cut to "Apprentice M...".
 								frameDraw.authoredText( drawFrame, {
 									node,
@@ -19274,10 +20973,9 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 					// Confirm button covered rows 2 and 3).
 					if ( combo && specialtyCombo && buying ) {
 						const r = authoredRect( combo, px, py ), height = inputs.rows * 18;
-						// Port-only (Experimental "Fit window labels"): a list that would
-						// leave the window opens upward from the box.
-						const up = experimental.state().saved.fitWindowLabels &&
-							r[1] + r[3] + height > py + root.rect[3] && r[1] - height >= py;
+						// Port-only, not native (owner 2026-11-21: the default, no row): a list that
+						// would leave the window opens upward from the box.
+						const up = r[1] + r[3] + height > py + root.rect[3] && r[1] - height >= py;
 						const list: UiRect = [ r[0], up ? r[1] - height : r[1] + r[3], r[2], height ];
 						rect( list, [ 0, 0, 0, 1 ] );
 						blocks.push( list );
@@ -19332,6 +21030,9 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 					// Beside a shop (trade goods loading into a transport) the bag keeps
 					// its own close identity; closing it ends the trade, as the shop's does.
 					nativeFrame( root, px, py, record?.name ?? "", panelCloseId( "COS inventory" ) );
+					if ( panel === "COS inventory" && cosTab === 1 && cosHasInventory( record ) && record?.inventory ) {
+						inventorySortButton( px + root.rect[2] - 26, py + 10, "cos" );
+					}
 					nativePage( hudData.windows.ifcos!, px, py );
 					[
 						"UIIT_STT_COSNEWUI_TABMENU_BASICINFO",
@@ -19811,7 +21512,7 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 									}
 									const prerequisiteMet = design.option === 1 ||
 										(state!.skills.find( entry => entry.id === skill.id - 1 )?.level ?? 0) >=
-											design.maxLevel;
+											(petSkillDesign( design.id - 1 )?.maxLevel ?? design.maxLevel);
 									controls.push( {
 										id: "pet-skill:" + design.id,
 										label: design.name,
@@ -20227,7 +21928,10 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 					nativePage( page, px, py, [ 11, 12, 15 ] );
 					for ( const id of [ 13, 14 ] ) authoredText( at( id ), px, py, hudCopy( at( id ).text ) );
 					for (
-						const [rows, base, mine] of [ [ state.theirs, 100, false ], [ state.own, 200, true ] ] as const
+						const [rows, base, mine, locked] of [
+							[ state.theirs, 100, false, state.theirLocked ],
+							[ state.own, 200, true, state.ownLocked ]
+						] as const
 					) {
 						for ( let slot = 0; slot < 12; slot++ ) {
 							const node = at( base + slot ),
@@ -20238,6 +21942,11 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 								image( r, icon );
 								itemEffects( (mine ? "exchange-my:" : "exchange-their:") + slot, row.item, r );
 								itemCount( row.item, r );
+							}
+							// 6B21B0 / 6B2120: a locked side washes all twelve slots.
+							if ( locked ) {
+								const overlay = itemSlotExchangeOverlay( r );
+								image( overlay.rect, overlay.path, white, overlay.uv );
 							}
 							controls.push( {
 								id: (mine ? "exchange-my:" : "exchange-their:") + slot,
@@ -20708,9 +22417,24 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 						blocks.push( list.popup );
 						for ( const { index, rect: entry } of list.rows ) {
 							const id = "stall-net-choice:" + index;
-							// Inference from 536E20's colour triple (normal white, then
-							// 0xFF8080FF): the row under the cursor draws in the second.
-							const color: UiQuad["color"] = hover === id ? [ 128 / 255, 128 / 255, 1, 1 ] : white;
+							// The popup list's row look (combo-box.ts POPUP_LIST_*): a bar
+							// behind the hovered row, pressed text blue, hovered pale
+							// yellow, else white.
+							if ( hover === id || pressed === id ) {
+								quads.push( {
+									rect: popupListRowBar( entry, text.height() ),
+									uv: [ 0, 0, 1, 1 ],
+									color: POPUP_LIST_HOVER_BAR,
+									rightColor: POPUP_LIST_HOVER_BAR,
+									texture: "",
+									clip: full
+								} );
+							}
+							const color: UiQuad["color"] = pressed === id ?
+								POPUP_LIST_PRESSED_TEXT :
+								hover === id ?
+								POPUP_LIST_HOVER_TEXT :
+								white;
 							quads.push( ...text.quads( open.entries[index]!, entry, entry, color ) );
 							controls.push( { id, label: open.entries[index]!, rect: entry, kind: "button" } );
 						}
@@ -22629,7 +24353,16 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 						*/
 						function editBox( id: string, name: string, value: string, yy: number, maxLength: number ) {
 							const r: UiRect = [ px + 22, yy, 336, 26 ];
-							controls.push( { id, label: name, kind: "text", value, rect: r, maxLength } );
+							// The value is drawn 6 px into the box (the text quad below).
+							controls.push( {
+								id,
+								label: name,
+								kind: "text",
+								value,
+								rect: r,
+								maxLength,
+								textInsets: [ 6, 0, 0, 0 ]
+							} );
 							rect( r, [ .02, .03, .02, 1 ] );
 							quads.push(
 								...text.quads(
@@ -22719,7 +24452,7 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 						) continue;
 						if (
 							overlay.fortressMark || overlay.caravanMark || overlay.guildText ||
-							overlay.contributorText ||
+							overlay.contributorText || overlay.tierText ||
 							overlay.status || overlay.stallText
 						) {
 							overlaid.add( entity.gid );
@@ -22963,11 +24696,33 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 					// board, left of the name (overhead-layout.ts titledNameRow).
 					const title = overheads.get( entity.gid )?.contributorText ?? "",
 						titleWidth = title ? text.run( title, selected ? 2 : 0 ).width : 0;
+					// Port-only (#3530): the tier's coloured title rides the
+					// same board, between the Contributor title and the name;
+					// one combined lead keeps the whole line centred.
+					const tierTitle = overheads.get( entity.gid )?.tierText ?? "",
+						tierTitleWidth = tierTitle ? text.run( tierTitle, 2 ).width : 0;
+					// The Hwan title (native in the later client, #3919) rides
+					// the same board closest to the name, after the tier title.
+					// Every title's width is in the one lead, so the centred
+					// board stands behind the whole line and no two titles
+					// ever share a slot.
+					const hwanTitle = overheads.get( entity.gid )?.hwanText ?? "",
+						hwanTitleWidth = hwanTitle ? text.run( hwanTitle, 2 ).width : 0,
+						titleWidths = [ titleWidth, tierTitleWidth, hwanTitleWidth ].filter( w => w > 0 ),
+						leadWidth = titleWidths.reduce( ( sum, w ) => sum + w, 0 ) +
+							TITLE_NAME_GAP * Math.max( 0, titleWidths.length - 1 );
 					if ( named && beginnerMarkShown( entity, options ) ) {
-						const name = boardText(
+						const name = staffBoardName(
 								entity,
-								entity.boardName ?? entity.name ??
-									(entity.gid === game?.localGid ? next.session?.character : "") ?? ""
+								titledDisplayName(
+									boardText(
+										entity,
+										entity.boardName ?? entity.name ??
+											(entity.gid === game?.localGid ? next.session?.character : "") ?? ""
+									),
+									visibleTitleFormat( entity, game?.localGid, options )
+								),
+								game?.staffRoster
 							),
 							width = text.run( name, selected ? 2 : 0 ).width,
 							height = text.boardHeight();
@@ -22976,7 +24731,12 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 							quads.push( {
 								characterAnchor: entity.gid,
 								alphaCutoff: 128 / 255,
-								rect: [ titledNameRow( titleWidth, width ).left - 21.5, -(height >> 1) - 1.5, 16, 16 ],
+								rect: [
+									titledNameRow( leadWidth, width ).left - 21.5,
+									-(height >> 1) - 1.5,
+									16,
+									16
+								],
 								clip: full,
 								uv: [ 0, 0, 1, 1 ],
 								texture: path,
@@ -22985,14 +24745,21 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 						}
 					}
 					if ( !named ) continue;
-					const name = boardText(
+					const name = staffBoardName(
 							entity,
-							entity.boardName ?? entity.name ??
-								(entity.gid === game?.localGid ? next.session?.character : "") ?? ""
+							titledDisplayName(
+								boardText(
+									entity,
+									entity.boardName ?? entity.name ??
+										(entity.gid === game?.localGid ? next.session?.character : "") ?? ""
+								),
+								visibleTitleFormat( entity, game?.localGid, options )
+							),
+							game?.staffRoster
 						),
 						width = text.run( name, selected ? 2 : 0 ).width,
 						height = text.boardHeight();
-					const row = titledNameRow( name ? titleWidth : 0, width ),
+					const row = titledNameRow( name ? leadWidth : 0, width ),
 						left = row.nameLeft,
 						top = -(height >> 1);
 					if ( name && height ) {
@@ -23022,6 +24789,43 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 								color: white
 							} );
 						}
+					}
+					// The board's titles stand left of the name in board
+					// order: Contributor, tier, then the Hwan title closest
+					// to the name (its lead is in the row, like the rest).
+					const tierLeft = row.left + (title ? titleWidth + TITLE_NAME_GAP : 0),
+						hwanLeft = tierLeft + (tierTitle ? tierTitleWidth + TITLE_NAME_GAP : 0);
+					// Port-only (#3530): the tier title, bold in its tier's colour.
+					if ( tierTitle && name && height ) {
+						quads.push(
+							...text.quads(
+								tierTitle,
+								[ tierLeft, top, tierTitleWidth, height ],
+								full,
+								overheads.get( entity.gid )?.tierColor ?? [ 1, 1, 1, 1 ],
+								{
+									vAlign: 0,
+									fontStyle: 2
+								}
+							).map( q => ({ ...q, characterAnchor: entity.gid }) )
+						);
+					}
+					// The Hwan title (native in the later client, #3919):
+					// bold, in its gold, just before the name, for every
+					// player the server's level roster named.
+					if ( hwanTitle && name && height ) {
+						quads.push(
+							...text.quads(
+								hwanTitle,
+								[ hwanLeft, top, hwanTitleWidth, height ],
+								full,
+								overheads.get( entity.gid )?.hwanColor ?? [ 1, 1, 1, 1 ],
+								{
+									vAlign: 0,
+									fontStyle: 2
+								}
+							).map( q => ({ ...q, characterAnchor: entity.gid }) )
+						);
 					}
 					// CICUser 858810 gives the actual [GM] name prefix priority over player
 					// relation colors. This is presentation, never a privilege check.
@@ -23104,14 +24908,12 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 				const speakers = next.entities.filter( e => e.kind === "local-player" || e.kind === "player" );
 				bugReport?.chat( game?.chat?.lines ?? [] );
 				for ( const [gid, row] of speech.step( game?.chat?.lines ?? [], speakers, now, chatLinksOn() ) ) {
-					// Port-only, not native (Experimental "Fit window labels", off is
-					// the original): the board breaks between words. Retail breaks at
+					// Port-only, not native (owner 2026-11-21: the default, no row): the
+					// board breaks between words. Retail breaks at
 					// whichever glyph passes the width (CGFontTexture_UpdateExtent
 					// 7824F0), splitting words ("human r" / "eview").
 					const measure = ( value: string ) => text.run( value ).width,
-						lines = experimental.state().saved.fitWindowLabels ?
-							textLines( row.text, SPEECH_BOARD_WIDTH, measure ) :
-							textBoardLines( row.text, SPEECH_BOARD_WIDTH, measure ),
+						lines = textLines( row.text, SPEECH_BOARD_WIDTH, measure ),
 						lineHeight = text.boardHeight(),
 						height = lines.length * lineHeight,
 						width = Math.max( 0, ...lines.map( value => text.run( value ).width ) ),
@@ -23155,6 +24957,48 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 			// CIFEventGuide::UpdateAcademy (6660F0): sound only on hidden -> shown.
 			if ( academyVisible && !academyWasVisible ) sound( "quest" );
 			academyWasVisible = academyVisible;
+			// The v1.696 client's Server Mission gauge (server-event-hud.ts),
+			// drawn once its v1.696 art is here.
+			const serverEvent = worldVisible ? serverEventHud.shown() : null;
+			if ( serverEvent ) {
+				const frameArt = SERVER_EVENT_ART + "wind.png";
+				paths.push( frameArt );
+				if ( resources.has( frameArt ) ) {
+					const at = serverEventLayout( w, hudCorner ),
+						ratio = gaugeRatio( serverEvent.count, serverEvent.goal );
+					image( at.frame, frameArt );
+					image( at.snow, SERVER_EVENT_ART + "snow.png" );
+					if ( ratio > 0 ) {
+						image(
+							[ at.gauge[0], at.gauge[1], at.gauge[2] * ratio, at.gauge[3] ],
+							SERVER_EVENT_ART + "gage.png",
+							white,
+							[ 0, 0, ratio, 1 ]
+						);
+					}
+					quads.push(
+						...text.quads(
+							gaugeText( serverEvent.count, serverEvent.goal ),
+							at.text,
+							full,
+							SERVER_EVENT_TEXT_COLOR,
+							{
+								hAlign: 1,
+								vAlign: 1
+							}
+						)
+					);
+					const id = "server-event-close",
+						states = [ "close", "close_focus", "close_press" ].map( face =>
+							SERVER_EVENT_ART + face + ".png"
+						),
+						wanted = states[pressed === id && hover === id ? 2 : hover === id ? 1 : 0]!;
+					paths.push( ...states );
+					image( at.close, resources.has( wanted ) ? wanted : states[0]! );
+					blocks.push( at.frame );
+					controls.push( { id, label: "", rect: at.close, kind: "button" } );
+				}
+			}
 			if ( worldVisible && game?.academy ) {
 				const academy = game.academy,
 					level = game.progression?.level ?? roster.find( c => c.name === next.session?.character )?.level;
@@ -23228,8 +25072,7 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 						hover,
 						pressed,
 						filter: { name: academyName, grade: academyGrade, kind: academyKind, open: academyCombo },
-						level,
-						fitLabels: experimental.state().saved.fitWindowLabels
+						level
 					} );
 					quads.push( ...projected.quads );
 					paths.push( ...projected.paths );
@@ -24221,6 +26064,91 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 				endWindow( [ mark[0], 0, mark[2], mark[3] ], "modal:" + panel );
 				blocks.push( full );
 			}
+			const mentorBox = hud.data()?.windows.ifmessagebox;
+			if ( worldVisible && academyDialog && mentorBox && panel === "Academy Matching" ) {
+				// 52A9F0 builds this CIFMessageBox branch from ifmessagebox's
+				// MentorMatchRegister section: an invitation-kind radio pair
+				// (507/508), the title edit (513, capped at 50 chars) and
+				// Confirm/Cancel (502/501) under the MACHING_ENTER title.
+				const mark = beginWindow(),
+					layout = messageBox( w, h, 340, 224 ),
+					[fx, fy] = layout.frame;
+				controls = drawFrame.controls = [];
+				blocks.push( full );
+				paths.push( ...partyProposalAssets() );
+				quads.push(
+					...normalTile( layout.background, MESSAGE_TILE, resources.size( MESSAGE_TILE ), full ),
+					...frameRing(
+						layout.frame,
+						MESSAGE_FRAME,
+						PARTS.map( p => resources.size( MESSAGE_FRAME + p + ".png" ) ),
+						full
+					),
+					...text.quads( hudCopy( "UIIT_CTL_TC_MACHING_ENTER" ), layout.title, full, white, {
+						hAlign: 1,
+						vAlign: 0
+					} )
+				);
+				const section = Object.fromEntries(
+					Object.entries( mentorBox ).filter( ( [, row] ) => row.id >= 501 && row.id <= 513 )
+				);
+				nativePage( section, fx, fy, [ 501, 502, 507, 508, 509, 510, 511, 512, 513 ] );
+				const at = ( id: number ) => Object.values( section ).find( row => row.id === id );
+				for ( const id of [ 509, 510, 511, 512 ] ) {
+					const node = at( id );
+					if ( node ) authoredText( node, fx, fy, hudCopy( node.text ) );
+				}
+				for (
+					const [nodeId, recruit] of [ [ 507, ACADEMY_KIND_STUDENT ], [
+						508,
+						ACADEMY_KIND_GUARDIAN
+					] ] as const
+				) {
+					const node = at( nodeId );
+					if ( !node ) continue;
+					const r = authoredRect( node, fx, fy ),
+						checked = academyForm.recruit === recruit,
+						face = ROOT + "interface/ifcommon/com_radiobutton_" + (checked ? "on" : "off") + ".png";
+					paths.push( face );
+					if ( resources.size( face ) ) {
+						quads.push( { rect: r, clip: full, texture: face, uv: [ 0, 0, 1, 1 ], color: white } );
+					}
+					controls.push( {
+						id: "academy-form-kind:" + recruit,
+						label: hudCopy(
+							recruit === ACADEMY_KIND_STUDENT ?
+								"UIIT_STT_TC_STUDENT_INVITATION" :
+								"UIIT_STT_TC_SECOND_GUARDIAN_INVITATION"
+						),
+						kind: "button",
+						rect: r,
+						selected: checked
+					} );
+				}
+				const edit = at( 513 );
+				if ( edit ) {
+					partyEdit( edit, fx, fy, "academy-form-detail", academyForm.detail, ACADEMY_DETAIL_MAX_LENGTH );
+				}
+				for (
+					const [nodeId, control] of [
+						[ 502, "academy-form-confirm" ],
+						[ 501, "academy-form-cancel" ]
+					] as const
+				) {
+					const node = at( nodeId );
+					if ( node ) {
+						authoredLabeledButton(
+							{ ...node, rect: [ node.rect[0], node.rect[1], 76, 24 ] },
+							fx,
+							fy,
+							control,
+							hudCopy( node.text ),
+							control === "academy-form-confirm" && !academyForm.detail.length
+						);
+					}
+				}
+				endWindow( [ mark[0], 0, mark[2], mark[3] ], "modal:academy-form" );
+			}
 			if ( worldVisible && shopDialog && panel === "Shop" && game?.shop && hud.data() ) {
 				const admission = beginWindow(),
 					confirm = shopChoice?.kind !== "buy",
@@ -24368,7 +26296,7 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 							value: shopQuantity,
 							maxLength: 5,
 							disabled: locked,
-							textAlign: amount.hAlign === 2 ? "right" : amount.hAlign === 1 ? "center" : "left",
+							textAlign: authoredEditAlign( amount.hAlign ),
 							textInsets: amount.client
 						} );
 					}
@@ -25986,7 +27914,57 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 					...layout.refuse.slice( 0, 3 ) as [number, number, number]
 				);
 			}
-			if ( worldVisible && (cosHud.cleanConfirm() !== null || cosHud.targetUse() !== null) ) {
+			const switchRaces = cosHud.weaponSwitchRaces(), switchKinds = cosHud.weaponSwitchKinds();
+			const switchRows = switchRaces.length > 0 ? switchRaces : switchKinds;
+			if ( worldVisible && switchRows.length > 0 ) {
+				// Port-only: the weapon switch box, the reverse return box's
+				// geometry with a row per offered race (first step) or kind
+				// (second step), and Cancel or Back under them.
+				const raceStep = switchRaces.length > 0;
+				const box = reverseReturnLayout( w, h, switchRows.length );
+				controls = drawFrame.controls = [];
+				blocks = drawFrame.blocks = [ full ];
+				paths.push( ...partyProposalAssets() );
+				quads.push(
+					...normalTile( box.background, MESSAGE_TILE, resources.size( MESSAGE_TILE ), full ),
+					...frameRing(
+						box.frame,
+						MESSAGE_FRAME,
+						PARTS.map( p => resources.size( MESSAGE_FRAME + p + ".png" ) ),
+						full
+					),
+					...text.quads( WEAPON_SWITCH_TITLE, box.title, full, white, { hAlign: 1, vAlign: 0 } ),
+					...text.quads(
+						raceStep ? WEAPON_SWITCH_RACE_QUESTION : WEAPON_SWITCH_QUESTION,
+						box.question,
+						full,
+						white,
+						{ hAlign: 1, vAlign: 0 }
+					)
+				);
+				switchRows.forEach( ( value, index ) => {
+					const row = box.points[index]!;
+					if ( raceStep ) {
+						button( WEAPON_SWITCH_RACE_PREFIX + value, weaponRaceName( value ), row[0], row[1], row[2] );
+						return;
+					}
+					const symbol = weaponTypeSymbol( value );
+					button(
+						WEAPON_SWITCH_KIND_PREFIX + value,
+						symbol ? hudCopy( symbol ) : String( value ),
+						row[0],
+						row[1],
+						row[2]
+					);
+				} );
+				button(
+					"weapon-switch-cancel",
+					raceStep ? hudCopy( "UIIT_CTL_CANCEL" ) : WEAPON_SWITCH_BACK,
+					box.refuse[0],
+					box.refuse[1],
+					box.refuse[2]
+				);
+			} else if ( worldVisible && (cosHud.cleanConfirm() !== null || cosHud.targetUse() !== null) ) {
 				// 6A2350 case 5 raises the type 0xD box with the two
 				// UIIT_MSG_COS_CLEAN_CONFIRM lines before a transport is destroyed.
 				// The item-target pick (cursor A6 at 567372, kind 0x1F pushed at
@@ -25999,7 +27977,10 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 					message = text.guide(
 						guideTokens(
 							targeted ?
-								"<center>" + hudCopy( "UIIT_MSG_QUESTION_SILKMALL_ITEM_USE" ) + "</center>" :
+								"<center>" + (cosHud.targetUseBox() === "race-switch" ?
+									RACE_SWITCH_QUESTION :
+									hudCopy( "UIIT_MSG_QUESTION_SILKMALL_ITEM_USE" )) +
+								"</center>" :
 								"<center>" +
 								hudCopy( "UIIT_MSG_COS_CLEAN_CONFIRM1" ) +
 								"<br>" +
@@ -26039,12 +28020,14 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 					...layout.refuse.slice( 0, 3 ) as [number, number, number]
 				);
 			}
-			if ( worldVisible && mallUse.pending() !== null ) {
+			const mallAsk = worldVisible ? mallUse.pending() : null;
+			if ( mallAsk !== null ) {
 				// CIFMessageBox kind 0x1F (52F460): the same fixed 308x148 box
-				// (5C82D0) as the kind-0x1F confirm above, one question line.
+				// (5C82D0) as the kind-0x1F confirm above, one question line -
+				// the gate's question (mall-use.ts mallUseQuestion).
 				const layout = guildProposalLayout( w, h ),
 					message = text.guide(
-						guideTokens( "<center>" + hudCopy( "UIIT_MSG_QUESTION_SILKMALL_ITEM_USE" ) + "</center>" ),
+						guideTokens( "<center>" + hudCopy( mallAsk.question ) + "</center>" ),
 						[ layout.frame[0] + 4, layout.frame[1] + 48, 300, 49 ],
 						full,
 						white,
@@ -26359,7 +28342,9 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 					kind: "text",
 					value: promptAmount,
 					rect: edit,
-					maxLength: 5
+					maxLength: 5,
+					// The count is drawn centred in its box (hAlign 1 below).
+					textAlign: "center"
 				} );
 				quads.push(
 					...text.quads( promptAmount, edit, edit, white, { hAlign: 1, vAlign: 1, overflow: "clip" } )
@@ -26445,7 +28430,9 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 					kind: "text",
 					value: amount,
 					rect: edit,
-					maxLength: 20
+					maxLength: 20,
+					// The amount is drawn right-aligned in its box (hAlign 2 below).
+					textAlign: "right"
 				} );
 				quads.push(
 					...text.quads( amount, [ edit[0], edit[1], edit[2] - 2, edit[3] ], edit, white, {
@@ -26809,8 +28796,15 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 					focus = drawFrame.focus = null;
 					composing = false;
 				}
-				paths.push( ...partyProposalAssets() );
-				const layout = instanceBoxLayout( w, h, instancePrompt.position() );
+				// The simple message box's look (frame.ts simpleMessageBox);
+				// only the body and the drag region are this box's own.
+				const layout = simpleMessageBox( {
+					title: hudCopy( "UIIT_STT_CONFIRM_BOX" ),
+					lines: [ instanceQuestionText() ],
+					yes: "instance-accept",
+					no: "instance-refuse",
+					position: instancePrompt.position()
+				} );
 				controls.push( {
 					id: "instance-body",
 					label: hudCopy( "UIIT_STT_CONFIRM_BOX" ),
@@ -26818,6 +28812,37 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 					rect: layout.frame
 				}, {
 					id: "instance-drag",
+					label: hudCopy( "UIIT_STT_CONFIRM_BOX" ),
+					kind: "region",
+					draggable: true,
+					rect: layout.drag
+				} );
+			}
+			// The party summon invitation (0xB4C6 kind 2, #3918): the
+			// shared confirm box with the leader's question line. The
+			// server never offers two prompts at once (one-transaction
+			// rule), so this simply draws after the instance box.
+			if ( game?.social?.summonPrompt && worldVisible ) {
+				const kept = ( id: string | null ) =>
+					!!id &&
+					(id.startsWith( "rebirth-" ) || id.startsWith( "invite-" ) || id.startsWith( "resurrection-" ) ||
+						id.startsWith( "instance-" ) || id.startsWith( "party-summon-" ));
+				controls = drawFrame.controls = controls.filter( c => kept( c.id ) );
+				blocks = drawFrame.blocks = [ full ];
+				if ( !kept( focus ) ) {
+					focus = drawFrame.focus = null;
+					composing = false;
+				}
+				paths.push( ...partyProposalAssets() );
+				const layout = partySummonBoxLayout( w, h, partySummonPrompt.position() ),
+					question = partySummonQuestion( game.social.summonPrompt.name );
+				controls.push( {
+					id: "party-summon-body",
+					label: hudCopy( "UIIT_STT_CONFIRM_BOX" ),
+					kind: "region",
+					rect: layout.frame
+				}, {
+					id: "party-summon-drag",
 					label: hudCopy( "UIIT_STT_CONFIRM_BOX" ),
 					kind: "region",
 					draggable: true,
@@ -26835,10 +28860,95 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 						hAlign: 1,
 						vAlign: 0
 					} ),
-					...text.quads( hudCopy( instanceQuestion()[0]! ), layout.question, full, white, { vAlign: 0 } )
+					...text.quads(
+						hudCopy( question.key ).replace( "%s", question.arg ),
+						layout.question,
+						full,
+						white,
+						{ vAlign: 0 }
+					)
 				);
-				button( "instance-accept", hudCopy( "UIIT_CTL_YES" ), layout.accept[0], layout.accept[1], 76 );
-				button( "instance-refuse", hudCopy( "UIIT_CTL_NO" ), layout.refuse[0], layout.refuse[1], 76 );
+				button( "party-summon-accept", hudCopy( "UIIT_CTL_YES" ), layout.accept[0], layout.accept[1], 76 );
+				button( "party-summon-refuse", hudCopy( "UIIT_CTL_NO" ), layout.refuse[0], layout.refuse[1], 76 );
+			}
+			// The party summon window (0xB4C6 kind 1, #3918; the later
+			// client's interface 214, drawn programmatically as no
+			// authored layout for it ships here): title, the native
+			// header lines, member rows with their eligibility, and
+			// the Summon button. Non-modal: the party window and the
+			// world stay usable beside it.
+			if ( partySummonHud.visible() && game?.social?.summon && worldVisible ) {
+				const summon = game.social.summon,
+					layout = partySummonWindowLayout( w, h, summon.rows.length, partySummonHud.position() ),
+					remaining = summon.rows[0]?.remaining ?? Math.max( 0, summon.allowed - summon.summoned ),
+					minutes = Math.floor( summon.limitSeconds / 60 ),
+					seconds = String( summon.limitSeconds % 60 ).padStart( 2, "0" ),
+					headers = [
+						hudCopy( "UIIT_STT_PARTY_SUMMON" ).replace( "%d", String( summon.allowed ) ),
+						hudCopy( "UIIT_STT_PARTY_SUMMON_PERSONNEL" ).replace( "%d", String( summon.summoned ) ),
+						hudCopy( "UIIT_STT_PARTY_SUMMON_LIMIT_TIME" ) + ": " +
+						(summon.limitSeconds ? minutes + ":" + seconds : "-"),
+						hudCopy( "UIIT_STT_PARTY_SUMMON_LIMIT_COUNT" ) + ": " + remaining
+					];
+				paths.push( ...partyProposalAssets() );
+				controls.push( {
+					id: "party-summon-window-body",
+					label: hudCopy( "UIIT_PAG_PARTY_SUMMON" ),
+					kind: "region",
+					rect: layout.frame
+				}, {
+					id: "party-summon-window-drag",
+					label: hudCopy( "UIIT_PAG_PARTY_SUMMON" ),
+					kind: "region",
+					draggable: true,
+					rect: layout.drag
+				} );
+				quads.push(
+					...normalTile( layout.frame, MESSAGE_TILE, resources.size( MESSAGE_TILE ), full ),
+					...frameRing(
+						layout.frame,
+						MESSAGE_FRAME,
+						PARTS.map( p => resources.size( MESSAGE_FRAME + p + ".png" ) ),
+						full
+					),
+					...text.quads( hudCopy( "UIIT_PAG_PARTY_SUMMON" ), layout.title, full, white, {
+						hAlign: 1,
+						vAlign: 0
+					} )
+				);
+				for ( let i = 0; i < headers.length; i++ ) {
+					quads.push( ...text.quads( headers[i]!, layout.headers[i]!, full, white, { vAlign: 0 } ) );
+				}
+				quads.push(
+					...text.quads( hudCopy( "UIIT_STT_PARTY_SUMMON_MEMBER_NAME" ), layout.columns[0], full, white, {
+						vAlign: 0
+					} ),
+					...text.quads( hudCopy( "UIIT_STT_PARTY_SUMMON_ENTRANCE" ), layout.columns[1], full, white, {
+						vAlign: 0
+					} )
+				);
+				for ( let i = 0; i < summon.rows.length; i++ ) {
+					const row = summon.rows[i]!,
+						name = game.social.members.find( m => m.id === row.gid )?.name ?? String( row.gid ),
+						possible = row.eligibility === PARTY_SUMMON_POSSIBLE,
+						color: readonly [number, number, number, number] = row.entered ?
+							[ 0x99 / 255, 0x99 / 255, 0x99 / 255, 1 ] :
+							possible ?
+							[ 0x02 / 255, 0xda / 255, 0x11 / 255, 1 ] :
+							white;
+					quads.push(
+						...text.quads( name, layout.rows[i]!.name, full, white, { vAlign: 0 } ),
+						...text.quads(
+							hudCopy( possible ? "UIIT_CTL_PARTY_SUMMON_POSSILBE" : "UIIT_CTL_PARTY_SUMMON_IMPOSSILBE" ),
+							layout.rows[i]!.state,
+							full,
+							color,
+							{ vAlign: 0 }
+						)
+					);
+				}
+				button( "party-summon", hudCopy( "UIIT_CTL_PARTY_SUMMON" ), layout.summon[0], layout.summon[1], 96 );
+				button( "party-summon-close", hudCopy( "UIIT_CTL_CLOSE" ), layout.close[0], layout.close[1], 76 );
 			}
 			const fatalAssetFailure = next.frontend?.error ?? next.resourceError ?? hud.error() ?? text.error() ??
 				guideResources.error() ??
@@ -27046,6 +29156,14 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 				// puts the later rail in force; the row off is the native
 				// rail, and switching rails restarts browsing there.
 				itemMall.setCategoriesLater( experimental.state().saved.mallCategories );
+				// The later client's renewal window is the desktop Item Mall
+				// whenever the later import published it (renewal-mall-view.ts;
+				// owner 2026-11-20, agreed with rptlee: default, not
+				// Experimental). A build without the import keeps the classic
+				// window, and the phone reflow keeps its own layout.
+				const renewalMall = !compact ? data.renewalMall : null;
+				itemMall.setRenewal( renewalMall !== null );
+				itemMall.setNames( data.strings );
 				let state = itemMall.read( game.itemMall );
 				const root = data.windows.ifitemmall!;
 				const frame = data.root.GDR_ITEM_MALL!;
@@ -27107,16 +29225,18 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 							rect: r,
 							value: String( value ),
 							maxLength,
-							disabled: busy
+							disabled: busy,
+							// The value is drawn 4 px into the box (mallText above).
+							textInsets: [ 4, 0, 0, 0 ]
 						} );
 					}
 					authoredChrome( { ...mallControl( root, 21 ), rect: [ 12, 40, w - 24, h - 52 ], text: "" }, 0, 0 );
 					authoredChrome( { ...frame, type: "CIFFrame", rect: full, text: "" }, 0, 0 );
 					mallText( hudCopy( frame.text ), [ margin, 12, contentWidth - 72, 22 ] );
 					mallText(
-						`Silk ${game.itemMall?.silk ?? 0}   Gift ${game.itemMall?.giftSilk ?? 0}   Points ${
-							game.itemMall?.points ?? 0
-						}`,
+						`Silk ${game.itemMall?.silk ?? 0}   Earned ${game.itemMall?.earnedSilk ?? 0}   Gift ${
+							game.itemMall?.giftSilk ?? 0
+						}   Points ${game.itemMall?.points ?? 0}`,
 						[ margin, 52, Math.max( 1, contentWidth - 64 ), 28 ]
 					);
 					if ( state.pointDialog || state.selected || state.question ) {
@@ -27192,6 +29312,18 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 									busy
 								);
 							}
+							// Port-only (#4133): the confirm states the outcome
+							// before the player buys.
+							mallText(
+								mallPurchaseOutcomeText(
+									game.itemMall,
+									offer.silk * state.quantity,
+									offer.giftSilk * state.quantity,
+									state.points,
+									false
+								),
+								[ dx, h - touch - margin - 40, dw, 32 ]
+							);
 							mallButton( "item-mall-purchase", hudCopy( "UIIT_STT_BUY" ), [
 								dx,
 								h - touch - margin,
@@ -27227,6 +29359,19 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 										busy
 									);
 								}
+							}
+							if ( (question.kind === "basket" || question.kind === "worn") && game.itemMall ) {
+								// Port-only (#4133): as the single purchase above.
+								mallText(
+									mallPurchaseOutcomeText(
+										game.itemMall,
+										question.offers.reduce( ( sum, offer ) => sum + offer.silk, 0 ),
+										question.offers.reduce( ( sum, offer ) => sum + offer.giftSilk, 0 ),
+										state.points,
+										true
+									),
+									[ dx, h - touch - margin - 40, dw, 32 ]
+								);
 							}
 							mallButton( "item-mall-question-confirm", hudCopy( quote.confirm ), [
 								dx,
@@ -27380,6 +29525,8 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 							if ( searchTop ) {
 								rect( [ margin, 124, contentWidth, 32 ], [ .02, .025, .03, 1 ] );
 								if ( !state.search ) mallText( "Search", [ margin + 4, 132, contentWidth - 8, 16 ] );
+								// Never locked: its edits are local state, and a locked
+								// editor silently eats its editing keys (#4153).
 								controls.push( {
 									id: "item-mall-search",
 									label: "Search",
@@ -27387,7 +29534,8 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 									rect: [ margin, 124, contentWidth, 32 ],
 									value: state.search,
 									maxLength: 32,
-									disabled: busy
+									// The prompt is drawn 4 px into the box (mallText above).
+									textInsets: [ 4, 0, 0, 0 ]
 								} );
 							}
 							const tabWidth = (contentWidth - gap * (tabColumns - 1)) / tabColumns;
@@ -27501,465 +29649,620 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 						quads.length = mallAdmission[0];
 						controls = drawFrame.controls = [];
 					} else {
-						const painted = resolveTextOverlaps(
-							quads.slice( mallAdmission[0] ),
-							experimental.state().saved.fitWindowLabels
-						);
+						const painted = resolveTextOverlaps( quads.slice( mallAdmission[0] ) );
 						quads.length = mallAdmission[0];
 						quads.push( ...painted );
 					}
 					mallButton( "item-mall-close", "Close", [ w - margin - 64, margin, 64, touch ] );
 				} else {
-					itemMall.setPageSize( 6 );
+					itemMall.setPageSize( renewalMall ? RENEWAL_GOODS_PER_PAGE : MALL_ROWS_PER_PAGE );
 					state = itemMall.read( game.itemMall );
-					nativeFrame( frame, ox, oy, hudCopy( frame.text ), "item-mall-close" );
-					nativePage( root, ox, oy );
-					// 6BC17E..6BC197 explicitly disable Buying List and Obtained List
-					// through CIFButton_SetEnabled(false), even in the retail client.
-					// Port-only (#2269): the Experimental silk history option enables
-					// Buying List (6); Obtained List (7) stays native-disabled.
-					const silkHistoryEnabled = experimental.state().saved.silkHistory;
-					for ( const node of Object.values( root ) ) {
-						if ( node.type !== "CIFButton" ) continue;
-						// Control ids are unique: the frame X already owns "item-mall-close".
-						const id = node.id === 8 ? "item-mall-close-button" : node.id === 3 ?
-							"item-mall-home" :
-							node.id === 6 && silkHistoryEnabled ?
-							"item-mall-silk-open" :
-							"item-mall-root:" + node.id;
-						authoredLabeledButton(
-							node,
-							ox,
-							oy,
-							id,
-							hudCopy( node.text ),
-							node.id === 4 || node.id === 5 ?
-								state.worn.length === 0 || state.batchPending || !!game.inventoryPending :
-								node.id === 6 ?
-								!silkHistoryEnabled :
-								node.id !== 8 && node.id !== 3
-						);
-					}
-					for ( let index = 0; index < state.categories.length; index++ ) {
-						const category = state.categories[index]!;
-						const disabled = category.key !== "basket" &&
-							!game.itemMall?.tabs.some( row => row.category === category.key );
-						const node = mallMenuControl(
-							mallControl( root, 8 ),
-							index,
-							state.category === index,
-							disabled,
-							state.categories
-						);
-						authoredLabeledButton( node, ox, oy, node.name, hudCopy( node.text ), disabled );
-						authoredImage( mallCategoryIcon( node, index, disabled, state.categories ), ox, oy );
-					}
-					const infoOrigin = mallControl( root, 90 ).rect;
-					const info = data.windows.ifitemmallmyinfo!;
-					// CIFItemMallMyInfo_OnCreate (6BDA60) always hides the money sign
-					// (5); on an English client (GameConfig +0x138 language 4, the
-					// type.txt Language this port ships) it also hides the Point row
-					// (17 box, 18 value, 19 "P", 22 caption).
-					nativePage( info, ox + infoOrigin[0], oy + infoOrigin[1], [
-						5,
-						10,
-						11,
-						12,
-						14,
-						17,
-						18,
-						19,
-						22
-					] );
-					// 6BDA60 disables Buy silk (7) and Coupon (9) only when their link
-					// strings are shorter than 5; v1.150's open retail web pages.
-					// Deliberate deviation, port-only, not native: there is no shop to
-					// link to, so both stay disabled.
-					for ( const id of [ 7, 9 ] ) {
-						const node = mallControl( info, id );
-						authoredLabeledButton(
-							node,
-							ox + infoOrigin[0],
-							oy + infoOrigin[1],
-							"item-mall-funding:" + id,
-							hudCopy( node.text ),
-							true
-						);
-					}
-					if ( game.localGid ) {
-						const picture = authoredRect( mallControl( info, 4 ), ox + infoOrigin[0], oy + infoOrigin[1] );
-						paths.push( PICTURE_CLIP_PLAYER );
-						quads.push( {
-							portraitGid: game.localGid,
-							texture: "__portrait",
-							rect: picture,
-							uv: [ 0, 0, 1, 1 ],
-							color: white,
-							clip: full,
-							mask: pictureClip( PICTURE_CLIP_PLAYER, picture )
-						}, {
-							doll: { gid: state.previewGid ?? game.localGid, yaw: 0 },
-							texture: "__doll",
-							rect: (() => {
-								const [x, y, width, height] = authoredRect( mallControl( root, 9 ), ox, oy );
-								// 6BB5BA applies the native viewport insets before its 30-degree camera.
-								return [ x + 2, y + 15, width - 2, height - 37 ];
-							})(),
-							uv: [ 0, 0, 1, 1 ],
-							color: white,
-							clip: full
+					if ( renewalMall ) {
+						const origin = renewalMallOrigin( w, h );
+						const windowRect: UiRect = [ origin[0], origin[1], RENEWAL_MALL_WIDTH, RENEWAL_MALL_HEIGHT ];
+						blocks.push( windowRect );
+						const ops = renewalMallView( {
+							data: renewalMall,
+							browse: state,
+							balance: game.itemMall,
+							character: { name: next.session?.character ?? "", level: game.progression?.level },
+							origin,
+							strings: data.strings,
+							busy: !!game.inventoryPending,
+							wearable: state.offers.map( offer =>
+								!!game.itemMall && itemMall.canWear( offer, game.itemMall )
+							),
+							searchFocused: focus === "item-mall-search"
 						} );
-					}
-					for (
-						const [id, value] of [
-							[ 10, next.session?.character ],
-							[ 11, game.progression?.level ],
-							[ 12, game.itemMall?.silk ],
-							[ 14, game.itemMall?.giftSilk ]
-						] as const
-					) {
-						authoredText(
-							mallControl( info, id ),
-							ox + infoOrigin[0],
-							oy + infoOrigin[1],
-							String( value ?? "" )
-						);
-					}
-					const trunkOrigin = mallControl( root, 102 ).rect;
-					const tx = ox + trunkOrigin[0], ty = oy + trunkOrigin[1];
-					nativePage( data.windows.ifitemmalltrunk!, tx, ty );
-					nativePage( data.windows.ifitemmallinventory!, tx, ty );
-					// 6CD535 creates 32x32 cells at (17,19), using the inventory's
-					// ordinary 32-slot pages and 36-pixel pitch. Share slot admission.
-					const mallBag = inventorySlots(
-						tx - 1,
-						ty + 6,
-						game.inventorySlotCount ?? 0,
-						game.equipmentSlotCount ?? 13,
-						state.bagPage
-					);
-					for ( const cell of mallBag.slots ) {
-						const item = game.inventory.find( row => row.slot === cell.slot );
-						const path = cell.enabled ? item && iconPath( item.icon ) : data.popupArt.blocked;
-						if ( path ) image( cell.rect, path );
-						if ( cell.enabled && item ) {
-							equipmentOverlay( item, cell.rect );
-							itemEffects( "item-mall-slot:" + cell.slot, item, cell.rect );
-							itemCount( item, cell.rect );
-							controls.push( {
-								id: "item-mall-slot:" + cell.slot,
-								label: item.name ?? "",
-								rect: cell.rect,
-								kind: "button"
-							} );
-						}
-					}
-					const selector = mallControl( data.windows.ifitemmallinventory!, 12 );
-					const expansion = data.windows.ifitemmalltrunkexpbar!;
-					for ( let index = 0; index < 3; index++ ) {
-						const position = mallControl( data.windows.ifitemmallinventory!, 51 + index ).rect;
-						const count = Math.max(
-							0,
-							Math.min(
-								32,
-								(game.inventorySlotCount ?? 0) -
-									(game.equipmentSlotCount ?? 13) - 32 * index
-							)
-						);
-						const ex = tx + position[0], ey = ty + position[1];
-						nativePage( expansion, ex, ey );
-						authoredImage(
-							{
-								...mallControl( expansion, 2 ),
-								texture: ROOT + "interface/mall/mall_inven_icon" + (count > 0 ? "" : "_disable") +
-									".png"
-							},
-							ex,
-							ey
-						);
-						const spaces = mallControl( expansion, 3 ),
-							icon = mallControl( expansion, 2 ),
-							spacesText = count > 0 ?
-								hudCopy( "UIIT_STT_SILKMALL_REMAIN_INVENTORY" ).replace( "%d", String( count ) ) :
-								hudCopy( "UIIT_STT_NONE" ),
-							bar = mallControl( expansion, 1 ),
-							spacesLeft = ex + icon.rect[0] + icon.rect[2] + MALL_SPACES_GAP,
-							spacesRight = ex + bar.rect[0] + bar.rect[2] - MALL_BAR_BEVEL;
-						// GDR_ITEM_MALL_TRUNK_EXP_NUM right-aligns "32 spaces" (58
-						// pixels) in 31, over the bag icon on its left. Port-only, not
-						// native (Experimental "Fit window labels"): the count is laid
-						// between the icon and the bar art's bevel, on the icon's
-						// height ("32" over "spaces" in the narrow face).
-						if (
-							!frameDraw.fittedLabel( drawFrame, {
-								node: spaces,
-								room: [ spacesLeft, ey + icon.rect[1], spacesRight - spacesLeft, icon.rect[3] ],
-								values: [ spacesText ]
-							} )
-						) authoredText( spaces, ex, ey, spacesText );
-					}
-					const spin = data.windows.ifspincontrol!;
-					const spinX = tx + selector.rect[0], spinY = ty + selector.rect[1];
-					authoredText( mallControl( spin, 0 ), spinX, spinY, String( mallBag.page + 1 ) );
-					for ( const [id, delta] of [ [ 1, -1 ], [ 2, 1 ] ] as const ) {
-						const page = mallBag.page + delta;
-						authoredButton(
-							mallControl( spin, id ),
-							spinX,
-							spinY,
-							"item-mall-bag-page:" + page,
-							"",
-							page < 0 || page >= mallBag.pages
-						);
-					}
-					const shopOrigin = mallControl( root, 50 ).rect;
-					const shop = data.windows.ifitemmallshop!;
-					for ( const node of authoredPaintOrder( shop ) ) {
-						if (
-							state.silk.open ?
-								node.creationSection === 3 || node.creationSection === 4 ||
-								node.creationSection === 5 || node.creationSection === 9 :
-								node.creationSection === 0 || state.category === -1 && node.creationSection === 2
-						) {
-							authoredChrome( node, ox + shopOrigin[0], oy + shopOrigin[1] );
-						}
-					}
-
-					const sx = ox + shopOrigin[0], sy = oy + shopOrigin[1];
-					if ( state.silk.open ) {
-						// Port-only (#2269): the Buying list page. CIFSilkBuyList's
-						// OnCreate (0x6CED10) builds these same sections but never
-						// fills a row; the rows are the worker's recorded-history
-						// publication for the selected period.
-						const history = game.itemMallSilkHistory;
-						const shown = history?.period === state.silk.period ? history : undefined;
-						authoredChrome(
-							{ ...mallControl( shop, 40 ), text: "UIIT_STT_SILK_INQUIRY_MONTH_SILK" },
-							sx,
-							sy
-						);
-						authoredText( mallControl( shop, 30 ), sx, sy, hudCopy( "UIIT_STT_SILK_INQUIRY_NUMBER" ) );
-						authoredText( mallControl( shop, 31 ), sx, sy, hudCopy( "UIIT_STT_SILK_INQUIRY_CHARGE_SILK" ) );
-						authoredText( mallControl( shop, 32 ), sx, sy, hudCopy( "UIIT_STT_SILK_INQUIRY_DATE" ) );
-						authoredText(
-							mallControl( shop, 36 ),
-							sx,
-							sy,
-							shown?.pending ?
-								hudCopy( "UIIT_MSG_SILK_INQUIRY_WAIT" ) :
-								shown && shown.rows.length === 0 ?
-								hudCopy( "UIIT_MSG_SILK_INQUIRY_NOT_INQUIRY" ) :
-								""
-						);
-						authoredText(
-							mallControl( shop, 26 ),
-							sx,
-							sy,
-							shown ? `${shown.total}${hudCopy( "UIIT_STT_ROLL_OF_CLOTH" )}` : ""
-						);
-						if ( shown ) {
-							// The layout authors fourteen row bars (80..93 at y=189,
-							// step 23); the newest recorded uses fill them in order.
-							for ( let index = 0; index < Math.min( shown.rows.length, 14 ); index++ ) {
-								const row = shown.rows[index]!, y = sy + 189 + index * 23;
-								quads.push(
-									...text.quads( String( index + 1 ), [ sx + 24, y, 50, 24 ], full, white, {
-										hAlign: 1,
-										vAlign: 1
-									} ),
-									...text.quads( String( row.charged ), [ sx + 74, y, 146, 24 ], full, white, {
-										hAlign: 1,
-										vAlign: 1
-									} ),
-									...text.quads(
-										mallSilkHistoryDate( row.at ),
-										[ sx + 220, y, 154, 24 ],
-										full,
-										white,
-										{ hAlign: 1, vAlign: 1 }
-									)
+						paths.push( ...renewalMallPictures( ops, PARTS ) );
+						for ( const op of ops ) {
+							if ( op.kind === "frame" ) {
+								const sizes = PARTS.map( part => resources.size( op.prefix + part + ".png" ) );
+								quads.push( ...frameRing( op.rect, op.prefix, sizes, full ) );
+							} else if ( op.kind === "image" ) {
+								image( op.rect, op.path );
+							} else if ( op.kind === "tile" ) {
+								quads.push( ...normalTile( op.rect, op.path, resources.size( op.path ), full ) );
+							} else if ( op.kind === "icon" ) {
+								const icon = iconPath( op.icon );
+								if ( icon ) image( op.rect, icon );
+							} else if ( op.kind === "text" && op.wrap ) {
+								// A card's name: broken by the drawn runs' own widths into
+								// the box's two lines (renewalNameLayout), the second cut
+								// with "..." when more remain. Never wider than the box; the
+								// clip lets the second line's descenders finish below it.
+								const name = renewalNameLayout(
+									textLines( op.value, op.rect[2], value => text.run( value ).width ),
+									op.rect[3]
 								);
-							}
-						}
-						authoredLabeledButton(
-							mallControl( shop, 28 ),
-							sx,
-							sy,
-							"item-mall-silk-inquire",
-							hudCopy( "UIIT_CTL_SILK_INQUIRY" ),
-							!!shown?.pending || !!game.inventoryPending
-						);
-						const combo = authoredRect( mallControl( shop, 70 ), sx, sy );
-						comboBox(
-							combo,
-							"item-mall-silk-combo",
-							hudCopy( "UIIT_STT_SILK_INQUIRY_PERIOD" ),
-							hudCopy( mallSilkPeriodTexts[state.silk.period]! )
-						);
-						if ( state.silk.comboOpen ) {
-							const list: UiRect = [
-								combo[0],
-								combo[1] + combo[3],
-								combo[2],
-								mallSilkPeriodTexts.length * 18
-							];
-							rect( list, [ 0, 0, 0, 1 ] );
-							blocks.push( list );
-							for ( let index = 0; index < mallSilkPeriodTexts.length; index++ ) {
-								const cell: UiRect = [ list[0], list[1] + index * 18, list[2], 18 ];
-								if ( index === state.silk.period ) rect( cell, [ .2, .25, .3, 1 ] );
-								quads.push(
-									...text.quads(
-										hudCopy( mallSilkPeriodTexts[index]! ),
-										[ cell[0] + 4, cell[1], cell[2] - 8, cell[3] ],
-										cell,
-										white
-									)
-								);
+								const nameClip: UiRect = [
+									op.rect[0],
+									op.rect[1],
+									op.rect[2],
+									op.rect[3] + RENEWAL_NAME_DESCENT
+								];
+								name.lines.forEach( ( line, index ) => {
+									const lineRect: UiRect = [
+										op.rect[0],
+										op.rect[1] + index * name.pitch,
+										op.rect[2],
+										name.pitch
+									];
+									quads.push( ...text.quads( line, lineRect, nameClip, op.color, {
+										fontIndex: 0,
+										hAlign: op.hAlign,
+										vAlign: 0,
+										overflow: "ellipsis"
+									} ) );
+								} );
+							} else if ( op.kind === "text" ) {
+								// A caption: one line, centred as asked, cut with "...".
+								quads.push( ...text.quads( op.value, op.rect, op.rect, op.color, {
+									fontIndex: 0,
+									hAlign: op.hAlign,
+									vAlign: op.vAlign,
+									overflow: "ellipsis"
+								} ) );
+							} else if ( op.kind === "button" ) {
+								if ( op.texture ) image( op.rect, op.texture, op.disabled ? RENEWAL_DISABLED : white );
 								controls.push( {
-									id: "item-mall-silk-period:" + index,
-									label: hudCopy( mallSilkPeriodTexts[index]! ),
-									rect: cell,
+									id: op.id,
+									label: op.label,
+									rect: op.rect,
 									kind: "button",
-									selected: index === state.silk.period
+									disabled: op.disabled
+								} );
+							} else if ( op.kind === "edit" ) {
+								controls.push( {
+									id: op.id,
+									label: op.label,
+									rect: op.rect,
+									kind: "text",
+									value: op.value,
+									maxLength: op.maxLength,
+									// The value is drawn at the op's textRect, inside
+									// its hit rect: the editor's text starts there.
+									textInsets: [
+										op.textRect[0] - op.rect[0],
+										op.textRect[1] - op.rect[1],
+										0,
+										0
+									]
+								} );
+								// The focused field's blinking caret, after its text and
+								// centred on its line, as every single-line edit draws it.
+								if ( focus === op.id && caretVisible ) {
+									const box = op.textRect, lineHeight = text.extentHeight( 0 );
+									const caretX = Math.min(
+										box[0] + box[2] - EDIT_CARET_WIDTH,
+										box[0] + text.run( op.value ).width
+									);
+									const caretY = box[1] + Math.floor( (box[3] - lineHeight) / 2 );
+									rect(
+										[ caretX, caretY, EDIT_CARET_WIDTH, lineHeight ],
+										white,
+										"",
+										[ 0, 0, 1, 1 ],
+										box
+									);
+								}
+							} else if ( game.localGid ) {
+								quads.push( {
+									doll: { gid: state.previewGid ?? game.localGid, yaw: 0 },
+									texture: "__doll",
+									rect: op.rect,
+									uv: [ 0, 0, 1, 1 ],
+									color: white,
+									clip: full
 								} );
 							}
 						}
+						closeButton( origin[0] + RENEWAL_MALL_WIDTH - 26, origin[1] + 10, "item-mall-close" );
 					} else {
-						const currentTab = state.tabs[state.tab];
-						// Port-only (#3257): the later rail's search field
-						// stands where the subtitle stands while browsing.
-						const searching = state.categoriesLater && state.category >= 0 &&
-							state.categories[state.category]?.key !== "basket";
-						const description = state.category === -1 ?
-							"UIIT_STT_SILKMALL_MAIN_INTRO" :
-							state.categories[state.category]?.key === "basket" ?
-							"UIIT_STT_SILKMALL_MAIN_ZZIM_SUB_TITLE_ZZIM" :
-							currentTab ?
-							mallDescription( currentTab.category, currentTab.tab ) :
-							"";
-						if ( searching ) {
-							rect( [ sx + 26, sy + 39, 363, 32 ], [ .02, .025, .03, 1 ] );
-							if ( !state.search ) {
-								quads.push( ...text.quads( "Search", [ sx + 30, sy + 47, 355, 16 ], full, white, {
-									hAlign: 0,
-									vAlign: 0
-								} ) );
-							}
-							controls.push( {
-								id: "item-mall-search",
-								label: "Search",
-								kind: "text",
-								rect: [ sx + 26, sy + 39, 363, 32 ],
-								value: state.search,
-								maxLength: 32,
-								disabled: state.batchPending || !!game.inventoryPending
-							} );
-						} else {
-							authoredChrome( { ...mallControl( shop, 41 ), text: description }, sx, sy );
+						nativeFrame( frame, ox, oy, hudCopy( frame.text ), "item-mall-close" );
+						nativePage( root, ox, oy );
+						// 6BC17E..6BC197 explicitly disable Buying List and Obtained List
+						// through CIFButton_SetEnabled(false), even in the retail client.
+						// Port-only (#2269): the Experimental silk history option enables
+						// Buying List (6); Obtained List (7) stays native-disabled.
+						const silkHistoryEnabled = experimental.state().saved.silkHistory;
+						for ( const node of Object.values( root ) ) {
+							if ( node.type !== "CIFButton" ) continue;
+							// Control ids are unique: the frame X already owns "item-mall-close".
+							const id = node.id === 8 ? "item-mall-close-button" : node.id === 3 ?
+								"item-mall-home" :
+								node.id === 6 && silkHistoryEnabled ?
+								"item-mall-silk-open" :
+								"item-mall-root:" + node.id;
+							authoredLabeledButton(
+								node,
+								ox,
+								oy,
+								id,
+								hudCopy( node.text ),
+								node.id === 4 || node.id === 5 ?
+									state.worn.length === 0 || state.batchPending || !!game.inventoryPending :
+									node.id === 6 ?
+									!silkHistoryEnabled :
+									node.id !== 8 && node.id !== 3
+							);
 						}
-						if ( state.category === -1 ) {
+						for ( let index = 0; index < state.categories.length; index++ ) {
+							const category = state.categories[index]!;
+							const disabled = category.key !== "basket" &&
+								!game.itemMall?.tabs.some( row => row.category === category.key );
+							const node = mallMenuControl(
+								mallControl( root, 8 ),
+								index,
+								state.category === index,
+								disabled,
+								state.categories
+							);
+							authoredLabeledButton( node, ox, oy, node.name, hudCopy( node.text ), disabled );
+							authoredImage( mallCategoryIcon( node, index, disabled, state.categories ), ox, oy );
+						}
+						const infoOrigin = mallControl( root, 90 ).rect;
+						const info = data.windows.ifitemmallmyinfo!;
+						// CIFItemMallMyInfo_OnCreate (6BDA60) always hides the money sign
+						// (5); on an English client (GameConfig +0x138 language 4, the
+						// type.txt Language this port ships) it also hides the Point row
+						// (17 box, 18 value, 19 "P", 22 caption).
+						nativePage( info, ox + infoOrigin[0], oy + infoOrigin[1], [
+							5,
+							10,
+							11,
+							12,
+							14,
+							17,
+							18,
+							19,
+							22
+						] );
+						// 6BDA60 disables Buy silk (7) and Coupon (9) only when their link
+						// strings are shorter than 5; v1.150's open retail web pages.
+						// Deliberate deviation, port-only, not native: there is no shop to
+						// link to, so both stay disabled.
+						for ( const id of [ 7, 9 ] ) {
+							const node = mallControl( info, id );
+							authoredLabeledButton(
+								node,
+								ox + infoOrigin[0],
+								oy + infoOrigin[1],
+								"item-mall-funding:" + id,
+								hudCopy( node.text ),
+								true
+							);
+						}
+						if ( game.localGid ) {
+							const picture = authoredRect(
+								mallControl( info, 4 ),
+								ox + infoOrigin[0],
+								oy + infoOrigin[1]
+							);
+							paths.push( PICTURE_CLIP_PLAYER );
+							quads.push( {
+								portraitGid: game.localGid,
+								texture: "__portrait",
+								rect: picture,
+								uv: [ 0, 0, 1, 1 ],
+								color: white,
+								clip: full,
+								mask: pictureClip( PICTURE_CLIP_PLAYER, picture )
+							}, {
+								doll: { gid: state.previewGid ?? game.localGid, yaw: 0 },
+								texture: "__doll",
+								rect: (() => {
+									const [x, y, width, height] = authoredRect( mallControl( root, 9 ), ox, oy );
+									// 6BB5BA applies the native viewport insets before its 30-degree camera.
+									return [ x + 2, y + 15, width - 2, height - 37 ];
+								})(),
+								uv: [ 0, 0, 1, 1 ],
+								color: white,
+								clip: full
+							} );
+						}
+						for (
+							const [id, value] of [
+								[ 10, next.session?.character ],
+								[ 11, game.progression?.level ],
+								[ 12, game.itemMall?.silk ],
+								[ 14, game.itemMall?.giftSilk ]
+							] as const
+						) {
+							authoredText(
+								mallControl( info, id ),
+								ox + infoOrigin[0],
+								oy + infoOrigin[1],
+								String( value ?? "" )
+							);
+						}
+						// Port-only (#4133): the earned Silk balance rides the
+						// Point row's place (22 caption, 18 value), which this
+						// client never draws (6BDA60 above); no native string
+						// names earned silk, so the caption is the port's own.
+						if ( game.itemMall ) {
+							authoredText(
+								mallControl( info, 22 ),
+								ox + infoOrigin[0],
+								oy + infoOrigin[1],
+								"Earned silk"
+							);
+							authoredText(
+								mallControl( info, 18 ),
+								ox + infoOrigin[0],
+								oy + infoOrigin[1],
+								String( game.itemMall.earnedSilk )
+							);
+						}
+						const trunkOrigin = mallControl( root, 102 ).rect;
+						const tx = ox + trunkOrigin[0], ty = oy + trunkOrigin[1];
+						nativePage( data.windows.ifitemmalltrunk!, tx, ty );
+						nativePage( data.windows.ifitemmallinventory!, tx, ty );
+						// 6CD535 creates 32x32 cells at (17,19), using the inventory's
+						// ordinary 32-slot pages and 36-pixel pitch. Share slot admission.
+						const mallBag = inventorySlots(
+							tx - 1,
+							ty + 6,
+							game.inventorySlotCount ?? 0,
+							game.equipmentSlotCount ?? 13,
+							state.bagPage
+						);
+						for ( const cell of mallBag.slots ) {
+							const item = game.inventory.find( row => row.slot === cell.slot );
+							const path = cell.enabled ? item && iconPath( item.icon ) : data.popupArt.blocked;
+							if ( path ) image( cell.rect, path );
+							if ( cell.enabled && item ) {
+								equipmentOverlay( item, cell.rect );
+								itemEffects( "item-mall-slot:" + cell.slot, item, cell.rect );
+								itemCount( item, cell.rect );
+								controls.push( {
+									id: "item-mall-slot:" + cell.slot,
+									label: item.name ?? "",
+									rect: cell.rect,
+									kind: "button"
+								} );
+							}
+						}
+						const selector = mallControl( data.windows.ifitemmallinventory!, 12 );
+						const expansion = data.windows.ifitemmalltrunkexpbar!;
+						for ( let index = 0; index < 3; index++ ) {
+							const position = mallControl( data.windows.ifitemmallinventory!, 51 + index ).rect;
+							const count = Math.max(
+								0,
+								Math.min(
+									32,
+									(game.inventorySlotCount ?? 0) -
+										(game.equipmentSlotCount ?? 13) - 32 * index
+								)
+							);
+							const ex = tx + position[0], ey = ty + position[1];
+							nativePage( expansion, ex, ey );
+							authoredImage(
+								{
+									...mallControl( expansion, 2 ),
+									texture: ROOT + "interface/mall/mall_inven_icon" + (count > 0 ? "" : "_disable") +
+										".png"
+								},
+								ex,
+								ey
+							);
+							const spaces = mallControl( expansion, 3 ),
+								icon = mallControl( expansion, 2 ),
+								spacesText = count > 0 ?
+									hudCopy( "UIIT_STT_SILKMALL_REMAIN_INVENTORY" ).replace( "%d", String( count ) ) :
+									hudCopy( "UIIT_STT_NONE" ),
+								bar = mallControl( expansion, 1 ),
+								spacesLeft = ex + icon.rect[0] + icon.rect[2] + MALL_SPACES_GAP,
+								spacesRight = ex + bar.rect[0] + bar.rect[2] - MALL_BAR_BEVEL;
+							// GDR_ITEM_MALL_TRUNK_EXP_NUM right-aligns "32 spaces" (58
+							// pixels) in 31, over the bag icon on its left. Port-only, not
+							// native (former Experimental "Fit window labels"): the count is laid
+							// between the icon and the bar art's bevel, on the icon's
+							// height ("32" over "spaces" in the narrow face).
+							if (
+								!frameDraw.fittedLabel( drawFrame, {
+									node: spaces,
+									room: [ spacesLeft, ey + icon.rect[1], spacesRight - spacesLeft, icon.rect[3] ],
+									values: [ spacesText ]
+								} )
+							) authoredText( spaces, ex, ey, spacesText );
+						}
+						const spin = data.windows.ifspincontrol!;
+						const spinX = tx + selector.rect[0], spinY = ty + selector.rect[1];
+						authoredText( mallControl( spin, 0 ), spinX, spinY, String( mallBag.page + 1 ) );
+						for ( const [id, delta] of [ [ 1, -1 ], [ 2, 1 ] ] as const ) {
+							const page = mallBag.page + delta;
+							authoredButton(
+								mallControl( spin, id ),
+								spinX,
+								spinY,
+								"item-mall-bag-page:" + page,
+								"",
+								page < 0 || page >= mallBag.pages
+							);
+						}
+						const shopOrigin = mallControl( root, 50 ).rect;
+						const shop = data.windows.ifitemmallshop!;
+						for ( const node of authoredPaintOrder( shop ) ) {
+							if (
+								state.silk.open ?
+									node.creationSection === 3 || node.creationSection === 4 ||
+									node.creationSection === 5 || node.creationSection === 9 :
+									node.creationSection === 0 || state.category === -1 && node.creationSection === 2
+							) {
+								authoredChrome( node, ox + shopOrigin[0], oy + shopOrigin[1] );
+							}
+						}
+
+						const sx = ox + shopOrigin[0], sy = oy + shopOrigin[1];
+						if ( state.silk.open ) {
+							// Port-only (#2269): the Buying list page. CIFSilkBuyList's
+							// OnCreate (0x6CED10) builds these same sections but never
+							// fills a row; the rows are the worker's recorded-history
+							// publication for the selected period.
+							const history = game.itemMallSilkHistory;
+							const shown = history?.period === state.silk.period ? history : undefined;
 							authoredChrome(
-								{ ...mallControl( shop, 53 ), text: "UIIT_STT_SILKMALL_MAIN_EXPLAIN" },
+								{ ...mallControl( shop, 40 ), text: "UIIT_STT_SILK_INQUIRY_MONTH_SILK" },
 								sx,
 								sy
 							);
-						}
-						if ( state.categories[state.category]?.key === "basket" ) {
-							const tab = mallTabControl( mallControl( root, 8 ), 0, true );
-							authoredLabeledButton( tab, sx, sy, tab.name, hudCopy( "UIIT_STT_SILKMALL_ZZIM" ) );
-							const buyAll = mallControl( shop, 42 );
-							authoredLabeledButton(
-								buyAll,
+							authoredText( mallControl( shop, 30 ), sx, sy, hudCopy( "UIIT_STT_SILK_INQUIRY_NUMBER" ) );
+							authoredText(
+								mallControl( shop, 31 ),
 								sx,
 								sy,
-								"item-mall-buy-all",
-								hudCopy( buyAll.text ),
-								state.count === 0 || state.batchPending || !!game.inventoryPending
+								hudCopy( "UIIT_STT_SILK_INQUIRY_CHARGE_SILK" )
 							);
-						}
-						if ( state.category >= 0 ) {
-							for ( let index = 0; index < state.tabs.length; index++ ) {
-								const tab = state.tabs[index]!;
-								const control = mallTabControl( mallControl( root, 8 ), index, index === state.tab );
-								const caption = state.categoriesLater ?
-									(mallTabCaptionLater( tab.category, index ) ?? hudCopy( tab.label )) :
-									hudCopy( tab.label );
-								authoredLabeledButton( control, sx, sy, control.name, caption );
-							}
-							pageManager(
-								mallControl( shop, 74 ).rect,
+							authoredText( mallControl( shop, 32 ), sx, sy, hudCopy( "UIIT_STT_SILK_INQUIRY_DATE" ) );
+							authoredText(
+								mallControl( shop, 36 ),
 								sx,
 								sy,
-								state.page,
-								mallPageLayout( mallControl( shop, 74 ).rect, state.page, state.count ).pages,
-								"item-mall-page:"
+								shown?.pending ?
+									hudCopy( "UIIT_MSG_SILK_INQUIRY_WAIT" ) :
+									shown && shown.rows.length === 0 ?
+									hudCopy( "UIIT_MSG_SILK_INQUIRY_NOT_INQUIRY" ) :
+									""
 							);
-
-							const row = data.windows.ifitemmallshopslot!;
-							for ( let index = 0; index < MALL_ROWS_PER_PAGE; index++ ) {
-								const offer = state.offers[index];
-								const origin = mallControl( shop, 61 + index ).rect;
-								const rx = sx + origin[0], ry = sy + origin[1];
-								if ( !offer ) {
-									// CIFItemMallShopSlot_ApplyVisibilityAndButtonStates (6C9420):
-									// an empty slot hides its bar, name, price, silk mark, icon and
-									// buttons, but the slot and its background (50) stay.
-									authoredChrome( mallControl( row, 50 ), rx, ry );
-									continue;
-								}
-								nativePage( row, rx, ry, [ 8, 10, 11 ] );
-								authoredText( mallControl( row, 11 ), rx, ry, hudCopy( offer.name ) );
-								authoredText( mallControl( row, 10 ), rx, ry, String( offer.silk ) );
-								authoredText( mallControl( row, 8 ), rx, ry, hudCopy( "UIIT_STT_SILKMALL_SILK" ) );
-								const icon = iconPath( offer.icon );
-								if ( icon ) authoredImage( { ...mallControl( row, 1 ), texture: icon }, rx, ry );
-								const mark = state.categoriesLater ? mallBadgeMark( offer.badge ) : undefined;
-								if ( mark ) {
-									const iconRect = authoredRect( mallControl( row, 1 ), rx, ry );
-									const chip: UiRect = [ iconRect[0] + iconRect[2] - 12, iconRect[1], 12, 12 ];
-									rect( chip, mark.color );
-									quads.push( ...text.quads(
-										mark.letter,
-										[
-											chip[0],
-											chip[1] + 1,
-											chip[2],
-											chip[3] - 2
-										],
-										full,
-										white,
-										{ hAlign: 1, vAlign: 1 }
-									) );
-								}
-								controls.push( {
-									id: "item-mall-offer:" + offer.packageId,
-									label: hudCopy( offer.name ),
-									rect: authoredRect( mallControl( row, 1 ), rx, ry ),
-									kind: "button"
-								} );
-								for ( const node of Object.values( row ) ) {
-									if ( node.type !== "CIFButton" ) continue;
-									const action = node.id === 3 ? "item-mall-wear:" + index : node.id === 4 ?
-										"item-mall-buy:" + index :
-										node.id === 6 ?
-										"item-mall-reserve:" + index :
-										"item-mall-row:" + index + ":" + node.id;
-									authoredLabeledButton(
-										node,
-										rx,
-										ry,
-										action,
-										hudCopy(
-											node.id === 6 && state.categories[state.category]?.key === "basket" ?
-												"UIIT_STT_SILKMALL_DEL" :
-												node.text
-										),
-										(node.id === 3 ?
-											!game.itemMall || !itemMall.wearEnabled( offer, game.itemMall ) :
-											node.id !== 4 && node.id !== 6) ||
-											!!game.inventoryPending || state.batchPending
+							authoredText(
+								mallControl( shop, 26 ),
+								sx,
+								sy,
+								shown ? `${shown.total}${hudCopy( "UIIT_STT_ROLL_OF_CLOTH" )}` : ""
+							);
+							if ( shown ) {
+								// The layout authors fourteen row bars (80..93 at y=189,
+								// step 23); the newest recorded uses fill them in order.
+								for ( let index = 0; index < Math.min( shown.rows.length, 14 ); index++ ) {
+									const row = shown.rows[index]!, y = sy + 189 + index * 23;
+									quads.push(
+										...text.quads( String( index + 1 ), [ sx + 24, y, 50, 24 ], full, white, {
+											hAlign: 1,
+											vAlign: 1
+										} ),
+										...text.quads( String( row.charged ), [ sx + 74, y, 146, 24 ], full, white, {
+											hAlign: 1,
+											vAlign: 1
+										} ),
+										...text.quads(
+											mallSilkHistoryDate( row.at ),
+											[ sx + 220, y, 154, 24 ],
+											full,
+											white,
+											{ hAlign: 1, vAlign: 1 }
+										)
 									);
+								}
+							}
+							authoredLabeledButton(
+								mallControl( shop, 28 ),
+								sx,
+								sy,
+								"item-mall-silk-inquire",
+								hudCopy( "UIIT_CTL_SILK_INQUIRY" ),
+								!!shown?.pending || !!game.inventoryPending
+							);
+							const combo = authoredRect( mallControl( shop, 70 ), sx, sy );
+							comboBox(
+								combo,
+								"item-mall-silk-combo",
+								hudCopy( "UIIT_STT_SILK_INQUIRY_PERIOD" ),
+								hudCopy( mallSilkPeriodTexts[state.silk.period]! )
+							);
+							if ( state.silk.comboOpen ) {
+								const list: UiRect = [
+									combo[0],
+									combo[1] + combo[3],
+									combo[2],
+									mallSilkPeriodTexts.length * 18
+								];
+								rect( list, [ 0, 0, 0, 1 ] );
+								blocks.push( list );
+								for ( let index = 0; index < mallSilkPeriodTexts.length; index++ ) {
+									const cell: UiRect = [ list[0], list[1] + index * 18, list[2], 18 ];
+									if ( index === state.silk.period ) rect( cell, [ .2, .25, .3, 1 ] );
+									quads.push(
+										...text.quads(
+											hudCopy( mallSilkPeriodTexts[index]! ),
+											[ cell[0] + 4, cell[1], cell[2] - 8, cell[3] ],
+											cell,
+											white
+										)
+									);
+									controls.push( {
+										id: "item-mall-silk-period:" + index,
+										label: hudCopy( mallSilkPeriodTexts[index]! ),
+										rect: cell,
+										kind: "button",
+										selected: index === state.silk.period
+									} );
+								}
+							}
+						} else {
+							const currentTab = state.tabs[state.tab];
+							// Port-only (#3257): the later rail's search field
+							// stands where the subtitle stands while browsing.
+							const searching = state.categoriesLater && state.category >= 0 &&
+								state.categories[state.category]?.key !== "basket";
+							const description = state.category === -1 ?
+								"UIIT_STT_SILKMALL_MAIN_INTRO" :
+								state.categories[state.category]?.key === "basket" ?
+								"UIIT_STT_SILKMALL_MAIN_ZZIM_SUB_TITLE_ZZIM" :
+								currentTab ?
+								mallDescription( currentTab.category, currentTab.tab ) :
+								"";
+							if ( searching ) {
+								rect( [ sx + 26, sy + 39, 363, 32 ], [ .02, .025, .03, 1 ] );
+								if ( !state.search ) {
+									quads.push( ...text.quads( "Search", [ sx + 30, sy + 47, 355, 16 ], full, white, {
+										hAlign: 0,
+										vAlign: 0
+									} ) );
+								}
+								// Never locked: its edits are local state, and a locked
+								// editor silently eats its editing keys (#4153).
+								controls.push( {
+									id: "item-mall-search",
+									label: "Search",
+									kind: "text",
+									rect: [ sx + 26, sy + 39, 363, 32 ],
+									value: state.search,
+									maxLength: 32,
+									// The prompt is drawn 4 px into the box (the text
+									// quad above, at sx + 30).
+									textInsets: [ 4, 0, 0, 0 ]
+								} );
+							} else {
+								authoredChrome( { ...mallControl( shop, 41 ), text: description }, sx, sy );
+							}
+							if ( state.category === -1 ) {
+								authoredChrome(
+									{ ...mallControl( shop, 53 ), text: "UIIT_STT_SILKMALL_MAIN_EXPLAIN" },
+									sx,
+									sy
+								);
+							}
+							if ( state.categories[state.category]?.key === "basket" ) {
+								const tab = mallTabControl( mallControl( root, 8 ), 0, true );
+								authoredLabeledButton( tab, sx, sy, tab.name, hudCopy( "UIIT_STT_SILKMALL_ZZIM" ) );
+								const buyAll = mallControl( shop, 42 );
+								authoredLabeledButton(
+									buyAll,
+									sx,
+									sy,
+									"item-mall-buy-all",
+									hudCopy( buyAll.text ),
+									state.count === 0 || state.batchPending || !!game.inventoryPending
+								);
+							}
+							if ( state.category >= 0 ) {
+								for ( let index = 0; index < state.tabs.length; index++ ) {
+									const tab = state.tabs[index]!;
+									const control = mallTabControl(
+										mallControl( root, 8 ),
+										index,
+										index === state.tab
+									);
+									const caption = state.categoriesLater ?
+										(mallTabCaptionLater( tab.category, index ) ?? hudCopy( tab.label )) :
+										hudCopy( tab.label );
+									authoredLabeledButton( control, sx, sy, control.name, caption );
+								}
+								pageManager(
+									mallControl( shop, 74 ).rect,
+									sx,
+									sy,
+									state.page,
+									mallPageLayout( mallControl( shop, 74 ).rect, state.page, state.count ).pages,
+									"item-mall-page:"
+								);
+
+								const row = data.windows.ifitemmallshopslot!;
+								for ( let index = 0; index < MALL_ROWS_PER_PAGE; index++ ) {
+									const offer = state.offers[index];
+									const origin = mallControl( shop, 61 + index ).rect;
+									const rx = sx + origin[0], ry = sy + origin[1];
+									if ( !offer ) {
+										// CIFItemMallShopSlot_ApplyVisibilityAndButtonStates (6C9420):
+										// an empty slot hides its bar, name, price, silk mark, icon and
+										// buttons, but the slot and its background (50) stay.
+										authoredChrome( mallControl( row, 50 ), rx, ry );
+										continue;
+									}
+									nativePage( row, rx, ry, [ 8, 10, 11 ] );
+									authoredText( mallControl( row, 11 ), rx, ry, hudCopy( offer.name ) );
+									authoredText( mallControl( row, 10 ), rx, ry, String( offer.silk ) );
+									authoredText( mallControl( row, 8 ), rx, ry, hudCopy( "UIIT_STT_SILKMALL_SILK" ) );
+									const icon = iconPath( offer.icon );
+									if ( icon ) authoredImage( { ...mallControl( row, 1 ), texture: icon }, rx, ry );
+									const mark = state.categoriesLater ? mallBadgeMark( offer.badge ) : undefined;
+									if ( mark ) {
+										const iconRect = authoredRect( mallControl( row, 1 ), rx, ry );
+										const chip: UiRect = [ iconRect[0] + iconRect[2] - 12, iconRect[1], 12, 12 ];
+										rect( chip, mark.color );
+										quads.push( ...text.quads(
+											mark.letter,
+											[
+												chip[0],
+												chip[1] + 1,
+												chip[2],
+												chip[3] - 2
+											],
+											full,
+											white,
+											{ hAlign: 1, vAlign: 1 }
+										) );
+									}
+									controls.push( {
+										id: "item-mall-offer:" + offer.packageId,
+										label: hudCopy( offer.name ),
+										rect: authoredRect( mallControl( row, 1 ), rx, ry ),
+										kind: "button"
+									} );
+									for ( const node of Object.values( row ) ) {
+										if ( node.type !== "CIFButton" ) continue;
+										const action = node.id === 3 ? "item-mall-wear:" + index : node.id === 4 ?
+											"item-mall-buy:" + index :
+											node.id === 6 ?
+											"item-mall-reserve:" + index :
+											"item-mall-row:" + index + ":" + node.id;
+										authoredLabeledButton(
+											node,
+											rx,
+											ry,
+											action,
+											hudCopy(
+												node.id === 6 && state.categories[state.category]?.key === "basket" ?
+													"UIIT_STT_SILKMALL_DEL" :
+													node.text
+											),
+											(node.id === 3 ?
+												!game.itemMall || !itemMall.wearEnabled( offer, game.itemMall ) :
+												node.id !== 4 && node.id !== 6) ||
+												!!game.inventoryPending || state.batchPending
+										);
+									}
 								}
 							}
 						}
@@ -28013,6 +30316,20 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 							authoredText( mallControl( row, 3 ), mx, cy, String( currency.amount ) );
 							authoredText( mallControl( row, 4 ), mx, cy, hudCopy( currency.label ) );
 						}
+						// Port-only (#4133): the confirm states the outcome
+						// before the player buys; no native string names it.
+						authoredText(
+							{ ...mallControl( page, 40 ), rect: [ 20, height - 62, dialogWidth - 40, 14 ] },
+							mx,
+							my,
+							mallPurchaseOutcomeText(
+								game.itemMall,
+								state.selected.silk * state.quantity,
+								state.selected.giftSilk * state.quantity,
+								state.points,
+								false
+							)
+						);
 						controls.push( {
 							id: "item-mall-quantity",
 							label: hudCopy( "UIIT_STT_AMOUNT" ),
@@ -28020,7 +30337,10 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 							kind: "text",
 							value: String( state.quantity ),
 							maxLength: 5,
-							disabled: game.inventoryPending
+							disabled: game.inventoryPending,
+							// GDR_ITEMMALL_CONFIRM_EDIT_COUNT draws by its authored
+							// alignment (right, authoredText above).
+							textAlign: authoredEditAlign( mallControl( page, 42 ).hAlign )
 						} );
 						if ( state.selected.allowsPoints ) {
 							authoredLabeledButton(
@@ -28191,6 +30511,21 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 								);
 							}
 						}
+						if ( question.kind === "basket" || question.kind === "worn" ) {
+							// Port-only (#4133): as the single purchase above.
+							authoredText(
+								{ ...template, rect: [ 16, layout.buttonY - 20, layout.width - 32, 14 ] },
+								mx,
+								my,
+								mallPurchaseOutcomeText(
+									game.itemMall,
+									question.offers.reduce( ( sum, offer ) => sum + offer.silk, 0 ),
+									question.offers.reduce( ( sum, offer ) => sum + offer.giftSilk, 0 ),
+									state.points,
+									true
+								)
+							);
+						}
 						authoredLabeledButton(
 							{ ...mallControl( store, 215 ), rect: [ layout.buttonX, layout.buttonY, 76, 22 ] },
 							mx,
@@ -28232,7 +30567,10 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 							kind: "text",
 							value: String( state.pointDraft ),
 							maxLength: 10,
-							disabled: game.inventoryPending
+							disabled: game.inventoryPending,
+							// GDR_ITEMMALL_USE_POINT_EDIT_USE_POINT draws by its
+							// authored alignment (right, authoredText above).
+							textAlign: authoredEditAlign( mallControl( pointPage, 41 ).hAlign )
 						} );
 						authoredLabeledButton(
 							mallControl( pointPage, 50 ),
@@ -28247,6 +30585,7 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 				}
 			}
 			if ( game?.arenaChest?.phase === "closed" || game?.arenaChest?.error ) arenaHiddenID = "";
+			if ( game?.arenaChest?.phase !== "claimable" ) arenaDiscard.chestID = "";
 			if (
 				worldVisible && game?.arenaChest && game.arenaChest.phase !== "closed" &&
 				game.arenaChest.phase !== "countdown" && game.arenaChest.id !== arenaHiddenID
@@ -28259,10 +30598,20 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 				}
 				const pages = Math.max( 1, Math.ceil( chest.items.length / 32 ) );
 				arenaPage = Math.min( arenaPage, pages - 1 );
-				const px = Math.floor( (w - width) / 2 ), py = Math.floor( (h - height) / 2 );
-				controls = drawFrame.controls = [];
 				const admission = beginWindow();
-				blocks.push( full );
+				const [px, py] = windowOrigin( "Survival Arena", [
+					Math.max( 0, Math.floor( (w - width - 380) / 2 ) ),
+					Math.floor( (h - height) / 2 ),
+					width,
+					height
+				] );
+				controls.push( {
+					id: "arena-chest-body",
+					label: "Survival rewards",
+					kind: "region",
+					rect: [ px, py + 34, width, height - 34 ]
+				} );
+				if ( chest.phase === "checkpoint" ) blocks.push( full );
 				windowBox( "Survival Arena", px, py, width, height );
 				paths.push( MESSAGE_TILE, ...PARTS.map( part => FRAME + part + ".png" ) );
 				quads.push(
@@ -28285,21 +30634,27 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 						hAlign: 2
 					} )
 				);
+				button( "arena-inventory", "Inventory", px + width - 107, py + 44, 83 );
 				rect( [ px + 30, py + 100, width - 60, 1 ], [ 0.46, 0.4, 0.28, 0.8 ] );
 				for ( let slot = 0; slot < 32; slot++ ) {
 					const x = px + 86 + (slot % 8) * 36, y = py + 120 + Math.floor( slot / 8 ) * 36;
 					rect( [ x - 1, y - 1, 34, 34 ], [ 0.38, 0.34, 0.25, 1 ] );
 					rect( [ x, y, 32, 32 ], [ 0.035, 0.04, 0.035, 1 ] );
 				}
-				for ( const item of chest.items.slice( arenaPage * 32, (arenaPage + 1) * 32 ) ) {
-					const local = item.slot - arenaPage * 32;
+				for ( const [local, item] of chest.items.slice( arenaPage * 32, (arenaPage + 1) * 32 ).entries() ) {
 					nativeItem( `arena-chest-item:${item.slot}`, item, [
 						px + 86 + (local % 8) * 36,
 						py + 120 + Math.floor( local / 8 ) * 36,
 						32,
 						32
 					] );
-					controls[controls.length - 1] = { ...controls[controls.length - 1]!, draggable: false };
+					if ( chest.phase !== "claimable" || game.inventoryPending ) {
+						controls[controls.length - 1] = {
+							...controls[controls.length - 1]!,
+							draggable: false,
+							carry: false
+						};
+					}
 				}
 				button( "arena-prev", "Previous", px + 50, py + 274, 100, arenaPage === 0 );
 				button( "arena-next", "Next page", px + 310, py + 274, 100, arenaPage >= pages - 1 );
@@ -28315,7 +30670,9 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 				const saved = chest.phase === "claimable" || chest.phase === "recoverable";
 				quads.push(
 					...text.quads(
-						saved ?
+						chest.phase === "claimable" ?
+							"Drag rewards into your inventory or take all." :
+							saved ?
 							"Speak to Event So-ok to collect or resume." :
 							`Automatic collection in ${Math.floor( seconds / 60 )}:${
 								String( seconds % 60 ).padStart( 2, "0" )
@@ -28335,8 +30692,11 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 						{ hAlign: 1 }
 					)
 				);
-				const notice = chest.error ??
-					(chest.stage === 5 ?
+				const discarding = chest.phase === "claimable" && arenaDiscard.chestID === chest.id;
+				const notice = discarding ? "Discard the remaining items? You keep your gold." : chest.error ??
+					(chest.phase === "claimable" ?
+						"Close to save any remaining items for later." :
+						chest.stage === 5 ?
 						"All five stages cleared. Collect your rewards!" :
 						"Next clear replaces this chest. Death loses it.");
 				quads.push(
@@ -28348,17 +30708,16 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 						{ hAlign: 1 }
 					)
 				);
-				button( "arena-claim", "Collect & leave", px + 42, py + 394, 160 );
-				if ( chest.phase === "claimable" ) button( "arena-close", "Close", px + 258, py + 394, 160 );
-				else {button(
-						"arena-continue",
-						"Next stage",
-						px + 258,
-						py + 394,
-						160,
-						chest.stage >= 5 || chest.phase !== "checkpoint" && chest.phase !== "recoverable"
-					);}
-				if ( chest.phase === "recoverable" ) button( "arena-close", "Close", px + width - 76, py + 44, 50 );
+				if ( chest.phase === "claimable" ) {
+					button( "arena-claim", "Take all", px + 24, py + 394, 130 );
+					button( "arena-discard", discarding ? "Confirm discard" : "Discard rest", px + 165, py + 394, 130 );
+					button( "arena-close", "Close", px + 306, py + 394, 130 );
+				} else {
+					const hasNextStage = chest.stage < 5;
+					button( "arena-claim", "Take all & end run", px + (hasNextStage ? 42 : 150), py + 394, 160 );
+					if ( hasNextStage ) button( "arena-continue", "Next stage", px + 258, py + 394, 160 );
+				}
+				if ( chest.phase === "recoverable" ) button( "arena-close", "Close", px + width - 74, py + 5, 62 );
 
 				endWindow( admission, "arena-chest" );
 			}
@@ -28674,6 +31033,16 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 				}
 				endWindow( admission, "withdrawal-confirm" );
 			}
+			if ( worldVisible && carriedMacroPotion?.icon ) {
+				paths.push( carriedMacroPotion.icon );
+				if ( resources.has( carriedMacroPotion.icon ) ) {
+					rect(
+						[ carriedMacroPotion.x - 16, carriedMacroPotion.y - 16, 32, 32 ],
+						white,
+						carriedMacroPotion.icon
+					);
+				}
+			}
 			if ( worldVisible && carriedShortcut && game ) {
 				const binding = quickSlotDrag( carriedShortcut.id, 0, game ),
 					skill = binding?.kind === 0x49 ?
@@ -28742,7 +31111,7 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 							game.petTraining.points,
 							design.option === 1 ||
 								(game.petTraining.skills.find( entry => entry.id === skill.id - 1 )?.level ?? 0) >=
-									design.maxLevel
+									(petSkillDesign( design.id - 1 )?.maxLevel ?? design.maxLevel)
 						);
 					}
 				}
@@ -28778,10 +31147,15 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 								undefined
 						),
 						item = items[0];
-					if ( id.startsWith( "item-mall-offer:" ) ) {
-						const offer = game.itemMall?.offers.find( row =>
-							row.packageId === Number( id.slice( "item-mall-offer:".length ) )
-						);
+					if ( id.startsWith( "item-mall-offer:" ) || id.startsWith( "item-mall-popup:" ) ) {
+						// The classic row's icon names its package; a renewal card
+						// names its place on the page (renewal-mall-view.ts).
+						const offer = id.startsWith( "item-mall-offer:" ) ?
+							game.itemMall?.offers.find( row =>
+								row.packageId === Number( id.slice( "item-mall-offer:".length ) )
+							) :
+							game.itemMall &&
+							itemMall.read( game.itemMall ).offers[Number( id.slice( "item-mall-popup:".length ) )];
 						if ( offer ) {
 							tooltip = [
 								{ value: lookup( offer.name ), color: 0xffffffff, heading: true },
@@ -28825,7 +31199,7 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 						const country = game.guide?.country,
 							gender = next.session?.characters?.find( row => row.name === next.session?.character )
 								?.gender,
-							sex = gender === 0 ? 1 : gender === 1 ? 0 : undefined,
+							sex = wearerSex( game.localSex, gender ),
 							sealUnderHeading = experimental.state().saved.sealUnderHeading,
 							expansion = game.levelCap === EXPANSION_LEVEL_CAP,
 							// Port-only set block: the published groups with the bag they are counted in.
@@ -28922,8 +31296,7 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 						tooltip,
 						control.rect,
 						full,
-						( s, strong ) => text.run( s, strong ? 2 : 0 ).width,
-						experimental.state().saved.fitWindowLabels
+						( s, strong ) => text.run( s, strong ? 2 : 0 ).width
 					);
 					paths.push( ...bubble.paths );
 					if ( bubble.paths.every( resources.has ) ) {
@@ -28942,8 +31315,7 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 							sideTooltip,
 							bubble.quads[0]!.rect,
 							full,
-							( s, strong ) => text.run( s, strong ? 2 : 0 ).width,
-							experimental.state().saved.fitWindowLabels
+							( s, strong ) => text.run( s, strong ? 2 : 0 ).width
 						);
 						paths.push( ...side.paths );
 						if ( side.paths.every( resources.has ) ) {
@@ -28984,6 +31356,27 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 						label: "New quests",
 						kind: "button",
 						rect: iconRect
+					} );
+				}
+			}
+			// Port-only (#3907): CIFMacroSystemGuide under the minimap
+			// (0xab8fe0 loads mecro_0; 0xab9080 opens CNIFMacroMenuWnd).
+			if ( worldVisible && experimental.state().saved.sroMacro && game?.sroMacro ) {
+				paths.push( MACRO_GUIDE_ICON_PATH );
+				const macroIconSize = resources.size( MACRO_GUIDE_ICON_PATH );
+				if ( macroIconSize ) {
+					const macroIconRect: UiRect = [
+						w - MACRO_GUIDE_ICON_X_INSET,
+						MACRO_GUIDE_ICON_Y,
+						macroIconSize[0],
+						macroIconSize[1]
+					];
+					rect( macroIconRect, white, MACRO_GUIDE_ICON_PATH );
+					controls.push( {
+						id: "sro-macro-icon",
+						label: "SRO Macro",
+						kind: "button",
+						rect: macroIconRect
 					} );
 				}
 			}
@@ -29177,6 +31570,11 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 						`Health ${local?.hp ?? "unknown"}; mana ${local?.mp ?? "unknown"}; target ${
 							target?.name ?? "none"
 						}. ${next.entities.length} nearby entities.` :
+						// A failed session names its reason (Session HTTP request
+						// rejected, ...): the bare phase told a screen reader only
+						// "failed" while the cause reached the diagnostics alone.
+						phase === "failed" && next.session?.error ?
+						title.message( next.session.error ) :
 						phase),
 				controls
 			};
@@ -29238,7 +31636,7 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 			gauges.end();
 			// Text runs travel to the renderer whole: the GPU packer writes one record
 			// per glyph straight into its buffer (text-run.ts, device/ui.ts).
-			quads = drawFrame.quads = resolveTextOverlaps( quads, experimental.state().saved.fitWindowLabels );
+			quads = drawFrame.quads = resolveTextOverlaps( quads );
 			probe?.detailEnd( "ui-finalize" );
 			probe?.detailBegin( "ui-compare" );
 			// Semantics are returned only when they change (uiPublication): a

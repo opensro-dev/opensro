@@ -95,7 +95,6 @@ tests/browser/native-service-windows.test.mjs
 tests/browser/nested-particle-motion.test.mjs
 tests/browser/notice-input-live.test.mjs
 tests/browser/npc-travel-live.test.mjs
-tests/browser/npc-window-live.test.mjs
 tests/browser/orb-continuity.test.mjs
 tests/browser/overlays.test.mjs
 tests/browser/particle-query.test.mjs
@@ -105,10 +104,8 @@ tests/browser/picking-alpha.test.mjs
 tests/browser/picking.test.mjs
 tests/browser/player-camera-fade.test.mjs
 tests/browser/popup-response.test.mjs
-tests/browser/portal-live.test.mjs
 tests/browser/potion-cooldown-live.test.mjs
 tests/browser/quest-marker-effects.test.mjs
-tests/browser/quickslot-inventory.test.mjs
 tests/browser/rebirth-self-selection-live.test.mjs
 tests/browser/recall-appointment-live.test.mjs
 tests/browser/region-music-live.test.mjs
@@ -137,7 +134,6 @@ tests/browser/travel.test.mjs
 tests/browser/ui-bridge-lifecycle.test.mjs
 tests/browser/ui-retail-audit.test.mjs
 tests/browser/ui.test.mjs
-tests/browser/window-chrome-live.test.mjs
 tests/browser/world-admission.test.mjs
 tests/browser/world-character-lighting.test.mjs
 tests/browser/world-chat.test.mjs

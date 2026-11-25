@@ -20,6 +20,7 @@ import { isMainScript } from "../shared/fsUtils.mjs";
 import { janganTombTeleportEnabled, loadJanganTombTeleportLinkRows } from "../shared/janganTombTeleport.mjs";
 import { loadMuhanTeleportDataRows, loadMuhanTeleportLinkRows, muhanEnabled } from "../shared/muhan.mjs";
 import { loadQinShiTombTeleportLinkRows, qinshiTombEnabled } from "../shared/qinshiTomb.mjs";
+import { closedSkytempleIds, skytempleEnabled } from "../shared/skytemple.mjs";
 import { readTextDataLinesSync, splitTextDataRow } from "../shared/textDataIo.mjs";
 import { extractedRoot, gameRoot, publicRoot } from "../world/paths.mjs";
 
@@ -41,6 +42,26 @@ readRows
 */
 function readRows( filePath ) {
 	return readTextDataLinesSync( filePath ).map( ( line ) => splitTextDataRow( line.trim() ) );
+}
+
+/*
+================
+linkMinLevel
+
+Port-only, not native (#4136): the required level of one teleportlink
+row - the highest minimum among its five kind-1 (level band) condition
+triples, kind/min/max at columns 6..20, the same rows the server's
+portalAdmission checks. 0 when no kind-1 condition restricts the link.
+================
+*/
+function linkMinLevel( columns ) {
+	let minLevel = 0;
+	for ( let at = 6; at + 2 < columns.length; at += 3 ) {
+		if ( Number( columns[at] ) === 1 ) {
+			minLevel = Math.max( minLevel, Number( columns[at + 1] ) >>> 0 );
+		}
+	}
+	return minLevel;
 }
 
 /*
@@ -73,8 +94,12 @@ export function buildTeleportDataAsset() {
 	if ( muhanEnabled() ) {
 		rawTeleportRows.push( ...loadMuhanTeleportDataRows().rows );
 	}
+	// Port-only, not native: the Sky Temple fields stay out of the menu
+	// while SRO_SKYTEMPLE is off, as the server keeps them closed.
+	const closedIds = closedSkytempleIds( rawTeleportRows, skytempleEnabled() );
 	const teleportRows = rawTeleportRows
 		.filter( ( columns ) => Number( columns[0] ) !== 0 )
+		.filter( ( columns ) => !closedIds.has( Number( columns[1] ) >>> 0 ) )
 		.map( ( columns ) => ({
 			id: Number( columns[1] ) >>> 0,
 			codeName: columns[2] ?? "",
@@ -118,10 +143,14 @@ export function buildTeleportDataAsset() {
 	}
 	const linkRows = rawLinkRows
 		.filter( ( columns ) => Number( columns[0] ) !== 0 )
+		.filter( ( columns ) =>
+			!closedIds.has( Number( columns[1] ) >>> 0 ) && !closedIds.has( Number( columns[2] ) >>> 0 )
+		)
 		.map( ( columns ) => ({
 			sourceId: Number( columns[1] ) >>> 0,
 			destinationId: Number( columns[2] ) >>> 0,
-			fee: Number( columns[3] ) | 0
+			fee: Number( columns[3] ) | 0,
+			minLevel: linkMinLevel( columns )
 		}) );
 	const catalog = {
 		sourcePaths: [

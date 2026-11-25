@@ -19,6 +19,7 @@ import (
 	"opensro.online/server/internal/game/world/simulation"
 )
 
+const petBondReviveDelayMs int64 = 5000
 const petBondRange = 120.0          // 12 metres.
 const petBondOpcode uint16 = 0x3fb4 // [recipient u32, bear u32, kind u8: transfer=1/revive=2].
 
@@ -97,14 +98,15 @@ func (rt *Runtime) bondSourceRefused(key petOwnerKey, state *petSession) (refuse
 bondRevivalTarget
 
 Whether a candidate record is one the revival walk could take:
-dead by a monster and inside the bear's level band. These are
+dead by a monster for five seconds and inside the bear's level band. These are
 the target admission's own tests, read on the live record the
 walk itself would find.
 ================
 */
-func bondRevivalTarget(target *enterworld.Character, band int64) bool {
+func bondRevivalTarget(target *enterworld.Character, band, now int64) bool {
 	return target != nil && !enterworld.CharacterAlive(target) &&
-		target.DeathKind == uint8(pk.DeathMonster) && rewardLevel(target) <= band
+		target.DeathKind == uint8(pk.DeathMonster) && rewardLevel(target) <= band &&
+		(target.SiegeDeathAtMs == 0 || now-target.SiegeDeathAtMs >= petBondReviveDelayMs)
 }
 
 /*
@@ -169,7 +171,7 @@ func (rt *Runtime) bondRevivalIdle(key petOwnerKey, state *petSession, now int64
 	// The owner candidate is the session's own live record - the
 	// record the revival closure itself writes through - so it is
 	// judged in hand; party members resolve through the store.
-	ownerTarget := bondRevivalTarget(owner, band)
+	ownerTarget := bondRevivalTarget(owner, band, now)
 	guard.Release()
 	if ownerTarget {
 		return false, true
@@ -179,7 +181,7 @@ func (rt *Runtime) bondRevivalIdle(key petOwnerKey, state *petSession, now int64
 		// takes the store's own read lock per lookup, exactly as
 		// the revival walk below runs it.
 		for gid := range rt.auraParty(key.division, owner) {
-			if gid != ownerGID && bondRevivalTarget(rt.findCharacterByGid(key.division, gid), band) {
+			if gid != ownerGID && bondRevivalTarget(rt.findCharacterByGid(key.division, gid), band, now) {
 				return false, true
 			}
 		}
@@ -230,7 +232,7 @@ func (rt *Runtime) bondSource(key petOwnerKey, state *petSession) (*enterworld.C
 bondRecipient
 ================
 */
-func (rt *Runtime) bondRecipient(key petOwnerKey, owner, recipient *enterworld.Character, pet *domain.CharacterCOS, skill companion.SkillDef, now int64) bool {
+func (rt *Runtime) bondRecipient(key petOwnerKey, owner, recipient *enterworld.Character, pet *domain.CharacterCOS, skill companion.SkillDef) bool {
 	if recipient == nil || recipient.DeletePending || !rt.petExpansionAllowed(recipient, pet) || rt.inTown(key.division, recipient) {
 		return false
 	}
@@ -238,12 +240,7 @@ func (rt *Runtime) bondRecipient(key petOwnerKey, owner, recipient *enterworld.C
 		return false
 	}
 	session := rt.petSessionFor(key.division, recipient.Name, 0)
-	if session == nil || !session.ready {
-		return false
-	}
-	a := rt.companionLiveSpawn(key.division, owner, pet, now)
-	b := rt.liveSpawn(simulation.WorldKey(key.division, recipient.Name), recipient, now)
-	return samePlaneAdjacent(a, b) && areaDistance(a, b) <= petBondRange
+	return session != nil && session.ready
 }
 
 /*
@@ -274,7 +271,12 @@ func (rt *Runtime) planPetBond(division string, victim *enterworld.Character, no
 	var best *petBondPlan
 	for _, source := range sources {
 		owner, pet, skill, level, ok := rt.bondSource(source.key, source.state)
-		if !ok || skill.Option < 2 || !enterworld.CharacterAlive(owner) || !rt.bondRecipient(source.key, owner, victim, pet, skill, now) {
+		if !ok || skill.Option < 2 || !enterworld.CharacterAlive(owner) || !rt.bondRecipient(source.key, owner, victim, pet, skill) {
+			continue
+		}
+		from := rt.companionLiveSpawn(division, owner, pet, now)
+		to := rt.liveSpawn(simulation.WorldKey(division, victim.Name), victim, now)
+		if !samePlaneAdjacent(from, to) || areaDistance(from, to) > petBondRange {
 			continue
 		}
 		percent := min(float64(skill.Option)*10, skill.ValueAt(min(level, skill.MaxLevel)))
@@ -415,10 +417,9 @@ func (rt *Runtime) advancePetBond(key petOwnerKey, state *petSession, now int64)
 		// revive a member without their avatar HP/MP options (#2030;
 		// TestBondRevivalTakesTheCombatCopy).
 		snapshot := rt.characterSnapshotCombatAdmitted(key.division, target, func(live *enterworld.Character) bool {
-			return !enterworld.CharacterAlive(live) && live.DeathKind == uint8(pk.DeathMonster) &&
-				rewardLevel(live) <= int64(pet.Level)+10
+			return bondRevivalTarget(live, int64(pet.Level)+10, now)
 		})
-		if snapshot == nil || !rt.bondRecipient(key, owner, snapshot, pet, skill, now) {
+		if snapshot == nil || !rt.bondRecipient(key, owner, snapshot, pet, skill) {
 			continue
 		}
 		stats, _, err := rt.playerCombatStats(key.division, snapshot)
@@ -433,7 +434,7 @@ func (rt *Runtime) advancePetBond(key petOwnerKey, state *petSession, now int64)
 		var revived revivedWhereDead
 		if !rt.deps.UpdateManyDeferred(actors, "pet-bond-revival", func() bool {
 			live := state.character.CompanionByGID(pet.GID)
-			if live == nil || !live.Summoned || live.CurrentHP == 0 || live.Training.PassiveReadyAtMs[skill.Row-companion.ActiveRowCount] > now || target.DeletePending || enterworld.CharacterAlive(target) {
+			if live == nil || !live.Summoned || live.CurrentHP == 0 || live.Training.PassiveReadyAtMs[skill.Row-companion.ActiveRowCount] > now || target.DeletePending || !bondRevivalTarget(target, int64(live.Level)+10, now) {
 				return false
 			}
 			live.Training.PassiveReadyAtMs[skill.Row-companion.ActiveRowCount] = now + cooldown

@@ -35,6 +35,31 @@ export function questProgressText(
 	return next && next !== questObjectivePresentation( event.before, entries ).description ? next : null;
 }
 
+// One reward choice the window lists: the item codename, the RefObjID
+// the pick names, its count, and the display name/icon the build resolved
+// (buildQuestDataAsset VERSION 6).
+export interface QuestRewardChoice {
+	readonly item: string;
+	readonly refId: number;
+	readonly count: number;
+	readonly name: string;
+	readonly icon?: string;
+}
+
+// A selection quest's reward block (buildQuestDataAsset VERSION 6): the
+// values the window lists and the pickable choices. Absent for quests
+// that claim without a pick.
+export interface QuestReward {
+	readonly selectionCount: number;
+	readonly gold: number;
+	readonly exp: number;
+	readonly skillPoints: number;
+	readonly skillExp: number;
+	readonly ap: number;
+	readonly jobExp: number;
+	readonly choices: readonly QuestRewardChoice[];
+}
+
 // CQuestData projection consumed by 5C3F90 and 5C1FA0. The quest text
 // manager owns these symbols; textdataname is a different catalog.
 // notify/condition/country are the projection the level-up QuestInfo
@@ -54,6 +79,7 @@ export interface QuestPresentation {
 				readonly notify: string;
 				readonly condition: string;
 				readonly country: number;
+				readonly reward?: QuestReward;
 			}
 		>
 	>;
@@ -79,6 +105,13 @@ export function decodeQuestPresentation( value: unknown ): QuestPresentation {
 		!v.textEntries || typeof v.textEntries !== "object" || Array.isArray( v.textEntries ) ||
 		Object.values( v.textEntries ).some( s => typeof s !== "string" )
 	) throw Error( "Invalid quest presentation catalog" );
+	const rewards = (v as { rewards?: unknown; }).rewards;
+	if (
+		rewards !== undefined &&
+		(typeof rewards !== "object" || rewards === null || Array.isArray( rewards ) ||
+			Object.values( rewards ).some( row => !validQuestReward( row ) ))
+	) throw Error( "Invalid quest reward catalog" );
+	const rewardById = (rewards ?? {}) as Record<string, QuestReward>;
 	const records: Record<number, QuestPresentation["records"][number]> = {};
 	for ( const [i, line] of v.rows.entries() ) {
 		if ( typeof line !== "string" ) throw Error( "Invalid quest presentation row" );
@@ -87,7 +120,10 @@ export function decodeQuestPresentation( value: unknown ): QuestPresentation {
 			c.length !== 7 || !Number.isSafeInteger( id ) || id <= 0 || !Number.isInteger( level ) || level < 0 ||
 			level > 255 || !Number.isInteger( warn ) || warn < 0 || warn > 255
 		) throw Error( "Invalid quest presentation fields" );
-		if ( level > 90 || records[id] ) continue;
+		// The v1.150 quest table stops at level 90; the cap-110 quest rows (the Blue Berserk chains,
+		// levels 95 to 110) are the only ones above it and need their titles and texts as well.
+		if ( records[id] ) continue;
+		const reward = rewardById[String( id )];
 		records[id] = {
 			level,
 			title: v.textEntries[c[2]!.trim()] ?? "",
@@ -97,8 +133,33 @@ export function decodeQuestPresentation( value: unknown ): QuestPresentation {
 			progressClear: v.progressClearBytes[i]!,
 			notify: v.textEntries[c[5]!.trim()] ?? "",
 			condition: v.textEntries[c[6]!.trim()] ?? "",
-			country: v.countryBytes?.[i] ?? 0
+			country: v.countryBytes?.[i] ?? 0,
+			...(reward ? { reward } : {})
 		};
 	}
 	return { records, text: { ...v.textEntries } };
+}
+
+/*
+================
+validQuestReward
+
+One VERSION 6 reward block: a pick of 1..choices.length from at least
+two listed items, the six listed values whole and non-negative, and
+each choice a named item with the RefObjID the pick carries.
+================
+*/
+function validQuestReward( value: unknown ): boolean {
+	const r = value as QuestReward;
+	const whole = ( n: unknown ) => typeof n === "number" && Number.isSafeInteger( n ) && n >= 0;
+	if (
+		!r || typeof r !== "object" || !Number.isSafeInteger( r.selectionCount ) || r.selectionCount < 1 ||
+		!Array.isArray( r.choices ) || r.choices.length < 2 || r.selectionCount > r.choices.length ||
+		![ r.gold, r.exp, r.skillPoints, r.skillExp, r.ap, r.jobExp ].every( whole )
+	) return false;
+	return r.choices.every( choice =>
+		typeof choice?.item === "string" && choice.item !== "" && whole( choice.refId ) && choice.refId > 0 &&
+		Number.isSafeInteger( choice.count ) && choice.count > 0 && typeof choice.name === "string" &&
+		choice.name !== "" && (choice.icon === undefined || typeof choice.icon === "string")
+	);
 }

@@ -12,6 +12,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"maps"
+	"slices"
 	"strconv"
 
 	"opensro.online/server/internal/domain"
@@ -27,6 +28,16 @@ const opArenaChest uint16 = 0x3fca
 const opArenaDecision uint16 = 0x7fca
 const arenaChestLimit = 200
 
+const (
+	arenaInspect byte = iota
+	arenaTakeAll
+	arenaContinue
+	// Operation 3 was used by the local Choose items prototype.
+	_
+	arenaTakeItem
+	arenaDiscard
+)
+
 /*
 ================
 EntryEventFrames - login notices and port-only saved arena rewards.
@@ -39,6 +50,8 @@ match a previous socket's arena lease.
 func (rt *Runtime) EntryEventFrames(division string, c *enterworld.Character) []enterworld.Packet {
 	packets := rt.HalloweenEntryFrames(division, c)
 	packets = append(packets, rt.ChristmasEntryFrames(division, c)...)
+	packets = append(packets, rt.macroEntryFrames(c)...)
+	packets = append(packets, rt.reverseUserPointEntryFrames(c)...)
 	if c == nil || rt.sookArena == nil {
 		return packets
 	}
@@ -90,7 +103,7 @@ func (rt *Runtime) arenaChestFrame(c *enterworld.Character, run *sookArenaRun, f
 	if chest := c.SookChest; chest != nil && rt.sookArena != nil {
 		p.ID, p.Stage, p.Kills = chest.ID, chest.Stage, chest.Kills
 		p.RemainingMs = max(0, sookarena.DurationMs-chest.ElapsedMs)
-		p.Gold = strconv.FormatUint(sookarena.KillReward(chest.Kills), 10)
+		p.Gold = strconv.FormatUint(sookarena.StageReward(chest.Stage), 10)
 		if chest.Pending {
 			p.Phase = "claimable"
 		} else if chest.Checkpoint {
@@ -149,7 +162,7 @@ rollSookChest - existing degree, plus, blue and seal rules; bounded stage bundle
 ================
 */
 func (rt *Runtime) rollSookChest(run *sookArenaRun, c *enterworld.Character, stage int) []domain.InventoryRow {
-	ranges := [5][2]int{{3, 7}, {8, 15}, {18, 28}, {32, 45}, {50, 70}}
+	ranges := [sookarena.StageCount][2]int{{9, 13}, {13, 20}, {20, 30}, {33, 46}, {50, 70}}
 	if stage < 1 || stage > len(ranges) {
 		return nil
 	}
@@ -211,15 +224,18 @@ func (rt *Runtime) claimSookChest(c *enterworld.Character) ([]wire.Frame, string
 			if !ok || ref == nil {
 				return fmt.Errorf("missing reward reference")
 			}
-			grant, fault := inv.GrantStack(item, rt.maxStackFor(item.TypeFlags, ref.Codename))
-			if fault != nil || grant.GroundRemainder != 0 {
-				return fmt.Errorf("bag full")
+			for item.Quantity > 0 {
+				grant, fault := inv.GrantStack(item, rt.maxStackFor(item.TypeFlags, ref.Codename))
+				if fault != nil || grant.GroundRemainder >= item.Quantity {
+					return fmt.Errorf("bag full")
+				}
+				item.Quantity = grant.GroundRemainder
 			}
 		}
 		return nil
 	})
 	if err != nil {
-		return nil, "Make space in your bag, then claim your saved chest from Event So-ok."
+		return nil, "Make bag space or drag rewards to your inventory one at a time."
 	}
 	id := c.SookChest.ID
 	if !rt.deps.Update(c, "sook-chest-claim", func() bool {
@@ -236,15 +252,90 @@ func (rt *Runtime) claimSookChest(c *enterworld.Character) ([]wire.Frame, string
 
 /*
 ================
+takeSookChestItem - move one reward into the chosen bag slot without swapping.
+
+Keep the other reward slots stable so a repeated request cannot take the next
+item. The normal container transfer handles stack identity and capacity.
+================
+*/
+func (rt *Runtime) takeSookChestItem(c *enterworld.Character, source, destination uint8) ([]wire.Frame, string) {
+	chest := c.SookChest
+	index := slices.IndexFunc(chest.Items, func(row domain.InventoryRow) bool { return row.Slot == int64(source) })
+	if index < 0 {
+		return nil, "That reward is no longer waiting."
+	}
+	reward := chest.Items[index : index+1]
+	container, fault := inventory.NewContainer(invItemsFromRowsWithin(reward, arenaChestLimit), arenaChestLimit)
+	if fault != nil {
+		return nil, "The reward could not be transferred. Your chest remains saved."
+	}
+	item, ok := container.At(source)
+	if !ok {
+		return nil, "That reward is no longer waiting."
+	}
+	rows, frames, err := rt.planBagChange(c, func(bag *inventory.Inventory) error {
+		if fault := container.TransferWholeTo(bag, source, destination, rt.maxStackFor(item.TypeFlags, item.Codename)); fault != nil {
+			return fault
+		}
+		if _, remains := container.At(source); remains {
+			return fmt.Errorf("destination cannot receive the whole reward")
+		}
+		return nil
+	})
+	if err != nil {
+		return nil, "Drop the reward into an empty bag slot or a stack with enough space."
+	}
+	payGold := !chest.GoldPaid
+	rewardGold := sookarena.StageReward(chest.Stage)
+	if !rt.deps.Update(c, "sook-chest-take-item", func() bool {
+		if c.SookChest != chest || !chest.Pending {
+			return false
+		}
+		if payGold {
+			if goldOf(c) > uint64(^uint64(0)>>1)-rewardGold {
+				return false
+			}
+			setGold(c, goldOf(c)+rewardGold)
+			chest.GoldPaid = true
+		}
+		c.MissionInventory = rows
+		chest.Items = slices.Delete(chest.Items, index, index+1)
+		if len(chest.Items) == 0 {
+			c.SookChest = nil
+		}
+		return true
+	}) {
+		return nil, "The reward could not be saved. Your chest remains waiting."
+	}
+	if payGold {
+		frames = append(frames, wire.Frame{Opcode: wire.OpPointsUpdate, Payload: wire.GoldRefresh{Balance: goldOf(c), Notify: true}.Encode()})
+	}
+	return frames, ""
+}
+
+/*
+================
 HandleArenaDecision - authenticated owner only; a stale run cannot claim another.
 ================
 */
 func (rt *Runtime) HandleArenaDecision(division string, c *enterworld.Character, payload []byte) OpResult {
-	if c == nil || len(payload) < 1 || len(payload) > 129 || payload[0] > 2 || payload[0] == 0 && len(payload) != 1 {
+	if c == nil || len(payload) < 1 {
+		return failureResult(wire.ErrCodeInvalidRequest)
+	}
+	operation, idFrom := payload[0], 1
+	switch operation {
+	case arenaInspect, arenaTakeAll, arenaContinue, arenaTakeItem, arenaDiscard:
+	default:
+		return failureResult(wire.ErrCodeInvalidRequest)
+	}
+	if operation == arenaTakeItem {
+		idFrom = 3
+	}
+	if len(payload) < idFrom || len(payload)-idFrom > 128 || (len(payload) == idFrom) != (operation == arenaInspect) {
 		return failureResult(wire.ErrCodeInvalidRequest)
 	}
 	if rt.sookArena == nil {
-		if payload[0] == 0 {
+		if operation == arenaInspect {
 			return OpResult{Frames: []wire.Frame{rt.arenaChestFrame(c, nil, "")}}
 		}
 		return failureResult(wire.ErrCodeInvalidRequest)
@@ -252,24 +343,42 @@ func (rt *Runtime) HandleArenaDecision(division string, c *enterworld.Character,
 	unlock := rt.lockDivision(division)
 	defer unlock()
 	c = rt.findCharacter(division, c.Name)
-	if c == nil {
+	if c == nil || c.DeletePending {
 		return OpResult{}
 	}
 	run := rt.sookRun(division, c)
-	if payload[0] == 0 {
+	if operation == arenaInspect {
 		return OpResult{Frames: rt.arenaChestFrames(c, run, "")}
 	}
-	if c.SookChest == nil || c.SookChest.ID != string(payload[1:]) {
+	if c.SookChest == nil || c.SookChest.ID != string(payload[idFrom:]) {
 		return OpResult{Frames: rt.arenaChestFrames(c, run, "This reward decision is no longer current.")}
 	}
 	if !enterworld.CharacterAlive(c) {
 		return OpResult{}
 	}
+	if run == nil {
+		if c.SookArenaActive || domain.CharacterWorldInstance(c) != domain.DefaultWorldInstance {
+			return OpResult{Frames: rt.arenaChestFrames(c, nil, "Leave the instance to collect your saved rewards.")}
+		}
+		if rt.Stalls.Keeping(division, c.Name) || rt.Exchanges.Trading(division, c.Name) {
+			return OpResult{Frames: rt.arenaChestFrames(c, nil, "Close your stall or exchange to collect your rewards.")}
+		}
+	}
+	if operation == arenaDiscard && (run != nil || !c.SookChest.Pending) {
+		return OpResult{Frames: rt.arenaChestFrames(c, run, "Only a saved chest can be discarded.")}
+	}
+	if operation == arenaTakeItem {
+		if run != nil || !c.SookChest.Pending {
+			return OpResult{Frames: rt.arenaChestFrames(c, run, "Collect your stage rewards before taking individual items.")}
+		}
+		frames, fault := rt.takeSookChestItem(c, payload[1], payload[2])
+		return OpResult{Frames: append(frames, rt.arenaChestFrames(c, nil, fault)...)}
+	}
 	if run != nil {
 		if run.program.PausedAt == 0 || run.program.ResumeAt != 0 {
 			return OpResult{}
 		}
-		if payload[0] == 2 {
+		if operation == arenaContinue {
 			if c.SookChest.Stage >= sookarena.StageCount {
 				return OpResult{}
 			}
@@ -287,12 +396,14 @@ func (rt *Runtime) HandleArenaDecision(division string, c *enterworld.Character,
 		rt.endSookArena(run, c, true)
 		return OpResult{}
 	}
-	selected, ok := rt.Selected.Get(division, c.Name)
-	npc, live := rt.npcForCurrentViewer(division, c, selected)
-	if !ok || !live || npc.Codename != sookarena.NPC || !rt.npcWithinHitRange(division, c, npc) {
-		return OpResult{Frames: rt.arenaChestFrames(c, nil, "Visit Event So-ok to collect or resume your chest.")}
+	if !c.SookChest.Pending {
+		selected, ok := rt.Selected.Get(division, c.Name)
+		npc, live := rt.npcForCurrentViewer(division, c, selected)
+		if !ok || !live || npc.Codename != sookarena.NPC || !rt.npcWithinHitRange(division, c, npc) {
+			return OpResult{Frames: rt.arenaChestFrames(c, nil, "Visit Event So-ok to collect or resume your chest.")}
+		}
 	}
-	if payload[0] == 2 && c.SookChest.Checkpoint && !c.SookChest.Pending {
+	if operation == arenaContinue && c.SookChest.Checkpoint && !c.SookChest.Pending {
 		if rt.sookArena == nil {
 			return OpResult{Frames: rt.arenaChestFrames(c, nil, "Arena entry is disabled. Your saved rewards can still be claimed.")}
 		}
@@ -301,7 +412,7 @@ func (rt *Runtime) HandleArenaDecision(division string, c *enterworld.Character,
 	if c.SookChest.Checkpoint || c.SookChest.Pending {
 		if !rt.deps.Update(c, "sook-recovered-payout", func() bool {
 			if !c.SookChest.GoldPaid {
-				reward := sookarena.KillReward(c.SookChest.Kills)
+				reward := sookarena.StageReward(c.SookChest.Stage)
 				if goldOf(c) > uint64(^uint64(0)>>1)-reward {
 					return false
 				}
@@ -309,12 +420,19 @@ func (rt *Runtime) HandleArenaDecision(division string, c *enterworld.Character,
 				c.SookChest.GoldPaid = true
 			}
 			c.SookChest.Pending, c.SookChest.Checkpoint = true, false
+			if operation == arenaDiscard {
+				c.SookChest = nil
+			}
 			return true
 		}) {
-			return OpResult{}
+			return OpResult{Frames: rt.arenaChestFrames(c, nil, "Your rewards are still saved. Please try again.")}
 		}
 	}
-	frames, fault := rt.claimSookChest(c)
+	var frames []wire.Frame
+	var fault string
+	if operation == arenaTakeAll {
+		frames, fault = rt.claimSookChest(c)
+	}
 	frames = append(frames, wire.Frame{Opcode: wire.OpPointsUpdate, Payload: wire.GoldRefresh{Balance: goldOf(c), Notify: true}.Encode()})
 	return OpResult{Frames: append(frames, rt.arenaChestFrames(c, nil, fault)...)}
 }

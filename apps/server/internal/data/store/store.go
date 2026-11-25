@@ -85,6 +85,9 @@ type Options struct {
 	// InventoryPages stamps the port-only 2.5-page base on a new record
 	// (SRO_INVENTORY_PAGES, #2769); false is the native 45.
 	InventoryPages bool
+	// StoragePages raises the account and guild warehouses (port-only,
+	// SRO_STORAGE_PAGES and SRO_GUILD_STORAGE_PAGES); zero is native.
+	StoragePages domain.StoragePages
 	// AsyncCommit applies commits on the asynchronous writer
 	// (commit_writer.go, SRO_STORE_ASYNC_COMMIT, #2802); false is the
 	// native-default synchronous door. Port-only, not native.
@@ -356,6 +359,11 @@ type Store struct {
 	batch tickBatch
 	// ledger attributes every committed gold change (economy_ledger.go).
 	ledger economyLedger
+	// items attributes every committed item change (item_ledger.go).
+	items itemLedger
+	// door is the open door's snapshots, for both ledgers
+	// (ledger_door.go): empty between doors.
+	door doorLedger
 	// trades holds the trade rows noted by committed trades until the
 	// commit that writes them (trade_history.go).
 	trades tradeHistoryState
@@ -369,6 +377,9 @@ type Store struct {
 	defaultInventory InventorySeedFunc
 	// inventoryPages is Options.InventoryPages, used only at creation.
 	inventoryPages bool
+	// storagePages is Options.StoragePages: every warehouse read and the
+	// guild warehouse's capacity go through it.
+	storagePages domain.StoragePages
 
 	// requireStore is Options.RequireStore (the production posture);
 	// CreateCharacter's unseeded-creation refusal keys off it.
@@ -446,6 +457,7 @@ func Open(dir string, opts Options) (*Store, error) {
 		defaultQuests:    opts.DefaultQuests,
 		defaultInventory: opts.DefaultInventory,
 		inventoryPages:   opts.InventoryPages,
+		storagePages:     opts.StoragePages,
 		requireStore:     opts.RequireStore,
 		asyncCommit:      opts.AsyncCommit,
 		openCtx:          openCtx,
@@ -640,6 +652,16 @@ func (s *Store) openAndLoadDB(path string) (*sql.DB, *loadedDB, error) {
 		db.Close()
 		return nil, nil, err
 	}
+	// The item ledger's tables (#3307): additive, like the buckets.
+	if err := ensureItemLedger(db); err != nil {
+		db.Close()
+		return nil, nil, err
+	}
+	// The free-grant days (#3307), additive the same way.
+	if err := ensureGrantDays(db); err != nil {
+		db.Close()
+		return nil, nil, err
+	}
 	// The market tables (port-only, SRO_CONSIGNMENT): additive too.
 	if err := ensureMarket(db); err != nil {
 		db.Close()
@@ -755,11 +777,9 @@ func (s *Store) adoptDB(db *sql.DB, loaded *loadedDB) {
 	s.committedDigests = map[committedCharacterKey][32]byte{}
 	s.committedRows = map[committedCharacterKey]*domain.Character{}
 	s.committedMetaDigests = map[string][32]byte{}
-	s.ledger.seen = map[*domain.Character]int64{}
 	for divisionID, records := range s.characters {
 		for _, c := range records {
 			s.charDivision[c] = divisionID
-			s.seedLedgerLocked(c)
 		}
 	}
 	// The writer handle adopted above never auto-checkpoints

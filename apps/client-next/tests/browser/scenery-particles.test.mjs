@@ -24,6 +24,7 @@ test(
 				const { createAssets } = await import( "/src/engine/runtime/assets/assets.ts" );
 				const { createRenderer } = await import( "/src/engine/runtime/renderer/renderer.ts" );
 				const { assetRequestBudget } = await import( "/src/engine/foundation/assets/asset-budget.ts" );
+				const { effectProgramModel } = await import( "/src/engine/foundation/assets/effect-programs.ts" );
 				const { createSceneryEmission } = await import(
 					"/src/engine/foundation/animation/scenery-emission.ts"
 				);
@@ -88,7 +89,7 @@ test(
 							"map/minga_smoke_s.efp"
 						]
 					) {
-						const model = "/assets/effects/programs.json#" + encodeURIComponent( path ),
+						const model = effectProgramModel( path ),
 							id = assets.request(
 								new URL( model, location.origin ).href,
 								assetRequestBudget( "effect" ),

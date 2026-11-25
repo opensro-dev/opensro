@@ -101,9 +101,17 @@ export function wolfEffectParts( action: number ): readonly WolfEffectPart[] {
 				[])
 		];
 	}
+	const chainDelay = petGearChainDelay( action );
+	if ( chainDelay !== undefined ) {
+		return [ {
+			path: "skill/china/lightning_chundung_hit_a.efp",
+			at: chainDelay,
+			anchor: "self",
+			lift: 8,
+			scale: 1.5
+		} ];
+	}
 	switch ( action ) {
-		case 0xd7:
-			return [ { path: "hiteffect/hit_4_lightning_hit_a.efp", at: 0, anchor: "self", lift: 8 } ];
 		case 0xd8:
 			return [ { path: "hiteffect/hit_4_fire_hit_a.efp", at: 0, anchor: "self", lift: 8 } ];
 		case 0xd9:
@@ -138,6 +146,19 @@ export function wolfEffectParts( action: number ): readonly WolfEffectPart[] {
 
 /*
 ================
+petGearChainDelay
+
+First strike and four bounces. Damage is settled on the server before these visuals.
+================
+*/
+export function petGearChainDelay( action: number ): number | undefined {
+	if ( action === 0xd7 ) return 0;
+	if ( action >= 0xdb && action <= 0xde ) return (action - 0xda) * .12;
+	return undefined;
+}
+
+/*
+================
 wolfEffectKind
 
 howl: the wolf's slow buildup; victim: drawn where the monster was struck;
@@ -146,7 +167,7 @@ strike: a flash at the moment of the hit.
 */
 export function wolfEffectKind( action: number ): "howl" | "victim" | "strike" {
 	if ( action >= 1 && action <= 3 ) return "howl";
-	return action >= 0xd7 && action <= 0xda || action === WOLF_EXECUTED || action === WOLF_HUNT ||
+	return action >= 0xd7 && action <= 0xde || action === WOLF_EXECUTED || action === WOLF_HUNT ||
 			action === WOLF_HUNT_BURST ?
 		"victim" :
 		"strike";

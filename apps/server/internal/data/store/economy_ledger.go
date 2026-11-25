@@ -8,17 +8,17 @@ Port-only, not native: the original keeps no economy journal. The staff
 console's economy view reads the aggregates (through the GameWorld's
 aggregate endpoint, never the live file).
 
-The store attributes every change itself, at the door boundary: the ledger
-remembers each live character's gold as of its last door, and a door that
-leaves a different balance notes the change against the door and the signed
-delta. Gameplay code needs no ledger calls, so no gold path can be missed;
-a door the reason table does not know is recorded as "unattributed" with
-its label. Every noted change joins the transaction that writes the
-character, so a change and its record are durable together or not at all;
-a failed commit keeps them pending, as it keeps the dirty records, and
-the next commit writes both. The few doors with their own transaction
-(fortress tax, warehouse, guild war stakes, fortress staff and production)
-write their record in that transaction.
+The store attributes every change itself, at the door boundary
+(ledger_door.go): a door snapshots the characters it changes and notes
+each balance that moved against the door and the signed delta. Gameplay
+code needs no ledger calls, so no gold path can be missed; a door the
+reason table does not know is recorded as "unattributed" with its label.
+Every noted change joins the transaction that writes the character, so a
+change and its record are durable together or not at all; a failed commit
+keeps them pending, as it keeps the dirty records, and the next commit
+writes both. The doors with their own transaction (fortress tax,
+warehouse, guild war stakes, fortress staff and production, the market)
+note the copy they write in that transaction (characterRowTx::noteWrite).
 
 At flush time a change lands in the hourly buckets
 (economy_ledger_hours: hour, division, reason, direction - the sums the
@@ -43,6 +43,7 @@ import (
 
 	log "github.com/sirupsen/logrus"
 	"opensro.online/server/internal/domain"
+	"opensro.online/server/internal/platform/sqlitecol"
 )
 
 // economyLedgerSchema is layout 10's addition (authority_upgrade.go adds it
@@ -100,6 +101,41 @@ CREATE TABLE IF NOT EXISTS economy_ledger_char_item_hours (
 // economyHourMs is the bucket width: one hour in milliseconds.
 const economyHourMs = 3_600_000
 
+/*
+================
+economyHourStartMs
+
+The start of the hourly bucket ms falls in: every bucket writer and
+reader (gold, sold items, the item ledger) rounds here.
+================
+*/
+func economyHourStartMs(ms int64) int64 {
+	return ms / economyHourMs * economyHourMs
+}
+
+/*
+================
+visitSorted
+
+Visits m's entries in less's key order, stopping at the first error: a
+bucket batch's statements run in a deterministic sequence. Every bucket
+writer (gold, sold items, the item ledger) walks its folds here.
+================
+*/
+func visitSorted[K comparable, V any](m map[K]V, less func(a, b K) bool, visit func(K, V) error) error {
+	keys := make([]K, 0, len(m))
+	for key := range m {
+		keys = append(keys, key)
+	}
+	sort.Slice(keys, func(i, j int) bool { return less(keys[i], keys[j]) })
+	for _, key := range keys {
+		if err := visit(key, m[key]); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 // ledgerBulkReasons are the two reasons that keep per-character hourly
 // buckets instead of exact rows: on production they are 99.5% of the
 // ledger's rows (monster_gold 94.3%, npc_sale 5.2% of the last 2M,
@@ -127,31 +163,8 @@ func ensureEconomyBuckets(db *sql.DB) error {
 	if _, err := db.Exec(economyBucketSchema); err != nil {
 		return fmt.Errorf("economy buckets: %w", err)
 	}
-	columns, err := db.Query("PRAGMA table_info(economy_ledger)")
-	if err != nil {
-		return err
-	}
-	defer columns.Close()
-	marked := false
-	for columns.Next() {
-		var cid int
-		var name, kind string
-		var notNull, pk int
-		var fallback any
-		if err := columns.Scan(&cid, &name, &kind, &notNull, &fallback, &pk); err != nil {
-			return err
-		}
-		if name == "bucketed" {
-			marked = true
-		}
-	}
-	if err := columns.Err(); err != nil {
-		return err
-	}
-	if !marked {
-		if _, err := db.Exec("ALTER TABLE economy_ledger ADD COLUMN bucketed INTEGER"); err != nil {
-			return fmt.Errorf("economy ledger bucketed marker: %w", err)
-		}
+	if err := sqlitecol.Ensure(db, []sqlitecol.Column{{Table: "economy_ledger", Name: "bucketed", Definition: "INTEGER"}}); err != nil {
+		return fmt.Errorf("economy ledger bucketed marker: %w", err)
 	}
 	return nil
 }
@@ -177,13 +190,12 @@ type ledgerRow struct {
 ================
 economyLedger
 
-seen is each live character's gold as of its last door. pending holds the
-rows of doors whose commit has not succeeded yet. totals are the committed
-gold per reason and direction, for the metrics endpoint.
+pending holds the rows of doors whose commit has not succeeded yet.
+totals are the committed gold per reason and direction, and the
+undeclared item rows, for the metrics endpoint.
 ================
 */
 type economyLedger struct {
-	seen    map[*domain.Character]int64
 	pending []ledgerRow
 	// items are the merchant sales' per-item folds (#3307) awaiting
 	// the same commit as pending.
@@ -208,116 +220,19 @@ func ledgerGold(c *domain.Character) int64 {
 
 /*
 ================
-seedLedgerLocked
+goldChangeRowLocked
 
-A character the store starts to own: its balance is where its rows begin.
+The row of charID's gold moving from before to after through the door,
+if it moved: the reason from the door's word, and a door the reason
+table does not name logged once.
 ================
 */
-func (s *Store) seedLedgerLocked(c *domain.Character) {
-	s.seedLedgerAtLocked(c, ledgerGold(c))
-}
-
-/*
-================
-seedLedgerAtLocked
-
-Starts c's rows at balance: its loaded gold, or nothing for a character
-whose creation mints its starting gold.
-================
-*/
-func (s *Store) seedLedgerAtLocked(c *domain.Character, balance int64) {
-	if s.ledger.seen == nil {
-		s.ledger.seen = map[*domain.Character]int64{}
-	}
-	s.ledger.seen[c] = balance
-}
-
-/*
-================
-forgetLedgerLocked
-================
-*/
-func (s *Store) forgetLedgerLocked(c *domain.Character) {
-	delete(s.ledger.seen, c)
-}
-
-/*
-================
-noteGoldLocked
-
-A door finished: every dirty character whose gold moved since its last
-door gets a row naming this door. A character noted by an earlier door of
-the same commit has not moved again, so nothing counts twice.
-================
-*/
-func (s *Store) noteGoldLocked(label string) {
-	if s.changes.all {
-		for division, records := range s.characters {
-			for _, c := range records {
-				s.noteCharacterGoldLocked(label, division, c)
-			}
-		}
-		return
-	}
-	for c := range s.changes.characters {
-		if division, known := s.charDivision[c]; known {
-			s.noteCharacterGoldLocked(label, division, c)
-		}
-	}
-}
-
-/*
-================
-noteDoorGoldLocked
-
-A deferred door: only the characters it declared can have moved, so the
-tick batch never rescans its whole dirty set per door. A door that
-escalated to the whole world notes everyone.
-================
-*/
-func (s *Store) noteDoorGoldLocked(label string, cs []*domain.Character) {
-	if s.changes.all {
-		s.noteGoldLocked(label)
-		return
-	}
-	for _, c := range cs {
-		if division, known := s.charDivision[c]; c != nil && known {
-			s.noteCharacterGoldLocked(label, division, c)
-		}
-	}
-}
-
-/*
-================
-noteCharacterGoldLocked
-================
-*/
-func (s *Store) noteCharacterGoldLocked(label, division string, c *domain.Character) {
-	if row, moved := s.goldRowLocked(label, division, c, ledgerGold(c)); moved {
-		s.ledger.pending = append(s.ledger.pending, row)
-		s.ledger.seen[c] = row.balance
-	}
-}
-
-/*
-================
-goldRowLocked
-
-The row of c's gold moving to balance through the door, if it moved. A
-character the ledger never saw (a wiring bug) is seeded, not guessed at.
-================
-*/
-func (s *Store) goldRowLocked(label, division string, c *domain.Character, balance int64) (ledgerRow, bool) {
-	before, known := s.ledger.seen[c]
-	if !known {
-		s.seedLedgerLocked(c)
-		return ledgerRow{}, false
-	}
-	if balance == before {
+func (s *Store) goldChangeRowLocked(label, division string, charID, before, after int64) (ledgerRow, bool) {
+	if after == before {
 		return ledgerRow{}, false
 	}
 	door := domain.EconomyDoor(label)
-	reason := domain.EconomyRowReason(label, c.ID, balance > before)
+	reason := domain.EconomyRowReason(label, charID, after > before)
 	if reason == domain.EconomyReasonUnattributed && !s.ledger.warned[door] {
 		// A door the reason table does not name moved gold: the row keeps
 		// the door, and the log names it once so the table can learn it.
@@ -325,16 +240,16 @@ func (s *Store) goldRowLocked(label, division string, c *domain.Character, balan
 			s.ledger.warned = map[string]bool{}
 		}
 		s.ledger.warned[door] = true
-		log.WithFields(log.Fields{"door": door, "gain": balance > before}).Warn("economy ledger: a door with no reason moved gold")
+		log.WithFields(log.Fields{"door": door, "gain": after > before}).Warn("economy ledger: a door with no reason moved gold")
 	}
 	return ledgerRow{
 		atMs:     s.now().UnixMilli(),
 		division: division,
-		charID:   c.ID,
+		charID:   charID,
 		reason:   reason,
 		door:     door,
-		gold:     balance - before,
-		balance:  balance,
+		gold:     after - before,
+		balance:  after,
 	}, true
 }
 
@@ -424,7 +339,7 @@ func foldLedgerRows(rows []ledgerRow) (map[ledgerBucketKey]*ledgerBucketFold, ma
 	global := map[ledgerBucketKey]*ledgerBucketFold{}
 	chars := map[ledgerCharBucketKey]*ledgerBucketFold{}
 	for _, row := range rows {
-		hourMs := row.atMs / economyHourMs * economyHourMs
+		hourMs := economyHourStartMs(row.atMs)
 		key := ledgerBucketKey{hourMs: hourMs, division: row.division, reason: row.reason, gain: row.gold > 0}
 		fold := global[key]
 		if fold == nil {
@@ -455,12 +370,7 @@ the statement sequence is deterministic.
 ================
 */
 func upsertLedgerBucketsTx(tx sqlExecer, global map[ledgerBucketKey]*ledgerBucketFold, chars map[ledgerCharBucketKey]*ledgerBucketFold) error {
-	keys := make([]ledgerBucketKey, 0, len(global))
-	for key := range global {
-		keys = append(keys, key)
-	}
-	sort.Slice(keys, func(i, j int) bool {
-		a, b := keys[i], keys[j]
+	err := visitSorted(global, func(a, b ledgerBucketKey) bool {
 		if a.hourMs != b.hourMs {
 			return a.hourMs < b.hourMs
 		}
@@ -471,9 +381,7 @@ func upsertLedgerBucketsTx(tx sqlExecer, global map[ledgerBucketKey]*ledgerBucke
 			return a.reason < b.reason
 		}
 		return !a.gain && b.gain
-	})
-	for _, key := range keys {
-		fold := global[key]
+	}, func(key ledgerBucketKey, fold *ledgerBucketFold) error {
 		gain := 0
 		if key.gain {
 			gain = 1
@@ -485,13 +393,12 @@ ON CONFLICT (hour_ms, division, reason, gain) DO UPDATE SET
 			key.hourMs, key.division, key.reason, gain, fold.total, fold.low, fold.high, fold.n); err != nil {
 			return fmt.Errorf("economy ledger hours: %w", err)
 		}
+		return nil
+	})
+	if err != nil {
+		return err
 	}
-	charKeys := make([]ledgerCharBucketKey, 0, len(chars))
-	for key := range chars {
-		charKeys = append(charKeys, key)
-	}
-	sort.Slice(charKeys, func(i, j int) bool {
-		a, b := charKeys[i], charKeys[j]
+	return visitSorted(chars, func(a, b ledgerCharBucketKey) bool {
 		if a.hourMs != b.hourMs {
 			return a.hourMs < b.hourMs
 		}
@@ -499,9 +406,7 @@ ON CONFLICT (hour_ms, division, reason, gain) DO UPDATE SET
 			return a.charID < b.charID
 		}
 		return a.reason < b.reason
-	})
-	for _, key := range charKeys {
-		fold := chars[key]
+	}, func(key ledgerCharBucketKey, fold *ledgerBucketFold) error {
 		if _, err := tx.Exec(`INSERT INTO economy_ledger_char_hours (hour_ms, char_id, reason, total, n)
 VALUES (?, ?, ?, ?, ?)
 ON CONFLICT (hour_ms, char_id, reason) DO UPDATE SET
@@ -509,8 +414,8 @@ ON CONFLICT (hour_ms, char_id, reason) DO UPDATE SET
 			key.hourMs, key.charID, key.reason, fold.total, fold.n); err != nil {
 			return fmt.Errorf("economy ledger char hours: %w", err)
 		}
-	}
-	return nil
+		return nil
+	})
 }
 
 /*
@@ -540,29 +445,6 @@ func flushLedgerTx(tx sqlExecer, rows []ledgerRow) error {
 
 /*
 ================
-ledgerOwnTxLocked
-
-A door with its own transaction: writes the row of live's gold moving to
-balance inside tx, and returns what to run once tx commits (the ledger
-then advances, as the door then assigns the balance).
-================
-*/
-func (s *Store) ledgerOwnTxLocked(tx *sql.Tx, label, division string, live *domain.Character, balance int64) (func(), error) {
-	row, moved := s.goldRowLocked(label, division, live, balance)
-	if !moved {
-		return func() {}, nil
-	}
-	if err := flushLedgerTx(tx, []ledgerRow{row}); err != nil {
-		return nil, err
-	}
-	return func() {
-		s.ledger.seen[live] = balance
-		s.countLedgerRows([]ledgerRow{row})
-	}, nil
-}
-
-/*
-================
 countLedgerRows
 
 Committed rows join the per-reason totals.
@@ -584,6 +466,32 @@ func (s *Store) countLedgerRows(rows []ledgerRow) {
 			s.ledger.totals["gold."+row.reason+".loss"] += uint64(-row.gold)
 		}
 	}
+}
+
+/*
+================
+countUndeclaredItemRows
+
+Committed item rows of changes made outside any door join the totals
+("items.undeclared"), beside gold's undeclared reason.
+================
+*/
+func (s *Store) countUndeclaredItemRows(rows []itemLedgerRow) {
+	var undeclared uint64
+	for _, row := range rows {
+		if row.door == domain.EconomyDoorUndeclared {
+			undeclared++
+		}
+	}
+	if undeclared == 0 {
+		return
+	}
+	s.ledger.mu.Lock()
+	defer s.ledger.mu.Unlock()
+	if s.ledger.totals == nil {
+		s.ledger.totals = map[string]uint64{}
+	}
+	s.ledger.totals["items.undeclared"] += undeclared
 }
 
 /*
@@ -699,7 +607,7 @@ func (s *Store) EconomyCharacterHours(charID int64, sinceMs int64) ([]LedgerChar
 		return nil, fmt.Errorf("economy char hours: no database open")
 	}
 	rows, err := s.db.Query(`SELECT hour_ms, reason, total, n FROM economy_ledger_char_hours
-WHERE char_id = ? AND hour_ms >= ? ORDER BY hour_ms, reason`, charID, sinceMs/economyHourMs*economyHourMs)
+WHERE char_id = ? AND hour_ms >= ? ORDER BY hour_ms, reason`, charID, economyHourStartMs(sinceMs))
 	if err != nil {
 		return nil, err
 	}
@@ -746,7 +654,7 @@ func (s *Store) NoteItemSale(charID int64, item string, count int, gold int64) e
 	if s.db == nil || charID <= 0 || item == "" || count <= 0 || gold < 0 {
 		return fmt.Errorf("economy item sale: unavailable or malformed note")
 	}
-	key := ledgerItemBucketKey{hourMs: s.now().UnixMilli() / economyHourMs * economyHourMs, charID: charID, item: item}
+	key := ledgerItemBucketKey{hourMs: economyHourStartMs(s.now().UnixMilli()), charID: charID, item: item}
 	if s.ledger.items == nil {
 		s.ledger.items = map[ledgerItemBucketKey]*ledgerItemFold{}
 	}
@@ -795,12 +703,7 @@ caller's transaction, beside flushLedgerTx.
 ================
 */
 func flushLedgerItemsTx(tx sqlExecer, items map[ledgerItemBucketKey]*ledgerItemFold) error {
-	keys := make([]ledgerItemBucketKey, 0, len(items))
-	for key := range items {
-		keys = append(keys, key)
-	}
-	sort.Slice(keys, func(i, j int) bool {
-		a, b := keys[i], keys[j]
+	return visitSorted(items, func(a, b ledgerItemBucketKey) bool {
 		if a.hourMs != b.hourMs {
 			return a.hourMs < b.hourMs
 		}
@@ -808,9 +711,7 @@ func flushLedgerItemsTx(tx sqlExecer, items map[ledgerItemBucketKey]*ledgerItemF
 			return a.charID < b.charID
 		}
 		return a.item < b.item
-	})
-	for _, key := range keys {
-		fold := items[key]
+	}, func(key ledgerItemBucketKey, fold *ledgerItemFold) error {
 		if _, err := tx.Exec(`INSERT INTO economy_ledger_char_item_hours (hour_ms, char_id, item, count, gold)
 VALUES (?, ?, ?, ?, ?)
 ON CONFLICT (hour_ms, char_id, item) DO UPDATE SET
@@ -818,8 +719,8 @@ ON CONFLICT (hour_ms, char_id, item) DO UPDATE SET
 			key.hourMs, key.charID, key.item, fold.count, fold.gold); err != nil {
 			return fmt.Errorf("economy ledger char item hours: %w", err)
 		}
-	}
-	return nil
+		return nil
+	})
 }
 
 /*
@@ -853,7 +754,7 @@ func (s *Store) EconomyCharacterItemHours(charID int64, sinceMs int64) ([]Ledger
 		return nil, fmt.Errorf("economy char item hours: no database open")
 	}
 	rows, err := s.db.Query(`SELECT hour_ms, item, count, gold FROM economy_ledger_char_item_hours
-WHERE char_id = ? AND hour_ms >= ? ORDER BY hour_ms, item`, charID, sinceMs/economyHourMs*economyHourMs)
+WHERE char_id = ? AND hour_ms >= ? ORDER BY hour_ms, item`, charID, economyHourStartMs(sinceMs))
 	if err != nil {
 		return nil, err
 	}

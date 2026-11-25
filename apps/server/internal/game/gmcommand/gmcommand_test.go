@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"opensro.online/server/internal/game/enterworld"
+	"opensro.online/server/internal/game/staff"
 )
 
 const testDivision = "global-official"
@@ -37,8 +38,12 @@ func nameFrame(subcmd uint8, name string) []byte {
 	return append(frame, []byte(name)...)
 }
 
+// gmChar is a host-allowlist GM (every staff capability) when gm is set.
 func gmChar(name string, gm bool, region int64) *enterworld.Character {
 	c := &enterworld.Character{Name: name, GMPrivilege: gm}
+	if gm {
+		c.GMCapabilities = uint32(staff.All)
+	}
 	c.World = &enterworld.CharacterWorld{Spawn: &enterworld.WorldSpawn{RegionID: &region}}
 	return c
 }

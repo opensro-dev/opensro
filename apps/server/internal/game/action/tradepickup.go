@@ -144,7 +144,7 @@ func (rt *Runtime) grantTradeGoodsPickup(g pickupGrant) OpResult {
 		bag.Rows = rowsFromInvItems(inv.Items())
 		body := wire.ItemBody{TradeOwner: granted.TradeOwner, TypeFlags: granted.TypeFlags, RefObjID: granted.RefObjID,
 			Quantity: granted.Quantity, Plus: granted.Plus, VarianceBits: granted.VarianceBits,
-			Durability: granted.Durability, MagicOptions: granted.MagicOptions}
+			Durability: granted.Durability, MagicOptions: granted.MagicOptions, Data: granted.Data}
 		plain := wire.EncodePickupItemResult(grant.DestSlot, body)
 		receipt := wire.NewWriter(len(plain) + 4).U8(1).U8(wire.MoveTypeCosPickup).U32(cart.GID).Bytes(plain[2:]).Payload()
 		// The picker's burst is the bag pickup's (PickupItemGrantFrames) with

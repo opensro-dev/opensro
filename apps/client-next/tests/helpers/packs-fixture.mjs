@@ -62,4 +62,65 @@ function fixture( assetPath = "/assets/a.bin" ) {
 	return { bytes, manifest, pack };
 }
 
-export { fixture, sha };
+/*
+================
+disk
+
+A fake origin Cache Storage installed on globalThis for one test: every
+pack reader the test creates shares it, as the windows of one site
+share theirs. `deny` fails every open and put; `quota` fails the next
+put for quota.
+================
+*/
+function disk( t ) {
+	const rows = new Map();
+	let denied = false, quota = false;
+	// A Cache takes a URL string or a Request (the store's inventory rebuild
+	// passes the Requests keys() returned).
+	const rowKey = request => request instanceof Request ? request.url : String( request );
+	const cache = {
+		async match( url ) {
+			return rows.get( rowKey( url ) )?.clone();
+		},
+		async keys() {
+			return [ ...rows.keys() ].map( url => new Request( url ) );
+		},
+		async delete( url ) {
+			return rows.delete( rowKey( url ) );
+		},
+		async put( url, response ) {
+			if ( denied ) throw Error( "denied" );
+			if ( quota ) {
+				quota = false;
+				throw new DOMException( "full", "QuotaExceededError" );
+			}
+			rows.set( rowKey( url ), new Response( await response.arrayBuffer(), { headers: response.headers } ) );
+		}
+	};
+	const old = Object.getOwnPropertyDescriptor( globalThis, "caches" );
+	Object.defineProperty( globalThis, "caches", {
+		configurable: true,
+		value: {
+			async open() {
+				if ( denied ) throw Error( "denied" );
+				return cache;
+			}
+		}
+	} );
+	t.after( () => {
+		if ( old ) Object.defineProperty( globalThis, "caches", old );
+		else Reflect.deleteProperty( globalThis, "caches" );
+	} );
+	return {
+		rows,
+		cache,
+		deny: () => {
+			denied = true;
+		},
+		quota: () => {
+			quota = true;
+		}
+	};
+}
+
+export { disk, fixture, sha };

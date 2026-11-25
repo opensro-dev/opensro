@@ -885,20 +885,27 @@
 				"select-window:Quests": {
 					"added": [
 						"close-window:Quests",
-						"quest-scroll-down",
-						"quest-scroll-thumb",
-						"quest-scroll-up"
+						"quest-list-drag",
+						"quest-list-scroll"
 					],
 					"commands": [],
 					"focus": null,
-					"hash": "c6984b4868e7c4fd",
+					"hash": "a6e1295dd7393407",
 					"panel": "Quests",
 					"removed": [
 						"academy-dismiss",
 						"academy-invite",
 						"academy-notice",
 						"close-window:Academy",
-						"open-window:Academy Matching"
+						"main-popup-drag",
+						"open-window:Academy Matching",
+						"select-window:Academy",
+						"select-window:Actions",
+						"select-window:Character",
+						"select-window:Inventory",
+						"select-window:Party",
+						"select-window:Quests",
+						"select-window:Skills"
 					]
 				},
 				"select-window:Skills": {
@@ -1046,11 +1053,17 @@
 				"ability-details",
 				"academy-combo:1",
 				"academy-combo:2",
+				"academy-delete",
 				"academy-join",
+				"academy-modify",
 				"academy-name",
 				"academy-next",
 				"academy-prev",
 				"academy-refresh",
+				"academy-register",
+				"academy-scroll-down",
+				"academy-scroll-thumb",
+				"academy-scroll-up",
 				"academy-search",
 				"academy-sort:GRADE_BTN",
 				"academy-sort:GRADUATE_BTN",
@@ -1121,13 +1134,13 @@
 				"window-drag:Academy Matching"
 			],
 			"focus": null,
-			"hash": "ca0e966eabfa243d",
+			"hash": "cfa2cba115d68414",
 			"keys": {
 				"Enter": {
 					"added": [],
 					"commands": [],
 					"focus": "chat-text",
-					"hash": "ca0e966eabfa243d",
+					"hash": "cfa2cba115d68414",
 					"panel": "Academy Matching",
 					"removed": []
 				},
@@ -1140,11 +1153,17 @@
 					"removed": [
 						"academy-combo:1",
 						"academy-combo:2",
+						"academy-delete",
 						"academy-join",
+						"academy-modify",
 						"academy-name",
 						"academy-next",
 						"academy-prev",
 						"academy-refresh",
+						"academy-register",
+						"academy-scroll-down",
+						"academy-scroll-thumb",
+						"academy-scroll-up",
 						"academy-search",
 						"academy-sort:GRADE_BTN",
 						"academy-sort:GRADUATE_BTN",
@@ -1174,7 +1193,7 @@
 					],
 					"commands": [],
 					"focus": null,
-					"hash": "8e1e1e9daf2af7e7",
+					"hash": "323fa0df04d9c5ec",
 					"panel": "Academy Matching",
 					"removed": [
 						"hotbar:1",
@@ -1204,7 +1223,7 @@
 					],
 					"commands": [],
 					"focus": null,
-					"hash": "bbbd3fd7150e6bfd",
+					"hash": "a92bd6d832f3b092",
 					"panel": "Academy Matching",
 					"removed": [
 						"hotbar:1",
@@ -1234,7 +1253,7 @@
 					],
 					"commands": [],
 					"focus": null,
-					"hash": "633cdc481e7d24d5",
+					"hash": "e4e5d4ee6c49b188",
 					"panel": "Academy Matching",
 					"removed": [
 						"hotbar:1",
@@ -1265,7 +1284,7 @@
 					],
 					"commands": [],
 					"focus": null,
-					"hash": "0c4b6eef19a06a26",
+					"hash": "a3dd4f8469c85de1",
 					"panel": "Academy Matching",
 					"removed": []
 				},
@@ -1277,13 +1296,17 @@
 					],
 					"commands": [],
 					"focus": null,
-					"hash": "d9a7ed07d35d20c5",
+					"hash": "ec56f13d6790145d",
 					"panel": "Academy Matching",
 					"removed": []
 				},
+				"academy-delete": null,
 				"academy-join": null,
+				"academy-modify": null,
 				"academy-name": null,
-				"academy-next": {
+				"academy-next": null,
+				"academy-prev": null,
+				"academy-refresh": {
 					"added": [],
 					"commands": [
 						{
@@ -1295,27 +1318,110 @@
 						}
 					],
 					"focus": null,
-					"hash": "ca0e966eabfa243d",
+					"hash": "cfa2cba115d68414",
 					"panel": "Academy Matching",
 					"removed": []
 				},
-				"academy-prev": null,
-				"academy-refresh": {
-					"added": [],
-					"commands": [
-						{
-							"command": {
-								"kind": "academy-page",
-								"page": 0
-							},
-							"kind": "gameplay"
-						}
+				"academy-register": {
+					"added": [
+						"academy-form-cancel",
+						"academy-form-confirm",
+						"academy-form-detail",
+						"academy-form-kind:1",
+						"academy-form-kind:2"
 					],
+					"commands": [],
 					"focus": null,
-					"hash": "ca0e966eabfa243d",
+					"hash": "587a9baf10fd4dd5",
 					"panel": "Academy Matching",
-					"removed": []
+					"removed": [
+						"ability-details",
+						"academy-combo:1",
+						"academy-combo:2",
+						"academy-delete",
+						"academy-join",
+						"academy-modify",
+						"academy-name",
+						"academy-next",
+						"academy-prev",
+						"academy-refresh",
+						"academy-register",
+						"academy-scroll-down",
+						"academy-scroll-thumb",
+						"academy-scroll-up",
+						"academy-search",
+						"academy-sort:GRADE_BTN",
+						"academy-sort:GRADUATE_BTN",
+						"academy-sort:ID_BTN",
+						"academy-sort:LEVEL_BTN",
+						"academy-sort:NAME_BTN",
+						"academy-sort:NUM_BTN",
+						"academy-sort:RACE_BTN",
+						"academy-whisper",
+						"chat-hide",
+						"chat-line:0",
+						"chat-line:1",
+						"chat-line:2",
+						"chat-line:3",
+						"chat-line:4",
+						"chat-line:5",
+						"chat-scroll-down",
+						"chat-scroll-thumb",
+						"chat-scroll-up",
+						"chat-size",
+						"chat-tab:0",
+						"chat-tab:1",
+						"chat-tab:2",
+						"chat-tab:3",
+						"chat-tab:4",
+						"chat-text",
+						"chat-whispers",
+						"close-window:Academy Matching",
+						"ext-drag",
+						"ext-horizontal",
+						"ext-open",
+						"ext-options",
+						"ext-vertical",
+						"hotbar-next",
+						"hotbar-prev",
+						"hotbar:0",
+						"hotbar:1",
+						"hotbar:10",
+						"hotbar:2",
+						"hotbar:3",
+						"hotbar:4",
+						"hotbar:41",
+						"hotbar:42",
+						"hotbar:43",
+						"hotbar:44",
+						"hotbar:45",
+						"hotbar:46",
+						"hotbar:47",
+						"hotbar:48",
+						"hotbar:49",
+						"hotbar:5",
+						"hotbar:50",
+						"hotbar:6",
+						"hotbar:7",
+						"hotbar:8",
+						"hotbar:9",
+						"hud-menu",
+						"item-mall",
+						"mall-notice-close",
+						"mall-notice-enter",
+						"minimap-in",
+						"minimap-out",
+						"self-target",
+						"status-panel",
+						"toggle-window:Guild",
+						"toggle-window:Map",
+						"toggle-window:System",
+						"window-drag:Academy Matching"
+					]
 				},
+				"academy-scroll-down": null,
+				"academy-scroll-thumb": null,
+				"academy-scroll-up": null,
 				"academy-search": null,
 				"academy-sort:GRADE_BTN": null,
 				"academy-sort:GRADUATE_BTN": null,
@@ -1329,7 +1435,7 @@
 					"added": [],
 					"commands": [],
 					"focus": null,
-					"hash": "88411197c7e4968f",
+					"hash": "f79785ea2979db5f",
 					"panel": "Academy Matching",
 					"removed": [
 						"chat-line:0",
@@ -1359,7 +1465,7 @@
 					"added": [],
 					"commands": [],
 					"focus": "chat-text",
-					"hash": "ca0e966eabfa243d",
+					"hash": "cfa2cba115d68414",
 					"panel": "Academy Matching",
 					"removed": []
 				},
@@ -1367,7 +1473,7 @@
 					"added": [],
 					"commands": [],
 					"focus": "chat-text",
-					"hash": "f04aa939191f3c08",
+					"hash": "507fa37cbb14ae63",
 					"panel": "Academy Matching",
 					"removed": [
 						"chat-line:0",
@@ -1382,7 +1488,7 @@
 					"added": [],
 					"commands": [],
 					"focus": "chat-text",
-					"hash": "f04aa939191f3c08",
+					"hash": "507fa37cbb14ae63",
 					"panel": "Academy Matching",
 					"removed": [
 						"chat-line:0",
@@ -1397,7 +1503,7 @@
 					"added": [],
 					"commands": [],
 					"focus": "chat-text",
-					"hash": "f04aa939191f3c08",
+					"hash": "507fa37cbb14ae63",
 					"panel": "Academy Matching",
 					"removed": [
 						"chat-line:0",
@@ -1412,7 +1518,7 @@
 					"added": [],
 					"commands": [],
 					"focus": "chat-text",
-					"hash": "f04aa939191f3c08",
+					"hash": "507fa37cbb14ae63",
 					"panel": "Academy Matching",
 					"removed": [
 						"chat-line:0",
@@ -1434,11 +1540,17 @@
 					"removed": [
 						"academy-combo:1",
 						"academy-combo:2",
+						"academy-delete",
 						"academy-join",
+						"academy-modify",
 						"academy-name",
 						"academy-next",
 						"academy-prev",
 						"academy-refresh",
+						"academy-register",
+						"academy-scroll-down",
+						"academy-scroll-thumb",
+						"academy-scroll-up",
 						"academy-search",
 						"academy-sort:GRADE_BTN",
 						"academy-sort:GRADUATE_BTN",
@@ -1458,7 +1570,7 @@
 					"added": [],
 					"commands": [],
 					"focus": null,
-					"hash": "dec7eaa98bcc2196",
+					"hash": "1792443fc2db3dc7",
 					"panel": "Academy Matching",
 					"removed": [
 						"hotbar:41",
@@ -1485,7 +1597,7 @@
 					],
 					"commands": [],
 					"focus": null,
-					"hash": "db3201e9fc7d2351",
+					"hash": "1c942989d377171c",
 					"panel": "Academy Matching",
 					"removed": []
 				},
@@ -1505,7 +1617,7 @@
 					],
 					"commands": [],
 					"focus": null,
-					"hash": "8e1e1e9daf2af7e7",
+					"hash": "323fa0df04d9c5ec",
 					"panel": "Academy Matching",
 					"removed": [
 						"hotbar:1",
@@ -1535,7 +1647,7 @@
 					],
 					"commands": [],
 					"focus": null,
-					"hash": "633cdc481e7d24d5",
+					"hash": "e4e5d4ee6c49b188",
 					"panel": "Academy Matching",
 					"removed": [
 						"hotbar:1",
@@ -1592,11 +1704,17 @@
 					"removed": [
 						"academy-combo:1",
 						"academy-combo:2",
+						"academy-delete",
 						"academy-join",
+						"academy-modify",
 						"academy-name",
 						"academy-next",
 						"academy-prev",
 						"academy-refresh",
+						"academy-register",
+						"academy-scroll-down",
+						"academy-scroll-thumb",
+						"academy-scroll-up",
 						"academy-search",
 						"academy-sort:GRADE_BTN",
 						"academy-sort:GRADUATE_BTN",
@@ -1655,11 +1773,17 @@
 						"ability-details",
 						"academy-combo:1",
 						"academy-combo:2",
+						"academy-delete",
 						"academy-join",
+						"academy-modify",
 						"academy-name",
 						"academy-next",
 						"academy-prev",
 						"academy-refresh",
+						"academy-register",
+						"academy-scroll-down",
+						"academy-scroll-thumb",
+						"academy-scroll-up",
 						"academy-search",
 						"academy-sort:GRADE_BTN",
 						"academy-sort:GRADUATE_BTN",
@@ -1734,7 +1858,7 @@
 					"added": [],
 					"commands": [],
 					"focus": null,
-					"hash": "a3d488cad2d6571e",
+					"hash": "aa2e66fb8044d222",
 					"panel": "Academy Matching",
 					"removed": [
 						"mall-notice-close",
@@ -1786,11 +1910,17 @@
 						"ability-details",
 						"academy-combo:1",
 						"academy-combo:2",
+						"academy-delete",
 						"academy-join",
+						"academy-modify",
 						"academy-name",
 						"academy-next",
 						"academy-prev",
 						"academy-refresh",
+						"academy-register",
+						"academy-scroll-down",
+						"academy-scroll-thumb",
+						"academy-scroll-up",
 						"academy-search",
 						"academy-sort:GRADE_BTN",
 						"academy-sort:GRADUATE_BTN",
@@ -1875,7 +2005,7 @@
 						}
 					],
 					"focus": null,
-					"hash": "ca0e966eabfa243d",
+					"hash": "cfa2cba115d68414",
 					"panel": "Academy Matching",
 					"removed": []
 				},
@@ -1903,11 +2033,17 @@
 					"removed": [
 						"academy-combo:1",
 						"academy-combo:2",
+						"academy-delete",
 						"academy-join",
+						"academy-modify",
 						"academy-name",
 						"academy-next",
 						"academy-prev",
 						"academy-refresh",
+						"academy-register",
+						"academy-scroll-down",
+						"academy-scroll-thumb",
+						"academy-scroll-up",
 						"academy-search",
 						"academy-sort:GRADE_BTN",
 						"academy-sort:GRADUATE_BTN",
@@ -1940,11 +2076,17 @@
 					"removed": [
 						"academy-combo:1",
 						"academy-combo:2",
+						"academy-delete",
 						"academy-join",
+						"academy-modify",
 						"academy-name",
 						"academy-next",
 						"academy-prev",
 						"academy-refresh",
+						"academy-register",
+						"academy-scroll-down",
+						"academy-scroll-thumb",
+						"academy-scroll-up",
 						"academy-search",
 						"academy-sort:GRADE_BTN",
 						"academy-sort:GRADUATE_BTN",
@@ -1975,11 +2117,17 @@
 					"removed": [
 						"academy-combo:1",
 						"academy-combo:2",
+						"academy-delete",
 						"academy-join",
+						"academy-modify",
 						"academy-name",
 						"academy-next",
 						"academy-prev",
 						"academy-refresh",
+						"academy-register",
+						"academy-scroll-down",
+						"academy-scroll-thumb",
+						"academy-scroll-up",
 						"academy-search",
 						"academy-sort:GRADE_BTN",
 						"academy-sort:GRADUATE_BTN",
@@ -1997,7 +2145,7 @@
 			},
 			"wheel": {
 				"changed": {},
-				"noop": 76
+				"noop": 82
 			}
 		},
 		"Academy honor": {
@@ -3840,13 +3988,12 @@
 				"select-window:Quests": {
 					"added": [
 						"close-window:Quests",
-						"quest-scroll-down",
-						"quest-scroll-thumb",
-						"quest-scroll-up"
+						"quest-list-drag",
+						"quest-list-scroll"
 					],
 					"commands": [],
 					"focus": null,
-					"hash": "c6984b4868e7c4fd",
+					"hash": "a6e1295dd7393407",
 					"panel": "Quests",
 					"removed": [
 						"action:1000",
@@ -3872,7 +4019,15 @@
 						"action:4005",
 						"action:4006",
 						"action:5000",
-						"close-window:Actions"
+						"close-window:Actions",
+						"main-popup-drag",
+						"select-window:Academy",
+						"select-window:Actions",
+						"select-window:Character",
+						"select-window:Inventory",
+						"select-window:Party",
+						"select-window:Quests",
+						"select-window:Skills"
 					]
 				},
 				"select-window:Skills": {
@@ -5705,9 +5860,8 @@
 				"select-window:Quests": {
 					"added": [
 						"close-window:Quests",
-						"quest-scroll-down",
-						"quest-scroll-thumb",
-						"quest-scroll-up"
+						"quest-list-drag",
+						"quest-list-scroll"
 					],
 					"commands": [
 						{
@@ -5718,7 +5872,7 @@
 						}
 					],
 					"focus": null,
-					"hash": "c6984b4868e7c4fd",
+					"hash": "a6e1295dd7393407",
 					"panel": "Quests",
 					"removed": [
 						"alchemy-empty:0",
@@ -5738,6 +5892,14 @@
 						"equipment-view",
 						"inventory-gold",
 						"inventory-page:0",
+						"main-popup-drag",
+						"select-window:Academy",
+						"select-window:Actions",
+						"select-window:Character",
+						"select-window:Inventory",
+						"select-window:Party",
+						"select-window:Quests",
+						"select-window:Skills",
 						"slot:0",
 						"slot:1",
 						"slot:10",
@@ -10444,13 +10606,12 @@
 				"select-window:Quests": {
 					"added": [
 						"close-window:Quests",
-						"quest-scroll-down",
-						"quest-scroll-thumb",
-						"quest-scroll-up"
+						"quest-list-drag",
+						"quest-list-scroll"
 					],
 					"commands": [],
 					"focus": null,
-					"hash": "819fd6db2e3d58cb",
+					"hash": "21384f6020306dce",
 					"panel": "Quests",
 					"removed": [
 						"close-window:COS inventory",
@@ -10466,6 +10627,14 @@
 						"equipment-view",
 						"inventory-gold",
 						"inventory-page:0",
+						"main-popup-drag",
+						"select-window:Academy",
+						"select-window:Actions",
+						"select-window:Character",
+						"select-window:Inventory",
+						"select-window:Party",
+						"select-window:Quests",
+						"select-window:Skills",
 						"slot:0",
 						"slot:1",
 						"slot:10",
@@ -11757,16 +11926,23 @@
 				"select-window:Quests": {
 					"added": [
 						"close-window:Quests",
-						"quest-scroll-down",
-						"quest-scroll-thumb",
-						"quest-scroll-up"
+						"quest-list-drag",
+						"quest-list-scroll"
 					],
 					"commands": [],
 					"focus": null,
-					"hash": "c6984b4868e7c4fd",
+					"hash": "a6e1295dd7393407",
 					"panel": "Quests",
 					"removed": [
 						"close-window:Character",
+						"main-popup-drag",
+						"select-window:Academy",
+						"select-window:Actions",
+						"select-window:Character",
+						"select-window:Inventory",
+						"select-window:Party",
+						"select-window:Quests",
+						"select-window:Skills",
 						"stat-int",
 						"stat-str"
 					]
@@ -12660,6 +12836,750 @@
 			"wheel": {
 				"changed": {},
 				"noop": 48
+			}
+		},
+		"Event Calendar": {
+			"controls": [
+				"ability-details",
+				"chat-hide",
+				"chat-line:0",
+				"chat-line:1",
+				"chat-line:2",
+				"chat-line:3",
+				"chat-line:4",
+				"chat-line:5",
+				"chat-scroll-down",
+				"chat-scroll-thumb",
+				"chat-scroll-up",
+				"chat-size",
+				"chat-tab:0",
+				"chat-tab:1",
+				"chat-tab:2",
+				"chat-tab:3",
+				"chat-tab:4",
+				"chat-text",
+				"chat-whispers",
+				"close-window:Event Calendar",
+				"ext-drag",
+				"ext-horizontal",
+				"ext-open",
+				"ext-options",
+				"ext-vertical",
+				"hotbar-next",
+				"hotbar-prev",
+				"hotbar:0",
+				"hotbar:1",
+				"hotbar:10",
+				"hotbar:2",
+				"hotbar:3",
+				"hotbar:4",
+				"hotbar:41",
+				"hotbar:42",
+				"hotbar:43",
+				"hotbar:44",
+				"hotbar:45",
+				"hotbar:46",
+				"hotbar:47",
+				"hotbar:48",
+				"hotbar:49",
+				"hotbar:5",
+				"hotbar:50",
+				"hotbar:6",
+				"hotbar:7",
+				"hotbar:8",
+				"hotbar:9",
+				"hud-menu",
+				"item-mall",
+				"mall-notice-close",
+				"mall-notice-enter",
+				"minimap-in",
+				"minimap-out",
+				"self-target",
+				"status-panel",
+				"toggle-window:Guild",
+				"toggle-window:Map",
+				"toggle-window:System",
+				"window-drag:Event Calendar"
+			],
+			"focus": null,
+			"hash": "16039619acbbccda",
+			"keys": {
+				"Enter": {
+					"added": [],
+					"commands": [],
+					"focus": "chat-text",
+					"hash": "16039619acbbccda",
+					"panel": "Event Calendar",
+					"removed": []
+				},
+				"Escape": {
+					"added": [],
+					"commands": [],
+					"focus": null,
+					"hash": "62a09a7aaf65fe38",
+					"panel": "",
+					"removed": [
+						"close-window:Event Calendar",
+						"window-drag:Event Calendar"
+					]
+				},
+				"F1": null,
+				"F2": {
+					"added": [
+						"hotbar:11",
+						"hotbar:12",
+						"hotbar:13",
+						"hotbar:14",
+						"hotbar:15",
+						"hotbar:16",
+						"hotbar:17",
+						"hotbar:18",
+						"hotbar:19",
+						"hotbar:20"
+					],
+					"commands": [],
+					"focus": null,
+					"hash": "1240165eff2f263b",
+					"panel": "Event Calendar",
+					"removed": [
+						"hotbar:1",
+						"hotbar:10",
+						"hotbar:2",
+						"hotbar:3",
+						"hotbar:4",
+						"hotbar:5",
+						"hotbar:6",
+						"hotbar:7",
+						"hotbar:8",
+						"hotbar:9"
+					]
+				},
+				"F3": {
+					"added": [
+						"hotbar:21",
+						"hotbar:22",
+						"hotbar:23",
+						"hotbar:24",
+						"hotbar:25",
+						"hotbar:26",
+						"hotbar:27",
+						"hotbar:28",
+						"hotbar:29",
+						"hotbar:30"
+					],
+					"commands": [],
+					"focus": null,
+					"hash": "061cd3ca872108d6",
+					"panel": "Event Calendar",
+					"removed": [
+						"hotbar:1",
+						"hotbar:10",
+						"hotbar:2",
+						"hotbar:3",
+						"hotbar:4",
+						"hotbar:5",
+						"hotbar:6",
+						"hotbar:7",
+						"hotbar:8",
+						"hotbar:9"
+					]
+				},
+				"F4": {
+					"added": [
+						"hotbar:31",
+						"hotbar:32",
+						"hotbar:33",
+						"hotbar:34",
+						"hotbar:35",
+						"hotbar:36",
+						"hotbar:37",
+						"hotbar:38",
+						"hotbar:39",
+						"hotbar:40"
+					],
+					"commands": [],
+					"focus": null,
+					"hash": "ce49bfacad9bdf3d",
+					"panel": "Event Calendar",
+					"removed": [
+						"hotbar:1",
+						"hotbar:10",
+						"hotbar:2",
+						"hotbar:3",
+						"hotbar:4",
+						"hotbar:5",
+						"hotbar:6",
+						"hotbar:7",
+						"hotbar:8",
+						"hotbar:9"
+					]
+				},
+				"KeyR": null
+			},
+			"panel": "Event Calendar",
+			"rows": {
+				"ability-details": null,
+				"chat-hide": {
+					"added": [],
+					"commands": [],
+					"focus": null,
+					"hash": "a8704fca4eebf254",
+					"panel": "Event Calendar",
+					"removed": [
+						"chat-line:0",
+						"chat-line:1",
+						"chat-line:2",
+						"chat-line:3",
+						"chat-line:4",
+						"chat-line:5",
+						"chat-tab:0",
+						"chat-tab:1",
+						"chat-tab:2",
+						"chat-tab:3",
+						"chat-tab:4"
+					]
+				},
+				"chat-line:0": null,
+				"chat-line:1": null,
+				"chat-line:2": null,
+				"chat-line:3": null,
+				"chat-line:4": null,
+				"chat-line:5": null,
+				"chat-scroll-down": null,
+				"chat-scroll-thumb": null,
+				"chat-scroll-up": null,
+				"chat-size": null,
+				"chat-tab:0": {
+					"added": [],
+					"commands": [],
+					"focus": "chat-text",
+					"hash": "16039619acbbccda",
+					"panel": "Event Calendar",
+					"removed": []
+				},
+				"chat-tab:1": {
+					"added": [],
+					"commands": [],
+					"focus": "chat-text",
+					"hash": "6f917b699ef2773c",
+					"panel": "Event Calendar",
+					"removed": [
+						"chat-line:0",
+						"chat-line:1",
+						"chat-line:2",
+						"chat-line:3",
+						"chat-line:4",
+						"chat-line:5"
+					]
+				},
+				"chat-tab:2": {
+					"added": [],
+					"commands": [],
+					"focus": "chat-text",
+					"hash": "6f917b699ef2773c",
+					"panel": "Event Calendar",
+					"removed": [
+						"chat-line:0",
+						"chat-line:1",
+						"chat-line:2",
+						"chat-line:3",
+						"chat-line:4",
+						"chat-line:5"
+					]
+				},
+				"chat-tab:3": {
+					"added": [],
+					"commands": [],
+					"focus": "chat-text",
+					"hash": "6f917b699ef2773c",
+					"panel": "Event Calendar",
+					"removed": [
+						"chat-line:0",
+						"chat-line:1",
+						"chat-line:2",
+						"chat-line:3",
+						"chat-line:4",
+						"chat-line:5"
+					]
+				},
+				"chat-tab:4": {
+					"added": [],
+					"commands": [],
+					"focus": "chat-text",
+					"hash": "6f917b699ef2773c",
+					"panel": "Event Calendar",
+					"removed": [
+						"chat-line:0",
+						"chat-line:1",
+						"chat-line:2",
+						"chat-line:3",
+						"chat-line:4",
+						"chat-line:5"
+					]
+				},
+				"chat-text": null,
+				"chat-whispers": null,
+				"close-window:Event Calendar": {
+					"added": [],
+					"commands": [],
+					"focus": null,
+					"hash": "62a09a7aaf65fe38",
+					"panel": "",
+					"removed": [
+						"close-window:Event Calendar",
+						"window-drag:Event Calendar"
+					]
+				},
+				"ext-drag": null,
+				"ext-horizontal": null,
+				"ext-open": {
+					"added": [],
+					"commands": [],
+					"focus": null,
+					"hash": "9951f81c0da4c66c",
+					"panel": "Event Calendar",
+					"removed": [
+						"hotbar:41",
+						"hotbar:42",
+						"hotbar:43",
+						"hotbar:44",
+						"hotbar:45",
+						"hotbar:46",
+						"hotbar:47",
+						"hotbar:48",
+						"hotbar:49",
+						"hotbar:50"
+					]
+				},
+				"ext-options": {
+					"added": [
+						"ext-double",
+						"ext-options-apply",
+						"ext-options-close",
+						"ext-options-ok",
+						"ext-position-lock",
+						"ext-slot-lock",
+						"ext-transparent"
+					],
+					"commands": [],
+					"focus": null,
+					"hash": "41a81f90d8afb382",
+					"panel": "Event Calendar",
+					"removed": []
+				},
+				"ext-vertical": null,
+				"hotbar-next": {
+					"added": [
+						"hotbar:11",
+						"hotbar:12",
+						"hotbar:13",
+						"hotbar:14",
+						"hotbar:15",
+						"hotbar:16",
+						"hotbar:17",
+						"hotbar:18",
+						"hotbar:19",
+						"hotbar:20"
+					],
+					"commands": [],
+					"focus": null,
+					"hash": "1240165eff2f263b",
+					"panel": "Event Calendar",
+					"removed": [
+						"hotbar:1",
+						"hotbar:10",
+						"hotbar:2",
+						"hotbar:3",
+						"hotbar:4",
+						"hotbar:5",
+						"hotbar:6",
+						"hotbar:7",
+						"hotbar:8",
+						"hotbar:9"
+					]
+				},
+				"hotbar-prev": {
+					"added": [
+						"hotbar:31",
+						"hotbar:32",
+						"hotbar:33",
+						"hotbar:34",
+						"hotbar:35",
+						"hotbar:36",
+						"hotbar:37",
+						"hotbar:38",
+						"hotbar:39",
+						"hotbar:40"
+					],
+					"commands": [],
+					"focus": null,
+					"hash": "ce49bfacad9bdf3d",
+					"panel": "Event Calendar",
+					"removed": [
+						"hotbar:1",
+						"hotbar:10",
+						"hotbar:2",
+						"hotbar:3",
+						"hotbar:4",
+						"hotbar:5",
+						"hotbar:6",
+						"hotbar:7",
+						"hotbar:8",
+						"hotbar:9"
+					]
+				},
+				"hotbar:0": null,
+				"hotbar:1": null,
+				"hotbar:10": null,
+				"hotbar:2": null,
+				"hotbar:3": null,
+				"hotbar:4": null,
+				"hotbar:41": null,
+				"hotbar:42": null,
+				"hotbar:43": null,
+				"hotbar:44": null,
+				"hotbar:45": null,
+				"hotbar:46": null,
+				"hotbar:47": null,
+				"hotbar:48": null,
+				"hotbar:49": null,
+				"hotbar:5": null,
+				"hotbar:50": null,
+				"hotbar:6": null,
+				"hotbar:7": null,
+				"hotbar:8": null,
+				"hotbar:9": null,
+				"hud-menu": {
+					"added": [
+						"close-window:Character",
+						"main-popup-drag",
+						"select-window:Academy",
+						"select-window:Actions",
+						"select-window:Character",
+						"select-window:Inventory",
+						"select-window:Party",
+						"select-window:Quests",
+						"select-window:Skills",
+						"stat-int",
+						"stat-str"
+					],
+					"commands": [],
+					"focus": null,
+					"hash": "e3daedc150847a53",
+					"panel": "Character",
+					"removed": [
+						"close-window:Event Calendar",
+						"window-drag:Event Calendar"
+					]
+				},
+				"item-mall": {
+					"added": [
+						"item-mall-bag-page:-1",
+						"item-mall-bag-page:1",
+						"item-mall-category:0",
+						"item-mall-category:1",
+						"item-mall-category:2",
+						"item-mall-category:3",
+						"item-mall-category:4",
+						"item-mall-category:5",
+						"item-mall-category:6",
+						"item-mall-category:7",
+						"item-mall-close",
+						"item-mall-close-button",
+						"item-mall-funding:7",
+						"item-mall-funding:9",
+						"item-mall-home",
+						"item-mall-root:4",
+						"item-mall-root:5",
+						"item-mall-root:6",
+						"item-mall-root:7"
+					],
+					"commands": [
+						{
+							"command": {
+								"kind": "mall-open"
+							},
+							"kind": "gameplay"
+						},
+						{
+							"command": {
+								"blocked": false,
+								"itemMallOpen": true,
+								"kind": "auto-potion-input"
+							},
+							"kind": "gameplay"
+						}
+					],
+					"focus": null,
+					"hash": "4dcdaaaa347c993f",
+					"panel": "Event Calendar",
+					"removed": [
+						"ability-details",
+						"chat-hide",
+						"chat-line:0",
+						"chat-line:1",
+						"chat-line:2",
+						"chat-line:3",
+						"chat-line:4",
+						"chat-line:5",
+						"chat-scroll-down",
+						"chat-scroll-thumb",
+						"chat-scroll-up",
+						"chat-size",
+						"chat-tab:0",
+						"chat-tab:1",
+						"chat-tab:2",
+						"chat-tab:3",
+						"chat-tab:4",
+						"chat-text",
+						"chat-whispers",
+						"close-window:Event Calendar",
+						"ext-drag",
+						"ext-horizontal",
+						"ext-open",
+						"ext-options",
+						"ext-vertical",
+						"hotbar-next",
+						"hotbar-prev",
+						"hotbar:0",
+						"hotbar:1",
+						"hotbar:10",
+						"hotbar:2",
+						"hotbar:3",
+						"hotbar:4",
+						"hotbar:41",
+						"hotbar:42",
+						"hotbar:43",
+						"hotbar:44",
+						"hotbar:45",
+						"hotbar:46",
+						"hotbar:47",
+						"hotbar:48",
+						"hotbar:49",
+						"hotbar:5",
+						"hotbar:50",
+						"hotbar:6",
+						"hotbar:7",
+						"hotbar:8",
+						"hotbar:9",
+						"hud-menu",
+						"item-mall",
+						"mall-notice-close",
+						"mall-notice-enter",
+						"minimap-in",
+						"minimap-out",
+						"self-target",
+						"status-panel",
+						"toggle-window:Guild",
+						"toggle-window:Map",
+						"toggle-window:System",
+						"window-drag:Event Calendar"
+					]
+				},
+				"mall-notice-close": {
+					"added": [],
+					"commands": [],
+					"focus": null,
+					"hash": "08c238ed3433cef5",
+					"panel": "Event Calendar",
+					"removed": [
+						"mall-notice-close",
+						"mall-notice-enter"
+					]
+				},
+				"mall-notice-enter": {
+					"added": [
+						"item-mall-bag-page:-1",
+						"item-mall-bag-page:1",
+						"item-mall-category:0",
+						"item-mall-category:1",
+						"item-mall-category:2",
+						"item-mall-category:3",
+						"item-mall-category:4",
+						"item-mall-category:5",
+						"item-mall-category:6",
+						"item-mall-category:7",
+						"item-mall-close",
+						"item-mall-close-button",
+						"item-mall-funding:7",
+						"item-mall-funding:9",
+						"item-mall-home",
+						"item-mall-root:4",
+						"item-mall-root:5",
+						"item-mall-root:6",
+						"item-mall-root:7"
+					],
+					"commands": [
+						{
+							"command": {
+								"kind": "mall-open"
+							},
+							"kind": "gameplay"
+						},
+						{
+							"command": {
+								"blocked": false,
+								"itemMallOpen": true,
+								"kind": "auto-potion-input"
+							},
+							"kind": "gameplay"
+						}
+					],
+					"focus": null,
+					"hash": "4dcdaaaa347c993f",
+					"panel": "Event Calendar",
+					"removed": [
+						"ability-details",
+						"chat-hide",
+						"chat-line:0",
+						"chat-line:1",
+						"chat-line:2",
+						"chat-line:3",
+						"chat-line:4",
+						"chat-line:5",
+						"chat-scroll-down",
+						"chat-scroll-thumb",
+						"chat-scroll-up",
+						"chat-size",
+						"chat-tab:0",
+						"chat-tab:1",
+						"chat-tab:2",
+						"chat-tab:3",
+						"chat-tab:4",
+						"chat-text",
+						"chat-whispers",
+						"close-window:Event Calendar",
+						"ext-drag",
+						"ext-horizontal",
+						"ext-open",
+						"ext-options",
+						"ext-vertical",
+						"hotbar-next",
+						"hotbar-prev",
+						"hotbar:0",
+						"hotbar:1",
+						"hotbar:10",
+						"hotbar:2",
+						"hotbar:3",
+						"hotbar:4",
+						"hotbar:41",
+						"hotbar:42",
+						"hotbar:43",
+						"hotbar:44",
+						"hotbar:45",
+						"hotbar:46",
+						"hotbar:47",
+						"hotbar:48",
+						"hotbar:49",
+						"hotbar:5",
+						"hotbar:50",
+						"hotbar:6",
+						"hotbar:7",
+						"hotbar:8",
+						"hotbar:9",
+						"hud-menu",
+						"item-mall",
+						"mall-notice-close",
+						"mall-notice-enter",
+						"minimap-in",
+						"minimap-out",
+						"self-target",
+						"status-panel",
+						"toggle-window:Guild",
+						"toggle-window:Map",
+						"toggle-window:System",
+						"window-drag:Event Calendar"
+					]
+				},
+				"minimap-in": null,
+				"minimap-out": null,
+				"self-target": {
+					"added": [],
+					"commands": [
+						{
+							"command": {
+								"gid": 1,
+								"kind": "select"
+							},
+							"kind": "gameplay"
+						}
+					],
+					"focus": null,
+					"hash": "16039619acbbccda",
+					"panel": "Event Calendar",
+					"removed": []
+				},
+				"status-panel": null,
+				"toggle-window:Guild": {
+					"added": [
+						"close-window:Guild",
+						"guild-sort:121",
+						"guild-sort:122",
+						"guild-sort:123",
+						"guild-sort:124",
+						"guild-sort:126",
+						"guild-tab:0",
+						"guild-tab:1",
+						"guild-tab:2",
+						"guild-tab:3",
+						"guild-tab:4",
+						"guild-tab:5",
+						"window-drag:Guild"
+					],
+					"commands": [],
+					"focus": null,
+					"hash": "edfad0427f16f9e3",
+					"panel": "Guild",
+					"removed": [
+						"close-window:Event Calendar",
+						"window-drag:Event Calendar"
+					]
+				},
+				"toggle-window:Map": {
+					"added": [
+						"close-window:Map",
+						"map-drag",
+						"map-foot",
+						"map-level-filter",
+						"map-pan",
+						"map-pin",
+						"map-side-tab",
+						"map-size",
+						"map-unique-spawns"
+					],
+					"commands": [],
+					"focus": null,
+					"hash": "d710be6f61454295",
+					"panel": "Map",
+					"removed": [
+						"close-window:Event Calendar",
+						"window-drag:Event Calendar"
+					]
+				},
+				"toggle-window:System": {
+					"added": [
+						"close-window:System",
+						"open-window:Experimental",
+						"open-window:Game Guide",
+						"open-window:Option",
+						"system-drag",
+						"system-exit",
+						"system-restart"
+					],
+					"commands": [],
+					"focus": null,
+					"hash": "7ec1f7900efb4bc5",
+					"panel": "System",
+					"removed": [
+						"close-window:Event Calendar",
+						"window-drag:Event Calendar"
+					]
+				},
+				"window-drag:Event Calendar": null
+			},
+			"wheel": {
+				"changed": {},
+				"noop": 60
 			}
 		},
 		"Exchange": {
@@ -14302,13 +15222,12 @@
 				"select-window:Quests": {
 					"added": [
 						"close-window:Quests",
-						"quest-scroll-down",
-						"quest-scroll-thumb",
-						"quest-scroll-up"
+						"quest-list-drag",
+						"quest-list-scroll"
 					],
 					"commands": [],
 					"focus": null,
-					"hash": "68b166da989975d0",
+					"hash": "b059420fd26cf365",
 					"panel": "Quests",
 					"removed": [
 						"close-window:Inventory",
@@ -14319,6 +15238,14 @@
 						"equipment-view",
 						"inventory-gold",
 						"inventory-page:0",
+						"main-popup-drag",
+						"select-window:Academy",
+						"select-window:Actions",
+						"select-window:Character",
+						"select-window:Inventory",
+						"select-window:Party",
+						"select-window:Quests",
+						"select-window:Skills",
 						"slot:0",
 						"slot:1",
 						"slot:10",
@@ -15217,11 +16144,10 @@
 				"experimental-tab:0": null,
 				"experimental-tab:1": {
 					"added": [
-						"experimental-confirm-guild-ban",
-						"experimental-drop-on-bag-tab",
+						"experimental-chat-item-links",
+						"experimental-chat-timestamps",
+						"experimental-event-chat-tab",
 						"experimental-exchange-click-shortcuts",
-						"experimental-fit-window-labels",
-						"experimental-grey-disabled-tabs",
 						"experimental-mall-categories",
 						"experimental-seal-under-heading",
 						"experimental-set-bonus-tooltip",
@@ -15230,7 +16156,7 @@
 					],
 					"commands": [],
 					"focus": null,
-					"hash": "79b03fde81258636",
+					"hash": "72240a8071fe1341",
 					"panel": "Experimental",
 					"removed": [
 						"experimental-anisotropic-filtering",
@@ -15251,18 +16177,18 @@
 				"experimental-tab:2": {
 					"added": [
 						"experimental-auto-select",
+						"experimental-consignment-market",
 						"experimental-homing-projectiles",
-						"experimental-main-thread-own-walk",
 						"experimental-predicted-run-up",
-						"experimental-silent-wing-flight",
 						"experimental-smooth-camera",
+						"experimental-sro-macro",
 						"experimental-unique-damage-rank",
-						"experimental-v-hides-companions",
-						"experimental-warp-arrival-sound"
+						"experimental-unique-status",
+						"experimental-v-hides-companions"
 					],
 					"commands": [],
 					"focus": null,
-					"hash": "4a81cf8115f63298",
+					"hash": "e6fa19499740c2fa",
 					"panel": "Experimental",
 					"removed": [
 						"experimental-anisotropic-filtering",
@@ -15282,13 +16208,14 @@
 				},
 				"experimental-tab:3": {
 					"added": [
+						"experimental-guide-waypoint",
 						"experimental-quest-tracker-markers",
 						"experimental-sun-drop-marker",
 						"experimental-unique-spawn-points"
 					],
 					"commands": [],
 					"focus": null,
-					"hash": "32f5d9442c5bcb12",
+					"hash": "ff77ab4985e19575",
 					"panel": "Experimental",
 					"removed": [
 						"experimental-anisotropic-filtering",
@@ -15350,12 +16277,11 @@
 						"experimental-pet-filter-other",
 						"experimental-pet-filter-potions",
 						"experimental-pet-pickup-filter",
-						"experimental-smart-pet-pickup",
 						"experimental-transport-auto-potion"
 					],
 					"commands": [],
 					"focus": null,
-					"hash": "d1e9351c82057f92",
+					"hash": "23f62880aa036734",
 					"panel": "Experimental",
 					"removed": [
 						"experimental-anisotropic-filtering",
@@ -25091,13 +26017,12 @@
 				"select-window:Quests": {
 					"added": [
 						"close-window:Quests",
-						"quest-scroll-down",
-						"quest-scroll-thumb",
-						"quest-scroll-up"
+						"quest-list-drag",
+						"quest-list-scroll"
 					],
 					"commands": [],
 					"focus": null,
-					"hash": "c6984b4868e7c4fd",
+					"hash": "a6e1295dd7393407",
 					"panel": "Quests",
 					"removed": [
 						"close-window:Inventory",
@@ -25108,6 +26033,14 @@
 						"equipment-view",
 						"inventory-gold",
 						"inventory-page:0",
+						"main-popup-drag",
+						"select-window:Academy",
+						"select-window:Actions",
+						"select-window:Character",
+						"select-window:Inventory",
+						"select-window:Party",
+						"select-window:Quests",
+						"select-window:Skills",
 						"slot:0",
 						"slot:1",
 						"slot:10",
@@ -25530,6 +26463,800 @@
 			"wheel": {
 				"changed": {},
 				"noop": 119
+			}
+		},
+		"Job Honor Rank": {
+			"controls": [
+				"ability-details",
+				"chat-hide",
+				"chat-line:0",
+				"chat-line:1",
+				"chat-line:2",
+				"chat-line:3",
+				"chat-line:4",
+				"chat-line:5",
+				"chat-scroll-down",
+				"chat-scroll-thumb",
+				"chat-scroll-up",
+				"chat-size",
+				"chat-tab:0",
+				"chat-tab:1",
+				"chat-tab:2",
+				"chat-tab:3",
+				"chat-tab:4",
+				"chat-text",
+				"chat-whispers",
+				"close-window:Job Honor Rank",
+				"ext-drag",
+				"ext-horizontal",
+				"ext-open",
+				"ext-options",
+				"ext-vertical",
+				"hotbar-next",
+				"hotbar-prev",
+				"hotbar:0",
+				"hotbar:1",
+				"hotbar:10",
+				"hotbar:2",
+				"hotbar:3",
+				"hotbar:4",
+				"hotbar:41",
+				"hotbar:42",
+				"hotbar:43",
+				"hotbar:44",
+				"hotbar:45",
+				"hotbar:46",
+				"hotbar:47",
+				"hotbar:48",
+				"hotbar:49",
+				"hotbar:5",
+				"hotbar:50",
+				"hotbar:6",
+				"hotbar:7",
+				"hotbar:8",
+				"hotbar:9",
+				"hud-menu",
+				"item-mall",
+				"job-honor-period:current",
+				"job-honor-period:previous",
+				"job-honor-tab:all",
+				"job-honor-tab:thief",
+				"job-honor-tab:trader",
+				"mall-notice-close",
+				"mall-notice-enter",
+				"minimap-in",
+				"minimap-out",
+				"self-target",
+				"status-panel",
+				"toggle-window:Guild",
+				"toggle-window:Map",
+				"toggle-window:System",
+				"window-drag:Job Honor Rank"
+			],
+			"focus": null,
+			"hash": "7ab8c1e2605e5df4",
+			"keys": {
+				"Enter": {
+					"added": [],
+					"commands": [],
+					"focus": "chat-text",
+					"hash": "7ab8c1e2605e5df4",
+					"panel": "Job Honor Rank",
+					"removed": []
+				},
+				"Escape": {
+					"added": [],
+					"commands": [],
+					"focus": null,
+					"hash": "62a09a7aaf65fe38",
+					"panel": "",
+					"removed": [
+						"close-window:Job Honor Rank",
+						"job-honor-period:current",
+						"job-honor-period:previous",
+						"job-honor-tab:all",
+						"job-honor-tab:thief",
+						"job-honor-tab:trader",
+						"window-drag:Job Honor Rank"
+					]
+				},
+				"F1": null,
+				"F2": {
+					"added": [
+						"hotbar:11",
+						"hotbar:12",
+						"hotbar:13",
+						"hotbar:14",
+						"hotbar:15",
+						"hotbar:16",
+						"hotbar:17",
+						"hotbar:18",
+						"hotbar:19",
+						"hotbar:20"
+					],
+					"commands": [],
+					"focus": null,
+					"hash": "53bfdb2c60c008a6",
+					"panel": "Job Honor Rank",
+					"removed": [
+						"hotbar:1",
+						"hotbar:10",
+						"hotbar:2",
+						"hotbar:3",
+						"hotbar:4",
+						"hotbar:5",
+						"hotbar:6",
+						"hotbar:7",
+						"hotbar:8",
+						"hotbar:9"
+					]
+				},
+				"F3": {
+					"added": [
+						"hotbar:21",
+						"hotbar:22",
+						"hotbar:23",
+						"hotbar:24",
+						"hotbar:25",
+						"hotbar:26",
+						"hotbar:27",
+						"hotbar:28",
+						"hotbar:29",
+						"hotbar:30"
+					],
+					"commands": [],
+					"focus": null,
+					"hash": "47a8e1f107a0ee69",
+					"panel": "Job Honor Rank",
+					"removed": [
+						"hotbar:1",
+						"hotbar:10",
+						"hotbar:2",
+						"hotbar:3",
+						"hotbar:4",
+						"hotbar:5",
+						"hotbar:6",
+						"hotbar:7",
+						"hotbar:8",
+						"hotbar:9"
+					]
+				},
+				"F4": {
+					"added": [
+						"hotbar:31",
+						"hotbar:32",
+						"hotbar:33",
+						"hotbar:34",
+						"hotbar:35",
+						"hotbar:36",
+						"hotbar:37",
+						"hotbar:38",
+						"hotbar:39",
+						"hotbar:40"
+					],
+					"commands": [],
+					"focus": null,
+					"hash": "9140600c3aa5c1e8",
+					"panel": "Job Honor Rank",
+					"removed": [
+						"hotbar:1",
+						"hotbar:10",
+						"hotbar:2",
+						"hotbar:3",
+						"hotbar:4",
+						"hotbar:5",
+						"hotbar:6",
+						"hotbar:7",
+						"hotbar:8",
+						"hotbar:9"
+					]
+				},
+				"KeyR": null
+			},
+			"panel": "Job Honor Rank",
+			"rows": {
+				"ability-details": null,
+				"chat-hide": {
+					"added": [],
+					"commands": [],
+					"focus": null,
+					"hash": "edf2c022e4cd151d",
+					"panel": "Job Honor Rank",
+					"removed": [
+						"chat-line:0",
+						"chat-line:1",
+						"chat-line:2",
+						"chat-line:3",
+						"chat-line:4",
+						"chat-line:5",
+						"chat-tab:0",
+						"chat-tab:1",
+						"chat-tab:2",
+						"chat-tab:3",
+						"chat-tab:4"
+					]
+				},
+				"chat-line:0": null,
+				"chat-line:1": null,
+				"chat-line:2": null,
+				"chat-line:3": null,
+				"chat-line:4": null,
+				"chat-line:5": null,
+				"chat-scroll-down": null,
+				"chat-scroll-thumb": null,
+				"chat-scroll-up": null,
+				"chat-size": null,
+				"chat-tab:0": {
+					"added": [],
+					"commands": [],
+					"focus": "chat-text",
+					"hash": "7ab8c1e2605e5df4",
+					"panel": "Job Honor Rank",
+					"removed": []
+				},
+				"chat-tab:1": {
+					"added": [],
+					"commands": [],
+					"focus": "chat-text",
+					"hash": "494c7f11c0cfcff6",
+					"panel": "Job Honor Rank",
+					"removed": [
+						"chat-line:0",
+						"chat-line:1",
+						"chat-line:2",
+						"chat-line:3",
+						"chat-line:4",
+						"chat-line:5"
+					]
+				},
+				"chat-tab:2": {
+					"added": [],
+					"commands": [],
+					"focus": "chat-text",
+					"hash": "494c7f11c0cfcff6",
+					"panel": "Job Honor Rank",
+					"removed": [
+						"chat-line:0",
+						"chat-line:1",
+						"chat-line:2",
+						"chat-line:3",
+						"chat-line:4",
+						"chat-line:5"
+					]
+				},
+				"chat-tab:3": {
+					"added": [],
+					"commands": [],
+					"focus": "chat-text",
+					"hash": "494c7f11c0cfcff6",
+					"panel": "Job Honor Rank",
+					"removed": [
+						"chat-line:0",
+						"chat-line:1",
+						"chat-line:2",
+						"chat-line:3",
+						"chat-line:4",
+						"chat-line:5"
+					]
+				},
+				"chat-tab:4": {
+					"added": [],
+					"commands": [],
+					"focus": "chat-text",
+					"hash": "494c7f11c0cfcff6",
+					"panel": "Job Honor Rank",
+					"removed": [
+						"chat-line:0",
+						"chat-line:1",
+						"chat-line:2",
+						"chat-line:3",
+						"chat-line:4",
+						"chat-line:5"
+					]
+				},
+				"chat-text": null,
+				"chat-whispers": null,
+				"close-window:Job Honor Rank": {
+					"added": [],
+					"commands": [],
+					"focus": null,
+					"hash": "62a09a7aaf65fe38",
+					"panel": "",
+					"removed": [
+						"close-window:Job Honor Rank",
+						"job-honor-period:current",
+						"job-honor-period:previous",
+						"job-honor-tab:all",
+						"job-honor-tab:thief",
+						"job-honor-tab:trader",
+						"window-drag:Job Honor Rank"
+					]
+				},
+				"ext-drag": null,
+				"ext-horizontal": null,
+				"ext-open": {
+					"added": [],
+					"commands": [],
+					"focus": null,
+					"hash": "49cd0b390c37bea5",
+					"panel": "Job Honor Rank",
+					"removed": [
+						"hotbar:41",
+						"hotbar:42",
+						"hotbar:43",
+						"hotbar:44",
+						"hotbar:45",
+						"hotbar:46",
+						"hotbar:47",
+						"hotbar:48",
+						"hotbar:49",
+						"hotbar:50"
+					]
+				},
+				"ext-options": {
+					"added": [
+						"ext-double",
+						"ext-options-apply",
+						"ext-options-close",
+						"ext-options-ok",
+						"ext-position-lock",
+						"ext-slot-lock",
+						"ext-transparent"
+					],
+					"commands": [],
+					"focus": null,
+					"hash": "12262073e8682e9b",
+					"panel": "Job Honor Rank",
+					"removed": []
+				},
+				"ext-vertical": null,
+				"hotbar-next": {
+					"added": [
+						"hotbar:11",
+						"hotbar:12",
+						"hotbar:13",
+						"hotbar:14",
+						"hotbar:15",
+						"hotbar:16",
+						"hotbar:17",
+						"hotbar:18",
+						"hotbar:19",
+						"hotbar:20"
+					],
+					"commands": [],
+					"focus": null,
+					"hash": "53bfdb2c60c008a6",
+					"panel": "Job Honor Rank",
+					"removed": [
+						"hotbar:1",
+						"hotbar:10",
+						"hotbar:2",
+						"hotbar:3",
+						"hotbar:4",
+						"hotbar:5",
+						"hotbar:6",
+						"hotbar:7",
+						"hotbar:8",
+						"hotbar:9"
+					]
+				},
+				"hotbar-prev": {
+					"added": [
+						"hotbar:31",
+						"hotbar:32",
+						"hotbar:33",
+						"hotbar:34",
+						"hotbar:35",
+						"hotbar:36",
+						"hotbar:37",
+						"hotbar:38",
+						"hotbar:39",
+						"hotbar:40"
+					],
+					"commands": [],
+					"focus": null,
+					"hash": "9140600c3aa5c1e8",
+					"panel": "Job Honor Rank",
+					"removed": [
+						"hotbar:1",
+						"hotbar:10",
+						"hotbar:2",
+						"hotbar:3",
+						"hotbar:4",
+						"hotbar:5",
+						"hotbar:6",
+						"hotbar:7",
+						"hotbar:8",
+						"hotbar:9"
+					]
+				},
+				"hotbar:0": null,
+				"hotbar:1": null,
+				"hotbar:10": null,
+				"hotbar:2": null,
+				"hotbar:3": null,
+				"hotbar:4": null,
+				"hotbar:41": null,
+				"hotbar:42": null,
+				"hotbar:43": null,
+				"hotbar:44": null,
+				"hotbar:45": null,
+				"hotbar:46": null,
+				"hotbar:47": null,
+				"hotbar:48": null,
+				"hotbar:49": null,
+				"hotbar:5": null,
+				"hotbar:50": null,
+				"hotbar:6": null,
+				"hotbar:7": null,
+				"hotbar:8": null,
+				"hotbar:9": null,
+				"hud-menu": {
+					"added": [
+						"close-window:Character",
+						"main-popup-drag",
+						"select-window:Academy",
+						"select-window:Actions",
+						"select-window:Character",
+						"select-window:Inventory",
+						"select-window:Party",
+						"select-window:Quests",
+						"select-window:Skills",
+						"stat-int",
+						"stat-str"
+					],
+					"commands": [],
+					"focus": null,
+					"hash": "e3daedc150847a53",
+					"panel": "Character",
+					"removed": [
+						"close-window:Job Honor Rank",
+						"job-honor-period:current",
+						"job-honor-period:previous",
+						"job-honor-tab:all",
+						"job-honor-tab:thief",
+						"job-honor-tab:trader",
+						"window-drag:Job Honor Rank"
+					]
+				},
+				"item-mall": {
+					"added": [
+						"item-mall-bag-page:-1",
+						"item-mall-bag-page:1",
+						"item-mall-category:0",
+						"item-mall-category:1",
+						"item-mall-category:2",
+						"item-mall-category:3",
+						"item-mall-category:4",
+						"item-mall-category:5",
+						"item-mall-category:6",
+						"item-mall-category:7",
+						"item-mall-close",
+						"item-mall-close-button",
+						"item-mall-funding:7",
+						"item-mall-funding:9",
+						"item-mall-home",
+						"item-mall-root:4",
+						"item-mall-root:5",
+						"item-mall-root:6",
+						"item-mall-root:7"
+					],
+					"commands": [
+						{
+							"command": {
+								"kind": "mall-open"
+							},
+							"kind": "gameplay"
+						},
+						{
+							"command": {
+								"blocked": false,
+								"itemMallOpen": true,
+								"kind": "auto-potion-input"
+							},
+							"kind": "gameplay"
+						}
+					],
+					"focus": null,
+					"hash": "4dcdaaaa347c993f",
+					"panel": "Job Honor Rank",
+					"removed": [
+						"ability-details",
+						"chat-hide",
+						"chat-line:0",
+						"chat-line:1",
+						"chat-line:2",
+						"chat-line:3",
+						"chat-line:4",
+						"chat-line:5",
+						"chat-scroll-down",
+						"chat-scroll-thumb",
+						"chat-scroll-up",
+						"chat-size",
+						"chat-tab:0",
+						"chat-tab:1",
+						"chat-tab:2",
+						"chat-tab:3",
+						"chat-tab:4",
+						"chat-text",
+						"chat-whispers",
+						"close-window:Job Honor Rank",
+						"ext-drag",
+						"ext-horizontal",
+						"ext-open",
+						"ext-options",
+						"ext-vertical",
+						"hotbar-next",
+						"hotbar-prev",
+						"hotbar:0",
+						"hotbar:1",
+						"hotbar:10",
+						"hotbar:2",
+						"hotbar:3",
+						"hotbar:4",
+						"hotbar:41",
+						"hotbar:42",
+						"hotbar:43",
+						"hotbar:44",
+						"hotbar:45",
+						"hotbar:46",
+						"hotbar:47",
+						"hotbar:48",
+						"hotbar:49",
+						"hotbar:5",
+						"hotbar:50",
+						"hotbar:6",
+						"hotbar:7",
+						"hotbar:8",
+						"hotbar:9",
+						"hud-menu",
+						"item-mall",
+						"job-honor-period:current",
+						"job-honor-period:previous",
+						"job-honor-tab:all",
+						"job-honor-tab:thief",
+						"job-honor-tab:trader",
+						"mall-notice-close",
+						"mall-notice-enter",
+						"minimap-in",
+						"minimap-out",
+						"self-target",
+						"status-panel",
+						"toggle-window:Guild",
+						"toggle-window:Map",
+						"toggle-window:System",
+						"window-drag:Job Honor Rank"
+					]
+				},
+				"job-honor-period:current": null,
+				"job-honor-period:previous": null,
+				"job-honor-tab:all": null,
+				"job-honor-tab:thief": null,
+				"job-honor-tab:trader": null,
+				"mall-notice-close": {
+					"added": [],
+					"commands": [],
+					"focus": null,
+					"hash": "4b5d8ae5a9e70bc6",
+					"panel": "Job Honor Rank",
+					"removed": [
+						"mall-notice-close",
+						"mall-notice-enter"
+					]
+				},
+				"mall-notice-enter": {
+					"added": [
+						"item-mall-bag-page:-1",
+						"item-mall-bag-page:1",
+						"item-mall-category:0",
+						"item-mall-category:1",
+						"item-mall-category:2",
+						"item-mall-category:3",
+						"item-mall-category:4",
+						"item-mall-category:5",
+						"item-mall-category:6",
+						"item-mall-category:7",
+						"item-mall-close",
+						"item-mall-close-button",
+						"item-mall-funding:7",
+						"item-mall-funding:9",
+						"item-mall-home",
+						"item-mall-root:4",
+						"item-mall-root:5",
+						"item-mall-root:6",
+						"item-mall-root:7"
+					],
+					"commands": [
+						{
+							"command": {
+								"kind": "mall-open"
+							},
+							"kind": "gameplay"
+						},
+						{
+							"command": {
+								"blocked": false,
+								"itemMallOpen": true,
+								"kind": "auto-potion-input"
+							},
+							"kind": "gameplay"
+						}
+					],
+					"focus": null,
+					"hash": "4dcdaaaa347c993f",
+					"panel": "Job Honor Rank",
+					"removed": [
+						"ability-details",
+						"chat-hide",
+						"chat-line:0",
+						"chat-line:1",
+						"chat-line:2",
+						"chat-line:3",
+						"chat-line:4",
+						"chat-line:5",
+						"chat-scroll-down",
+						"chat-scroll-thumb",
+						"chat-scroll-up",
+						"chat-size",
+						"chat-tab:0",
+						"chat-tab:1",
+						"chat-tab:2",
+						"chat-tab:3",
+						"chat-tab:4",
+						"chat-text",
+						"chat-whispers",
+						"close-window:Job Honor Rank",
+						"ext-drag",
+						"ext-horizontal",
+						"ext-open",
+						"ext-options",
+						"ext-vertical",
+						"hotbar-next",
+						"hotbar-prev",
+						"hotbar:0",
+						"hotbar:1",
+						"hotbar:10",
+						"hotbar:2",
+						"hotbar:3",
+						"hotbar:4",
+						"hotbar:41",
+						"hotbar:42",
+						"hotbar:43",
+						"hotbar:44",
+						"hotbar:45",
+						"hotbar:46",
+						"hotbar:47",
+						"hotbar:48",
+						"hotbar:49",
+						"hotbar:5",
+						"hotbar:50",
+						"hotbar:6",
+						"hotbar:7",
+						"hotbar:8",
+						"hotbar:9",
+						"hud-menu",
+						"item-mall",
+						"job-honor-period:current",
+						"job-honor-period:previous",
+						"job-honor-tab:all",
+						"job-honor-tab:thief",
+						"job-honor-tab:trader",
+						"mall-notice-close",
+						"mall-notice-enter",
+						"minimap-in",
+						"minimap-out",
+						"self-target",
+						"status-panel",
+						"toggle-window:Guild",
+						"toggle-window:Map",
+						"toggle-window:System",
+						"window-drag:Job Honor Rank"
+					]
+				},
+				"minimap-in": null,
+				"minimap-out": null,
+				"self-target": {
+					"added": [],
+					"commands": [
+						{
+							"command": {
+								"gid": 1,
+								"kind": "select"
+							},
+							"kind": "gameplay"
+						}
+					],
+					"focus": null,
+					"hash": "7ab8c1e2605e5df4",
+					"panel": "Job Honor Rank",
+					"removed": []
+				},
+				"status-panel": null,
+				"toggle-window:Guild": {
+					"added": [
+						"close-window:Guild",
+						"guild-sort:121",
+						"guild-sort:122",
+						"guild-sort:123",
+						"guild-sort:124",
+						"guild-sort:126",
+						"guild-tab:0",
+						"guild-tab:1",
+						"guild-tab:2",
+						"guild-tab:3",
+						"guild-tab:4",
+						"guild-tab:5",
+						"window-drag:Guild"
+					],
+					"commands": [],
+					"focus": null,
+					"hash": "edfad0427f16f9e3",
+					"panel": "Guild",
+					"removed": [
+						"close-window:Job Honor Rank",
+						"job-honor-period:current",
+						"job-honor-period:previous",
+						"job-honor-tab:all",
+						"job-honor-tab:thief",
+						"job-honor-tab:trader",
+						"window-drag:Job Honor Rank"
+					]
+				},
+				"toggle-window:Map": {
+					"added": [
+						"close-window:Map",
+						"map-drag",
+						"map-foot",
+						"map-level-filter",
+						"map-pan",
+						"map-pin",
+						"map-side-tab",
+						"map-size",
+						"map-unique-spawns"
+					],
+					"commands": [],
+					"focus": null,
+					"hash": "d710be6f61454295",
+					"panel": "Map",
+					"removed": [
+						"close-window:Job Honor Rank",
+						"job-honor-period:current",
+						"job-honor-period:previous",
+						"job-honor-tab:all",
+						"job-honor-tab:thief",
+						"job-honor-tab:trader",
+						"window-drag:Job Honor Rank"
+					]
+				},
+				"toggle-window:System": {
+					"added": [
+						"close-window:System",
+						"open-window:Experimental",
+						"open-window:Game Guide",
+						"open-window:Option",
+						"system-drag",
+						"system-exit",
+						"system-restart"
+					],
+					"commands": [],
+					"focus": null,
+					"hash": "7ec1f7900efb4bc5",
+					"panel": "System",
+					"removed": [
+						"close-window:Job Honor Rank",
+						"job-honor-period:current",
+						"job-honor-period:previous",
+						"job-honor-tab:all",
+						"job-honor-tab:thief",
+						"job-honor-tab:trader",
+						"window-drag:Job Honor Rank"
+					]
+				},
+				"window-drag:Job Honor Rank": null
+			},
+			"wheel": {
+				"changed": {},
+				"noop": 65
 			}
 		},
 		"Job ranking": {
@@ -28515,9 +30242,8 @@
 				"select-window:Quests": {
 					"added": [
 						"close-window:Quests",
-						"quest-scroll-down",
-						"quest-scroll-thumb",
-						"quest-scroll-up"
+						"quest-list-drag",
+						"quest-list-scroll"
 					],
 					"commands": [
 						{
@@ -28528,7 +30254,7 @@
 						}
 					],
 					"focus": null,
-					"hash": "c6984b4868e7c4fd",
+					"hash": "a6e1295dd7393407",
 					"panel": "Quests",
 					"removed": [
 						"companion-close",
@@ -28539,6 +30265,14 @@
 						"equipment-view",
 						"inventory-gold",
 						"inventory-page:0",
+						"main-popup-drag",
+						"select-window:Academy",
+						"select-window:Actions",
+						"select-window:Character",
+						"select-window:Inventory",
+						"select-window:Party",
+						"select-window:Quests",
+						"select-window:Skills",
 						"slot:0",
 						"slot:1",
 						"slot:10",
@@ -30829,7 +32563,20 @@
 					"panel": "Option",
 					"removed": []
 				},
-				"option-video-combo:-2": null,
+				"option-video-combo:-2": {
+					"added": [
+						"option-video-choice:-2:0",
+						"option-video-choice:-2:1",
+						"option-video-choice:-2:2",
+						"option-video-choice:-2:3",
+						"option-video-choice:-2:4"
+					],
+					"commands": [],
+					"focus": null,
+					"hash": "a4406b66887b338b",
+					"panel": "Option",
+					"removed": []
+				},
 				"option-video-combo:0": {
 					"added": [
 						"option-video-choice:0:0",
@@ -32070,20 +33817,27 @@
 				"select-window:Quests": {
 					"added": [
 						"close-window:Quests",
-						"quest-scroll-down",
-						"quest-scroll-thumb",
-						"quest-scroll-up"
+						"quest-list-drag",
+						"quest-list-scroll"
 					],
 					"commands": [],
 					"focus": null,
-					"hash": "c6984b4868e7c4fd",
+					"hash": "a6e1295dd7393407",
 					"panel": "Quests",
 					"removed": [
 						"close-window:Party",
+						"main-popup-drag",
 						"open-window:Party Matching",
 						"party-disband",
 						"party-invite",
-						"party-settings"
+						"party-settings",
+						"select-window:Academy",
+						"select-window:Actions",
+						"select-window:Character",
+						"select-window:Inventory",
+						"select-window:Party",
+						"select-window:Quests",
+						"select-window:Skills"
 					]
 				},
 				"select-window:Skills": {
@@ -33265,21 +35019,12 @@
 				"hotbar:9",
 				"hud-menu",
 				"item-mall",
-				"main-popup-drag",
 				"mall-notice-close",
 				"mall-notice-enter",
 				"minimap-in",
 				"minimap-out",
-				"quest-scroll-down",
-				"quest-scroll-thumb",
-				"quest-scroll-up",
-				"select-window:Academy",
-				"select-window:Actions",
-				"select-window:Character",
-				"select-window:Inventory",
-				"select-window:Party",
-				"select-window:Quests",
-				"select-window:Skills",
+				"quest-list-drag",
+				"quest-list-scroll",
 				"self-target",
 				"status-panel",
 				"toggle-window:Guild",
@@ -33287,13 +35032,13 @@
 				"toggle-window:System"
 			],
 			"focus": null,
-			"hash": "c6984b4868e7c4fd",
+			"hash": "a6e1295dd7393407",
 			"keys": {
 				"Enter": {
 					"added": [],
 					"commands": [],
 					"focus": "chat-text",
-					"hash": "c6984b4868e7c4fd",
+					"hash": "a6e1295dd7393407",
 					"panel": "Quests",
 					"removed": []
 				},
@@ -33305,17 +35050,8 @@
 					"panel": "",
 					"removed": [
 						"close-window:Quests",
-						"main-popup-drag",
-						"quest-scroll-down",
-						"quest-scroll-thumb",
-						"quest-scroll-up",
-						"select-window:Academy",
-						"select-window:Actions",
-						"select-window:Character",
-						"select-window:Inventory",
-						"select-window:Party",
-						"select-window:Quests",
-						"select-window:Skills"
+						"quest-list-drag",
+						"quest-list-scroll"
 					]
 				},
 				"F1": null,
@@ -33334,7 +35070,7 @@
 					],
 					"commands": [],
 					"focus": null,
-					"hash": "832751360f3f5c07",
+					"hash": "406f0da9bf5aa83f",
 					"panel": "Quests",
 					"removed": [
 						"hotbar:1",
@@ -33364,7 +35100,7 @@
 					],
 					"commands": [],
 					"focus": null,
-					"hash": "22cfa510498a92ea",
+					"hash": "f6bc3d498f97d016",
 					"panel": "Quests",
 					"removed": [
 						"hotbar:1",
@@ -33394,7 +35130,7 @@
 					],
 					"commands": [],
 					"focus": null,
-					"hash": "509d727f4f70486c",
+					"hash": "8f442aa2a66c9425",
 					"panel": "Quests",
 					"removed": [
 						"hotbar:1",
@@ -33418,7 +35154,7 @@
 					"added": [],
 					"commands": [],
 					"focus": null,
-					"hash": "90db8ddcdd1eff7a",
+					"hash": "9a50cd0a0a65319c",
 					"panel": "Quests",
 					"removed": [
 						"chat-line:0",
@@ -33448,7 +35184,7 @@
 					"added": [],
 					"commands": [],
 					"focus": "chat-text",
-					"hash": "c6984b4868e7c4fd",
+					"hash": "a6e1295dd7393407",
 					"panel": "Quests",
 					"removed": []
 				},
@@ -33456,7 +35192,7 @@
 					"added": [],
 					"commands": [],
 					"focus": "chat-text",
-					"hash": "54db76c732b345a1",
+					"hash": "005e086659d74e7d",
 					"panel": "Quests",
 					"removed": [
 						"chat-line:0",
@@ -33471,7 +35207,7 @@
 					"added": [],
 					"commands": [],
 					"focus": "chat-text",
-					"hash": "54db76c732b345a1",
+					"hash": "005e086659d74e7d",
 					"panel": "Quests",
 					"removed": [
 						"chat-line:0",
@@ -33486,7 +35222,7 @@
 					"added": [],
 					"commands": [],
 					"focus": "chat-text",
-					"hash": "54db76c732b345a1",
+					"hash": "005e086659d74e7d",
 					"panel": "Quests",
 					"removed": [
 						"chat-line:0",
@@ -33501,7 +35237,7 @@
 					"added": [],
 					"commands": [],
 					"focus": "chat-text",
-					"hash": "54db76c732b345a1",
+					"hash": "005e086659d74e7d",
 					"panel": "Quests",
 					"removed": [
 						"chat-line:0",
@@ -33522,17 +35258,8 @@
 					"panel": "",
 					"removed": [
 						"close-window:Quests",
-						"main-popup-drag",
-						"quest-scroll-down",
-						"quest-scroll-thumb",
-						"quest-scroll-up",
-						"select-window:Academy",
-						"select-window:Actions",
-						"select-window:Character",
-						"select-window:Inventory",
-						"select-window:Party",
-						"select-window:Quests",
-						"select-window:Skills"
+						"quest-list-drag",
+						"quest-list-scroll"
 					]
 				},
 				"ext-drag": null,
@@ -33541,7 +35268,7 @@
 					"added": [],
 					"commands": [],
 					"focus": null,
-					"hash": "c4ccd0e296597a25",
+					"hash": "c8002a45984573b6",
 					"panel": "Quests",
 					"removed": [
 						"hotbar:41",
@@ -33568,7 +35295,7 @@
 					],
 					"commands": [],
 					"focus": null,
-					"hash": "0afe97ab93af8847",
+					"hash": "ba5dfa0d021a5e9a",
 					"panel": "Quests",
 					"removed": []
 				},
@@ -33588,7 +35315,7 @@
 					],
 					"commands": [],
 					"focus": null,
-					"hash": "832751360f3f5c07",
+					"hash": "406f0da9bf5aa83f",
 					"panel": "Quests",
 					"removed": [
 						"hotbar:1",
@@ -33618,7 +35345,7 @@
 					],
 					"commands": [],
 					"focus": null,
-					"hash": "509d727f4f70486c",
+					"hash": "8f442aa2a66c9425",
 					"panel": "Quests",
 					"removed": [
 						"hotbar:1",
@@ -33662,17 +35389,8 @@
 					"panel": "",
 					"removed": [
 						"close-window:Quests",
-						"main-popup-drag",
-						"quest-scroll-down",
-						"quest-scroll-thumb",
-						"quest-scroll-up",
-						"select-window:Academy",
-						"select-window:Actions",
-						"select-window:Character",
-						"select-window:Inventory",
-						"select-window:Party",
-						"select-window:Quests",
-						"select-window:Skills"
+						"quest-list-drag",
+						"quest-list-scroll"
 					]
 				},
 				"item-mall": {
@@ -33767,21 +35485,12 @@
 						"hotbar:9",
 						"hud-menu",
 						"item-mall",
-						"main-popup-drag",
 						"mall-notice-close",
 						"mall-notice-enter",
 						"minimap-in",
 						"minimap-out",
-						"quest-scroll-down",
-						"quest-scroll-thumb",
-						"quest-scroll-up",
-						"select-window:Academy",
-						"select-window:Actions",
-						"select-window:Character",
-						"select-window:Inventory",
-						"select-window:Party",
-						"select-window:Quests",
-						"select-window:Skills",
+						"quest-list-drag",
+						"quest-list-scroll",
 						"self-target",
 						"status-panel",
 						"toggle-window:Guild",
@@ -33789,12 +35498,11 @@
 						"toggle-window:System"
 					]
 				},
-				"main-popup-drag": null,
 				"mall-notice-close": {
 					"added": [],
 					"commands": [],
 					"focus": null,
-					"hash": "f886e094fe55d53c",
+					"hash": "f82e542253f6002a",
 					"panel": "Quests",
 					"removed": [
 						"mall-notice-close",
@@ -33893,21 +35601,12 @@
 						"hotbar:9",
 						"hud-menu",
 						"item-mall",
-						"main-popup-drag",
 						"mall-notice-close",
 						"mall-notice-enter",
 						"minimap-in",
 						"minimap-out",
-						"quest-scroll-down",
-						"quest-scroll-thumb",
-						"quest-scroll-up",
-						"select-window:Academy",
-						"select-window:Actions",
-						"select-window:Character",
-						"select-window:Inventory",
-						"select-window:Party",
-						"select-window:Quests",
-						"select-window:Skills",
+						"quest-list-drag",
+						"quest-list-scroll",
 						"self-target",
 						"status-panel",
 						"toggle-window:Guild",
@@ -33917,188 +35616,8 @@
 				},
 				"minimap-in": null,
 				"minimap-out": null,
-				"quest-scroll-down": null,
-				"quest-scroll-thumb": null,
-				"quest-scroll-up": null,
-				"select-window:Academy": {
-					"added": [
-						"academy-dismiss",
-						"academy-invite",
-						"academy-notice",
-						"close-window:Academy",
-						"open-window:Academy Matching"
-					],
-					"commands": [],
-					"focus": null,
-					"hash": "0c289de5a23d541e",
-					"panel": "Academy",
-					"removed": [
-						"close-window:Quests",
-						"quest-scroll-down",
-						"quest-scroll-thumb",
-						"quest-scroll-up"
-					]
-				},
-				"select-window:Actions": {
-					"added": [
-						"action:1000",
-						"action:1001",
-						"action:1002",
-						"action:1003",
-						"action:1004",
-						"action:1006",
-						"action:1007",
-						"action:1008",
-						"action:1009",
-						"action:1010",
-						"action:1011",
-						"action:1012",
-						"action:1013",
-						"action:1014",
-						"action:1015",
-						"action:4000",
-						"action:4001",
-						"action:4002",
-						"action:4003",
-						"action:4004",
-						"action:4005",
-						"action:4006",
-						"action:5000",
-						"close-window:Actions"
-					],
-					"commands": [],
-					"focus": null,
-					"hash": "c023cd35ef369a66",
-					"panel": "Actions",
-					"removed": [
-						"close-window:Quests",
-						"quest-scroll-down",
-						"quest-scroll-thumb",
-						"quest-scroll-up"
-					]
-				},
-				"select-window:Character": {
-					"added": [
-						"close-window:Character",
-						"stat-int",
-						"stat-str"
-					],
-					"commands": [],
-					"focus": null,
-					"hash": "e3daedc150847a53",
-					"panel": "Character",
-					"removed": [
-						"close-window:Quests",
-						"quest-scroll-down",
-						"quest-scroll-thumb",
-						"quest-scroll-up"
-					]
-				},
-				"select-window:Inventory": {
-					"added": [
-						"close-window:Inventory",
-						"doll-left",
-						"doll-reset",
-						"doll-right",
-						"equipment-drop-zone",
-						"equipment-view",
-						"inventory-gold",
-						"inventory-page:0",
-						"slot:0",
-						"slot:1",
-						"slot:10",
-						"slot:11",
-						"slot:12",
-						"slot:13",
-						"slot:14",
-						"slot:15",
-						"slot:16",
-						"slot:17",
-						"slot:18",
-						"slot:19",
-						"slot:2",
-						"slot:20",
-						"slot:21",
-						"slot:22",
-						"slot:23",
-						"slot:24",
-						"slot:25",
-						"slot:26",
-						"slot:27",
-						"slot:28",
-						"slot:29",
-						"slot:3",
-						"slot:30",
-						"slot:31",
-						"slot:32",
-						"slot:33",
-						"slot:34",
-						"slot:35",
-						"slot:36",
-						"slot:37",
-						"slot:38",
-						"slot:39",
-						"slot:4",
-						"slot:40",
-						"slot:41",
-						"slot:42",
-						"slot:43",
-						"slot:44",
-						"slot:5",
-						"slot:6",
-						"slot:7",
-						"slot:8",
-						"slot:9"
-					],
-					"commands": [],
-					"focus": null,
-					"hash": "fb7fec8e8b1c3de5",
-					"panel": "Inventory",
-					"removed": [
-						"close-window:Quests",
-						"quest-scroll-down",
-						"quest-scroll-thumb",
-						"quest-scroll-up"
-					]
-				},
-				"select-window:Party": {
-					"added": [
-						"close-window:Party",
-						"open-window:Party Matching",
-						"party-disband",
-						"party-invite",
-						"party-settings"
-					],
-					"commands": [],
-					"focus": null,
-					"hash": "af0964c6575d6528",
-					"panel": "Party",
-					"removed": [
-						"close-window:Quests",
-						"quest-scroll-down",
-						"quest-scroll-thumb",
-						"quest-scroll-up"
-					]
-				},
-				"select-window:Quests": null,
-				"select-window:Skills": {
-					"added": [
-						"close-window:Skills",
-						"skill-scroll-down",
-						"skill-scroll-thumb",
-						"skill-scroll-up"
-					],
-					"commands": [],
-					"focus": null,
-					"hash": "062c0bda09d7366d",
-					"panel": "Skills",
-					"removed": [
-						"close-window:Quests",
-						"quest-scroll-down",
-						"quest-scroll-thumb",
-						"quest-scroll-up"
-					]
-				},
+				"quest-list-drag": null,
+				"quest-list-scroll": null,
 				"self-target": {
 					"added": [],
 					"commands": [
@@ -34111,7 +35630,7 @@
 						}
 					],
 					"focus": null,
-					"hash": "c6984b4868e7c4fd",
+					"hash": "a6e1295dd7393407",
 					"panel": "Quests",
 					"removed": []
 				},
@@ -34138,17 +35657,8 @@
 					"panel": "Guild",
 					"removed": [
 						"close-window:Quests",
-						"main-popup-drag",
-						"quest-scroll-down",
-						"quest-scroll-thumb",
-						"quest-scroll-up",
-						"select-window:Academy",
-						"select-window:Actions",
-						"select-window:Character",
-						"select-window:Inventory",
-						"select-window:Party",
-						"select-window:Quests",
-						"select-window:Skills"
+						"quest-list-drag",
+						"quest-list-scroll"
 					]
 				},
 				"toggle-window:Map": {
@@ -34169,17 +35679,8 @@
 					"panel": "Map",
 					"removed": [
 						"close-window:Quests",
-						"main-popup-drag",
-						"quest-scroll-down",
-						"quest-scroll-thumb",
-						"quest-scroll-up",
-						"select-window:Academy",
-						"select-window:Actions",
-						"select-window:Character",
-						"select-window:Inventory",
-						"select-window:Party",
-						"select-window:Quests",
-						"select-window:Skills"
+						"quest-list-drag",
+						"quest-list-scroll"
 					]
 				},
 				"toggle-window:System": {
@@ -34198,23 +35699,14 @@
 					"panel": "System",
 					"removed": [
 						"close-window:Quests",
-						"main-popup-drag",
-						"quest-scroll-down",
-						"quest-scroll-thumb",
-						"quest-scroll-up",
-						"select-window:Academy",
-						"select-window:Actions",
-						"select-window:Character",
-						"select-window:Inventory",
-						"select-window:Party",
-						"select-window:Quests",
-						"select-window:Skills"
+						"quest-list-drag",
+						"quest-list-scroll"
 					]
 				}
 			},
 			"wheel": {
 				"changed": {},
-				"noop": 70
+				"noop": 61
 			}
 		},
 		"Shop": {
@@ -36106,13 +37598,12 @@
 				"select-window:Quests": {
 					"added": [
 						"close-window:Quests",
-						"quest-scroll-down",
-						"quest-scroll-thumb",
-						"quest-scroll-up"
+						"quest-list-drag",
+						"quest-list-scroll"
 					],
 					"commands": [],
 					"focus": null,
-					"hash": "c6984b4868e7c4fd",
+					"hash": "a6e1295dd7393407",
 					"panel": "Quests",
 					"removed": [
 						"close-window:Shop",
@@ -36124,6 +37615,14 @@
 						"equipment-view",
 						"inventory-gold",
 						"inventory-page:0",
+						"main-popup-drag",
+						"select-window:Academy",
+						"select-window:Actions",
+						"select-window:Character",
+						"select-window:Inventory",
+						"select-window:Party",
+						"select-window:Quests",
+						"select-window:Skills",
 						"shop-buyback-empty:0",
 						"shop-buyback-empty:1",
 						"shop-buyback-empty:2",
@@ -39524,16 +41023,23 @@
 				"select-window:Quests": {
 					"added": [
 						"close-window:Quests",
-						"quest-scroll-down",
-						"quest-scroll-thumb",
-						"quest-scroll-up"
+						"quest-list-drag",
+						"quest-list-scroll"
 					],
 					"commands": [],
 					"focus": null,
-					"hash": "c6984b4868e7c4fd",
+					"hash": "a6e1295dd7393407",
 					"panel": "Quests",
 					"removed": [
 						"close-window:Skills",
+						"main-popup-drag",
+						"select-window:Academy",
+						"select-window:Actions",
+						"select-window:Character",
+						"select-window:Inventory",
+						"select-window:Party",
+						"select-window:Quests",
+						"select-window:Skills",
 						"skill-scroll-down",
 						"skill-scroll-thumb",
 						"skill-scroll-up"
@@ -42002,13 +43508,12 @@
 				"select-window:Quests": {
 					"added": [
 						"close-window:Quests",
-						"quest-scroll-down",
-						"quest-scroll-thumb",
-						"quest-scroll-up"
+						"quest-list-drag",
+						"quest-list-scroll"
 					],
 					"commands": [],
 					"focus": null,
-					"hash": "9fcfa8df92f93670",
+					"hash": "37f62a88a8f91f80",
 					"panel": "Quests",
 					"removed": [
 						"close-window:Inventory",
@@ -42019,6 +43524,14 @@
 						"equipment-view",
 						"inventory-gold",
 						"inventory-page:0",
+						"main-popup-drag",
+						"select-window:Academy",
+						"select-window:Actions",
+						"select-window:Character",
+						"select-window:Inventory",
+						"select-window:Party",
+						"select-window:Quests",
+						"select-window:Skills",
 						"slot:0",
 						"slot:1",
 						"slot:10",
@@ -45753,13 +47266,12 @@
 				"select-window:Quests": {
 					"added": [
 						"close-window:Quests",
-						"quest-scroll-down",
-						"quest-scroll-thumb",
-						"quest-scroll-up"
+						"quest-list-drag",
+						"quest-list-scroll"
 					],
 					"commands": [],
 					"focus": null,
-					"hash": "c6984b4868e7c4fd",
+					"hash": "a6e1295dd7393407",
 					"panel": "Quests",
 					"removed": [
 						"close-window:Storage",
@@ -45771,6 +47283,14 @@
 						"equipment-view",
 						"inventory-gold",
 						"inventory-page:0",
+						"main-popup-drag",
+						"select-window:Academy",
+						"select-window:Actions",
+						"select-window:Character",
+						"select-window:Inventory",
+						"select-window:Party",
+						"select-window:Quests",
+						"select-window:Skills",
 						"slot:0",
 						"slot:1",
 						"slot:10",
@@ -46636,6 +48156,750 @@
 			"wheel": {
 				"changed": {},
 				"noop": 154
+			}
+		},
+		"Styria Clash": {
+			"controls": [
+				"ability-details",
+				"chat-hide",
+				"chat-line:0",
+				"chat-line:1",
+				"chat-line:2",
+				"chat-line:3",
+				"chat-line:4",
+				"chat-line:5",
+				"chat-scroll-down",
+				"chat-scroll-thumb",
+				"chat-scroll-up",
+				"chat-size",
+				"chat-tab:0",
+				"chat-tab:1",
+				"chat-tab:2",
+				"chat-tab:3",
+				"chat-tab:4",
+				"chat-text",
+				"chat-whispers",
+				"close-window:Styria Clash",
+				"ext-drag",
+				"ext-horizontal",
+				"ext-open",
+				"ext-options",
+				"ext-vertical",
+				"hotbar-next",
+				"hotbar-prev",
+				"hotbar:0",
+				"hotbar:1",
+				"hotbar:10",
+				"hotbar:2",
+				"hotbar:3",
+				"hotbar:4",
+				"hotbar:41",
+				"hotbar:42",
+				"hotbar:43",
+				"hotbar:44",
+				"hotbar:45",
+				"hotbar:46",
+				"hotbar:47",
+				"hotbar:48",
+				"hotbar:49",
+				"hotbar:5",
+				"hotbar:50",
+				"hotbar:6",
+				"hotbar:7",
+				"hotbar:8",
+				"hotbar:9",
+				"hud-menu",
+				"item-mall",
+				"mall-notice-close",
+				"mall-notice-enter",
+				"minimap-in",
+				"minimap-out",
+				"self-target",
+				"status-panel",
+				"toggle-window:Guild",
+				"toggle-window:Map",
+				"toggle-window:System",
+				"window-drag:Styria Clash"
+			],
+			"focus": null,
+			"hash": "792f748c3671cf4e",
+			"keys": {
+				"Enter": {
+					"added": [],
+					"commands": [],
+					"focus": "chat-text",
+					"hash": "792f748c3671cf4e",
+					"panel": "Styria Clash",
+					"removed": []
+				},
+				"Escape": {
+					"added": [],
+					"commands": [],
+					"focus": null,
+					"hash": "62a09a7aaf65fe38",
+					"panel": "",
+					"removed": [
+						"close-window:Styria Clash",
+						"window-drag:Styria Clash"
+					]
+				},
+				"F1": null,
+				"F2": {
+					"added": [
+						"hotbar:11",
+						"hotbar:12",
+						"hotbar:13",
+						"hotbar:14",
+						"hotbar:15",
+						"hotbar:16",
+						"hotbar:17",
+						"hotbar:18",
+						"hotbar:19",
+						"hotbar:20"
+					],
+					"commands": [],
+					"focus": null,
+					"hash": "39026bf5ddb0c63d",
+					"panel": "Styria Clash",
+					"removed": [
+						"hotbar:1",
+						"hotbar:10",
+						"hotbar:2",
+						"hotbar:3",
+						"hotbar:4",
+						"hotbar:5",
+						"hotbar:6",
+						"hotbar:7",
+						"hotbar:8",
+						"hotbar:9"
+					]
+				},
+				"F3": {
+					"added": [
+						"hotbar:21",
+						"hotbar:22",
+						"hotbar:23",
+						"hotbar:24",
+						"hotbar:25",
+						"hotbar:26",
+						"hotbar:27",
+						"hotbar:28",
+						"hotbar:29",
+						"hotbar:30"
+					],
+					"commands": [],
+					"focus": null,
+					"hash": "0d6fc44eff7615b6",
+					"panel": "Styria Clash",
+					"removed": [
+						"hotbar:1",
+						"hotbar:10",
+						"hotbar:2",
+						"hotbar:3",
+						"hotbar:4",
+						"hotbar:5",
+						"hotbar:6",
+						"hotbar:7",
+						"hotbar:8",
+						"hotbar:9"
+					]
+				},
+				"F4": {
+					"added": [
+						"hotbar:31",
+						"hotbar:32",
+						"hotbar:33",
+						"hotbar:34",
+						"hotbar:35",
+						"hotbar:36",
+						"hotbar:37",
+						"hotbar:38",
+						"hotbar:39",
+						"hotbar:40"
+					],
+					"commands": [],
+					"focus": null,
+					"hash": "e9def794c879ddff",
+					"panel": "Styria Clash",
+					"removed": [
+						"hotbar:1",
+						"hotbar:10",
+						"hotbar:2",
+						"hotbar:3",
+						"hotbar:4",
+						"hotbar:5",
+						"hotbar:6",
+						"hotbar:7",
+						"hotbar:8",
+						"hotbar:9"
+					]
+				},
+				"KeyR": null
+			},
+			"panel": "Styria Clash",
+			"rows": {
+				"ability-details": null,
+				"chat-hide": {
+					"added": [],
+					"commands": [],
+					"focus": null,
+					"hash": "ab825364c75ea02d",
+					"panel": "Styria Clash",
+					"removed": [
+						"chat-line:0",
+						"chat-line:1",
+						"chat-line:2",
+						"chat-line:3",
+						"chat-line:4",
+						"chat-line:5",
+						"chat-tab:0",
+						"chat-tab:1",
+						"chat-tab:2",
+						"chat-tab:3",
+						"chat-tab:4"
+					]
+				},
+				"chat-line:0": null,
+				"chat-line:1": null,
+				"chat-line:2": null,
+				"chat-line:3": null,
+				"chat-line:4": null,
+				"chat-line:5": null,
+				"chat-scroll-down": null,
+				"chat-scroll-thumb": null,
+				"chat-scroll-up": null,
+				"chat-size": null,
+				"chat-tab:0": {
+					"added": [],
+					"commands": [],
+					"focus": "chat-text",
+					"hash": "792f748c3671cf4e",
+					"panel": "Styria Clash",
+					"removed": []
+				},
+				"chat-tab:1": {
+					"added": [],
+					"commands": [],
+					"focus": "chat-text",
+					"hash": "8087961974393b57",
+					"panel": "Styria Clash",
+					"removed": [
+						"chat-line:0",
+						"chat-line:1",
+						"chat-line:2",
+						"chat-line:3",
+						"chat-line:4",
+						"chat-line:5"
+					]
+				},
+				"chat-tab:2": {
+					"added": [],
+					"commands": [],
+					"focus": "chat-text",
+					"hash": "8087961974393b57",
+					"panel": "Styria Clash",
+					"removed": [
+						"chat-line:0",
+						"chat-line:1",
+						"chat-line:2",
+						"chat-line:3",
+						"chat-line:4",
+						"chat-line:5"
+					]
+				},
+				"chat-tab:3": {
+					"added": [],
+					"commands": [],
+					"focus": "chat-text",
+					"hash": "8087961974393b57",
+					"panel": "Styria Clash",
+					"removed": [
+						"chat-line:0",
+						"chat-line:1",
+						"chat-line:2",
+						"chat-line:3",
+						"chat-line:4",
+						"chat-line:5"
+					]
+				},
+				"chat-tab:4": {
+					"added": [],
+					"commands": [],
+					"focus": "chat-text",
+					"hash": "8087961974393b57",
+					"panel": "Styria Clash",
+					"removed": [
+						"chat-line:0",
+						"chat-line:1",
+						"chat-line:2",
+						"chat-line:3",
+						"chat-line:4",
+						"chat-line:5"
+					]
+				},
+				"chat-text": null,
+				"chat-whispers": null,
+				"close-window:Styria Clash": {
+					"added": [],
+					"commands": [],
+					"focus": null,
+					"hash": "62a09a7aaf65fe38",
+					"panel": "",
+					"removed": [
+						"close-window:Styria Clash",
+						"window-drag:Styria Clash"
+					]
+				},
+				"ext-drag": null,
+				"ext-horizontal": null,
+				"ext-open": {
+					"added": [],
+					"commands": [],
+					"focus": null,
+					"hash": "b404c285d958c55f",
+					"panel": "Styria Clash",
+					"removed": [
+						"hotbar:41",
+						"hotbar:42",
+						"hotbar:43",
+						"hotbar:44",
+						"hotbar:45",
+						"hotbar:46",
+						"hotbar:47",
+						"hotbar:48",
+						"hotbar:49",
+						"hotbar:50"
+					]
+				},
+				"ext-options": {
+					"added": [
+						"ext-double",
+						"ext-options-apply",
+						"ext-options-close",
+						"ext-options-ok",
+						"ext-position-lock",
+						"ext-slot-lock",
+						"ext-transparent"
+					],
+					"commands": [],
+					"focus": null,
+					"hash": "e35def3721ff9d97",
+					"panel": "Styria Clash",
+					"removed": []
+				},
+				"ext-vertical": null,
+				"hotbar-next": {
+					"added": [
+						"hotbar:11",
+						"hotbar:12",
+						"hotbar:13",
+						"hotbar:14",
+						"hotbar:15",
+						"hotbar:16",
+						"hotbar:17",
+						"hotbar:18",
+						"hotbar:19",
+						"hotbar:20"
+					],
+					"commands": [],
+					"focus": null,
+					"hash": "39026bf5ddb0c63d",
+					"panel": "Styria Clash",
+					"removed": [
+						"hotbar:1",
+						"hotbar:10",
+						"hotbar:2",
+						"hotbar:3",
+						"hotbar:4",
+						"hotbar:5",
+						"hotbar:6",
+						"hotbar:7",
+						"hotbar:8",
+						"hotbar:9"
+					]
+				},
+				"hotbar-prev": {
+					"added": [
+						"hotbar:31",
+						"hotbar:32",
+						"hotbar:33",
+						"hotbar:34",
+						"hotbar:35",
+						"hotbar:36",
+						"hotbar:37",
+						"hotbar:38",
+						"hotbar:39",
+						"hotbar:40"
+					],
+					"commands": [],
+					"focus": null,
+					"hash": "e9def794c879ddff",
+					"panel": "Styria Clash",
+					"removed": [
+						"hotbar:1",
+						"hotbar:10",
+						"hotbar:2",
+						"hotbar:3",
+						"hotbar:4",
+						"hotbar:5",
+						"hotbar:6",
+						"hotbar:7",
+						"hotbar:8",
+						"hotbar:9"
+					]
+				},
+				"hotbar:0": null,
+				"hotbar:1": null,
+				"hotbar:10": null,
+				"hotbar:2": null,
+				"hotbar:3": null,
+				"hotbar:4": null,
+				"hotbar:41": null,
+				"hotbar:42": null,
+				"hotbar:43": null,
+				"hotbar:44": null,
+				"hotbar:45": null,
+				"hotbar:46": null,
+				"hotbar:47": null,
+				"hotbar:48": null,
+				"hotbar:49": null,
+				"hotbar:5": null,
+				"hotbar:50": null,
+				"hotbar:6": null,
+				"hotbar:7": null,
+				"hotbar:8": null,
+				"hotbar:9": null,
+				"hud-menu": {
+					"added": [
+						"close-window:Character",
+						"main-popup-drag",
+						"select-window:Academy",
+						"select-window:Actions",
+						"select-window:Character",
+						"select-window:Inventory",
+						"select-window:Party",
+						"select-window:Quests",
+						"select-window:Skills",
+						"stat-int",
+						"stat-str"
+					],
+					"commands": [],
+					"focus": null,
+					"hash": "e3daedc150847a53",
+					"panel": "Character",
+					"removed": [
+						"close-window:Styria Clash",
+						"window-drag:Styria Clash"
+					]
+				},
+				"item-mall": {
+					"added": [
+						"item-mall-bag-page:-1",
+						"item-mall-bag-page:1",
+						"item-mall-category:0",
+						"item-mall-category:1",
+						"item-mall-category:2",
+						"item-mall-category:3",
+						"item-mall-category:4",
+						"item-mall-category:5",
+						"item-mall-category:6",
+						"item-mall-category:7",
+						"item-mall-close",
+						"item-mall-close-button",
+						"item-mall-funding:7",
+						"item-mall-funding:9",
+						"item-mall-home",
+						"item-mall-root:4",
+						"item-mall-root:5",
+						"item-mall-root:6",
+						"item-mall-root:7"
+					],
+					"commands": [
+						{
+							"command": {
+								"kind": "mall-open"
+							},
+							"kind": "gameplay"
+						},
+						{
+							"command": {
+								"blocked": false,
+								"itemMallOpen": true,
+								"kind": "auto-potion-input"
+							},
+							"kind": "gameplay"
+						}
+					],
+					"focus": null,
+					"hash": "4dcdaaaa347c993f",
+					"panel": "Styria Clash",
+					"removed": [
+						"ability-details",
+						"chat-hide",
+						"chat-line:0",
+						"chat-line:1",
+						"chat-line:2",
+						"chat-line:3",
+						"chat-line:4",
+						"chat-line:5",
+						"chat-scroll-down",
+						"chat-scroll-thumb",
+						"chat-scroll-up",
+						"chat-size",
+						"chat-tab:0",
+						"chat-tab:1",
+						"chat-tab:2",
+						"chat-tab:3",
+						"chat-tab:4",
+						"chat-text",
+						"chat-whispers",
+						"close-window:Styria Clash",
+						"ext-drag",
+						"ext-horizontal",
+						"ext-open",
+						"ext-options",
+						"ext-vertical",
+						"hotbar-next",
+						"hotbar-prev",
+						"hotbar:0",
+						"hotbar:1",
+						"hotbar:10",
+						"hotbar:2",
+						"hotbar:3",
+						"hotbar:4",
+						"hotbar:41",
+						"hotbar:42",
+						"hotbar:43",
+						"hotbar:44",
+						"hotbar:45",
+						"hotbar:46",
+						"hotbar:47",
+						"hotbar:48",
+						"hotbar:49",
+						"hotbar:5",
+						"hotbar:50",
+						"hotbar:6",
+						"hotbar:7",
+						"hotbar:8",
+						"hotbar:9",
+						"hud-menu",
+						"item-mall",
+						"mall-notice-close",
+						"mall-notice-enter",
+						"minimap-in",
+						"minimap-out",
+						"self-target",
+						"status-panel",
+						"toggle-window:Guild",
+						"toggle-window:Map",
+						"toggle-window:System",
+						"window-drag:Styria Clash"
+					]
+				},
+				"mall-notice-close": {
+					"added": [],
+					"commands": [],
+					"focus": null,
+					"hash": "2490ce924e359ea3",
+					"panel": "Styria Clash",
+					"removed": [
+						"mall-notice-close",
+						"mall-notice-enter"
+					]
+				},
+				"mall-notice-enter": {
+					"added": [
+						"item-mall-bag-page:-1",
+						"item-mall-bag-page:1",
+						"item-mall-category:0",
+						"item-mall-category:1",
+						"item-mall-category:2",
+						"item-mall-category:3",
+						"item-mall-category:4",
+						"item-mall-category:5",
+						"item-mall-category:6",
+						"item-mall-category:7",
+						"item-mall-close",
+						"item-mall-close-button",
+						"item-mall-funding:7",
+						"item-mall-funding:9",
+						"item-mall-home",
+						"item-mall-root:4",
+						"item-mall-root:5",
+						"item-mall-root:6",
+						"item-mall-root:7"
+					],
+					"commands": [
+						{
+							"command": {
+								"kind": "mall-open"
+							},
+							"kind": "gameplay"
+						},
+						{
+							"command": {
+								"blocked": false,
+								"itemMallOpen": true,
+								"kind": "auto-potion-input"
+							},
+							"kind": "gameplay"
+						}
+					],
+					"focus": null,
+					"hash": "4dcdaaaa347c993f",
+					"panel": "Styria Clash",
+					"removed": [
+						"ability-details",
+						"chat-hide",
+						"chat-line:0",
+						"chat-line:1",
+						"chat-line:2",
+						"chat-line:3",
+						"chat-line:4",
+						"chat-line:5",
+						"chat-scroll-down",
+						"chat-scroll-thumb",
+						"chat-scroll-up",
+						"chat-size",
+						"chat-tab:0",
+						"chat-tab:1",
+						"chat-tab:2",
+						"chat-tab:3",
+						"chat-tab:4",
+						"chat-text",
+						"chat-whispers",
+						"close-window:Styria Clash",
+						"ext-drag",
+						"ext-horizontal",
+						"ext-open",
+						"ext-options",
+						"ext-vertical",
+						"hotbar-next",
+						"hotbar-prev",
+						"hotbar:0",
+						"hotbar:1",
+						"hotbar:10",
+						"hotbar:2",
+						"hotbar:3",
+						"hotbar:4",
+						"hotbar:41",
+						"hotbar:42",
+						"hotbar:43",
+						"hotbar:44",
+						"hotbar:45",
+						"hotbar:46",
+						"hotbar:47",
+						"hotbar:48",
+						"hotbar:49",
+						"hotbar:5",
+						"hotbar:50",
+						"hotbar:6",
+						"hotbar:7",
+						"hotbar:8",
+						"hotbar:9",
+						"hud-menu",
+						"item-mall",
+						"mall-notice-close",
+						"mall-notice-enter",
+						"minimap-in",
+						"minimap-out",
+						"self-target",
+						"status-panel",
+						"toggle-window:Guild",
+						"toggle-window:Map",
+						"toggle-window:System",
+						"window-drag:Styria Clash"
+					]
+				},
+				"minimap-in": null,
+				"minimap-out": null,
+				"self-target": {
+					"added": [],
+					"commands": [
+						{
+							"command": {
+								"gid": 1,
+								"kind": "select"
+							},
+							"kind": "gameplay"
+						}
+					],
+					"focus": null,
+					"hash": "792f748c3671cf4e",
+					"panel": "Styria Clash",
+					"removed": []
+				},
+				"status-panel": null,
+				"toggle-window:Guild": {
+					"added": [
+						"close-window:Guild",
+						"guild-sort:121",
+						"guild-sort:122",
+						"guild-sort:123",
+						"guild-sort:124",
+						"guild-sort:126",
+						"guild-tab:0",
+						"guild-tab:1",
+						"guild-tab:2",
+						"guild-tab:3",
+						"guild-tab:4",
+						"guild-tab:5",
+						"window-drag:Guild"
+					],
+					"commands": [],
+					"focus": null,
+					"hash": "edfad0427f16f9e3",
+					"panel": "Guild",
+					"removed": [
+						"close-window:Styria Clash",
+						"window-drag:Styria Clash"
+					]
+				},
+				"toggle-window:Map": {
+					"added": [
+						"close-window:Map",
+						"map-drag",
+						"map-foot",
+						"map-level-filter",
+						"map-pan",
+						"map-pin",
+						"map-side-tab",
+						"map-size",
+						"map-unique-spawns"
+					],
+					"commands": [],
+					"focus": null,
+					"hash": "d710be6f61454295",
+					"panel": "Map",
+					"removed": [
+						"close-window:Styria Clash",
+						"window-drag:Styria Clash"
+					]
+				},
+				"toggle-window:System": {
+					"added": [
+						"close-window:System",
+						"open-window:Experimental",
+						"open-window:Game Guide",
+						"open-window:Option",
+						"system-drag",
+						"system-exit",
+						"system-restart"
+					],
+					"commands": [],
+					"focus": null,
+					"hash": "7ec1f7900efb4bc5",
+					"panel": "System",
+					"removed": [
+						"close-window:Styria Clash",
+						"window-drag:Styria Clash"
+					]
+				},
+				"window-drag:Styria Clash": null
+			},
+			"wheel": {
+				"changed": {},
+				"noop": 60
 			}
 		},
 		"System": {
@@ -47564,6 +49828,820 @@
 			"wheel": {
 				"changed": {},
 				"noop": 65
+			}
+		},
+		"Unique Status": {
+			"controls": [
+				"ability-details",
+				"chat-hide",
+				"chat-line:0",
+				"chat-line:1",
+				"chat-line:2",
+				"chat-line:3",
+				"chat-line:4",
+				"chat-line:5",
+				"chat-scroll-down",
+				"chat-scroll-thumb",
+				"chat-scroll-up",
+				"chat-size",
+				"chat-tab:0",
+				"chat-tab:1",
+				"chat-tab:2",
+				"chat-tab:3",
+				"chat-tab:4",
+				"chat-text",
+				"chat-whispers",
+				"close-window:Unique Status",
+				"ext-drag",
+				"ext-horizontal",
+				"ext-open",
+				"ext-options",
+				"ext-vertical",
+				"hotbar-next",
+				"hotbar-prev",
+				"hotbar:0",
+				"hotbar:1",
+				"hotbar:10",
+				"hotbar:2",
+				"hotbar:3",
+				"hotbar:4",
+				"hotbar:41",
+				"hotbar:42",
+				"hotbar:43",
+				"hotbar:44",
+				"hotbar:45",
+				"hotbar:46",
+				"hotbar:47",
+				"hotbar:48",
+				"hotbar:49",
+				"hotbar:5",
+				"hotbar:50",
+				"hotbar:6",
+				"hotbar:7",
+				"hotbar:8",
+				"hotbar:9",
+				"hud-menu",
+				"item-mall",
+				"mall-notice-close",
+				"mall-notice-enter",
+				"minimap-in",
+				"minimap-out",
+				"self-target",
+				"status-panel",
+				"toggle-window:Guild",
+				"toggle-window:Map",
+				"toggle-window:System",
+				"unique-status-browser",
+				"unique-status-deaths",
+				"unique-status-save",
+				"unique-status-tab:alive",
+				"unique-status-tab:all",
+				"unique-status-tab:dead",
+				"unique-status-tab:notify",
+				"window-drag:UniqueStatus"
+			],
+			"focus": null,
+			"hash": "3058afff2d9a2bf7",
+			"keys": {
+				"Enter": {
+					"added": [],
+					"commands": [],
+					"focus": "chat-text",
+					"hash": "3058afff2d9a2bf7",
+					"panel": "Unique Status",
+					"removed": []
+				},
+				"Escape": {
+					"added": [],
+					"commands": [],
+					"focus": null,
+					"hash": "62a09a7aaf65fe38",
+					"panel": "",
+					"removed": [
+						"close-window:Unique Status",
+						"unique-status-browser",
+						"unique-status-deaths",
+						"unique-status-save",
+						"unique-status-tab:alive",
+						"unique-status-tab:all",
+						"unique-status-tab:dead",
+						"unique-status-tab:notify",
+						"window-drag:UniqueStatus"
+					]
+				},
+				"F1": null,
+				"F2": {
+					"added": [
+						"hotbar:11",
+						"hotbar:12",
+						"hotbar:13",
+						"hotbar:14",
+						"hotbar:15",
+						"hotbar:16",
+						"hotbar:17",
+						"hotbar:18",
+						"hotbar:19",
+						"hotbar:20"
+					],
+					"commands": [],
+					"focus": null,
+					"hash": "6cf2836590f84f67",
+					"panel": "Unique Status",
+					"removed": [
+						"hotbar:1",
+						"hotbar:10",
+						"hotbar:2",
+						"hotbar:3",
+						"hotbar:4",
+						"hotbar:5",
+						"hotbar:6",
+						"hotbar:7",
+						"hotbar:8",
+						"hotbar:9"
+					]
+				},
+				"F3": {
+					"added": [
+						"hotbar:21",
+						"hotbar:22",
+						"hotbar:23",
+						"hotbar:24",
+						"hotbar:25",
+						"hotbar:26",
+						"hotbar:27",
+						"hotbar:28",
+						"hotbar:29",
+						"hotbar:30"
+					],
+					"commands": [],
+					"focus": null,
+					"hash": "07edf78b5f70558e",
+					"panel": "Unique Status",
+					"removed": [
+						"hotbar:1",
+						"hotbar:10",
+						"hotbar:2",
+						"hotbar:3",
+						"hotbar:4",
+						"hotbar:5",
+						"hotbar:6",
+						"hotbar:7",
+						"hotbar:8",
+						"hotbar:9"
+					]
+				},
+				"F4": {
+					"added": [
+						"hotbar:31",
+						"hotbar:32",
+						"hotbar:33",
+						"hotbar:34",
+						"hotbar:35",
+						"hotbar:36",
+						"hotbar:37",
+						"hotbar:38",
+						"hotbar:39",
+						"hotbar:40"
+					],
+					"commands": [],
+					"focus": null,
+					"hash": "d9e2a4103038b8ac",
+					"panel": "Unique Status",
+					"removed": [
+						"hotbar:1",
+						"hotbar:10",
+						"hotbar:2",
+						"hotbar:3",
+						"hotbar:4",
+						"hotbar:5",
+						"hotbar:6",
+						"hotbar:7",
+						"hotbar:8",
+						"hotbar:9"
+					]
+				},
+				"KeyR": null
+			},
+			"panel": "Unique Status",
+			"rows": {
+				"ability-details": null,
+				"chat-hide": {
+					"added": [],
+					"commands": [],
+					"focus": null,
+					"hash": "542383d3042dc22e",
+					"panel": "Unique Status",
+					"removed": [
+						"chat-line:0",
+						"chat-line:1",
+						"chat-line:2",
+						"chat-line:3",
+						"chat-line:4",
+						"chat-line:5",
+						"chat-tab:0",
+						"chat-tab:1",
+						"chat-tab:2",
+						"chat-tab:3",
+						"chat-tab:4"
+					]
+				},
+				"chat-line:0": null,
+				"chat-line:1": null,
+				"chat-line:2": null,
+				"chat-line:3": null,
+				"chat-line:4": null,
+				"chat-line:5": null,
+				"chat-scroll-down": null,
+				"chat-scroll-thumb": null,
+				"chat-scroll-up": null,
+				"chat-size": null,
+				"chat-tab:0": {
+					"added": [],
+					"commands": [],
+					"focus": "chat-text",
+					"hash": "3058afff2d9a2bf7",
+					"panel": "Unique Status",
+					"removed": []
+				},
+				"chat-tab:1": {
+					"added": [],
+					"commands": [],
+					"focus": "chat-text",
+					"hash": "34d87d48f1d79237",
+					"panel": "Unique Status",
+					"removed": [
+						"chat-line:0",
+						"chat-line:1",
+						"chat-line:2",
+						"chat-line:3",
+						"chat-line:4",
+						"chat-line:5"
+					]
+				},
+				"chat-tab:2": {
+					"added": [],
+					"commands": [],
+					"focus": "chat-text",
+					"hash": "34d87d48f1d79237",
+					"panel": "Unique Status",
+					"removed": [
+						"chat-line:0",
+						"chat-line:1",
+						"chat-line:2",
+						"chat-line:3",
+						"chat-line:4",
+						"chat-line:5"
+					]
+				},
+				"chat-tab:3": {
+					"added": [],
+					"commands": [],
+					"focus": "chat-text",
+					"hash": "34d87d48f1d79237",
+					"panel": "Unique Status",
+					"removed": [
+						"chat-line:0",
+						"chat-line:1",
+						"chat-line:2",
+						"chat-line:3",
+						"chat-line:4",
+						"chat-line:5"
+					]
+				},
+				"chat-tab:4": {
+					"added": [],
+					"commands": [],
+					"focus": "chat-text",
+					"hash": "34d87d48f1d79237",
+					"panel": "Unique Status",
+					"removed": [
+						"chat-line:0",
+						"chat-line:1",
+						"chat-line:2",
+						"chat-line:3",
+						"chat-line:4",
+						"chat-line:5"
+					]
+				},
+				"chat-text": null,
+				"chat-whispers": null,
+				"close-window:Unique Status": {
+					"added": [],
+					"commands": [],
+					"focus": null,
+					"hash": "62a09a7aaf65fe38",
+					"panel": "",
+					"removed": [
+						"close-window:Unique Status",
+						"unique-status-browser",
+						"unique-status-deaths",
+						"unique-status-save",
+						"unique-status-tab:alive",
+						"unique-status-tab:all",
+						"unique-status-tab:dead",
+						"unique-status-tab:notify",
+						"window-drag:UniqueStatus"
+					]
+				},
+				"ext-drag": null,
+				"ext-horizontal": null,
+				"ext-open": {
+					"added": [],
+					"commands": [],
+					"focus": null,
+					"hash": "7331718445f077ff",
+					"panel": "Unique Status",
+					"removed": [
+						"hotbar:41",
+						"hotbar:42",
+						"hotbar:43",
+						"hotbar:44",
+						"hotbar:45",
+						"hotbar:46",
+						"hotbar:47",
+						"hotbar:48",
+						"hotbar:49",
+						"hotbar:50"
+					]
+				},
+				"ext-options": {
+					"added": [
+						"ext-double",
+						"ext-options-apply",
+						"ext-options-close",
+						"ext-options-ok",
+						"ext-position-lock",
+						"ext-slot-lock",
+						"ext-transparent"
+					],
+					"commands": [],
+					"focus": null,
+					"hash": "be2dc80d8f470d10",
+					"panel": "Unique Status",
+					"removed": []
+				},
+				"ext-vertical": null,
+				"hotbar-next": {
+					"added": [
+						"hotbar:11",
+						"hotbar:12",
+						"hotbar:13",
+						"hotbar:14",
+						"hotbar:15",
+						"hotbar:16",
+						"hotbar:17",
+						"hotbar:18",
+						"hotbar:19",
+						"hotbar:20"
+					],
+					"commands": [],
+					"focus": null,
+					"hash": "6cf2836590f84f67",
+					"panel": "Unique Status",
+					"removed": [
+						"hotbar:1",
+						"hotbar:10",
+						"hotbar:2",
+						"hotbar:3",
+						"hotbar:4",
+						"hotbar:5",
+						"hotbar:6",
+						"hotbar:7",
+						"hotbar:8",
+						"hotbar:9"
+					]
+				},
+				"hotbar-prev": {
+					"added": [
+						"hotbar:31",
+						"hotbar:32",
+						"hotbar:33",
+						"hotbar:34",
+						"hotbar:35",
+						"hotbar:36",
+						"hotbar:37",
+						"hotbar:38",
+						"hotbar:39",
+						"hotbar:40"
+					],
+					"commands": [],
+					"focus": null,
+					"hash": "d9e2a4103038b8ac",
+					"panel": "Unique Status",
+					"removed": [
+						"hotbar:1",
+						"hotbar:10",
+						"hotbar:2",
+						"hotbar:3",
+						"hotbar:4",
+						"hotbar:5",
+						"hotbar:6",
+						"hotbar:7",
+						"hotbar:8",
+						"hotbar:9"
+					]
+				},
+				"hotbar:0": null,
+				"hotbar:1": null,
+				"hotbar:10": null,
+				"hotbar:2": null,
+				"hotbar:3": null,
+				"hotbar:4": null,
+				"hotbar:41": null,
+				"hotbar:42": null,
+				"hotbar:43": null,
+				"hotbar:44": null,
+				"hotbar:45": null,
+				"hotbar:46": null,
+				"hotbar:47": null,
+				"hotbar:48": null,
+				"hotbar:49": null,
+				"hotbar:5": null,
+				"hotbar:50": null,
+				"hotbar:6": null,
+				"hotbar:7": null,
+				"hotbar:8": null,
+				"hotbar:9": null,
+				"hud-menu": {
+					"added": [
+						"close-window:Character",
+						"main-popup-drag",
+						"select-window:Academy",
+						"select-window:Actions",
+						"select-window:Character",
+						"select-window:Inventory",
+						"select-window:Party",
+						"select-window:Quests",
+						"select-window:Skills",
+						"stat-int",
+						"stat-str"
+					],
+					"commands": [],
+					"focus": null,
+					"hash": "e3daedc150847a53",
+					"panel": "Character",
+					"removed": [
+						"close-window:Unique Status",
+						"unique-status-browser",
+						"unique-status-deaths",
+						"unique-status-save",
+						"unique-status-tab:alive",
+						"unique-status-tab:all",
+						"unique-status-tab:dead",
+						"unique-status-tab:notify",
+						"window-drag:UniqueStatus"
+					]
+				},
+				"item-mall": {
+					"added": [
+						"item-mall-bag-page:-1",
+						"item-mall-bag-page:1",
+						"item-mall-category:0",
+						"item-mall-category:1",
+						"item-mall-category:2",
+						"item-mall-category:3",
+						"item-mall-category:4",
+						"item-mall-category:5",
+						"item-mall-category:6",
+						"item-mall-category:7",
+						"item-mall-close",
+						"item-mall-close-button",
+						"item-mall-funding:7",
+						"item-mall-funding:9",
+						"item-mall-home",
+						"item-mall-root:4",
+						"item-mall-root:5",
+						"item-mall-root:6",
+						"item-mall-root:7"
+					],
+					"commands": [
+						{
+							"command": {
+								"kind": "mall-open"
+							},
+							"kind": "gameplay"
+						},
+						{
+							"command": {
+								"blocked": false,
+								"itemMallOpen": true,
+								"kind": "auto-potion-input"
+							},
+							"kind": "gameplay"
+						}
+					],
+					"focus": null,
+					"hash": "4dcdaaaa347c993f",
+					"panel": "Unique Status",
+					"removed": [
+						"ability-details",
+						"chat-hide",
+						"chat-line:0",
+						"chat-line:1",
+						"chat-line:2",
+						"chat-line:3",
+						"chat-line:4",
+						"chat-line:5",
+						"chat-scroll-down",
+						"chat-scroll-thumb",
+						"chat-scroll-up",
+						"chat-size",
+						"chat-tab:0",
+						"chat-tab:1",
+						"chat-tab:2",
+						"chat-tab:3",
+						"chat-tab:4",
+						"chat-text",
+						"chat-whispers",
+						"close-window:Unique Status",
+						"ext-drag",
+						"ext-horizontal",
+						"ext-open",
+						"ext-options",
+						"ext-vertical",
+						"hotbar-next",
+						"hotbar-prev",
+						"hotbar:0",
+						"hotbar:1",
+						"hotbar:10",
+						"hotbar:2",
+						"hotbar:3",
+						"hotbar:4",
+						"hotbar:41",
+						"hotbar:42",
+						"hotbar:43",
+						"hotbar:44",
+						"hotbar:45",
+						"hotbar:46",
+						"hotbar:47",
+						"hotbar:48",
+						"hotbar:49",
+						"hotbar:5",
+						"hotbar:50",
+						"hotbar:6",
+						"hotbar:7",
+						"hotbar:8",
+						"hotbar:9",
+						"hud-menu",
+						"item-mall",
+						"mall-notice-close",
+						"mall-notice-enter",
+						"minimap-in",
+						"minimap-out",
+						"self-target",
+						"status-panel",
+						"toggle-window:Guild",
+						"toggle-window:Map",
+						"toggle-window:System",
+						"unique-status-browser",
+						"unique-status-deaths",
+						"unique-status-save",
+						"unique-status-tab:alive",
+						"unique-status-tab:all",
+						"unique-status-tab:dead",
+						"unique-status-tab:notify",
+						"window-drag:UniqueStatus"
+					]
+				},
+				"mall-notice-close": {
+					"added": [],
+					"commands": [],
+					"focus": null,
+					"hash": "b3821962042515f1",
+					"panel": "Unique Status",
+					"removed": [
+						"mall-notice-close",
+						"mall-notice-enter"
+					]
+				},
+				"mall-notice-enter": {
+					"added": [
+						"item-mall-bag-page:-1",
+						"item-mall-bag-page:1",
+						"item-mall-category:0",
+						"item-mall-category:1",
+						"item-mall-category:2",
+						"item-mall-category:3",
+						"item-mall-category:4",
+						"item-mall-category:5",
+						"item-mall-category:6",
+						"item-mall-category:7",
+						"item-mall-close",
+						"item-mall-close-button",
+						"item-mall-funding:7",
+						"item-mall-funding:9",
+						"item-mall-home",
+						"item-mall-root:4",
+						"item-mall-root:5",
+						"item-mall-root:6",
+						"item-mall-root:7"
+					],
+					"commands": [
+						{
+							"command": {
+								"kind": "mall-open"
+							},
+							"kind": "gameplay"
+						},
+						{
+							"command": {
+								"blocked": false,
+								"itemMallOpen": true,
+								"kind": "auto-potion-input"
+							},
+							"kind": "gameplay"
+						}
+					],
+					"focus": null,
+					"hash": "4dcdaaaa347c993f",
+					"panel": "Unique Status",
+					"removed": [
+						"ability-details",
+						"chat-hide",
+						"chat-line:0",
+						"chat-line:1",
+						"chat-line:2",
+						"chat-line:3",
+						"chat-line:4",
+						"chat-line:5",
+						"chat-scroll-down",
+						"chat-scroll-thumb",
+						"chat-scroll-up",
+						"chat-size",
+						"chat-tab:0",
+						"chat-tab:1",
+						"chat-tab:2",
+						"chat-tab:3",
+						"chat-tab:4",
+						"chat-text",
+						"chat-whispers",
+						"close-window:Unique Status",
+						"ext-drag",
+						"ext-horizontal",
+						"ext-open",
+						"ext-options",
+						"ext-vertical",
+						"hotbar-next",
+						"hotbar-prev",
+						"hotbar:0",
+						"hotbar:1",
+						"hotbar:10",
+						"hotbar:2",
+						"hotbar:3",
+						"hotbar:4",
+						"hotbar:41",
+						"hotbar:42",
+						"hotbar:43",
+						"hotbar:44",
+						"hotbar:45",
+						"hotbar:46",
+						"hotbar:47",
+						"hotbar:48",
+						"hotbar:49",
+						"hotbar:5",
+						"hotbar:50",
+						"hotbar:6",
+						"hotbar:7",
+						"hotbar:8",
+						"hotbar:9",
+						"hud-menu",
+						"item-mall",
+						"mall-notice-close",
+						"mall-notice-enter",
+						"minimap-in",
+						"minimap-out",
+						"self-target",
+						"status-panel",
+						"toggle-window:Guild",
+						"toggle-window:Map",
+						"toggle-window:System",
+						"unique-status-browser",
+						"unique-status-deaths",
+						"unique-status-save",
+						"unique-status-tab:alive",
+						"unique-status-tab:all",
+						"unique-status-tab:dead",
+						"unique-status-tab:notify",
+						"window-drag:UniqueStatus"
+					]
+				},
+				"minimap-in": null,
+				"minimap-out": null,
+				"self-target": {
+					"added": [],
+					"commands": [
+						{
+							"command": {
+								"gid": 1,
+								"kind": "select"
+							},
+							"kind": "gameplay"
+						}
+					],
+					"focus": null,
+					"hash": "3058afff2d9a2bf7",
+					"panel": "Unique Status",
+					"removed": []
+				},
+				"status-panel": null,
+				"toggle-window:Guild": {
+					"added": [
+						"close-window:Guild",
+						"guild-sort:121",
+						"guild-sort:122",
+						"guild-sort:123",
+						"guild-sort:124",
+						"guild-sort:126",
+						"guild-tab:0",
+						"guild-tab:1",
+						"guild-tab:2",
+						"guild-tab:3",
+						"guild-tab:4",
+						"guild-tab:5",
+						"window-drag:Guild"
+					],
+					"commands": [],
+					"focus": null,
+					"hash": "edfad0427f16f9e3",
+					"panel": "Guild",
+					"removed": [
+						"close-window:Unique Status",
+						"unique-status-browser",
+						"unique-status-deaths",
+						"unique-status-save",
+						"unique-status-tab:alive",
+						"unique-status-tab:all",
+						"unique-status-tab:dead",
+						"unique-status-tab:notify",
+						"window-drag:UniqueStatus"
+					]
+				},
+				"toggle-window:Map": {
+					"added": [
+						"close-window:Map",
+						"map-drag",
+						"map-foot",
+						"map-level-filter",
+						"map-pan",
+						"map-pin",
+						"map-side-tab",
+						"map-size",
+						"map-unique-spawns"
+					],
+					"commands": [],
+					"focus": null,
+					"hash": "d710be6f61454295",
+					"panel": "Map",
+					"removed": [
+						"close-window:Unique Status",
+						"unique-status-browser",
+						"unique-status-deaths",
+						"unique-status-save",
+						"unique-status-tab:alive",
+						"unique-status-tab:all",
+						"unique-status-tab:dead",
+						"unique-status-tab:notify",
+						"window-drag:UniqueStatus"
+					]
+				},
+				"toggle-window:System": {
+					"added": [
+						"close-window:System",
+						"open-window:Experimental",
+						"open-window:Game Guide",
+						"open-window:Option",
+						"system-drag",
+						"system-exit",
+						"system-restart"
+					],
+					"commands": [],
+					"focus": null,
+					"hash": "7ec1f7900efb4bc5",
+					"panel": "System",
+					"removed": [
+						"close-window:Unique Status",
+						"unique-status-browser",
+						"unique-status-deaths",
+						"unique-status-save",
+						"unique-status-tab:alive",
+						"unique-status-tab:all",
+						"unique-status-tab:dead",
+						"unique-status-tab:notify",
+						"window-drag:UniqueStatus"
+					]
+				},
+				"unique-status-browser": null,
+				"unique-status-deaths": null,
+				"unique-status-save": null,
+				"unique-status-tab:alive": null,
+				"unique-status-tab:all": null,
+				"unique-status-tab:dead": null,
+				"unique-status-tab:notify": null,
+				"window-drag:UniqueStatus": null
+			},
+			"wheel": {
+				"changed": {},
+				"noop": 67
 			}
 		},
 		"World": {

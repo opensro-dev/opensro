@@ -18,6 +18,7 @@ import { readFileSync, mkdirSync, writeFileSync } from "node:fs";
 import { defined } from "../helpers/defined.mjs";
 import { uiFixture, fontAtlas } from "../helpers/ui-fixture.mjs";
 import { correctedUiSystemCatalog } from "../helpers/corrected-text.mjs";
+const { academyBootstrap } = await import( "../../src/engine/foundation/gameplay/academy.ts" );
 /*
 ================
 load
@@ -798,11 +799,7 @@ test("NPC UI uses authored talk bounds and native fonts through option, accept, 
 
 test("quest objectives repaint native progress, per-node status and color after updates and reopen", () => {
 	const f = uiFixture(), quests = createQuests( () => {} );
-	const captures = [],
-		subLayout = JSON.parse(
-			readFileSync( CLIENT_PUBLIC_ROOT + "/assets/cif/layouts/ifquestslotsub.json", "utf8" )
-		)
-			.controlsByName;
+	const captures = [];
 	const symbol = "SN_CON_QNO_CH_SOLDIER_EA1_1";
 	const record = {
 		refId: 2,
@@ -881,11 +878,12 @@ test("quest objectives repaint native progress, per-node status and color after 
 		settle( 1000 );
 		f.ui.event( { kind: "activate", id: "open-window:Quests" } );
 		settle( 1100 );
+		// The quest list window (#4245) lists each objective under its quest:
+		// the quest's content button stands for the row.
 		assert.ok(
-			defined( semantics ).controls.some( c => c.id === "quest-expand:2" ),
+			defined( semantics ).controls.some( c => c.id === "quest-list-content:2" ),
 			"Production quest row must exist"
 		);
-		f.ui.event( { kind: "activate", id: "quest-expand:2" } );
 		let firstRect;
 		for ( const [index, [kind, count]] of [ [ 1, 0 ], [ 0, 40 ], [ 1, 7 ], [ 2, 40 ], [ 1, 8 ] ].entries() ) {
 			update( kind, count );
@@ -895,16 +893,12 @@ test("quest objectives repaint native progress, per-node status and color after 
 			const description = "Hunt 40 Weasel (" + count + ")",
 				status = strings[complete ? "UIIT_STT_QUEST_END" : "UIIT_STT_QUEST_ING"];
 			const run = glyphRun( description, color ), statusRun = glyphRun( status, color );
-			const background = f.scenes.at( -1 ).quads.find( q =>
-				q.texture === subLayout.GDR_QUESTSLOT_SUB_WND.ddj.publicPath
-			);
-			assert.ok( background, "Expanded row background must be drawn" );
 			captures.push( {
 				kind,
 				count,
 				description,
 				status,
-				origin: background.rect.slice( 0, 2 ),
+				origin: run[0].rect.slice( 0, 2 ),
 				quads: [ ...run, ...statusRun ]
 			} );
 			firstRect ??= run[0].rect;
@@ -1176,6 +1170,71 @@ test("Academy main popup and matching board have separate native entry lifecycle
 		f.ui.step( f.state, 1500 );
 		f.ui.event( { kind: "activate", id: "open-window:Academy Matching" } );
 		assert.equal( sent.filter( c => c.command?.kind === "academy-page" ).length, 1 );
+	} finally {
+		f.dispose();
+	}
+});
+
+test("Academy Matching registers, modifies and deletes its own entry", () => {
+	const sent = [], f = uiFixture( c => sent.push( c ) );
+	try {
+		f.state.gameplay = {
+			...f.state.gameplay,
+			academy: { member: false, page: 2, pages: 3, rows: [], own: null, request: null, result: null }
+		};
+		for ( let t = 0; t < 1200; t += 100 ) f.ui.step( f.state, t );
+		f.ui.event( { kind: "activate", id: "open-window:Academy Matching" } );
+		let scene = f.ui.step( f.state, 1300 );
+		// Page 2 of 3: the scrollbar and both page directions are live, and
+		// only Register is offered while no entry is owned.
+		assert.ok( scene.controls.find( c => c.id === "academy-scroll-thumb" && !c.disabled ) );
+		assert.ok( scene.controls.find( c => c.id === "academy-prev" && !c.disabled ) );
+		assert.ok( scene.controls.find( c => c.id === "academy-register" && !c.disabled ) );
+		assert.ok( scene.controls.find( c => c.id === "academy-modify" && c.disabled ) );
+		assert.ok( scene.controls.find( c => c.id === "academy-delete" && c.disabled ) );
+		f.ui.event( { kind: "activate", id: "academy-register" } );
+		scene = f.ui.step( f.state, 1400 );
+		assert.ok( scene.controls.some( c => c.id === "academy-form-detail" ) );
+		assert.ok( scene.controls.find( c => c.id === "academy-form-confirm" && c.disabled ) );
+		assert.ok( scene.controls.find( c => c.id === "academy-form-kind:1" && c.selected ) );
+		f.ui.event( {
+			kind: "edit",
+			id: "academy-form-detail",
+			value: "Need a guardian",
+			start: 15,
+			end: 15,
+			composing: false
+		} );
+		scene = f.ui.step( f.state, 1450 );
+		assert.ok( scene.controls.find( c => c.id === "academy-form-confirm" && !c.disabled ) );
+		f.ui.event( { kind: "activate", id: "academy-form-kind:2" } );
+		f.ui.event( { kind: "activate", id: "academy-form-confirm" } );
+		assert.deepEqual( sent.at( -1 ).command, {
+			kind: "academy-register",
+			recruit: 2,
+			detail: "Need a guardian"
+		} );
+		scene = f.ui.step( f.state, 1500 );
+		assert.ok( !scene.controls.some( c => c.id === "academy-form-detail" ) );
+		// With an entry owned, Register closes and Modify/Delete open; the
+		// form reopens on the entry's own kind and title.
+		f.state.gameplay = {
+			...f.state.gameplay,
+			academy: {
+				...f.state.gameplay.academy,
+				own: { id: 9, kind: 2, detail: "Need a guardian" }
+			}
+		};
+		scene = f.ui.step( f.state, 1600 );
+		assert.ok( scene.controls.find( c => c.id === "academy-register" && c.disabled ) );
+		assert.ok( scene.controls.find( c => c.id === "academy-modify" && !c.disabled ) );
+		f.ui.event( { kind: "activate", id: "academy-modify" } );
+		scene = f.ui.step( f.state, 1700 );
+		assert.equal( scene.controls.find( c => c.id === "academy-form-detail" ).value, "Need a guardian" );
+		assert.ok( scene.controls.find( c => c.id === "academy-form-kind:2" && c.selected ) );
+		f.ui.event( { kind: "activate", id: "academy-form-cancel" } );
+		f.ui.event( { kind: "activate", id: "academy-delete" } );
+		assert.deepEqual( sent.at( -1 ).command, { kind: "academy-delete" } );
 	} finally {
 		f.dispose();
 	}
@@ -5673,7 +5732,7 @@ test("native popup menu, selected tab weight, localized EU mastery and empty-par
 			...f.state.gameplay,
 			guide: { country: 1 },
 			progression: { level: 1, masteries: [ { id: 513, level: 0 }, { id: 515, level: 0 } ] },
-			academy: { member: false, rows: [], request: null },
+			academy: academyBootstrap( { academyMember: false } ),
 			social: { leader: 0, members: [], options: 0 }
 		};
 		let now = 0;

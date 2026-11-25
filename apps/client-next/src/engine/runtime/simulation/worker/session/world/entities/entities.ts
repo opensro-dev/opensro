@@ -61,6 +61,7 @@ import {
 	OBJECT_LIST_CHUNK_OPCODE,
 	OBJECT_LIST_FINALIZE_OPCODE,
 	OBJECT_LIST_START_OPCODE,
+	OBJECT_POSITION_UPDATE_OPCODE,
 	OBJECT_SOURCE_CORRECTION_OPCODE,
 	OBJECT_SOURCE_MOVE_OPCODE,
 	OBJECT_STATE_REFRESH_OPCODE,
@@ -87,6 +88,18 @@ import { viewOf } from "@/engine/foundation/binary/byte-view";
 const CHARACTER_KINDS = new Set( [ "player", "local-player", "npc", "monster", "cos", "structure" ] );
 // Peer appearance slot 6 selects the overhead title; STALL_TITLE_MODE owns a stall.
 const STALL_TITLE_SLOT = 6;
+// The peer title frame (later-native titles, #3502): a port-carried S->C
+// opcode (server game/title/wire.go). The later native client keeps the
+// title id on the character object (v1.696 client, pinned sha256
+// 52118aaf075877851483d400b6b2905943e47b97b971d85b6cf59c3032c32d34: name
+// builder 0xF5F7C0 reads it at object+0x88 and resolves it by id); which
+// spawn-stream read stores it there was not isolated in that build, so
+// no native byte position is claimed. The port carries it here instead,
+// because a tab loaded before this release decodes the spawn
+// row length-strictly - a grown row would fail it at the first player
+// spawn, while a client that predates this frame drops the unknown
+// opcode. It rides right after the peer's spawn row.
+const PEER_TITLE_OPCODE = 0x3fc3;
 // Skipped cosmetic steps held between world takes (degrade).
 const MAX_PENDING_DEGRADATIONS = 64;
 // The one-shot natives a compaction keeps for its resync (dropQueuedJournal):
@@ -139,6 +152,9 @@ export function createEntities(
 	// /LOADMONSTER resolves a typed codename here, as the native client reads
 	// its own character data (GlobalDataManager_GetItemRecordByCodeName).
 	const monsterCodenames = new Map<string, { readonly refObjId: number; readonly monsterType: number; }>();
+	// Reverse of monsterCodenames: hunt pillar skip (68c3d0) reads CodeName
+	// by the living monster's RefObjID.
+	const monsterCodenameByRef = new Map<number, string>();
 	// Port-only (#1640): the Experimental Sun drop marker's admission state:
 	// the row's byte and the local player's gid (its drops are the marked).
 	let sunMarkerOn = false, ownGid = 0;
@@ -775,6 +791,18 @@ export function createEntities(
 		monsterReference( codename: string ): { readonly refObjId: number; readonly monsterType: number; } | undefined {
 			return monsterCodenames.get( codename );
 		},
+		/*
+		================
+		monsterCodename
+
+		The catalog CodeName for a monster RefObjID, or undefined when the
+		snapshot never named that row. Hunt byte 10 feeds this into
+		isDimensionPillarTarget.
+		================
+		*/
+		monsterCodename( refObjId: number ): string | undefined {
+			return monsterCodenameByRef.get( refObjId );
+		},
 		characterCountry( refObjId: number ): number | undefined {
 			return refs.get( refObjId )?.countryByte9c;
 		},
@@ -929,6 +957,7 @@ export function createEntities(
 			itemRefs.clear();
 			itemNames.clear();
 			monsterCodenames.clear();
+			monsterCodenameByRef.clear();
 			for ( const row of b.refObjSnapshot ) {
 				if (
 					!row || typeof row.refObjId !== "number" || !Number.isInteger( row.refObjId ) ||
@@ -966,6 +995,7 @@ export function createEntities(
 				) throw Error( "Invalid entity reference monsterType" );
 				if ( row.kind === "monster" && typeof row.codename === "string" && row.codename ) {
 					monsterCodenames.set( row.codename, { refObjId: row.refObjId, monsterType: row.monsterType ?? 0 } );
+					monsterCodenameByRef.set( row.refObjId, row.codename );
 				}
 				if (
 					row.kind === "teleport" &&
@@ -1260,6 +1290,30 @@ export function createEntities(
 					kind: "state",
 					entity: { ...entity, titleText, titleId, appearanceState }
 				} );
+				return;
+			}
+			if ( frame.opcode === PEER_TITLE_OPCODE ) {
+				// u32 gid, u32 title id, u16 length + the format's UTF-8 bytes
+				// (server game/title EncodePeerTitle). A frame for a gid with
+				// no entity is dropped: the spawn row it follows creates the
+				// entity first, in the same pushed batch.
+				if ( p.length < 10 ) throw Error( "Invalid peer title" );
+				const gid = v.getUint32( 0, true ), titleId = v.getUint32( 4, true ), n = v.getUint16( 8, true );
+				if ( 10 + n !== p.length ) throw Error( "Invalid peer title" );
+				const entity = entities.get( gid );
+				if ( entity ) {
+					const format = n ?
+						new TextDecoder( "utf-8", { fatal: true } ).decode( p.subarray( 10, 10 + n ) ) :
+						"";
+					apply( {
+						kind: "state",
+						entity: {
+							...entity,
+							characterTitleId: titleId || undefined,
+							characterTitleFormat: format || undefined
+						}
+					} );
+				}
 				return;
 			}
 			if ( frame.opcode === GROUND_OWNERSHIP_EXPIRED_OPCODE ) {
@@ -1771,16 +1825,23 @@ export function createEntities(
 				}
 				return;
 			}
-			if ( frame.opcode === OBJECT_SOURCE_MOVE_OPCODE || frame.opcode === OBJECT_SOURCE_CORRECTION_OPCODE ) {
+			// 0x3028 is the server's position resync: the 0x30E3 layout
+			// (gid last) and its source treatment - authoritative progress
+			// while travel remains active, never a stop.
+			if (
+				frame.opcode === OBJECT_SOURCE_MOVE_OPCODE || frame.opcode === OBJECT_SOURCE_CORRECTION_OPCODE ||
+				frame.opcode === OBJECT_POSITION_UPDATE_OPCODE
+			) {
 				if ( p.length !== 20 ) {
 					throw new Error( "Invalid entity position" );
 				}
-				const gid = v.getUint32( frame.opcode === OBJECT_SOURCE_MOVE_OPCODE ? 16 : 0, true ),
+				const sourced = frame.opcode !== OBJECT_SOURCE_CORRECTION_OPCODE;
+				const gid = v.getUint32( sourced ? 16 : 0, true ),
 					source = entities.get( gid );
 				// A rider's position belongs to its active mover, the mount (0x85E000).
 				const entity = source?.mountedOn ? entities.get( source.mountedOn ) ?? source : source;
 				// Source movement is advisory travel; LIFE-dead retires it.
-				if ( frame.opcode === OBJECT_SOURCE_MOVE_OPCODE && entity?.appearanceState?.[0] === 2 ) return;
+				if ( sourced && entity?.appearanceState?.[0] === 2 ) return;
 				// 775B50 (0x775C1A): once the mover is resolved (85E000), a
 				// monster or COS mover whose life state (+0x263) is 2 (dead)
 				// ignores its B2F5 - no halt, no reseed. Players are not
@@ -1791,7 +1852,7 @@ export function createEntities(
 					(entity.kind === "monster" || entity.kind === "cos")
 				) return;
 				if ( entity ) {
-					const corrected = position( v, frame.opcode === OBJECT_SOURCE_MOVE_OPCODE ? 0 : 4 );
+					const corrected = position( v, sourced ? 0 : 4 );
 					// The local mover has one navigation owner in gameplay. Its
 					// entity row does not follow B738 or prediction; projecting a
 					// correction from that stale row can replace the arena floor
@@ -1820,7 +1881,7 @@ export function createEntities(
 										{ moving: false, movementPath: undefined } :
 										{})
 								} :
-								frame.opcode === OBJECT_SOURCE_MOVE_OPCODE ?
+								sourced ?
 								motion.source( entity, { ...corrected, angle: corrected.heading }, now ) :
 								motion.correct( entity, { ...corrected, angle: corrected.heading } ))
 						} )

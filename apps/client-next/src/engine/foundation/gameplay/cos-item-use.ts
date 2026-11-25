@@ -8,12 +8,19 @@ The worker owns selection; admitted records nominate pets or summoner items.
 
 ===========================================================================
 */
+import { isSpiritItem } from "./avatar-socket";
 import { constantNativeNotice } from "./native-notice";
 import type { SystemNotice } from "./system-notices";
 import type { CosRecord, GameplayCommand, InventoryItem } from "@/engine/contracts/gameplay";
 import { isSkinChangeScroll, skinChangeTail, type SkinChoice } from "./skin-change";
 import { REVERSE_RETURN_LAST_DEATH, REVERSE_RETURN_LAST_RECALL } from "./count-job";
 import { REVERSE_RETURN_MAP, reverseMapTail } from "./reverse-return-map";
+import {
+	REVERSE_RETURN_ENROLL,
+	REVERSE_RETURN_PARTY,
+	REVERSE_RETURN_USER,
+	reversePartyTail
+} from "./reverse-user-point";
 
 /*
 ================
@@ -38,9 +45,14 @@ export interface CosItemUseContext {
 	// port-only 7, a map point).
 	readonly reverseChoice?: number;
 	readonly reverseMapPoint?: number;
+	// The party member a party move (choice 4) names, by gid
+	// (reverse-user-point.ts, #3903).
+	readonly reversePartyGid?: number;
 	// The name-change scroll's new name (#1689, port-only), from its
 	// entry window.
 	readonly renameName?: string;
+	// The weapon switch scroll's picked kind (port-only, weapon-switch.ts).
+	readonly weaponKind?: number;
 }
 
 /*
@@ -131,7 +143,11 @@ export function cosItemUseTail(
 		// 6971B0 case 0x1E: the choice box's row is the one byte after the type.
 		const choice = context?.reverseChoice;
 		if ( choice === REVERSE_RETURN_MAP ) return reverseMapTail( context?.reverseMapPoint ?? 0 );
-		if ( choice !== REVERSE_RETURN_LAST_RECALL && choice !== REVERSE_RETURN_LAST_DEATH ) {
+		if ( choice === REVERSE_RETURN_PARTY ) return reversePartyTail( context?.reversePartyGid ?? 0 );
+		if (
+			choice !== REVERSE_RETURN_LAST_RECALL && choice !== REVERSE_RETURN_LAST_DEATH &&
+			choice !== REVERSE_RETURN_USER && choice !== REVERSE_RETURN_ENROLL
+		) {
 			throw Error( "Choose where the reverse return scroll goes" );
 		}
 		return Uint8Array.of( choice );
@@ -259,6 +275,29 @@ The Devil's Spirit extension gear, 3/3/13/16 (port-only, SRO_NASRUN,
 */
 export function isSpiritExtensionGear( flags: number ): boolean {
 	return (flags & 0x7c) === 0x6c && (flags >>> 7 & 15) === 13 && (flags >>> 11 & 31) === 16;
+}
+
+/*
+================
+spiritExtensionWornNotice
+
+The later client refuses the extension gear aimed at the worn Spirit
+before anything is sent and prints
+UIIT_MSG_NASRUN_WEAR_EXTENSION_ITEM_NOT_USE as a type-5 system line
+(the key's only use in the v1.696 client sits in its item-use
+admission, ahead of the send). v1.150 has neither the gear nor the
+refusal; the port's gear exists only behind SRO_NASRUN (#3456), and
+this refusal rides with it. The target the caller passes is a row of
+the avatar storage, so it is worn by construction; any Spirit there
+arms the refusal, awake or lapsed.
+================
+*/
+export function spiritExtensionWornNotice(
+	sourceTypeFlags: number,
+	targetTypeFlags: number
+): SystemNotice | null {
+	if ( !isSpiritExtensionGear( sourceTypeFlags ) || !isSpiritItem( targetTypeFlags ) ) return null;
+	return { key: "UIIT_MSG_NASRUN_WEAR_EXTENSION_ITEM_NOT_USE", value: 0, nativeType: 5 };
 }
 
 /*

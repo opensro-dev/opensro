@@ -22,7 +22,8 @@ hunting2_import.py). The tables:
 	                   233): the temple gates have no object, a player walks
 	                   into them, as the Donwhang cave's gates (#1018).
 	teleport tables    the four gates, merged by build_alexandria_variant like
-	                   TOMB_GATE_CODES; the codes are named here.
+	                   TOMB_GATE_CODES, and the two sanctum teleporter
+	                   buildings (TELEPORTER_CODES); the codes are named here.
 
 The dungeon files themselves (Dungeon\\Asiam\\*.dof and every /asiam/ model,
 material, lightmap and animation they use) are VSRO Data.pk2 files the
@@ -35,14 +36,12 @@ region ids and gate codes, kept in step by a test on each side.
 
 ===========================================================================
 """
-import os
 from pathlib import Path
 
 import import_vsro_alexandria as stage1
+import variant_files
 
 FLAG = "SRO_PHARAOH_TEMPLE"
-FLAG_OFF_VALUES = ("", "0", "off", "false")
-FLAG_ON_VALUES = ("1", "on", "true")
 
 # The dungeon region bit: dungeoninfo.txt names a region by its low 15 bits.
 DUNGEON_REGION_BIT = 0x8000
@@ -69,6 +68,14 @@ DESERT_GATE_CODES = ("GATE_DESERT_MERCHANT_HUNTER_GATE", "GATE_DESERT_THIEF_GATE
 TEMPLE_ZONE_CODES = ("GATE_TEMPLE_MERCHANT_HUNTER_GATE", "GATE_TEMPLE_THIEF_GATE")
 GATE_CODES = DESERT_GATE_CODES + TEMPLE_ZONE_CODES
 
+# The sanctum teleporters: buildings no teleport row names, which the server
+# places while a sanctum is open (internal/game/world/pharaohtemple/
+# sanctum.go, #3787). INS_TEMPLE_TELEPORT is the five Temple-side gates'
+# object, INS_TEMPLE_SETH_TELEPORT the one in Haroeris's sanctum. Both are
+# VSRO teleportbuilding rows (27760 and 27759) drawn with
+# alex_raid_portal.bsr, which the variant already stages.
+TELEPORTER_CODES = ("INS_TEMPLE_TELEPORT", "INS_TEMPLE_SETH_TELEPORT")
+
 # The destination world of every temple gate in the source (the Temple is
 # database world 60, the sanctums 51-56). The port has no such worlds: the
 # Temple is a dungeon region of the persistent world, as the Donwhang cave
@@ -89,12 +96,7 @@ def temple_enabled(environ=None):
 	native build; anything else is refused, as the server refuses a value it
 	does not know, so a typo cannot silently build the native tables.
 	"""
-	value = (os.environ if environ is None else environ).get(FLAG, "").strip().lower()
-	if value in FLAG_OFF_VALUES:
-		return False
-	if value in FLAG_ON_VALUES:
-		return True
-	raise ValueError(f"{FLAG} must be off, on or unset, not {value!r}")
+	return variant_files.build_switch(FLAG, environ)
 
 
 # ================
@@ -196,27 +198,25 @@ def add_temple(vsro_root, native, out):
 	build left rows in is put back, and one that already matches is not
 	touched. Returns the summary.
 	"""
-	import build_alexandria_variant as variant
-
 	enabled = temple_enabled()
 	dungeon_info = Path("Data_extracted") / "dungeon" / "dungeoninfo.txt"
-	event_zones = Path("Media_extracted") / variant.TEXTDATA / "eventzonedata.txt"
+	event_zones = Path("Media_extracted") / variant_files.TEXTDATA / "eventzonedata.txt"
 	native_info = (native / dungeon_info).read_bytes()
 	native_zones = (native / event_zones).read_bytes()
 	if enabled:
 		wanted_info = merge_dungeon_info(native_info)
 		wanted_zones = merge_event_zones(
-			native_zones, variant.read_vsro_file(vsro_root, "Media", variant.TEXTDATA + "eventzonedata.txt")
+			native_zones, variant_files.read_vsro_file(vsro_root, "Media", variant_files.TEXTDATA + "eventzonedata.txt")
 		)
 	else:
 		wanted_info, wanted_zones = native_info, native_zones
 	for relative, content in ((dungeon_info, wanted_info), (event_zones, wanted_zones)):
 		target = out / relative
 		if not target.is_file() or target.read_bytes() != content:
-			variant.replace_file(target, content)
+			variant_files.replace_file(target, content)
 	if not enabled:
 		return {"enabled": False}
-	staged = variant.lower_paths(out / "Data_extracted" / "dungeon")
+	staged = variant_files.lower_paths(out / "Data_extracted" / "dungeon")
 	missing = [path for path in map(dof_path, DUNGEONS) if path.split("/", 1)[1] not in staged]
 	if missing:
 		raise SystemExit(f"the Pharaoh Temple's dungeon files are missing from the variant: {missing}")

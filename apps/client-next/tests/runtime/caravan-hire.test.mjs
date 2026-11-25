@@ -1,7 +1,7 @@
 /*
 ===========================================================================
 
-caravan-hire.test.mjs - the AI caravan hire window's frames (port-only 0x3FC3 / 0x7FC3)
+caravan-hire.test.mjs - the AI caravan hire window's frames (port-only 0x3FCF / 0x7FCF)
 
 ===========================================================================
 */

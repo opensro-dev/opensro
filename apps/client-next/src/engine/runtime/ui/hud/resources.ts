@@ -19,6 +19,7 @@ import { withdrawalGoldPrices } from "@/engine/foundation/gameplay/withdrawal";
 import { tradeGoldBases } from "@/engine/foundation/gameplay/specialty-deal";
 import { decodeMallNotify, type MallNotify } from "@/engine/foundation/ui/mall-notify";
 import { decodeEventInterface } from "@/engine/foundation/ui/event-interface";
+import { optionalRenewalMall, RENEWAL_MALL_CATALOG, type RenewalMallData } from "@/engine/foundation/ui/renewal-mall";
 import { type JobExpThresholds, jobExpThresholds } from "@/engine/foundation/gameplay/player-info-job";
 import { nativeWindowSections } from "@/engine/foundation/ui/native-window-sections";
 import { partyCharacterCountries } from "@/engine/foundation/gameplay/party-matching";
@@ -265,7 +266,10 @@ export function createHudResources(
 			"/assets/data/fortressMap.json",
 			"/assets/config/cameradata.json",
 			"/assets/data/event-interface.json",
-			"/assets/data/event-interface-later.json"
+			"/assets/data/event-interface-later.json",
+			// Port-only: the renewal mall (import_vsro_renewal_mall.py),
+			// absent unless the later client was imported.
+			RENEWAL_MALL_CATALOG
 		],
 		states: Load[] = paths.map( () => ({ kind: "idle" }) );
 	let data: HudData | null = null;
@@ -322,7 +326,7 @@ export function createHudResources(
 						try {
 							if (
 								(i === layouts.length + 17 || i === layouts.length + 18 ||
-									i === layouts.length + 21) &&
+									i === layouts.length + 21 || i === layouts.length + 22) &&
 								r.kind === "error" &&
 								r.absent
 							) {
@@ -367,6 +371,7 @@ export function createHudResources(
 									}
 								}
 							} else if ( i === layouts.length + 20 || i === layouts.length + 21 ) value = raw;
+							else if ( i === layouts.length + 22 ) value = optionalRenewalMall( raw );
 							else if ( i === layouts.length + 19 ) value = decodeCameraDataRows( raw );
 							else if ( i === layouts.length + 18 ) value = decodeFortressMap( raw );
 							else if ( i === layouts.length + 17 ) value = raw;
@@ -493,6 +498,7 @@ export function createHudResources(
 						values[layouts.length + 20],
 						values[layouts.length + 21]
 					),
+					renewalMall: values[layouts.length + 22] as RenewalMallData | null,
 					commandTable: values[layouts.length + 16] as ReadonlyMap<string, number>,
 					cameraDataRows: values[layouts.length + 19] as HudData["cameraDataRows"],
 					targets: Object.fromEntries(

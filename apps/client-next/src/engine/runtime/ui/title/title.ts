@@ -26,6 +26,7 @@ import { dockSlot } from "@/engine/foundation/rendering/dock-slots";
 import { screenPoint } from "@/engine/foundation/rendering/screen-point";
 import type { TitleNode, TitleInteraction } from "./internal/title-contract";
 import { skillPointReadouts } from "@/engine/foundation/ui/hud-readouts";
+import { serverStateBand } from "@/engine/foundation/ui/title-status";
 
 // The authored width of the title's top and bottom bars (pstitle
 // GDR_STA_SCREENUP / GDR_STA_SCREENDOWN, 1600 x 172).
@@ -40,9 +41,7 @@ createTitleUi
 */
 export function createTitleUi(
 	assets: Pick<AssetOwner, "available" | "request" | "take" | "cancel">,
-	base: string,
-	// The Experimental "Fit window labels" row; off draws the original.
-	fitLabels: () => boolean = () => false
+	base: string
 ) {
 	const resources = createTitleResources( assets, base );
 	let listAlpha = 0, lastTime: number | null = null;
@@ -367,6 +366,12 @@ export function createTitleUi(
 				image( path, rect, 1, barUv );
 				if ( narrow ) quads[quads.length - 1] = { ...quads[quads.length - 1]!, sampling: "nearest" };
 			}
+			// Port-only, not native (#3925): the maintenance notice line
+			// under the top bar, on the login and server-list screens
+			// while the Experimental row is on. Absent is the native title.
+			if ( data && input.notice && !dock && !raceTable && !custom ) {
+				text( input.notice, [ 9, top + 8, w - 18, 20 ], 1, 1, [ 1, .85, .55, 1 ] );
+			}
 			const phase = state.phase;
 			if ( custom ) {
 				for ( let i = 0; i < quads.length; i++ ) quads[i] = { ...quads[i]!, layer: "background" };
@@ -378,7 +383,7 @@ export function createTitleUi(
 						data.text,
 						state.creation,
 						input,
-						{ w, h, interactive: phase === "customize", fitLabels: fitLabels() }
+						{ w, h, interactive: phase === "customize" }
 					);
 					quads.push( ...output.quads );
 					controls.push( ...output.controls );
@@ -890,21 +895,12 @@ export function createTitleUi(
 								} );
 							}
 							text( server.name, [ rect[0] + 15, rect[1], 120, 20 ], a );
-							const ratio = server.capacity > 0 ? server.onlinePlayers / server.capacity : 0;
 							// 0x747E16 tests record +0x24 (operating), not the +0x28 name/test marker.
-							const band = !server.operating ?
-								[ "UIO_STT_SERVER_TEST", 0xc0bdff ] as const :
-								ratio < Number( data.text.UIO_STT_SERVER_35 ) / 100 ?
-								[ "UIO_STT_EXCELLENT", 0x6dffef ] as const :
-								ratio < Number( data.text.UIO_STT_SERVER_75 ) / 100 ?
-								[ "UIO_STT_CROWDEDNESS", 0xffda49 ] as const :
-								ratio >= 1 ?
-								[ "UIO_STT_SERVER_FULL", 0xffb541 ] as const :
-								[ "UIO_STT_SERVER_MAX_FULL", 0xff5858 ] as const;
-							text( data.text[band[0]] ?? "", [ rect[0] + 152, rect[1], 45, 20 ], a, 0, [
-								(band[1] >> 16 & 255) / 255,
-								(band[1] >> 8 & 255) / 255,
-								(band[1] & 255) / 255,
+							const band = serverStateBand( server, key => data.text[key] );
+							text( band.label, [ rect[0] + 152, rect[1], 45, 20 ], a, 0, [
+								(band.color >> 16 & 255) / 255,
+								(band.color >> 8 & 255) / 255,
+								(band.color & 255) / 255,
 								1
 							] );
 						} );

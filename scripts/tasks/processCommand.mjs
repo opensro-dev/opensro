@@ -9,7 +9,8 @@ export function resolveProcessCommand(command, args) {
     return { executable: process.execPath, args };
   }
   if (command === "python") {
-    return { executable: pythonExecutable(), args };
+    const python = pythonExecutable();
+    return { executable: python.command, args: [...python.args, ...args] };
   }
   if (command === "pnpm" && process.platform === "win32") {
     return { executable: process.execPath, args: [resolvePnpmCli(), ...args] };

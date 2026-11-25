@@ -12,7 +12,6 @@ shipping decoders; unsupported identities fail explicitly.
 const ASSET_TIMEOUT_MS = 30000;
 const MAX_MODEL_BYTES = 128 * 1024 * 1024;
 const MAX_EFFECT_IMAGES_BYTES = 32 * 1024 * 1024;
-const EFFECT_PROGRAMS = "/assets/effects/programs.json";
 
 /*
 ================
@@ -24,6 +23,9 @@ The caller owns the renderer; dispose it before closing returned bitmaps.
 export async function loadCrowdModels( renderer, actors ) {
 	const { createModelDecoder } = await import( "/src/engine/runtime/assets/worker/model/model.ts" );
 	const { createEffectDecoder } = await import( "/src/engine/runtime/assets/worker/effects/effects.ts" );
+	const { EFFECT_PROGRAM_PREFIX, effectMeshFile, effectProgramFile } = await import(
+		"/src/engine/foundation/assets/effect-programs.ts"
+	);
 	const { decodeNativeClip } = await import( "/src/engine/foundation/animation/native-clip.ts" );
 	const { readBytes } = await import( "/src/engine/foundation/assets/read-bytes.ts" );
 	const { decodeNativeTexture, NATIVE_TEXTURE_MIME } = await import(
@@ -128,11 +130,13 @@ export async function loadCrowdModels( renderer, actors ) {
 					return;
 				}
 				let source;
-				if ( id.startsWith( EFFECT_PROGRAMS + "#" ) ) {
-					const decoded = effects.model(
-						await readAsset( EFFECT_PROGRAMS ),
-						decodeURIComponent( id.slice( EFFECT_PROGRAMS.length + 1 ) )
-					);
+				if ( id.startsWith( EFFECT_PROGRAM_PREFIX ) ) {
+					// One effect file and its meshes, as the asset worker reads them.
+					const path = decodeURIComponent( id.slice( EFFECT_PROGRAM_PREFIX.length ) );
+					const program = effects.program( await readAsset( effectProgramFile( path ) ) );
+					const meshBytes = [];
+					for ( const key of program.meshes ) meshBytes.push( await readAsset( effectMeshFile( key ) ) );
+					const decoded = effects.model( program, effects.meshes( program, meshBytes ), path );
 					const raw = [];
 					let imageBytes = 0;
 					for ( const path of decoded.imagePaths ) {
@@ -184,6 +188,5 @@ export async function loadCrowdModels( renderer, actors ) {
 		throw error;
 	} finally {
 		bytesByPath.clear();
-		effects.dispose();
 	}
 }

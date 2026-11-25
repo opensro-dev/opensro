@@ -370,10 +370,10 @@ Distances use 10 world units per in-game metre (skill ranges: 180 units = 18m); 
   call only Hunters answer (an escort answers a fellow guard of its own caravan); it never replaces a
   Trader's own call. A Hunter killed by a Thief respawns in town, rallies up to 3 idle Hunters there
   and leads them back after that Thief, as a killed Thief does after a Trader.
-- **Hiring window** (port-only `0x3FC3` S->C JSON, `0x7FC3` C->S `u8 op, u8 stars, name`): the
+- **Hiring window** (port-only `0x3FCF` S->C JSON, `0x7FCF` C->S `u8 op, u8 stars, name`): the
   specialty shops list "Hire Hunters and Traders" as the first row of their menu, before "Start
   conversation" (the Thief Den's Stolen Goods Dealer: "Hire Thieves"); the server marks those NPCs
-  at select with `0x3FC5` (u32 npc gid, label) and the row opens the window. It lists every agent of the kinds hired there,
+  at select with `0x3FD1` (u32 npc gid, label) and the row opens the window. It lists every agent of the kinds hired there,
   available ones first in green, the rest in red with the reason (on a trade run, hired by X, waiting
   in another town, out hunting a caravan, won't work for you, ...). "Show only available" filters the
   list; Previous/Next page and Refresh. Clicking a green name always opens a confirm dialog
@@ -386,8 +386,8 @@ Distances use 10 world units per in-game metre (skill ranges: 180 units = 18m); 
 - **Leading:** hired Hunters/Thieves follow the hirer. Hired Traders follow one leader: the hirer or one
   of the hired Traders, which drives the run itself and waits while the hirer is more than 120m away.
   The hirer picks the leader on the party board (port-only, not native): each hired Trader's row and the
-  hirer's own panel carry a "Lead" badge, the current leader shows "Leads" (0x7FC3 operation 2; the
-  server pushes the state as 0x3FC4). With no pick the first hired Trader in party order leads.
+  hirer's own panel carry a "Lead" badge, the current leader shows "Leads" (0x7FCF operation 2; the
+  server pushes the state as 0x3FD0). With no pick the first hired Trader in party order leads.
   `!leed` (or `!lead`) still toggles the hirer leading.
 - **Hire end (hands off):** no time limit and no command needed. A hired Trader that left town rides to
   the shop of the next town it reaches (its hire town again only after 10 minutes out), sells there and

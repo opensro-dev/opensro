@@ -108,9 +108,10 @@ test( "gzip-stored pack members survive cold decode, warm worker replacement and
 						// Native (block-compressed) textures own no bitmap; close bitmaps only.
 						for ( const image of row.images ) if ( !("kind" in image) ) image.close();
 					}
-					const cache = await caches.open( "sro-next-verified-v1" ), deadline = performance.now() + 10000;
+					// The store's shards are its own business: caches.match searches them all.
+					const deadline = performance.now() + 10000;
 					for ( const entry of entries ) {
-						while ( !await cache.match( location.origin + "/assets/.verified/" + entry.sha256 ) ) {
+						while ( !await caches.match( location.origin + "/assets/.verified/" + entry.sha256 ) ) {
 							if ( performance.now() > deadline ) {
 								throw Error( "Cache publication timeout" );
 							}

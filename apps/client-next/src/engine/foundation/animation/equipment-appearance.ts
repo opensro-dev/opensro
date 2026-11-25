@@ -75,6 +75,9 @@ export interface DressCatalog {
 	specialGlows?: Record<string, readonly ModelParticle[]>;
 	// Port-only, not native: equipmentEnchantSparks' rows, by item id.
 	enchantSparks?: Record<string, readonly ModelParticle[]>;
+	// Port-only, not native: the later mall avatars' worn auras
+	// (avatarWornEffects), by item id, on the wearer's own bones.
+	avatarEffects?: Record<string, readonly ModelParticle[]>;
 	avatarVisualOverrides?: Record<string, { animation: string; priority: number; additionalBsr: string; }>;
 	avatarAuxiliary?: Record<string, AuxiliaryEntry>;
 	equipment?: Record<string, EquipmentRecord>;
@@ -187,6 +190,30 @@ export function createItemCodenameIndex( dress: DressCatalog ): ReadonlyMap<stri
 
 /*
 ================
+branchAmbientParticles
+
+A worn resource's own ambient set (ModDataParticle kind 2) on its private
+bones, socketed under slot. A worn item and a worn avatar are both CRes
+models, so both start their set through this one path; only the socket
+differs (the compound slot, or the avatar's own socket).
+================
+*/
+function branchAmbientParticles( slot: number, branches: readonly EquipmentBranch[] | undefined ): ModelParticle[] {
+	const particles: ModelParticle[] = [];
+	for ( const branch of branches ?? [] ) {
+		for ( const particle of ambientModelParticles( branch.particleModifiers ) ) {
+			particles.push( {
+				...particle,
+				source: "equipment",
+				bone: equipmentSocket( slot, branch.part, particle.bone )
+			} );
+		}
+	}
+	return particles;
+}
+
+/*
+================
 assembleEquipmentAppearance
 
 Native slot visuals for one wearer. Validation is strict: a referenced item
@@ -294,16 +321,8 @@ export function assembleEquipmentAppearance( input: AppearanceInput ): Appearanc
 			covers: coverIndices( entry, resource )
 		} );
 		// The resource's own ambient set (the shoulder garments' orbs and
-		// crystals) on its private bones: equipmentAmbientParticles.
-		for ( const branch of entry.branches ?? [] ) {
-			for ( const particle of ambientModelParticles( branch.particleModifiers ) ) {
-				particles.push( {
-					...particle,
-					source: "equipment",
-					bone: equipmentSocket( item.slot, branch.part, particle.bone )
-				} );
-			}
-		}
+		// crystals) on its private bones.
+		particles.push( ...branchAmbientParticles( item.slot, entry.branches ) );
 		if ( !armament ) continue;
 		const sparks = input.enchantSparks ?
 			(dress.enchantSparks?.[item.refObjId] ?? []).filter( spark =>
@@ -330,6 +349,9 @@ export function assembleEquipmentAppearance( input: AppearanceInput ): Appearanc
 		const entry = visual.bodies[prefix];
 		if ( entry === undefined ) throw Error( `Missing cosmetic attachment ${prefix}/${item.refObjId}` );
 		if ( entry === null ) continue;
+		// Port-only, not native: a later mall avatar's worn aura, on the
+		// wearer's bones (or origin) like the body's own ambient set.
+		particles.push( ...(dress.avatarEffects?.[item.refObjId] ?? []) );
 		// Native item masks already decide admission. Mesh coverage hides
 		// base-body geometry; it must not remove another accepted item.
 		if ( entry.auxiliary ) {
@@ -338,7 +360,15 @@ export function assembleEquipmentAppearance( input: AppearanceInput ): Appearanc
 			parts.push( { model: entry.auxiliary.glb, parts: [], covers: coverIndices( entry.auxiliary, resource ) } );
 			continue;
 		}
-		parts.push( { model: entry.glb, parts: entry.parts, covers: coverIndices( entry, resource ) } );
+		parts.push( {
+			model: entry.glb,
+			parts: entry.parts,
+			...(entry.branches ? { branches: { slot: visual.avatarSlot, entries: entry.branches } } : {}),
+			covers: coverIndices( entry, resource )
+		} );
+		// The avatar resource's own ambient set (the noblesse and halloween
+		// dresses' fires), socketed under the avatar's own slot.
+		particles.push( ...branchAmbientParticles( visual.avatarSlot, entry.branches ) );
 		if ( dress.avatarVisualOverrides?.[item.refObjId]?.additionalBsr ) {
 			const extra = dress.avatarAuxiliary?.[item.refObjId];
 			if ( !extra ) throw Error( "Missing auxiliary avatar " + item.refObjId );

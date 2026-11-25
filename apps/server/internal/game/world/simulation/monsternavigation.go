@@ -80,16 +80,35 @@ func (ops *MonsterMoverOps) planSegment(instance *monster.Instance, mover monste
 		route := ops.planRouteTimed(caller, live, owner, goal)
 		ops.Navigation.plan(caller, route)
 		if route == nil || route.Status() != monster.NavigationRouteReady || route.Len() == 0 {
-			next, frames := ops.waitForNavigation(instance.Gid, mover, live, goal, speed, settledFrames, now)
-			// Only a real search failure is noted, and only where the
-			// memo may later answer for it: unavailable geometry, the
-			// cross-plane refusal (RouteMemo false) and a nil planner
-			// prove nothing about a recompute.
-			if route != nil && ops.RouteMemo != nil && ops.RouteMemo(live, goal) &&
-				(route.Status() == monster.NavigationRouteBlocked || route.Status() == monster.NavigationSearchExhausted) {
-				next.NoteRouteFailure(live, owner, route.Status())
+			// The detour search is a bounded local search: at a distant
+			// or maze-bound goal its probe budget exhausts and there is
+			// no route. The native HOMING mover instead re-aims at its
+			// stored home goal every tick and walks the ground toward
+			// it, so a returning mover marches the local path: one leg
+			// to the furthest pose the path can walk toward the goal,
+			// then re-plan from there (#4124). A march that makes no
+			// progress (the gorge rim: the straight line gains nothing
+			// against the wall) gets one global search at the homing
+			// budget instead, and only a failed global search keeps
+			// the wait below, with the stuck policy's answer intact.
+			// Chase and follow keep the wait throughout (their detour
+			// economics are pinned separately).
+			if marched := ops.marchRoute(caller, mover.Mode(), live, owner, goal); marched != nil {
+				route = marched
+			} else if global := ops.globalRoute(caller, mover.Mode(), live, owner, goal); global != nil {
+				route = global
+			} else {
+				next, frames := ops.waitForNavigation(instance.Gid, mover, live, goal, speed, settledFrames, now)
+				// Only a real search failure is noted, and only where the
+				// memo may later answer for it: unavailable geometry, the
+				// cross-plane refusal (RouteMemo false) and a nil planner
+				// prove nothing about a recompute.
+				if route != nil && ops.RouteMemo != nil && ops.RouteMemo(live, goal) &&
+					(route.Status() == monster.NavigationRouteBlocked || route.Status() == monster.NavigationSearchExhausted) {
+					next.NoteRouteFailure(live, owner, route.Status())
+				}
+				return next, frames
 			}
-			return next, frames
 		}
 		mover.BeginNavigation(route)
 		point, _ = mover.NavigationWaypoint()
@@ -102,6 +121,56 @@ func (ops *MonsterMoverOps) planSegment(instance *monster.Instance, mover monste
 		return ops.waitForNavigation(instance.Gid, mover, live, goal, speed, settledFrames, now)
 	}
 	return next, frames
+}
+
+/*
+================
+MonsterMoverOps.marchRoute
+
+The homing fallback when the bounded detour search fails: march the
+local path toward the stored home goal, the way the native HOMING
+mover walks its destination. Returns a one-point route at the
+furthest pose the path can walk, or nil for any other mode, when
+there is no path planner, or when the path gains nothing toward the
+goal (walled in, or no geometry): the caller's wait then stands.
+================
+*/
+func (ops *MonsterMoverOps) marchRoute(caller navCaller, mode monster.MoverMode, live monster.Pose, owner NavOwner, goal monster.Pose) *monster.NavigationRoute {
+	if mode != monster.MoverReturning || !ops.hasPlanner() {
+		return nil
+	}
+	path := ops.planPath(caller, live, owner, goal)
+	if path == nil {
+		return nil
+	}
+	rest := path.Rest()
+	if planarDistance(live, rest) <= .01 || planarDistance(rest, goal) >= planarDistance(live, goal) {
+		return nil
+	}
+	return monster.NewNavigationRoute(goal, []monster.Pose{rest})
+}
+
+/*
+================
+MonsterMoverOps.globalRoute
+
+The homing fallback when the march stalls: one global search at the
+homing budget (PlanGlobalRoute), whose waypoints the mover then walks
+like any detour route. Returns a ready route, or nil for any other
+mode, when no global planner is wired, or when the search fails: the
+caller's wait then stands.
+================
+*/
+func (ops *MonsterMoverOps) globalRoute(caller navCaller, mode monster.MoverMode, live monster.Pose, owner NavOwner, goal monster.Pose) *monster.NavigationRoute {
+	if mode != monster.MoverReturning || ops.PlanGlobalRoute == nil {
+		return nil
+	}
+	route := ops.planGlobalRouteTimed(caller, live, owner, goal)
+	ops.Navigation.plan(caller, route)
+	if route == nil || route.Status() != monster.NavigationRouteReady || route.Len() == 0 {
+		return nil
+	}
+	return route
 }
 
 func (ops *MonsterMoverOps) waitForNavigation(gid uint32, mover monster.MoverState, live, goal monster.Pose, speed float64, settledFrames []Frame, now int64) (monster.MoverState, []Frame) {

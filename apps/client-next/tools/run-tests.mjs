@@ -45,7 +45,7 @@ import os from "node:os";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { resolveMainCheckout } from "../../../scripts/lib/generatedRoot.mjs";
-import { pruneRecordFiles, recordsPath, statsPath as statsFilePath } from "./lib/test-cache-files.mjs";
+import { pruneRecordFiles, recordFiles, recordsPath, statsPath as statsFilePath } from "./lib/test-cache-files.mjs";
 import { LOCATION_VARIABLES, cacheRoots, decodeTarget, encodeTarget } from "./lib/test-cache-ids.mjs";
 import { logPathFor } from "./lib/test-input-recorder.mjs";
 
@@ -58,6 +58,9 @@ const LOCATION_SET = "(set)";
 const clientRoot = path.resolve( path.dirname( fileURLToPath( import.meta.url ) ), ".." );
 const repoRoot = path.resolve( clientRoot, "../.." );
 const SKIP_FLAG = "--skip=";
+// Keeps only the directory files a list names: the release's asset lane runs
+// the asset-backed runtime files CI's source lane skips (check.mjs --assets).
+const ONLY_FLAG = "--only=";
 // The trees input ids are named against (test-cache-ids.mjs cacheRoots).
 const roots = cacheRoots( repoRoot );
 const statsPath = statsFilePath( repoRoot );
@@ -65,6 +68,12 @@ const recorderUrl = pathToFileURL( path.join( clientRoot, "tools/lib/test-input-
 const watchdogUrl = pathToFileURL( path.join( clientRoot, "tools/lib/test-process-watchdog.mjs" ) ).href;
 // The environment a test can see beyond its files.
 const ENV_KEYS = [ "TZ", "LANG", "NODE_ENV" ];
+// Worker counts set speed, never a result: the one list every cache key
+// shares (scripts/data/speed-variables.json). r204l's rebuild added
+// SRO_CENSUS_JOBS=10 and every one of 910 files reran under a fresh key.
+const SPEED_VARIABLES = new Set(
+	JSON.parse( fs.readFileSync( path.join( repoRoot, "scripts/data/speed-variables.json" ), "utf8" ) ).variables
+);
 // Parallel stats: more pool threads than the default four, and enough
 // requests in flight to keep them busy. Set before the pool first starts.
 const PREFETCH_WORKERS = 64;
@@ -147,25 +156,43 @@ The files the targets name. A directory gives its test files except those a
 --skip=<list.json> argument names (a {"tests": [file name...]} list, as
 tests/runtime/asset-backed-tests.json): CI's source lane runs a directory
 minus its asset-backed files without one argument per file, which would
-pass Windows' 32 KiB command line at ~600 files.
+pass Windows' 32 KiB command line at ~600 files. --only=<list.json> is
+the complement: a directory gives only the files the list names.
 ================
 */
 function testFiles( args ) {
-	const skip = new Set();
-	for ( const arg of args.filter( ( a ) => a.startsWith( SKIP_FLAG ) ) ) {
-		const list = path.resolve( clientRoot, arg.slice( SKIP_FLAG.length ) );
-		for ( const name of JSON.parse( fs.readFileSync( list, "utf8" ) ).tests ) skip.add( name );
-	}
+	const skip = listedTests( args, SKIP_FLAG ), only = listedTests( args, ONLY_FLAG );
 	const files = [];
-	for ( const target of args.filter( ( a ) => !a.startsWith( SKIP_FLAG ) ) ) {
+	for ( const target of args.filter( ( a ) => !a.startsWith( SKIP_FLAG ) && !a.startsWith( ONLY_FLAG ) ) ) {
 		const full = path.resolve( clientRoot, target );
 		if ( fs.statSync( full ).isDirectory() ) {
 			for ( const name of fs.readdirSync( full ).sort() ) {
-				if ( name.endsWith( ".test.mjs" ) && !skip.has( name ) ) files.push( path.join( full, name ) );
+				if ( !name.endsWith( ".test.mjs" ) || skip?.has( name ) ) continue;
+				if ( only && !only.has( name ) ) continue;
+				files.push( path.join( full, name ) );
 			}
 		} else files.push( full );
 	}
 	return files;
+}
+
+/*
+================
+listedTests
+
+The file names the lists of one flag name, or undefined when no argument
+carries the flag.
+================
+*/
+function listedTests( args, flag ) {
+	const lists = args.filter( ( a ) => a.startsWith( flag ) );
+	if ( lists.length === 0 ) return undefined;
+	const names = new Set();
+	for ( const arg of lists ) {
+		const list = path.resolve( clientRoot, arg.slice( flag.length ) );
+		for ( const name of JSON.parse( fs.readFileSync( list, "utf8" ) ).tests ) names.add( name );
+	}
+	return names;
 }
 
 /*
@@ -190,7 +217,7 @@ function cacheKey() {
 		// A fresh lock token must not discard every unchanged test pass.
 		Object.keys( process.env ).filter( key =>
 			(key.startsWith( "SRO_" ) && key !== "SRO_CHECK_FORCE" && !key.startsWith( "SRO_TEST_" ) &&
-					!key.startsWith( "SRO_REBUILD_LOCK_" ) ||
+					!key.startsWith( "SRO_REBUILD_LOCK_" ) && !SPEED_VARIABLES.has( key ) ||
 				ENV_KEYS.includes( key )) &&
 			// A blank location variable is unset, and an unset one has no entry.
 			!(LOCATION_VARIABLES.has( key ) && !locationPresence( process.env[key] ))
@@ -228,6 +255,57 @@ function readIndex( key ) {
 	index.records = readKeyed( recordsPath( repoRoot, key ), key, "records" );
 	index.stats = readKeyed( statsPath, key, "stats" );
 	return index;
+}
+
+/*
+================
+keyDifferences
+
+What separates one cache key from another, as "name: was -> now" lines
+over the key's fields and its environment ("unset" for a missing one).
+================
+*/
+function keyDifferences( was, now ) {
+	const lines = [];
+	for ( const field of [ "format", "node", "platform", "arch" ] ) {
+		if ( was[field] !== now[field] ) lines.push( `${field}: ${was[field]} -> ${now[field]}` );
+	}
+	const before = was.env ?? {}, after = now.env ?? {};
+	for ( const name of [ ...new Set( [ ...Object.keys( before ), ...Object.keys( after ) ] ) ].sort() ) {
+		if ( before[name] !== after[name] ) {
+			lines.push( `${name}: ${before[name] ?? "unset"} -> ${after[name] ?? "unset"}` );
+		}
+	}
+	return lines;
+}
+
+/*
+================
+explainNewKey
+
+A run whose key holds no records reruns every file, and said only "0
+reused": r204l's release reran 910 files (637 s) for a worker count in the
+key. Names what separates this key from the nearest recorded one.
+================
+*/
+function explainNewKey( key ) {
+	const now = JSON.parse( key );
+	let nearest = null;
+	for ( const file of recordFiles( repoRoot ) ) {
+		let was;
+		try {
+			was = JSON.parse( JSON.parse( fs.readFileSync( file, "utf8" ) ).key );
+		} catch {
+			continue;
+		}
+		const lines = keyDifferences( was, now );
+		if ( lines.length && (!nearest || lines.length < nearest.length) ) nearest = lines;
+	}
+	process.stdout.write(
+		nearest ?
+			`test cache: no records under this key; the nearest recorded key differs in ${nearest.join( ", " )}\n` :
+			"test cache: no records under this key, and no other key is recorded\n"
+	);
 }
 
 /*
@@ -448,6 +526,7 @@ async function main() {
 	const files = testFiles( process.argv.slice( 2 ) );
 	if ( !files.length ) throw new Error( "Usage: node tools/run-tests.mjs <dir|file>..." );
 	const index = readIndex( cacheKey() );
+	if ( process.env.SRO_CHECK_FORCE !== "1" && Object.keys( index.records ).length === 0 ) explainNewKey( index.key );
 	const fingerprint = createFingerprints( index );
 	const recorded = files.map( file => index.records[path.relative( repoRoot, file )] ).filter( Boolean );
 	await fingerprint.prefetch(

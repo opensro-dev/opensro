@@ -9,7 +9,8 @@ before a gated item is used - the gate is the native rule (type 3/3/13,
 CanUse & 0x81 == 0x81, TID4 not 8/12/15) - Yes runs the use, No or
 Escape runs nothing - and the 768530 frame banners every Magic Pang win
 it receives (UIIT_MSG_GACHA_ANNOUNCE with the prize name and its
-quantity).
+quantity). The later client's storage expansion items (3/3/13/17,
+#3904) ask their own question, chosen by Param2, whatever CanUse says.
 
 ===========================================================================
 */
@@ -19,7 +20,9 @@ import assert from "node:assert/strict";
 import { uiFixture, fontAtlas } from "../helpers/ui-fixture.mjs";
 import { defined } from "../helpers/defined.mjs";
 
-const { isMallUseConfirmItem } = await import( "../../src/engine/foundation/gameplay/mall-use.ts" );
+const { isMallUseConfirmItem, mallUseQuestion, MALL_USE_QUESTION } = await import(
+	"../../src/engine/foundation/gameplay/mall-use.ts"
+);
 const { createMallUseHud } = await import( "../../src/engine/runtime/ui/hud/mall-use-hud.ts" );
 const { createGameplay } = await import(
 	"../../src/engine/runtime/simulation/worker/session/world/gameplay/gameplay.ts"
@@ -152,6 +155,63 @@ test("the mall gate is the native rule (3/3/13, CanUse 129, no picker kinds)", (
 	);
 	assert.equal( isMallUseConfirmItem( { ...defined( ticket ), nativeFields: {} } ), false );
 	assert.equal( isMallUseConfirmItem( defined( potion ) ), false );
+});
+
+/*
+================
+expansion
+
+A later storage expansion item (3/3/13/17, CanUse 1) on slot 13 whose
+Param2 names what it grows: 0 the bag, 1 the warehouse.
+================
+*/
+function expansion( param2 ) {
+	return {
+		...defined( mallBag().inventory[0] ),
+		typeFlags: words( 17 ),
+		nativeFields: { canUse: 1, itemParam1_29c: param2 === 0 ? 32 : 30, itemParam2_2a0: param2 },
+		name: "Expansion"
+	};
+}
+
+test("a storage expansion item asks its own question whatever its CanUse", () => {
+	assert.equal( isMallUseConfirmItem( expansion( 0 ) ), true, "the bag addition asks" );
+	assert.equal( isMallUseConfirmItem( expansion( 1 ) ), true, "the warehouse addition asks" );
+	assert.equal(
+		mallUseQuestion( expansion( 0 ) ),
+		"UIIT_STT_STORAGE_EXPANSION_INVENTORY_ADDITION_ITEM_USE"
+	);
+	assert.equal(
+		mallUseQuestion( expansion( 1 ) ),
+		"UIIT_STT_STORAGE_EXPANSION_WAREHOUSE_ADDITION_ITEM_USE"
+	);
+	// A Param2 neither kind names falls back to the native rule: CanUse
+	// 1 uses at once.
+	assert.equal( isMallUseConfirmItem( expansion( 2 ) ), false );
+	// Every other gated item keeps the native question.
+	assert.equal( mallUseQuestion( defined( mallBag().inventory[0] ) ), MALL_USE_QUESTION );
+	// TID4 17 off the mall type is no expansion item.
+	assert.equal( isMallUseConfirmItem( { ...expansion( 0 ), typeFlags: words( 17 ) - 0x80 } ), false );
+});
+
+test("the expansion confirmation is not the native question and Yes runs the use", () => {
+	const sent = [], f = uiFixture( c => sent.push( c ) );
+	try {
+		Object.assign( f.state.gameplay, { ...mallBag(), inventory: [ expansion( 0 ) ] } );
+		openBag( f );
+		f.ui.event( { kind: "double-activate", id: "slot:13" } );
+		assert.equal( sent.length, 0, "the addition waits for confirmation" );
+		const scene = defined( f.ui.step( f.state, 1400 ) );
+		assert.ok( scene.controls.some( c => c.id === "mall-use-confirm" ), "the box is up" );
+		// The box asks the expansion's own question (its English is the
+		// build's text completion, scripts/test/assets/textCompletions),
+		// never the native mall-use line.
+		assert.equal( glyphsFor( f, "Will you use the selected item?" ).length, 0 );
+		f.ui.event( { kind: "activate", id: "mall-use-confirm" } );
+		assert.deepEqual( sent, [ { kind: "gameplay", command: { kind: "item-use", slot: 13 } } ] );
+	} finally {
+		f.dispose();
+	}
 });
 
 test("using a mall item from the bag asks first and Yes runs the use", () => {

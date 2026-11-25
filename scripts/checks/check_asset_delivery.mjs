@@ -5,7 +5,8 @@ check_asset_delivery.mjs - the published asset packs deliver what they claim
 
 Validates the pack index's delivery metadata (version 2: no transport copy
 of any member, every world animation catalog indexed), the packed font
-atlases and the runtime effect catalogs, and proves each animation index
+atlases and the runtime effect catalogs (every per-effect program and mesh
+file among them), and proves each animation index
 matches the catalog it was derived from.
 
 Stored members are proven lossless by check_asset_pack_integrity.mjs, which
@@ -20,22 +21,50 @@ import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { gunzipSync } from "node:zlib";
 import { readPublishedAssetBytesSync } from "../lib/publishedAsset.mjs";
+import {
+	EFFECT_PROGRAM_INDEX,
+	effectProgramIndexFiles
+} from "../../apps/client-next/src/engine/foundation/assets/effect-programs.ts";
 
 const publicRoot = CLIENT_PUBLIC_ROOT;
 const RUNTIME_EFFECT_CATALOGS = [
 	"/assets/skill/effectRecords.json",
 	"/assets/skill/namedEffectRecords.json",
-	"/assets/effects/programs.json"
+	EFFECT_PROGRAM_INDEX
 ];
 
 const index = JSON.parse( await readFile( path.join( publicRoot, "assets/packs/manifest.json" ), "utf8" ) );
 validateAssetDelivery( index );
 await validatePackedFontAtlases( index, publicRoot );
+const published = new Set( index.assets.map( e => e.path.toLowerCase() ) );
+
+/*
+================
+delivered
+
+Whether the packs deliver a path the way the worker asks for it: the member
+itself, or for a .json its .json.gz member, which the worker decompresses
+(packs.ts, the pathname + ".gz" fallback). Effect programs publish gzip only.
+================
+*/
+function delivered( file ) {
+	const key = file.toLowerCase();
+	return published.has( key ) || (key.endsWith( ".json" ) && published.has( key + ".gz" ));
+}
+
 // Effect records are runtime inputs, including the named table loaded on the
 // first item/cure event. Loose files are not evidence of worker delivery.
 for ( const catalog of RUNTIME_EFFECT_CATALOGS ) {
-	if ( !index.assets.some( e => e.path === catalog || e.path === catalog + ".gz" ) ) {
+	if ( !delivered( catalog ) ) {
 		throw Error( "Missing runtime effect catalog in asset publication: " + catalog );
+	}
+}
+// The worker reads one effect file and its meshes per effect (#3951): every
+// file the effect index names must be a published member.
+const effectIndex = JSON.parse( readPublishedAssetBytesSync( EFFECT_PROGRAM_INDEX, publicRoot ).toString( "utf8" ) );
+for ( const file of effectProgramIndexFiles( effectIndex ) ) {
+	if ( !delivered( file ) ) {
+		throw Error( "Missing effect program file in asset publication: " + file );
 	}
 }
 

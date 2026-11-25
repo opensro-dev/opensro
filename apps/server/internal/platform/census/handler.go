@@ -70,6 +70,8 @@ func Handler(service *Service, tokenPath string) (http.Handler, error) {
 			servePerson(w, r, service)
 		case "signals":
 			serve(w, func() (any, error) { return service.Signals() })
+		case "churn":
+			serveChurn(w, r, service)
 		default:
 			http.NotFound(w, r)
 		}
@@ -88,6 +90,20 @@ func serveOnline(w http.ResponseWriter, r *http.Request, service *Service) {
 		return
 	}
 	serve(w, func() (any, error) { return service.OnlineNow(window[0], window[1]) })
+}
+
+// serveChurn answers the churn route with its window checked.
+func serveChurn(w http.ResponseWriter, r *http.Request, service *Service) {
+	name := r.URL.Query().Get("window")
+	if name == "" {
+		name = "1h"
+	}
+	window, known := churnWindows[name]
+	if !known {
+		writeError(w, http.StatusBadRequest, "bad_window", "window must be 1h or 24h")
+		return
+	}
+	serve(w, func() (any, error) { return service.Churn(window) })
 }
 
 // servePerson answers the person route; the character read is the

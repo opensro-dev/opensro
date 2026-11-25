@@ -43,7 +43,8 @@ const EnvShopExtraGoods = "SRO_SHOP_EXTRA_GOODS"
 // 1M in the Jangan smith's third tab after its arrows. Owner, 2026-10-13:
 // the smith's Luck, Steady, Astral, Athanasia and Repair stones are degree 9
 // only (degrees 1-3 removed, agreed with the reporter); 2026-10-18: Astral is
-// 50M, Athanasia (Immortal) 25M and Luck, Steady and Repair 5M; the other
+// 50M, Athanasia (Immortal) 25M and Luck, Steady and Repair 5M (2026-11-25:
+// the degree 10 Steady stone joins them at 5M); the other
 // degree 9 stones at Jangan's grocer for 2M; the vigor potions at every
 // herbalist. The two Jangan segments are built from the alchemy shop's
 // goods tables (alchemyshop.go), which the three-tab regroup reads too.
@@ -79,11 +80,23 @@ var shopExtraGoodsDefault = "" +
 	// at every grocer's alchemy tab (NPC_*_ACCESSORY, SN_TAB_ALCHEMY) for
 	// A_09's native price, 54,469 (refpricepolicyofitem, its Hotan package).
 	// Hotan's two grocer tabs already sell it natively. The large powder
-	// (B_09) waits for F8 (owner, 2026-10-14).
+	// (B_09) waits for F8 (owner, 2026-10-14). Degrees 10 and 11 join it
+	// (owner, 2026-11-25) at their itemdata prices, 63,656 and 70,875: no
+	// native gold shop sells a degree 10 or 11 powder, so degree 10-11
+	// gear had no reinforcement elixir to buy. Jangan's three ride its
+	// alchemy shop's powder list (alchemyshop.go janganPowderGoods).
 	"STORE_CH_ACCESSORY_TAB3:ITEM_ETC_ARCHEMY_REINFORCE_PROB_UP_A_09:54469," +
+	"STORE_CH_ACCESSORY_TAB3:ITEM_ETC_ARCHEMY_REINFORCE_PROB_UP_A_10:63656," +
+	"STORE_CH_ACCESSORY_TAB3:ITEM_ETC_ARCHEMY_REINFORCE_PROB_UP_A_11:70875," +
 	"STORE_WC_ACCESSORY_TAB3:ITEM_ETC_ARCHEMY_REINFORCE_PROB_UP_A_09:54469," +
+	"STORE_WC_ACCESSORY_TAB3:ITEM_ETC_ARCHEMY_REINFORCE_PROB_UP_A_10:63656," +
+	"STORE_WC_ACCESSORY_TAB3:ITEM_ETC_ARCHEMY_REINFORCE_PROB_UP_A_11:70875," +
 	"STORE_EU_ACCESSORY_TAB3:ITEM_ETC_ARCHEMY_REINFORCE_PROB_UP_A_09:54469," +
-	"STORE_CA_ACCESSORY_TAB3:ITEM_ETC_ARCHEMY_REINFORCE_PROB_UP_A_09:54469"
+	"STORE_EU_ACCESSORY_TAB3:ITEM_ETC_ARCHEMY_REINFORCE_PROB_UP_A_10:63656," +
+	"STORE_EU_ACCESSORY_TAB3:ITEM_ETC_ARCHEMY_REINFORCE_PROB_UP_A_11:70875," +
+	"STORE_CA_ACCESSORY_TAB3:ITEM_ETC_ARCHEMY_REINFORCE_PROB_UP_A_09:54469," +
+	"STORE_CA_ACCESSORY_TAB3:ITEM_ETC_ARCHEMY_REINFORCE_PROB_UP_A_10:63656," +
+	"STORE_CA_ACCESSORY_TAB3:ITEM_ETC_ARCHEMY_REINFORCE_PROB_UP_A_11:70875"
 
 // maxShopSlot is the last slot a tab can address: the offer slot is a byte.
 const maxShopSlot = math.MaxUint8
@@ -212,7 +225,7 @@ func (c *Catalog) AddExtraGoods(goods []ExtraGood, refs enterworld.ItemRefSource
 		if !known {
 			return fmt.Errorf("%s: unknown shop tab %s", EnvShopExtraGoods, good.Tab)
 		}
-		content, err := packageContent(extraTemplate(good.Codename), refs)
+		content, err := packageContent(extraTemplate(good.Codename), refs, rentTerms{})
 		if err != nil {
 			return fmt.Errorf("%s: %s: %w", EnvShopExtraGoods, good.Codename, err)
 		}

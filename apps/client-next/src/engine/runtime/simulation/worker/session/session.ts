@@ -28,6 +28,9 @@ import { dockRetryDelayMs } from "@/engine/foundation/session/dock-retry";
 
 // How long a failure report may take; it never holds up the session ending.
 const INCIDENT_TIMEOUT_MS = 5000;
+// A bug report carries a clip on a player's uplink: generous, but a hung
+// connection must still settle the send the window is waiting on (#4109).
+const BUG_REPORT_TIMEOUT_MS = 300000;
 const INCIDENT_QUEUE_LIMIT = 8;
 // One client report per code per session owner, and at most this many codes:
 // a repeating fault cannot flood the Agent (as DEGRADED_CODES_PER_SESSION).
@@ -36,7 +39,10 @@ const INCIDENT_MAX_ATTEMPTS = 4;
 const INCIDENT_RETRY_MS = 6000;
 // The build every incident from this worker carries (build-tag.ts), read once.
 const INCIDENT_BUILD = buildTag( import.meta.url );
-const RELEASE_OUTDATED_MESSAGE = "A newer version of the game is available. Refresh the page to continue.";
+// The page reloads itself once the newer release is served (release-watch.ts
+// releaseNotice), so the line names no click: during a publish the server
+// switches first and a manual reload would only be refused again.
+const RELEASE_OUTDATED_MESSAGE = "Silkroad Online is being updated. The game continues on its own in a moment.";
 /*
 ================
 createSession
@@ -68,6 +74,10 @@ export function createSession(): SessionOwner {
 		token: string;
 		divisionId: string;
 		transportUrl: string;
+		// The Agent advertised a route ("/shards/<id>", catalog.go
+		// PublicTransportURL) rather than a transport host: the web edge
+		// proxies it over HTTP, so the world session dials no WebTransport.
+		edgeRoute: boolean;
 		nativeServerName?: string;
 	} | null = null;
 	let completion: {
@@ -159,12 +169,19 @@ apart from failures; a refused entry files as a software failure with the
 stage it happened in. Each code reports once - except asset failures,
 which file once per terminal episode: the stream owners hand each out
 exactly once (#2337), so a code dedupe would eat a later episode whole.
+The one uncaught_error code is the journal's fault port instead: it hands
+over the first throw of each distinct failure (journal.ts recordError,
+bounded there), so those dedupe by the failure itself - message and top
+frame - or a storm's second signature never files (#3684).
 ================
 	*/
 	function reportClient( command: Extract<SessionCommand, { kind: "client-report"; }> ) {
 		if ( command.incidentKind !== "asset" ) {
-			if ( clientReports.has( command.code ) || clientReports.size >= CLIENT_REPORT_CODES ) return;
-			clientReports.add( command.code );
+			const key = command.code === "uncaught_error" ?
+				command.code + "\n" + command.message + "\n" + (command.stack?.split( "\n" )[0] ?? "") :
+				command.code;
+			if ( clientReports.has( key ) || clientReports.size >= CLIENT_REPORT_CODES ) return;
+			clientReports.add( key );
 		}
 		reportIncident( {
 			id: crypto.randomUUID().replaceAll( "-", "" ),
@@ -215,6 +232,66 @@ flushIncidents
 			else if ( state.incidentID === report.body.id ) {
 				publish( { ...state, incidentDelivery: incidentDelivery.get( report.body.id! ) } );
 			}
+		} );
+	}
+	// One bug report in flight (#4109) and its last answer, which
+	// publishWorld carries like the incidents' delivery marks.
+	let bugReportSending = false;
+	let bugReportResult: import("@/engine/contracts/session").BugReportResult | undefined;
+	/*
+================
+fileBugReport
+
+The in-game reporter files through this owner (#4109): the parts ride
+the bug-report command, and this posts them with the session token the
+game session was admitted with - the login cookie is only the browser's
+copy of that session, erasable by another tab and expired with it, so a
+player still in the world was told to log in. The answer (the Agent's
+own ok or refusal code) is published by operation for the reporter.
+Without an identity the reporter hears NO_SESSION and falls back to its
+cookie fetch, which is also the title screens' lane. One report at a
+time; the report window locks its own send meanwhile.
+================
+	*/
+	function fileBugReport( command: Extract<SessionCommand, { kind: "bug-report"; }> ) {
+		const answer = ( result: import("@/engine/contracts/session").BugReportResult ) => {
+			bugReportResult = result;
+			if ( scope === "world" ) publishWorld();
+			else publish( { ...state, bugReportResult: result } );
+		};
+		if ( !identity ) {
+			answer( { operationId: command.operationId, ok: false, code: "NO_SESSION" } );
+			return;
+		}
+		if ( bugReportSending ) {
+			answer( { operationId: command.operationId, ok: false, code: "BUSY" } );
+			return;
+		}
+		bugReportSending = true;
+		const form = new FormData();
+		form.append( "description", command.description );
+		form.append( "meta", command.meta );
+		if ( command.diagnostics ) form.append( "diagnostics", command.diagnostics, "diagnostics.zip" );
+		if ( command.media && command.mediaField ) {
+			form.append(
+				command.mediaField,
+				command.media,
+				command.mediaField === "clip" ? "replay.mp4" : "screenshot.jpg"
+			);
+		}
+		http.report( identity.apiBase, identity.token, form, AbortSignal.timeout( BUG_REPORT_TIMEOUT_MS ) ).then(
+			result => {
+				const body = result.body as { ok?: boolean; code?: string; retryAfter?: number; } | null;
+				answer( {
+					operationId: command.operationId,
+					ok: result.httpOk && body?.ok === true,
+					...(typeof body?.code === "string" ? { code: body.code } : {}),
+					...(typeof body?.retryAfter === "number" ? { retryAfter: body.retryAfter } : {})
+				} );
+			},
+			() => answer( { operationId: command.operationId, ok: false, code: "DELIVERY_FAILED" } )
+		).finally( () => {
+			bugReportSending = false;
 		} );
 	}
 	const world = createWorldSession( mintWorldToken, http.references, reportIncident );
@@ -340,6 +417,7 @@ publishWorld
 			disconnectMessage: value.disconnectMessage,
 			incidentID: value.incidentID,
 			incidentDelivery: incidentDelivery.get( value.incidentID ),
+			bugReportResult,
 			divisionId: identity?.divisionId,
 			characters: state.characters
 		} );
@@ -479,7 +557,12 @@ baseUrl
 					if ( command.kind === "enter-world" ) {
 						if ( !identity ) throw new Error( "Authentication required" );
 						entryCharacter = command.character;
-						world.enter( command.character, identity.divisionId, identity.transportUrl );
+						world.enter(
+							command.character,
+							identity.divisionId,
+							identity.transportUrl,
+							identity.edgeRoute
+						);
 						cancelTitleRequest();
 						scope = "world";
 					} else if ( command.kind === "disconnect" ) {
@@ -507,6 +590,10 @@ baseUrl
 			}
 			if ( command.kind === "client-report" ) {
 				reportClient( command );
+				return;
+			}
+			if ( command.kind === "bug-report" ) {
+				fileBugReport( command );
 				return;
 			}
 			if ( command.kind === "gameplay" ) {
@@ -858,7 +945,7 @@ baseUrl
 										nativeResult: 1,
 										characterRosterContractVersion: body.characterRosterContractVersion,
 										characters: [ body.character ]
-									} );
+									} ).characters;
 									const index = (characters ?? []).findIndex( c => c.id === character!.id );
 									if ( character!.name !== result.expectedCharacter ) {
 										throw Error( "Character operation returned a different character" );
@@ -893,7 +980,8 @@ baseUrl
 							if ( result.kind === "servers" ) {
 								publish( { phase: "signed-out", servers: decoder.servers( result.value.body ) } );
 							} else {
-								const characters = decoder.roster( result.value.body ),
+								const roster = decoder.roster( result.value.body ),
+									characters = roster.characters,
 									resume = characters.find( row =>
 										row.name === resumeCharacter && !row.deletePending
 									);
@@ -902,11 +990,18 @@ baseUrl
 									phase: "character-select",
 									crestPrefix,
 									divisionId: identity!.divisionId,
-									characters
+									characters,
+									jobSuitHidesArmor: roster.jobSuitHidesArmor,
+									moonlitThiefSuit: roster.moonlitThiefSuit
 								} );
 								if ( resume ) {
 									entryCharacter = resume.name;
-									world.enter( resume.name, identity!.divisionId, identity!.transportUrl );
+									world.enter(
+										resume.name,
+										identity!.divisionId,
+										identity!.transportUrl,
+										identity!.edgeRoute
+									);
 									cancelTitleRequest();
 									scope = "world";
 									restoringWorld = true;
@@ -962,6 +1057,7 @@ baseUrl
 							typeof value.sessionToken !== "string" || !value.sessionToken.trim() ||
 							value.sessionToken.length > 4096 || !result.expectedShard ||
 							value.divisionId !== result.expectedShard || typeof value.transportUrl !== "string" ||
+							(value.transportRoute !== undefined && typeof value.transportRoute !== "boolean") ||
 							value.nextScene !== "character-select"
 						) {
 							throw new Error( "Invalid authentication route" );
@@ -984,7 +1080,10 @@ baseUrl
 							apiBase: result.apiBase,
 							token: value.sessionToken,
 							divisionId: result.expectedShard,
-							transportUrl: baseUrl( value.transportUrl, result.apiBase )
+							transportUrl: baseUrl( value.transportUrl, result.apiBase ),
+							// The Agent states the form (catalog.go TransportEdgeRoute);
+							// an Agent that does not is a host, as before.
+							edgeRoute: value.transportRoute === true
 						};
 						if (
 							result.kind === "restore" && typeof value.resumeCharacter === "string" &&

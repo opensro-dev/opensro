@@ -3,7 +3,7 @@
 
 uniquenotices.go - the shard's unique appearance and death notices
 
-A rarity-3 monster's spawn and death are told to the whole division
+A unique's spawn and death are told to the whole division
 (0x3058, kinds 5 and 6). Each population queues its own notices; the tick
 drains them once per division. The overworld population always speaks.
 An instance layer speaks only when its world announces its uniques
@@ -58,7 +58,7 @@ func (s *MonsterState) RecordUniqueKiller(division string, gid uint32, name stri
 	defer s.mu.Unlock()
 	state := s.populationForObject(division, gid)
 	instance, ok := state.instances.lookup(gid)
-	if !ok || instance.Arena || instance.CurrentHP != 0 || instance.Rarity()&15 != 3 || state.uniqueDeaths[gid] {
+	if !ok || instance.Arena || instance.CurrentHP != 0 || !instance.IsUnique() || state.uniqueDeaths[gid] {
 		return 0, false
 	}
 	if state.uniqueDeaths == nil {
@@ -68,8 +68,33 @@ func (s *MonsterState) RecordUniqueKiller(division string, gid uint32, name stri
 	if name == "" {
 		name = "???"
 	}
+	if state.uniqueKillers == nil {
+		state.uniqueKillers = map[uint32]string{}
+	}
+	state.uniqueKillers[gid] = name
 	state.uniqueNotices = append(state.uniqueNotices, uniqueNotice(uniqueNoticeDeath, instance.Ref.RefObjID, name))
 	return instance.Ref.RefObjID, true
+}
+
+/*
+================
+UniqueKiller
+
+The killer RecordUniqueKiller retained for a slain unique, for
+owners that judge a kill after the fact (the EventBot's Random
+Unique, #3537). False while the unique stands, fell unnamed, or
+its population is gone.
+================
+*/
+func (s *MonsterState) UniqueKiller(division string, gid uint32) (string, bool) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	state, ok := s.divs[division]
+	if !ok || state == nil {
+		return "", false
+	}
+	name, ok := state.uniqueKillers[gid]
+	return name, ok && name != ""
 }
 
 /*

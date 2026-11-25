@@ -111,23 +111,6 @@ export interface ExperimentalOptions {
 	// downloads with progress, and the retail texture stays the fallback
 	// for every path the set does not hold.
 	readonly hdTextures: boolean;
-	// Port-only, not native: characters and effects share one nearest-first
-	// order under the renderer's CHARACTER_ACTORS (the original keeps every
-	// decoration, 85C020), so a far character gives way to a near effect.
-	// On unless turned off (the owner's choice, 2026-10-14); off is the
-	// previous rule, characters first.
-	readonly sharedActorRoom: boolean;
-	// Port-only, not native: the local player's ground-click walk is stepped
-	// on the main thread from the click frame (runtime/movement/local-mover.ts,
-	// Unreal's locally controlled character, epic #1437, with
-	// reconciliation #1441b). The original client predicts its own walk the
-	// same way (0x6932A0 -> StartGroundMove 0x878600). On unless turned off
-	// (the owner's choice, 2026-10-25); off is the worker-driven walk.
-	readonly mainThreadOwnWalk: boolean;
-	// Port-only, not native: a disabled tab is dimmed with a grey label (the
-	// original draws it like an unselected tab, 5376A0). On unless turned
-	// off (the owner's choice, 2026-10-15); off is the original look.
-	readonly greyDisabledTabs: boolean;
 	// Port-only, not native: the shard's job-kill announcements (their own
 	// 0x3667 channel, server wire.JobKillNoticeChannel). On unless turned off
 	// (the owner's choice, 2026-10-15); off hides them from the banner and
@@ -156,34 +139,24 @@ export interface ExperimentalOptions {
 	// in a window (unique-rank-hud.ts). Off unless turned on, so each
 	// player opts in.
 	readonly uniqueDamageRank: boolean;
+	// Port-only, not native: the Unique Status window (unique-status-hud.ts)
+	// lists every unique's alive/dead state and last kill from the shard's
+	// feed (0x3FC4/0x3FC5, server SRO_UNIQUE_STATUS), and alerts - in game,
+	// and in the browser once allowed - when a marked unique spawns or
+	// dies. Off unless turned on, so each player opts in.
+	readonly uniqueStatus: boolean;
+	// Port-only, not native: the Consignment Market (market-hud.ts) sells
+	// while the seller is offline (server SRO_CONSIGNMENT). The row adds
+	// its System menu entry; the window itself also opens from its button
+	// beside FPS, the K key and a storage keeper, all of which the shard's
+	// own switch already gates. Off unless turned on, so each player opts in.
+	readonly consignmentMarket: boolean;
 	// Port-only, not native: holding V (UIIT_STT_USER_MOSTER_BLIND) also
 	// hides other players' pets and transports. The original hides only
 	// monsters and players (8602C0, 85E550): a COS draws through its owner
 	// (CICCos_ResolveDrawOwner 854680), which ignores the key. Off unless
 	// turned on (the balance advisor's ask, owner-approved 2026-10-15).
 	readonly vHidesCompanions: boolean;
-	// Port-only, not native: a character the navmesh puts in a dungeon room
-	// the camera's room does not draw is hidden and cannot be clicked, as
-	// that room's scenery is not drawn, so characters and rooms appear and
-	// vanish together. The original draws every entity in its frustum, so
-	// mobs show floating in the void behind a culled room (World_PickEntity-
-	// AtScreenPoint 692680 likewise raycasts entities only). On unless
-	// turned off (the owner's choice, 2026-10-19); off is the original,
-	// frustum-only draw and pick.
-	readonly dungeonCharacterPvs: boolean;
-	// Port-only, not native: an authored label wider than its box wraps onto
-	// two lines inside it, a button caption wider than its plate keeps its
-	// leading words (in game and on the creation screen), a speech board
-	// breaks between words, and an open list that would leave its window opens
-	// upward (the original runs the text past the window's edge, breaks a
-	// board at any glyph and draws the list below the box). On unless turned off (the owner's choice,
-	// 2026-10-15); off is the original look.
-	readonly fitWindowLabels: boolean;
-	// Port-only, not native: an item dropped on the other bag page's tab
-	// moves to that page's first free slot (bag-tab-drop.ts). On unless
-	// turned off (the owner's choice, 2026-10-15); off is the original,
-	// where a drop on a tab does nothing.
-	readonly dropOnBagTab: boolean;
 	// Port-only, not native: Ctrl+click, right-click or double-click a bag
 	// item stages it into the open exchange, as a drop on the table does;
 	// the original stages by drag and drop only. On unless turned off (the
@@ -205,11 +178,6 @@ export interface ExperimentalOptions {
 	// runtime/ui/hud/unique-banner.ts). On unless turned off (the balance
 	// advisor's ask, owner-approved 2026-10-15); off is the original timing.
 	readonly shortNotices: boolean;
-	// Port-only, not native: the guild window's Withdraw asks "Ban [name]?"
-	// (UIIT_MSG_GUILD_QUESTION_EXPULSION_ANYONE) before it bans; 5E4C30 sends
-	// the ban on the click. On unless turned off (the owner's choice,
-	// 2026-10-15); off is the original.
-	readonly confirmGuildBan: boolean;
 	// Port-only, not native: straight AT_MOV_1TAR projectiles re-aim at the
 	// target's live socket each frame (stepHomingProjectile). The original
 	// interpolates between the launch-captured start (+0x58) and end (+0x64)
@@ -238,11 +206,6 @@ export interface ExperimentalOptions {
 	// CIFCOSStatus maps no left-click message (6A9BC0). On unless turned off
 	// (the owner's choice, 2026-10-18, BUG-086); off is native.
 	readonly petClickOpensWindow: boolean;
-	// Port-only, not native (0x0077DD61 clears commandMode bit 0x80 via 0x705B
-	// selector 2 on 0xB69E pickup error 0xB4/0xB5, stopping gold pickup too):
-	// when on, keep bit 0x80 enabled on full-bag errors and pause non-gold item
-	// pickup until bag space changes so the pet keeps picking up gold. Default on.
-	readonly smartPetPickup: boolean;
 	// Port-only, not native (#841): an item filter for the pickup pet. Off
 	// unless turned on; off, the pet proposes exactly the native categories
 	// and the kind switches below are never read. The filter only ever
@@ -266,6 +229,12 @@ export interface ExperimentalOptions {
 	// the world map and the minimap, not only the one quest the journal
 	// tracks. Off unless turned on; off is the native tracked quest only.
 	readonly questTrackerMarkers: boolean;
+	// Port-only, not native (#3394): a monster picked in the M map guide's
+	// Monster tab also marks its hunting ground on the minimap (the edge
+	// arrow while the point is off the ring) until another row is picked.
+	// The later client only tints the ground on the M map. Off unless
+	// turned on; off, the minimap is unchanged.
+	readonly guideWaypoint: boolean;
 	// Port-only, not native: the world map (M, never the minimap) offers a
 	// "Unique spawns" box at its foot, off until ticked; with both on it
 	// draws one unique sign on every nest a unique may spawn from, all
@@ -284,11 +253,6 @@ export interface ExperimentalOptions {
 	// 0x68eafd in 0x68e530 never reaches it on the traced path - so the
 	// native arrival is silent. Off unless turned on.
 	readonly warpArrivalSound: boolean;
-	// Port-only, not native (#3547): a wing dress's flight plays no ground
-	// footsteps. The wing set has no sound binding, so the native client
-	// falls back to the Default run's snd_run1 (0xADEAB5 -> 0xADEADE). On
-	// by default (the owner's choice, 2026-11-15); off is the native steps.
-	readonly silentWingFlight: boolean;
 	// Port-only, not native: the four Christmas carols (event_carol_01..04,
 	// music mode 1) while the Christmas event group (1) is on. The native
 	// carol branch (8F7A43) is reached only through the music manager's
@@ -316,6 +280,26 @@ export interface ExperimentalOptions {
 	// sides it with SRO_MALL_CATEGORIES; a client with the row off keeps
 	// the shipped mall exactly. Off unless turned on.
 	readonly mallCategories: boolean;
+	// Port-only, not native (#3907): the v1.696 SRO Macro (CNIFMacroMenuWnd
+	// and its option windows), which v1.150 does not have. The server sides
+	// it with SRO_AUTO_MACRO; a client with the row off never opens the
+	// windows and never sends 0x7554. On unless turned off (owner,
+	// 2026-11-21: the macro ships on in the next release).
+	readonly sroMacro: boolean;
+	// Port-only, not native (#3532): the Event Calendar window over the
+	// public schedule feed (#3520). Off unless turned on; off, the System
+	// menu has no calendar entry and the window never opens.
+	readonly eventCalendar: boolean;
+	// Port-only, not native (#3530): the Job Honor Rank window over the
+	// honor feed. Off unless turned on; off, the System menu has no
+	// honor entry and the window never opens. The server sides it with
+	// SRO_JOB_HONOR; with that off nothing is ever sent.
+	readonly jobHonor: boolean;
+	// Port-only, not native (#3925): the login and server-list screens
+	// show the running maintenance from the public schedule feed (#3520)
+	// as one notice line. Off by default; off, the title never reads the
+	// feed and shows the native screens exactly.
+	readonly maintenanceNotice: boolean;
 }
 
 /*
@@ -470,10 +454,10 @@ export function uiScaleFactor( options: ExperimentalOptions ): number {
 experimentalOptions
 
 Only an explicit true enables a toggle, except smoothCamera, enchantSparks,
-compressedTextures, sharedActorRoom, mainThreadOwnWalk, greyDisabledTabs, jobKillNotices, dropPlusNotices,
-breakNotices, highlightEventNotices, fitWindowLabels, dropOnBagTab, exchangeClickShortcuts, noticeLinks, chatItemLinks, shortNotices, confirmGuildBan,
-petClickOpensWindow, smartPetPickup, touchInspect, uniqueSpawnPoints, phoneRenderCap, webTransport, eventChatTab, transportAutoPotion, silentWingFlight, dungeonCharacterPvs and
-christmasCarols (owner, 2026-11-15: on by default, off by the player's choice), which only an explicit false turns off.
+compressedTextures, jobKillNotices, dropPlusNotices,
+breakNotices, highlightEventNotices, exchangeClickShortcuts, noticeLinks, chatItemLinks, shortNotices,
+petClickOpensWindow, touchInspect, uniqueSpawnPoints, phoneRenderCap, webTransport, eventChatTab, transportAutoPotion,
+christmasCarols and sroMacro (owners, 2026-11-15 and 2026-11-21: on by default, off by the player's choice), which only an explicit false turns off.
 The pickup filter's kinds (petFilterGold and its siblings) also only turn off
 explicitly, and are read only while petPickupFilter is on.
 Missing or invalid render scales restore full resolution and missing or
@@ -515,29 +499,23 @@ export function experimentalOptions( value: unknown = null ): ExperimentalOption
 		enchantSparks: record.enchantSparks !== false,
 		compressedTextures: record.compressedTextures !== false,
 		hdTextures: enabled( "hdTextures" ),
-		sharedActorRoom: record.sharedActorRoom !== false,
-		mainThreadOwnWalk: record.mainThreadOwnWalk !== false,
-		greyDisabledTabs: record.greyDisabledTabs !== false,
 		jobKillNotices: record.jobKillNotices !== false,
 		dropPlusNotices: record.dropPlusNotices !== false,
 		breakNotices: record.breakNotices !== false,
 		highlightEventNotices: record.highlightEventNotices !== false,
 		uniqueDamageRank: enabled( "uniqueDamageRank" ),
+		uniqueStatus: enabled( "uniqueStatus" ),
+		consignmentMarket: enabled( "consignmentMarket" ),
 		vHidesCompanions: enabled( "vHidesCompanions" ),
-		dungeonCharacterPvs: record.dungeonCharacterPvs !== false,
-		fitWindowLabels: record.fitWindowLabels !== false,
-		dropOnBagTab: record.dropOnBagTab !== false,
 		exchangeClickShortcuts: record.exchangeClickShortcuts !== false,
 		noticeLinks: record.noticeLinks !== false,
 		chatItemLinks: record.chatItemLinks !== false,
 		shortNotices: record.shortNotices !== false,
 		autoSelect: enabled( "autoSelect" ),
-		confirmGuildBan: record.confirmGuildBan !== false,
 		homingProjectiles: enabled( "homingProjectiles" ),
 		transportAutoPotion: record.transportAutoPotion !== false,
 		webTransport: record.webTransport !== false,
 		petClickOpensWindow: record.petClickOpensWindow !== false,
-		smartPetPickup: record.smartPetPickup !== false,
 		petPickupFilter: enabled( "petPickupFilter" ),
 		petFilterGold: record.petFilterGold !== false,
 		petFilterEquipment: record.petFilterEquipment !== false,
@@ -546,15 +524,19 @@ export function experimentalOptions( value: unknown = null ): ExperimentalOption
 		petFilterOther: record.petFilterOther !== false,
 		touchInspect: record.touchInspect !== false,
 		questTrackerMarkers: enabled( "questTrackerMarkers" ),
+		guideWaypoint: enabled( "guideWaypoint" ),
 		uniqueSpawnPoints: record.uniqueSpawnPoints !== false,
 		sunDropMarker: enabled( "sunDropMarker" ),
 		warpArrivalSound: enabled( "warpArrivalSound" ),
-		silentWingFlight: record.silentWingFlight !== false,
 		christmasCarols: record.christmasCarols !== false,
 		sealUnderHeading: enabled( "sealUnderHeading" ),
 		setBonusTooltip: enabled( "setBonusTooltip" ),
 		silkHistory: enabled( "silkHistory" ),
-		mallCategories: enabled( "mallCategories" )
+		mallCategories: enabled( "mallCategories" ),
+		sroMacro: record.sroMacro !== false,
+		eventCalendar: enabled( "eventCalendar" ),
+		jobHonor: enabled( "jobHonor" ),
+		maintenanceNotice: enabled( "maintenanceNotice" )
 	};
 }
 
@@ -562,19 +544,53 @@ export function experimentalOptions( value: unknown = null ): ExperimentalOption
 // version bumped with the WebTransport default flip (#1451 step 3): a
 // record saved under the previous key carries the old explicit default
 // for that row, so it migrates on read without its webTransport value
-// and the new default reaches every saved profile. A choice stored
-// under the current key is kept as written.
-export const EXPERIMENTAL_STORAGE_KEY = "sro:v1150:experimental-options:2";
-export const PREVIOUS_EXPERIMENTAL_STORAGE_KEY = "sro:v1150:experimental-options:1";
+// and the new default reaches every saved profile. It bumped again with
+// the SRO Macro default flip (owner, 2026-11-21): a record saved under
+// the :2 key migrates without its sroMacro value, and one under the
+// oldest (:1) key without its webTransport and sroMacro values. A
+// choice stored under the current key is kept as written.
+export const EXPERIMENTAL_STORAGE_KEY = "sro:v1150:experimental-options:3";
+export const PREVIOUS_EXPERIMENTAL_STORAGE_KEY = "sro:v1150:experimental-options:2";
+export const FIRST_EXPERIMENTAL_STORAGE_KEY = "sro:v1150:experimental-options:1";
+
+/*
+================
+migratedExperimentalOptions
+
+A record saved under an older key, read with the flipped rows' stored
+values dropped (see the keys above), or undefined when that key holds
+nothing. A stored value that is not a JSON object loads as itself, so
+every row falls back to its rule for an invalid record.
+================
+*/
+function migratedExperimentalOptions(
+	storage: Pick<Storage, "getItem"> | undefined,
+	key: string,
+	flippedRows: readonly string[]
+): { readonly options: ExperimentalOptions; readonly raw: unknown; } | undefined {
+	const stored = storage?.getItem( key ) ?? null;
+	if ( stored === null ) {
+		return undefined;
+	}
+	const parsed: unknown = JSON.parse( stored );
+	if ( typeof parsed !== "object" || parsed === null || Array.isArray( parsed ) ) {
+		return { options: experimentalOptions( parsed ), raw: parsed };
+	}
+	const raw: Record<string, unknown> = { ...(parsed as Record<string, unknown>) };
+	for ( const row of flippedRows ) {
+		delete raw[row];
+	}
+	return { options: experimentalOptions( raw ), raw };
+}
 
 /*
 ================
 storedExperimentalOptions
 
 The saved preferences from storage, or the defaults when there are none or
-they cannot be read. A record found only under the previous key migrates
-without its webTransport value (see the key above); the platform's next
-save writes the current key and retires the old one. The platform owns
+they cannot be read. A record found only under an older key migrates
+without the flipped rows' values (see the keys above); the platform's next
+save writes the current key and retires the old ones. The platform owns
 saving them; an owner that must act before the platform starts (the asset
 worker's texture variant) reads them here. Throws only for a stored value
 that is not JSON, which the platform reports.
@@ -589,17 +605,19 @@ export function storedExperimentalOptions( storage: Pick<Storage, "getItem"> | u
 		const raw: unknown = JSON.parse( stored );
 		return { options: experimentalOptions( raw ), raw };
 	}
-	const previous = storage?.getItem( PREVIOUS_EXPERIMENTAL_STORAGE_KEY ) ?? null;
-	if ( previous === null ) {
-		return { options: experimentalOptions(), raw: null };
+	const previous = migratedExperimentalOptions( storage, PREVIOUS_EXPERIMENTAL_STORAGE_KEY, [ "sroMacro" ] );
+	if ( previous !== undefined ) {
+		return previous;
 	}
-	const parsed: unknown = JSON.parse( previous );
-	if ( typeof parsed !== "object" || parsed === null || Array.isArray( parsed ) ) {
-		return { options: experimentalOptions( parsed ), raw: parsed };
+	const first = migratedExperimentalOptions(
+		storage,
+		FIRST_EXPERIMENTAL_STORAGE_KEY,
+		[ "webTransport", "sroMacro" ]
+	);
+	if ( first !== undefined ) {
+		return first;
 	}
-	const raw: Record<string, unknown> = { ...(parsed as Record<string, unknown>) };
-	delete raw.webTransport;
-	return { options: experimentalOptions( raw ), raw };
+	return { options: experimentalOptions(), raw: null };
 }
 
 /*
@@ -627,10 +645,7 @@ export interface ExperimentalVideo {
 	readonly sceneFxaa: boolean;
 	readonly smoothCamera: boolean;
 	readonly enchantSparks: boolean;
-	readonly sharedActorRoom: boolean;
 	readonly vHidesCompanions: boolean;
-	readonly dungeonCharacterPvs: boolean;
-	readonly silentWingFlight: boolean;
 }
 
 /*
@@ -656,10 +671,7 @@ export function experimentalVideo( options: ExperimentalOptions ): ExperimentalV
 		sceneFxaa: options.sceneFxaa,
 		smoothCamera: options.smoothCamera,
 		enchantSparks: options.enchantSparks,
-		sharedActorRoom: options.sharedActorRoom,
-		vHidesCompanions: options.vHidesCompanions,
-		dungeonCharacterPvs: options.dungeonCharacterPvs,
-		silentWingFlight: options.silentWingFlight
+		vHidesCompanions: options.vHidesCompanions
 	};
 }
 
@@ -679,10 +691,11 @@ export interface ExperimentalGameplay {
 	readonly highlightEventNotices?: boolean;
 	readonly webTransport: boolean;
 	readonly homingProjectiles?: boolean;
-	readonly smartPetPickup?: boolean;
 	readonly sunDropMarker?: boolean;
 	readonly warpArrivalSound?: boolean;
 	readonly christmasCarols?: boolean;
+	// Port-only (#3907): the SRO Macro's automation runs only while on.
+	readonly sroMacro?: boolean;
 	// The pickup pet filter's kind mask (ground-item's PICKUP_KIND bits);
 	// undefined while the filter row is off, which is the native loop.
 	readonly petPickupKinds?: number;
@@ -702,10 +715,10 @@ export function experimentalGameplay( options: ExperimentalOptions ): Experiment
 		breakNotices: options.breakNotices,
 		highlightEventNotices: options.highlightEventNotices,
 		homingProjectiles: options.homingProjectiles,
-		smartPetPickup: options.smartPetPickup,
 		sunDropMarker: options.sunDropMarker,
 		warpArrivalSound: options.warpArrivalSound,
 		christmasCarols: options.christmasCarols,
+		sroMacro: options.sroMacro,
 		petPickupKinds: options.petPickupFilter ?
 			(options.petFilterGold ? PICKUP_KIND_GOLD : 0) |
 			(options.petFilterEquipment ? PICKUP_KIND_EQUIPMENT : 0) |

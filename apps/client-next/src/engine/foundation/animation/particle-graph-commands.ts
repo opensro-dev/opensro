@@ -24,7 +24,7 @@ import {
 } from "@/engine/foundation/animation/particle-program";
 import { hypot3 } from "@/engine/foundation/math/hypot";
 import { onFrame } from "@/engine/foundation/animation/particle-graph-plan";
-import { NO_SLOT, type ParticleGraphState } from "@/engine/foundation/animation/particle-graph-slots";
+import { NO_SLOT, type ParticleGraphState, unitFrame } from "@/engine/foundation/animation/particle-graph-slots";
 
 /*
 ================
@@ -105,9 +105,10 @@ export function attract( graph: ParticleGraphState, s: number, source: number, s
 	const length = hypot3( d0, d1, d2 );
 	// Not a negated test: a NaN distance skips the pull, as native does.
 	if ( !(length > 1e-6) ) return;
-	velocity[at] = Math.fround( velocity[at]! + d0 * strength / length );
-	velocity[at + 1] = Math.fround( velocity[at + 1]! + d1 * strength / length );
-	velocity[at + 2] = Math.fround( velocity[at + 2]! + d2 * strength / length );
+	const pull = strength * graph.unit / length;
+	velocity[at] = Math.fround( velocity[at]! + d0 * pull );
+	velocity[at + 1] = Math.fround( velocity[at + 1]! + d1 * pull );
+	velocity[at + 2] = Math.fround( velocity[at + 2]! + d2 * pull );
 }
 
 /*
@@ -141,8 +142,10 @@ export function commands(
 			// AF4581: BAN mode 2 is frame * parent in native row storage.
 			// Our transposed storage reverses those operands.
 			if ( flags === 3 && sibling < 0 ) continue;
-			if ( flags === 0 ) matrix.set( rotation, s * 16 );
-			else {
+			if ( flags === 0 ) {
+				matrix.set( rotation, s * 16 );
+				unitFrame( graph, s );
+			} else {
 				// The authored rotation is a plain array: multiply, with the
 				// basis frame copied out of its slot.
 				copy16( matrix, (flags === 1 ? s : flags === 2 ? parent : sibling) * 16, scratch.basis, 0 );
@@ -187,7 +190,7 @@ export function commands(
 		if ( program.sphere && sphereFlags === SPHERE_POS_SIBLING && sibling < 0 ) continue;
 		const basis = coneFlags === 1 ? s : coneFlags === 3 ? sibling : parent, sample = scratch.sample;
 		copy16( matrix, basis * 16, scratch.basis, 0 );
-		graph.index = sampleParticle( samples[c]!, table, graph.index, scratch.basis, sample );
+		graph.index = sampleParticle( samples[c]!, table, graph.index, scratch.basis, sample, graph.unit );
 		const to = s * 3, sampled = sample.position as Float64Array, pushed = sample.velocity as Float64Array;
 		if ( program.sphere ) {
 			const base = (sphereFlags === SPHERE_POS_SELF ? s : sphereFlags === SPHERE_POS_SIBLING ? sibling : parent) *
@@ -227,6 +230,8 @@ function setPosition(
 	if ( flag >= 3 ) {
 		const basis = flag < 6 ? s : flag < 9 ? parent : sibling;
 		affineInto( graph.matrix, basis * 16, work[0]!, work[1]!, work[2]!, work, 0 );
+	} else {
+		for ( let i = 0; i < 3; i++ ) work[i] = work[i]! * graph.unit;
 	}
 	const base = originMode === 1 ? parent : originMode === 2 ? sibling : NO_SLOT;
 	const position = graph.position, at = s * 3;
@@ -264,6 +269,8 @@ export function vectors(
 			if ( flag ) {
 				const basis = flag === 1 ? s : flag === 2 ? graph.parent[s]! : sibling;
 				affineInto( graph.matrix, basis * 16, work[0]!, work[1]!, work[2]!, work, 0 );
+			} else {
+				for ( let i = 0; i < 3; i++ ) work[i] = work[i]! * graph.unit;
 			}
 			const force = op.name === "Force";
 			for ( let i = 0; i < 3; i++ ) velocity[at + i] = Math.fround( work[i]! + (force ? velocity[at + i]! : 0) );

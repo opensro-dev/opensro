@@ -176,6 +176,65 @@ func TestBoundContainerTransferSwapsMixedPairs(t *testing.T) {
 
 /*
 ================
+earnedPotion
+
+The stock HP potion as an inventory row, earned-marked or not (#4133).
+================
+*/
+func earnedPotion(slot uint8, earned bool, quantity uint16) Item {
+	return Item{
+		Slot: slot, RefObjID: 3630, TypeFlags: wire.PackTypeFlags(3, 3, 1, 1),
+		Quantity: quantity, EarnedBought: earned, RecordID: 1,
+	}
+}
+
+/*
+================
+TestEarnedPickupMergesOnlyWithEarned
+
+The earned mark rides the same identity as the seal: earned quantity
+poured into an unmarked row would come out untradable, and unmarked
+quantity poured into an earned row would come out tradable. Neither
+pour may happen.
+================
+*/
+func TestEarnedPickupMergesOnlyWithEarned(t *testing.T) {
+	for _, tc := range []struct {
+		bagEarned, grantEarned, merged bool
+	}{
+		{false, false, true},
+		{true, true, true},
+		{false, true, false},
+		{true, false, false},
+	} {
+		inv := New([]Item{earnedPotion(13, tc.bagEarned, 10)}, domain.DefaultInventorySize)
+		grant, fault := inv.GrantStack(earnedPotion(0, tc.grantEarned, 25), boundTestCap)
+		if fault != nil {
+			t.Fatal(fault)
+		}
+		if grant.Merged != tc.merged {
+			t.Fatalf("bag earned=%v, pickup earned=%v: merged=%v, want %v",
+				tc.bagEarned, tc.grantEarned, grant.Merged, tc.merged)
+		}
+		row, _ := inv.At(13)
+		if tc.merged {
+			if row.Quantity != 35 || row.EarnedBought != tc.bagEarned || inv.Len() != 1 {
+				t.Fatalf("bag earned=%v, pickup earned=%v: rows %+v",
+					tc.bagEarned, tc.grantEarned, inv.Items())
+			}
+			continue
+		}
+		landed, _ := inv.At(grant.DestSlot)
+		if row.Quantity != 10 || row.EarnedBought != tc.bagEarned ||
+			landed.Quantity != 25 || landed.EarnedBought != tc.grantEarned || inv.Len() != 2 {
+			t.Fatalf("bag earned=%v, pickup earned=%v poured across the mark: %+v",
+				tc.bagEarned, tc.grantEarned, inv.Items())
+		}
+	}
+}
+
+/*
+================
 TestBoundStorageEligibilitySplitsByBound
 ================
 */

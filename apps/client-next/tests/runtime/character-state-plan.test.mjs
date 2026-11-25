@@ -17,7 +17,13 @@ async function load( path ) {
 import { test } from "node:test";
 import assert from "node:assert/strict";
 const { createPaletteStreams } = await load( "src/engine/runtime/renderer/characters/palette-streams.ts" );
-const { createCharacterRenderPlan, characterBatchBytes, characterPoseBytes, createCharacterStateIndex } = {
+const {
+	createCharacterRenderPlan,
+	characterBatchBytes,
+	characterPoseBytes,
+	createCharacterStateIndex,
+	RENDERED_ACTORS
+} = {
 	...(await load( "src/engine/foundation/animation/character-render-plan.ts" )),
 	...(await load( "src/engine/foundation/animation/character-budget.ts" )),
 	...(await load( "src/engine/runtime/characters/state-index.ts" ))
@@ -48,10 +54,12 @@ test("admission plans preserve every capacity reservation including irregular pa
 		};
 		const plan = createCharacterRenderPlan( model );
 		assert.equal( plan.poseBytes, characterPoseBytes( model ) );
-		for ( let count = 0; count <= 512; count++ ) {
+		// A batch holds as many rows as the renderer holds actors: the scene's
+		// and the model particles' rooms (RENDERED_ACTORS).
+		for ( let count = 0; count <= RENDERED_ACTORS; count++ ) {
 			assert.equal( plan.batchBytes( count ), characterBatchBytes( model, count ), `count ${count}` );
 		}
-		assert.throws( () => plan.batchBytes( 513 ), /capacity/ );
+		assert.throws( () => plan.batchBytes( RENDERED_ACTORS + 1 ), /capacity/ );
 		assert.equal( plan.clips.get( "walk" ), model.clips[0] );
 	}
 });

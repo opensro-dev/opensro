@@ -25,6 +25,22 @@ import (
 
 /*
 ================
+wireQuestRoster
+
+The quest runtime's seats that read the NPC roster: the Blue Berserk level
+(wiring_hwan.go), then the check that every quest marker's NPC has an authored
+placement. Kept here so wiring_gameplay.go stays at the source-size limit.
+================
+*/
+func (game *gameplayPlane) wireQuestRoster(quests *quest.Runtime) error {
+	if err := game.wireHwanLevel(quests); err != nil {
+		return err
+	}
+	return game.validateQuestMarkerRoster()
+}
+
+/*
+================
 wireQuestDoors
 
 The quest runtime's own doors and the item lane's quest hooks: the
@@ -37,6 +53,9 @@ func (game *gameplayPlane) wireQuestDoors(quests *quest.Runtime) {
 	quests.PlanInventory = game.items.PlanQuestInventory
 	quests.SpawnQuestMonster = func(character *enterworld.Character, request simulation.QuestMonsterSpawn) bool {
 		return game.items.SpawnQuestMonster(game.divisionID, character, request)
+	}
+	quests.SelectedMonster = func(character *enterworld.Character) (string, simulation.Spawn, bool) {
+		return game.items.SelectedMonster(game.divisionID, character)
 	}
 	game.wireQuestProgrammes(quests)
 	game.items.CanPlaceQuestTrap = quests.CanPlaceTrap
@@ -164,7 +183,7 @@ func (game *gameplayPlane) wireQuestProgrammes(quests *quest.Runtime) {
 		facts := game.items.InstancePartyFacts(game.divisionID, character.Name)
 		return quest.InstancePartyFacts{
 			Found: facts.Found, InParty: facts.InParty, Leader: facts.Leader,
-			Shared: facts.Shared, Transported: facts.Transported,
+			Shared: facts.Shared, Transported: facts.Transported, JobSuit: facts.JobSuit,
 		}
 	}
 	quests.InstanceInvite = func(leader *enterworld.Character, call quest.InstanceInviteCall) quest.InstanceInviteOutcome {
@@ -175,6 +194,7 @@ func (game *gameplayPlane) wireQuestProgrammes(quests *quest.Runtime) {
 			Entry:      call.Entry,
 			DeadlineMs: call.DeadlineMs,
 			Eligible:   call.Eligible,
+			Solo:       call.Solo,
 		})
 		return quest.InstanceInviteOutcome{
 			Opened:   result.OpenStatus == instance.Success,
@@ -194,4 +214,5 @@ func (game *gameplayPlane) wireQuestProgrammes(quests *quest.Runtime) {
 	quests.RegisterEasteu21Programme()
 	quests.RegisterIvy3Programme()
 	quests.RegisterGoria7Programme()
+	quests.RegisterHwanArenaProgrammes()
 }

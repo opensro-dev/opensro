@@ -161,8 +161,7 @@ TestWolfMaximumHowlAppliesSixfoldRate
 func TestWolfMaximumHowlAppliesSixfoldRate(t *testing.T) {
 	rt, clock, c, _ := wolfFieldFixture(t, 1)
 	c.MissionInventory = nil
-	skill := learnPetBook(t, c, 3)
-	c.ActiveCOS.Training.Levels[skill.Index()] = 10
+	skill := learnPetBook(t, c, 3) // book III's only rank: +500%
 	rt.castWolfHowl(testDivision, c, c.ActiveCOS.GID, skill, clock.NowMs())
 	step, ok := rt.wolfCompanion(testDivision, c, c.ActiveCOS.GID, clock.NowMs())
 	if !ok || rt.petAttackSpeed(step) != 6 || rt.EntryActionSpeed(testDivision, c.Name) != float32(100.0/6) {

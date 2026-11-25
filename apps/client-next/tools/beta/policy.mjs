@@ -211,9 +211,15 @@ export async function files( root, prefix = "" ) {
 /*
 ================
 verifyDirectory
+
+inspected maps a release path to the sha256 of the bytes its builder
+already inspected in this process (build.mjs add). A file whose bytes still
+hash to that record is hash-checked but not inspected again: re-decoding
+every pack member took about 30 s of each release package (#4337). Every
+other caller passes nothing and gets the full inspection.
 ================
 */
-export async function verifyDirectory( root ) {
+export async function verifyDirectory( root, { inspected = new Map() } = {} ) {
 	const manifest = JSON.parse( await readFile( path.join( root, "release.json" ), "utf8" ) );
 	if (
 		manifest.format !== "sro-beta-release-v1" || !Array.isArray( manifest.files ) ||
@@ -236,7 +242,7 @@ export async function verifyDirectory( root ) {
 	for ( const e of manifest.files ) {
 		const b = await readFile( path.join( root, e.path ) );
 		if ( b.length !== e.length || sha( b ) !== e.sha256 ) throw Error( "Release hash mismatch: " + e.path );
-		inspect( e.path, b, { application: e.kind === "application" } );
+		if ( inspected.get( e.path ) !== e.sha256 ) inspect( e.path, b, { application: e.kind === "application" } );
 	}
 	const routes = new Set();
 	const entries = new Map( manifest.files.map( e => [ e.path, e ] ) );

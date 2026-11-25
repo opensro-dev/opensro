@@ -18,7 +18,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import fc from "fast-check";
 
-const { questObjectivePresentation } = await import(
+const { questObjectivePresentation, decodeQuestPresentation } = await import(
 	sourceFileUrl( "src/engine/foundation/ui/quest-presentation.ts" ).href
 );
 const content = ( fields = {} ) => ({
@@ -137,4 +137,85 @@ test("quest countdown advances one native tick after a delayed frame and switche
 	assert.deepEqual( timers.step( [ q ], 3641000, 2 ).notices, [ 9 ] );
 	for ( let i = 2; i <= 10; i++ ) timers.step( [ q ], 3640000 + i * 1000, 2 );
 	assert.equal( timers.step( [ q ], 4000000, 2 ).changed, false );
+});
+
+test("a selection quest's reward block rides its record; malformed blocks refuse whole", () => {
+	const reward = {
+		selectionCount: 1,
+		gold: 0,
+		exp: 5100,
+		skillPoints: 0,
+		skillExp: 1800,
+		ap: 0,
+		jobExp: 0,
+		choices: [
+			{ item: "ITEM_A", refId: 10414, count: 1, name: "Str Scroll", icon: "item/etc/a.ddj" },
+			{ item: "ITEM_B", refId: 10415, count: 2, name: "Int Scroll" }
+		]
+	};
+	const catalog = {
+		version: 5,
+		rows: [ [ 167, 10, "SN_T", "SN_PAY", "SN_PC", "SN_NN", "SN_NC" ].join( "\t" ) ],
+		giveupWarnBytes: [ 0 ],
+		progressClearBytes: [ 0 ],
+		rewards: { "167": reward },
+		textEntries: { SN_T: "Title" }
+	};
+	const { records } = decodeQuestPresentation( catalog );
+	assert.deepEqual( records[167].reward, reward );
+	assert.equal( records[167].title, "Title" );
+	for (
+		const bad of [
+			{ ...reward, selectionCount: 0 },
+			{ ...reward, selectionCount: 3 },
+			{ ...reward, choices: reward.choices.slice( 0, 1 ) },
+			{ ...reward, gold: -1 },
+			{ ...reward, choices: [ reward.choices[0], { ...reward.choices[1], refId: 0 } ] },
+			{ ...reward, choices: [ reward.choices[0], { ...reward.choices[1], name: "" } ] }
+		]
+	) {
+		assert.throws(
+			() => decodeQuestPresentation( { ...catalog, rewards: { "167": bad } } ),
+			/Invalid quest reward catalog/
+		);
+	}
+});
+
+test("the published quest data carries the three selection quests' reward blocks", () => {
+	const catalog = JSON.parse( readFileSync( CLIENT_PUBLIC_ROOT + "/assets/data/questData.json", "utf8" ) );
+	const { records } = decodeQuestPresentation( catalog );
+	for ( const [id, choices] of [ [ 9, 14 ], [ 160, 13 ], [ 167, 2 ] ] ) {
+		const reward = records[id]?.reward;
+		assert.ok( reward, "quest " + id + " has a reward block" );
+		assert.equal( reward.selectionCount, 1 );
+		assert.equal( reward.choices.length, choices );
+		for ( const choice of reward.choices ) {
+			assert.ok( choice.refId > 0 && choice.name !== "", "choice resolves: " + choice.item );
+		}
+	}
+});
+
+test("a quest above level 90 (the cap-110 Blue Berserk chains) keeps its title and texts", () => {
+	const catalog = {
+		version: 5,
+		rows: [
+			[ 100, 90, "SN_A", "SN_PA", "SN_PC", "SN_NN", "SN_NC" ].join( "\t" ),
+			[ 360, 95, "SN_B", "SN_PB", "SN_PD", "SN_NNB", "SN_NCB" ].join( "\t" ),
+			[ 600, 110, "SN_C", "SN_PC2", "SN_PD2", "SN_NNC", "SN_NCC" ].join( "\t" )
+		],
+		giveupWarnBytes: [ 0, 0, 0 ],
+		progressClearBytes: [ 0, 0, 0 ],
+		textEntries: {
+			SN_A: "Old quest",
+			SN_B: "Military Test 1 (Europe)",
+			SN_NCB: "Available 1 Time Only",
+			SN_C: "Late quest"
+		}
+	};
+	const { records } = decodeQuestPresentation( catalog );
+	assert.equal( records[100].title, "Old quest" );
+	assert.equal( records[360].title, "Military Test 1 (Europe)" );
+	assert.equal( records[360].condition, "Available 1 Time Only" );
+	assert.equal( records[600].title, "Late quest" );
+	assert.equal( records[600].level, 110 );
 });

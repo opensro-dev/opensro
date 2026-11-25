@@ -19,6 +19,7 @@ to send, so the coordinator only forwards them; market-window.ts draws.
 ===========================================================================
 */
 import type {
+	MarketArmor,
 	MarketCurrency,
 	MarketDestination,
 	MarketOffer,
@@ -30,6 +31,7 @@ import type {
 	MarketSort,
 	MarketState
 } from "@/engine/contracts/market";
+import { MARKET_ARMOR_VALUES, MARKET_RARITY_VALUES } from "@/engine/contracts/market";
 import {
 	MARKET_MAX_DEGREE,
 	MARKET_MAX_PAGE,
@@ -50,10 +52,11 @@ export const MARKET_SORT_ORDER: readonly MarketSort[] = [ "newest", "ending", "p
 export const MARKET_CURRENCY_FILTERS: readonly (MarketCurrency | "")[] = [ "", "gold", "silk" ];
 // The race and rarity filters, "" for all.
 export const MARKET_RACES: readonly (MarketRace | "")[] = [ "", "ch", "eu" ];
-export const MARKET_RARITIES: readonly (MarketRarity | "")[] = [ "", "sealed", "normal" ];
+export const MARKET_RARITIES: readonly (MarketRarity | "")[] = [ "", ...MARKET_RARITY_VALUES ];
+export const MARKET_ARMORS: readonly (MarketArmor | "")[] = [ "", ...MARKET_ARMOR_VALUES ];
 // The search line's dropdowns; "" is none open.
-export type MarketMenu = "" | "degree" | "race" | "rarity" | "currency" | "sort";
-export const MARKET_MENUS: readonly MarketMenu[] = [ "degree", "race", "rarity", "currency", "sort" ];
+export type MarketMenu = "" | "degree" | "race" | "rarity" | "armor" | "currency" | "sort";
+export const MARKET_MENUS: readonly MarketMenu[] = [ "degree", "race", "rarity", "armor", "currency", "sort" ];
 // K opens and closes the market (virtual key 0x4B): no native default
 // binding uses it (input-options.ts), and a player's own binding wins.
 export const MARKET_HOTKEY_VK = 0x4b;
@@ -113,6 +116,7 @@ export interface MarketHudState {
 	readonly degree: number;
 	readonly race: MarketRace | "";
 	readonly rarity: MarketRarity | "";
+	readonly armor: MarketArmor | "";
 	// The open dropdown of the search line.
 	readonly menu: MarketMenu;
 	readonly page: number;
@@ -178,6 +182,7 @@ const CLOSED: MarketHudState = {
 	degree: 0,
 	race: "",
 	rarity: "",
+	armor: "",
 	menu: "",
 	page: 1,
 	selected: 0,
@@ -255,7 +260,7 @@ a degree or a filter. The empty result offers to clear only then.
 ================
 */
 export function marketSearchNarrowed( s: MarketHudState ): boolean {
-	return !!(s.query.trim() || s.category || s.degree || s.race || s.rarity || s.currency);
+	return !!(s.query.trim() || s.category || s.degree || s.race || s.rarity || s.armor || s.currency);
 }
 
 /*
@@ -350,6 +355,8 @@ function chooseFilter( menu: MarketMenu, value: string ): Partial<MarketHudState
 			return MARKET_RACES.includes( value as MarketRace ) ? { race: value as MarketRace | "" } : null;
 		case "rarity":
 			return MARKET_RARITIES.includes( value as MarketRarity ) ? { rarity: value as MarketRarity | "" } : null;
+		case "armor":
+			return MARKET_ARMORS.includes( value as MarketArmor ) ? { armor: value as MarketArmor | "" } : null;
 		case "currency":
 			return MARKET_CURRENCY_FILTERS.includes( value as MarketCurrency ) ?
 				{ currency: value as MarketCurrency | "" } :
@@ -382,6 +389,7 @@ export function createMarketHud() {
 		...(s.degree ? { degree: s.degree } : {}),
 		...(s.race ? { race: s.race } : {}),
 		...(s.rarity ? { rarity: s.rarity } : {}),
+		...(s.armor ? { armor: s.armor } : {}),
 		...(s.currency ? { currency: s.currency } : {}),
 		sort: s.sort,
 		page
@@ -539,6 +547,7 @@ export function createMarketHud() {
 					degree: 0,
 					race: "",
 					rarity: "",
+					armor: "",
 					currency: "",
 					page: 1,
 					selected: 0

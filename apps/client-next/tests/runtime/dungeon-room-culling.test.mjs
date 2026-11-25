@@ -27,9 +27,6 @@ const { minimapPoseKey } = await import(
 	"../../src/engine/foundation/gameplay/minimap-floor-key.ts"
 );
 const { publishCharacters } = await import( "../../src/engine/runtime/characters/presentation-finalize.ts" );
-const { experimentalOptions, experimentalVideo } = await import(
-	"../../src/engine/foundation/ui/experimental-options.ts"
-);
 
 const DUNGEON = 0x8001, OUTDOOR = 25000, WEST_ROOM = 3, EAST_ROOM = 4, DOOR_X = 500;
 const roomAt = x => x < DOOR_X ? WEST_ROOM : EAST_ROOM;
@@ -195,7 +192,6 @@ function selectDungeon( entities, gameplayOverrides = {}, options = {} ) {
 		gameplay,
 		localGid: options.localGid ?? gameplay.localGid,
 		mountedOn: options.mountedOn,
-		dungeonCharacterPvs: options.dungeonCharacterPvs ?? true,
 		dungeonBlockHides
 	} );
 	const selection = createCharacterSelection( options.limit ?? 375 );
@@ -235,17 +231,12 @@ test("selection rejects other-room and other-floor entities before top-K ranking
 	);
 });
 
-test("selection admits everything when dungeonCharacterPvs is off or outdoors", () => {
+test("selection admits everything outdoors", () => {
 	const entities = [
 		entityAt( 1, { kind: "local-player", x: 100, dungeonBlock: WEST_ROOM, floor: FLOOR_4 } ),
 		entityAt( 2, { x: 101, dungeonBlock: EAST_ROOM, floor: FLOOR_4 } ),
 		entityAt( 3, { x: 102, dungeonBlock: WEST_ROOM, floor: FLOOR_1 } )
 	];
-	assert.deepEqual(
-		selectDungeon( entities, {}, { dungeonCharacterPvs: false } ),
-		[ 1, 2, 3 ],
-		"Experimental off matches native selection"
-	);
 	assert.deepEqual(
 		selectDungeon(
 			entities.map( e => ({ ...e, regionId: OUTDOOR }) ),
@@ -333,7 +324,8 @@ test("publishCharacters publishes selected actors without a second room-culling 
 		gameplay: { navigationBlock: WEST_ROOM },
 		next: new Map( [ 1, 2 ].map( gid => [ gid, { gid, model: "m" + gid, blindable: gid === 2 } ] ) ),
 		seconds: 0,
-		blindHeld: true
+		blindHeld: true,
+		modelParticles: 0
 	});
 	const bindings = /** @type {any} */ ({
 		renderer: {
@@ -360,7 +352,8 @@ test("publishCharacters drops the /hideme local player's body", () => {
 		gameplay: undefined,
 		next: new Map( [ 1, 2 ].map( gid => [ gid, { gid, model: "m" + gid } ] ) ),
 		seconds: 0,
-		blindHeld: false
+		blindHeld: false,
+		modelParticles: 0
 	});
 	const bindings = /** @type {any} */ ({
 		renderer: {
@@ -378,15 +371,4 @@ test("publishCharacters drops the /hideme local player's body", () => {
 	assert.equal( byGid.get( 1 ).opacity, 0 );
 	assert.equal( byGid.get( 1 ).pickable, false );
 	assert.equal( byGid.get( 2 ).opacity, undefined );
-});
-
-test("dungeon character PVS is on unless explicitly false", () => {
-	for ( const value of [ undefined, null, {}, { dungeonCharacterPvs: 1 }, { dungeonCharacterPvs: "true" } ] ) {
-		assert.equal( experimentalOptions( value ).dungeonCharacterPvs, true );
-	}
-	const off = experimentalOptions( { dungeonCharacterPvs: false } );
-	assert.equal( off.dungeonCharacterPvs, false );
-	assert.equal( experimentalVideo( off ).dungeonCharacterPvs, false );
-	assert.equal( experimentalVideo( experimentalOptions( {} ) ).dungeonCharacterPvs, true );
-	assert.equal( "dungeonRoomCulling" in experimentalOptions( { dungeonRoomCulling: false } ), false );
 });

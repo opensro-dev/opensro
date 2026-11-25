@@ -163,20 +163,17 @@ def add_stones(native, output, v1696_root=None):
 			for row in tables.table_rows(read(name[0]))]
 		later_texts = [row for name in nasrun.LATER_TEXT_TABLES for row in avatars.later_text_rows(media, index, name)]
 	stones = select_stones(later_rows)
-	# Identities stand above every published row of the merged item
-	# tables (the variant's accumulated shards, hunting2's posture),
-	# never in the character band other imports reserve.
-	native_ids = set()
 	stone_codes = {stone[2] for stone in stones}
 	for path in sorted(text_root.glob("itemdata*.txt")):
 		if path.name == ITEM_SHARD:
 			continue
 		for row in tables.table_rows(path.read_bytes()):
-			if len(row) > 2 and row[0] == "1":
-				native_ids.add(int(row[1]))
-				if row[2] in stone_codes:
-					raise ValueError(f"gears stone {row[2]} already stands in the native tables")
-	allocated = published_ids.allocate(published_ids.OBJECTS, native_ids, [stone[2] for stone in stones], prior.get("items", {}))
+			if len(row) > 2 and row[0] == "1" and row[2] in stone_codes:
+				raise ValueError(f"gears stone {row[2]} already stands in the native tables")
+	# Identities stand above every object row of the tree, items and
+	# characters alike: the stones once took the fox pets' ids (#3994).
+	occupied = published_ids.occupied_objects(text_root, (ITEM_SHARD,))
+	allocated = published_ids.allocate(published_ids.OBJECTS, occupied, [stone[2] for stone in stones], prior.get("items", {}))
 	rows = []
 	for stone in stones:
 		row = list(stone)

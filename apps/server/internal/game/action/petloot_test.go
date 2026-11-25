@@ -60,6 +60,35 @@ func TestMonsterPetGearAllDegreesAndSlots(t *testing.T) {
 
 /*
 ================
+TestArenaPetGearStartsDegreeTenAtLevelNinety
+================
+*/
+func TestArenaPetGearStartsDegreeTenAtLevelNinety(t *testing.T) {
+	rt, _, c, _ := newCombatTestRuntime(t, 1)
+	rt.AttackPetExpansion = true
+	rt.DropRoll = constantDropRoll(dropRollDomain - 1)
+	items := rt.deps.ItemReferences().(staticItemSource)
+	for _, degree := range companion.D.Gear[8:] {
+		for _, gear := range degree.Items {
+			items[gear.Codename] = &enterworld.ItemRef{RefObjID: gear.ID, Codename: gear.Codename, TypeIDs: [4]int64{3, 3, 9, 0}}
+		}
+	}
+	for _, level := range []int64{89, 90, 100} {
+		c.Level = testInt64(level)
+		reward, delivered := rt.arenaReward(&sookArenaRun{}, c, 1, 1)
+		degree, _, ok := companion.GearByID(reward.RefObjID)
+		want := 9
+		if level >= 90 {
+			want = 10
+		}
+		if !delivered || !ok || degree.Degree != want {
+			t.Fatalf("level %d pet reward = %+v, want degree %d", level, reward, want)
+		}
+	}
+}
+
+/*
+================
 TestPetGearInheritsNativeSealRoll
 ================
 */

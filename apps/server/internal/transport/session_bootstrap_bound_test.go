@@ -55,9 +55,9 @@ func bootstrapBoundSession(t *testing.T, bound time.Duration) (*Session, *manual
 TestSceneBootstrapStuckClosesAtEntryBound
 
 Begin an admission and never enqueue a bootstrap: the watchdog must
-close the session and say so. Without the watchdog the session sits
-in scene-loading until the idle timeout, which scene-loading pings
-keep postponing forever.
+close the session and say so. Without the watchdog nothing would
+reap the wedged admission: the idle detach waits out any scene load
+(#4139), however long it sits.
 ================
 */
 func TestSceneBootstrapStuckClosesAtEntryBound(t *testing.T) {

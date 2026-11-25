@@ -166,25 +166,31 @@ TestStorageGoldDepositCaps
 
 Off, one deposit moves at most the native 100,000,000. On, a
 1,000,000,000 deposit is accepted and one above the raised cap is
-refused. The guild warehouse shares storageMutation, so it shares this.
+refused. A shard's configured value replaces both: a 2,000,000,000
+deposit is accepted under it and one above it is refused. The guild
+warehouse shares storageMutation, so it shares this.
 ================
 */
 func TestStorageGoldDepositCaps(t *testing.T) {
 	for _, tc := range []struct {
 		name     string
 		on       bool
+		limit    uint64
 		amount   uint32
 		accepted bool
 	}{
-		{"off native ceiling", false, 100_000_000, true},
-		{"off above native", false, 100_000_001, false},
-		{"on one billion", true, 1_000_000_000, true},
-		{"on above raised", true, 1_000_000_001, false},
+		{"off native ceiling", false, 0, 100_000_000, true},
+		{"off above native", false, 0, 100_000_001, false},
+		{"on one billion", true, 0, 1_000_000_000, true},
+		{"on above raised", true, 0, 1_000_000_001, false},
+		{"configured two billion", false, 2_000_000_000, 2_000_000_000, true},
+		{"configured above refused", false, 2_000_000_000, 2_000_000_001, false},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			rt, c, authority := storageFixture(t)
 			rt.RaisedGoldCaps = tc.on
-			setGold(c, 2_000_000_000)
+			rt.StorageGoldDepositLimit = tc.limit
+			setGold(c, 3_000_000_000)
 			// The test's encoder applies the native client's 100,000,000
 			// clamp, so the payload is written by hand: the server must
 			// refuse a larger amount on its own.
@@ -203,6 +209,32 @@ func TestStorageGoldDepositCaps(t *testing.T) {
 				t.Fatalf("refused deposit changed the room to %d", authority.room.Gold)
 			}
 		})
+	}
+}
+
+/*
+================
+TestStorageGoldWithdrawsAboveTheRaisedCap
+
+Withdrawals carry no cap beyond the stored balance: under the widest
+configured deposit cap, 2,000,000,000 goes in and comes back out in
+single moves.
+================
+*/
+func TestStorageGoldWithdrawsAboveTheRaisedCap(t *testing.T) {
+	rt, c, authority := storageFixture(t)
+	rt.StorageGoldDepositLimit = MaxStorageGoldDepositLimit
+	setGold(c, 2_000_000_000)
+	move := func(kind byte, amount uint32) []byte {
+		return []byte{kind, byte(amount), byte(amount >> 8), byte(amount >> 16), byte(amount >> 24)}
+	}
+	r := rt.HandleItemMove(testDivision, c, move(wire.MoveTypeStorageGoldDeposit, 2_000_000_000))
+	if r.Frames[0].Payload[0] != 1 || authority.room.Gold != 2_000_000_000 {
+		t.Fatalf("deposit = % X room %d", r.Frames[0].Payload, authority.room.Gold)
+	}
+	r = rt.HandleItemMove(testDivision, c, move(wire.MoveTypeStorageGoldWithdraw, 2_000_000_000))
+	if r.Frames[0].Payload[0] != 1 || authority.room.Gold != 0 || goldOf(c) != 2_000_000_000 {
+		t.Fatalf("withdraw = % X room %d gold %d", r.Frames[0].Payload, authority.room.Gold, goldOf(c))
 	}
 }
 

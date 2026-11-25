@@ -18,12 +18,29 @@ const {
 	defaultVideoOptions,
 	changeVideo,
 	videoOptions,
+	resetVideoRecord,
+	BRIGHTNESS_STEP_DEFAULT,
+	brightnessGamma,
+	brightnessStepKeys,
 	backgroundDrawDistance,
 	uiPixelScaleFor,
-	fitCanvasViewport
+	fitCanvasViewport,
+	surfaceSize,
+	SURFACE_MAX_DIMENSION
 } = await import(
 	sourceFileUrl( "src/engine/foundation/rendering/video-options.ts" ).href
 );
+test("a page wider than the device's texture limit gets a backing store it can configure (#4028)", () => {
+	assert.deepEqual( surfaceSize( 1920, 1080 ), { width: 1920, height: 1080 } );
+	assert.deepEqual( surfaceSize( SURFACE_MAX_DIMENSION, 4000 ), { width: SURFACE_MAX_DIMENSION, height: 4000 } );
+	// The reported Apple window: 8820 x 5226 failed configure at 8192.
+	const wide = surfaceSize( 8820, 5226 );
+	assert.equal( wide.width, SURFACE_MAX_DIMENSION );
+	assert.ok( Math.abs( wide.width / wide.height - 8820 / 5226 ) < 0.001, "aspect kept" );
+	const tall = surfaceSize( 3000, 12000 );
+	assert.equal( tall.height, SURFACE_MAX_DIMENSION );
+	assert.ok( tall.width <= SURFACE_MAX_DIMENSION && tall.width >= 2047 );
+});
 test("background range and effect quality survive the persisted two-record option format", () => {
 	let options = defaultVideoOptions();
 	const untouched = [ ...options.records[1] ];
@@ -55,6 +72,50 @@ test("native store-only slots and implemented water/cloth settings persist indep
 	assert.equal( backgroundDrawDistance( saved ), backgroundDrawDistance( defaultVideoOptions() ) );
 	assert.equal( videoOptions( changeVideo( saved, 4, 1 ) ).records[0][4], 1 );
 	assert.equal( videoOptions( changeVideo( saved, 12, 0 ) ).records[0][12], 0 );
+});
+
+/*
+================
+Brightness steps (#3908)
+
+The later client's five-step brightness spin: a presentation preference
+beside the frame limit, never a native record byte. Normal is the
+default step and the identity gamma; a persisted file without the
+field predates the setting and reads as Normal.
+================
+*/
+test("the brightness step defaults to Normal, persists, and validates", () => {
+	assert.equal( BRIGHTNESS_STEP_DEFAULT, 2 );
+	assert.deepEqual( brightnessStepKeys(), [
+		"UILM_TEXT_BRIGHT_FIRST",
+		"UILM_TEXT_BRIGHT_SECOND",
+		"UILM_TEXT_BRIGHT_THIRD",
+		"UILM_TEXT_BRIGHT_FORTH",
+		"UILM_TEXT_BRIGHT_FIFTH"
+	] );
+	assert.equal( defaultVideoOptions().brightness, BRIGHTNESS_STEP_DEFAULT );
+	const bare = JSON.parse( JSON.stringify( defaultVideoOptions() ) );
+	delete bare.brightness;
+	assert.equal( videoOptions( bare ).brightness, BRIGHTNESS_STEP_DEFAULT );
+	assert.equal( videoOptions( { ...bare, brightness: 0 } ).brightness, 0 );
+	assert.equal( videoOptions( { ...bare, brightness: 4 } ).brightness, 4 );
+	for ( const bad of [ 5, -1, 1.5, "2" ] ) {
+		assert.throws( () => videoOptions( { ...bare, brightness: bad } ), /Invalid brightness/, String( bad ) );
+	}
+	// A detail change keeps the step, and the page reset restores Normal.
+	assert.equal( changeVideo( { ...bare, brightness: 4 }, 0, 1 ).brightness, 4 );
+	assert.equal( resetVideoRecord( { ...bare, brightness: 4 } ).brightness, BRIGHTNESS_STEP_DEFAULT );
+});
+test("the brightness gamma is the identity at Normal and monotone across the steps", () => {
+	assert.equal( brightnessGamma( undefined ), 1 );
+	assert.equal( brightnessGamma( BRIGHTNESS_STEP_DEFAULT ), 1 );
+	let previous = 0;
+	for ( let step = 0; step < brightnessStepKeys().length; step++ ) {
+		const gamma = brightnessGamma( step );
+		assert.ok( gamma > previous, "step " + step + " brighter than step " + (step - 1) );
+		previous = gamma;
+	}
+	assert.equal( brightnessGamma( 99 ), 1 );
 });
 
 /*

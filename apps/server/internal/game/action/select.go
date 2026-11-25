@@ -322,6 +322,11 @@ func (rt *Runtime) HandleObjectSelect(divisionID string, character *enterworld.C
 		return refusedSelect(err.Error())
 	}
 
+	// Port-only (#3648): a Styria Clash treasure box's select is its
+	// opening (styria_score.go); the match owner answers it.
+	if outcome, handled := rt.styriaSelect(divisionID, character, gid); handled {
+		return outcome
+	}
 	// Capture the Flag arena objects (flagwar_arena.go) live outside
 	// every roster; the match owner answers their selects itself.
 	if outcome, handled := rt.flagWarSelect(divisionID, character, gid); handled {
@@ -419,11 +424,6 @@ func (rt *Runtime) HandleObjectSelect(divisionID string, character *enterworld.C
 			Opcode:  wire.OpObjectSelectResult,
 			Payload: wire.EncodeMonsterObjectSelectResult(gid, target.monster.CurrentHP),
 		}}
-		// Port-only, not native (#3349): a Muhan change NPC is a nest
-		// entity that offers Talk (muhan_change.go).
-		if change := rt.muhanChangeSelect(divisionID, character, gid); change != nil {
-			outcome.Frames = change
-		}
 	}
 	if target.cos {
 		outcome.Frames = []wire.Frame{{
@@ -492,6 +492,10 @@ func (rt *Runtime) resolveLiveObject(
 				simulation.NpcVisibleAt(*npc, viewer) {
 				return selectedObject{npc: &rt.NpcRoster[index]}, true
 			}
+		}
+		// A static world NPC of the character's own world (worldnpc.go).
+		if npc := rt.worldNpcAt(character, gid); npc != nil && simulation.NpcVisibleAt(*npc, viewer) {
+			return selectedObject{npc: npc}, true
 		}
 	}
 	// Shared monsters are selectable only while they are live and inside

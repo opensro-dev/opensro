@@ -28,6 +28,7 @@ import (
 	"opensro.online/server/internal/config/shardsettings"
 	"opensro.online/server/internal/game/action"
 	"opensro.online/server/internal/game/progression"
+	"opensro.online/server/internal/game/quest"
 )
 
 /*
@@ -88,6 +89,13 @@ func (settings portOnlySettings) validate() error {
 			_, err = action.ParseBetaSilk(raw)
 		case shardsettings.ValueBetaGrowthBands:
 			_, err = progression.ParseGrowthBands(raw)
+		case shardsettings.ValueHwanKnob:
+			_, err = quest.HwanKnobsFromEnv(func(name string) string {
+				if name == setting.Env {
+					return raw
+				}
+				return ""
+			})
 		default:
 			err = fmt.Errorf("unknown validation kind %d", setting.Validation)
 		}
@@ -128,6 +136,20 @@ refusal code in one window, so both read this one value.
 */
 func (settings portOnlySettings) maintenanceMessage() string {
 	raw, _ := settings["maintenance_message"].(string)
+	return raw
+}
+
+/*
+================
+comingSoonShards
+
+The captured coming-soon switch, which only the Agent job takes
+(agentVariables): the Agent lists announced-but-unopened shards on the
+title server list (#3925); the GameWorld has no list to mark.
+================
+*/
+func (settings portOnlySettings) comingSoonShards() string {
+	raw, _ := settings["coming_soon_shards"].(string)
 	return raw
 }
 

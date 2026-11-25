@@ -280,13 +280,7 @@ A USU1 skill: a persistent, pinned item program (skillitemeffect.go).
 ================
 */
 func (rt *Runtime) compositeSkill(codename string) (enterworld.SkillRow, bool) {
-	source, ok := rt.deps.SkillData().(interface {
-		SkillByCodename(string) (enterworld.SkillRow, bool)
-	})
-	if !ok {
-		return enterworld.SkillRow{}, false
-	}
-	skill, found := source.SkillByCodename(codename)
+	skill, found := rt.skillByCodename(codename)
 	return skill, found && skill.TimedEffect.Pinned && skill.TimedEffect.ItemProgram && skill.EffectDurationMs > 0
 }
 
@@ -312,6 +306,22 @@ func (rt *Runtime) useCompositeScroll(divisionID string, character *enterworld.C
 	if hasCooltime && character.ItemGroupCooldowns[group] > nowMs {
 		*result = itemUseFailure(wire.ErrCodeItemReuseDelay)
 		return false
+	}
+	// An Energy of Life scroll (hwan.go): refused while one's rows are on the
+	// bar (port-only: the client keeps one extension value), and the cooldown it
+	// shares with the buff starts at the buff's charge, not at the scroll.
+	energyScroll := false
+	for _, work := range plan.works {
+		if work.TargetCodename == hwanChargeItem {
+			energyScroll = true
+		}
+	}
+	if energyScroll {
+		if hwanEffectOnBar(character, nowMs) {
+			*result = itemUseFailure(wire.ErrCodeItemReuseDelay)
+			return false
+		}
+		hasCooltime = false
 	}
 	if len(plan.skills) > 0 {
 		if _, err := rt.PlayerBaseStats(divisionID, character); err != nil {

@@ -48,6 +48,7 @@ import (
 	"math"
 
 	"opensro.online/server/internal/domain"
+	"opensro.online/server/internal/platform/sqlitecol"
 )
 
 // marketSchema holds the listings and the sales; dbSchema carries it for a
@@ -105,14 +106,14 @@ CREATE INDEX IF NOT EXISTS market_offers_buyer ON market_offers (buyer_account, 
 
 // marketColumns are the columns later than the first market tables, by
 // table, with their definitions: ensureMarket adds each one a file lacks.
-var marketColumns = []struct{ table, column, definition string }{
-	{"market_listings", "seller_name", "TEXT NOT NULL DEFAULT ''"},
-	{"market_listings", "anonymous", "INTEGER NOT NULL DEFAULT 0"},
-	{"market_sales", "seller_char", "INTEGER NOT NULL DEFAULT 0"},
-	{"market_sales", "unpaid", "INTEGER NOT NULL DEFAULT 0"},
-	{"market_sales", "codename", "TEXT NOT NULL DEFAULT ''"},
-	{"market_sales", "dest", "TEXT NOT NULL DEFAULT 'warehouse'"},
-	{"market_sales", "slot", "INTEGER NOT NULL DEFAULT 0"},
+var marketColumns = []sqlitecol.Column{
+	{Table: "market_listings", Name: "seller_name", Definition: "TEXT NOT NULL DEFAULT ''"},
+	{Table: "market_listings", Name: "anonymous", Definition: "INTEGER NOT NULL DEFAULT 0"},
+	{Table: "market_sales", Name: "seller_char", Definition: "INTEGER NOT NULL DEFAULT 0"},
+	{Table: "market_sales", Name: "unpaid", Definition: "INTEGER NOT NULL DEFAULT 0"},
+	{Table: "market_sales", Name: "codename", Definition: "TEXT NOT NULL DEFAULT ''"},
+	{Table: "market_sales", Name: "dest", Definition: "TEXT NOT NULL DEFAULT 'warehouse'"},
+	{Table: "market_sales", Name: "slot", Definition: "INTEGER NOT NULL DEFAULT 0"},
 }
 
 // marketLateIndexes index the later columns, so they are created only
@@ -149,45 +150,13 @@ func ensureMarket(db *sql.DB) error {
 	if _, err := db.Exec(marketSchema); err != nil {
 		return fmt.Errorf("market: %w", err)
 	}
-	for _, c := range marketColumns {
-		present, err := tableHasColumn(db, c.table, c.column)
-		if err != nil {
-			return fmt.Errorf("market: %w", err)
-		}
-		if present {
-			continue
-		}
-		if _, err := db.Exec("ALTER TABLE " + c.table + " ADD COLUMN " + c.column + " " + c.definition); err != nil {
-			return fmt.Errorf("market: add %s.%s: %w", c.table, c.column, err)
-		}
+	if err := sqlitecol.Ensure(db, marketColumns); err != nil {
+		return fmt.Errorf("market: %w", err)
 	}
 	if _, err := db.Exec(marketLateIndexes); err != nil {
 		return fmt.Errorf("market: %w", err)
 	}
 	return nil
-}
-
-/*
-================
-tableHasColumn
-================
-*/
-func tableHasColumn(db *sql.DB, table, column string) (bool, error) {
-	rows, err := db.Query("SELECT name FROM pragma_table_info(?)", table)
-	if err != nil {
-		return false, err
-	}
-	defer rows.Close()
-	for rows.Next() {
-		var name string
-		if err := rows.Scan(&name); err != nil {
-			return false, err
-		}
-		if name == column {
-			return true, nil
-		}
-	}
-	return false, rows.Err()
 }
 
 /*
@@ -229,7 +198,7 @@ listFromStorageLocked
 ================
 */
 func (s *Store) listFromStorageLocked(req domain.MarketListRequest, listing domain.MarketListing) (domain.MarketListing, error) {
-	storage, err := readAccountStorage(s.syncDBLocked(), req.Account)
+	storage, err := s.readAccountStorage(s.syncDBLocked(), req.Account)
 	if err != nil {
 		return domain.MarketListing{}, err
 	}
@@ -286,7 +255,7 @@ func (s *Store) listFromBagLocked(req domain.MarketListRequest, listing domain.M
 	listing.Item = row
 	committed := *character
 	committed.MissionInventory = rest
-	tx, err := s.beginCharacterTxLocked()
+	tx, err := s.beginCharacterTxLocked("market-list")
 	if err != nil {
 		return domain.MarketListing{}, err
 	}
@@ -390,7 +359,7 @@ func (s *Store) settleSaleLocked(t saleTerms) (domain.MarketSale, error) {
 		// The warehouse unless the bag is named: the website has no bag.
 		sale.To = domain.MarketToWarehouse
 		var err error
-		if buyerStorage, err = readAccountStorage(db, t.buyer); err != nil {
+		if buyerStorage, err = s.readAccountStorage(db, t.buyer); err != nil {
 			return domain.MarketSale{}, err
 		}
 		slot, free := freeStorageSlot(buyerStorage)
@@ -445,7 +414,7 @@ func (s *Store) settleSaleLocked(t saleTerms) (domain.MarketSale, error) {
 			// Read before the transaction: the store has one connection, so a
 			// read outside an open transaction would wait on it forever.
 			var err error
-			if sellerStorage, err = readAccountStorage(db, listing.SellerAccount); err != nil {
+			if sellerStorage, err = s.readAccountStorage(db, listing.SellerAccount); err != nil {
 				return domain.MarketSale{}, err
 			}
 			if sellerStorage.Gold > math.MaxInt64-(t.price-fee) {
@@ -459,7 +428,7 @@ func (s *Store) settleSaleLocked(t saleTerms) (domain.MarketSale, error) {
 	// One character row when the payer's bag receives the item.
 	sameRecord := gold && toBag && t.receiver == t.payer
 
-	tx, err := s.beginCharacterTxLocked()
+	tx, err := s.beginCharacterTxLocked("market-buy")
 	if err != nil {
 		return domain.MarketSale{}, err
 	}
@@ -469,7 +438,6 @@ func (s *Store) settleSaleLocked(t saleTerms) (domain.MarketSale, error) {
 			return domain.MarketSale{}, err
 		}
 	}
-	settle := func() {}
 	if gold {
 		committed := *t.payer
 		committed.Gold = &paidGold
@@ -477,9 +445,6 @@ func (s *Store) settleSaleLocked(t saleTerms) (domain.MarketSale, error) {
 			committed.MissionInventory = withRow(t.payer.MissionInventory, item)
 		}
 		if err := tx.upsertCharacter(payerDivision, &committed); err != nil {
-			return domain.MarketSale{}, err
-		}
-		if settle, err = s.ledgerOwnTxLocked(tx.Tx, "market-buy", payerDivision, t.payer, paidGold); err != nil {
 			return domain.MarketSale{}, err
 		}
 		if creditWarehouse {
@@ -525,7 +490,6 @@ func (s *Store) settleSaleLocked(t saleTerms) (domain.MarketSale, error) {
 	if toBag {
 		t.receiver.MissionInventory = withRow(t.receiver.MissionInventory, item)
 	}
-	settle()
 	return sale, nil
 }
 
@@ -610,7 +574,7 @@ func (s *Store) MarketReclaim(req domain.MarketReclaimRequest) (domain.MarketLis
 	}
 	item := listing.Item
 	item.Slot = req.BagSlot
-	tx, err := s.beginCharacterTxLocked()
+	tx, err := s.beginCharacterTxLocked("market-reclaim")
 	if err != nil {
 		return domain.MarketListing{}, err
 	}
@@ -680,7 +644,7 @@ listings. A held item is never dropped.
 ================
 */
 func (s *Store) returnListingLocked(listing domain.MarketListing, fallBackToHeld bool) (domain.MarketListing, error) {
-	storage, err := readAccountStorage(s.syncDBLocked(), listing.SellerAccount)
+	storage, err := s.readAccountStorage(s.syncDBLocked(), listing.SellerAccount)
 	if err != nil {
 		return domain.MarketListing{}, err
 	}

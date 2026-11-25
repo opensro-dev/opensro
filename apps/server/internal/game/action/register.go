@@ -12,12 +12,14 @@ package action
 
 import (
 	"encoding/json"
+	"sync/atomic"
 	"time"
 
 	log "github.com/sirupsen/logrus"
 	"opensro.online/server/internal/domain"
 	"opensro.online/server/internal/game/enterworld"
 	"opensro.online/server/internal/game/item/wire"
+	"opensro.online/server/internal/game/macro"
 	"opensro.online/server/internal/game/social/guild"
 	"opensro.online/server/internal/game/world/simulation"
 	"opensro.online/server/internal/transport"
@@ -53,6 +55,8 @@ Register
 func (rt *Runtime) Register(hub *transport.Hub) {
 	hub.Handle(opArenaDecision, rt.hubHandler(hub, rt.HandleArenaDecision))
 	hub.Handle(OpCaravanHireRequest, rt.hubHandler(hub, rt.HandleCaravanHire))
+	// 0x7554 SRO Macro settings (macro.go; port-only, silent while off).
+	hub.Handle(macro.OpRequest, rt.hubHandler(hub, rt.HandleMacroRequest))
 	rt.registerDeparture(hub)
 	rt.registerMall(hub)
 	rt.registerCrest(hub)
@@ -125,6 +129,9 @@ func (rt *Runtime) Register(hub *transport.Hub) {
 	rt.registerStorage(hub)
 	rt.registerNpcDialogResponse(hub)
 	hub.Handle(wire.OpRebirthPointAppointRequest, rt.hubHandler(hub, rt.HandleRebirthPointAppointment))
+	// 0x34C6 is the party leader's summon into an instanced world
+	// (party_summon.go; the later client's staged request bytes).
+	hub.Handle(opPartySummonRequest, rt.hubHandler(hub, rt.HandlePartySummon))
 	// Gacha's roll request shares this runtime's selected NPC, inventory
 	// authority and per-division operation lock. Generic 0x7338 is registered
 	// above by the NPC owner, never conditionally by this child feature.
@@ -246,6 +253,7 @@ func (rt *Runtime) hubHandlerPrepared(hub *transport.Hub, op opFunc, prepare opP
 			result = op(divisionID, character, payload)
 		}
 		if result.DiagnosticRefusal != "" {
+			rt.countDiagnosticRefusal(result.DiagnosticRefusal)
 			log.Debugf(
 				"action: 0x%04X refused for %s: %s",
 				opcode, character.Name, result.DiagnosticRefusal,
@@ -267,6 +275,42 @@ func (rt *Runtime) hubHandlerPrepared(hub *transport.Hub, op opFunc, prepare opP
 			}
 		}
 	}
+}
+
+/*
+================
+countDiagnosticRefusal
+
+Counts one DiagnosticRefusal reason for /transport/metrics (#4222). The
+live server used to drop these: a refused pet order left no 0xB69E and
+no log line, so the next report could not name its cause. Reasons must
+stay fixed literals (no Sprintf or per-request interpolation): the map
+never forgets a key, so a growing vocabulary would grow forever.
+================
+*/
+func (rt *Runtime) countDiagnosticRefusal(reason string) {
+	if reason == "" {
+		return
+	}
+	entry, _ := rt.diagnosticRefusalTotals.LoadOrStore(reason, &atomic.Uint64{})
+	entry.(*atomic.Uint64).Add(1)
+}
+
+/*
+================
+DiagnosticRefusalCounters
+
+The metrics' diagnostic_refusals block: each DiagnosticRefusal reason
+seen since start, counted once per refused request.
+================
+*/
+func (rt *Runtime) DiagnosticRefusalCounters() map[string]uint64 {
+	out := make(map[string]uint64)
+	rt.diagnosticRefusalTotals.Range(func(key, value any) bool {
+		out[key.(string)] = value.(*atomic.Uint64).Load()
+		return true
+	})
+	return out
 }
 
 /*
@@ -333,10 +377,8 @@ hold (#1613: an attacker's observer got a killed rider's dismount).
 ================
 */
 func frameSourceGID(defaultSourceGID uint32, f wire.Frame) uint32 {
-	if f.Opcode == wire.OpCosRideState {
-		if rider, ok := wire.CosRideStateRider(f.Payload); ok {
-			return rider
-		}
+	if rider, ok := wire.FrameRideRider(f.Opcode, f.Payload); ok {
+		return rider
 	}
 	if f.Opcode == wire.OpObjectDespawn && len(f.Scope) == 1 && !f.Scope[0].Visible {
 		gid := f.Scope[0].GID

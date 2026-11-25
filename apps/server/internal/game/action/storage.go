@@ -309,6 +309,18 @@ func (rt *Runtime) HandleStorageList(divisionID string, character *enterworld.Ch
 	if err != nil {
 		return nil, err.Error()
 	}
+	// Native deletes an out-of-period rental as the warehouse loads
+	// (_DelExpiredRentItemInStorage, rental_items.go): an expired
+	// rental leaves before the room lists.
+	if rentalRowsExpired(storage.Rows, rt.Now().Unix()) {
+		storage, err = rt.storageAuthority.TransactStorage(character, func(_ *domain.Character, room *domain.AccountStorage) error {
+			removeExpiredRentRows(&room.Rows, rt.Now().Unix())
+			return nil
+		})
+		if err != nil {
+			return nil, err.Error()
+		}
+	}
 	list, err := rt.storageListPayload(storage)
 	if err != nil {
 		return nil, err.Error()
@@ -495,7 +507,8 @@ func (rt *Runtime) storageMutation(movement uint8, q wire.ItemMoveRequest) func(
 		case wire.MoveTypeStorageGoldDeposit:
 			amount := int64(q.GoldAmount)
 			// The client caps a deposit at 100,000,000 natively (59A430);
-			// SRO_RAISED_GOLD_CAPS raises both sides to 1,000,000,000.
+			// SRO_RAISED_GOLD_CAPS raises both sides, to 1,000,000,000 or
+			// to the shard's chosen value (goldcaps.go).
 			if amount <= 0 || uint64(amount) > rt.storageGoldDepositLimit() {
 				return storageRefusal(wire.ErrCodeInvalidRequest)
 			}

@@ -186,7 +186,6 @@ test("six tabs group every preference once, in the spec's sections", () => {
 	// Scene FXAA, the cheap edge smoothing, follows MSAA.
 	assert.equal( image.indexOf( "sceneFxaa" ), image.indexOf( "msaa" ) + 1 );
 	assert.deepEqual( EXPERIMENTAL_TABS[5].sections[1].rows.map( row => row.key ), [
-		"smartPetPickup",
 		"petPickupFilter",
 		"petFilterGold",
 		"petFilterEquipment",
@@ -195,16 +194,25 @@ test("six tabs group every preference once, in the spec's sections", () => {
 		"petFilterOther"
 	] );
 	const keys = EXPERIMENTAL_TABS.flatMap( tab => experimentalRows( tab ).map( row => row.key ) );
-	// Every option has a row; the own-walk presenter has none (owner 2026-10-25).
+	// Every option has a row.
 	// 65: the Entire-map level checkbox (#3258) left when the v1.188
 	// window's own foot checkbox became the map's native switch, and the
 	// unique spawn points row (#3417) joined World map (M); 66: Silent wing
 	// flight (#3547) joined Sound and connection; 65: Water refraction left
 	// at the owner's request (2026-11-15); 66: the Christmas carols row
 	// joined Sound and connection; 65: Plus +7 notices left once success
-	// notices began at +8 (#3681). Retail typos are fixed in the reviewed
+	// notices began at +8 (#3681); 66: the SRO Macro (#3907) joined Combat;
+	// 57: nine rows that only fixed what the original got wrong became plain
+	// defaults (owner 2026-11-21); 58: the guide's hunting-ground waypoint
+	// (#3394) joined Map and minimap; 59: the Event Calendar (#3532)
+	// joined Game; 60: the Unique Status window (#3531) joined Combat;
+	// 61: the Consignment Market's menu entry (#3529) joined Combat;
+	// 62: the Job Honor Rank (#3530) joined Game; 63: the login
+	// Maintenance notice (#3925) joined Game.
+	// The Server Mission gauge (#3803) has no row: it is the v1.696 client's
+	// own window, native here. Retail typos are fixed in the reviewed
 	// English table (englishCorrections.json), not by a row.
-	assert.equal( keys.length, 65 );
+	assert.equal( keys.length, 63 );
 	assert.deepEqual( [ ...keys ].sort(), Object.keys( OFF ).sort() );
 	const kinds = EXPERIMENTAL_TABS.flatMap( experimentalRows ).filter( row => row.parent );
 	assert.deepEqual(

@@ -256,6 +256,80 @@ test("an Agent edge route resolves against the API URL, so the socket stays on t
 	}
 });
 
+test("the Agent's transportRoute alone decides whether WebTransport is dialed", async t => {
+	const sockets = [], transports = [];
+	class Socket {
+		static OPEN = 1;
+		readyState = 0;
+		bufferedAmount = 0;
+		constructor( url ) {
+			sockets.push( String( url ) );
+		}
+		send() {}
+		close() {}
+	}
+	// A QUIC path that refuses at once, so the host case falls back too.
+	class Transport {
+		ready = Promise.reject( new Error( "refused" ) );
+		closed = new Promise( () => {} );
+		constructor( url ) {
+			this.ready.catch( () => {} );
+			transports.push( String( url ) );
+		}
+		close() {}
+	}
+	for ( const [name, value] of [ [ "WebSocket", Socket ], [ "WebTransport", Transport ] ] ) {
+		const descriptor = Object.getOwnPropertyDescriptor( globalThis, name );
+		Object.defineProperty( globalThis, name, { value, configurable: true, writable: true } );
+		t.after( () => {
+			if ( descriptor ) Object.defineProperty( globalThis, name, descriptor );
+			else Reflect.deleteProperty( globalThis, name );
+		} );
+	}
+	const { experimentalGameplay, experimentalOptions } = await import(
+		sourceFileUrl( path.join( root, "src/engine/foundation/ui/experimental-options.ts" ) ).href
+	);
+	// The Agent states the form (catalog.go TransportEdgeRoute). The client
+	// reads that, never the string: an Agent that sends no statement is a
+	// host as before, whatever its URL looks like.
+	for (
+		const [transportUrl, transportRoute, quic] of [
+			[ "/shards/shard", true, 0 ],
+			[ "https://play.example.com/eu", false, 1 ],
+			[ "/shards/shard", undefined, 1 ]
+		]
+	) {
+		sockets.length = 0;
+		transports.length = 0;
+		t.mock.method(
+			globalThis,
+			"fetch",
+			async url =>
+				Response.json(
+					url.endsWith( "/title/login" ) ?
+						{ ...response, transportUrl, transportRoute } :
+						{ ok: true, token: "fixture-ticket" }
+				)
+		);
+		const session = createSession();
+		// The shipped default turns the WebTransport row on.
+		session.command( { kind: "experimental-gameplay", value: experimentalGameplay( experimentalOptions() ) } );
+		session.command( { ...command, apiBase: "https://192.168.1.20:5180/api" } );
+		session.step( 0 );
+		await settle();
+		session.step( 1 );
+		session.command( { kind: "enter-world", character: "fixture" } );
+		for ( let i = 0; i < 20 && !sockets.length; i++ ) {
+			await new Promise( resolve => setTimeout( resolve, 5 ) );
+			session.step( 2 + i );
+		}
+		assert.equal( transports.length, quic, `${transportUrl} (${transportRoute}) WebTransport dials` );
+		assert.equal( sockets.length, 1, `${transportUrl} (${transportRoute}) reaches the socket` );
+		session.dispose();
+		t.mock.restoreAll();
+	}
+});
+
 test("native login argument is validated, published and cleared on retry and success", async t => {
 	let body = {
 		ok: false,
@@ -627,6 +701,7 @@ test("server listing is unauthenticated and rejects duplicate routing identities
 		nativeFarmId: 1,
 		isTest: false,
 		operating: true,
+		comingSoon: false,
 		transportUrl: "http://localhost:9000"
 	};
 	let rows = [ server ];
@@ -1011,8 +1086,8 @@ test("a server speaking another release protocol marks the session outdated and 
 	await settle();
 	const state = session.step();
 	assert.equal( state.releaseOutdated, true );
-	assert.match( state.error, /newer version/i );
-	// Every later state keeps saying so: the page must be refreshed.
+	assert.match( state.error, /being updated/i );
+	// Every later state keeps saying so: the page reloads once a newer one is served.
 	session.command( { kind: "servers", apiBase: command.apiBase } );
 	session.step();
 	await settle();

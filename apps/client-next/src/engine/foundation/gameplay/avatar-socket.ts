@@ -44,6 +44,33 @@ export function isAvatarItem( typeFlags: number ): boolean {
 
 /*
 ================
+isSpiritItem
+
+A Devil's / Angel's Spirit (TID 3/1/14), the item the Spirit socket holds.
+================
+*/
+export function isSpiritItem( typeFlags: number ): boolean {
+	return (typeFlags & TYPE_KIND_MASK) === SPIRIT_KIND;
+}
+
+/*
+================
+isDormantSpirit
+
+A Spirit that has never been used: its data word (the bag row's
+durability field) is still 0. The server wears only an awake Spirit and
+answers any other with 0x18F9, a code the v1.150 notice table lacks, so
+the client must send the use that wakes it instead of an equip
+(server nasrun/clock.go Awake and Wake; #4364). A woken Spirit carries
+its expiry in unix seconds and is never dormant again.
+================
+*/
+export function isDormantSpirit( typeFlags: number, data: number ): boolean {
+	return isSpiritItem( typeFlags ) && data === 0;
+}
+
+/*
+================
 avatarSocket
 
 The socket an item is worn in: TID4 (1..4) for a v1.150 avatar,

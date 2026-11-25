@@ -66,13 +66,19 @@ BUILDER = Path(__file__).with_name("build_alexandria_variant.py")
 CODE_STAMP = REPO_ROOT / "scripts" / "build" / "shared" / "codeStamp.mjs"
 # SRO_* variables the variant never reads: they name the asset build's own
 # outputs (sro_paths resolves them, the importers never open them) or set
-# how many workers run, not what they produce.
+# how many workers run, not what they produce. SRO_CENSUS_JOBS is the UI
+# census width the release now passes through (ops #507): r204l's rebuild
+# read it as a variant input ("rebuilding: env:SRO_CENSUS_JOBS").
 # The asset build's content caches (SRO_SHARED_CACHE_ROOT, generatedRoot.mjs)
 # hold results named by their own inputs, never a variant input: r203's
 # release walked the whole cache as a source, and each build's own cache
 # writes made the next one rebuild the variant from scratch.
 SHARED_CACHE_ROOT_ENV = "SRO_SHARED_CACHE_ROOT"
-IGNORED_ENV = frozenset(("SRO_BUILD_JOBS", "SRO_GENERATED_ROOT", "SRO_SERVER_GAME_DATA_ROOT", "SRO_CHECK_FORCE",
+# The worker counts come from the one list every cache key shares
+# (scripts/data/speed-variables.json).
+SPEED_VARIABLES_PATH = REPO_ROOT / "scripts" / "data" / "speed-variables.json"
+SPEED_VARIABLES = frozenset(json.loads(SPEED_VARIABLES_PATH.read_text(encoding="utf-8"))["variables"])
+IGNORED_ENV = SPEED_VARIABLES | frozenset(("SRO_GENERATED_ROOT", "SRO_SERVER_GAME_DATA_ROOT", "SRO_CHECK_FORCE",
 	SHARED_CACHE_ROOT_ENV))
 ENV_PREFIX = "SRO_"
 # The importers' source variables, by their naming convention:
@@ -84,12 +90,19 @@ SOURCE_VARIABLE = re.compile(r"SRO_\w+_(?:ROOT|ZIP|DATABASE|NESTS)")
 OUTPUT_ROOTS = frozenset(("SRO_GAME_ROOT", "SRO_GENERATED_ROOT", "SRO_SERVER_GAME_DATA_ROOT", SHARED_CACHE_ROOT_ENV))
 # A single source file up to this size is hashed by content, not stat.
 SMALL_FILE = 64 << 20
-# Calls one export of codeStamp.mjs on the builder and prints its result.
+# Calls one export of codeStamp.mjs and prints its result. Its arguments
+# (the entry - a file, or the files a step ran - and any after the
+# repository root) arrive as JSON on stdin, so a step that ran a hundred
+# files never meets the command line's length limit; the repository root
+# is passed only by callers keying a tree other than this checkout (the
+# variant step tests).
 CODE_STAMP_SCRIPT = (
 	"const { pathToFileURL } = await import( 'node:url' );"
-	"const [ owner, name, entry ] = process.argv.slice( 1 );"
+	"const { readFileSync } = await import( 'node:fs' );"
+	"const [ owner, name, root ] = process.argv.slice( 1 );"
+	"const [ entry, ...rest ] = JSON.parse( readFileSync( 0, 'utf8' ) );"
 	"const stamp = await import( pathToFileURL( owner ).href );"
-	"console.log( JSON.stringify( await stamp[name]( entry ) ) );"
+	"console.log( JSON.stringify( await stamp[name]( entry, root || undefined, ...rest ) ) );"
 )
 
 
@@ -103,14 +116,21 @@ def stamp_path(variant_root: Path) -> Path:
 # ================
 # code_stamp
 #
-# One export of codeStamp.mjs (codeClosure or codeHash) on the builder: the
-# one owner of code closures, so the variant and the asset lanes agree on
-# what counts as code (imports, named scripts, pin files beside a module).
+# One export of codeStamp.mjs (codeClosure or codeHash) on an entry file:
+# the one owner of code closures, so the variant and the asset lanes agree
+# on what counts as code (imports, named scripts, pin files beside a
+# module). The entry defaults to the builder; the step journal keys each
+# step from its own module through here (variant_steps.py).
 # ================
-def code_stamp(export: str):
+def code_stamp(export: str, entry=BUILDER, repository_root: Path | None = None, rest=()):
+	argv = ["node", "--input-type=module", "-e", CODE_STAMP_SCRIPT, str(CODE_STAMP), export]
+	if repository_root is not None:
+		argv.append(str(repository_root))
+	def plain(value):
+		return [plain(item) for item in value] if isinstance(value, (list, tuple)) else str(value)
 	result = subprocess.run(
-		["node", "--input-type=module", "-e", CODE_STAMP_SCRIPT, str(CODE_STAMP), export, str(BUILDER)],
-		cwd=REPO_ROOT, capture_output=True, text=True, encoding="utf-8", check=False
+		argv, cwd=REPO_ROOT, input=json.dumps([plain(entry)] + [plain(item) for item in rest]),
+		capture_output=True, text=True, encoding="utf-8", check=False
 	)
 	if result.returncode != 0:
 		raise SystemExit(f"variant stamp: {export} failed (exit {result.returncode}):\n{result.stderr}")
@@ -120,8 +140,22 @@ def code_stamp(export: str):
 # ================
 # code_closure
 # ================
-def code_closure() -> list[Path]:
-	return [Path(file) for file in code_stamp("codeClosure")]
+def code_closure(entry: Path = BUILDER, repository_root: Path | None = None) -> list[Path]:
+	return [Path(file) for file in code_stamp("codeClosure", entry, repository_root)]
+
+
+# ================
+# module_closures
+#
+# codeStamp's moduleClosures: for each (ran, imported) record of a step,
+# what it ran and imported, their module-level imports and the pins beside
+# them, and the scripts the files that ran name - every record in one Node
+# start.
+# ================
+def module_closures(records: list[tuple], repository_root: Path | None = None) -> list[list[Path]]:
+	if not records:
+		return []
+	return [[Path(file) for file in closure] for closure in code_stamp("moduleClosures", records, repository_root)]
 
 
 # ================
@@ -173,24 +207,58 @@ def file_key(path: Path, content: bool) -> str:
 
 
 # ================
+# native_skipped
+#
+# The top folders of the native root no variant build reads through it:
+# the stage 1 import's own output. When that folder is the import in
+# use it is a source root of its own (taken by content); when the build
+# names another --imported-root (a release staging) it is never read. A
+# stage 1 run in the hub rewrote it and so invalidated every variant
+# step of an unrelated release build (r204h, 2188 s, #4251).
+# ================
+def native_skipped() -> tuple[str, ...]:
+	# Imported here, not at load: it imports build_alexandria_variant, which
+	# imports this module.
+	import import_vsro_alexandria
+	return (import_vsro_alexandria.OUTPUT_FOLDER,)
+
+
+# ================
 # tree_fingerprint
 #
 # sha256 over (relative path, file key) of a file or of every file under a
-# folder. A single file up to SMALL_FILE is always taken by content.
+# folder. A single file up to SMALL_FILE is always taken by content. skip
+# names top folders of root left out (native_skipped).
 # ================
-def tree_fingerprint(root: Path, content: bool = False) -> str:
+def tree_fingerprint(root: Path, content: bool = False, skip: tuple[str, ...] = ()) -> str:
 	digest = hashlib.sha256()
 	if root.is_file():
 		digest.update(file_key(root, content or root.stat().st_size <= SMALL_FILE).encode())
 		return digest.hexdigest()
 	rows = []
-	for directory, _, names in os.walk(root):
+	for directory, folders, names in os.walk(root):
+		if skip and Path(directory) == root:
+			folders[:] = [folder for folder in folders if folder not in skip]
 		for name in names:
 			absolute = Path(directory, name)
 			rows.append(f"{absolute.relative_to(root).as_posix()}\0{file_key(absolute, content)}")
 	for row in sorted(rows):
 		digest.update(row.encode("utf-8") + b"\n")
 	return digest.hexdigest()
+
+
+# ================
+# source_fingerprint
+#
+# One source root's fingerprint under the build's arguments: the stage 1
+# import in use is taken by content, and the native root leaves out the
+# folders native_skipped names. The stamp and the step journal both ask
+# here, so a root fingerprints the same way in both.
+# ================
+def source_fingerprint(root: Path, native=None, imported=None) -> str:
+	by_content = imported is not None and root == Path(imported).resolve()
+	skip = native_skipped() if native is not None and root == Path(native).resolve() else ()
+	return tree_fingerprint(root, by_content, skip)
 
 
 # ================
@@ -215,7 +283,7 @@ def read_inputs(native: Path, imported: Path, vsro_root: Path, variant: Path, en
 			"variant": str(Path(variant).resolve())
 		},
 		"sources": {
-			str(root): tree_fingerprint(root, root == Path(imported).resolve())
+			str(root): source_fingerprint(root, native, imported)
 			for root in source_roots(native, imported, vsro_root, variant, environ)
 		}
 	}

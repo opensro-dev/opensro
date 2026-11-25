@@ -31,6 +31,7 @@ import {
 import { panelCloseId } from "@/engine/foundation/ui/panels";
 import { minimapSameFloor } from "@/engine/foundation/ui/minimap-floor";
 import { questMarkerTargets, rosterPositions } from "@/engine/foundation/ui/minimap-markers";
+import { questLocationTargets } from "@/engine/foundation/ui/quest-locations";
 import {
 	worldMapDemand,
 	expandedWorldMapOn,
@@ -46,8 +47,9 @@ import {
 	type MapMarker,
 	mapLabelVisible
 } from "@/engine/foundation/ui/world-map";
-import { guideOverlay, guideRace } from "@/engine/foundation/ui/worldmap-guide";
+import { guideDungeonGround, guideMonsterTarget, guideOverlay, guideRace } from "@/engine/foundation/ui/worldmap-guide";
 import { NATIVE_LEVEL_CAP } from "@/engine/foundation/gameplay/level-cap";
+import { huntingPose } from "@/engine/foundation/gameplay/hunting";
 import { HUNTING_AREA_PREFIX, HUNTING_MONSTER_SIGN } from "@/engine/foundation/ui/hunting-guide";
 import { UNIQUE_NEST_SIGN } from "@/engine/foundation/ui/unique-nests";
 import { createHuntingGuideHud } from "./hunting-guide";
@@ -139,6 +141,7 @@ interface MapPaint {
 		| null
 		| undefined;
 	trackedQuest: number;
+	locatedQuest?: number | undefined;
 	minimapResources: { positions(): ReturnType<typeof minimapNpcPositions> | undefined; };
 	// The dungeon pages, read by the caller this frame.
 	caveMaps?: CaveMapCatalog | undefined;
@@ -273,6 +276,17 @@ export function createWorldMapHud( options: MapHudOptions ) {
 		},
 		/*
 		================
+		guideWaypoint
+
+		The guide pick's point for the minimap (port-only, #3394),
+		delegated from the guide's tool state; see hud/map-tools.ts.
+		================
+		*/
+		guideWaypoint(): Pose | null {
+			return mapTools.guideWaypoint();
+		},
+		/*
+		================
 		restorePosition
 		================
 		*/
@@ -321,6 +335,22 @@ export function createWorldMapHud( options: MapHudOptions ) {
 				return true;
 			}
 			return false;
+		},
+		/*
+		================
+		locate
+
+		Centres the map on an external point (the quest list's locate
+		button, issue #4245): the view leaves follow mode, holds this
+		centre and picks its page, like the guide pick in activate.
+		================
+		*/
+		locate( center: Pose ) {
+			mapTools.clearView();
+			mapFollow = false;
+			mapPan = [ 0, 0 ];
+			mapCenter = { ...center };
+			mapPage = worldMapPageAt( center, mapLayout );
 		},
 		/*
 		================
@@ -602,13 +632,45 @@ export function createWorldMapHud( options: MapHudOptions ) {
 						} );
 					}
 				}
+				// Issue #4245: the located quest's own sign (the later
+				// client's wmap_quest_icon), over its NPC sign pass.
+				if ( input.locatedQuest !== undefined && game ) {
+					for ( const quest of game.quests ?? [] ) {
+						if ( quest.refId !== input.locatedQuest ) continue;
+						for ( const id of quest.targetIds ) {
+							const target = minimapResources.positions()?.get( id );
+							if ( target && minimapSameFloor( pose, target, game ?? null ) ) {
+								mapMarkers.push( {
+									regionId: target.regionId,
+									x: target.x,
+									z: target.z,
+									rotation: 0,
+									path: ROOT + "interface/worldmap/wmap_quest_icon.png"
+								} );
+							}
+						}
+					}
+				}
+				// Port-only: the spot a quest tool is used at (quest-locations.ts).
+				for (
+					const spot of questLocationTargets( game?.quests, experimental.state().saved.questTrackerMarkers )
+				) {
+					if ( !minimapSameFloor( pose, spot, game ?? null ) ) continue;
+					mapMarkers.push( {
+						regionId: spot.regionId,
+						x: spot.x,
+						z: spot.z,
+						rotation: 0,
+						path: ROOT + "interface/worldmap/wmap_sign_questnpc.png"
+					} );
+				}
 				for ( const point of game?.huntingPoints ?? [] ) {
-					const live = next.entities.find( e => e.gid === point.gid ) ?? point;
+					const live = huntingPose( point, next.entities );
 					mapMarkers.push( {
 						regionId: live.regionId,
 						x: live.x,
 						z: live.z,
-						rotation: -point.angle * Math.PI * 2 / 65536,
+						rotation: -live.angle * Math.PI * 2 / 65536,
 						path: ROOT + "interface/worldmap/wmap_sign_huntingpoint.png"
 					} );
 				}
@@ -682,6 +744,25 @@ export function createWorldMapHud( options: MapHudOptions ) {
 			const toolsPage = mapTools.cavePage( input.caveMaps, pose );
 			const cavePage = toolsPage?.page ?? indoorPage;
 			const caveMark = mapTools.mark();
+			// The monster picked in the guide, when the floor on screen
+			// is its own: its hunting ground for the cave page
+			// (worldmap-guide.ts guideDungeonGround, issue #3395).
+			const cavePick = mapTools.guidePick();
+			const caveTarget = cavePick ? guideMonsterTarget( cavePick.catalog, cavePick.index ) : null;
+			const caveFloor = caveTarget?.kind === "dungeon" && input.caveMaps ?
+				caveDungeonFloors( input.caveMaps, caveTarget.dungeon )[caveTarget.floor] :
+				undefined;
+			const guideCaveGround = cavePick && caveFloor && cavePage &&
+					caveFloor.regionId === cavePage.regionId && caveFloor.floorIndex === cavePage.floorIndex ?
+				guideDungeonGround( cavePick.catalog, cavePick.index ) :
+				null;
+			// The roster signs stand only on the page of the floor
+			// the player stands on (issue #3775): the roster is
+			// already admitted to that floor, so a page of another
+			// floor - or one browsed from above ground - is a chart.
+			const caveLocal = pose && cavePage && input.caveMaps ?
+				cavePageLocal( input.caveMaps, cavePage, pose, game?.navigationFloor ) :
+				false;
 			const caveMap = mapOpen && pose && cavePage && input.caveMaps ?
 				caveMapView( {
 					pose,
@@ -693,8 +774,18 @@ export function createWorldMapHud( options: MapHudOptions ) {
 					pan: mapFollow ? [ 0, 0 ] : mapPan,
 					// The "you are here" sign stands only on the floor
 					// the player is on (issue #3239).
-					local: cavePageLocal( input.caveMaps, cavePage, pose, game?.navigationFloor ),
-					mark: caveMark && caveMark.regionId === cavePage.regionId ? caveMark : null
+					local: caveLocal,
+					mark: caveMark && caveMark.regionId === cavePage.regionId ? caveMark : null,
+					roster: caveLocal ?
+						roster
+							.filter( row => row.regionId === cavePage.regionId )
+							.map( row => ({
+								x: row.x,
+								z: row.z,
+								path: ROOT + "interface/worldmap/wmap_sign_" + row.kind + ".png"
+							}) ) :
+						undefined,
+					ground: guideCaveGround
 				} ) :
 				null;
 			mapCaveShown = caveMap !== null;
@@ -804,7 +895,15 @@ export function createWorldMapHud( options: MapHudOptions ) {
 				);
 			}
 			const mapImages = caveMap ?
-				cavePageImages( caveMap, text, mapClip, hover ) :
+				// A mask drawn before its image loads would tint the
+				// whole tile square: each waits for its own texture.
+				cavePageImages(
+					caveMap,
+					text,
+					mapClip,
+					hover,
+					caveMap.ground.filter( q => resources.has( q.texture ) )
+				) :
 				mapProjection ?
 				[
 					...mapProjection.background,
@@ -900,6 +999,7 @@ export function createWorldMapHud( options: MapHudOptions ) {
 					...(mapGuide?.paths ?? []),
 					...(levelGround?.paths ?? []),
 					...(guideGround?.paths ?? []),
+					...(guideCaveGround?.paths ?? []),
 					...mapImages.map( q => q.texture ).filter( Boolean )
 				);
 			} else if ( cavePage && input.caveMaps ) {

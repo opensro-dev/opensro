@@ -10,9 +10,10 @@ package action
 
 import (
 	"math"
-	"opensro.online/server/internal/game/item/wire"
 
 	"opensro.online/server/internal/game/enterworld"
+	"opensro.online/server/internal/game/item/commerce"
+	"opensro.online/server/internal/game/item/wire"
 )
 
 /*
@@ -46,6 +47,7 @@ const (
 	itemUsePetExtension
 	itemUseResurrection
 	itemUseStatRecall
+	itemUseSkillRecall
 	itemUseFirework
 	itemUseRepairHammer
 	itemUseWarehouseTicket
@@ -67,6 +69,10 @@ const (
 	itemUseSpiritExtension
 	itemUsePartySummonScroll
 	itemUsePandoraBox
+	itemUseEquipSwitch
+	itemUseRigidSummonScroll
+	itemUseExpScroll
+	itemUseExpansion
 )
 
 /*
@@ -88,6 +94,12 @@ func admittedItemUseFamily(ref *enterworld.ItemRef) itemUseFamily {
 	// (namechange.go). The classification alone grants nothing.
 	if ref.Codename == NameChangeScrollItem {
 		return itemUseNameChange
+	}
+	// Port-only, not native: the equipment switch scrolls reuse shipped
+	// items no native family claims, so admission is by codename too and
+	// the handler re-checks each scroll's own flag (commerce/equipswitch.go).
+	if _, ok := commerce.EquipSwitchScrollByCodename(ref.Codename); ok {
+		return itemUseEquipSwitch
 	}
 	if ref.TypeIDs == [4]int64{3, 3, 12, 1} {
 		return itemUseMercenary
@@ -119,6 +131,13 @@ func admittedItemUseFamily(ref *enterworld.ItemRef) itemUseFamily {
 	// Port-only, likewise: Pandora's Box opened from the bag (pandorabox.go).
 	if ref.Codename == PandoraBoxItem {
 		return itemUsePandoraBox
+	}
+	// Later-native (#3785): the Rigid L2 summon scrolls (3/3/3/23),
+	// admitted by codename; no v1.150-native family claims the type,
+	// and the handler needs no switch - the use path is the later
+	// server's (rigidsummonscroll.go).
+	if _, ok := RigidSummonScrollMonster(ref.Codename); ok {
+		return itemUseRigidSummonScroll
 	}
 	if ref.TypeIDs == [4]int64{3, 3, 9, 0} {
 		return itemUseQuestTool
@@ -206,18 +225,37 @@ func admittedItemUseFamily(ref *enterworld.ItemRef) itemUseFamily {
 	// Type 4 = 13 splits on Param1 (itemdata column 29c): 1 is the Hwan
 	// scroll, which fills the berserk gauge like the type 3/3/1/8 item
 	// above (ITEM_MALL_HWAN 9259); 2 is the stat point recall
-	// (ITEM_MALL_(STR|INT)_RECALL 9253..9258, progression/statrecall.go).
+	// (ITEM_MALL_(STR|INT)_RECALL 9253..9258, progression/statrecall.go);
+	// 5 is the port's skill reset scroll.
 	// The family read Param1 or it sends a Hwan to the recall, which
 	// spends it resetting a player's stat points.
 	if ref.TypeIDs == [4]int64{3, 3, 13, 13} {
-		if param1, _ := ref.NativeFields.Lookup("itemParam1_29c"); param1 == 1 {
+		param1, _ := ref.NativeFields.Lookup("itemParam1_29c")
+		if param1 == 1 {
 			return itemUseBerserk
+		}
+		// Param1 5 is the v1.696 skill reset (port-only, not native:
+		// progression/skillrecall.go); it must not reach the stat recall.
+		if param1 == 5 {
+			return itemUseSkillRecall
 		}
 		return itemUseStatRecall
 	}
 	// The composite scroll (UIU1 param jobs).
 	if ref.TypeIDs == [4]int64{3, 3, 13, 14} {
 		return itemUseComposite
+	}
+	// Later-native (#4240 part 3): the EXP/SP increase scrolls (3/3/13/21)
+	// start a timed param-job keeper (expscroll.go); no v1.150 row
+	// carries the type.
+	if ref.TypeIDs == [4]int64{3, 3, 13, 21} {
+		return itemUseExpScroll
+	}
+	// Later-native (#4240 part 3): the inventory and warehouse addition
+	// items (3/3/13/17) grow a capacity once their limits allow
+	// (expansion.go); no v1.150 row carries the type.
+	if ref.TypeIDs == [4]int64{3, 3, 13, 17} {
+		return itemUseExpansion
 	}
 	// The crest delete items (#2282, crestdelete.go): the four crest
 	// items share type 3/3/12/2 and split on their params - param1

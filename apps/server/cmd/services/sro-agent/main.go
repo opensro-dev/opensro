@@ -129,6 +129,7 @@ func main() {
 		SessionSigner:           sessionSigner,
 		MaintenanceMessage:      agentapi.MaintenanceMessageFromEnv(),
 		MaintenanceGatePath:     strings.TrimSpace(os.Getenv(agentapi.EnvMaintenanceGate)),
+		ComingSoonShards:        agentapi.ComingSoonShardsFromEnv(),
 		ControlIdentityVerifier: controlVerifier,
 		ControlNamespace:        nomadNamespace,
 		AllowedOrigins:          splitCSV(os.Getenv(envOrigins)),

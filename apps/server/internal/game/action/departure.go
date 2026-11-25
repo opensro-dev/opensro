@@ -10,6 +10,7 @@ package action
 import (
 	"opensro.online/server/internal/game/enterworld"
 	"opensro.online/server/internal/game/item/grounditem"
+	"opensro.online/server/internal/game/world/simulation"
 	"opensro.online/server/internal/transport"
 )
 
@@ -132,6 +133,13 @@ battle, or in battle with none of those, a teleport in progress (vtable
 ================
 */
 func (rt *Runtime) departureRefusal(division string, c *enterworld.Character) uint8 {
+	if _, held := rt.logoutBlocks.Load(simulation.WorldKey(division, c.Name)); held {
+		// Port-only, not native: a GM's /BLOCKLOGOUT. The original names
+		// the command but sends nothing for it, so no refusal code of its
+		// own exists; INFERENCE: the in-battle code is the closest notice
+		// the client already shows ("cannot log out in battle state").
+		return departureRefusedInBattle
+	}
 	code := uint8(0)
 	now := rt.Now().UnixMilli()
 	rt.deps.Read(division, func() {
@@ -149,6 +157,43 @@ func (rt *Runtime) departureRefusal(division string, c *enterworld.Character) ui
 		}
 	})
 	return code
+}
+
+/*
+================
+SetLogoutBlockGM
+
+The GM's /BLOCKLOGOUT (blocked) and /ALLOWLOGOUT (gmcommand/moderation.go):
+holds or releases the character's logout and restart requests. It
+reports whether the hold changed. A countdown already running is ended,
+so a player who asked a moment before cannot slip out. The hold lives in
+memory: a GameWorld restart lifts it, and closing the client is a
+disconnect this cannot stop.
+================
+*/
+func (rt *Runtime) SetLogoutBlockGM(division, name string, blocked bool) bool {
+	key := simulation.WorldKey(division, name)
+	if !blocked {
+		_, held := rt.logoutBlocks.LoadAndDelete(key)
+		return held
+	}
+	if _, held := rt.logoutBlocks.LoadOrStore(key, struct{}{}); held {
+		return false
+	}
+	var cancelled []*transport.Session
+	rt.departureMu.Lock()
+	for id, job := range rt.departures {
+		if job.division == division && job.character == name {
+			cancelled = append(cancelled, job.session)
+			delete(rt.departures, id)
+		}
+	}
+	rt.departureMu.Unlock()
+	for _, s := range cancelled {
+		// The cancel answer the client already handles: the countdown ends.
+		_ = s.Send(opDepartureCancelResponse, []byte{departureResultOK})
+	}
+	return true
 }
 
 /*

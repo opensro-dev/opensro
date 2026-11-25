@@ -29,7 +29,9 @@ type PlaneFeatures struct {
 	// QuestMonsterSpawns: a quest's summoned guardian or lure. Inference:
 	// the three quest guardians appear at field positions, and the port
 	// places them with the outdoor nest placement (radius sample, then
-	// the sector-grid region clamp), which has no cave-floor form.
+	// the sector-grid region clamp), which has no cave-floor form. A
+	// spawn at a named point samples nothing and is taken on either
+	// plane (QuestMonsterSpawn.atNamedPoint).
 	QuestMonsterSpawns bool
 	// CaravanBandits: the ambush around a trade vehicle. Inference: the
 	// trade routes run over open terrain and a caravan never enters a cave,

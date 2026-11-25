@@ -43,7 +43,7 @@ import { createCharacterEffects } from "./effects/effects";
 import { createCharacterSounds } from "./sounds/sounds";
 import { createCharacterResources } from "./resources/resources";
 import { createMallPreview } from "./mall-preview";
-import type { CharacterRecord } from "@/engine/contracts/session";
+import type { CharacterRecord, SuitRuleFlags } from "@/engine/contracts/session";
 import type { AssetOwner } from "@/engine/contracts/assets";
 import type { RenderFrameProbe, Renderer } from "@/engine/contracts/runtime";
 import type { EntityState } from "@/engine/contracts/world";
@@ -501,9 +501,6 @@ export function createCharacterPresentation(
 			gameplay,
 			localGid: local?.gid,
 			mountedOn: local?.mountedOn,
-			dungeonCharacterPvs: renderer.dungeonCharacterPvs ?
-				renderer.dungeonCharacterPvs() :
-				renderer.dungeonBlockHides !== undefined,
 			dungeonBlockHides: renderer.dungeonBlockHides
 		} );
 		// Port-only survival arena: dense spells must not evict live enemies and their pick meshes.
@@ -936,7 +933,7 @@ export function createCharacterPresentation(
 		presentDisappearing(
 			{ disappearing, seconds, next, animationDeltaMs, resources, animationHolders, particleHolders }
 		);
-		presentEmission(
+		const modelParticles = presentEmission(
 			{ entities, next, seconds, hideSilkCos, particleHolders, animationHolders, frameWork },
 			{
 				resources,
@@ -949,7 +946,7 @@ export function createCharacterPresentation(
 			}
 		);
 		publishCharacters(
-			{ local, gameplay, next, seconds, blindHeld },
+			{ local, gameplay, next, seconds, blindHeld, modelParticles },
 			output,
 			published,
 			{ renderer, resources, mallPreview, portraitEmission }
@@ -1113,14 +1110,15 @@ export function createCharacterPresentation(
 			effectDetail = 2,
 			blindHeld = false,
 			nativeServerName?: string,
-			normalFortressClothes = false
+			normalFortressClothes = false,
+			suitRules?: SuitRuleFlags
 		) {
 			const frameSeconds = Math.max( seconds, lastSeconds );
 			lastSeconds = frameSeconds;
 			const begun = beginFrame( entities, gameplay, frameSeconds, dock, preview );
 			if (
 				dockPreview.step(
-					{ seconds: frameSeconds, dock, preview, lizard, nativeServerName },
+					{ seconds: frameSeconds, dock, preview, lizard, nativeServerName, suitRules },
 					output,
 					published
 				)
@@ -1182,6 +1180,16 @@ export function createCharacterPresentation(
 		entryReady: () => output.commonReady && presentationActions.warmed() && effects.loaded(),
 		previewReady: () => output.previewReady,
 		dockReady: () => output.dockReady,
+		/*
+		================
+		shownCharacters
+
+		The characters this frame presents: the roster's models at the dock,
+		the world's characters in world. The renderer's actor count also holds
+		the item glows and scenery emitters beside them, so it is not this.
+		================
+		*/
+		shownCharacters: () => output.displayed.size,
 		/*
 		================
 		profile

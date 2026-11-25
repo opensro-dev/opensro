@@ -82,6 +82,15 @@ const (
 	// MAINTENANCE the gate answered before this switch existed; on
 	// answers MAINTENANCE so the client can explain the refusal.
 	EnvMaintenanceMessage = "SRO_MAINTENANCE_MESSAGE"
+
+	// EnvComingSoonShards lists announced-but-unopened shards on the
+	// title server list (internal/agent/server). Port-only, not native
+	// (the original lists only shards that exist to enter): off is the
+	// native list, where a shard the operator has not opened is not a
+	// row at all; on, a disabled catalog shard also lists, marked coming
+	// soon and carrying no transport URL, so it can be shown but never
+	// entered (#3925).
+	EnvComingSoonShards = "SRO_COMING_SOON_SHARDS"
 )
 
 /*
@@ -96,6 +105,21 @@ must keep meaning what it meant.
 */
 func MaintenanceMessageFromEnv() bool {
 	switch strings.ToLower(strings.TrimSpace(os.Getenv(EnvMaintenanceMessage))) {
+	case "on", "1", "true":
+		return true
+	}
+	return false
+}
+
+/*
+================
+ComingSoonShardsFromEnv
+
+The EnvComingSoonShards switch as the Agent reads it.
+================
+*/
+func ComingSoonShardsFromEnv() bool {
+	switch strings.ToLower(strings.TrimSpace(os.Getenv(EnvComingSoonShards))) {
 	case "on", "1", "true":
 		return true
 	}
@@ -224,6 +248,13 @@ type Config struct {
 	// instead of SHARD_OFFLINE (EnvMaintenanceMessage). Port-only, not
 	// native: see the EnvMaintenanceMessage comment.
 	MaintenanceMessage bool
+	// JobSuitHidesArmor and MoonlitThiefSuit are the shard's port-only
+	// suit-look rules (enterworld deps, from SRO_JOB_SUIT_HIDES_ARMOR and
+	// SRO_MOONLIT_THIEF_SUIT). The world entry publishes them already; the
+	// roster publishes them too so the character-select dock dresses a
+	// character exactly as the world does (#4128). False is native.
+	JobSuitHidesArmor bool
+	MoonlitThiefSuit  bool
 }
 
 // API serves the agent HTTP surface.
@@ -268,6 +299,8 @@ type API struct {
 	now                     func() time.Time
 	maintenanceGatePath     string
 	maintenanceMessage      bool
+	jobSuitHidesArmor       bool
+	moonlitThiefSuit        bool
 
 	allowedOrigins map[string]struct{}
 	listener       httpLifecycle
@@ -277,6 +310,8 @@ type API struct {
 	// per account (ticket_pace.go).
 	transportTickets  *pacer.Keyed
 	enterWorldTickets *pacer.Keyed
+	// tickets counts what the pacers decided (ticket_pace.go noteTicket).
+	tickets ticketTally
 }
 
 // New builds the API. A configured accounts file that fails to load is a
@@ -345,6 +380,8 @@ func New(config Config) (*API, error) {
 		now:                     now,
 		maintenanceGatePath:     config.MaintenanceGatePath,
 		maintenanceMessage:      config.MaintenanceMessage,
+		jobSuitHidesArmor:       config.JobSuitHidesArmor,
+		moonlitThiefSuit:        config.MoonlitThiefSuit,
 		allowedOrigins:          allowedOrigins,
 		revocations:             newAccountRevoker(),
 	}

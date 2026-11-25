@@ -578,6 +578,123 @@ func (s *Service) Previous() ([]Standing, time.Time, error) {
 
 /*
 ================
+Service::HeldTier
+
+The tier a character holds for one job: the newest snapshot's tier for
+it, TierNone when the snapshot never ranked it (or none has run yet).
+The tier's honor buff reads it - it is the grant "for the day" the
+05:00 change wrote.
+================
+*/
+func (s *Service) HeldTier(characterID int64, job int) int {
+	s.flushMu.Lock()
+	defer s.flushMu.Unlock()
+	held, _, err := s.snapshotLocked()
+	if err != nil {
+		return TierNone
+	}
+	for _, row := range held {
+		if row.CharacterID == characterID && row.Job == job {
+			return row.Tier
+		}
+	}
+	return TierNone
+}
+
+/*
+================
+Service::CharacterPoints
+
+One character's kept points per job over [from, to) of honor days: the
+honor window's "today" and "this month" for one character, and whether
+a job-kill victim had points at stake today.
+================
+*/
+func (s *Service) CharacterPoints(characterID int64, from, to time.Time) (map[int]int64, error) {
+	s.flushMu.Lock()
+	defer s.flushMu.Unlock()
+	if err := s.flushLocked(); err != nil {
+		return nil, err
+	}
+	rows, err := s.db.Query(`SELECT job, SUM(points) FROM job_honor_points
+WHERE character_id = ? AND day_s >= ? AND day_s < ? GROUP BY job`, characterID, from.Unix(), to.Unix())
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := map[int]int64{}
+	for rows.Next() {
+		var job int
+		var points int64
+		if err := rows.Scan(&job, &points); err != nil {
+			return nil, err
+		}
+		out[job] = points
+	}
+	return out, rows.Err()
+}
+
+/*
+================
+BoardRow
+
+One visible board row: a standing joined to its job alias. Tier is the
+tier held now; Tonight is the tier the next change would give (the
+same tier on a previous-period row, whose snapshot already landed).
+================
+*/
+type BoardRow struct {
+	CharacterID int64
+	Alias       string
+	Job         int
+	Points      int64
+	Rank        int
+	Tier        int
+	Tonight     int
+}
+
+/*
+================
+BoardRows
+
+The visible rows of one job (wanted) or of every job (0), points down:
+standings the alias source does not show (deleted, public-hidden or
+alias-less) drop out, the rest rank across jobs while each row keeps
+its own job's tier, and at most limit rows survive (a limit of 0 or
+less keeps them all). The public board and the in-game feed share this
+composition so the two can never disagree.
+================
+*/
+func BoardRows(standings []Standing, wanted int, limit int, alias func(characterID int64) (string, bool)) []BoardRow {
+	visible := make([]BoardRow, 0, len(standings))
+	for _, row := range standings {
+		if wanted != 0 && row.Job != wanted {
+			continue
+		}
+		name, ok := alias(row.CharacterID)
+		if !ok || name == "" {
+			continue
+		}
+		visible = append(visible, BoardRow{CharacterID: row.CharacterID, Alias: name, Job: row.Job,
+			Points: row.Points, Tier: row.Held, Tonight: row.Tier})
+	}
+	sort.SliceStable(visible, func(i, j int) bool {
+		if visible[i].Points != visible[j].Points {
+			return visible[i].Points > visible[j].Points
+		}
+		return visible[i].Alias < visible[j].Alias
+	})
+	if limit > 0 && len(visible) > limit {
+		visible = visible[:limit]
+	}
+	for i := range visible {
+		visible[i].Rank = i + 1
+	}
+	return visible
+}
+
+/*
+================
 snapshotLocked
 ================
 */

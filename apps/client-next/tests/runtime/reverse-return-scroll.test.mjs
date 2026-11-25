@@ -66,7 +66,13 @@ test("a bag use asks for the point, and a row sends the use with it", () => {
 		f.ui.event( { kind: "double-activate", id: "slot:13" } );
 		assert.equal( sent.length, 0, "the use waited for its point" );
 		const shown = f.ui.step( f.state, 1300 );
-		assert.deepEqual( boxIds( shown ), [ "reverse-scroll:2", "reverse-scroll:3", "reverse-scroll-cancel" ] );
+		// No party: the party row is not offered (#4391).
+		assert.deepEqual( boxIds( shown ), [
+			"reverse-scroll:2",
+			"reverse-scroll:3",
+			"reverse-scroll-user",
+			"reverse-scroll-cancel"
+		] );
 		assert.ok( f.hasText( "Select the location used by the reverse return scroll." ) );
 		f.ui.event( { kind: "activate", id: "reverse-scroll:3" } );
 		assert.deepEqual( sent.at( -1 ), {
@@ -112,16 +118,17 @@ function buttonArt( f, result, id ) {
 	return quad ? defined( /com_return_button(_focus|_press)?\.png/.exec( quad.texture ) )[1] ?? "" : null;
 }
 
-test("the box stacks three return buttons; the one under the pointer shows its focus art", () => {
+test("the box stacks its return buttons; the one under the pointer shows its focus art", () => {
 	const sent = [], f = open( sent );
 	try {
 		f.ui.event( { kind: "double-activate", id: "slot:13" } );
 		const idle = defined( f.ui.step( f.state, 1300 ) );
-		// 52F460 types 0x21/0x24: 252 x 24 buttons at x 25, y 76, 107, 138.
+		// 52F460 types 0x21/0x24: 252 x 24 buttons at x 25, y 76, then one
+		// row pitch (31) per button under it.
 		const frame = defined( idle.controls.find( c => c.id === "reverse-scroll:2" ) ).rect;
 		assert.deepEqual(
 			boxIds( idle ).map( id => defined( idle.controls.find( c => c.id === id ) ).rect ),
-			[ 0, 31, 62 ].map( dy => [ frame[0], frame[1] + dy, 252, 24 ] )
+			[ 0, 31, 62, 93 ].map( dy => [ frame[0], frame[1] + dy, 252, 24 ] )
 		);
 		for ( const id of boxIds( idle ) ) assert.equal( buttonArt( f, idle, id ), "", id + " at rest" );
 		f.ui.event( { kind: "hover", id: "reverse-scroll:3" } );
@@ -174,7 +181,7 @@ test("right-click opens a modal choice without toggling the inventory behind it"
 	const sent = [], f = open( sent );
 	try {
 		f.ui.event( { kind: "right-activate", id: "slot:13" } );
-		assert.equal( boxIds( f.ui.step( f.state, 1300 ) ).length, 3 );
+		assert.equal( boxIds( f.ui.step( f.state, 1300 ) ).length, 4 );
 		f.ui.event( { kind: "key", code: "KeyI" } );
 		f.ui.event( { kind: "activate", id: "reverse-scroll-cancel" } );
 		const restored = f.ui.step( f.state, 1400 );
@@ -245,13 +252,18 @@ test("the box survives a busy inventory", () => {
 	try {
 		f.ui.event( { kind: "double-activate", id: "slot:13" } );
 		const before = f.ui.step( f.state, 1300 );
-		assert.equal( boxIds( defined( before ) ).length, 3, "the box is up before the bag is busy" );
+		assert.equal( boxIds( defined( before ) ).length, 4, "the box is up before the bag is busy" );
 		/** @type {any} */ (f.state.gameplay).inventoryPending = true;
 		const busy = f.ui.step( f.state, 1400 );
 		/** @type {any} */ (f.state.gameplay).inventoryPending = false;
 		// A frame that changed nothing repaints nothing: the last scene stands.
 		const shown = defined( f.ui.step( f.state, 1500 ) ?? busy ?? before );
-		assert.deepEqual( boxIds( shown ), [ "reverse-scroll:2", "reverse-scroll:3", "reverse-scroll-cancel" ] );
+		assert.deepEqual( boxIds( shown ), [
+			"reverse-scroll:2",
+			"reverse-scroll:3",
+			"reverse-scroll-user",
+			"reverse-scroll-cancel"
+		] );
 		f.ui.event( { kind: "activate", id: "reverse-scroll:3" } );
 		assert.deepEqual( sent.filter( row => row.kind === "gameplay" ), [
 			{ kind: "gameplay", command: { kind: "item-use", slot: 13, reverseChoice: 3 } }
@@ -271,7 +283,7 @@ test("an answer during a busy inventory is held, not lost", () => {
 		f.ui.event( { kind: "activate", id: "reverse-scroll:3" } );
 		const held = f.ui.step( f.state, 1500 ) ?? before;
 		assert.equal( sent.filter( row => row.kind === "gameplay" ).length, 0, "the answer waited for the bag" );
-		assert.equal( boxIds( defined( held ) ).length, 3, "the box stayed up" );
+		assert.equal( boxIds( defined( held ) ).length, 4, "the box stayed up" );
 		/** @type {any} */ (f.state.gameplay).inventoryPending = false;
 		f.ui.step( f.state, 1600 );
 		f.ui.event( { kind: "activate", id: "reverse-scroll:3" } );
@@ -314,12 +326,13 @@ test("with no published table the box keeps its two native points", () => {
 		assert.deepEqual( boxIds( f.ui.step( f.state, 1300 ) ), [
 			"reverse-scroll:2",
 			"reverse-scroll:3",
+			"reverse-scroll-user",
 			"reverse-scroll-cancel"
 		] );
 		// The map row is not offered, so naming it leaves the box as it was.
 		f.ui.event( { kind: "activate", id: "reverse-scroll-map" } );
 		const after = f.ui.step( f.state, 1400 );
-		assert.ok( !after || boxIds( after ).length === 3, "the box stays up" );
+		assert.ok( !after || boxIds( after ).length === 4, "the box stays up" );
 		assert.ok( !after?.controls.some( c => c.id.startsWith( "reverse-map-point:" ) ), "no map points" );
 	} finally {
 		f.dispose();
@@ -334,6 +347,7 @@ test("with a published table, the map row picks a point and sends choice 7 with 
 			"reverse-scroll:2",
 			"reverse-scroll:3",
 			"reverse-scroll-map",
+			"reverse-scroll-user",
 			"reverse-scroll-cancel"
 		] );
 		f.ui.event( { kind: "activate", id: "reverse-scroll-map" } );
@@ -457,6 +471,265 @@ test("the worker sends choice 7 and the point id as a u32 after the type word", 
 		payload: Uint8Array.of( 21, REVERSE_SCROLL & 255, REVERSE_SCROLL >>> 8, 7, 4, 3, 2, 1 )
 	} ] );
 	gameplay.dispose();
+});
+
+// ============================================================================
+// Later-native (#3903): the party and user destinations
+// ============================================================================
+
+const {
+	decodeReverseUserPoint,
+	reversePartyTail,
+	reverseReturnFailureKey
+} = await import( "../../src/engine/foundation/gameplay/reverse-user-point.ts" );
+
+/*
+================
+withParty
+
+The open fixture in a party with two other members.
+================
+*/
+function withParty( f ) {
+	f.state.gameplay = /** @type {any} */ ({
+		...f.state.gameplay,
+		social: {
+			...(f.state.gameplay.social ?? {}),
+			members: [ { id: 42, name: "Mate" }, { id: 43, name: "Other" } ]
+		}
+	});
+	return f;
+}
+
+test("the party row lists the members and a member sends choice 4 with its gid", () => {
+	const sent = [], f = withParty( open( sent ) );
+	try {
+		f.ui.event( { kind: "double-activate", id: "slot:13" } );
+		f.ui.step( f.state, 1300 );
+		f.ui.event( { kind: "activate", id: "reverse-scroll-party" } );
+		const shown = defined( f.ui.step( f.state, 1400 ) );
+		assert.deepEqual(
+			shown.controls.map( c => c.id ).filter( id => id.startsWith( "reverse-party:" ) ),
+			[ "reverse-party:42", "reverse-party:43" ]
+		);
+		assert.equal( sent.length, 0, "no use until a member is picked" );
+		f.ui.event( { kind: "activate", id: "reverse-party:43" } );
+		assert.deepEqual( sent.at( -1 ), {
+			kind: "gameplay",
+			command: { kind: "item-use", slot: 13, reverseChoice: 4, reversePartyGid: 43 }
+		} );
+	} finally {
+		f.dispose();
+	}
+});
+
+test("with no party the box offers no party row, and naming it opens nothing (#4391)", () => {
+	const sent = [], f = open( sent );
+	try {
+		f.ui.event( { kind: "double-activate", id: "slot:13" } );
+		const shown = defined( f.ui.step( f.state, 1300 ) );
+		assert.ok( !boxIds( shown ).includes( "reverse-scroll-party" ), "no party row without a party" );
+		// Even named directly, the party window never opens onto an
+		// empty member list: nothing repaints, the box stands as it was.
+		f.ui.event( { kind: "activate", id: "reverse-scroll-party" } );
+		const after = f.ui.step( f.state, 1400 ) ?? shown;
+		assert.deepEqual( boxIds( after ), boxIds( shown ) );
+		assert.ok( !after.controls.some( c => c.id.startsWith( "reverse-party:" ) ), "no member buttons" );
+		assert.equal( sent.length, 0, "no use sent" );
+	} finally {
+		f.dispose();
+	}
+});
+
+test("a party of only the player offers no party row (#4391)", () => {
+	const sent = [], f = open( sent );
+	try {
+		const gid = f.state.gameplay.localGid;
+		f.state.gameplay = /** @type {any} */ ({
+			...f.state.gameplay,
+			social: { ...(f.state.gameplay.social ?? {}), members: [ { id: gid, name: "Self" } ] }
+		});
+		f.ui.event( { kind: "double-activate", id: "slot:13" } );
+		const shown = defined( f.ui.step( f.state, 1300 ) );
+		assert.ok( !boxIds( shown ).includes( "reverse-scroll-party" ), "no party row with nobody to move to" );
+	} finally {
+		f.dispose();
+	}
+});
+
+test("the party window returns to the box when the last member leaves (#4391)", () => {
+	const sent = [], f = withParty( open( sent ) );
+	try {
+		f.ui.event( { kind: "double-activate", id: "slot:13" } );
+		f.ui.step( f.state, 1300 );
+		f.ui.event( { kind: "activate", id: "reverse-scroll-party" } );
+		f.ui.step( f.state, 1400 );
+		f.state.gameplay = /** @type {any} */ ({ ...f.state.gameplay, social: { members: [] } });
+		const shown = defined( f.ui.step( f.state, 1500 ) );
+		assert.ok( boxIds( shown ).includes( "reverse-scroll:2" ), "back at the box" );
+		assert.ok( !shown.controls.some( c => c.id.startsWith( "reverse-party:" ) ), "no member buttons" );
+		assert.equal( sent.length, 0, "no use sent" );
+	} finally {
+		f.dispose();
+	}
+});
+
+test("the party window's cancel returns to the box, and Escape leaves the window first", () => {
+	const sent = [], f = withParty( open( sent ) );
+	try {
+		f.ui.event( { kind: "double-activate", id: "slot:13" } );
+		f.ui.step( f.state, 1300 );
+		f.ui.event( { kind: "activate", id: "reverse-scroll-party" } );
+		f.ui.step( f.state, 1400 );
+		f.ui.event( { kind: "activate", id: "reverse-window-close" } );
+		assert.deepEqual( boxIds( defined( f.ui.step( f.state, 1500 ) ) ), [
+			"reverse-scroll:2",
+			"reverse-scroll:3",
+			"reverse-scroll-party",
+			"reverse-scroll-user",
+			"reverse-scroll-cancel"
+		] );
+		f.ui.event( { kind: "activate", id: "reverse-scroll-user" } );
+		f.ui.step( f.state, 1600 );
+		f.ui.event( { kind: "key", code: "Escape" } );
+		assert.equal( boxIds( defined( f.ui.step( f.state, 1700 ) ) ).length, 5, "Escape returned to the box" );
+		f.ui.event( { kind: "key", code: "Escape" } );
+		assert.deepEqual( boxIds( f.ui.step( f.state, 1800 ) ), [], "a second Escape closed the box" );
+		assert.equal( sent.filter( row => row.kind === "gameplay" ).length, 0 );
+	} finally {
+		f.dispose();
+	}
+});
+
+test("the user window enrolls without a location, and asks before it overwrites one", () => {
+	const sent = [], f = open( sent );
+	try {
+		f.ui.event( { kind: "double-activate", id: "slot:13" } );
+		f.ui.step( f.state, 1300 );
+		f.ui.event( { kind: "activate", id: "reverse-scroll-user" } );
+		const shown = defined( f.ui.step( f.state, 1400 ) );
+		assert.ok( shown.controls.some( c => c.id === "reverse-user-enroll" ), "the enroll button is up" );
+		assert.ok( !shown.controls.some( c => c.id === "reverse-user-move" ), "no move button without a location" );
+		f.ui.event( { kind: "activate", id: "reverse-user-enroll" } );
+		assert.deepEqual( sent.at( -1 ), {
+			kind: "gameplay",
+			command: { kind: "item-use", slot: 13, reverseChoice: 6 }
+		} );
+		// With a location told, the enroll asks first, then sends.
+		f.state.gameplay = /** @type {any} */ ({
+			...f.state.gameplay,
+			reverseUserPoint: { regionId: 25000, x: 10, y: 2, z: 30 }
+		});
+		f.ui.event( { kind: "double-activate", id: "slot:13" } );
+		f.ui.step( f.state, 1500 );
+		f.ui.event( { kind: "activate", id: "reverse-scroll-user" } );
+		const saved = defined( f.ui.step( f.state, 1600 ) );
+		assert.ok( saved.controls.some( c => c.id === "reverse-user-move" ), "the move button is up" );
+		const sentBefore = sent.length;
+		f.ui.event( { kind: "activate", id: "reverse-user-enroll" } );
+		f.ui.step( f.state, 1700 );
+		assert.equal( sent.length, sentBefore, "the enroll asked before overwriting" );
+		f.ui.event( { kind: "activate", id: "reverse-user-enroll" } );
+		assert.deepEqual( sent.at( -1 ), {
+			kind: "gameplay",
+			command: { kind: "item-use", slot: 13, reverseChoice: 6 }
+		} );
+	} finally {
+		f.dispose();
+	}
+});
+
+test("the user window's move button sends choice 5", () => {
+	const sent = [], f = open( sent );
+	try {
+		f.state.gameplay = /** @type {any} */ ({
+			...f.state.gameplay,
+			reverseUserPoint: { regionId: 25000, x: 10, y: 2, z: 30 }
+		});
+		f.ui.event( { kind: "double-activate", id: "slot:13" } );
+		f.ui.step( f.state, 1300 );
+		f.ui.event( { kind: "activate", id: "reverse-scroll-user" } );
+		f.ui.step( f.state, 1400 );
+		f.ui.event( { kind: "activate", id: "reverse-user-move" } );
+		assert.deepEqual( sent.at( -1 ), {
+			kind: "gameplay",
+			command: { kind: "item-use", slot: 13, reverseChoice: 5 }
+		} );
+	} finally {
+		f.dispose();
+	}
+});
+
+test("the worker sends the party, user and enroll choices as their tails", () => {
+	const sent = [];
+	const gameplay = createGameplay( frame => sent.push( frame ) );
+	gameplay.bootstrap( {
+		refItemSnapshot: [ { refObjId: 3795, typeFlags: REVERSE_SCROLL } ],
+		equipItems: [ { refObjId: 3795, slot: 21, body: [ 0xd3, 0x0e, 0, 0, 2, 0 ] } ]
+	} );
+	gameplay.seed( {
+		gid: 1,
+		refObjId: 1,
+		kind: "local-player",
+		regionId: 257,
+		x: 0,
+		y: 0,
+		z: 0,
+		heading: 0,
+		name: "Author"
+	} );
+	const word = [ REVERSE_SCROLL & 255, REVERSE_SCROLL >>> 8 ];
+	gameplay.command( { kind: "item-use", slot: 21, reverseChoice: 4, reversePartyGid: 0x01020304 }, 1, undefined );
+	assert.deepEqual( sent.at( -1 ), { opcode: 0x75bd, payload: Uint8Array.of( 21, ...word, 4, 4, 3, 2, 1 ) } );
+	// The party flight's refusal byte reads as the left-party line; the
+	// same byte with no flight is the native mapper's business.
+	gameplay.receive( { opcode: 0xb5bd, payload: Uint8Array.of( 2, 0xf6 ) }, 1 );
+	assert.equal(
+		defined( defined( gameplay.take() ).notices ).at( -1 )?.key,
+		"UIIT_MSG_REVERSE_RETRUN_SCROLL_PARTY_MOVE"
+	);
+	gameplay.command( { kind: "item-use", slot: 21, reverseChoice: 5 }, 1, undefined );
+	assert.deepEqual( sent.at( -1 ), { opcode: 0x75bd, payload: Uint8Array.of( 21, ...word, 5 ) } );
+	gameplay.receive( { opcode: 0xb5bd, payload: Uint8Array.of( 2, 0xfa ) }, 1 );
+	assert.equal(
+		defined( defined( gameplay.take() ).notices ).at( -1 )?.key,
+		"UIIT_MSG_REVERSE_RETRUN_SCROLL_USER_MOVE_FAIL_2"
+	);
+	gameplay.command( { kind: "item-use", slot: 21, reverseChoice: 6 }, 1, undefined );
+	assert.deepEqual( sent.at( -1 ), { opcode: 0x75bd, payload: Uint8Array.of( 21, ...word, 6 ) } );
+	// An enroll's success answer is the set line (and spends nothing).
+	gameplay.receive( { opcode: 0xb5bd, payload: Uint8Array.of( 1, 21, 2, 0, ...word ) }, 1 );
+	assert.equal(
+		defined( defined( gameplay.take() ).notices ).at( -1 )?.key,
+		"UIIT_MSG_REVERSE_RETRUN_SCROLL_USER_APPOINT_SELECTION_END"
+	);
+	assert.throws( () => gameplay.command( { kind: "item-use", slot: 21, reverseChoice: 4 }, 1, undefined ) );
+	gameplay.dispose();
+});
+
+test("the saved location body decodes whole or not at all", () => {
+	assert.equal( decodeReverseUserPoint( Uint8Array.of( 0 ) ), null );
+	const body = new Uint8Array( 15 );
+	const view = new DataView( body.buffer );
+	body[0] = 1;
+	view.setUint16( 1, 25000, true );
+	view.setFloat32( 3, 900.5, true );
+	view.setFloat32( 7, 12, true );
+	view.setFloat32( 11, 640.25, true );
+	assert.deepEqual( decodeReverseUserPoint( body ), { regionId: 25000, x: 900.5, y: 12, z: 640.25 } );
+	assert.throws( () => decodeReverseUserPoint( Uint8Array.of( 1, 2 ) ) );
+	assert.throws( () => decodeReverseUserPoint( Uint8Array.of( 2 ) ) );
+	assert.throws( () => decodeReverseUserPoint( new Uint8Array( 0 ) ) );
+	assert.deepEqual( [ ...reversePartyTail( 0x01020304 ) ], [ 4, 4, 3, 2, 1 ] );
+	assert.throws( () => reversePartyTail( 0 ) );
+});
+
+test("the refusal bytes name the later client's lines", () => {
+	assert.equal( reverseReturnFailureKey( 0xf6 ), "UIIT_MSG_REVERSE_RETRUN_SCROLL_PARTY_MOVE" );
+	assert.equal( reverseReturnFailureKey( 0xf8 ), "UIIT_MSG_REVERSE_RETRUN_SCROLL_PARTY_MOVE_1" );
+	assert.equal( reverseReturnFailureKey( 0xfa ), "UIIT_MSG_REVERSE_RETRUN_SCROLL_USER_MOVE_FAIL_2" );
+	assert.equal( reverseReturnFailureKey( 0xfb ), "UIIT_MSG_REVERSE_RETRUN_SCROLL_USER_MOVE_FAIL_3" );
+	assert.equal( reverseReturnFailureKey( 0x85 ), undefined );
 });
 
 test("the published table is checked: ids in order, field regions, local coordinates", () => {

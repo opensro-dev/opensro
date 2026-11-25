@@ -25,15 +25,14 @@ import type { ButtonAccess } from "@/engine/foundation/ui/button-state";
 ================
 CreationView
 
-The screen the window is drawn on: its size, whether the creation
-controls take input, and the Experimental "Fit window labels" row.
+The screen the window is drawn on: its size and whether the creation
+controls take input.
 ================
 */
 export interface CreationView {
 	readonly w: number;
 	readonly h: number;
 	readonly interactive: boolean;
-	readonly fitLabels: boolean;
 }
 
 /*
@@ -49,7 +48,7 @@ export function drawCreation(
 	input: TitleInteraction,
 	view: CreationView
 ) {
-	const { w, h, interactive, fitLabels } = view;
+	const { w, h, interactive } = view;
 	const quads: UiQuad[] = [],
 		controls: UiControl[] = [],
 		paths: string[] = [ font.image ],
@@ -132,17 +131,15 @@ export function drawCreation(
 				r[2] - inset.x - inset.width,
 				r[3] - inset.y - inset.height
 			];
-		// Port-only, not native (Experimental "Fit window labels", off is the
-		// original): a caption wider than its plate keeps its leading words,
+		// Port-only, not native (owner 2026-11-21: the default, no row): a caption wider than
+		// its plate keeps its leading words,
 		// as authoredLabeledButton does in game ("Unique check" -> "Unique",
 		// whose 75 pixels fill retail's 75-pixel GDR_BTN_CHECK, bevel and all).
-		const shown = fitLabels ?
-			captionWords(
-				caption,
-				area[2] - 2 * CAPTION_MARGIN,
-				value => titleTextWidth( font, value, { fontIndex: n.fontIndex } )
-			) :
-			caption;
+		const shown = captionWords(
+			caption,
+			area[2] - 2 * CAPTION_MARGIN,
+			value => titleTextWidth( font, value, { fontIndex: n.fontIndex } )
+		);
 		if ( shown ) {
 			text(
 				n,
@@ -215,7 +212,9 @@ export function drawCreation(
 				rect: r,
 				value: selection.name,
 				maxLength: 12,
-				disabled: !enabled
+				disabled: !enabled,
+				// The name is drawn in the authored client inset (area above).
+				textInsets: [ inset.x, inset.y, inset.width, inset.height ]
 			} );
 			text( n, selection.name, area );
 			if ( input.focus === "create:name" && Math.floor( input.now / 500 ) % 2 === 0 ) {
@@ -274,6 +273,10 @@ export function drawCreation(
 				kind: "range",
 				label: catalog["UIO_NEWCHAR_STT_" + key.toUpperCase()] ?? key,
 				rect: [ r[0] + 20, r[1], 100, 24 ],
+				// The groove between the drawn arrows is inert: only the
+				// arrows and the drawn thumb's drag pick the choice. A
+				// browser groove press would jump it (#4121).
+				thumbDragOnly: true,
 				min,
 				max,
 				value: String( selection[key] ),

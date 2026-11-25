@@ -259,7 +259,7 @@ func (rt *Runtime) exchangeOfferable(c *enterworld.Character, slot uint8) (inven
 	if !ok {
 		return inventory.Item{}, wire.ErrCodeInvalidRequest
 	}
-	if !rt.Tradeable(item.Codename, item.ForgeBound, item.Summon) {
+	if !rt.Tradeable(item.Codename, item.ForgeBound, item.EarnedBought, item.Summon) {
 		return inventory.Item{}, wire.ExchangeErrCannotTrade
 	}
 	return item, 0
@@ -270,12 +270,19 @@ func (rt *Runtime) exchangeOfferable(c *enterworld.Character, slot uint8) (inven
 Tradeable
 
 Whether an item may pass to another player: the exchange's rule, which
-the market (game/market) applies to a listing too. RefObjCommon CanTrade
+the stall offers through and the market (game/market) applies to a
+listing too - the one owner of the decision. RefObjCommon CanTrade
 (token 16) must be set, a summoned pet stays with its owner, and two
 port-only seals refuse whatever the reference says.
+
+Port-only (#4133): an Item Mall item paid for wholly with earned Silk
+carries its tradability on the instance (earnedBought), because every
+shipped mall row is record-bound - the row alone can never admit it.
+The seal is read first, so a bound instance (a granted-Silk buy, the
+rule off at delivery) refuses whatever the mark says.
 ================
 */
-func (rt *Runtime) Tradeable(codename string, forgeBound bool, summon *domain.CharacterCOS) bool {
+func (rt *Runtime) Tradeable(codename string, forgeBound bool, earnedBought bool, summon *domain.CharacterCOS) bool {
 	// Port-only (forge.go, issue #1980): a bound forged item never
 	// reaches the table, however tradeable its row is.
 	if forgeBound {
@@ -292,8 +299,10 @@ func (rt *Runtime) Tradeable(codename string, forgeBound bool, summon *domain.Ch
 	if !ok || ref == nil {
 		return false
 	}
-	if value, present := ref.NativeFields.Lookup("canTrade"); !present || value < 1 {
-		return false
+	if !earnedBought {
+		if value, present := ref.NativeFields.Lookup("canTrade"); !present || value < 1 {
+			return false
+		}
 	}
 	// Port-only, not native (halloween.go): a sealed event helmet never
 	// reaches the table either, however tradeable its row is.

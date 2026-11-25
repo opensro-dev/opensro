@@ -2,7 +2,8 @@
 	"format": "sro-compiled-quest-evidence-v1",
 	"dumpSHA256": [
 		"1a23832efa2cc136d9edaebcec4119a7f7427070eb777ac4e59dfe8ec85de6d6",
-		"8ff172d3afa1f69f72c92cd6348ad5a07a35d1d8d35afe87da1eac5768bfba9d"
+		"8ff172d3afa1f69f72c92cd6348ad5a07a35d1d8d35afe87da1eac5768bfba9d",
+		"051eca3fb053a6d0429f6727a9de8ade0b45fb0c43a4d383d4f35852418cde78"
 	],
 	"quests": {
 		"QNO_CA_GORIA_2": {
@@ -4159,6 +4160,510 @@
 			],
 			"overrides": [
 				"0x58"
+			]
+		},
+		"QNO_RM_ARCHEMY_1": {
+			"words": {
+				"0x121": 1,
+				"0x138": "SN_NPC_KT_SMITH_QS",
+				"0x130": "SN_TALK_QNO_RM_ARCHEMY_1_01",
+				"0x131": "SN_TALK_QNO_RM_ARCHEMY_1_02",
+				"0x132": "SN_TALK_QNO_RM_ARCHEMY_1_03",
+				"0x136": "SN_TALK_QNO_RM_ARCHEMY_1_05",
+				"0x134": "SN_TALK_QNO_RM_ARCHEMY_1_06",
+				"0x133": "SN_TALK_QNO_RM_ARCHEMY_1_04",
+				"0x139": "SN_TALK_QNO_RM_ARCHEMY_1_07",
+				"vf17c": 0
+			},
+			"tables": {
+				"0xc2": {
+					"flags": 7,
+					"0x23": 100,
+					"0x4": 80,
+					"0x38": [
+						"ITEM_QNO_RM_ARCHEMY_1"
+					]
+				},
+				"0xc4": {
+					"flags": 1,
+					"0x4": 1,
+					"0x8": "NPC_KT_SMITH"
+				}
+			},
+			"lists": {
+				"0xf7": [
+					"NPC_KT_SMITH"
+				]
+			},
+			"missions": [
+				{
+					"size": 602,
+					"fields": {
+						"0x4": 0,
+						"0x8": 0,
+						"0x11": 1,
+						"0x19": 1,
+						"0x10d": 0,
+						"0x245": 1,
+						"0x249": 1,
+						"0x24d": 1,
+						"0x24e": 0,
+						"0x252": 0,
+						"0x256": 0,
+						"0x14d": 0.0,
+						"0x9": 1,
+						"0x15": "NPC_KT_SMITH",
+						"0xd": "SN_CON_QNO_RM_ARCHEMY_1",
+						"0x1d": "MOB_RM_ROC",
+						"0x23d": 3,
+						"0x241": "ITEM_QNO_RM_ARCHEMY_1"
+					}
+				}
+			],
+			"overrides": [
+				"0x58",
+				"0xfc"
+			]
+		},
+		"QNO_RM_ARCHEMY_2": {
+			"words": {
+				"0x121": 1,
+				"0x138": "SN_NPC_KT_ARMOR_QS",
+				"0x130": "SN_TALK_QNO_RM_ARCHEMY_2_01",
+				"0x131": "SN_TALK_QNO_RM_ARCHEMY_2_02",
+				"0x132": "SN_TALK_QNO_RM_ARCHEMY_2_03",
+				"0x136": "SN_TALK_QNO_RM_ARCHEMY_2_05",
+				"0x134": "SN_TALK_QNO_RM_ARCHEMY_2_06",
+				"0x133": "SN_TALK_QNO_RM_ARCHEMY_2_04",
+				"0x139": "SN_TALK_QNO_RM_ARCHEMY_2_07",
+				"vf17c": 0
+			},
+			"tables": {
+				"0xc2": {
+					"flags": 7,
+					"0x23": 100,
+					"0x4": 80,
+					"0x38": [
+						"ITEM_QNO_RM_ARCHEMY_2"
+					]
+				},
+				"0xc4": {
+					"flags": 1,
+					"0x4": 1,
+					"0x8": "NPC_KT_ARMOR"
+				}
+			},
+			"lists": {
+				"0xf7": [
+					"NPC_KT_ARMOR"
+				]
+			},
+			"missions": [
+				{
+					"size": 602,
+					"fields": {
+						"0x4": 0,
+						"0x8": 0,
+						"0x11": 1,
+						"0x19": 1,
+						"0x10d": 0,
+						"0x245": 1,
+						"0x249": 1,
+						"0x24d": 1,
+						"0x24e": 0,
+						"0x252": 0,
+						"0x256": 0,
+						"0x14d": 0.0,
+						"0x9": 1,
+						"0x15": "NPC_KT_ARMOR",
+						"0xd": "SN_CON_QNO_RM_ARCHEMY_2",
+						"0x1d": "MOB_RM_ROC",
+						"0x23d": 3,
+						"0x241": "ITEM_QNO_RM_ARCHEMY_2"
+					}
+				}
+			],
+			"overrides": [
+				"0x58",
+				"0xfc"
+			]
+		},
+		"QNO_RM_ARCHEMY_3": {
+			"words": {
+				"0x121": 1,
+				"0x138": "SN_NPC_KT_ACCESSORY_QS",
+				"0x130": "SN_TALK_QNO_RM_ARCHEMY_3_01",
+				"0x131": "SN_TALK_QNO_RM_ARCHEMY_3_02",
+				"0x132": "SN_TALK_QNO_RM_ARCHEMY_3_03",
+				"0x136": "SN_TALK_QNO_RM_ARCHEMY_3_05",
+				"0x134": "SN_TALK_QNO_RM_ARCHEMY_3_06",
+				"0x133": "SN_TALK_QNO_RM_ARCHEMY_3_04",
+				"0x139": "SN_TALK_QNO_RM_ARCHEMY_3_07",
+				"vf17c": 0
+			},
+			"tables": {
+				"0xc2": {
+					"flags": 7,
+					"0x23": 100,
+					"0x4": 80,
+					"0x38": [
+						"ITEM_QNO_RM_ARCHEMY_3"
+					]
+				},
+				"0xc4": {
+					"flags": 1,
+					"0x4": 1,
+					"0x8": "NPC_KT_ACCESSORY"
+				}
+			},
+			"lists": {
+				"0xf7": [
+					"NPC_KT_ACCESSORY"
+				]
+			},
+			"missions": [
+				{
+					"size": 602,
+					"fields": {
+						"0x4": 0,
+						"0x8": 0,
+						"0x11": 1,
+						"0x19": 1,
+						"0x10d": 0,
+						"0x245": 1,
+						"0x249": 1,
+						"0x24d": 1,
+						"0x24e": 0,
+						"0x252": 0,
+						"0x256": 0,
+						"0x14d": 0.0,
+						"0x9": 1,
+						"0x15": "NPC_KT_ACCESSORY",
+						"0xd": "SN_CON_QNO_RM_ARCHEMY_3",
+						"0x1d": "MOB_RM_ROC",
+						"0x23d": 3,
+						"0x241": "ITEM_QNO_RM_ARCHEMY_3"
+					}
+				}
+			],
+			"overrides": [
+				"0x58",
+				"0xfc"
+			]
+		},
+		"QNO_RM_ARCHEMY_4": {
+			"words": {
+				"0x121": 1,
+				"0x138": "SN_NPC_KT_MANAGER_QS",
+				"0x130": "SN_TALK_QNO_RM_ARCHEMY_4_01",
+				"0x131": "SN_TALK_QNO_RM_ARCHEMY_4_02",
+				"0x132": "SN_TALK_QNO_RM_ARCHEMY_4_03",
+				"0x136": "SN_TALK_QNO_RM_ARCHEMY_4_05",
+				"0x134": "SN_TALK_QNO_RM_ARCHEMY_4_06",
+				"0x133": "SN_TALK_QNO_RM_ARCHEMY_4_04",
+				"0x139": "SN_TALK_QNO_RM_ARCHEMY_4_07",
+				"vf17c": 0
+			},
+			"tables": {
+				"0xc2": {
+					"flags": 7,
+					"0x23": 100,
+					"0x4": 80,
+					"0x38": [
+						"ITEM_QNO_RM_ARCHEMY_4"
+					]
+				},
+				"0xc4": {
+					"flags": 1,
+					"0x4": 1,
+					"0x8": "NPC_KT_MANAGER"
+				}
+			},
+			"lists": {
+				"0xf7": [
+					"NPC_KT_MANAGER"
+				]
+			},
+			"missions": [
+				{
+					"size": 602,
+					"fields": {
+						"0x4": 0,
+						"0x8": 0,
+						"0x11": 1,
+						"0x19": 1,
+						"0x10d": 0,
+						"0x245": 1,
+						"0x249": 1,
+						"0x24d": 1,
+						"0x24e": 0,
+						"0x252": 0,
+						"0x256": 0,
+						"0x14d": 0.0,
+						"0x9": 1,
+						"0x15": "NPC_KT_MANAGER",
+						"0xd": "SN_CON_QNO_RM_ARCHEMY_4",
+						"0x1d": "MOB_RM_ROC",
+						"0x23d": 3,
+						"0x241": "ITEM_QNO_RM_ARCHEMY_4"
+					}
+				}
+			],
+			"overrides": [
+				"0x58",
+				"0xfc"
+			]
+		},
+		"QNO_RM_ARCHEMY_5": {
+			"words": {
+				"0x121": 1,
+				"0x138": "SN_NPC_KT_MANAGER_QS",
+				"0x130": "SN_TALK_QNO_RM_ARCHEMY_5_01",
+				"0x131": "SN_TALK_QNO_RM_ARCHEMY_5_02",
+				"0x132": "SN_TALK_QNO_RM_ARCHEMY_5_03",
+				"0x136": "SN_TALK_QNO_RM_ARCHEMY_5_05",
+				"0x134": "SN_TALK_QNO_RM_ARCHEMY_5_06",
+				"0x133": "SN_TALK_QNO_RM_ARCHEMY_5_04",
+				"0x139": "SN_TALK_QNO_RM_ARCHEMY_5_07",
+				"vf17c": 0
+			},
+			"tables": {
+				"0xc2": {
+					"flags": 7,
+					"0x23": 100,
+					"0x4": 80,
+					"0x38": [
+						"ITEM_QNO_RM_ARCHEMY_5"
+					]
+				},
+				"0xc4": {
+					"flags": 1,
+					"0x4": 1,
+					"0x8": "NPC_KT_MANAGER"
+				}
+			},
+			"lists": {
+				"0xf7": [
+					"NPC_KT_MANAGER"
+				]
+			},
+			"missions": [
+				{
+					"size": 602,
+					"fields": {
+						"0x4": 0,
+						"0x8": 0,
+						"0x11": 1,
+						"0x19": 1,
+						"0x10d": 0,
+						"0x245": 1,
+						"0x249": 1,
+						"0x24d": 1,
+						"0x24e": 0,
+						"0x252": 0,
+						"0x256": 0,
+						"0x14d": 0.0,
+						"0x9": 1,
+						"0x15": "NPC_KT_MANAGER",
+						"0xd": "SN_CON_QNO_RM_ARCHEMY_5",
+						"0x1d": "MOB_RM_ROC",
+						"0x23d": 3,
+						"0x241": "ITEM_QNO_RM_ARCHEMY_5"
+					}
+				}
+			],
+			"overrides": [
+				"0x58",
+				"0xfc"
+			]
+		},
+		"QNO_RM_ARCHEMY_6": {
+			"words": {
+				"0x121": 1,
+				"0x138": "SN_NPC_KT_MANAGER_QS",
+				"0x130": "SN_TALK_QNO_RM_ARCHEMY_6_01",
+				"0x131": "SN_TALK_QNO_RM_ARCHEMY_6_02",
+				"0x132": "SN_TALK_QNO_RM_ARCHEMY_6_03",
+				"0x136": "SN_TALK_QNO_RM_ARCHEMY_6_05",
+				"0x134": "SN_TALK_QNO_RM_ARCHEMY_6_06",
+				"0x133": "SN_TALK_QNO_RM_ARCHEMY_6_04",
+				"0x139": "SN_TALK_QNO_RM_ARCHEMY_6_07",
+				"vf17c": 0
+			},
+			"tables": {
+				"0xc2": {
+					"flags": 7,
+					"0x23": 100,
+					"0x4": 80,
+					"0x38": [
+						"ITEM_QNO_RM_ARCHEMY_6"
+					]
+				},
+				"0xc4": {
+					"flags": 1,
+					"0x4": 1,
+					"0x8": "NPC_KT_MANAGER"
+				}
+			},
+			"lists": {
+				"0xf7": [
+					"NPC_KT_MANAGER"
+				]
+			},
+			"missions": [
+				{
+					"size": 602,
+					"fields": {
+						"0x4": 0,
+						"0x8": 0,
+						"0x11": 1,
+						"0x19": 1,
+						"0x10d": 0,
+						"0x245": 1,
+						"0x249": 1,
+						"0x24d": 1,
+						"0x24e": 0,
+						"0x252": 0,
+						"0x256": 0,
+						"0x14d": 0.0,
+						"0x9": 1,
+						"0x15": "NPC_KT_MANAGER",
+						"0xd": "SN_CON_QNO_RM_ARCHEMY_6",
+						"0x1d": "MOB_RM_ROC",
+						"0x23d": 3,
+						"0x241": "ITEM_QNO_RM_ARCHEMY_6"
+					}
+				}
+			],
+			"overrides": [
+				"0x58",
+				"0xfc"
+			]
+		},
+		"QNO_RM_ARCHEMY_7": {
+			"words": {
+				"0x121": 1,
+				"0x138": "SN_NPC_KT_MANAGER_QS",
+				"0x130": "SN_TALK_QNO_RM_ARCHEMY_7_01",
+				"0x131": "SN_TALK_QNO_RM_ARCHEMY_7_02",
+				"0x132": "SN_TALK_QNO_RM_ARCHEMY_7_03",
+				"0x136": "SN_TALK_QNO_RM_ARCHEMY_7_05",
+				"0x134": "SN_TALK_QNO_RM_ARCHEMY_7_06",
+				"0x133": "SN_TALK_QNO_RM_ARCHEMY_7_04",
+				"0x139": "SN_TALK_QNO_RM_ARCHEMY_7_07",
+				"vf17c": 0
+			},
+			"tables": {
+				"0xc2": {
+					"flags": 7,
+					"0x23": 100,
+					"0x4": 80,
+					"0x38": [
+						"ITEM_QNO_RM_ARCHEMY_7"
+					]
+				},
+				"0xc4": {
+					"flags": 1,
+					"0x4": 1,
+					"0x8": "NPC_KT_MANAGER"
+				}
+			},
+			"lists": {
+				"0xf7": [
+					"NPC_KT_MANAGER"
+				]
+			},
+			"missions": [
+				{
+					"size": 602,
+					"fields": {
+						"0x4": 0,
+						"0x8": 0,
+						"0x11": 1,
+						"0x19": 1,
+						"0x10d": 0,
+						"0x245": 1,
+						"0x249": 1,
+						"0x24d": 1,
+						"0x24e": 0,
+						"0x252": 0,
+						"0x256": 0,
+						"0x14d": 0.0,
+						"0x9": 1,
+						"0x15": "NPC_KT_MANAGER",
+						"0xd": "SN_CON_QNO_RM_ARCHEMY_7",
+						"0x1d": "MOB_RM_ROC",
+						"0x23d": 3,
+						"0x241": "ITEM_QNO_RM_ARCHEMY_7"
+					}
+				}
+			],
+			"overrides": [
+				"0x58",
+				"0xfc"
+			]
+		},
+		"QNO_RM_ARCHEMY_8": {
+			"words": {
+				"0x121": 1,
+				"0x138": "SN_NPC_KT_MANAGER_QS",
+				"0x130": "SN_TALK_QNO_RM_ARCHEMY_8_01",
+				"0x131": "SN_TALK_QNO_RM_ARCHEMY_8_02",
+				"0x132": "SN_TALK_QNO_RM_ARCHEMY_8_03",
+				"0x136": "SN_TALK_QNO_RM_ARCHEMY_8_05",
+				"0x134": "SN_TALK_QNO_RM_ARCHEMY_8_06",
+				"0x133": "SN_TALK_QNO_RM_ARCHEMY_8_04",
+				"0x139": "SN_TALK_QNO_RM_ARCHEMY_8_07",
+				"vf17c": 0
+			},
+			"tables": {
+				"0xc2": {
+					"flags": 7,
+					"0x23": 100,
+					"0x4": 80,
+					"0x38": [
+						"ITEM_QNO_RM_ARCHEMY_8"
+					]
+				},
+				"0xc4": {
+					"flags": 1,
+					"0x4": 1,
+					"0x8": "NPC_KT_MANAGER"
+				}
+			},
+			"lists": {
+				"0xf7": [
+					"NPC_KT_MANAGER"
+				]
+			},
+			"missions": [
+				{
+					"size": 602,
+					"fields": {
+						"0x4": 0,
+						"0x8": 0,
+						"0x11": 1,
+						"0x19": 1,
+						"0x10d": 0,
+						"0x245": 1,
+						"0x249": 1,
+						"0x24d": 1,
+						"0x24e": 0,
+						"0x252": 0,
+						"0x256": 0,
+						"0x14d": 0.0,
+						"0x9": 1,
+						"0x15": "NPC_KT_MANAGER",
+						"0xd": "SN_CON_QNO_RM_ARCHEMY_8",
+						"0x1d": "MOB_RM_ROC",
+						"0x23d": 3,
+						"0x241": "ITEM_QNO_RM_ARCHEMY_8"
+					}
+				}
+			],
+			"overrides": [
+				"0x58",
+				"0xfc"
 			]
 		},
 		"QNO_RM_FLYSHIP1_2": {

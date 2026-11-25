@@ -57,12 +57,38 @@ insertSilkHistoryTx
 
 Append one movement row inside the transaction that moves the wallet.
 Amounts are the movement's own fields, not the balances around it.
+Returns the row's seq, the key insertSilkHistoryEarnedTx splits under.
 ================
 */
-func insertSilkHistoryTx(tx *sql.Tx, account string, atMs int64, kind int, amount domain.MallBalance) error {
-	if _, err := tx.Exec(`INSERT INTO silk_history (account_id, at_ms, kind, silk, gift_silk, points)
-VALUES (?, ?, ?, ?, ?, ?)`, account, atMs, kind, amount.Silk, amount.GiftSilk, amount.Points); err != nil {
-		return fmt.Errorf("silk history: %w", err)
+func insertSilkHistoryTx(tx *sql.Tx, account string, atMs int64, kind int, amount domain.MallBalance) (int64, error) {
+	result, err := tx.Exec(`INSERT INTO silk_history (account_id, at_ms, kind, silk, gift_silk, points)
+VALUES (?, ?, ?, ?, ?, ?)`, account, atMs, kind, amount.Silk, amount.GiftSilk, amount.Points)
+	if err != nil {
+		return 0, fmt.Errorf("silk history: %w", err)
+	}
+	seq, err := result.LastInsertId()
+	if err != nil {
+		return 0, fmt.Errorf("silk history: %w", err)
+	}
+	return seq, nil
+}
+
+/*
+================
+insertSilkHistoryEarnedTx
+
+Record how much of one movement's silk was earned silk (#4133), beside
+its silk_history row in the same transaction. Zero writes nothing: a
+movement with no split row reads as all granted, which is also the
+truth for every row recorded before layout 15.
+================
+*/
+func insertSilkHistoryEarnedTx(tx *sql.Tx, seq int64, earned uint32) error {
+	if earned == 0 {
+		return nil
+	}
+	if _, err := tx.Exec(`INSERT INTO silk_history_earned (seq, earned_silk) VALUES (?, ?)`, seq, earned); err != nil {
+		return fmt.Errorf("silk history split: %w", err)
 	}
 	return nil
 }
@@ -95,8 +121,9 @@ WHERE account_id = ? AND kind = ? AND at_ms >= ?`, character.AccountID, silkHist
 	if err != nil {
 		return nil, 0, err
 	}
-	found, err := s.syncDBLocked().Query(`SELECT at_ms, silk, gift_silk FROM silk_history
-WHERE account_id = ? AND kind = ? AND at_ms >= ? ORDER BY at_ms DESC, seq DESC LIMIT ?`,
+	found, err := s.syncDBLocked().Query(`SELECT h.at_ms, h.silk, h.gift_silk, COALESCE(e.earned_silk, 0) FROM silk_history h
+LEFT JOIN silk_history_earned e ON e.seq = h.seq
+WHERE h.account_id = ? AND h.kind = ? AND h.at_ms >= ? ORDER BY h.at_ms DESC, h.seq DESC LIMIT ?`,
 		character.AccountID, silkHistoryUse, since, limit)
 	if err != nil {
 		return nil, 0, err
@@ -106,7 +133,7 @@ WHERE account_id = ? AND kind = ? AND at_ms >= ? ORDER BY at_ms DESC, seq DESC L
 	for found.Next() {
 		var row domain.SilkHistoryRow
 		var silk, gift uint32
-		if err := found.Scan(&row.AtMs, &silk, &gift); err != nil {
+		if err := found.Scan(&row.AtMs, &silk, &gift, &row.EarnedSilk); err != nil {
 			return nil, 0, err
 		}
 		row.Charged = silk + gift
@@ -124,13 +151,33 @@ validateSilkHistory
 
 Startup reads the table's shape without scanning it: the history grows
 with play and its rows are never decoded into the authority graph.
+The layout-15 split table is validateSilkHistoryEarned's.
 ================
 */
 func validateSilkHistory(db *sql.DB) error {
+	// The handle has one connection: each probe's rows close before the
+	// next probe asks, or the second waits on the first forever.
 	rows, err := db.Query("SELECT seq, account_id, at_ms, kind, silk, gift_silk, points FROM silk_history LIMIT 0")
 	if err != nil {
 		return err
 	}
 	defer rows.Close()
 	return rows.Err()
+}
+
+/*
+================
+validateSilkHistoryEarned
+
+The silk-history split table's shape (layout 15, #4133), called from
+layout 15 on, as validateEarnedSilk.
+================
+*/
+func validateSilkHistoryEarned(db *sql.DB) error {
+	split, err := db.Query("SELECT seq, earned_silk FROM silk_history_earned LIMIT 0")
+	if err != nil {
+		return err
+	}
+	defer split.Close()
+	return split.Err()
 }

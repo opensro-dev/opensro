@@ -12,6 +12,7 @@ import (
 	"opensro.online/server/internal/game/combat"
 	"opensro.online/server/internal/game/enterworld"
 	"opensro.online/server/internal/game/item/wire"
+	"opensro.online/server/internal/game/world/monster"
 	"opensro.online/server/internal/game/world/simulation"
 )
 
@@ -66,10 +67,10 @@ func TestPetShieldTiersAndExpiry(t *testing.T) {
 			if rt.petShields.rows[self].amount == 0 || rt.petShields.rows[petShieldKey{testDivision, c.ActiveCOS.GID}].amount == 0 {
 				t.Fatal("missing owner/bear shield")
 			}
-			percent := []uint32{20, 35, 50}[tier-1]
+			percent := []float64{20, 35, 63.5}[tier-1]
 			for _, shield := range rt.petShields.rows {
-				if shield.amount != uint32(uint64(shield.maxHP)*uint64(percent)/100) {
-					t.Fatalf("tier %d shield is not %d percent of recipient HP", tier, percent)
+				if shield.amount != uint32(float64(shield.maxHP)*percent/100) {
+					t.Fatalf("tier %d shield is not %v percent of recipient HP", tier, percent)
 				}
 			}
 			_, gotNear := rt.petShields.rows[petShieldKey{testDivision, enterworld.ObjectIDForCharacter(near)}]
@@ -79,7 +80,7 @@ func TestPetShieldTiersAndExpiry(t *testing.T) {
 			if _, ok := rt.petShields.rows[petShieldKey{testDivision, enterworld.ObjectIDForCharacter(far)}]; ok {
 				t.Fatal("party radius")
 			}
-			if rt.petShields.rows[self].burst != (tier == 3) {
+			if (rt.petShields.rows[self].burst != nil) != (tier == 3) {
 				t.Fatal("burst tier gate")
 			}
 			before := rt.petShields.rows[self]
@@ -119,12 +120,53 @@ func TestPetShieldTiersAndExpiry(t *testing.T) {
 			left, _ := rt.Monsters.Get(testDivision, mob.Gid)
 			want := mob.CurrentHP
 			if tier == 3 {
-				want -= 24
+				want -= 4
 			}
 			if left.CurrentHP != want {
 				t.Fatalf("burst HP %d, want %d", left.CurrentHP, want)
 			}
 		})
+	}
+}
+
+/*
+================
+TestPetShieldBurstCapsDistinctMonstersAcrossRecipients
+================
+*/
+func TestPetShieldBurstCapsDistinctMonstersAcrossRecipients(t *testing.T) {
+	rt, clock, c, _ := newPetCombatRuntime(t, 100000, attackPetBand)
+	makeTrainedPet(rt, c, "COS_P_BEAR_090", 90)
+	first := roarField(t, rt, c, clock)
+	c.MissionInventory = nil
+	rt.AttackPetExpansion = true
+	near := nearbyCharacter(rt, c, 21, "shield-near", 100)
+	rt.RewardParties = func(string) []RewardParty {
+		return []RewardParty{{Members: []uint32{enterworld.ObjectIDForCharacter(c), enterworld.ObjectIDForCharacter(near)}}}
+	}
+	skill := learnPetBook(t, c, 21)
+	now := clock.NowMs()
+	result := rt.castPetShield(testDivision, c, c, c.ActiveCOS, skill, now)
+	if len(result.Broadcast) != 4 {
+		t.Fatalf("bear, owner and party member must all receive shields: %+v", result.Broadcast)
+	}
+	mobs := []monster.Instance{first}
+	at := simulation.Spawn{RegionID: first.Spawn.RegionID, X: first.Spawn.X, Y: first.Spawn.Y, Z: first.Spawn.Z}
+	for _, dx := range []float64{5, 10, 15, 20, 100, 120, 135} {
+		next := at
+		next.X += dx
+		mobs = append(mobs, wolfSpawnAt(t, rt, c, next, now))
+	}
+	rt.advancePetShields(now + petShieldDuration)
+	damaged := 0
+	for _, before := range mobs {
+		after, _ := rt.Monsters.Get(testDivision, before.Gid)
+		if after.CurrentHP < before.CurrentHP {
+			damaged++
+		}
+	}
+	if damaged != petShieldBurstTargets {
+		t.Fatalf("cast damaged %d distinct monsters, want %d", damaged, petShieldBurstTargets)
 	}
 }
 
@@ -301,6 +343,53 @@ func TestPetShieldPartyDepartureCancels(t *testing.T) {
 
 /*
 ================
+TestPetShieldWorksInSoloSurvival
+================
+*/
+func TestPetShieldWorksInSoloSurvival(t *testing.T) {
+	rt, clock, c, _ := newPetCombatRuntime(t, 100000, attackPetBand)
+	makeTrainedPet(rt, c, "COS_P_BEAR_090", 90)
+	mob := roarField(t, rt, c, clock)
+	c.MissionInventory = nil
+	rt.AttackPetExpansion = true
+	skill := learnPetBook(t, c, 19)
+	lease, ok := rt.Monsters.OpenInstanceLayer(testDivision, 30)
+	if !ok {
+		t.Fatal("could not open the arena population")
+	}
+	setCharacterWorld(c, lease.ID)
+	rt.sookArena = &sookArenaRuntime{}
+	rt.sookArena.runs.Store(simulation.WorldKey(testDivision, c.Name), &sookArenaRun{lease: lease})
+
+	now := clock.NowMs()
+	command := append(trainingCommand(c.ActiveCOS.GID, petTrainingUse, skill.ID), 0, 0, 0, 0)
+	if result := rt.HandleCosCommand(testDivision, c, command); len(result.Broadcast) < 3 {
+		t.Fatalf("arena Iron Hide cast failed: %+v", result)
+	}
+	rt.advancePetShields(now + 500)
+	key := petShieldKey{testDivision, enterworld.ObjectIDForCharacter(c)}
+	before := rt.petShields.rows[key].amount
+	petKey := petShieldKey{testDivision, c.ActiveCOS.GID}
+	if before == 0 || rt.petShields.rows[petKey].amount == 0 {
+		t.Fatal("Iron Hide did not protect both the arena owner and bear")
+	}
+	hp := *c.CurrentHP
+	rt.strikePlayerInDoor(playerStrike{
+		division: testDivision, victim: c, killer: deathKiller{monster: &mob}, now: now + 500,
+		owner:    rt.newPlayerAbnormalOwner(testDivision, c, now+500),
+		formulas: []combat.Result{{Damage: 1, ResultFlags: 1}},
+	})
+	if *c.CurrentHP != hp || rt.petShields.rows[key].amount != before-1 {
+		t.Fatal("arena monster damage bypassed Iron Hide")
+	}
+	rt.sookArena.runs.Delete(simulation.WorldKey(testDivision, c.Name))
+	if rt.petShieldRecipientAllowed(testDivision, c) {
+		t.Fatal("shield allowed an unrelated instance")
+	}
+}
+
+/*
+================
 TestPetShieldPlayerSourceBypassesAbsorption
 ================
 */
@@ -373,12 +462,12 @@ func TestPetShieldDisconnectCancelsRecipientAndCaster(t *testing.T) {
 		{key: petShieldKey{"one", 2}, name: "other", source: petOwnerKey{name: "member"}},
 		{key: petShieldKey{"two", 1}, name: "member", source: petOwnerKey{name: "caster"}},
 	} {
-		shield.amount, shield.until, shield.burst = 100, 5000, true
+		shield.amount, shield.until, shield.burst = 100, 5000, new([petShieldBurstTargets]uint32)
 		rt.petShields.rows[shield.key] = shield
 	}
 	rt.retirePetShields("one", "MEMBER")
 	for key, shield := range rt.petShields.rows {
-		if key.division == "one" && (shield.amount != 0 || shield.burst) {
+		if key.division == "one" && (shield.amount != 0 || shield.burst != nil) {
 			t.Fatal("disconnected shield retained")
 		}
 		if key.division == "two" && shield.amount != 100 {

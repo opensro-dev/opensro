@@ -7,6 +7,7 @@ import (
 	"opensro.online/server/internal/game/enterworld"
 	"opensro.online/server/internal/game/gmcommand"
 	"opensro.online/server/internal/game/item/wire"
+	"opensro.online/server/internal/game/staff"
 	"opensro.online/server/internal/game/world/simulation"
 	"testing"
 )
@@ -39,7 +40,7 @@ func TestGMWarpAuthorityAndReentry(t *testing.T) {
 	if missionSpawnFromWorld(c.World.Spawn, simulation.Spawn{}) != before {
 		t.Fatal("nonGM mutated position")
 	}
-	c.GMPrivilege = true
+	c.GMPrivilege, c.GMCapabilities = true, uint32(staff.All)
 	rt.Selected.Set(testDivision, c.Name, 999)
 	hp, mp := *c.CurrentHP, *c.CurrentMP
 	out := gmcommand.HandleGmCommand(deps, nil, testDivision, c, warpFrame(), rt)
@@ -81,7 +82,7 @@ ResolveGMWarpDestination and then rewritten by ReentryPackets.
 */
 func TestGMWarpSurfaceStandAndStrandedAgreement(t *testing.T) {
 	c := rebirthTestCharacter(20, 100)
-	c.GMPrivilege = true
+	c.GMPrivilege, c.GMCapabilities = true, uint32(staff.All)
 	rt, _ := newTestRuntime(c, testItems())
 	deps := rt.deps.(*enterworld.Deps)
 	deps.CanEnterWorldRegion = func(*enterworld.Character, uint16) bool { return true }
@@ -110,18 +111,15 @@ func TestGMWarpSurfaceStandAndStrandedAgreement(t *testing.T) {
 }
 
 func TestGMWarpRefusals(t *testing.T) {
-	for _, kind := range []string{"denied-region", "missing-terrain", "stranded", "pet", "dead", "malformed", "nonfinite", "out-of-region"} {
+	for _, kind := range []string{"denied-region", "missing-terrain", "stranded", "dead", "malformed", "nonfinite", "out-of-region"} {
 		t.Run(kind, func(t *testing.T) {
 			c := rebirthTestCharacter(20, 100)
-			c.GMPrivilege = true
+			c.GMPrivilege, c.GMCapabilities = true, uint32(staff.All)
 			rt, _ := newTestRuntime(c, testItems())
 			deps := rt.deps.(*enterworld.Deps)
 			deps.CanEnterWorldRegion = func(*enterworld.Character, uint16) bool { return kind != "denied-region" }
 			deps.SpawnTerrainHeight = func(uint16, float64, float64) (float64, bool) { return 20, kind != "missing-terrain" }
 			deps.RelocateStrandedSpawn = func(p simulation.Spawn) (simulation.Spawn, bool, bool) { return p, kind == "stranded", false }
-			if kind == "pet" {
-				c.ActiveCOS = &enterworld.CharacterCOS{Summoned: true}
-			}
 			if kind == "dead" {
 				*c.CurrentHP = 0
 			}
@@ -151,7 +149,7 @@ type failedWarpEntry struct{ *enterworld.Deps }
 func (*failedWarpEntry) ReentryPackets(string, string) ([]enterworld.Packet, bool) { return nil, false }
 func TestGMWarpEntryFailureRestoresMovement(t *testing.T) {
 	c := rebirthTestCharacter(20, 100)
-	c.GMPrivilege = true
+	c.GMPrivilege, c.GMCapabilities = true, uint32(staff.All)
 	rt, clock := newTestRuntime(c, testItems())
 	installMidMove(rt, c, clock)
 	deps := rt.deps.(*enterworld.Deps)

@@ -27,6 +27,7 @@ import (
 	"opensro.online/server/internal/game/item/grounditem"
 	"opensro.online/server/internal/game/item/inventory"
 	"opensro.online/server/internal/game/item/wire"
+	"opensro.online/server/internal/game/staff"
 	"opensro.online/server/internal/game/world/simulation"
 )
 
@@ -170,7 +171,7 @@ forgeTestGM
 */
 func forgeTestGM() *enterworld.Character {
 	c := testCharacter()
-	c.GMPrivilege = true
+	c.GMPrivilege, c.GMCapabilities = true, uint32(staff.All)
 	c.MissionInventory = nil
 	return c
 }

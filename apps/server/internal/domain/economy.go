@@ -23,6 +23,15 @@ import (
 // not know; its row keeps the door label so the table can learn it.
 const EconomyReasonUnattributed = "unattributed"
 
+// EconomyDoorUndeclared is the reserved door of a change the commit found
+// that no door noted (store/ledger_door.go): a writer changed a character
+// outside the door lifecycle. Its gold rows carry EconomyReasonUndeclared,
+// as unknown a kind as unattributed, and its item rows this door word.
+const EconomyDoorUndeclared = "undeclared-write"
+
+// EconomyReasonUndeclared is the reason of an undeclared change's gold.
+const EconomyReasonUndeclared = "undeclared"
+
 /*
 ================
 economyDoorReason
@@ -49,7 +58,10 @@ var economyDoorReasons = map[string]economyDoorReason{
 	// before the creation seed existed) at its first world entry.
 	"create-character": {gain: "starting_gold"},
 	"bootstrap-seed":   {gain: "starting_gold"},
-	"shop-buyback":     {loss: "buyback"},
+	// An EventBot win (social/eventbot, port-only #3533): the prize
+	// item lands in the winner's bag through this door.
+	"eventbot-reward": {gain: "event_reward"},
+	"shop-buyback":    {loss: "buyback"},
 	// A portal or guide's fee, and its refund when the travel rolls back.
 	"portal-travel":         {loss: "teleport_fee"},
 	"guide-reverse-return":  {loss: "teleport_fee"},
@@ -135,6 +147,82 @@ func EconomyDoor(label string) string {
 	return door
 }
 
+// itemBulkDoors are the doors whose item changes the item ledger
+// (store/item_ledger.go, #3307) folds into per-character hourly buckets
+// instead of exact rows: consumption and loot, a change every potion,
+// arrow or pickup, where a row each would be noise beside the evidence
+// rows of grants, sales, transfers and destroys. The ammunition debit
+// rides the four strike doors (action/ammunition.go applyAmmunitionDebit:
+// skillcombat.go, skillarea.go, pvpstrike.go, playerstrike_cos.go). An NPC
+// shop's sold items also land in the sale buckets (NoteItemSale), which
+// carry the gold per item a holdings diff cannot see.
+var itemBulkDoors = map[string]bool{
+	"item-use":             true,
+	"potion-recovery":      true,
+	"player-basic-attack":  true,
+	"player-area-attack":   true,
+	"player-strike-player": true,
+	"player-strike-cos":    true,
+	"pickup-item":          true,
+	"cos-ground-item":      true,
+	"shop-transaction":     true,
+}
+
+// The free grants (#3307): what the shard hands an account for nothing,
+// counted per account and day at grant time (store/grant_days.go) so a
+// create-grant-sell-delete loop stays visible after the character is
+// gone. The two item grants are door words (enterworld/bootstrap.go);
+// the three silk grants name their store writers (betasilk.go,
+// referrals.go). An operator's grant is staff work, not a free grant.
+const (
+	GrantStarterKit    = "starter-kit"
+	GrantStarterRefill = "starter-refill"
+	GrantStarterSilk   = "starter-silk"
+	GrantBetaSilk      = "beta-silk"
+	GrantReferralSilk  = "referral-silk"
+	// GrantEventBotReward is the EventBot host's win payment
+	// (social/eventbot, port-only #3533): an audited free grant, so
+	// the daily win cap reads the same rows the audit keeps.
+	GrantEventBotReward = "eventbot-reward"
+	// GrantEventBotTicket is the Lottery ticket door (social/eventbot,
+	// port-only #3539): one ticket to a unique's kill owner, one
+	// spent at entry. Audited like any grant, but deliberately not
+	// a free grant (freeGrantDoors): a ticket is entry currency,
+	// not a win, and must never count toward the daily win cap.
+	GrantEventBotTicket = "eventbot-ticket"
+)
+
+// freeGrantDoors are the item doors whose gains count as free grants.
+var freeGrantDoors = map[string]bool{
+	GrantStarterKit:     true,
+	GrantStarterRefill:  true,
+	GrantEventBotReward: true,
+}
+
+/*
+================
+FreeGrantDoor
+
+Whether an item door's gains are a free grant. door is EconomyDoor's
+word.
+================
+*/
+func FreeGrantDoor(door string) bool {
+	return freeGrantDoors[door]
+}
+
+/*
+================
+ItemDoorBulk
+
+Whether the item ledger buckets a door's item changes instead of
+keeping a row each. door is EconomyDoor's word.
+================
+*/
+func ItemDoorBulk(door string) bool {
+	return itemBulkDoors[door]
+}
+
 /*
 ================
 economyDoorBase
@@ -174,6 +262,9 @@ The reason of a gold change of the given sign committed by the door.
 ================
 */
 func EconomyReason(door string, gain bool) string {
+	if door == EconomyDoorUndeclared {
+		return EconomyReasonUndeclared
+	}
 	reasons := economyDoorReasons[economyDoorBase(door)]
 	name := reasons.loss
 	if gain {
@@ -236,6 +327,7 @@ var economyReasonKinds = map[string]string{
 	"most_wanted_bounty":     EconomyKindMint,
 	"fortress_withdraw":      EconomyKindMint,
 	"guild_war_compensation": EconomyKindMint,
+	"event_reward":           EconomyKindMint,
 	"trade_payout":           EconomyKindMint,
 	"trade_sale_credit":      EconomyKindMint,
 	"trade_party_share":      EconomyKindMint,
@@ -312,11 +404,11 @@ Every named reason, sorted, for the endpoint's meta.
 ================
 */
 func EconomyReasons() []string {
-	names := make([]string, 0, len(economyReasonKinds)+1)
+	names := make([]string, 0, len(economyReasonKinds)+2)
 	for name := range economyReasonKinds {
 		names = append(names, name)
 	}
-	names = append(names, EconomyReasonUnattributed)
+	names = append(names, EconomyReasonUnattributed, EconomyReasonUndeclared)
 	slices.Sort(names)
 	return names
 }

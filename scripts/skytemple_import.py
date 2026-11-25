@@ -41,7 +41,7 @@ What the source authors, and what this import does with it:
 	          the later per-field world ids (132-134) are not worlds of
 	          this port, whose portal catalogue refuses unknown worlds.
 	          Link level conditions clamp to the build's cap as every
-	          imported gate's do (build_alexandria_variant.gate_level_cap).
+	          imported gate's do (variant_gates.gate_level_cap).
 
 Turning the flag off removes the shards, the population, the copied
 files and the owned table rows (the marker lists them); the gate tables
@@ -61,10 +61,12 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import alexandria_npcs as characters  # noqa: E402
-import build_alexandria_variant as variant  # noqa: E402
+import variant_files as variant  # noqa: E402
+import variant_gates  # noqa: E402
 import cap110_monsters as monsters  # noqa: E402
 import cap110_skill_effects as effects  # noqa: E402
 import import_vsro_alexandria as tables  # noqa: E402
+import published_ids  # noqa: E402
 import skilldata_enc as skill_tables  # noqa: E402
 import sro_pk2  # noqa: E402
 from alexandria_map_tables import later_zone_rows, native_text_row  # noqa: E402
@@ -699,8 +701,7 @@ def add_skytemple(native, output, source=None, closure=copy_resource_closure):
 		refs = select_kinds(later, {code for code, *_rest in found})
 		population = build_population(found, refs)
 
-		native_chars = monsters.tree_characters(text_root, CHARACTER_SHARD)
-		occupied = {int(r[1]) for r in native_chars}
+		occupied = published_ids.occupied_objects(text_root, (CHARACTER_SHARD,))
 		allocated = monsters.allocate_characters(occupied, sorted(refs), prior.get("characters", {}))
 		for code, row in sorted(refs.items()):
 			row[1] = str(allocated[code])
@@ -742,11 +743,11 @@ def add_skytemple(native, output, source=None, closure=copy_resource_closure):
 			later_gate_tables,
 			tables.table_rows((native_text_root / "teleportdata.txt").read_bytes()),
 			{row[1] for row in tables.table_rows(current["teleportdata.txt"]) if len(row) > 1},
-			{row[1] for row in tables.table_rows(current["teleportbuilding.txt"]) if len(row) > 1},
+			variant_gates.gate_building_taken(current["teleportbuilding.txt"], text_root, CHARACTER_SHARD, allocated),
 			d_arrival(found, fields),
 		)
-		merged_gates, gate_summary = variant.merge_gate_tables(
-			current, gate_tables, codes=gate_codes, level_cap=variant.gate_level_cap())
+		merged_gates, gate_summary = variant_gates.merge_gate_tables(
+			current, gate_tables, codes=gate_codes, level_cap=variant_gates.gate_level_cap())
 		for dropped in gate_summary.get("droppedConditions", []):
 			tables.log(f"sky temple gates: link {dropped['from']} -> {dropped['to']}: condition kind "
 				f"{dropped['kind']} dropped; the v1.150 server has no evaluator for it")
@@ -934,8 +935,11 @@ def add_skytemple(native, output, source=None, closure=copy_resource_closure):
 			"animationBases": sorted(set(prior.get("animationBases", []))
 				| {base for rows in selected.values() for base, _ in rows}),
 			"characterInfo": sorted(owned_info | {row[0] for row in info}),
-			"nameSymbols": sorted(({r[1] for r in characters.translation_rows(base_text) if len(r) > 1}
-				| {r[1] for r in texts}) & {r[5] for r in refs.values()}),
+			# Owned names follow characters.owned_name_symbols
+			# (#3767): the old union with the base table claimed rows
+			# this build never added, and the off reap drops them.
+			"nameSymbols": characters.owned_name_symbols(texts, prior.get("nameSymbols", []),
+				{r[5] for r in refs.values()}),
 			"files": files,
 			"archives": archive_hashes,
 		}

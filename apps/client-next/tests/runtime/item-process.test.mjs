@@ -83,9 +83,10 @@ function equipment( plus = 0 ) {
 	p.writeUInt32LE( 10, 13 );
 	return [ ...p ];
 }
-function setup() {
+function setup( rules = {} ) {
 	const sounds = [], frames = [], owner = createInventory( f => frames.push( f ), h => sounds.push( h ) );
 	owner.bootstrap( {
+		...rules,
 		refItemSnapshot: [ { refObjId: 1, typeFlags: 0x2c }, {
 			refObjId: 2,
 			typeFlags: 0xf6c,
@@ -139,6 +140,23 @@ test("a reinforcement is held while its prepare effect plays, and the window sta
 	assert.equal( frames.length, 1, "sent once" );
 	owner.receive( 0xb373, Uint8Array.from( [ 1, 1, 13, ...equipment( 1 ) ] ) );
 	assert.equal( owner.state().inventoryPending, false );
+});
+test("under the server's quick rule a reinforcement is sent on the press, with no prepare effect", () => {
+	const { owner, frames } = setup( { quickFuse: true } );
+	owner.process( { kind: "alchemy-open" }, 0 );
+	owner.process( { kind: "alchemy-start", mode: "reinforce", slots: [ 13, 14 ] }, 1000 );
+	assert.deepEqual( frames.map( f => [ f.opcode, ...f.payload ] ), [ [ 0x7373, 2, 13, 14 ] ] );
+	assert.equal( owner.state().alchemy.preparing, undefined );
+	assert.equal( owner.state().alchemy.quick, true, "the window tells the UI not to wait out the effects" );
+	assert.equal( owner.state().inventoryPending, true, "busy until the answer" );
+	owner.step( 1000 + ALCHEMY_PREPARE_MS );
+	assert.equal( frames.length, 1, "sent once" );
+	owner.receive( 0xb373, Uint8Array.from( [ 1, 1, 13, ...equipment( 1 ) ] ) );
+	assert.equal( owner.state().inventoryPending, false );
+});
+test("without the quick rule the window does not publish it", () => {
+	const { owner } = setup();
+	assert.equal( owner.state().alchemy.quick, undefined );
 });
 test("closing the window during the prepare effect sends nothing (625550)", () => {
 	const { owner, frames } = setup();
@@ -262,9 +280,15 @@ test("advanced pads five native slots; dissolve uses its separate opcode; invali
 	] );
 	a.compound( true, 1 );
 	assert.equal( a.state().pending, false );
-	assert.throws( () => a.start( "dissolve", [ 13, 14 ], items, 2000, 2 ), /quantity/ );
-	assert.throws( () => a.start( "dissolve", [ 13, 14, 15 ], items, 2000, 1 ), /unavailable/ );
-	const dissolve = a.start( "dissolve", [ 13, 14 ], items, 2000, 1 );
+	// The window's count edit never reaches the dissolve frame: the All
+	// button's summed stacks (5000) still send one {n, s0, s1} request.
+	const bulk = a.start( "dissolve", [ 13, 14 ], items, 2000, 5000 );
+	assert.equal( bulk.opcode, 0x7549 );
+	assert.deepEqual( [ ...bulk.payload ], [ 2, 13, 14 ] );
+	assert.equal( a.state().total, 1 );
+	a.compound( false, undefined, 7 );
+	assert.throws( () => a.start( "dissolve", [ 13, 14, 15 ], items, 4000, 1 ), /unavailable/ );
+	const dissolve = a.start( "dissolve", [ 13, 14 ], items, 4000, 1 );
 	assert.equal( dissolve.opcode, 0x7549 );
 	assert.deepEqual( [ ...dissolve.payload ], [ 2, 13, 14 ] );
 	a.compound( false, undefined, 7 );

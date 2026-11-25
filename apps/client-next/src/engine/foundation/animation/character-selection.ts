@@ -30,7 +30,6 @@ export interface DungeonAdmissionInput {
 	readonly gameplay: GameplayState | null;
 	readonly localGid?: number;
 	readonly mountedOn?: number;
-	readonly dungeonCharacterPvs?: boolean;
 	readonly dungeonBlockHides?: ( block: number, activeBlock?: number ) => boolean;
 }
 
@@ -38,8 +37,8 @@ export interface DungeonAdmissionInput {
 ================
 dungeonCharacterAdmission
 
-Port-only, not native (Experimental "Dungeon character PVS", default ON;
-when off, returns undefined so selection behaves identically to native):
+Port-only, not native (owner 2026-11-21: the default, no row; outside a
+character-PVS region it returns undefined, so selection is native there):
 filters out dungeon entities before top-K selection when:
 1. Room PVS: the entity's mover has a dungeonBlock that the active dungeon
    block does not draw (dungeonBlockHides(block, activeBlock)).
@@ -55,9 +54,9 @@ Never rejects:
 export function dungeonCharacterAdmission(
 	input: DungeonAdmissionInput
 ): (( entity: EntityState ) => boolean) | undefined {
-	const { entities, gameplay, dungeonCharacterPvs = true, dungeonBlockHides } = input;
+	const { entities, gameplay, dungeonBlockHides } = input;
 	const anchor = input.anchor ?? gameplay?.pose ?? undefined;
-	if ( !dungeonCharacterPvs || !anchor || !featuresAt( anchor.regionId ).characterPvs ) {
+	if ( !anchor || !featuresAt( anchor.regionId ).characterPvs ) {
 		return undefined;
 	}
 	const localAnchor: Pick<Pose, "regionId" | "x" | "y" | "z"> = anchor;

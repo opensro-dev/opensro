@@ -19,29 +19,13 @@ from __future__ import annotations
 import os
 from pathlib import Path
 
+from checkout_root import resolve_main_checkout
+
 REPO_ROOT = Path(__file__).resolve().parents[1]
 
-
-# ================
-# _resolve_main_checkout
-#
-# The main checkout: this one, or the one a linked worktree's .git file
-# names ("gitdir: <main>/.git/worktrees/<name>"); a main checkout's .git is
-# a directory.
-# ================
-def _resolve_main_checkout(checkout: Path) -> Path:
-	dot_git = checkout / ".git"
-	if not dot_git.is_file():
-		return checkout
-	for line in dot_git.read_text(encoding="utf-8").splitlines():
-		if line.startswith("gitdir:"):
-			worktree_git_dir = (checkout / line[len("gitdir:"):].strip()).resolve()
-			# parents: [0] .git/worktrees, [1] .git, [2] main checkout
-			return worktree_git_dir.parents[2]
-	raise RuntimeError(f"Unreadable worktree link {dot_git}")
-
-
-MAIN_CHECKOUT_ROOT = _resolve_main_checkout(REPO_ROOT)
+# The main checkout rule lives in checkout_root.py, the side-effect-free
+# module revtool resolves through too (#4033).
+MAIN_CHECKOUT_ROOT = resolve_main_checkout(REPO_ROOT)
 
 # The trees a worktree must never hold itself, each exempt only while its
 # own override names another tree (scripts/lib/generatedRoot.mjs).
@@ -161,3 +145,36 @@ BUILD_STATE_ROOT = resolve_build_state_root()
 # ================
 def build_state_path(*parts) -> Path:
 	return BUILD_STATE_ROOT.joinpath(*parts)
+
+
+SHARED_CACHE_ROOT_ENV = "SRO_SHARED_CACHE_ROOT"
+
+
+# ================
+# resolve_shared_cache_root
+#
+# The folder the content-named caches share across trees and releases
+# (generatedRoot.mjs resolveSharedCacheRoot, the same contract), or None
+# when SRO_SHARED_CACHE_ROOT is unset. Like the generated root, it must be
+# absolute.
+# ================
+def resolve_shared_cache_root(env=os.environ) -> Path | None:
+	override = env.get(SHARED_CACHE_ROOT_ENV)
+	if not override:
+		return None
+	if not Path(override).is_absolute():
+		raise SystemExit(f"{SHARED_CACHE_ROOT_ENV} must be an absolute path, not {override!r}")
+	return Path(override).resolve()
+
+
+# ================
+# shared_cache_path
+#
+# Where a content-named cache lives (generatedRoot.mjs sharedCachePath):
+# name under the shared cache root when one is set, else under this tree's
+# build state. Only a cache whose entries are named by the content they
+# hold may come here: two trees then read the same answer for the same key.
+# ================
+def shared_cache_path(name: str, env=os.environ) -> Path:
+	root = resolve_shared_cache_root(env)
+	return root / name if root is not None else build_state_path(name)

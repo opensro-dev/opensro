@@ -10,8 +10,8 @@ package inventory
 import (
 	"fmt"
 	"math"
-	"opensro.online/server/internal/domain"
 
+	"opensro.online/server/internal/domain"
 	"opensro.online/server/internal/game/item/wire"
 )
 
@@ -97,6 +97,16 @@ type Item struct {
 	// part of stack identity (tradegoods.go) so a merge can never pour
 	// bound quantity into an unbound row.
 	ForgeBound bool
+	// EarnedBought marks an Item Mall item paid for wholly with earned
+	// Silk (port only, issue #4133): the tradability its reference row
+	// denies, decided at delivery and read by Runtime.Tradeable. Part
+	// of stack identity for the same reason as the seal: a merge can
+	// never pour quantity into or out of a marked row.
+	EarnedBought bool
+	// RentExpiresUnix is a rental's expiry in unix seconds (native
+	// _RentItemInfo PeriodEndTime): the world-entry sweep deletes the
+	// row at or past it. Zero is not a rental (issue #4240).
+	RentExpiresUnix int64
 }
 
 // Body returns the CSOItem body for this row, the remainder of a type-0x06
@@ -107,7 +117,7 @@ Body
 ================
 */
 func (i Item) Body() wire.ItemBody {
-	return wire.ItemBody{
+	body := wire.ItemBody{
 		TradeOwner:   i.TradeOwner,
 		RefObjID:     i.RefObjID,
 		TypeFlags:    i.TypeFlags,
@@ -118,6 +128,10 @@ func (i Item) Body() wire.ItemBody {
 		MagicOptions: append([]uint64(nil), i.MagicOptions...),
 		Data:         i.Data, Summon: domain.CloneCOS(i.Summon),
 	}
+	if i.RentExpiresUnix > 0 {
+		body.RentExpiresUnixMs = i.RentExpiresUnix * 1000
+	}
+	return body
 }
 
 // Inventory is a character's authoritative slot map.
@@ -842,58 +856,6 @@ func (inv *Inventory) Grant(item Item) (uint8, *Fault) {
 	}
 	inv.items = append(inv.items, cloneInventoryRow(item))
 	return destSlot, nil
-}
-
-// MergeTargetSlot returns the bag row a pickup of refObjID would merge onto:
-// the LOWEST bag wire slot holding the same ref below stackCap. Lowest slot
-// wins, not row order - the persisted row order is an artifact of past moves,
-// and the destination must be reproducible. The second result is false when
-// no mergeable row exists.
-/*
-================
-MergeTargetSlot
-================
-*/
-func (inv *Inventory) MergeTargetSlot(refObjID uint32, stackCap uint16) (uint8, bool) {
-	return inv.mergeTargetSlot(Item{RefObjID: refObjID}, stackCap)
-}
-
-// CanMergeStack reports whether a pickup can add to a stack without a free slot.
-func (inv *Inventory) CanMergeStack(item Item, stackCap uint16) bool {
-	_, ok := inv.mergeTargetSlot(item, stackCap)
-	return stackCap > 1 && ok
-}
-
-/*
-================
-mergeTargetSlot
-
-Cargo grants carry the owner name; reference-only callers cannot merge into
-an owned cargo stack without that identity.
-================
-*/
-func (inv *Inventory) mergeTargetSlot(item Item, stackCap uint16) (uint8, bool) {
-	best := -1
-	for index := range inv.items {
-		row := &inv.items[index]
-		if !inv.bagSlot(row.Slot) || !stackIdentityMatches(*row, item) {
-			continue
-		}
-		count := row.Quantity
-		if count == 0 {
-			count = 1
-		}
-		if count >= stackCap {
-			continue
-		}
-		if best < 0 || row.Slot < inv.items[best].Slot {
-			best = index
-		}
-	}
-	if best < 0 {
-		return 0, false
-	}
-	return inv.items[best].Slot, true
 }
 
 // PickupGrant describes an applied ground-item grant.

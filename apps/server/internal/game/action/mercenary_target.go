@@ -39,6 +39,12 @@ func (rt *Runtime) acquireMercenaryTarget(step petCombatStep) {
 	at := step.state.mover.AnyFollower().Position(step.nowMs)
 	best, gid := uint32(mercenarySightRange), uint32(0)
 	admit := func(target uint32, pose simulation.Spawn) {
+		// A target a fight just yielded on sits out its cooldown
+		// (petrecovery.go): re-acquiring it on the next tick would send
+		// the soldier straight back to the wall it could not pass.
+		if target == step.state.stallTarget && step.nowMs < step.state.stallUntilMs {
+			return
+		}
 		// Natively the distance is stored as float32 before the inclusive sight test.
 		// Only an existing selection uses the strict integer-best test.
 		distance := float64(float32(areaDistance(at, pose)))

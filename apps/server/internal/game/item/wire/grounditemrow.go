@@ -41,6 +41,16 @@ func IsEtcBand(typeFlags uint16) bool {
 	return isItemClass(typeFlags) && typeFlags&0x60 == 0x60
 }
 
+// IsDevilSpirit is a Devil's Spirit wearable (TID 3/1/14, any TID4;
+// port-only behind SRO_NASRUN, game/nasrun). Its body's durability field
+// carries the record's data word, its awakening clock (durabilityWord).
+func IsDevilSpirit(typeFlags uint16) bool {
+	return typeFlags&devilSpiritKindMask == PackTypeFlags(3, 1, 14, 0)&devilSpiritKindMask
+}
+
+// devilSpiritKindMask keeps TID1..TID3 of a packed type word.
+const devilSpiritKindMask uint16 = 0x7fe
+
 // IsMonsterCapsule tests TID 3.2.2, the monster mask. Its CSOItem body
 // is the RefObjID and the captured monster (client CSOItem_Deserialize).
 func IsMonsterCapsule(typeFlags uint16) bool {

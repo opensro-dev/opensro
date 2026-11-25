@@ -284,6 +284,10 @@ export function createMovement(
 	// approach: a skill press's run-up, whose goal the server derives from
 	// combat spacing and navigation (sameApproachWalk); since: its start.
 	let predicted: { from: Pose; to: Pose; approach: boolean; since: number; } | null = null;
+	// The local player's abnormal state makes the server drop every move
+	// (holdPrediction): commands are still sent, nothing walks before the
+	// server's answer.
+	let predictionHeld = false;
 	// A walk stopped where a cast command left it (holdForCast): the held
 	// pose, when the hold lapses, and the server walk to follow if it does.
 	let castHold: {
@@ -1293,26 +1297,6 @@ current
 		},
 		/*
 ================
-constrainDisplacement
-================
-		*/
-		constrainDisplacement(
-			command: import("@/engine/contracts/gameplay").CastDisplacement,
-			from: Pose,
-			local = false,
-			now = 0
-		) {
-			if ( command.kind === 2 ) return command;
-			const to = { ...command.destination, angle: from.angle },
-				resolved = navigation.clip( from, to, {
-					slide: true,
-					sourceOwner: local ? liveOwner( now ) : undefined,
-					sourceTerrainRetained: local ? liveTerrainRetained( now ) : undefined
-				} );
-			return resolved ? { ...command, destination: resolved } : command;
-		},
-		/*
-================
 groundSkillGoal
 ================
 		*/
@@ -1580,9 +1564,25 @@ seed
 		/*
 ================
 correct
+
+A correction ends the walk in flight: the B2F5 stop halts the mover
+(775B50). keepTravel is the server's 0x3028 position resync
+(position_resync.go, #3723) instead: a source reseed, as entities apply
+it to every other character - authoritative progress while travel
+remains active, never a stop - so a walk in flight goes on to its goal
+from the resynced pose.
 ================
 		*/
-		correct( value: Pose, now?: number ) {
+		correct( value: Pose, now?: number, keepTravel = false ) {
+			// A resync keeps a walk's goal; a displacement (fixed timing) is
+			// no walk and ends as a correction ends it. A direction walk has
+			// no goal: its leg end is only the next lookahead, so it keeps
+			// its heading and drift state instead and walks on from the
+			// resynced pose (the server resyncs every moving character).
+			const travel = keepTravel && segment && !segment.fixedTiming && !segment.direction ? segment.to : null;
+			const steer = keepTravel && segment?.direction && !segment.direction.blocked && walk ?
+				{ heading: segment.direction.heading, walk } :
+				null;
 			// What the walk was doing when the correction came, for the report:
 			// a large one names its cause (a hold the server never settled, a
 			// walk of the wrong lead) instead of only its size.
@@ -1616,7 +1616,7 @@ correct
 			// retiring the segment; server endpoint Y can be below a hill/deck.
 			pose = authoritative = reconcile( admitPose( value ), RESOLVE_CELL );
 			if ( before ) {
-				noteReanchor( "server correction", before, pose, {
+				noteReanchor( keepTravel ? "server resync" : "server correction", before, pose, {
 					atMs: now ?? poseAtMs,
 					pending: pending.size,
 					latest: nextId,
@@ -1676,6 +1676,29 @@ correct
 					segment = { ...rebuilt, history: transition.walkingPath };
 				}
 			}
+			// A resync mid-walk: the walk goes on to its goal from the
+			// resynced pose, as entities' source reseed walks every other
+			// character on. The server already walks it there.
+			const distance = travel && pose ? poseDistance( pose, travel ) : 0;
+			if ( travel && !segment && now !== undefined && distance > 0 && navigation.available( pose ) ) {
+				segment = {
+					from: pose,
+					to: { ...travel, angle: movementHeading( pose, travel ) },
+					start: now,
+					timing: "speed",
+					lead: "server",
+					duration: movementDuration( distance, speed ),
+					admitted: true,
+					history: transition.walkingPath
+				};
+			}
+			if ( steer && !segment && now !== undefined ) {
+				const leg = directionSegment( pose, steer.heading, now, "server", steer.walk.factor, true );
+				if ( leg ) {
+					segment = { ...leg, history: transition.walkingPath };
+					walk = steer.walk;
+				}
+			}
 		},
 		/*
 ================
@@ -1729,7 +1752,7 @@ request
 				slide: false,
 				sourceOwner: owner
 			};
-			const clipped = navigation.available( pose ) ? to : null;
+			const clipped = !predictionHeld && navigation.available( pose ) ? to : null;
 			const frame = { opcode: OP_PREDICTED_MOVE, payload };
 			send( frame );
 			record( {
@@ -1769,6 +1792,22 @@ request
 		},
 		/*
 ================
+holdPrediction
+
+Port-only, not native: the native client never predicts a walk, it walks
+on the server's answer. While the local player is asleep, rooted,
+petrified or stunned the server's move handler drops every command
+(action PlayerMovementBlocked), so a walk predicted then snapped back to
+where the player stood. Held, request and direct still send their command
+and predict nothing, and no run-up is predicted: only the server's answer
+walks, as on the native client.
+================
+		*/
+		holdPrediction( held: boolean ) {
+			predictionHeld = held;
+		},
+		/*
+================
 predictApproach
 
 Start a walk the server drives (a pickup run-up: 0x72CD answered by a
@@ -1779,7 +1818,7 @@ walk (native); a refusal ends it (endPrediction).
 ================
 		*/
 		predictApproach( value: Pose, now: number, approach = false ): boolean {
-			if ( !pose || life === "dead" || walk || pending.size || predicted ) return false;
+			if ( !pose || life === "dead" || walk || pending.size || predicted || predictionHeld ) return false;
 			advanceTo( now );
 			const current = pose,
 				to = admitPose( value ),
@@ -1912,7 +1951,7 @@ over complete navigation coverage; otherwise the receipt starts the walk.
 			} );
 			nextId = id;
 			beginTransition( "input" );
-			const leg = directionSegment( pose, heading, now, "client", 1, true );
+			const leg = predictionHeld ? null : directionSegment( pose, heading, now, "client", 1, true );
 			pending.set( id, {
 				to: leg?.to ?? directionLegEnd( pose, heading ),
 				from: pose,

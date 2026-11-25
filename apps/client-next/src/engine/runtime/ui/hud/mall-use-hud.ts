@@ -9,12 +9,14 @@ bag activation 561D50 opens it at 562177; foundation/gameplay/
 mall-use.ts carries the gate). The HUD owns the one pending ask: the
 bag row it was raised on, kept so that Yes runs exactly that slot's
 use and a row that changed or left the bag cancels the ask, as the
-native box is modal.
+native box is modal. It keeps the question the gate chose too (the
+later storage expansion items ask their own, mall-use.ts).
 
 ===========================================================================
 */
 
 import type { InventoryItem } from "@/engine/contracts/gameplay";
+import { mallUseQuestion } from "@/engine/foundation/gameplay/mall-use";
 
 /*
 ================
@@ -22,7 +24,7 @@ createMallUseHud
 ================
 */
 export function createMallUseHud() {
-	let pending: { slot: number; refObjId: number; } | null = null;
+	let pending: { slot: number; refObjId: number; question: string; } | null = null;
 	return {
 		/*
 		================
@@ -32,7 +34,7 @@ export function createMallUseHud() {
 		================
 		*/
 		ask( item: InventoryItem ) {
-			pending = { slot: item.slot, refObjId: item.refObjId };
+			pending = { slot: item.slot, refObjId: item.refObjId, question: mallUseQuestion( item ) };
 		},
 		/*
 		================

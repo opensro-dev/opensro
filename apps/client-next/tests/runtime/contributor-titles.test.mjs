@@ -169,7 +169,12 @@ Run the chat layout over lines with a recording text service; the
 drawn runs come back in order.
 ================
 */
-function chatDraws( lines, contributorTitles ) {
+/**
+ * @param {any[]} lines
+ * @param {string[] | undefined} contributorTitles
+ * @param {import("../../src/engine/foundation/gameplay/staff-roster.ts").StaffRosterEntry[]} [staffRoster]
+ */
+function chatDraws( lines, contributorTitles, staffRoster ) {
 	const draws = [];
 	chatLayout( {
 		layout: chatFixtureLayout,
@@ -180,6 +185,7 @@ function chatDraws( lines, contributorTitles ) {
 		input: "",
 		lines,
 		contributorTitles,
+		staffRoster,
 		welcome: "",
 		copy: key => key,
 		size: () => [ 16, 16 ],
@@ -247,4 +253,32 @@ test("the login prompt raises one dialog per frame, answering with the contribut
 	// A roster frame never raises the prompt.
 	titles.receive( { opcode: OP_CONTRIBUTOR_TITLES, payload: Uint8Array.of( 0, 0 ) } );
 	assert.equal( titles.takePrompt(), undefined );
+});
+
+test("a staff sender's role tag is its own span, emphasised like the Contributor tag (#4415)", () => {
+	// The seeded gm role: tag [GM], name 0xFFFFD87A, chat 0xFFFFAEC3.
+	const gm = { name: "Boss", tag: "[GM]", nameColor: 0xffffd87a, chatColor: 0xffffaec3 };
+	const lines = [
+		{ channel: 3, name: "Boss", text: "hello", outgoing: false },
+		{ channel: 1, name: "Hero", text: "both", outgoing: false }
+	];
+	const draws = chatDraws( lines, [ "Hero" ], [ gm, { ...gm, name: "Hero" } ] );
+	const gmTags = draws.filter( d => d.value === "[GM]" );
+	assert.equal( gmTags.length, 2, "every staff sender line leads with its role tag" );
+	for ( const tag of gmTags ) {
+		assert.deepEqual( tag.color, [ 1, 0xd8 / 255, 0x7a / 255, 1 ] );
+		assert.deepEqual( tag.style, { fontStyle: 2 } );
+	}
+	// The rest of the GM's line keeps the role's chat colour, after the tag.
+	const rest = draws.find( d => d.value.startsWith( "Boss:" ) );
+	assert.ok( rest );
+	assert.deepEqual( rest.color, [ 1, 0xae / 255, 0xc3 / 255, 1 ] );
+	assert.equal( rest.rect[0], gmTags[0].rect[0] + "[GM]".length * 7 );
+	// A Contributor who is also staff: both tags, Contributor first.
+	const contributor = draws.find( d => d.value === CONTRIBUTOR_TAG );
+	assert.ok( contributor );
+	assert.equal( gmTags[1].rect[0], contributor.rect[0] + CONTRIBUTOR_TAG.length * 7 );
+	assert.ok( draws.some( d => d.value.startsWith( "Hero:" ) && d.rect[0] === gmTags[1].rect[0] + 4 * 7 ) );
+	// No staff roster: the GM's line is one plain run, nothing tagged.
+	assert.equal( chatDraws( lines, undefined ).filter( d => d.value === "[GM]" ).length, 0 );
 });

@@ -101,6 +101,7 @@ declare var fixture: any;
 declare var flagFixture: any;
 declare var groundInputProbe: any;
 declare var inventoryFixture: any;
+declare var mallSearchFixture: any;
 declare var matchingFixture: any;
 declare var questProbe: any;
 declare var quickbarFixture: any;

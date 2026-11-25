@@ -76,7 +76,7 @@ export const CAPTION_MARGIN = 4;
 ================
 narrowFace
 
-Port-only, not native (Experimental "Fit window labels"): the face a
+Port-only, not native (former Experimental "Fit window labels"): the face a
 one-line text wider than width in face 0 is drawn in, so a column head
 or a button caption on a fixed plate ("Experience" on the job ranking's
 56-pixel head, "Dismiss" on the academy's 44-pixel button) reads whole
@@ -103,7 +103,7 @@ export function narrowFace(
 ================
 fitLines
 
-Port-only, not native (Experimental "Fit window labels"): a label's
+Port-only, not native (former Experimental "Fit window labels"): a label's
 lines and face inside width, the first that fits of: one line in its
 face, two in its face, one in NARROW_FONT_INDEX, two in it (the academy
 matching's "Recruitment Condition" in the 62 pixels between its combo
@@ -140,7 +140,7 @@ const CAPTION_TRAILING_WORDS = " a an the for of to in on with and or ";
 ================
 captionWords
 
-Port-only, not native (Experimental "Fit window labels"): the leading
+Port-only, not native (former Experimental "Fit window labels"): the leading
 words of a one-line caption that fit width, without a dangling function
 word at the cut ("Check for duplicate entries" reads "Check", not "Check
 for"). The whole caption comes back when it fits, or when not even its

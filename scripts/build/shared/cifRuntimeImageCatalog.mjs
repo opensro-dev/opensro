@@ -257,10 +257,14 @@ CIFSlotWithHelp item-slot effect sheets (CIFSlotWithHelp_LoadOverlayTextures
 shine, the summoned-companion glow, the revival flash, the item-changed
 flash and the repair flash, plus the blocked-slot grey (54FDB0's +0x614
 flag: slot 7 under a two-hand grip, 596190; the avatar attachment slot
-under a one-piece dress, 5965E0). Code-selected; no resinfo names them.
+under a one-piece dress, 5965E0), and the exchange lock wash (5548C0
+loads com_item_exchange.ddj at 554906 into +0x584; 565850 draws it while
+54FC60's +0x4FD flag stands, which CIFExchange raises on a locked side,
+6B21B0 / 6B2120). Code-selected; no resinfo names them.
 ================
 */
 export const slotEffectRuntimeImageReferences = [
+	"interface/ifcommon/com_item_exchange.ddj",
 	"icon/item/etc/icon_edge_rare.ddj",
 	"interface/pet/pt_edge_effect.ddj",
 	"interface/pet/pt_life_effect.ddj",
@@ -271,11 +275,34 @@ export const slotEffectRuntimeImageReferences = [
 
 /*
 ================
+laterSlotEffectRuntimeImageReferences
+
+Port-only, not native (SRO_NASRUN, #4384): the later clients' active-Spirit
+edge, looped over a worn, awake Devil's Spirit's socket
+(item-slot-effects.ts spiritActiveOverlay). Only a tree the Nasrun skill
+import staged holds it (nasrun_import.py SPIRIT_EDGE_SHEET); a native tree
+lacks it and publishes nothing here (copyImageReference skips an absent
+source).
+================
+*/
+export const laterSlotEffectRuntimeImageReferences = [
+	"icon/item/etc/icon_edge_nasrun.ddj",
+	// The later clients' Spirit socket frame (a bracelet, as the Spirit's
+	// mall guide names it) and its skill strip's slot backgrounds
+	// (ifequipskillslotwnd.txt GDR_AVATAR_SKILL_SLOT_BG_01..04): both ship
+	// in the v1.150 tree, but only the Spirit's avatar view draws them.
+	"interface/equipment/equip_slot_extraneous.ddj",
+	"interface/pet/pt_block02.ddj"
+];
+
+/*
+================
 runtimeCifImageReferences
 ================
 */
 export const runtimeCifImageReferences = [
 	...slotEffectRuntimeImageReferences,
+	...laterSlotEffectRuntimeImageReferences,
 	...itemMallRuntimeImageReferences,
 	// CIFDelayInfo 6B14E0 / 6B1B30 assigns these outside resinfo.
 	...returnScrollRuntimeImageReferences,
@@ -338,6 +365,16 @@ export const runtimeCifImageReferences = [
 	"interface/playerminiinfo/pmi_hp.ddj",
 	"interface/playerminiinfo/pmi_mp.ddj",
 	"interface/playerminiinfo/pmi_jahwan_burn.ddj",
+	// The Blue Berserk's gauge art: the v1.150 data ships a blue twin of every pmi_jahwan
+	// picture, at the same size. The later client draws them for a Blue Berserk level above 0
+	// (hwan-skin.ts); no v1.150 layout names them, so they are listed here.
+	"interface/playerminiinfo/pmi_jahwan_02.ddj",
+	"interface/playerminiinfo/pmi_jahwan_02_burn.ddj",
+	"interface/playerminiinfo/pmi_jahwan_02_button.ddj",
+	"interface/playerminiinfo/pmi_jahwan_02_button_focus.ddj",
+	"interface/playerminiinfo/pmi_jahwan_02_button_press.ddj",
+	"interface/playerminiinfo/pmi_jahwan_02_face.ddj",
+	"interface/playerminiinfo/pmi_jahwan_02_glow.ddj",
 	// CIFPetMiniInfo_OnCreate (6B3760) loads the pet portrait frame from code.
 	"interface/playerminiinfo/pmi_pet_face.ddj",
 	"interface/ifcommon/com_kindred_china.ddj",
@@ -629,6 +666,8 @@ export const runtimeCifImageReferences = [
 	"icon/action/icon_cha_run.ddj",
 	"icon/action/icon_cha_walk.ddj",
 	"icon/action/icon_cha_stand.ddj",
+	// The Actions window's port-only Auto Select row (action-layout.ts, AUTO_SELECT_ACTION_ID): no action record binds it.
+	"icon/action/icon_cha_autotarget.ddj",
 	// CIFCommunity window chrome ('U' hotkey, ginterface id 23): the six
 	// CIFSelectableArea tabs are built in code by CIFCommunity::OnCreate
 	// (CIFCommunity_CreateControls, texture strings @0x005dfdcf off / @0x005dfdfc on), so the

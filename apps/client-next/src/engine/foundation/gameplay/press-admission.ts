@@ -39,7 +39,8 @@ const PRIMARY_SOCKET = 6, SHIELD_SOCKET = 7;
 const ANY_WEAPON = 0xff, BARE_HAND = 1, FORTRESS_WEAPON = 16;
 // Refusal codes the gates below return.
 const DISABLED = 0x3009, BERSERK_HIDE = 0x3031, NOT_LOW_HP = 0x3036, NOT_STEALTHED = 0x3034;
-const WRONG_WEAPON = 0x300d, FORTRESS_ONLY = 0x3047, BROKEN = 0x300f;
+export const WRONG_WEAPON = 0x300d;
+const FORTRESS_ONLY = 0x3047, BROKEN = 0x300f;
 const NO_HP = 0x3013, NO_MP = 0x3004, NO_AMMUNITION = 0x300e;
 // 58E2BC -> 59D870: the buff-replacement check's refusal.
 const REPLACE_REFUSED = 0x300c;

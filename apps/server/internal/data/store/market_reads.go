@@ -34,7 +34,7 @@ func (s *Store) MarketWarehouse(account string) (domain.AccountStorage, error) {
 	if s.db == nil || account == "" {
 		return domain.AccountStorage{}, domain.ErrMarketUnavailable
 	}
-	return readAccountStorage(s.syncDBLocked(), account)
+	return s.readAccountStorage(s.syncDBLocked(), account)
 }
 
 /*

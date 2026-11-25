@@ -22,6 +22,7 @@ import (
 	"opensro.online/server/internal/agent/publicstats"
 	"opensro.online/server/internal/game/action"
 	"opensro.online/server/internal/game/progression"
+	"opensro.online/server/internal/game/social/eventbot"
 )
 
 // scheduleTestDay is a fixed UTC day for the flag war rows.
@@ -151,12 +152,13 @@ func TestPublicScheduleKindsAllPublish(t *testing.T) {
 		t.Fatal(err)
 	}
 	now := scheduleTestDay.Add(time.Hour)
-	src := scheduleSources{halloween: halloweenOn(t, scheduleTestDay, scheduleTestDay.AddDate(0, 0, 7))}
+	src := scheduleSources{halloween: halloweenOn(t, scheduleTestDay, scheduleTestDay.AddDate(0, 0, 7)),
+		eventBot: eventBotFixture(t)}
 	seen := map[string]bool{}
 	for _, event := range publicSchedule(src, now) {
 		seen[event.Kind] = true
 	}
-	for _, kind := range []string{publicstats.ScheduleKindMaintenance, publicstats.ScheduleKindFlagWarSignup, publicstats.ScheduleKindFlagWar, publicstats.ScheduleKindHalloween} {
+	for _, kind := range []string{publicstats.ScheduleKindMaintenance, publicstats.ScheduleKindFlagWarSignup, publicstats.ScheduleKindFlagWar, publicstats.ScheduleKindHalloween, publicstats.ScheduleKindEventBot} {
 		if !seen[kind] {
 			t.Errorf("kind %q is never published", kind)
 		}
@@ -165,5 +167,44 @@ func TestPublicScheduleKindsAllPublish(t *testing.T) {
 		if names.kind != publicstats.ScheduleKindFortress && names.kind != publicstats.ScheduleKindFortressRegistration {
 			t.Errorf("fortress window kind %q has no calendar constant", names.kind)
 		}
+	}
+}
+
+/*
+================
+eventBotFixture
+
+An enabled host over one daily raffle row.
+================
+*/
+func eventBotFixture(t *testing.T) *eventbot.Host {
+	t.Helper()
+	schedule, err := eventbot.ParseSchedule("19:30 raffle rounds=2 round=1m reward=ITEM_Xx10 title=Evening Raffle", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return eventbot.New(true, schedule, eventbot.Dependencies{})
+}
+
+/*
+================
+TestPublicScheduleEventBotRows
+
+The host's rows reach the feed while it runs (live-or-next per row,
+titled from the file); a disabled host lists nothing.
+================
+*/
+func TestPublicScheduleEventBotRows(t *testing.T) {
+	now := scheduleTestDay.Add(12 * time.Hour)
+	rows := eventsOfKind(publicSchedule(scheduleSources{flagWarOff: true, eventBot: eventBotFixture(t)}, now),
+		publicstats.ScheduleKindEventBot)
+	if len(rows) != 1 || rows[0].Title != "EventBot: Evening Raffle" || rows[0].Running {
+		t.Fatalf("rows = %+v", rows)
+	}
+	disabled := eventsOfKind(publicSchedule(scheduleSources{flagWarOff: true,
+		eventBot: eventbot.New(false, eventbot.Schedule{}, eventbot.Dependencies{})}, now),
+		publicstats.ScheduleKindEventBot)
+	if len(disabled) != 0 {
+		t.Fatalf("disabled host listed %+v", disabled)
 	}
 }

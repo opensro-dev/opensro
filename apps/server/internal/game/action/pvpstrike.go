@@ -447,6 +447,11 @@ func (rt *Runtime) strikePlayerTarget(st offensiveStage, target combatTarget, ca
 		// Port-only, not native (#2958): a thief's landed hit on a 5-star
 		// caravan's owner marks the thief for the hunter bounty.
 		rt.noteCaravanAttack(character, target.player, now)
+		// Port-only, not native (#3530): the same hit marks the thief for
+		// the job honor escort escrow, and a hunter's landed damage on a
+		// marked thief accrues against its caravan's arrival.
+		rt.noteHonorCaravanAttack(character, target.player, now)
+		rt.noteHonorEscortDamage(character, target.player, honorAppliedDamage(hit.struck), now)
 		if st.release == nil {
 			rt.startSkillCast(division, character, skill, now)
 		}

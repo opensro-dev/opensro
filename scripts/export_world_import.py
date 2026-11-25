@@ -202,7 +202,7 @@ def read_marker(out):
 # No archive is read.
 # ================
 def reap(native, out, prior):
-	import build_alexandria_variant as variant
+	import variant_files as variant
 
 	if not prior:
 		return {"enabled": False}
@@ -261,7 +261,7 @@ def add_export_world(native, out, env=os.environ):
 	variant (or, off, reap a previous on build). Port-only, not
 	native; off is byte-for-byte the tree the other layers left.
 	"""
-	import build_alexandria_variant as variant
+	import variant_files as variant
 
 	native, out = Path(native).resolve(), Path(out).resolve()
 	if native == out or native in out.parents or out in native.parents:

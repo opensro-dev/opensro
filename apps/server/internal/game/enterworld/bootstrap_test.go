@@ -677,6 +677,42 @@ func TestBootstrapJSONPublishesRaisedGoldCaps(t *testing.T) {
 
 /*
 ================
+TestBootstrapJSONPublishesStorageGoldDepositLimit
+
+The configured warehouse deposit cap rides beside the switch: set, the
+blob names the number; zero omits it and the client keeps the native cap.
+================
+*/
+func TestBootstrapJSONPublishesStorageGoldDepositLimit(t *testing.T) {
+	for _, tc := range []struct {
+		limit uint32
+		want  string
+	}{
+		{0, ""},
+		{100_000_000, `"storageGoldDepositLimit":100000000`},
+		{4_294_967_295, `"storageGoldDepositLimit":4294967295`},
+	} {
+		blob, err := json.Marshal(&BootstrapResult{
+			NativeResult: nativeResultSuccess, Character: &Character{Name: "keeper", AccountID: "a"},
+			LocalPlayerEntry: &LocalPlayerEntry{RaceKey: RaceKeyChina},
+			ChatMessages:     []string{}, SystemMessages: []string{}, Packets: []Packet{},
+			StorageGoldDepositLimit: tc.limit,
+		})
+		if err != nil {
+			t.Fatalf("marshal: %v", err)
+		}
+		if tc.want == "" {
+			if strings.Contains(string(blob), "storageGoldDepositLimit") {
+				t.Fatalf("limit 0: blob names the cap: %s", blob)
+			}
+		} else if !strings.Contains(string(blob), tc.want) {
+			t.Fatalf("limit %d: blob lacks %s", tc.limit, tc.want)
+		}
+	}
+}
+
+/*
+================
 TestBootstrapPublishesAlexandria
 
 SRO_ALEXANDRIA reaches the client through the world-entry blob, so the M

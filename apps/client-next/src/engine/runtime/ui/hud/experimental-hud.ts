@@ -201,12 +201,6 @@ export const EXPERIMENTAL_TABS: readonly ExperimentalTab[] = [
 						description: "Richer glow and sparks on reinforced gear."
 					},
 					{
-						key: "sharedActorRoom",
-						id: "experimental-shared-actor-room",
-						label: "Effects in crowds",
-						description: "In a crowd, near skill effects draw before far characters."
-					},
-					{
 						key: "compressedTextures",
 						id: "experimental-compressed-textures",
 						label: "Compressed textures",
@@ -222,12 +216,6 @@ export const EXPERIMENTAL_TABS: readonly ExperimentalTab[] = [
 						id: "experimental-hd-textures",
 						label: "HD textures",
 						description: "Sharper world textures; downloads while on."
-					},
-					{
-						key: "dungeonCharacterPvs",
-						id: "experimental-dungeon-character-pvs",
-						label: "Dungeon character PVS",
-						description: "Hide characters in unseen dungeon rooms."
 					}
 				]
 			}
@@ -240,34 +228,10 @@ export const EXPERIMENTAL_TABS: readonly ExperimentalTab[] = [
 				title: "Windows",
 				rows: [
 					{
-						key: "fitWindowLabels",
-						id: "experimental-fit-window-labels",
-						label: "Fit window labels",
-						description: "Fit labels, captions and speech; open lists upward."
-					},
-					{
-						key: "greyDisabledTabs",
-						id: "experimental-grey-disabled-tabs",
-						label: "Grey disabled tabs",
-						description: "Dim a window tab you cannot use."
-					},
-					{
-						key: "dropOnBagTab",
-						id: "experimental-drop-on-bag-tab",
-						label: "Drop on bag tabs",
-						description: "Drop an item on a bag tab to move it to that page."
-					},
-					{
 						key: "exchangeClickShortcuts",
 						id: "experimental-exchange-click-shortcuts",
 						label: "Exchange click shortcuts",
 						description: "Ctrl+click, right-click or double-click a bag item to offer it."
-					},
-					{
-						key: "confirmGuildBan",
-						id: "experimental-confirm-guild-ban",
-						label: "Confirm guild ban",
-						description: "Ask before Withdraw bans a guild member."
 					},
 					{
 						key: "touchInspect",
@@ -361,12 +325,6 @@ export const EXPERIMENTAL_TABS: readonly ExperimentalTab[] = [
 						description: "Walk to a far target on press; stop at the cast."
 					},
 					{
-						key: "mainThreadOwnWalk",
-						id: "experimental-main-thread-own-walk",
-						label: "Instant own movement",
-						description: "Your character starts walking on the click frame."
-					},
-					{
 						key: "smoothCamera",
 						id: "experimental-smooth-camera",
 						label: "Smooth camera",
@@ -396,10 +354,62 @@ export const EXPERIMENTAL_TABS: readonly ExperimentalTab[] = [
 						description: "When a unique you hit dies, show who did the most."
 					},
 					{
+						key: "uniqueStatus",
+						id: "experimental-unique-status",
+						label: "Unique status window",
+						description: "Each unique alive or dead; alerts for the ones you mark."
+					},
+					{
+						// Port-only, not native (#3529): the market has no
+						// native counterpart; the row only adds its System
+						// menu entry, over the shard's SRO_CONSIGNMENT switch.
+						key: "consignmentMarket",
+						id: "experimental-consignment-market",
+						label: "Consignment market",
+						description: "System menu: trade items while the seller is offline."
+					},
+					{
 						key: "vHidesCompanions",
 						id: "experimental-v-hides-companions",
 						label: "V hides pets and transports",
 						description: "Holding V also hides other players' pets and transports."
+					},
+					{
+						key: "sroMacro",
+						id: "experimental-sro-macro",
+						label: "SRO Macro",
+						description: "Later client's auto-potion, skill and hunt windows."
+					}
+				]
+			},
+			{
+				title: "Events",
+				rows: [
+					{
+						// Port-only, not native (#3532): the calendar has no
+						// native counterpart; the row only adds its System
+						// menu entry and window over the schedule feed.
+						key: "eventCalendar",
+						id: "experimental-event-calendar",
+						label: "Event calendar",
+						description: "System menu: this week's events, in server time."
+					},
+					{
+						// Port-only, not native (#3925): the title screens
+						// gain one notice line while a maintenance runs.
+						key: "maintenanceNotice",
+						id: "experimental-maintenance-notice",
+						label: "Maintenance notice",
+						description: "Login screens: planned maintenance from the public schedule."
+					},
+					{
+						// Port-only, not native (#3530): the Job Honor Rank
+						// window over the honor feed; the row only adds its
+						// System menu entry and window.
+						key: "jobHonor",
+						id: "experimental-job-honor",
+						label: "Job honor ranking",
+						description: "System menu: the job honor ranking and your standing."
 					}
 				]
 			},
@@ -411,12 +421,6 @@ export const EXPERIMENTAL_TABS: readonly ExperimentalTab[] = [
 						id: "experimental-warp-arrival-sound",
 						label: "Portal arrival sound",
 						description: "Play the portal-out cue when you arrive."
-					},
-					{
-						key: "silentWingFlight",
-						id: "experimental-silent-wing-flight",
-						label: "Silent wing flight",
-						description: "Wing dresses fly without footstep sounds."
 					},
 					{
 						key: "christmasCarols",
@@ -463,7 +467,15 @@ export const EXPERIMENTAL_TABS: readonly ExperimentalTab[] = [
 						key: "questTrackerMarkers",
 						id: "experimental-quest-tracker-markers",
 						label: "Quest target markers",
-						description: "Show every active quest's target on M and the minimap."
+						description: "Quest targets and tool spots on M and the minimap."
+					},
+					{
+						// Port-only, not native (#3394): the later client only
+						// tints the picked ground on the M map itself.
+						key: "guideWaypoint",
+						id: "experimental-guide-waypoint",
+						label: "Hunting-ground waypoint",
+						description: "A guide monster pick marks its ground on the minimap."
 					}
 				]
 			},
@@ -549,12 +561,6 @@ export const EXPERIMENTAL_TABS: readonly ExperimentalTab[] = [
 			{
 				title: "Pickup pet",
 				rows: [
-					{
-						key: "smartPetPickup",
-						id: "experimental-smart-pet-pickup",
-						label: "Keep pet gold pickup when full",
-						description: "Keep picking up gold when a full bag refuses an item."
-					},
 					{
 						key: "petPickupFilter",
 						id: "experimental-pet-pickup-filter",

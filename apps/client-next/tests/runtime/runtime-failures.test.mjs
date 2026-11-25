@@ -383,14 +383,13 @@ that reached the worker.
 		try {
 			const calls = globalThis.__runtimeCalls ?? [];
 			const platformArgs = defined( calls.find( call => call.owner === "platform" ) ).args;
-			const uiEvent = defined( platformArgs[5] ), worldClick = defined( platformArgs[7] );
+			const worldClick = defined( platformArgs[7] );
 			const drive = async now => {
 				defined( callback )( now );
 				for ( let i = 0; i < 32; i++ ) await Promise.resolve();
 			};
 			let now = performance.now();
 			await drive( now );
-			uiEvent( { kind: "experimental-preferences", value: { mainThreadOwnWalk: true } } );
 			worldClick( 10, 10 );
 			for ( let i = 0; i < 30; i++ ) await drive( now += 16.7 );
 			return { moverFrames, sessionCommands };
@@ -566,7 +565,6 @@ test("a move command starts a mover prediction while the row is on, and only the
 	try {
 		const calls = globalThis.__runtimeCalls ?? [];
 		const sessionCommand = defined( calls.find( call => call.owner === "ui" ) ).args[0].commands;
-		const uiEvent = defined( calls.find( call => call.owner === "platform" ) ).args[5];
 		const drive = async now => {
 			defined( callback )( now );
 			for ( let i = 0; i < 32; i++ ) await Promise.resolve();
@@ -580,21 +578,17 @@ test("a move command starts a mover prediction while the row is on, and only the
 				destination: { regionId: 0x61a8, x: 1300, y: 0, z: 1000, angle: 0 }
 			}
 		};
-		// Row off: the command reaches the worker and no frame walks.
+		// The worker's ground-walk gate closed: the command reaches the
+		// worker and no frame walks.
+		gameState.walkPredictable = false;
 		sessionCommand( move );
-		await drive( t0 + 100 );
+		await drive( t0 + 200 );
 		assert.ok(
 			sessionCommands.some( c => c.kind === "gameplay" && c.command.kind === "move" ),
 			"the move never reached the worker"
 		);
-		assert.ok( !moverFrames.some( f => f.kind === "walking" ), "the presenter lost the walk with the row off" );
-		// Row on but the worker's ground-walk gate closed: still nothing.
-		uiEvent( { kind: "experimental-preferences", value: { mainThreadOwnWalk: true } } );
-		gameState.walkPredictable = false;
-		sessionCommand( move );
-		await drive( t0 + 200 );
 		assert.ok( !moverFrames.some( f => f.kind === "walking" ), "a gated move was predicted" );
-		// Row on, gate open: the body walks toward the destination.
+		// Gate open: the body walks toward the destination.
 		gameState.walkPredictable = true;
 		sessionCommand( move );
 		let now = t0 + 200;

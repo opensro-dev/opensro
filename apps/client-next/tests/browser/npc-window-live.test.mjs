@@ -133,6 +133,6 @@ test('live NPC title drag and ESC retire the selected conversation',{timeout:300
   if(!baseline){assert.equal(logout.session,'signed-out');assert.deepEqual(errors,[]);}
  } catch(error) {
   await writeFile(directory+'/failure.json',JSON.stringify({error:String(error),errors,state:await page.evaluate(()=>({session:globalThis.__playableRuntime?.sessionState(),game:globalThis.__playableRuntime?.gameplay(),ui:globalThis.__npcWindowProbe?.owner.stats(),events:globalThis.__npcWindowProbe?.events})).catch(()=>null)},null,2));
-  await page.screenshot({path:directory+'/failure.png'}).catch(()=>{});throw error;
+  throw error;
  } finally {await browser.close();}
 });

@@ -156,18 +156,61 @@ func (server *Server) resolveBrowserIdentity(r *http.Request) (identity browserI
 	if !live {
 		return browserIdentity{}, true, false
 	}
-	character := ""
-	if hint, err := r.Cookie(name + "Character"); err == nil && len(hint.Value) <= 128 {
-		if decoded, err := base64.RawURLEncoding.DecodeString(hint.Value); err == nil && len(decoded) <= 64 {
-			character = string(decoded)
-		}
+	return browserIdentity{token: cookie.Value, accountID: claims.AccountID, definition: definition, character: server.browserCharacterHint(r)}, true, true
+}
+
+/*
+================
+browserCharacterHint
+
+The remembered character a request's hint cookie names, or "" - a
+navigation hint, never an admission credential.
+================
+*/
+func (server *Server) browserCharacterHint(r *http.Request) string {
+	name, _ := browserCookieName(r)
+	hint, err := r.Cookie(name + "Character")
+	if err != nil || len(hint.Value) > 128 {
+		return ""
 	}
-	return browserIdentity{token: cookie.Value, accountID: claims.AccountID, definition: definition, character: character}, true, true
+	decoded, err := base64.RawURLEncoding.DecodeString(hint.Value)
+	if err != nil || len(decoded) > 64 {
+		return ""
+	}
+	return string(decoded)
+}
+
+/*
+================
+setBrowserSessionUntil
+
+Re-issues the browser's copy of a session the caller already verified,
+at the token's own expiry (its remaining life, never an extension),
+leaving the character hint alone: a cleared copy is restored, not a
+new login (#4109).
+================
+*/
+func (server *Server) setBrowserSessionUntil(w http.ResponseWriter, r *http.Request, token string, expires time.Time) {
+	maxAge := int(expires.Sub(server.now()) / time.Second)
+	if maxAge <= 0 {
+		return
+	}
+	name, secure := browserCookieName(r)
+	http.SetCookie(w, &http.Cookie{Name: name, Value: token, Path: "/", HttpOnly: true, Secure: secure,
+		SameSite: http.SameSiteStrictMode, MaxAge: maxAge, Expires: expires})
 }
 
 /*
 ================
 handleBrowserSession
+
+The client's reload restore. A request with no session cookie at all is
+a visitor with nothing to restore, not a failed authentication: it gets
+200 {"ok": false}, so every first page load stops logging a 401 in the
+browser console and the access log. A cookie that is present but forged,
+expired or revoked still gets 401, and the cookie is cleared. The client
+reads anything but 200 {"ok": true} as "no session" either way
+(session.ts restore).
 ================
 */
 func (server *Server) handleBrowserSession(w http.ResponseWriter, r *http.Request) {
@@ -184,7 +227,7 @@ func (server *Server) handleBrowserSession(w http.ResponseWriter, r *http.Reques
 	}
 	identity, present, ok := server.resolveBrowserIdentity(r)
 	if !present {
-		writeJSON(w, http.StatusUnauthorized, map[string]any{"ok": false})
+		writeJSON(w, http.StatusOK, map[string]any{"ok": false})
 		return
 	}
 	if !ok {
@@ -196,7 +239,7 @@ func (server *Server) handleBrowserSession(w http.ResponseWriter, r *http.Reques
 	// authoritative, including across Agent restarts and signing-key rotation.
 	definition := identity.definition
 	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "sessionToken": identity.token, "divisionId": definition.ID,
-		"nativeServerId": definition.NativeServerID, "nativeServerName": definition.Name, "transportUrl": definition.AdvertisedTransportURL(), "nextScene": "character-select", "resumeCharacter": identity.character})
+		"nativeServerId": definition.NativeServerID, "nativeServerName": definition.Name, "transportUrl": definition.AdvertisedTransportURL(), "transportRoute": definition.TransportEdgeRoute(), "nextScene": "character-select", "resumeCharacter": identity.character})
 }
 
 /*

@@ -65,6 +65,40 @@ path).
 ================
 */
 func Build(deps *Deps, request BootstrapRequest) *BootstrapResult {
+	result := buildBootstrap(deps, request)
+	if result.NativeResult != nativeResultSuccess {
+		logRefusedEntry(request, result)
+	}
+	return result
+}
+
+/*
+================
+logRefusedEntry
+
+Every refused entry, login and re-entry alike, as one log line: the
+player sees only a native code (S2 is 0x02, which eleven refusals share),
+so without this line a refusal is found only by reading the store
+(#4019).
+================
+*/
+func logRefusedEntry(request BootstrapRequest, result *BootstrapResult) {
+	fields := log.Fields{"division": request.DivisionID, "character": request.CharacterName,
+		"code": fmt.Sprintf("0x%02X", result.NativeErrorCode), "reason": result.Reason}
+	if result.cause != "" {
+		fields["cause"] = result.cause
+	}
+	log.WithFields(fields).Warn("enterworld: entry refused")
+}
+
+/*
+================
+buildBootstrap
+
+Build's body; every return is the result Build logs when it refuses.
+================
+*/
+func buildBootstrap(deps *Deps, request BootstrapRequest) *BootstrapResult {
 	divisionID := resolveBootstrapDivision(deps, request.DivisionID)
 	if divisionID == "" {
 		return Failure(nativeErrorInvalidRequest, "unknownDivision")
@@ -86,11 +120,13 @@ func Build(deps *Deps, request BootstrapRequest) *BootstrapResult {
 	if liveCharacter == nil {
 		return Failure(nativeErrorCharacter, "characterNotFound")
 	}
+	request.hold.Mark("lookup")
 
 	character := readCharacterSnapshot(deps, divisionID, liveCharacter)
 	if character == nil {
 		return Failure(nativeErrorCharacter, "characterNotFound")
 	}
+	request.hold.Mark("snapshot")
 	if character.DeletePending {
 		return Failure(nativeErrorInvalidRequest, "deletePending")
 	}
@@ -124,15 +160,18 @@ func Build(deps *Deps, request BootstrapRequest) *BootstrapResult {
 
 	// The beta starter kit backfills every character on entry (starterkit.go),
 	// and its HP/MP potions are topped up to a full stack (starterrefill.go).
-	kitMissing := len(deps.StarterKit) > 0 && StarterKitMissing(character, deps.StarterKit)
-	refillShort := len(deps.StarterRefills) > 0 && StarterRefillShort(character, deps.StarterRefills)
-	if kitMissing || refillShort {
-		deps.Mutate(liveCharacter, "starter-kit", func() {
-			GrantStarterKit(liveCharacter, deps.StarterKit)
-			RefillStarterPotions(liveCharacter, deps.StarterRefills)
-		})
-		character = readCharacterSnapshot(deps, divisionID, liveCharacter)
-		if character == nil {
+	// Each is its own door, so the item ledger and the free-grant days
+	// (#3307) tell a kit from a refill; the refill reads the snapshot the
+	// kit left, as it did when both shared one door.
+	if len(deps.StarterKit) > 0 && StarterKitMissing(character, deps.StarterKit) {
+		deps.Mutate(liveCharacter, domain.GrantStarterKit, func() { GrantStarterKit(liveCharacter, deps.StarterKit) })
+		if character = readCharacterSnapshot(deps, divisionID, liveCharacter); character == nil {
+			return Failure(nativeErrorCharacter, "characterNotFound")
+		}
+	}
+	if len(deps.StarterRefills) > 0 && StarterRefillShort(character, deps.StarterRefills) {
+		deps.Mutate(liveCharacter, domain.GrantStarterRefill, func() { RefillStarterPotions(liveCharacter, deps.StarterRefills) })
+		if character = readCharacterSnapshot(deps, divisionID, liveCharacter); character == nil {
 			return Failure(nativeErrorCharacter, "characterNotFound")
 		}
 	}
@@ -150,6 +189,7 @@ func Build(deps *Deps, request BootstrapRequest) *BootstrapResult {
 		// inventory and companion state, not the snapshot taken before restoration.
 		character = readCharacterSnapshot(deps, divisionID, liveCharacter)
 	}
+	request.hold.Mark("prepare")
 	if deps.NormalizeEntryQuests != nil {
 		if err := deps.NormalizeEntryQuests(character); err != nil {
 			return Failure(nativeErrorInvalidRequest, "invalidQuestState: "+err.Error())
@@ -176,15 +216,32 @@ func Build(deps *Deps, request BootstrapRequest) *BootstrapResult {
 			}
 		}
 	}
+	// Native deletes an out-of-period rental when its storage loads
+	// (_DelExpiredRentItemInStorage), so the expiry takes the row at
+	// the first entry past it; the conditional door writes only then.
+	if deps.RemoveExpiredRentItems != nil {
+		removed := false
+		deps.Update(liveCharacter, "expired-rent-items", func() bool {
+			removed = deps.RemoveExpiredRentItems(liveCharacter)
+			return removed
+		})
+		if removed {
+			character = readCharacterSnapshot(deps, divisionID, liveCharacter)
+			if character == nil {
+				return Failure(nativeErrorCharacter, "characterNotFound")
+			}
+		}
+	}
 	// World entry is where the v1.150 client learns its capacity, so slots
 	// an expansion quest paid become usable here (inventory_capacity.go).
 	// The port-only inventory-pages base rides the same presentation: the
 	// encoded entry shows it, and the live record adopts it on encode.
+	request.hold.Mark("normalize")
 	presented := character.PresentInventoryExpansion()
 	if deps.InventoryPages {
 		presented = character.RaiseInventoryFloor(domain.InventoryPagesBase) || presented
 	}
-	result := buildCharacterProjection(deps, divisionID, character)
+	result := buildCharacterProjection(deps, divisionID, character, request.hold)
 	if result.NativeResult == nativeResultSuccess {
 		result.liveOwner = liveCharacter
 		if presented {
@@ -205,7 +262,7 @@ never seeds or mutates the live character, so re-entry can be prepared before
 an authoritative relocation/revival commits.
 ================
 */
-func buildCharacterProjection(deps *Deps, divisionID string, character *Character) *BootstrapResult {
+func buildCharacterProjection(deps *Deps, divisionID string, character *Character, hold *simulation.HoldBreakdown) *BootstrapResult {
 	// Both callers pass a snapshot, so the running events' groups join the
 	// entry without touching the stored record; a fresh slice keeps the
 	// snapshot from sharing the record's backing array.
@@ -249,11 +306,13 @@ func buildCharacterProjection(deps *Deps, divisionID string, character *Characte
 	inventoryRows := InventoryWireItems(character.MissionInventory)
 	for _, row := range inventoryRows {
 		if len(BuildItemBody(row)) == 0 {
-			return Failure(nativeErrorInvalidRequest, "invalidPersistentItem")
+			return FailureCause(nativeErrorInvalidRequest, "invalidPersistentItem",
+				fmt.Errorf("slot %d item %d has no item body", row.Slot, row.RefObjID))
 		}
 	}
 
 	localPlayerPayload := BuildLocalPlayerEntryPayload(character, &entry, eventGuideStateMask, inventoryRows)
+	hold.Mark("entry")
 	objectID := ObjectIDForCharacter(character)
 
 	encodeItems := func(rows []WireItem) []EquipItemRow {
@@ -273,6 +332,7 @@ func buildCharacterProjection(deps *Deps, divisionID string, character *Characte
 		return equipItems
 	}
 	equipItems := encodeItems(inventoryRows)
+	hold.Mark("items")
 	var avatarItems []EquipItemRow
 	if character.AvatarInventory != nil {
 		avatarItems = encodeItems(InventoryWireItems(character.AvatarInventory.Rows))
@@ -287,8 +347,9 @@ func buildCharacterProjection(deps *Deps, divisionID string, character *Characte
 
 	packets, packetErr := buildBootstrapPackets(deps, divisionID, character, &entry, localPlayerPayload, objectID)
 	if packetErr != nil {
-		return Failure(nativeErrorInvalidRequest, "invalidCOSRestoration")
+		return FailureCause(nativeErrorInvalidRequest, "invalidCOSRestoration", packetErr)
 	}
+	hold.Mark("packets")
 	academyMember := false
 	var skillSnapshot []SpawnSkillRow
 	if deps.BrowserReferences == nil {
@@ -298,42 +359,47 @@ func buildCharacterProjection(deps *Deps, divisionID string, character *Characte
 		_, academyMember = deps.TrainingCamps.CampOfCharacter(divisionID, character.ID)
 	}
 	return &BootstrapResult{
-		NativeResult:         nativeResultSuccess,
-		DivisionID:           divisionID,
-		Character:            character,
-		AcademyMember:        academyMember,
-		EventGuideStateMask:  eventGuideStateMask,
-		RefObjSnapshot:       refObjSnapshot,
-		RefSkillSnapshot:     skillSnapshot,
-		SkillCooldowns:       entrySkillCooldowns(deps, character),
-		RefItemSnapshot:      buildRefItemSnapshot(deps, divisionID, character),
-		MagicOptionSnapshot:  buildMagicOptionSnapshot(deps, character),
-		AvatarMagicOptions:   buildAvatarMagicOptions(deps),
-		SiegeItemForgeGroups: DefaultSiegeItemForgeGroups(),
-		SiegeFortressData:    siegeFortressRows(deps),
-		SiegeStructUpgrades:  deps.SiegeStructUpgrades,
-		GameWorldData:        DefaultGameWorldDataRows(),
-		AvatarItems:          avatarItems,
-		EquipItems:           equipItems,
-		LocalPlayerEntry:     &entry,
-		ChatPermissions:      ChatPermissions{},
-		ChatMessages:         []string{},
-		SystemMessages:       systemMessages,
-		Packets:              packets,
-		UnlimitedItems:       StarterKitRefObjIDs(deps.StarterKit),
-		MasteryTotalOverride: MasteryAllowanceOverride(deps.MasteryTotalOverride, deps.BetaMasteryEarly, character),
-		LevelCap:             deps.LevelCap,
-		EquipmentSets:        deps.PublishedSets(),
-		StorageAutoStack:     deps.StorageAutoStack,
-		ChatItemLinks:        deps.ChatItemLinks,
-		FastDenReturn:        deps.FastDenReturn,
-		TradeTiers:           deps.TradeTiers,
-		Consignment:          deps.Consignment,
-		JobSuitHidesArmor:    deps.JobSuitHidesArmor,
-		MoonlitThiefSuit:     deps.MoonlitThiefSuit,
-		Alexandria:           deps.Alexandria,
-		RaisedGoldCaps:       deps.RaisedGoldCaps,
-		UiTuning:             UiTuningFrom(tunables.Current()),
+		NativeResult:            nativeResultSuccess,
+		DivisionID:              divisionID,
+		Character:               character,
+		AcademyMember:           academyMember,
+		EventGuideStateMask:     eventGuideStateMask,
+		RefObjSnapshot:          refObjSnapshot,
+		RefSkillSnapshot:        skillSnapshot,
+		SpiritSkills:            entrySpiritSkills(deps, divisionID, character),
+		SkillCooldowns:          entrySkillCooldowns(deps, character),
+		ItemCooldowns:           entryItemCooldowns(deps, character),
+		RefItemSnapshot:         buildRefItemSnapshot(deps, divisionID, character),
+		MagicOptionSnapshot:     buildMagicOptionSnapshot(deps, character),
+		AvatarMagicOptions:      buildAvatarMagicOptions(deps),
+		SiegeItemForgeGroups:    DefaultSiegeItemForgeGroups(),
+		SiegeFortressData:       siegeFortressRows(deps),
+		SiegeStructUpgrades:     deps.SiegeStructUpgrades,
+		GameWorldData:           DefaultGameWorldDataRows(),
+		AvatarItems:             avatarItems,
+		EquipItems:              equipItems,
+		LocalPlayerEntry:        &entry,
+		ChatPermissions:         ChatPermissions{},
+		ChatMessages:            []string{},
+		SystemMessages:          systemMessages,
+		Packets:                 packets,
+		UnlimitedItems:          StarterKitRefObjIDs(deps.StarterKit),
+		MasteryTotalOverride:    MasteryAllowanceOverride(deps.MasteryTotalOverride, deps.BetaMasteryEarly, character),
+		LevelCap:                deps.LevelCap,
+		EquipmentSets:           deps.PublishedSets(),
+		StorageAutoStack:        deps.StorageAutoStack,
+		ChatItemLinks:           deps.ChatItemLinks,
+		FastDenReturn:           deps.FastDenReturn,
+		TradeTiers:              deps.TradeTiers,
+		Consignment:             deps.Consignment,
+		JobSuitHidesArmor:       deps.JobSuitHidesArmor,
+		QuickFuse:               deps.QuickFuse,
+		MoonlitThiefSuit:        deps.MoonlitThiefSuit,
+		InventorySort:           deps.InventorySort,
+		Alexandria:              deps.Alexandria,
+		RaisedGoldCaps:          deps.RaisedGoldCaps,
+		StorageGoldDepositLimit: deps.StorageGoldDepositLimit,
+		UiTuning:                UiTuningFrom(tunables.Current()),
 	}
 }
 
@@ -420,6 +486,31 @@ func readCharacterSnapshot(
 
 /*
 ================
+companionRefusal
+
+Which of the restore's identity checks a summoned companion failed, for
+the refusal's log line: an unknown codename, a stored id the catalogue
+moved (#4019), a band no restore admits, or a GID that is not its own.
+================
+*/
+func companionRefusal(cos *CharacterCOS, ref *CharacterRef, expectedGID uint32, gidOK, unique bool) error {
+	switch {
+	case ref == nil:
+		return fmt.Errorf("companion %s (stored id %d): codename not in the catalogue", cos.Codename, cos.RefObjID)
+	case ref.RefObjID != cos.RefObjID:
+		return fmt.Errorf("companion %s: stored id %d, catalogue id %d", cos.Codename, cos.RefObjID, ref.RefObjID)
+	case ref.TidWord>>11 < 1 || ref.TidWord>>11 > 5:
+		return fmt.Errorf("companion %s (id %d): band %d is not a companion band", cos.Codename, ref.RefObjID, ref.TidWord>>11)
+	case !gidOK || cos.GID != expectedGID:
+		return fmt.Errorf("companion %s (id %d): gid %d, expected %d (derivable %v)", cos.Codename, ref.RefObjID, cos.GID, expectedGID, gidOK)
+	case !unique:
+		return fmt.Errorf("companion %s (id %d): gid %d is held by another companion record", cos.Codename, ref.RefObjID, cos.GID)
+	}
+	return fmt.Errorf("companion %s (id %d) failed validation", cos.Codename, ref.RefObjID)
+}
+
+/*
+================
 buildBootstrapPackets
 
 buildBootstrapPackets assembles the packet sequence in the exact Node
@@ -469,7 +560,7 @@ func buildBootstrapPackets(deps *Deps, divisionID string, character *Character, 
 		}
 		if !found || ref == nil || ref.RefObjID != cos.RefObjID || (ref.TidWord>>11 < 1 || ref.TidWord>>11 > 5) ||
 			!gidOK || cos.GID != expectedGID || character.CompanionByGID(cos.GID) != cos {
-			return nil, fmt.Errorf("active COS failed authoritative media/identity validation")
+			return nil, companionRefusal(cos, ref, expectedGID, gidOK, character.CompanionByGID(cos.GID) == cos)
 		} else {
 			record, recordErr := BuildCOSRecord(cos, ref, deps.Items)
 			if recordErr != nil {
@@ -771,6 +862,7 @@ func (c *refItemCollector) add(codename string, typeFlags *uint16) {
 		Kind:         "equipment",
 		Name:         row.Name,
 		NativeFields: row.NativeFields,
+		Rent:         row.Rent,
 	})
 }
 
@@ -874,4 +966,21 @@ func withEventGroups(own, running []uint32) []uint32 {
 		}
 	}
 	return out
+}
+
+/*
+================
+entrySpiritSkills
+
+The skills the worn, awake Devil's Spirit lends at entry, derived from
+the stored avatar rows by the runtime that owns the rule (Deps.SpiritSkills;
+action/spiritability.go): the runtime-only Spirit record is not part of
+the character this projection reads.
+================
+*/
+func entrySpiritSkills(deps *Deps, divisionID string, character *Character) []uint32 {
+	if deps.SpiritSkills == nil || character == nil {
+		return nil
+	}
+	return deps.SpiritSkills(divisionID, character)
 }

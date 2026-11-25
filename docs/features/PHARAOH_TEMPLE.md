@@ -8,7 +8,7 @@ one for the thief job. With the switch on, the dungeons, their gates and their m
 
 | Switch | Where | Effect |
 | --- | --- | --- |
-| `SRO_PHARAOH_TEMPLE` | Build and server | The seven dungeons (regions `0x800A`-`0x8010`), the four gates, and the 24 kinds and 101 nests in them, `pharaoh-temple.txt` |
+| `SRO_PHARAOH_TEMPLE` | Build and server | The seven dungeons (regions `0x800A`-`0x8010`), the four gates, and the 26 kinds and 103 nests in them, `pharaoh-temple.txt` |
 
 The live shard profile (`apps/server/config/shard-settings.json`) turns it on. The code default stays off.
 
@@ -28,17 +28,19 @@ stages.
 
 | Part | Result (real inputs) |
 | --- | --- |
-| Monsters | 24 kinds in `characterdata_270000.txt`, 83 skills in `skilldata_270000.txt` |
-| Placements | 101 nests across the seven dungeons, joining the default world |
+| Monsters | 26 kinds admitted, in `characterdata_270000.txt` (the Osiris kind rides the Pharaoh Tomb pass's standing row when that pass staged it first), 104 skills in `skilldata_270000.txt` |
+| Placements | 102 nests across the seven dungeons, joining the default world |
 | Keepers | Selkis, Neith, Anubis, Isis and Seth (grade 3), one each in their sanctums (Anubis two), on a 3-hour respawn |
+| Uniques | Osiris (`MOB_SD_OSIRIS_3`, grade 8), one nest in the Temple on an 8-hour respawn; Haroeris (`MOB_SD_HAROERIS`, grade 3), his kind and skills only: no nest places him (below) |
 
 The server loader (`monster.AppendPharaohTemple`) admits a nest only in one of the seven dungeon regions, and only
-when its source world is the one its dungeon is grouped under (51-56, and 60 for the Temple). Every other population
-keeps refusing dungeon regions.
+when its source world is the one its dungeon is grouped under (51-56, and 60 for the Temple); the one exception is
+the Osiris nest, which v1.188 groups under the field world and which is admitted from there alone. Every other
+population keeps refusing dungeon regions.
 
 ## Native evidence and decisions
 
-- **Source.** The v1.188 server places the same 24 kinds in these regions, with the same nest counts and the same
+- **Source.** The v1.188 server places the same 25 kinds in these regions, with the same nest counts and the same
   keeper counts and respawns (research `tactics-recovered/Tab_RefNest.json`, 105 nests joined through
   `Tab_RefTactics.json`). Its recovered tactics keep 10 of the fields a nest's controls carry, so the rows come from the
   ISRO-R export, whose tactics are whole.
@@ -47,7 +49,36 @@ keeps refusing dungeon regions.
   world, region and cap. The server caps the four nests as one (`HiveKey` / `HiveMaxCount`).
 - **NPC rows.** The export's guild agents and the Mentuhotep and Berenice stands are roster content and stay out of
   the population.
-- **Not yet here.**
-  - `MOB_SD_OSIRIS_3`: v1.188 has one nest of it, a world-1 hive in the Temple with an 8-hour respawn. The ISRO-R
-    export doesn't carry it, and its controls need the v1.188 database's full tactics row.
-  - Haroeris: neither source places it by a nest.
+- **The Osiris exception.** v1.188's one `MOB_SD_OSIRIS_3` nest (40999) is grouped under the field world
+  (hive 2761), not under the Temple's world 60, so the ISRO-R export carries no row for it and the projection
+  would drop the one it was handed. The import names it as a single authored row with the v1.188 database's
+  full tactics row (57573, read whole), and the server admits it alone from the field world into the Temple
+  region, at the grade its tomb brothers carry (8). The kind is the Pharaoh Tomb's too: whichever pass stages
+  it first, the other places its nest on the standing row (one codename, one row).
+## Sanctum gates
+
+With the switch on, each pair of sanctums opens twice a day, as the later server opens them. The windows are
+_Schedule_copy1 defines 12-14 of the pinned shard, two hours each, in shard time:
+
+| Pair | Windows | Gates open |
+| --- | --- | --- |
+| Selkis & Neith | 00:00, 09:30 | 00:30, 10:00 |
+| Anubis & Isis | 01:30, 11:00 | 02:00, 11:30 |
+| Haroeris & Seth | 03:00, 12:30 | 03:30, 13:00 |
+
+- **Open.** Half an hour into a window, the pair's enter gates stand in the Temple and its leave gates in the
+  sanctums. The gates are the two teleporter buildings the VSRO client carries (INS_TEMPLE_TELEPORT,
+  INS_TEMPLE_SETH_TELEPORT), at the points _RefGameWorldGroup_Config gives each GROUP_TEMPLE_* group.
+- **Haroeris and Seth.** The Haroeris window spawns Haroeris once at the native wave's point, for the rest of the
+  window. Seth's gate stands in Haroeris's sanctum once he is dead.
+- **Close.** At the window's end the gates come down, and everyone still inside one of the pair's sanctums leaves to
+  that sanctum's leave target in the Temple.
+
+The server owns the table (pharaohtemple/sanctum.go, with its evidence) and the runtime
+(ction/temple_sanctum.go). The build stages the two teleporters (pharaoh_temple.TELEPORTER_CODES).
+
+- **Not yet here** (#3787):
+  - the countdown notices before an open;
+  - the temple association reputation the native entry check reads;
+  - the keepers living only while their sanctum is open (today they stand on their 3-hour respawn);
+  - Haroeris's skill summons (ssou) and decoys, on the iSRO-R counts and _RefGameWorldNPC points.

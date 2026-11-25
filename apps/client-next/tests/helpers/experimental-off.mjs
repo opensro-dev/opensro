@@ -52,12 +52,6 @@ export const OFF = Object.freeze( {
 	// Off by default (owner 2026-11-07, #2061): off fetches none of the
 	// HD set, not even its index.
 	hdTextures: false,
-	// On by default (owner 2026-10-14): near effects outrank far characters.
-	sharedActorRoom: true,
-	// On by default (owner 2026-10-25): the own walk is stepped on the main thread.
-	mainThreadOwnWalk: true,
-	// On by default (owner 2026-10-15): a disabled tab is dimmed.
-	greyDisabledTabs: true,
 	// On by default (owner 2026-10-15): the shard's job-kill notices show.
 	jobKillNotices: true,
 	// On by default (owner 2026-10-15): the shard's drop and plus notices show.
@@ -68,14 +62,12 @@ export const OFF = Object.freeze( {
 	highlightEventNotices: true,
 	// Off by default: each player opts in to the unique damage ranking.
 	uniqueDamageRank: false,
+	// Off by default: each player opts in to the Unique Status window (#3531).
+	uniqueStatus: false,
+	// Off by default: each player opts in to the market's menu entry (#3529).
+	consignmentMarket: false,
 	// Off by default: V hides only monsters and players, as the original does.
 	vHidesCompanions: false,
-	// On by default (port-only, not native): hides characters in dungeon blocks the active block does not draw.
-	dungeonCharacterPvs: true,
-	// On by default (owner 2026-10-15): labels and lists stay inside their window.
-	fitWindowLabels: true,
-	// On by default (owner 2026-10-15): a drop on a bag tab moves the item there.
-	dropOnBagTab: true,
 	// On by default (owner 2026-10-24): click shortcuts stage into an exchange.
 	exchangeClickShortcuts: true,
 	// On by default (owner 2026-10-15): a notice's player and item are links.
@@ -85,8 +77,6 @@ export const OFF = Object.freeze( {
 	// On by default (owner 2026-10-15): the notice banner shows for 5 s.
 	shortNotices: true,
 	autoSelect: false,
-	// On by default (owner 2026-10-15): Withdraw asks before a guild ban.
-	confirmGuildBan: true,
 	// Off by default: straight projectiles keep their launch-captured endpoint (8D8580).
 	homingProjectiles: false,
 	// On by default (owner 2026-11-07, #2741): companion and vigor auto-potions;
@@ -95,9 +85,6 @@ export const OFF = Object.freeze( {
 	// On by default (owner 2026-10-18, BUG-086): clicking CIFPetMiniInfo opens CIFCos;
 	// off restores the native no-op click (6B3760).
 	petClickOpensWindow: true,
-	// On by default (owner 2026-10-20): keep bit 0x80 enabled on 0xB4/0xB5 so the
-	// pet keeps picking up gold when full; off restores the native 0x0077DD61 disable.
-	smartPetPickup: true,
 	// Off by default (#841): the pickup pet proposes the native categories
 	// until the item filter is turned on.
 	petPickupFilter: false,
@@ -116,6 +103,9 @@ export const OFF = Object.freeze( {
 	// Off by default: the M window shows only the five native towns and 28 x 8 overview.
 	// Off by default (#840): the maps mark the tracked quest's targets only.
 	questTrackerMarkers: false,
+	// Off by default (#3394): the guide shows its ground on the M map only,
+	// as the later client does (sub_e75d50).
+	guideWaypoint: false,
 	// On by default (owner 2026-11-07): the world map's unique nest signs.
 	uniqueSpawnPoints: true,
 	// Off by default (#1640): only the native plate and no ground ring.
@@ -123,9 +113,6 @@ export const OFF = Object.freeze( {
 	// Off by default: port-only portal-out cue on arrival; the native
 	// gate has no traced caller, so silence is the native default.
 	warpArrivalSound: false,
-	// On by default (owner 2026-11-15, #3547): a wing dress flies without
-	// the Default run's fallback footsteps.
-	silentWingFlight: true,
 	// On by default (owner 2026-11-15): port-only carols during the
 	// Christmas event's snowfalls; no v1.150 code sets the native carol mode.
 	christmasCarols: true,
@@ -139,5 +126,15 @@ export const OFF = Object.freeze( {
 	silkHistory: false,
 	// Off by default (#3257): the later mall's categories, HOT shop and
 	// item search; the native mall stands.
-	mallCategories: false
+	mallCategories: false,
+	// On by default (owner 2026-11-21, #3907): the v1.696 SRO Macro
+	// windows are port-only and ship on in the next release.
+	sroMacro: true,
+	// Off by default (#3532): the Event Calendar is port-only; off, the
+	// System menu has no calendar entry.
+	eventCalendar: false,
+	jobHonor: false,
+	// Off by default (#3925): the login maintenance notice is port-only;
+	// off, the title never reads the schedule feed.
+	maintenanceNotice: false
 } );

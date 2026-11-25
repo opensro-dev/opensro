@@ -56,7 +56,7 @@ value falls back to the reference's type.
 func GMSpawnRarity(requested, referenceType uint8) uint8 {
 	requested &= 0x0f
 	own := referenceType & 0x0f
-	if own == 3 || own == 8 {
+	if monster.RarityIsUnique(own) {
 		return own
 	}
 	switch requested {
@@ -175,4 +175,29 @@ func (s *MonsterState) SpawnGMMonstersTracked(request GMMonsterSpawn) []uint32 {
 		armLifetimeLocked(state, actor, request.NowMs)
 	}
 	return created
+}
+
+/*
+================
+DespawnGMMonster
+
+Port-only: removes one tracked GM spawn silently - no death, no loot,
+no credit; the caller's event simply ends (an EventBot hider at round
+end, #3536). The interest pass tells nearby clients the object left,
+as it does for any population exit. False when no such live monster.
+================
+*/
+func (s *MonsterState) DespawnGMMonster(division string, gid uint32) bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	state, slot := s.locateObject(division, gid)
+	if state == nil {
+		return false
+	}
+	row := state.instances.slotValue(gid, &slot)
+	if !row.GMSpawned {
+		return false
+	}
+	s.removeInstanceLocked(state, gid, row)
+	return true
 }

@@ -144,16 +144,7 @@ func reverseReturnPoint(c *enterworld.Character, choice uint8) (travelPoint, uin
 			point = c.World.LastDeathPoint
 		}
 	}
-	if point == nil || point.RegionID == nil || *point.RegionID == 0 {
-		return travelPoint{}, refusal
-	}
-	// The point keeps its GameWorldID; a recorded world is type 0, entered
-	// on layer 1. Absent means the field.
-	world := instance.ID(domain.DefaultWorldInstance)
-	if point.World != 0 {
-		world = instance.Pack(instance.DefinitionID(point.World), portalWorldLayer)
-	}
-	return travelPoint{spawn: missionSpawnFromWorld(&point.WorldSpawn, simulation.Spawn{}), world: world}, 0
+	return recordedTravelPoint(point, refusal)
 }
 
 /*
@@ -245,12 +236,16 @@ func (rt *Runtime) scrollReverseReturn(division string, c *enterworld.Character,
 reverseReturnTarget
 
 The point a use picked: choice 2 or 3, or the port-only map choice 7
-with its point id.
+with its point id, or the two later destinations (reverseuser.go): the
+party choice 4 with the member it names, its standing point already
+resolved by the finisher, and the user choice 5.
 ================
 */
 type reverseReturnTarget struct {
-	choice uint8
-	point  uint32
+	choice   uint8
+	point    uint32
+	member   uint32
+	resolved *travelPoint
 }
 
 /*
@@ -278,24 +273,43 @@ func (rt *Runtime) beginReverseReturnScroll(division string, c *enterworld.Chara
 		if destination, found = rt.reverseMapDestination(target.point); !found {
 			return false
 		}
-	} else if target.choice != reverseReturnLastRecall && target.choice != reverseReturnLastDeath {
+	} else if target.choice == reverseReturnPartyChoice {
+		// The finisher already judged the member and resolved the standing
+		// point (reverseuser.go); an unresolved target never starts.
+		if target.resolved == nil {
+			return false
+		}
+		destination = *target.resolved
+	} else if target.choice != reverseReturnLastRecall && target.choice != reverseReturnLastDeath &&
+		target.choice != reverseReturnUserChoice {
 		return false
 	}
 	duration, ok := returnScrollDuration(ref)
 	if !ok || !rt.returnScrollAdmission(division, c, result) {
 		return false
 	}
-	if target.choice != reverseReturnMapChoice {
+	switch {
+	case target.choice == reverseReturnMapChoice:
+		if !rt.reverseMapAdmitsLevel(target.point, c) {
+			// Port-only (reversemap.go): v1.150 has no notice for a level band,
+			// so the item-use level notice answers (INFERENCE).
+			*result = itemUseFailure(wire.ErrCodeItemUseLevelRequired)
+			return false
+		}
+	case target.choice == reverseReturnPartyChoice:
+		// The destination stands from the finisher.
+	case target.choice == reverseReturnUserChoice:
+		var refusal uint8
+		if destination, refusal = reverseUserPoint(c); refusal != 0 {
+			*result = itemUseFailure(refusal)
+			return false
+		}
+	default:
 		var refusal uint8
 		if destination, refusal = reverseReturnPoint(c, target.choice); refusal != 0 {
 			*result = itemUseFailure(refusal)
 			return false
 		}
-	} else if !rt.reverseMapAdmitsLevel(target.point, c) {
-		// Port-only (reversemap.go): v1.150 has no notice for a level band,
-		// so the item-use level notice answers (INFERENCE).
-		*result = itemUseFailure(wire.ErrCodeItemUseLevelRequired)
-		return false
 	}
 	if rt.transportBarredFromDestination(c, destination.spawn) {
 		*result = itemUseFailure(0x5e)

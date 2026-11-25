@@ -56,6 +56,6 @@ test('passive '+(damage?'damage':'critical')+' follows learned rank, equipment a
   await page.reload();await bindPlayableRuntime(page);await waitPlayableWorld(page,name);await note('authenticated-reload',bonus);
   const learned=await page.evaluate(()=>__playableRuntime.gameplay().skills);assert.equal(family.filter(r=>learned.includes(+r[1])).length,1,'only current rank survives reload');
   assert.deepEqual(report.errors,[]);report.verdict='PASS';
- }catch(e){report.failure=String(e);await page.screenshot({path:out+'/failure.png'}).catch(()=>{});throw e;}
+ }catch(e){report.failure=String(e);throw e;}
  finally{await page.context().tracing.stop({path:out+'/trace.zip'}).catch(()=>{});await writeFile(out+'/incident.json',JSON.stringify(report,null,2));await browser.close();}
 });

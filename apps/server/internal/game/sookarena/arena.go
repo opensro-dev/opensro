@@ -54,6 +54,19 @@ func KillReward(kills int) uint64 {
 
 /*
 ================
+StageReward - gold for cashing out the last cleared stage.
+================
+*/
+func StageReward(stage int) uint64 {
+	rewards := [StageCount]uint64{40_000_000, 70_000_000, 100_000_000, 130_000_000, 150_000_000}
+	if stage < 1 || stage > len(rewards) {
+		return 0
+	}
+	return rewards[stage-1]
+}
+
+/*
+================
 Enabled - port-only, not native; absent and unknown values stay native.
 ================
 */

@@ -55,11 +55,12 @@ async function admitEffects( { count, match, width, height, counts, gpu } ) {
 	document.body.append( canvas );
 	const renderer = createRenderer( canvas, undefined, undefined, { gpuTiming: gpu } ), assets = createAssets();
 	const resources = createCharacterResources( assets, renderer, location.origin );
-	const catalog = await (await fetch( "/assets/effects/programs.json" )).json();
-	const pattern = new RegExp( match );
-	const paths = Object.keys( catalog.effects ).filter( name => pattern.test( name ) ).slice( 0, count ).map( name =>
-		"/assets/effects/programs.json#" + encodeURIComponent( name )
+	const { EFFECT_PROGRAM_INDEX, effectProgramModel } = await import(
+		"/src/engine/foundation/assets/effect-programs.ts"
 	);
+	const index = await (await fetch( EFFECT_PROGRAM_INDEX )).json();
+	const pattern = new RegExp( match );
+	const paths = index.effects.filter( name => pattern.test( name ) ).slice( 0, count ).map( effectProgramModel );
 	// The renderer's frame probe (frame-probes.ts): counts, and "@stage" ms
 	// since the owner's previous mark, as client.mjs records them.
 	const tally = {}, marks = { render: 0, character: 0 };

@@ -1906,3 +1906,52 @@ test("native mips transfer once and retain compressed residency across renderer 
 	characters.dispose( null, null );
 	assert.equal( result.images[0].levels[0].byteLength, 8 );
 });
+
+/*
+================
+adaptedModel
+
+A decoded character model as the loader leaves it: its glTF roots under
+the __gltf_left_handed__ adapter, one primitive skinned to joint.
+================
+*/
+function adaptedModel( names, joint, part ) {
+	const base = model(), adapter = names.length;
+	base.nodes = [
+		...names.map( name => ({
+			name,
+			parent: adapter,
+			translation: [ 0, 0, 0 ],
+			rotation: [ 0, 0, 0, 1 ],
+			scale: [ 1, 1, 1 ]
+		}) ),
+		{
+			name: "__gltf_left_handed__",
+			parent: -1,
+			translation: [ 0, 0, 0 ],
+			rotation: [ 0, 0, 0, 1 ],
+			scale: [ -1, 1, 1 ]
+		}
+	];
+	base.primitives[0].name = part;
+	base.primitives[0].joints = [ names.indexOf( joint ) ];
+	return base;
+}
+
+test("an avatar skinned to the unbound palette root assembles onto a body without one", () => {
+	const renderer = createCharacters(), pixel = () => ({ width: 1, height: 1, close() {} });
+	renderer.model( "body", adaptedModel( [ "Bip01" ], "Bip01", "mesh" ), [ pixel() ] );
+	// The v1.696 female Plague Doctor: exportGlb groups Bip01 and its
+	// NativeUnbound joint under an identity NativeModelSpace node.
+	const dress = adaptedModel( [ "Bip01", "NativeUnbound", "NativeModelSpace" ], "NativeUnbound", "part:EQ0" );
+	dress.nodes[0].parent = dress.nodes[1].parent = 2;
+	renderer.model( "dress", dress, [ pixel() ] );
+	renderer.assembly( "outfit", "body", [ { model: "dress", parts: [ "EQ0" ], covers: [] } ] );
+	assert.ok( renderer.hasModel( "outfit" ) );
+	// Any other joint the body lacks still refuses.
+	renderer.model( "cape", adaptedModel( [ "Bip01", "Cape01" ], "Cape01", "part:EQ0" ), [ pixel() ] );
+	assert.throws(
+		() => renderer.assembly( "caped", "body", [ { model: "cape", parts: [ "EQ0" ], covers: [] } ] ),
+		/Attachment joint Cape01 is absent from body/
+	);
+});

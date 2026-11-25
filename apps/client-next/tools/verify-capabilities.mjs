@@ -29,6 +29,8 @@ const ASYNC_OWNERS = [
 	runtime + "assets/worker/packs/packs.ts",
 	runtime + "assets/worker/packs/blocks.ts",
 	runtime + "assets/worker/packs/persistent.ts",
+	// The cross-window block lock and its hold (#4324).
+	runtime + "assets/worker/packs/shared-blocks.ts",
 	runtime + "assets/worker/world/resources/resources.ts",
 	runtime + "assets/worker/navigation/navigation.ts",
 	// Background install of the combat presentation set; worker-only I/O.
@@ -38,6 +40,8 @@ const ASYNC_OWNERS = [
 	// The bug reporter: its settings and upload, the capture stream's
 	// playback and the report window's send (issue #90).
 	runtime + "bug-report/bug-report.ts",
+	// The session filing lane's answer wait (#4109).
+	runtime + "bug-report/filing.ts",
 	runtime + "bug-report/recorder.ts",
 	runtime + "bug-report/dialog.ts",
 	runtime + "bug-report/trimmer.ts",
@@ -72,6 +76,7 @@ const finish = runtime + "renderer/device/finish.ts";
 const shadows = runtime + "renderer/device/character-shadows.ts";
 const sunShadow = runtime + "renderer/device/sun-shadow.ts";
 const hdr = runtime + "renderer/device/hdr.ts";
+const brightness = runtime + "renderer/device/brightness.ts";
 const ambientOcclusion = runtime + "renderer/device/ambient-occlusion.ts";
 // Port-only: the experimental 4x multisampled scene buffers (device/msaa.ts).
 const msaa = runtime + "renderer/device/msaa.ts";
@@ -106,6 +111,7 @@ const deviceInternals = [
 	shadows,
 	sunShadow,
 	hdr,
+	brightness,
 	ambientOcclusion,
 	msaa
 ];
@@ -225,7 +231,11 @@ export const rules = {
 		runtime + "simulation/worker/network/network.ts",
 		bugReport,
 		// The Agent's one GET /title/build for the FPS chip.
-		buildInfo
+		buildInfo,
+		// The Agent's public schedule feed for the port-only Event Calendar (#3532).
+		runtime + "ui/hud/event-calendar-hud.ts",
+		// The Agent's public schedule feed for the port-only title maintenance notice (#3925).
+		runtime + "ui/hud/maintenance-notice-hud.ts"
 	],
 	WebSocket: [ runtime + "simulation/worker/network/network.ts" ],
 	WebTransport: [ runtime + "simulation/worker/network/network.ts" ],
@@ -377,6 +387,20 @@ for (
 		"beginRenderPass"
 	]
 ) rules[name].push( hdr );
+// The video page's brightness owner (#3908): the scene intermediate and
+// the gamma pass the frame presents through.
+for (
+	const name of [
+		"createShaderModule",
+		"createRenderPipeline",
+		"createSampler",
+		"createTexture",
+		"createBindGroup",
+		"createBuffer",
+		"writeBuffer",
+		"beginRenderPass"
+	]
+) rules[name].push( brightness );
 // The experimental occlusion owner (#2094): it totals the frame's
 // stored depth into the half-resolution factor the surfaces sample.
 for (

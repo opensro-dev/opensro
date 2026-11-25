@@ -9,7 +9,11 @@ row over its transport; speech rises above the highest row.
 withoutBoardPass is the same stack with the /id byte clear: only the stall
 title and speech board remain. A Contributor's title (port-only, #3358)
 is no row of its own: it rides the name board, left of the name, as
-the owner asked (titledNameRow).
+the owner asked (titledNameRow). The Hwan title (native in the later
+client, #3919) rides the same board, closest to the name: the word of
+the character's Hwan level for its race, from the level table the later
+client loads (hwanleveldata.txt, textdata type 0x44 in its loader at
+0x87cec0), resolved through the system-text catalog.
 
 ===========================================================================
 */
@@ -23,6 +27,9 @@ import { fortressActive, fortressStatus } from "@/engine/foundation/gameplay/for
 import { STALL_TITLE_MODE } from "@/engine/foundation/gameplay/interaction-approach";
 import { NAME_COLOR_WHITE, nameColorRgba } from "@/engine/foundation/gameplay/name-color";
 import { TRADE_STARS_MAX, tradeStarTint } from "@/engine/foundation/gameplay/cos-trade-info";
+import { NO_JOB_CLASS } from "@/engine/foundation/gameplay/job-guild";
+import { hwanTitleKey } from "@/engine/foundation/gameplay/hwan-skin";
+import { tierName } from "./job-honor";
 
 // CICCos 855CBC subtracts the double 20.0 at C46198 before drawing the owner.
 const COMPANION_OWNER_Y = -20;
@@ -48,6 +55,33 @@ export const CONTRIBUTOR_TITLE_TEXT = "Contributor";
 export const CONTRIBUTOR_TITLE_COLOR = [ 1, 1, 0, 1 ] as const;
 // The gap between the title and the name on the board, in pixels.
 export const TITLE_NAME_GAP = 4;
+// The Hwan title's colour on the name board: bold gold, the colour the
+// cap-110 presentation chose for the Blue Berserk grades (#3919). The
+// word is the later client's own (hwanTitleKey); the level is the one
+// the server's roster tells (hwan-level.ts), the local player's too.
+export const HWAN_TITLE_COLOR = [ 1, 0.84, 0.2, 1 ] as const;
+
+/*
+================
+jobTierColor
+
+Port-only, not native (#3530): the colour a tier title is drawn in -
+amber for a King, gold for Gold, pale silver for Silver, mirroring
+the metal the tier names. The word itself is job-honor.ts's tierName.
+================
+*/
+export function jobTierColor( tier: number ): UiQuad["color"] {
+	switch ( tier ) {
+		case 3:
+			return [ 1, 0.6, 0.08, 1 ];
+		case 2:
+			return [ 1, 0.83, 0.25, 1 ];
+		case 1:
+			return [ 0.8, 0.85, 0.95, 1 ];
+		default:
+			return [ 1, 1, 1, 1 ];
+	}
+}
 
 /*
 ================
@@ -64,6 +98,45 @@ export function titledNameRow( titleWidth: number, nameWidth: number ) {
 		total = lead + nameWidth,
 		left = -(total >> 1);
 	return { left, nameLeft: left + lead, total };
+}
+
+/*
+================
+titledDisplayName
+
+The name line's one string for a titled character: the name printed
+through the title's format ("<Big Spender> %s"), the later client's
+BuildDisplayNameWithTitle shape (it formats the name through the
+title record's text, "%s" with no title). No format - no title, or an
+id the server's table does not carry - prints the plain name, and so
+does a format with no %s in it: a bad row can never blank a nameplate.
+================
+*/
+export function titledDisplayName( name: string, format: string | undefined ): string {
+	if ( !format || !name ) return name;
+	return format.includes( "%s" ) ? format.replace( "%s", name ) : name;
+}
+
+/*
+================
+visibleTitleFormat
+
+The title format the name line may print for this entity, after the
+two title options (#3502 slice 2). The later client's name builder
+(0x9689B0) reads option +0x1F for the player's own title and +0x20 for
+everyone else's; with the matching option off the title is simply not
+indicated and the plain name prints, exactly as an untitled character
+prints. The local player is the entity whose gid is the local gid.
+================
+*/
+export function visibleTitleFormat(
+	entity: Pick<EntityState, "gid" | "characterTitleFormat">,
+	localGid: number | undefined,
+	options: GameOptions
+): string | undefined {
+	if ( !entity.characterTitleFormat ) return undefined;
+	const shown = entity.gid === localGid ? options.ownTitle : options.otherTitles;
+	return shown ? entity.characterTitleFormat : undefined;
 }
 
 /*
@@ -137,8 +210,12 @@ export function overheadLayout(
 	const social = game.social, own = entity.gid === game.localGid;
 	const guild = own ? social?.guild : undefined, name = own ? guild?.name : entity.guildName;
 	const grant = own ? guild?.members.find( m => m.name === social?.localName )?.grant : entity.guildGrantName;
-	const hold = entity.equipment?.find( i => i.slot === 8 )?.typeFlags;
-	const plain = hold === undefined || ![ 0x800, 0x1000, 0x1800 ].includes( hold & 0xf800 );
+	// 86B974: the guild row (name, grant, officer title) is built only when
+	// the active job class (vtable +0xA8) is 4 - a job suit hides the row.
+	// The class itself is the entity's word (86AFB0 classifies the spawn's
+	// slot-8 suit; the local row carries the same classification), so no
+	// equipment walk belongs here: the local entity has none to walk.
+	const plain = entity.activeJob === undefined || entity.activeJob === NO_JOB_CLASS;
 	// +7E0 is a guild office bit, not a separate attacker/defender team.
 	const role = social?.roleUpdates?.find( r => r.name === entity.name )?.role ??
 		(own ? guild?.members.find( m => m.name === social?.localName )?.role : entity.guildWarTeam);
@@ -172,6 +249,22 @@ export function overheadLayout(
 			game.contributorTitles?.includes( entity.name ) ?
 		CONTRIBUTOR_TITLE_TEXT :
 		"";
+	// Port-only, not native (#3530): the tier's coloured title in front
+	// of a rostered player's name, the local player's own included. The
+	// roster (job-honor-tiers.ts) is the server's word; with
+	// SRO_JOB_HONOR off no frame arrives and no title ever shows.
+	const tier = (entity.kind === "player" || entity.kind === "local-player") && entity.name ?
+			game.jobHonorTiers?.get( entity.name ) ?? 0 :
+			0,
+		tierText = tier ? tierName( tier ) : "";
+	// The Hwan title (native in the later client, #3919): the title word
+	// of the level the server's roster last told for this character, in
+	// its race's column of the level table. No level told (a native
+	// shard, or a character who never turned blue) - no title.
+	const hwanKey = (entity.kind === "player" || entity.kind === "local-player") ?
+			hwanTitleKey( game.hwanLevels?.[entity.gid], entity.countryByte9c ) :
+			"",
+		hwanText = hwanKey ? copy( hwanKey ) : "";
 	const status = quickStatus( entity, local, game, options ),
 		guildY = guildText ? -20 : 0,
 		ownerY = companionOwnerShown( entity, options ) ? COMPANION_OWNER_Y : 0,
@@ -226,6 +319,10 @@ export function overheadLayout(
 		guildY,
 		contributorText,
 		contributorColor: CONTRIBUTOR_TITLE_COLOR,
+		tierText,
+		tierColor: jobTierColor( tier ),
+		hwanText,
+		hwanColor: HWAN_TITLE_COLOR,
 		status,
 		statusY,
 		speechY,
@@ -259,6 +356,8 @@ export function withoutBoardPass( layout: OverheadLayout ): OverheadLayout {
 		guildText: "",
 		guildY: 0,
 		contributorText: "",
+		tierText: "",
+		hwanText: "",
 		status: null,
 		statusY: 0,
 		fortressMark: null,

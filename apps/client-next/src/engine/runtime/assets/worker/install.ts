@@ -1,19 +1,20 @@
 /*
 ===========================================================================
 
-install.ts - background install of the combat presentation set
+install.ts - background install of the interface and combat presentation
 
-Retail plays every effect sound and effect on demand: the sound cache
-(SoundResourceCache_Acquire, 8F7F90) loads a sound synchronously on its first
-play, which costs nothing because the archive is on the local disk. In the
-browser the same first play is a network round trip, so the first hit, swing
-or skill of a session was late.
+Retail reads interface art and plays every effect sound and effect on
+demand: the sound cache (SoundResourceCache_Acquire, 8F7F90) loads a sound
+synchronously on its first play, and a window's art loads as it opens, which
+costs nothing because the archive is on the local disk. In the browser the
+same first use is a network round trip, so the first shop of a session
+opened seconds late (#3977) and its first hit, swing or skill was late.
 
 The play paths stay exactly as retail has them. What changes is where the
 bytes are: once the world is ready, this installer walks the build's ordered
-list (/assets/delivery/background-install.json: combat first, then world
-sounds) and makes each file local in the persistent store. Later plays read
-local bytes, as retail does.
+list (/assets/delivery/background-install.json: interface art first, then
+combat, then world sounds) and makes each file local in the persistent
+store. Later opens and plays read local bytes, as retail does.
 
 It never competes with the game: it lives in the asset worker, uses none of
 the main thread's request slots, waits whenever a foreground load is active,

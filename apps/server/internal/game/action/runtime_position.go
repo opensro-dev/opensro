@@ -597,6 +597,16 @@ liveSpawn
 
 liveSpawn samples the character's LIVE position - the bug-D plane. Every
 position-dependent op reads THIS, never the goal in WorldState.Spawn.
+
+The walk is read at nowMs (WorldStore.SnapshotAt), never past it. Every
+caller passes either the wall clock (a request handler) or its tick's
+own time (a tick hook; mapped 2026-11-24, 157 calls). A handler's read
+is the wall-clock read it always was. A tick hook's read is the pose the
+tick's prepare phase stepped to, instead of a fresh walk step: each step
+runs the full ground clip and water guard whatever its length (#3523),
+so a scan over every character per field, pet or step paid one full
+step per walking player per caller. That was 4.5 s of a 30 s live
+profile at 152 players, and the tick ran 105 ms of work a tick.
 ==================
 */
 func (rt *Runtime) liveSpawn(
@@ -604,11 +614,26 @@ func (rt *Runtime) liveSpawn(
 	character *enterworld.Character,
 	nowMs int64,
 ) simulation.Spawn {
-	snapshot := rt.Worlds.Snapshot(worldKey, func() simulation.WorldState {
-		return simulation.SeedWorldState(character)
-	})
+	return rt.liveWorld(worldKey, character, nowMs).LiveSpawnAt(nowMs)
+}
 
-	return snapshot.LiveSpawnAt(nowMs)
+/*
+==================
+liveWorld
+
+The character's world state with its walk read at nowMs: the one
+snapshot every live-position read in this package goes through
+(liveSpawn, liveNav and the readers that keep the whole state).
+==================
+*/
+func (rt *Runtime) liveWorld(
+	worldKey string,
+	character *enterworld.Character,
+	nowMs int64,
+) simulation.WorldState {
+	return rt.Worlds.SnapshotAt(worldKey, func() simulation.WorldState {
+		return simulation.SeedWorldState(character)
+	}, nowMs)
 }
 
 /*
@@ -647,9 +672,7 @@ func (rt *Runtime) liveNav(
 	character *enterworld.Character,
 	nowMs int64,
 ) (simulation.Spawn, simulation.NavOwner) {
-	snapshot := rt.Worlds.Snapshot(worldKey, func() simulation.WorldState {
-		return simulation.SeedWorldState(character)
-	})
+	snapshot := rt.liveWorld(worldKey, character, nowMs)
 
 	return snapshot.LiveSpawnAt(nowMs), snapshot.LiveOwnerAt(nowMs)
 }

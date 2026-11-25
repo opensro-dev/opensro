@@ -31,20 +31,16 @@ These are inferences and port choices, not native evidence:
 - **Admission.** Exactly the 112 codename rows; a missing, miscast or mislabelled row refuses the build
   rather than staging a partial set the mall would half list.
 - **Price.** Authored at 30 silk (the summon scrolls' tier) in one constant the shard owner can retune.
-- **Left out, on evidence (#3331).** The two other Premium > Gears kinds of the screenshot epic were
-  searched for in every source this build reads, and both stay unlisted — not for missing rows. An
-  earlier line here recorded that no pinned client holds a row for either; that was wrong. Sabakun's
-  jewel (`ITEM_ETC_NASRUN_ARCHEMY_UPGRADE_STONE`) and the extension gear (`ITEM_MALL_NASRUN_EXTENSION`)
-  stand in the pinned v1.696 client's `ItemData_24400.txt` (ids 24397 and 24395, the stones' own shard
-  neighbourhood), in the VSRO client's `ItemData_25000.txt` (ids 24417 and 24415), and in the ISRO-R
-  shard backup's item census. What neither v1.150 nor this port holds is anything for them to act on:
-  both serve only the Devil's Spirit (the later client's Nasrun). The extension gear lengthens a worn
-  Nasrun's awakening by four weeks; the jewel upgrades one. The Nasrun wearable is item type 3/1/14 —
-  v1.150's avatars are 3/1/13, the later-avatar import selects 3/1/13 only; the Nasrun rows themselves
-  land inert behind `SRO_NASRUN` ([NASRUN.md](NASRUN.md)) — and no awakening clock, Nasrun alchemy (the jewel's recipe and stones) or
-  upgrade path exists here yet. Listing either now would sell an item that cannot be used, and a substitute
-  effect would be invented behaviour. The owner's call (2026-11-12): port every prerequisite first. #3348
-  ports the Devil's Spirit system (the wearable, its awakening clock, Nasrun alchemy) and then lists both.
+- **Listed once the system they serve stands (#3331, #3456 step 5).** The two other Premium > Gears kinds
+  of the screenshot epic were searched for in every source this build reads. Sabakun's jewel
+  (`ITEM_ETC_NASRUN_ARCHEMY_UPGRADE_STONE`) and the extension gear (`ITEM_MALL_NASRUN_EXTENSION`) stand in
+  the pinned v1.696 client's `ItemData_24400.txt` (ids 24397 and 24395), in the VSRO client's
+  `ItemData_25000.txt` (ids 24417 and 24415), and in the ISRO-R shard backup's item census. Both serve only
+  the Devil's Spirit, so the owner's call (2026-11-12) was to port every prerequisite first: #3348 and
+  #3456 built the wearable, the awakening clock and Nasrun alchemy ([NASRUN.md](NASRUN.md)), and now both
+  list here beside the stones at the stones' 30-silk tier — only while `SRO_NASRUN` stands and their rows
+  are staged, so a mall never sells an item the system cannot use. Both also sell for tokens on the honor
+  shops' second tabs (step 3b); the mall listing is the silk door.
 - **The Halloween summon scrolls (#3331).** The screenshot's Joon (500 silk) and Firespirits (200)
   summon scrolls for HOT shop > Halloween Exclusive have no row in any source searched: the v1.150,
   VSRO and pinned v1.696 item tables, the ISRO-R shard census (40,691 codenames) and its game-reference

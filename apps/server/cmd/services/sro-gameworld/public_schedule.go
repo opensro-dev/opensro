@@ -15,7 +15,8 @@ The sources:
     file's time and the end is open);
   - the fortress lane's registration and war windows;
   - Capture the Flag's daily sign-up and match (action.FlagWarSettings);
-  - the Halloween Day window, when its switch is on.
+  - the Halloween Day window, when its switch is on;
+  - the EventBot host's data-file rows, when its switch is on (#3533).
 
 Port-only, not native: the original has no public read API.
 
@@ -33,6 +34,7 @@ import (
 	"opensro.online/server/internal/game/action"
 	"opensro.online/server/internal/game/progression"
 	"opensro.online/server/internal/game/siege"
+	"opensro.online/server/internal/game/social/eventbot"
 )
 
 // publicWindowEvents names the fortress lane's windows on the calendar.
@@ -54,6 +56,9 @@ type scheduleSources struct {
 	siege     *siege.Lane
 	flagWar   action.FlagWarSettings
 	halloween progression.HalloweenEvent
+	// eventBot is the EventBot host; nil or a disabled host lists no
+	// chat events (port-only #3533).
+	eventBot *eventbot.Host
 	// flagWarOff leaves Capture the Flag out (no action runtime wired).
 	flagWarOff bool
 	// flagWarCancelled answers whether the match starting at an instant
@@ -74,7 +79,7 @@ func scheduleSourcesOf(game *gameplayPlane) scheduleSources {
 		return scheduleSources{flagWarOff: true}
 	}
 	return scheduleSources{siege: game.siege, flagWar: game.items.FlagWar, halloween: game.items.Halloween,
-		flagWarCancelled: game.items.FlagWarCancelled}
+		eventBot: game.eventBot, flagWarCancelled: game.items.FlagWarCancelled}
 }
 
 /*
@@ -104,6 +109,11 @@ func publicSchedule(src scheduleSources, now time.Time) []publicstats.ScheduledE
 	if start, end, valid := src.halloween.Window(); src.halloween.Enabled() && valid && now.Before(end) {
 		events = append(events, publicstats.ScheduledEvent{Kind: publicstats.ScheduleKindHalloween, Title: "Halloween Day",
 			Start: start, End: end, Running: src.halloween.ActiveAt(now)})
+	}
+	for _, occurrence := range src.eventBot.ScheduledEvents(now) {
+		events = append(events, publicstats.ScheduledEvent{Kind: publicstats.ScheduleKindEventBot,
+			Title: "EventBot: " + occurrence.Event.DisplayTitle(),
+			Start: occurrence.Start, End: occurrence.End, Running: occurrence.Running})
 	}
 	return events
 }

@@ -177,10 +177,12 @@ def convert_rows(selected, occupied, previous):
 # occupied_identities
 #
 # Items, characters and teleport buildings share one reference space; every
-# table of the output and of the later client is reserved, except our shard.
+# table of the output and of the later client is reserved, except the caller's
+# own shard (ours by default; another importer passes its shard so a rebuild
+# does not reserve the identities it is about to retain).
 # ================
-def occupied_identities(text_root, later_rows):
-	return {int(row[items.IDENTITY]) for row in later_rows} | item_import.output_identities(text_root, OUTPUT_SHARD)
+def occupied_identities(text_root, later_rows, own_shard=OUTPUT_SHARD):
+	return {int(row[items.IDENTITY]) for row in later_rows} | published_ids.occupied_objects(text_root, (own_shard,))
 
 
 # ================

@@ -46,14 +46,15 @@ import os
 import re
 import struct
 import sys
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import sro_pk2  # noqa: E402
 from pin_file import read_pin_field  # noqa: E402
 import state_document  # noqa: E402
-from prepare_client_resources import file_digest, safe_target, write_atomically  # noqa: E402
-from sro_paths import EXTRACTED_ROOT  # noqa: E402
+from prepare_client_resources import file_digest, log, safe_target, write_atomically  # noqa: E402
+from sro_paths import EXTRACTED_ROOT, shared_cache_path  # noqa: E402
 
 FLAG_ENV = "SRO_ALEXANDRIA"
 ROOT_ENV = "SRO_VSRO_ROOT"
@@ -79,7 +80,7 @@ CITY_GATE_PREFIX = "GATE_SD"
 CITY_GATE_EXTRA = ("GATE_NPC_SD_M_AREA_FERRY",)
 # Port-only, not native: the far ends of the city's two outdoor crossings
 # (Delta West to Kings Valley, Delta East to the Storm Desert), which the
-# variant links (build_alexandria_variant GATE_CODES). Their regions seed
+# variant links (variant_gates.GATE_CODES). Their regions seed
 # terrain components like the field's, so a crossing never lands on a
 # region the client has no terrain for.
 CROSSING_GATE_CODES = ("GATE_STORMDESERT_GATE", "GATE_KINGSVALLEY_GATE")
@@ -118,10 +119,6 @@ PLACEHOLDER_TILE = re.compile(r"^x+\.ddj$", re.IGNORECASE)
 TILE_ROW = re.compile(r'^(\d+)\s+(0x[0-9a-fA-F]+|\d+)\s+"([^"]*)"\s+"([^"]*)"')
 OBJECT_ROW = re.compile(r'^(\d+)\s+(0x[0-9a-fA-F]+|\d+)\s+"([^"]*)"')
 HASH_CHUNK = 1 << 20
-
-
-def log(message):
-	print(message, flush=True)
 
 
 #============================================================================
@@ -373,6 +370,41 @@ def archive_index(data):
 	return dict(index)
 
 
+# The stage 1 import's entries in the shared content cache
+# (sro_paths.shared_cache_path), kept across releases: a release's staging
+# starts its stage 1 empty whenever the import's key moves.
+CACHE_NAME = "vsro-import"
+INDEX_CACHE_FORMAT = "sro-vsro-archive-index-v1"
+
+
+# ================
+# pinned_index
+#
+# archive_index of a pinned archive, kept on disk under its pinned sha256:
+# walking a PK2 directory decrypts every block in Python (about 2 s for
+# each of Map, Media and Data), and pinned bytes always hold the same
+# directory. Call it only after the archive passed its pin. A cache file
+# that does not parse, names other bytes, or points past the end of the
+# archive is ignored and rewritten, so the cache can only skip the walk,
+# never change an entry. JSON, not pickle: a cache file is data.
+# ================
+def pinned_index(data, sha256, cache=None):
+	path = (cache or shared_cache_path(CACHE_NAME)) / f"index-{sha256}.json"
+	try:
+		document = json.loads(path.read_text(encoding="utf-8"))
+		if document.get("format") == INDEX_CACHE_FORMAT and document.get("sha256") == sha256:
+			index = {key: sro_pk2.Entry(name, offset, size) for key, name, offset, size in document["entries"]}
+			if all(0 <= e.offset and e.offset + e.size <= len(data) for e in index.values()):
+				return index
+	except (OSError, ValueError, TypeError, KeyError, AttributeError):
+		pass
+	index = archive_index(data)
+	entries = [[key, e.path, e.offset, e.size] for key, e in sorted(index.items())]
+	write_atomically(path, json.dumps({"format": INDEX_CACHE_FORMAT, "sha256": sha256, "entries": entries},
+		separators=(",", ":")).encode("utf-8"))
+	return index
+
+
 def open_archive(root, name):
 	path = Path(root) / f"{name}.pk2"
 	if not path.is_file():
@@ -479,6 +511,8 @@ def admit_verified_archives(folder, pins=None):
 		if record.get("sha256") != expected.get(record.get("name")):
 			continue
 		_verified_archives.add(key)
+		# Kept with the ones hashed here, so a record written back holds both.
+		_verified_digests[key] = record
 		admitted += 1
 	return admitted
 
@@ -539,6 +573,64 @@ def vsro_only_regions(data, index, native_path):
 	return mfo_regions(sro_pk2.payload(data, entry)) - mfo_regions(native_path.read_bytes())
 
 
+# Output files go through a pool: on Windows each one costs a create, a
+# write, a close and a rename (about 9 ms, the import's largest share at
+# 1800 files), and that is waiting on the file system, not Python.
+WRITE_WORKERS = min(32, (os.cpu_count() or 4) * 2)
+
+
+# ================
+# OutputPool
+#
+# Writes archive entries under the output folder on WRITE_WORKERS threads.
+# safe_target still refuses each path, in the worker; close() waits for
+# every write and raises the first failure, so a failed write fails the
+# import exactly as a serial one did. Every folder a file lands in exists
+# before the file is queued, made here on the calling thread after the same
+# safe_target check: on Windows a path resolved while another thread
+# creates one of its folders can come back other than its final name, and
+# safe_target would read a safe path as an escape.
+# ================
+class OutputPool:
+	def __init__(self):
+		self.pool = ThreadPoolExecutor(max_workers=WRITE_WORKERS)
+		self.pending = []
+		self.folders = set()
+
+	def put(self, root, archive_path, data):
+		folder = archive_path.rpartition("/")[0]
+		if (root, folder) not in self.folders:
+			root.mkdir(parents=True, exist_ok=True)
+			if folder:
+				safe_target(root, folder).mkdir(parents=True, exist_ok=True)
+			self.folders.add((root, folder))
+		self.pending.append(self.pool.submit(lambda: write_atomically(safe_target(root, archive_path), data)))
+
+	def close(self):
+		try:
+			for future in self.pending:
+				future.result()
+		finally:
+			self.pool.shutdown(wait=True)
+
+
+# ================
+# require_pins_with_cache
+#
+# require_vsro_pin, trusting the shared cache's record of an archive hashed
+# by an earlier run only while it keeps the size and mtime it was hashed at
+# and its digest is today's pin (admit_verified_archives, the rule the
+# variant step already applies to this step's record, #3590). A changed
+# archive is hashed in full, so the pin stays exactly as strict; an
+# unchanged one skips its 2 s hash. The record goes back with every
+# archive this run verified.
+# ================
+def require_pins_with_cache(vsro_root, names, cache, pins=None):
+	admit_verified_archives(cache, pins)
+	require_vsro_pin(vsro_root, names, pins)
+	write_verified_archives(cache)
+
+
 # ================
 # import_alexandria
 #
@@ -550,13 +642,19 @@ def import_alexandria(vsro_root, extracted, native_mapinfo=None):
 	"""Run the import; returns the manifest dict it also writes."""
 	if native_mapinfo is None:
 		native_mapinfo = extracted / NATIVE_MAPINFO
-	require_vsro_pin(vsro_root, STAGE1_ARCHIVES)
+	cache = shared_cache_path(CACHE_NAME)
+	require_pins_with_cache(vsro_root, STAGE1_ARCHIVES, cache)
+	# Every archive matched its pin just now, so the pin is its sha256.
+	pins = archive_pins()
 	output = extracted / OUTPUT_FOLDER
+	writes = OutputPool()
 	map_path, map_handle, map_data = open_archive(vsro_root, "Map")
 	media_path, media_handle, media_data = open_archive(vsro_root, "Media")
 	data_path, data_handle, data_data = open_archive(vsro_root, "Data")
 	try:
-		map_index, media_index, data_index = archive_index(map_data), archive_index(media_data), archive_index(data_data)
+		map_index = pinned_index(map_data, pins["Map"], cache)
+		media_index = pinned_index(media_data, pins["Media"], cache)
+		data_index = pinned_index(data_data, pins["Data"], cache)
 
 		city = city_regions(table_text(media_data, media_index, "regioncode.txt"))
 		if not city:
@@ -566,8 +664,11 @@ def import_alexandria(vsro_root, extracted, native_mapinfo=None):
 		# Empty connecting terrain and mountain sectors have no monster nests.
 		fields = field_seed_regions(vsro_root)
 		crossings = gate_seed_regions(table_text(media_data, media_index, "teleportdata.txt"))
+		# Port-only, not native: the Blue Berserk trial arenas are two isolated regions
+		# only the later client has; the quest switch seeds them like the fields.
+		from cap110_quest_arenas import arena_seeds
 		regions = connected_regions(
-			city, vsro_only_regions(data_data, data_index, native_mapinfo), set(fields) | crossings
+			city, vsro_only_regions(data_data, data_index, native_mapinfo), set(fields) | crossings | arena_seeds()
 		)
 		log(f"{len(city)} city regions, {len(regions)} regions with the fields and crossings around it")
 
@@ -579,7 +680,7 @@ def import_alexandria(vsro_root, extracted, native_mapinfo=None):
 					missing.append(archive_path)
 					continue
 				stored = sro_pk2.payload(map_data, entry)
-				write_atomically(safe_target(output / "Map", archive_path), stored)
+				writes.put(output / "Map", archive_path, stored)
 				copied.append("Map/" + archive_path)
 				if archive_path.endswith(".m"):
 					tile_ids |= terrain_tile_ids(stored)
@@ -588,12 +689,12 @@ def import_alexandria(vsro_root, extracted, native_mapinfo=None):
 			if entry is None:
 				missing.append(nav)
 			else:
-				write_atomically(safe_target(output / "Data", nav), sro_pk2.payload(data_data, entry))
+				writes.put(output / "Data", nav, sro_pk2.payload(data_data, entry))
 				copied.append("Data/" + nav)
 
 		catalog_raw = {name: sro_pk2.payload(map_data, map_index[name]) for name in CATALOGS}
 		for name, raw in catalog_raw.items():
-			write_atomically(safe_target(output / "Map", name), raw)
+			writes.put(output / "Map", name, raw)
 		vsro_tiles = tile_catalog(catalog_raw["tile2d.ifo"])
 		unknown = sorted(tile_ids - set(vsro_tiles))
 		if unknown:
@@ -604,19 +705,21 @@ def import_alexandria(vsro_root, extracted, native_mapinfo=None):
 			if entry is None:
 				missing.append("tile2d/" + name)
 				continue
-			write_atomically(safe_target(output / "Map" / "tile2d", name), sro_pk2.payload(map_data, entry))
+			writes.put(output / "Map" / "tile2d", name, sro_pk2.payload(map_data, entry))
 			copied.append("Map/tile2d/" + name)
 
 		catalogs = catalog_report(extracted, catalog_raw, tile_ids)
 		tables = write_tables(output, media_data, media_index, regions)
+		# Every entry is on disk before the manifest says the import is whole.
+		writes.close()
 		manifest = {
 			"format": MANIFEST_FORMAT,
 			"portOnly": True,
 			"flag": FLAG_ENV,
 			"archives": {
-				"Map": {"sha256": sha256_of(map_data)},
-				"Media": {"sha256": sha256_of(media_data)},
-				"Data": {"sha256": sha256_of(data_data)}
+				"Map": {"sha256": pins["Map"]},
+				"Media": {"sha256": pins["Media"]},
+				"Data": {"sha256": pins["Data"]}
 			},
 			"regions": [{"sectorX": x, "sectorY": y} for x, y in regions],
 			"tileIds": sorted(tile_ids),
@@ -628,6 +731,8 @@ def import_alexandria(vsro_root, extracted, native_mapinfo=None):
 		write_atomically(output / MANIFEST_NAME, (json.dumps(manifest, indent=2, ensure_ascii=False) + "\n").encode("utf-8"))
 		return manifest
 	finally:
+		# A failed import still lets the writes it started finish (no-op after close).
+		writes.pool.shutdown(wait=True)
 		for handle, data in ((map_handle, map_data), (media_handle, media_data), (data_handle, data_data)):
 			data.close()
 			handle.close()

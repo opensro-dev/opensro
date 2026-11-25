@@ -26,6 +26,10 @@ const { createPresentation } = await import( "../../src/engine/runtime/presentat
 const { decodePortalCatalog, portalMenu, portalNotice } = await import(
 	"../../src/engine/foundation/gameplay/portal.ts"
 );
+const { noticeText } = await import( "../../src/engine/foundation/ui/notice-text.ts" );
+const { createGameplay } = await import(
+	"../../src/engine/runtime/simulation/worker/session/world/gameplay/gameplay.ts"
+);
 const { interactionApproach, interactionApproachTransition } = await import(
 	"../../src/engine/foundation/gameplay/interaction-approach.ts"
 );
@@ -83,6 +87,90 @@ test("portal refusal uses native quest/transport notices and strict reply framin
 	for ( const p of [ [], [ 1, 0 ], [ 2 ], [ 2, 4, 0 ] ] ) {
 		assert.throws( () => portalNotice( 0xb495, Uint8Array.from( p ) ) );
 	}
+});
+test("portal catalogue carries each link's required level and defaults an unlevelled row to none", () => {
+	const raw = {
+		format: "sro-teleportdata",
+		version: 1,
+		teleportRows: [
+			{ id: 1, npcRefObjId: 2011, nameSymbol: "SN_A", codeName: "GATE_A" },
+			{ id: 2, npcRefObjId: 0, nameSymbol: "SN_B", codeName: "GATE_B" },
+			{ id: 3, npcRefObjId: 0, nameSymbol: "SN_C", codeName: "GATE_C" }
+		],
+		linkRows: [
+			{ sourceId: 1, destinationId: 2, fee: 0, minLevel: 20 },
+			// A catalogue published before the level was recorded
+			// decodes as unrestricted rather than failing the load.
+			{ sourceId: 1, destinationId: 3, fee: 5 }
+		]
+	};
+	const catalog = decodePortalCatalog( raw );
+	assert.equal( catalog.links[0]?.minLevel, 20 );
+	assert.equal( catalog.links[1]?.minLevel, 0 );
+	assert.throws( () =>
+		decodePortalCatalog( { ...raw, linkRows: [ { sourceId: 1, destinationId: 2, fee: 0, minLevel: -1 } ] } )
+	);
+});
+test("a noted level refusal names the required level after the native line; unnoted refusals stay native", () => {
+	const copy = key =>
+		key === "UIIT_MSG_INTERACTION_FAIL_OUT_OF_REQUIRED_LEVEL_FOR_TELEPORT" ?
+			"Cannot transport because n does not meet the requirement." :
+			key;
+	const noted = defined( portalNotice( 0xb495, Uint8Array.of( 2, 0x15 ), 20 ) );
+	assert.equal(
+		noticeText( copy, noted ),
+		"Cannot transport because n does not meet the requirement. [Lv: 20]"
+	);
+	assert.equal(
+		noticeText( copy, noted, "banner" ),
+		"Cannot transport because n does not meet the requirement. [Lv: 20]"
+	);
+	const unnoted = defined( portalNotice( 0xb495, Uint8Array.of( 2, 0x15 ) ) );
+	assert.equal( unnoted.suffix, undefined );
+	assert.equal( noticeText( copy, unnoted ), "Cannot transport because n does not meet the requirement." );
+	// A noted level never annotates another refusal.
+	assert.equal( defined( portalNotice( 0xb495, Uint8Array.of( 2, 0x10 ), 20 ) ).suffix, undefined );
+});
+test("a gate refusal answers with the noted level once, then the note is retired", () => {
+	const g = createGameplay( () => {} );
+	g.bootstrap( {} );
+	g.seed( { gid: 1, regionId: 1, x: 0, y: 0, z: 0, heading: 0 } );
+	g.take();
+	g.noteGateTravel( 20 );
+	assert.equal( g.receive( { opcode: 0xb495, payload: Uint8Array.of( 2, 0x15 ) }, 0 ), true );
+	assert.equal( defined( defined( g.take() ).notices ).at( -1 )?.suffix, " [Lv: 20]" );
+	// The answer retired the note: a later walk-in refusal keeps the
+	// native line alone.
+	g.receive( { opcode: 0xb495, payload: Uint8Array.of( 2, 0x15 ) }, 0 );
+	assert.equal( defined( defined( g.take() ).notices ).at( -1 )?.suffix, undefined );
+	// A success retires it too.
+	g.noteGateTravel( 20 );
+	g.receive( { opcode: 0xb495, payload: Uint8Array.of( 1 ) }, 0 );
+	g.take();
+	g.receive( { opcode: 0xb495, payload: Uint8Array.of( 2, 0x15 ) }, 0 );
+	assert.equal( defined( defined( g.take() ).notices ).at( -1 )?.suffix, undefined );
+});
+test("gate travel notes the level for its refusal without changing the native request bytes", () => {
+	const sent = [];
+	const core = createWorldCore( frame => sent.push( frame ) );
+	core.bootstrap( bootstrap );
+	const latch = Buffer.alloc( 8 );
+	latch.writeUInt32LE( 7 );
+	core.receive( { opcode: 0x32a6, payload: latch }, 0 );
+	drain( core );
+	core.command( { kind: "travel-gate", gid: 7, type: 2, target: 9, minLevel: 20 }, 0 );
+	// The noted level never reaches the wire.
+	assert.deepEqual(
+		sent.at( -1 ),
+		gateRequest( { kind: "travel-gate", gid: 7, type: 2, target: 9 } )
+	);
+	core.receive( { opcode: 0xb495, payload: Uint8Array.of( 2, 0x15 ) }, 0 );
+	core.step( 0 );
+	const batch = drain( core );
+	const states = (batch?.events ?? []).filter( e => e.kind === "gameplay" ).map( e => e.state );
+	const notices = states.flatMap( s => s.notices ?? [] );
+	assert.equal( notices.at( -1 )?.suffix, " [Lv: 20]" );
+	core.dispose();
 });
 const bootstrap = {
 	protocolVersion: 2,
@@ -479,6 +567,41 @@ test("the Jangan gate folds the Qin-Shi tomb floors under one row, floor 4 by co
 	// The tomb's own gates keep the native flat menu.
 	assert.deepEqual( portalMenu( catalog, 23280, copy ), [
 		{ id: "npc-portal:130", label: "SN_ZONE_26005" }
+	] );
+});
+
+test("the Jangan gate folds the Sky Temple fields under one Shambhala row (port-only)", () => {
+	const row = ( id, codeName, npcRefObjId, nameSymbol ) => ({ id, codeName, npcRefObjId, nameSymbol, regionId: 0 });
+	const link = ( sourceId, destinationId, fee ) => ({ sourceId, destinationId, fee });
+	const catalog = decodePortalCatalog( {
+		format: "sro-teleportdata",
+		version: 1,
+		teleportRows: [
+			row( 1, "GATE_CH", 2094, "SN_ZONE_22001" ),
+			row( 2, "GATE_WC", 2095, "SN_ZONE_22002" ),
+			row( 349, "GATE_OTHER_SKYTEMPLE_A", 43803, "RN_OTHER_SKYTEMPLE_A_01" ),
+			row( 352, "GATE_OTHER_SKYTEMPLE_D", 43806, "RN_OTHER_SKYTEMPLE_D_01" )
+		],
+		linkRows: [
+			link( 1, 2, 5000 ),
+			link( 1, 349, 0 ),
+			link( 1, 352, 0 ),
+			link( 349, 1, 0 )
+		]
+	} );
+	const copy = key =>
+		key === "UIIT_CTL_TELEPORT_RESULT" ? "%s %d" : key === "UIIT_CTL_TELEPORT_FREE_RESULT" ? "%s" : key;
+	assert.deepEqual( portalMenu( catalog, 2094, copy ), [
+		{ id: "npc-portal:2", label: "SN_ZONE_22002 5000" },
+		{ id: "npc-portal-group:sky-temple", label: "Shambhala" }
+	] );
+	assert.deepEqual( portalMenu( catalog, 2094, copy, { group: "sky-temple" } ), [
+		{ id: "npc-portal:349", label: "RN_OTHER_SKYTEMPLE_A_01" },
+		{ id: "npc-portal:352", label: "RN_OTHER_SKYTEMPLE_D_01" }
+	] );
+	// A field's own gate keeps the flat menu back to Jangan.
+	assert.deepEqual( portalMenu( catalog, 43803, copy ), [
+		{ id: "npc-portal:1", label: "SN_ZONE_22001" }
 	] );
 });
 

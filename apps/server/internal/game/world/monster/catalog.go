@@ -254,7 +254,8 @@ func LoadTemplate(textdataDir string) Template {
 ==================
 restoreZeroCapNests
 
-Gives a standalone nest capped at zero its live cap from ISRO-R.
+Gives a standalone nest capped at zero its native cap from ISRO-R's
+archived Tab_RefNest_Back.
 
 The v1.188 evidence is one operator's shard backup. Beside the monsters it
 disables everywhere (laterDisabledCodenames), it zeroes single nests of
@@ -263,8 +264,8 @@ building's bandits and archers (regions 0x5BA0, 0x5CA0), the Stone Cave's
 Nachal and Work Earth Ghost (0x8001), three KT Ong. The v1.150 client still
 places every one of them, and the native ordinary hive spawns
 nothing while the live count is not below its authored maximum.
-A second shipped server build's active nest table keeps the
-same nests, by region and anchor, with live caps (isror_zero_cap_caps.tsv,
+A second shipped server build's archived nest table keeps the
+same nests, by region and anchor, with native caps (isror_zero_cap_caps.tsv,
 scripts/build/import_isror_zero_caps.py); the dungeon layer matches by its
 own region id. A hive member (an overwrite cap above zero) is left
 alone: the overwrite hive caps it with the hive's own limit.
@@ -560,6 +561,18 @@ func (instance Instance) Rarity() uint8 {
 		return instance.Nest.RarityOverride
 	}
 	return instance.Ref.MonsterType & 0x0f
+}
+
+/*
+==================
+IsUnique
+
+Whether this instance is a unique, as the one owner of the rule
+(unique_nests.go) reads this instance's rarity.
+==================
+*/
+func (instance Instance) IsUnique() bool {
+	return RarityIsUnique(instance.Rarity())
 }
 
 /*

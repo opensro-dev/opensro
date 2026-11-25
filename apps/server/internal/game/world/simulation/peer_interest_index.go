@@ -16,6 +16,12 @@ type peerVisibilityKey struct {
 	character        int64
 	interest         peerInterestKey
 	appearance, live bool
+	// invisible is the GM invisible body state (peer_visibility.go) and
+	// party the character's party stamp, 0 when partyless. Both ride the
+	// key so a GM toggle or a party change re-runs the pass that applies
+	// the invisible audience rule.
+	invisible bool
+	party     uint64
 }
 
 // Tick-local derived index over detached session snapshots. Links are input

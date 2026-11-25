@@ -98,6 +98,16 @@ export type AssetWorkerMessage =
 	| { kind: "released"; id: number; };
 /*
 ================
+AssetLane
+
+"interface": the UI's image demand, which always has a slot of its own
+(foundation/assets/asset-slots.ts). A load without a lane is a stream load.
+================
+*/
+export type AssetLane = "interface";
+
+/*
+================
 AssetRequest
 
 Every load carries its byte limit and optional decoder identity.
@@ -108,6 +118,9 @@ export type AssetRequest = {
 	id: number;
 	url: string;
 	limit: number;
+	// The interface lane's own slot (foundation/assets/asset-slots.ts); absent
+	// for every stream load.
+	lane?: AssetLane;
 	// Also return the decoded texture's alpha as a picking mask (world DDS).
 	pickAlpha?: boolean;
 	decode?:
@@ -142,6 +155,11 @@ export type AssetRequest = {
 	// the row on starts the set's download, off stops it.
 	kind: "hd-textures";
 	format: import("@/engine/foundation/assets/texture-variants").HdTextureVariant | null;
+} | {
+	// The desktop launcher's local copy of the packs (pack-mirror.ts), or
+	// null in a browser. Sent once, before any load.
+	kind: "pack-mirror";
+	origin: string | null;
 };
 /*
 ================
@@ -224,7 +242,8 @@ export interface AssetOwner {
 	snapshot?(): AssetJobSnapshot;
 	progress(): AssetProgress | null;
 	health(): { phase: "running"; } | { phase: "failed"; error: string; } | { phase: "disposed"; };
-	available(): number;
+	// Free slots for a load of this lane; no lane asks for a stream load.
+	available( lane?: AssetLane ): number;
 	// Whether a listed file came back 404 (an error's stale flag) since the
 	// last call; each call consumes it.
 	takeReleaseStale?(): boolean;
@@ -247,7 +266,7 @@ export interface AssetOwner {
 			| "effects"
 			| "effect"
 			| "release",
-		options?: { readonly pickAlpha?: boolean; }
+		options?: { readonly pickAlpha?: boolean; readonly lane?: AssetLane; }
 	): number;
 	take( id: number ): AssetResult | null;
 	// Port-only: the device's texture features, given once when known

@@ -19,7 +19,7 @@ SOURCE = "apps/server/internal/game/companion/petdesign.json"
 CLIENT_MODULE = "apps/client-next/src/engine/foundation/ui/pet-design-data.ts"
 SECTIONS = ("rules", "pets", "skills", "treeSkills", "gear", "affixes", "procs")
 UNIQUE_ID_SECTIONS = ("skills", "treeSkills", "affixes")
-GEAR_DEGREES = 9
+GEAR_DEGREES = 10
 TREE_SKILL_BOOKS = 75
 
 
@@ -37,7 +37,7 @@ def validate(design):
 		if len(ids) != len(set(ids)):
 			raise ValueError("Duplicate IDs in " + key)
 	if len(design["gear"]) != GEAR_DEGREES or len(design["treeSkills"]) != TREE_SKILL_BOOKS:
-		raise ValueError("Expected nine degrees and sixty skill books")
+		raise ValueError("Expected ten degrees and seventy-five skill books")
 
 
 # ================

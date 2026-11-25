@@ -131,6 +131,12 @@ export interface EntityState {
 	readonly spawnSkills?: readonly SpawnSkill[];
 	readonly titleText?: string;
 	readonly titleId?: number;
+	// The worn character title (later-native #3502, the peer title frame
+	// 0x3FC3): its RefTitle id and the name-line format the server
+	// resolved for it ("<Big Spender> %s"); the name board prints the
+	// name through the format. Absent is no title.
+	readonly characterTitleId?: number;
+	readonly characterTitleFormat?: string;
 	readonly transformSkin?: TransformSkin;
 	readonly cosAppearanceRefObjId?: number;
 	readonly spawnDestination?: Pose;

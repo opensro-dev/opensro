@@ -3,17 +3,20 @@ r"""
 
 later_fortress_import.py - a later client's fortress, staged into the variant
 
-PORT-ONLY, NOT NATIVE to v1.150 (each fortress is native to the later
-client it comes from). One engine for every fortress the shipped
-siegefortress.txt lacks; each caller names its fortress in a
-FortressSpec and owns one switch, one marker, one character shard and
-one placement file, so two fortresses never reap each other's rows:
+One engine for every fortress the shipped siegefortress.txt lacks; each
+caller names its fortress in a FortressSpec and owns one marker, one
+character shard and one placement file, so two fortresses never reap
+each other's rows:
 
 	constantinople_import.py   FORTRESS_CONSTANTINOPLE (v1.696)
-	vsro_fortress_import.py    FORTRESS_BIJEOKDAN, FORTRESS_HOTAN (v1.188)
+	bandit_fortress_import.py  FORTRESS_BIJEOKDAN (v1.188)
+	hotan_fortress_import.py   FORTRESS_HOTAN (v1.188)
 
-Off, add_fortress removes exactly what its marker records and reads no
-archive; the flag-off build is byte-identical to the build without it.
+A spec with a flag is port-only, not native to v1.150: off, add_fortress
+removes exactly what its marker records and reads no archive, and the
+flag-off build is byte-identical to the build without it. A spec with
+no flag is later-native content the game ships (the later client has
+it, so we do): add_fortress imports it on every run, with no off state.
 
 What a source authors, and what the engine does with it:
 
@@ -53,12 +56,13 @@ from typing import Callable
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import alexandria_npcs as characters  # noqa: E402
-import build_alexandria_variant as variant  # noqa: E402
+import variant_files as variant  # noqa: E402
 import cap110_monsters as monsters  # noqa: E402
 import import_vsro_alexandria as tables  # noqa: E402
+import published_ids  # noqa: E402
 import skytemple_import as sky  # noqa: E402
 import sro_pk2  # noqa: E402
-from alexandria_map_tables import later_zone_rows, native_text_row  # noqa: E402
+from alexandria_map_tables import LOCALINFO_COLUMNS, MAPINFO_COLUMNS, later_zone_rows, native_text_row  # noqa: E402
 from prepare_client_resources import safe_target, write_atomically  # noqa: E402
 from sro_paths import trees_overlap  # noqa: E402
 
@@ -77,7 +81,8 @@ NAVMESH = Path("Data_extracted") / "navmesh"
 class FortressSpec:
 	label: str
 	source_label: str
-	flag: str
+	# None: later-native content, imported unconditionally (no off state).
+	flag: str | None
 	marker: str
 	character_shard: str
 	portonly_ifo: str
@@ -98,12 +103,21 @@ class FortressSpec:
 	# authored model no source ships (an inference, documented by the
 	# spec). A fallback the source does ship is refused as stale.
 	model_fallbacks: tuple = ()
+	# The worldmap_mapinfo page the fortress's icons open, when the
+	# spec publishes one (the Bandit fortress's 1002); None publishes
+	# no page rows.
+	map_page: int | None = None
 
 
 # ================
 # enabled
+#
+# A flagged spec follows its switch. A spec with no flag is shipped
+# content and is always enabled, whatever the environment carries.
 # ================
 def enabled(spec, env=os.environ):
+	if spec.flag is None:
+		return True
 	return env.get(spec.flag, "").strip().lower() in tables.FLAG_ON
 
 
@@ -134,6 +148,50 @@ def fortress_zones(spec, eventzone_rows):
 		raise ValueError(f"{spec.source_label} eventzonedata names {len(zones)} {spec.world} zones, "
 			f"expected {spec.expected_zones}")
 	return zones
+
+
+# ================
+# map_page_rows
+#
+# The fortress's world-map page in the native table shapes: the
+# source's worldmap_mapinfo row for the page trimmed to the native
+# width, and the worldmap_localinfo icon rows that name the page (the
+# world page's destination icons, then the page's own markers) with
+# the source tables' leading service column and trailing cell dropped,
+# the conversion the Alexandria map merge makes. A page the source
+# does not carry is a data-contract break, refused by name.
+# ================
+def map_page_rows(spec, read):
+	if spec.map_page is None:
+		return [], []
+	page = str(spec.map_page)
+	pages = [row[:MAPINFO_COLUMNS] for row in tables.table_rows(read("worldmap_mapinfo.txt"))
+		if len(row) >= MAPINFO_COLUMNS and row[0] == page]
+	if len(pages) != 1:
+		raise ValueError(f"{spec.source_label} worldmap_mapinfo names {len(pages)} rows "
+			f"for page {page}, expected 1")
+	pins = [row[1:1 + LOCALINFO_COLUMNS] for row in tables.table_rows(read("worldmap_localinfo.txt"))
+		if len(row) == LOCALINFO_COLUMNS + 2 and row[0] == "1" and row[2] == "2"
+		and page in (row[7], row[8])]
+	if not pins:
+		raise ValueError(f"{spec.source_label} worldmap_localinfo names no icon of page {page}")
+	return pages, pins
+
+
+# ================
+# map_art_paths
+#
+# The Media files a published page draws: its picture, the icons its
+# localinfo rows name and the fortress crest the siege row names. The
+# import stages the ones the native tree lacks; the staff icons ship
+# natively (they are Jangan's too) and are never the import's.
+# ================
+def map_art_paths(page_rows, pin_rows, fortress_row):
+	paths = {page_rows[0][3].replace("\\", "/")}
+	paths |= {row[2].replace("\\", "/") for row in pin_rows}
+	if len(fortress_row) > 12:
+		paths.add("icon/" + fortress_row[12].replace("\\", "/"))
+	return sorted(paths)
 
 
 # ================
@@ -302,6 +360,20 @@ def remove_owned(spec, native, output, prior):
 		write_atomically(siege_path, monsters.encode_rows(
 			[row for row in tables.table_rows(siege_path.read_bytes())
 				if len(row) <= 2 or row[2] != spec.fortress_code]))
+	page_ids = {str(page) for page in prior.get("mapPageIds", [])}
+	if page_ids:
+		mapinfo_path = text_root / "worldmap_mapinfo.txt"
+		if mapinfo_path.exists():
+			write_atomically(mapinfo_path, monsters.encode_rows(
+				[row for row in tables.table_rows(mapinfo_path.read_bytes())
+					if not row or row[0] not in page_ids]))
+	pin_ids = {str(pin) for pin in prior.get("localInfoIds", [])}
+	if pin_ids:
+		localinfo_path = text_root / "worldmap_localinfo.txt"
+		if localinfo_path.exists():
+			write_atomically(localinfo_path, monsters.encode_rows(
+				[row for row in tables.table_rows(localinfo_path.read_bytes())
+					if not row or row[0] not in pin_ids]))
 	region_ids = {str(region) for region in prior.get("regions", [])}
 	if region_ids:
 		region_path = text_root / "regioncode.txt"
@@ -367,6 +439,7 @@ def add_fortress(spec, native, output, source=None, closure=sky.copy_resource_cl
 			if len(row) > 2 and row[2] == spec.fortress_code), None)
 		if fortress_row is None:
 			raise ValueError(f"{spec.source_label} siegefortress.txt names no {spec.fortress_code}")
+		page_rows, pin_rows = map_page_rows(spec, read)
 
 		# Before the first write, a provisional marker owns what this run
 		# is about to change: a run that stops part way (a missing model,
@@ -374,7 +447,7 @@ def add_fortress(spec, native, output, source=None, closure=sky.copy_resource_cl
 		# needs, including the native sectors a later fortress replaces.
 		sectors = sorted({(region & 0xFF, (region >> 8) & 0xFF) for region in regions})
 		planned = {f"Map_extracted/{y}/{x}{extension}" for x, y in sectors for extension in tables.MAP_EXTENSIONS}
-		write_atomically(marker, (json.dumps({
+		provisional = {
 			"enabled": True,
 			"provisional": True,
 			"characters": prior.get("characters", {}),
@@ -384,7 +457,11 @@ def add_fortress(spec, native, output, source=None, closure=sky.copy_resource_cl
 			"nameSymbols": prior.get("nameSymbols", []),
 			"npcStandings": prior.get("npcStandings", []),
 			"files": sorted(set(prior.get("files", [])) | planned),
-		}, indent=2) + "\n").encode())
+		}
+		if page_rows:
+			provisional["mapPageIds"] = [int(row[0]) for row in page_rows]
+			provisional["localInfoIds"] = [int(row[0]) for row in pin_rows]
+		write_atomically(marker, (json.dumps(provisional, indent=2) + "\n").encode())
 
 		# The characters the shipped tables lack, converted to the
 		# v1.150 layout (the conversion gives a structure the skills
@@ -395,7 +472,7 @@ def add_fortress(spec, native, output, source=None, closure=sky.copy_resource_cl
 		shipped_codes = {r[2] for r in shipped_chars if len(r) > 2}
 		refs = {code: characters.convert_character(later[code])
 			for code in needed if code not in shipped_codes}
-		occupied = {int(r[1]) for r in shipped_chars if len(r) > 1 and r[1].isdigit()}
+		occupied = published_ids.occupied_objects(text_root, (spec.character_shard,))
 		allocated = monsters.allocate_characters(occupied, sorted(refs), prior.get("characters", {}))
 		fallbacks = dict(spec.model_fallbacks)
 		for code, row in refs.items():
@@ -418,6 +495,18 @@ def add_fortress(spec, native, output, source=None, closure=sky.copy_resource_cl
 		current_siege = tables.table_rows(siege_path.read_bytes())
 		if not any(len(row) > 2 and row[2] == spec.fortress_code for row in current_siege):
 			write_atomically(siege_path, monsters.encode_rows(current_siege + [fortress_row]))
+
+		# The fortress's world-map page and the icons that name it join
+		# their tables by identity; a page already published stands.
+		if page_rows:
+			mapinfo_path = text_root / "worldmap_mapinfo.txt"
+			published = {row[0] for row in tables.table_rows(mapinfo_path.read_bytes()) if row}
+			write_atomically(mapinfo_path, characters.append_rows(mapinfo_path.read_bytes(),
+				[row for row in page_rows if row[0] not in published]))
+			localinfo_path = text_root / "worldmap_localinfo.txt"
+			published = {row[0] for row in tables.table_rows(localinfo_path.read_bytes()) if row}
+			write_atomically(localinfo_path, characters.append_rows(localinfo_path.read_bytes(),
+				[row for row in pin_rows if row[0] not in published]))
 
 		# The staff's standings, by the shipped ids. A standing the
 		# world already has stays the world's; one the prior marker
@@ -579,10 +668,25 @@ def add_fortress(spec, native, output, source=None, closure=sky.copy_resource_cl
 			particles.close()
 			particles_handle.close()
 
+		# The page art the native Media lacks, staged beside its files;
+		# art the tree already ships stands and is never the import's.
+		art_files = []
+		if page_rows:
+			for relative in map_art_paths(page_rows, pin_rows, fortress_row):
+				if (output / "Media_extracted" / relative).is_file():
+					continue
+				entry = media_index.get(relative.lower())
+				if entry is None:
+					raise ValueError(f"{spec.source_label} Media.pk2 has no {relative}")
+				variant.replace_file(output / "Media_extracted" / relative,
+					sro_pk2.payload(media, entry))
+				art_files.append("Media_extracted/" + relative)
+
 		mapinfo = output / NAVMESH / "mapinfo.mfo"
 		variant.replace_file(mapinfo, variant.enable_regions(mapinfo.read_bytes(), sectors))
 
-		files = sorted({entry for entry in set(prior.get("files", [])) | set(copied) if not entry.startswith("clash:")})
+		files = sorted({entry for entry in set(prior.get("files", [])) | set(copied) | set(art_files)
+			if not entry.startswith("clash:")})
 		summary = {
 			"enabled": True,
 			"characters": {code: int(row[1]) for code, row in refs.items()},
@@ -606,6 +710,9 @@ def add_fortress(spec, native, output, source=None, closure=sky.copy_resource_cl
 		}
 		if spec.staff_codes:
 			summary["npcStandings"] = owned_standings
+		if page_rows:
+			summary["mapPageIds"] = [int(row[0]) for row in page_rows]
+			summary["localInfoIds"] = [int(row[0]) for row in pin_rows]
 		write_atomically(marker, (json.dumps(summary, indent=2) + "\n").encode())
 		return summary
 	finally:

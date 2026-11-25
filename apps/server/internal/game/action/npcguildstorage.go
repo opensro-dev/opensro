@@ -142,6 +142,53 @@ func (rt *Runtime) HandleGuildStorageOpen(division string, c *enterworld.Charact
 
 /*
 ================
+guildStorageHoldCode
+
+Why the acting member does not hold their guild's warehouse for this
+move, as the 0xB06D code the client names (#3568); 0 when they hold
+it. Every lost hold within the warehouse flow answers the blocked
+code - the warehouse session ended, the manager is gone or is no guild
+manager, the membership or its storage permission went, another member
+holds the room - except an item move whose keeper stands beyond the
+hit range, which answers the personal warehouse's range code. Gold
+moves take no range test, as at the personal warehouse
+(applyStorageMove). A move with no warehouse session and no guild
+behind it is a shape the client cannot compose and keeps the generic
+code, as the forge-bound gate's fall-through pins. The
+guildStorageMember category codes are the 0xB515 lane's and are not
+reused here: on this lane the same bytes would name other texts. The
+caller holds the division lock.
+================
+*/
+func (rt *Runtime) guildStorageHoldCode(division string, c *enterworld.Character, gid uint32, itemMove bool) uint8 {
+	// The manager the warehouse was opened at, not the current selection:
+	// re-selecting it, or anything else, leaves the held room usable.
+	if open, ok := rt.storageSession(division, c.Name); !ok || open != gid {
+		if _, code := rt.guildStorageMember(division, c); code != 0 {
+			return wire.ErrCodeInvalidRequest
+		}
+		return wire.ErrCodeStorageOperationBlocked
+	}
+	npc, live := rt.npcForCurrentViewer(division, c, gid)
+	if !live || !npc.Services.Has(simulation.NpcServiceGuild) {
+		return wire.ErrCodeStorageOperationBlocked
+	}
+	if itemMove && !rt.npcWithinHitRange(division, c, npc) {
+		return hitRangeTooFar
+	}
+	guildID, code := rt.guildStorageMember(division, c)
+	if code != 0 {
+		return wire.ErrCodeStorageOperationBlocked
+	}
+	holder, held := rt.guildStorageHolder(guildStorageKey{division: division, guild: guildID})
+	if !held || holder != c.Name {
+		return wire.ErrCodeStorageOperationBlocked
+	}
+	return 0
+}
+
+/*
+================
 holdsGuildStorage
 
 Whether the acting member holds their guild's warehouse at the manager.
@@ -149,21 +196,7 @@ The caller holds the division lock.
 ================
 */
 func (rt *Runtime) holdsGuildStorage(division string, c *enterworld.Character, gid uint32) bool {
-	// The manager the warehouse was opened at, not the current selection:
-	// re-selecting it, or anything else, leaves the held room usable.
-	if open, ok := rt.storageSession(division, c.Name); !ok || open != gid {
-		return false
-	}
-	npc, live := rt.npcForCurrentViewer(division, c, gid)
-	if !live || !rt.npcWithinHitRange(division, c, npc) || !npc.Services.Has(simulation.NpcServiceGuild) {
-		return false
-	}
-	guildID, code := rt.guildStorageMember(division, c)
-	if code != 0 {
-		return false
-	}
-	holder, held := rt.guildStorageHolder(guildStorageKey{division: division, guild: guildID})
-	return held && holder == c.Name
+	return rt.guildStorageHoldCode(division, c, gid, true) == 0
 }
 
 /*
@@ -188,6 +221,17 @@ func (rt *Runtime) HandleGuildStorageList(division string, c *enterworld.Charact
 	room, refusal, err := store.TransactGuildStorageAs(division, c.ID, nil)
 	if refusal.Refused() || err != nil {
 		return guildNpcAnswer(opGuildStorageListed, guildRefusalCode(refusal))
+	}
+	// Native deletes an out-of-period rental as the guild chest loads
+	// (_DelExpiredRentItemInStorage, rental_items.go).
+	if rentalRowsExpired(room.Rows, rt.Now().Unix()) {
+		room, refusal, err = store.TransactGuildStorageAs(division, c.ID, func(_ *domain.Character, chest *domain.AccountStorage) error {
+			removeExpiredRentRows(&chest.Rows, rt.Now().Unix())
+			return nil
+		})
+		if refusal.Refused() || err != nil {
+			return guildNpcAnswer(opGuildStorageListed, guildRefusalCode(refusal))
+		}
 	}
 	list, err := rt.storageListPayload(room)
 	if err != nil {
@@ -240,14 +284,17 @@ func (rt *Runtime) releaseGuildStorage(division, name string) {
 applyGuildStorageMove
 
 The five guild move types: the holder's moves at the manager, one store
-commit each, answered as the personal warehouse's are.
+commit each, answered as the personal warehouse's are - gold takes no
+range test, and a member who no longer holds the room reads the
+blocked code instead of the silent generic one (#3568).
 ================
 */
 func (rt *Runtime) applyGuildStorageMove(division string, c *enterworld.Character, q wire.ItemMoveRequest) OpResult {
 	store := rt.deps.GuildAuthority()
 	personal, _ := wire.PersonalStorageMove(q.MovementType)
+	goldMove := personal == wire.MoveTypeStorageGoldDeposit || personal == wire.MoveTypeStorageGoldWithdraw
 	gid := q.NpcGID
-	if personal == wire.MoveTypeStorageGoldDeposit || personal == wire.MoveTypeStorageGoldWithdraw {
+	if goldMove {
 		gid, _ = rt.storageSession(division, c.Name)
 	}
 	// Port-only (forge.go, issue #1980): a bound forged item never enters
@@ -262,7 +309,10 @@ func (rt *Runtime) applyGuildStorageMove(division string, c *enterworld.Characte
 			}
 		}
 	}
-	if store == nil || !rt.holdsGuildStorage(division, c, gid) {
+	if code := rt.guildStorageHoldCode(division, c, gid, !goldMove); code != 0 {
+		return failureResult(code)
+	}
+	if store == nil {
 		return failureResult(wire.ErrCodeInvalidRequest)
 	}
 	_, refusal, err := store.TransactGuildStorageAs(division, c.ID, rt.storageMutation(personal, q))
@@ -270,9 +320,13 @@ func (rt *Runtime) applyGuildStorageMove(division string, c *enterworld.Characte
 	switch {
 	case errors.As(err, &moveRefusal):
 		return failureResult(uint8(moveRefusal))
-	case err != nil || refusal.Refused():
-		log.Warnf("guild storage: %s move 0x%02X failed: %v / %v", c.Name, q.MovementType, err, refusal)
+	case err != nil:
+		log.Warnf("guild storage: %s move 0x%02X failed: %v", c.Name, q.MovementType, err)
 		return failureResult(wire.ErrCodeInvalidRequest)
+	case refusal.Refused():
+		// The store's own membership answer a breath after the hold
+		// check passed: blocked, not malformed.
+		return failureResult(wire.ErrCodeStorageOperationBlocked)
 	}
 	frames := []wire.Frame{{Opcode: wire.OpItemMoveResponse, Payload: wire.EncodeStorageMoveSuccess(q)}}
 	if personal != wire.MoveTypeStorage {

@@ -66,6 +66,10 @@ function summonerSlotState( item: SummonerSlotItem | undefined ): number | undef
 // under a two-hand-grip weapon; CIFEquipment_SetAvatarSlotItem (5965E0)
 // raises it on the avatar attachment slot under a one-piece dress.
 const BLOCKED_SHEET = "/assets/images/Media_extracted/effect/icon/int_effect.png";
+// CIFSlotWithHelp's exchange flag (+0x4FD, written by 54FC60): while it
+// stands, 565850 lays com_item_exchange.ddj (loaded at 554906) over the
+// slot. CIFExchange raises it on all twelve slots of a locked side.
+const EXCHANGE_SHEET = "/assets/images/Media_extracted/interface/ifcommon/com_item_exchange.png";
 // The avatar dress TypeID4 (5965E0/56A1E0 test (word & 0xf800) == 0x1000).
 const AVATAR_DRESS_TID4 = 2;
 
@@ -130,6 +134,30 @@ frame (count - p + ticks) mod count.
 function loopFrame( nowMs: number, stepMs: number, frames: number, phase: number ): number {
 	const ticks = Math.floor( nowMs / stepMs );
 	return ((frames - phase + ticks) % frames + frames) % frames;
+}
+
+// Port-only (SRO_NASRUN, #4384): the later clients' active-Spirit edge,
+// icon_edge_nasrun.ddj, a 512x32 sheet of sixteen 32x32 cells in one row.
+// Its step is not traced in either later client: it takes the summoned
+// glow's 50 ms (inference).
+const SPIRIT_EDGE_FRAMES = 16;
+const SPIRIT_EDGE_STEP_MS = 50;
+
+/*
+================
+spiritActiveOverlay
+
+The looping edge over a Devil's Spirit's icon for its whole awakening,
+worn or carried (frame/item-slot.ts).
+================
+*/
+export function spiritActiveOverlay( rect: UiRect, seed: number, nowMs: number ): ItemSlotOverlay {
+	const frame = loopFrame( nowMs, SPIRIT_EDGE_STEP_MS, SPIRIT_EDGE_FRAMES, seed % SPIRIT_EDGE_FRAMES );
+	return {
+		path: SHEET + "icon/item/etc/icon_edge_nasrun.png",
+		uv: [ frame / SPIRIT_EDGE_FRAMES, 0, 1 / SPIRIT_EDGE_FRAMES, 1 ],
+		rect
+	};
 }
 
 /*
@@ -261,6 +289,20 @@ The grey int_effect quad 565850 draws over a blocked slot (+0x614).
 */
 export function itemSlotBlockedOverlay( rect: UiRect ): ItemSlotOverlay {
 	return { path: BLOCKED_SHEET, uv: [ 0, 0, 1, 1 ], rect };
+}
+
+/*
+================
+itemSlotExchangeOverlay
+
+The light-blue com_item_exchange quad 565850 draws over an exchange slot
+whose side has locked (+0x4FD): 6B21B0 raises it on the own twelve slots
+when 0xB095 accepts the lock, 6B2120 on the partner's twelve on 0x37CF.
+Empty slots take it too; the flag is per slot, not per item.
+================
+*/
+export function itemSlotExchangeOverlay( rect: UiRect ): ItemSlotOverlay {
+	return { path: EXCHANGE_SHEET, uv: [ 0, 0, 1, 1 ], rect };
 }
 
 /*

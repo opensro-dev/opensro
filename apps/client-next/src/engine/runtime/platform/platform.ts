@@ -20,6 +20,7 @@ import { chatBlocks } from "@/engine/foundation/gameplay/chat-blocks";
 import {
 	defaultVideoOptions,
 	fitCanvasViewport,
+	surfaceSize,
 	uiPixelScaleFor,
 	videoOptions,
 	type VideoOptions
@@ -33,6 +34,7 @@ import { cameraWheelDelta } from "@/engine/foundation/rendering/camera-wheel";
 import { createTouchCamera, type TouchCameraOutput } from "@/engine/foundation/rendering/touch-camera";
 import {
 	EXPERIMENTAL_STORAGE_KEY,
+	FIRST_EXPERIMENTAL_STORAGE_KEY,
 	PREVIOUS_EXPERIMENTAL_STORAGE_KEY,
 	experimentalOptions,
 	storedExperimentalOptions,
@@ -40,6 +42,11 @@ import {
 	type ExperimentalOptions
 } from "@/engine/foundation/ui/experimental-options";
 import { gameOptions, initialGameOptions, type GameOptions } from "@/engine/foundation/gameplay/game-options";
+import {
+	uniqueNotifyBook,
+	uniqueNotifySettings,
+	type UniqueNotifySettings
+} from "@/engine/foundation/gameplay/unique-status";
 import { windowPositions, type WindowPositions } from "@/engine/foundation/ui/window-positions";
 import { createUiBridge } from "./ui/ui";
 import { createTelemetry } from "./telemetry";
@@ -48,12 +55,46 @@ import { createKeepAwake } from "./keep-awake";
 import { createCursor } from "./ui/cursor";
 import type { UiEvent, UiSemantics } from "@/engine/contracts/ui";
 import type { RawInput, WorldClickInput } from "@/engine/contracts/input";
-import type { Platform } from "@/engine/contracts/runtime";
+import type { Platform, ReleaseNotice } from "@/engine/contracts/runtime";
 import type { AssetProgress } from "@/engine/contracts/assets";
 import { loadingDetailText } from "@/engine/foundation/ui/loading-detail";
 
 // How often the loading detail line may change while only its rate moves.
 const LOADING_DETAIL_REFRESH_MS = 250;
+
+// The update prompt's line for each shown notice (presentUpdate). "updating"
+// names no click: a reload before the page moves would be refused again.
+const UPDATE_NOTICE_TEXT = {
+	updating: "Silkroad Online is being updated. The game continues on its own in a moment.",
+	newer: "Silkroad Online has been updated. Refresh to continue playing."
+} as const;
+
+// The tab's last automatic reload (sessionStorage), and the gap within which a
+// second one is refused: a page that reloads and is still served the old
+// release must not loop.
+const RELEASE_RELOAD_KEY = "sro-release-reload-ms";
+const RELEASE_RELOAD_GAP_MS = 60 * 1000;
+
+/*
+================
+takeReleaseReload
+
+True, and stamps the tab, when no automatic reload ran in the last
+RELEASE_RELOAD_GAP_MS. Storage can throw (a private window, blocked site
+data); then the reload is refused and the player gets the Refresh button,
+the safe side of a loop.
+================
+*/
+function takeReleaseReload( nowMs: number ): boolean {
+	try {
+		const last = Number( sessionStorage.getItem( RELEASE_RELOAD_KEY ) );
+		if ( Number.isFinite( last ) && last > 0 && nowMs - last < RELEASE_RELOAD_GAP_MS ) return false;
+		sessionStorage.setItem( RELEASE_RELOAD_KEY, String( nowMs ) );
+		return true;
+	} catch {
+		return false;
+	}
+}
 
 /*
 ================
@@ -80,6 +121,10 @@ export function createPlatform(
 	// clientWidth every frame forces a synchronous layout whenever the UI
 	// touched the DOM that frame (a trace showed it among the top costs).
 	const canvasBox = { width: canvas.clientWidth, height: canvas.clientHeight };
+	// Backing pixels per CSS pixel: devicePixelRatio unless surfaceSize
+	// clamped the store (#4028); pointer mapping and the UI scale use it so a
+	// click lands on what the clamped frame drew there.
+	let surfacePixelRatio = devicePixelRatio;
 	const canvasObserver = typeof ResizeObserver === "undefined" ?
 		null :
 		new ResizeObserver( refreshCanvasBox );
@@ -131,6 +176,16 @@ export function createPlatform(
 		status.value = "Experimental options could not be restored: " + String( error );
 	}
 	onUi( { kind: "experimental-preferences", value: experimental } );
+	// Port-only (#3531): the Unique Status window's notify book,
+	// character name to its list. A corrupt record restores as empty.
+	const uniqueNotifyKey = "sro:v1150:unique-notify:1";
+	let uniqueNotify: Readonly<Record<string, UniqueNotifySettings>> = {};
+	try {
+		const stored = localStorage.getItem( uniqueNotifyKey );
+		if ( stored !== null ) uniqueNotify = uniqueNotifyBook( JSON.parse( stored ) );
+	} catch ( error ) {
+		status.value = "Unique notify list could not be restored: " + String( error );
+	}
 	const preferenceKey = "sro:v1150:game-options:1";
 	let preferences = initialGameOptions();
 	try {
@@ -212,7 +267,8 @@ export function createPlatform(
 	================
 	*/
 	function displayScale(): number {
-		return uiPixelScale() / devicePixelRatio * uiScaleFactor( experimental ); // UI size: 1 at native 100
+		// uiPixelScale reads the viewport first, so the ratio is this frame's.
+		return uiPixelScale() / surfacePixelRatio * uiScaleFactor( experimental ); // UI size: 1 at native 100
 	}
 	/*
 	================
@@ -228,7 +284,7 @@ export function createPlatform(
 	function uiPixelScale(): number {
 		if ( video.displaySize ) return 1;
 		const physical = readViewport();
-		return uiPixelScaleFor( physical.width, physical.height, devicePixelRatio );
+		return uiPixelScaleFor( physical.width, physical.height, surfacePixelRatio );
 	}
 	/*
 	================
@@ -361,12 +417,14 @@ export function createPlatform(
 	let onlineAgain = false;
 	// A newer release is live: like a native client the gateway sends to the
 	// patcher, the outdated page stops playing until it reloads.
-	let updateRequired = false;
+	let updateNoticeShown: ReleaseNotice = "none";
 	window.addEventListener( "online", () => {
 		onlineAgain = true;
 	}, { signal: lifetime.signal } );
 	const updateNotice = document.getElementById( "update-notice" );
-	updateNotice?.querySelector( "button" )?.addEventListener( "click", () => location.reload(), {
+	const updateText = updateNotice?.querySelector( "span" );
+	const updateButton = updateNotice?.querySelector( "button" );
+	updateButton?.addEventListener( "click", () => location.reload(), {
 		signal: lifetime.signal
 	} );
 	document.addEventListener( "visibilitychange", () => {
@@ -437,6 +495,7 @@ export function createPlatform(
 		try {
 			localStorage.setItem( experimentalKey, JSON.stringify( experimental ) );
 			localStorage.removeItem( PREVIOUS_EXPERIMENTAL_STORAGE_KEY );
+			localStorage.removeItem( FIRST_EXPERIMENTAL_STORAGE_KEY );
 			localStorage.removeItem( "sro.developerDiagnostics" );
 		} catch ( error ) {
 			status.value = "Experimental options could not be saved: " + String( error );
@@ -612,8 +671,8 @@ export function createPlatform(
 	}, { signal: lifetime.signal, capture: true } );
 	window.addEventListener( "keydown", event => {
 		if ( !event.code || event.isComposing || event.keyCode === 229 ) return;
-		// The update prompt holds focus; Enter reaches its Refresh button.
-		if ( updateRequired ) return;
+		// The update prompt holds the keys; Enter reaches its Refresh button.
+		if ( updateNoticeShown !== "none" ) return;
 		// A letter is the one the layout prints on the key, as native VKs are.
 		const code = layoutKeys.down( event.code, event.key ), vk = virtualKey( code );
 		if (
@@ -679,13 +738,35 @@ export function createPlatform(
 		const fit = fitCanvasViewport( window, video.displaySize, pinVisualViewport ), box = canvasSize();
 		const width = fit.pinned || box.width <= 0 ? fit.width : box.width,
 			height = fit.pinned || box.height <= 0 ? fit.height : box.height;
-		viewport.width = Math.max( 1, Math.round( width * devicePixelRatio ) );
-		viewport.height = Math.max( 1, Math.round( height * devicePixelRatio ) );
+		// Clamped to what the device can configure (#4028).
+		const full = Math.max( 1, Math.round( width * devicePixelRatio ) ),
+			surface = surfaceSize( full, Math.max( 1, Math.round( height * devicePixelRatio ) ) );
+		viewport.width = surface.width;
+		viewport.height = surface.height;
+		surfacePixelRatio = devicePixelRatio * surface.width / full;
 		return viewport;
 	}
 	return {
 		displayScale,
 		saveExperimentalOptions,
+		// Port-only (#3531): the Unique Status window's notify book.
+		uniqueNotifyBook: () => uniqueNotify,
+		/*
+		================
+		saveUniqueNotify
+
+		One character's saved notify list joins the book and persists.
+		================
+		*/
+		saveUniqueNotify( character: string, value: UniqueNotifySettings ) {
+			if ( !character ) return;
+			uniqueNotify = { ...uniqueNotify, [character]: uniqueNotifySettings( value ) };
+			try {
+				localStorage.setItem( uniqueNotifyKey, JSON.stringify( uniqueNotify ) );
+			} catch ( error ) {
+				status.value = "Unique notify list could not be saved: " + String( error );
+			}
+		},
 		/*
 		================
 		saveCameraWaypoints
@@ -1009,19 +1090,31 @@ export function createPlatform(
 		presentUpdate
 		================
 		*/
-		presentUpdate( newer ) {
+		presentUpdate( requested ) {
 			// An outdated page cannot keep playing (its next scene may name files
 			// the release replaced), so the prompt covers the game and takes the
-			// keys. The reload itself is the player's click.
+			// keys. A page still in session reloads on the player's click; a
+			// refused one reloads itself once, unless it already did moments ago
+			// (a cache that still serves the old page), when it offers the click.
 			// Called every frame: write only a change. Assigning hidden, even to its
 			// current value, invalidates style (1.8 ms a frame in a trace).
-			if ( updateNotice && updateNotice.hidden === newer ) updateNotice.hidden = !newer;
-			if ( newer === updateRequired ) return;
-			updateRequired = newer;
-			if ( !newer ) return;
-			uiPointer = false;
-			onInput( { kind: "release", timeMs: timeMs() } );
-			updateNotice?.querySelector( "button" )?.focus();
+			const notice = requested === "reload" && !takeReleaseReload( Date.now() ) ? "newer" : requested;
+			if ( notice === updateNoticeShown ) return;
+			const wasShown = updateNoticeShown !== "none";
+			updateNoticeShown = notice;
+			if ( notice === "reload" ) {
+				location.reload();
+				return;
+			}
+			if ( updateNotice ) updateNotice.hidden = notice === "none";
+			if ( notice === "none" ) return;
+			if ( updateText ) updateText.textContent = UPDATE_NOTICE_TEXT[notice];
+			if ( updateButton ) updateButton.hidden = notice !== "newer";
+			if ( !wasShown ) {
+				uiPointer = false;
+				onInput( { kind: "release", timeMs: timeMs() } );
+			}
+			if ( notice === "newer" ) updateButton?.focus();
 		},
 		/*
 		================

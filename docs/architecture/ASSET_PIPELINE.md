@@ -46,8 +46,11 @@ first run `node scripts/build/shared/nativeCharacterTextures.mjs`. Both this
 prerequisite and the full build acquire the generated-asset lock. The cache
 lives in `.generated/intermediate/images/native-character/`. A missing or
 mismatched entry fails publication rather than silently switching formats.
-An older client cannot consume schema 4 (SROPACK2 packs); ship rebuilt data and the matching
-client together as a data release.
+An older client cannot consume schema 5 (since #3951 each EasyFX effect program and each BMS
+mesh it draws is its own file under `/assets/effects/programs/` and `/assets/effects/meshes/`,
+named by `apps/client-next/src/engine/foundation/assets/effect-programs.ts`; the single
+`effects/programs.json` is gone); ship rebuilt data and the matching client together as a data
+release.
 
 | Output | Contents |
 | --- | --- |
@@ -69,6 +72,7 @@ client together as a data release.
 | `pnpm assets build world-outdoor -- --region=0x6a48 --force --jobs=1` | Rebuild one outdoor region |
 | `pnpm assets refresh <family>` | Re-publish one family into an existing tree (`pnpm task list --kind assets` lists them) |
 | `pnpm assets refresh delivery` | Regenerate the web manifest and stale precompressed sidecars |
+| `pnpm task assets:refresh:files -- <paths>` | Repack only the named published files (a rebaked `assets/data/teleportData.json`, a re-converted image) into the groups that hold them: seconds, where `repack` takes minutes. It packs, never produces: run the file's builder first. A JSON resolves to its packed `.json.gz` twin, derived again from the JSON. Write paths without the leading slash under Git Bash |
 | `pnpm assets repack` | Rebuild every pack from the published loose tree |
 | `pnpm assets gc` | Report asset-pack outputs the published index no longer uses; `-- --apply` soft-archives them to `temp/archives/` (publishers also do this after every index publish) |
 | `pnpm assets check integrity` | Verify pack manifests and artifacts |

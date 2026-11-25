@@ -80,10 +80,11 @@ test("guild/status/speech share native stack independently of hidden base names"
 	assert.equal( row.statusY, -45 );
 	assert.equal( row.speechY, -45 );
 	assert.equal( overheadLayout( peer, local, game, { ...options, guildNames: false } ).statusY, -25 );
-	assert.equal(
-		overheadLayout( { ...peer, equipment: [ { slot: 8, typeFlags: 0x1000 } ] }, local, game, options ).guildText,
-		""
-	);
+	// 86B974: a job suit (active job class 1..3, here a thief) hides the
+	// guild row, the wearer's own board included. The local entity carries
+	// no equipment rows, so the class is the only word it can give (#4127).
+	assert.equal( overheadLayout( { ...peer, activeJob: 2 }, local, game, options ).guildText, "" );
+	assert.equal( overheadLayout( { ...local, activeJob: 2 }, local, game, options ).guildText, "" );
 	assert.equal( overheadLayout( local, local, game, options ).guildText, "[Guild * Master]" );
 	assert.equal(
 		overheadLayout( peer, local, { ...game, social: { ...game.social, members: [] } }, options ).speechY,

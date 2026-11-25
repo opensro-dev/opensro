@@ -11,6 +11,14 @@ code 4 when the target is too far. Trades do not measure distance: they
 need the NPC function an in-range request opened (player +0xC+6 state 5),
 which the selection store keeps (SelectionStore.OpenFunction).
 
+Port-only addition (#4125, owner ruling 2026-11-23: a native bug is not
+copied): natively the gate stops at range - the client picks through
+scenery and the server never tests sight - so an NPC behind a wall can
+be selected and used. Inside the range this gate also runs the talk
+sight test (movement.Runtime.TalkSight): a walled-off NPC is refused
+with the same code 4, the only refusal this gate's wire has. Plain
+default, no flag: the ruling admits no opt-out.
+
 ===========================================================================
 */
 
@@ -64,21 +72,44 @@ func npcInteractionRange(npc simulation.NpcDef) float32 {
 npcWithinHitRange
 
 True while the character stands inside the NPC's class range, measured to
-the station the NPC is published at (simulation.NpcStation). Authored NPCs
-stand there; the synthetic fixture's patrol leg is short and bounded, so
-its station is the measure for it too. Incompatible planes (dungeon
-against field) measure as overflow and refuse, as natively.
+the station the NPC is published at (simulation.NpcStation), and - the
+port-only arm - the station passes the talk sight test from the
+character's live pose. Authored NPCs stand there; the synthetic
+fixture's patrol leg is short and bounded, so its station is the measure
+for it too. Incompatible planes (dungeon against field) measure as
+overflow and refuse, as natively.
 ================
 */
 func (rt *Runtime) npcWithinHitRange(divisionID string, character *enterworld.Character, npc simulation.NpcDef) bool {
-	viewer := rt.liveSpawn(simulation.WorldKey(divisionID, character.Name), character, rt.Now().UnixMilli())
+	nowMs := rt.Now().UnixMilli()
+	// The same snapshot liveSpawn samples, kept whole so the sight test
+	// below starts from the viewer's retained surface owner.
+	world := rt.liveWorld(simulation.WorldKey(divisionID, character.Name), character, nowMs)
+	viewer := world.LiveSpawnAt(nowMs)
 	station := simulation.NpcStation(npc, rt.NpcSpawn.Anchor(simulation.SeedWorldState(character).Spawn))
 	distance := monster.NativeActorDistance(
 		monster.Pose{RegionID: viewer.RegionID, X: viewer.X, Y: viewer.Y, Z: viewer.Z},
 		monster.Pose{RegionID: station.RegionID, X: station.X, Y: station.Y, Z: station.Z},
 	)
 	// The reference server refuses when the range is below the distance.
-	return !(npcInteractionRange(npc) < distance)
+	if npcInteractionRange(npc) < distance {
+		return false
+	}
+	// #4125 (owner ruling above): inside the range, an NPC the player
+	// can neither see nor walk up to is out of reach. An unwired sight
+	// test admits, the posture LineOfSight's nil takes; the composition
+	// root wires movement.Runtime.TalkSight.
+	//
+	// Teleport gates keep the range-only gate. The client approaches a
+	// gate to 640 of its 800 and uses it from there (698740), so the
+	// talk test's 25-unit walk arrival does not describe a gate use: a
+	// town gate measured on real geometry (Jangan, STORE_CH_GATE) fails
+	// both arms from most sides at 35-50 units already. The client pick
+	// still refuses a gate hidden behind scenery.
+	if npc.Teleport == nil && rt.TalkSight != nil && !rt.TalkSight(viewer, world.LiveOwnerAt(nowMs), station) {
+		return false
+	}
+	return true
 }
 
 /*

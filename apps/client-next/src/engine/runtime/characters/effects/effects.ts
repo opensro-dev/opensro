@@ -30,6 +30,7 @@ import {
 } from "@/engine/foundation/animation/sound-selectors";
 import { trimToEffectBudget } from "@/engine/foundation/animation/effect-room";
 import {
+	petGearChainDelay,
 	WOLF_EFFECT_MAX_PARTS,
 	WOLF_EFFECT_SECONDS,
 	wolfEffectSound,
@@ -98,6 +99,7 @@ import {
 	worldDelta
 } from "@/engine/foundation/world/world-space";
 import { SYSTEM_CAPTURE_MARK } from "@/engine/contracts/orb";
+import { effectProgramModel, isEffectProgramModel } from "@/engine/foundation/assets/effect-programs";
 
 /*
 ================
@@ -137,7 +139,12 @@ type EffectGameplay = Pick<
 	| "movementRevision"
 	| "movementPath"
 	| "movementTransition"
+	| "hwanLevels"
 >;
+// Port-only (Blue Berserk, not native): the 2nd Hwan body record the owner wears from Blue level 1.
+const HWAN2_MODE_RECORD = "SYSTEM_CH_HWAN2MODE";
+// How long after a character first appears a Berserk is taken as already running.
+const HWAN_ENTRY_QUIET_MS = 5000;
 // TID4 6 in the COS type word: the captured quest monster.
 const CAPTURED_MONSTER_TYPE = 6 << 11;
 // The effect actors drawn at once: cast visuals, state and attached
@@ -495,7 +502,10 @@ export function createCharacterEffects(
 			states: Readonly<Record<number, import("@/engine/contracts/effects").HawkAnimation>>;
 		};
 	};
-	type Attachment = import("@/engine/foundation/gameplay/attached-effects").AttachedEffect & { recordName?: string; };
+	type Attachment = import("@/engine/foundation/gameplay/attached-effects").AttachedEffect & {
+		recordName?: string;
+		quiet?: boolean;
+	};
 	const statuses = new Map<number, { view: StatusView; revisions: Map<string, number>; }>();
 	const recordFor = ( effect: Attachment ) =>
 		effect.recordName ? namedCatalog?.[effect.recordName] : catalog?.[String( effect.skill )];
@@ -523,8 +533,21 @@ export function createCharacterEffects(
 		materialOwners = new Map<string, number>();
 	const hwan = new Map<
 		number,
-		{ active: boolean; from: number; value: number; progress: number; previous: number; revision: number; }
+		{
+			active: boolean;
+			from: number;
+			value: number;
+			progress: number;
+			previous: number;
+			revision: number;
+			quiet: boolean;
+		}
 	>();
+	// When each character first appeared since the last reset. A Berserk that shows within
+	// HWAN_ENTRY_QUIET_MS of that is the one already running when the character entered
+	// (a loading screen), not an activation, and plays no sound; the state can trail the
+	// first frame of the character by a few packets.
+	const firstSeen = new Map<number, number>();
 	const roars = new Map<
 		number,
 		{
@@ -779,9 +802,7 @@ export function createCharacterEffects(
 								paths: [
 									...new Set(
 										particles.flatMap( set =>
-											set.particles.map( p =>
-												"/assets/effects/programs.json#" + encodeURIComponent( p.effectPath )
-											)
+											set.particles.map( p => effectProgramModel( p.effectPath ) )
 										)
 									)
 								]
@@ -845,7 +866,7 @@ export function createCharacterEffects(
 	const modelFor = ( path: string ) =>
 		path.endsWith( ".efp" ) ?
 			{
-				glb: "/assets/effects/programs.json#" + encodeURIComponent( path ),
+				glb: effectProgramModel( path ),
 				clips: [ "effect" ],
 				clipLoop: false
 			} :
@@ -950,7 +971,7 @@ export function createCharacterEffects(
 				);
 				continue;
 			}
-			if ( stage.sound ) {
+			if ( stage.sound && !effect.quiet ) {
 				play( {
 					id: `attached:${effect.gid}:${effect.token}:${effect.receivedAtMs ?? 0}:${stop}:${result.length}`,
 					path: stage.sound,
@@ -1037,7 +1058,7 @@ export function createCharacterEffects(
 							result.push( {
 								actor: {
 									gid: allocate(),
-									model: "/assets/effects/programs.json#" + encodeURIComponent( particle.effectPath ),
+									model: effectProgramModel( particle.effectPath ),
 									pose: owner.pose,
 									clip: "effect",
 									time: 0,
@@ -1099,7 +1120,7 @@ export function createCharacterEffects(
 						result.push( {
 							actor: {
 								gid: allocate(),
-								model: "/assets/effects/programs.json#" + encodeURIComponent( particle.effectPath ),
+								model: effectProgramModel( particle.effectPath ),
 								pose: owner.pose,
 								clip: "effect",
 								time: 0,
@@ -1302,7 +1323,8 @@ export function createCharacterEffects(
 			load(
 				now,
 				entities.length > 0 || external.size > 0,
-				gameplay?.vitals?.some( v => !!((v.abnormal ?? 0) & STATUS_DECORATION_MASK) ) ?? false
+				(gameplay?.vitals?.some( v => !!((v.abnormal ?? 0) & STATUS_DECORATION_MASK) ) ?? false) ||
+					Object.keys( gameplay?.hwanLevels ?? {} ).length > 0
 			);
 			failure = null;
 			try {
@@ -1406,6 +1428,30 @@ export function createCharacterEffects(
 						yaw
 					};
 				}
+				/*
+				================
+				moverYaw
+
+				The yaw a mover's Initialize caller hands it: the source
+				object's own yaw float (CICharactor +0x88; the TR client's 1TAR
+				caller a0ebf3 reads it at +0x80), which CIDecoSkill_Update
+				(8DC440) turns toward the target every
+				frame of the cast. That is the drawn body's yaw (cast-facing.ts),
+				not the logical heading the server set at cast start: a target
+				that moved since, or a press that turned no prediction, left the
+				logical heading behind and the bolt flew backwards. The
+				presented actor carries it as characterHeadingYaw (pi minus the
+				native yaw). A rider's yaw belongs to its vehicle in this port,
+				and a holder not drawn yet keeps the logical heading.
+				================
+				*/
+				function moverYaw( holder: EntityState, angle: number ): Radians {
+					const actor = presentation.get( holder.gid );
+					if ( !actor || holder.mountedOn !== undefined || actor.mountedOn !== undefined ) {
+						return nativeHeadingYaw( angle );
+					}
+					return radians( Math.PI - actor.pose.yaw );
+				}
 				const clock = Math.trunc( now * 1000 );
 				for ( const [token, gid] of weaponOwners ) {
 					if (
@@ -1467,10 +1513,19 @@ export function createCharacterEffects(
 							} );
 						}
 					} else if ( !enabled && view.tint === null ) materials.delete( entity.gid );
+					if ( !firstSeen.has( entity.gid ) ) firstSeen.set( entity.gid, now );
 					let row = hwan.get( entity.gid );
 					if ( !row && !enabled ) continue;
 					if ( !row ) {
-						row = { active: enabled, from: 1, value: 1, progress: 0, previous: now, revision: clock };
+						row = {
+							active: enabled,
+							from: 1,
+							value: 1,
+							progress: 0,
+							previous: now,
+							revision: clock,
+							quiet: now - (firstSeen.get( entity.gid ) ?? now) < HWAN_ENTRY_QUIET_MS
+						};
 						hwan.set( entity.gid, row );
 					}
 					if ( row.active !== enabled ) {
@@ -1493,6 +1548,7 @@ export function createCharacterEffects(
 				}
 				for ( const gid of hwan.keys() ) if ( !byGid.has( gid ) ) hwan.delete( gid );
 				for ( const gid of appearances.keys() ) if ( !byGid.has( gid ) ) appearances.delete( gid );
+				for ( const gid of firstSeen.keys() ) if ( !byGid.has( gid ) ) firstSeen.delete( gid );
 				for ( const gid of statuses.keys() ) {
 					if ( !byGid.has( gid ) ) {
 						statuses.delete( gid );
@@ -1566,8 +1622,7 @@ export function createCharacterEffects(
 									for ( const particle of ambientModelParticles( model.particleModifiers ) ) {
 										actors.push( {
 											gid: allocate(),
-											model: "/assets/effects/programs.json#" +
-												encodeURIComponent( particle.effectPath ),
+											model: effectProgramModel( particle.effectPath ),
 											pose: owner.pose,
 											clip: "effect",
 											time: 0,
@@ -1892,16 +1947,24 @@ export function createCharacterEffects(
 									const gid = traded?.actor.gid ?? allocate();
 									if ( traded ) active.delete( gid );
 									// Effect world poses carry the native heading yaw; only the
-									// position comes from the binding (stageAnchor).
+									// position comes from the binding (stageAnchor). A sampled
+									// launch bone is a drawn actor's pose, whose yaw is
+									// characterHeadingYaw (pi minus the native yaw): an .efp
+									// mover took that mirror and flew sideways or backwards.
+									// A mover takes its holder's drawn yaw (moverYaw).
+									const launchYaw = flying ?
+										moverYaw( entity, pose.angle ) :
+										nativeHeadingYaw( pose.angle );
 									let source = flying && targetLocal ?
 										targetMoverPoint( pose, stage.offset ) :
-										sourceSocket ??
-											stageAnchor(
-												entity,
-												stageBinding( stage, false ),
-												trigger,
-												victimFacing ?? nativeHeadingYaw( pose.angle )
-											);
+										sourceSocket ?
+										{ ...sourceSocket, yaw: launchYaw } :
+										stageAnchor(
+											entity,
+											stageBinding( stage, false ),
+											trigger,
+											victimFacing ?? launchYaw
+										);
 									if ( !source ) {
 										refuse( `anchor-height:${entity.refObjId}` );
 										continue;
@@ -1996,15 +2059,18 @@ export function createCharacterEffects(
 										) :
 										flying && targetLocal ?
 										targetMoverPoint( pose, targetOffset ) :
-										targetSocket ??
-											(target ?
-												stageAnchor(
-													target,
-													stageBinding( stage, true ),
-													trigger,
-													nativeHeadingYaw( target.heading )
-												) ?? source :
-												source);
+										// A landing bone gives only its point too: its yaw
+										// reaches the arrival effect and a zero-length mover.
+										targetSocket && target ?
+										{ ...targetSocket, yaw: nativeHeadingYaw( target.heading ) } :
+										(target ?
+											stageAnchor(
+												target,
+												stageBinding( stage, true ),
+												trigger,
+												nativeHeadingYaw( target.heading )
+											) ?? source :
+											source);
 									// The fYaw this mover's Initialize caller gave it:
 									// kept verbatim if the path has zero length. Read
 									// before the radial lane re-aims the source pose.
@@ -2967,9 +3033,22 @@ export function createCharacterEffects(
 				}
 				if ( catalog && models ) {
 					const wanted = new Set<string>();
+					// A Blue Berserk player (any, once the roster told its level) wears the 2nd Hwan
+					// record (blue) when the named catalog has it.
+					const blueBody = !!namedCatalog?.[HWAN2_MODE_RECORD];
 					const stateEffects: Attachment[] = [ ...hwan ].filter( ( [, row] ) => row.active ).map( (
 						[gid, row]
-					) => ({ gid, skill: -2147483648, token: -1, phase: 0, receivedAtMs: row.revision }) );
+					) => blueBody && !!gameplay?.hwanLevels?.[gid] ?
+						{
+							gid,
+							recordName: HWAN2_MODE_RECORD,
+							skill: 0,
+							token: -1,
+							phase: 0,
+							receivedAtMs: row.revision
+						} :
+						{ gid, skill: -2147483648, token: -1, phase: 0, receivedAtMs: row.revision }
+					);
 					for ( const [gid, row] of statuses ) {
 						for ( const [recordName, revision] of row.revisions ) {
 							stateEffects.push( {
@@ -3069,7 +3148,7 @@ export function createCharacterEffects(
 						}
 						row.visuals = row.visuals.filter( v =>
 							v.released !== undefined ?
-								v.actor.model.includes( "/effects/programs.json#" ) &&
+								isEffectProgramModel( v.actor.model ) &&
 								now - v.released < (v.fade || duration( v.actor.model, v.actor.clip )) :
 								v.keep || now - v.started < (v.life || duration( v.actor.model, v.actor.clip ))
 						);
@@ -3260,7 +3339,7 @@ export function createCharacterEffects(
 								stepRelease( visual, now );
 								if ( !resident.has( visual.actor.model ) ) continue;
 								const period = duration( visual.actor.model, visual.actor.clip ),
-									cycle = !visual.actor.model.includes( "/effects/programs.json#" ) &&
+									cycle = !isEffectProgramModel( visual.actor.model ) &&
 											visual.released !== undefined && visual.actor.loop && period ?
 										Math.floor( (visual.released - visual.started) / period ) * period :
 										0;
@@ -3328,7 +3407,7 @@ export function createCharacterEffects(
 					}
 					if (
 						command?.released !== undefined &&
-						(!visual.actor.model.includes( "/effects/programs.json#" ) ||
+						(!isEffectProgramModel( visual.actor.model ) ||
 							now - command.released >=
 								(command.fade || duration( visual.actor.model, visual.actor.clip )))
 					) {
@@ -3694,7 +3773,7 @@ export function createCharacterEffects(
 					}
 					if ( visual.visualStarted !== undefined ) elapsed = Math.max( 0, now - visual.visualStarted );
 					const period = duration( visual.actor.model, visual.actor.clip ),
-						cycle = !visual.actor.model.includes( "/effects/programs.json#" ) &&
+						cycle = !isEffectProgramModel( visual.actor.model ) &&
 								command?.released !== undefined && command.loop && period ?
 							Math.floor(
 								(command.released - (visualStarts.get( gid ) ?? visual.actor.time)) / period
@@ -3718,11 +3797,10 @@ export function createCharacterEffects(
 						auxiliary.started ??= now;
 						const end = visual.landed?.at ?? visual.family?.end?.at,
 							period = duration( auxiliary.actor.model, auxiliary.actor.clip );
-						const cycle =
-							!auxiliary.actor.model.includes( "/effects/programs.json#" ) && end !== undefined &&
+						const cycle = !isEffectProgramModel( auxiliary.actor.model ) && end !== undefined &&
 								period ?
-								Math.floor( Math.max( 0, end - auxiliary.started ) / period ) * period :
-								0;
+							Math.floor( Math.max( 0, end - auxiliary.started ) / period ) * period :
+							0;
 						result.push( {
 							...auxiliary.actor,
 							time: Math.max( 0, now - auxiliary.started - cycle ),
@@ -3882,7 +3960,7 @@ export function createCharacterEffects(
 					const action = entity.emote?.action ?? 0;
 					if (
 						!(entity.kind === "cos" && action >= 1 && action <= 6) && !(action >= 0xf0 && action <= 0xf4) &&
-						!(action >= 0xd0 && action <= 0xda) && !(entity.kind === "cos" && action >= 34 && action <= 36)
+						!(action >= 0xd0 && action <= 0xde) && !(entity.kind === "cos" && action >= 34 && action <= 36)
 					) {
 						continue;
 					}
@@ -3909,7 +3987,7 @@ export function createCharacterEffects(
 					const elapsed = Math.max( 0, now - skill.startedAt );
 					const penguinCasting = skill.action >= 34 && skill.action <= 36;
 					const frost = (skill.action >= 0xd0 && skill.action <= 0xd6) || penguinCasting;
-					const gear = skill.action >= 0xd7 && skill.action <= 0xda;
+					const gear = skill.action >= 0xd7 && skill.action <= 0xde;
 					const lifetime = skill.action >= 0xd3 && skill.action <= 0xd5 ?
 						PENGUIN_BLIZZARD_SECONDS :
 						penguinCasting ?
@@ -3924,6 +4002,7 @@ export function createCharacterEffects(
 						continue;
 					}
 					const parts = frost ? [] : wolfEffectParts( skill.action );
+					const chainDelay = petGearChainDelay( skill.action );
 					const kind = penguinCasting ? "follow" : skill.action >= 0xd0 && skill.action <= 0xd6 ?
 						"victim" :
 						wolfEffectKind( skill.action );
@@ -3962,6 +4041,18 @@ export function createCharacterEffects(
 						}
 						continue;
 					}
+					if ( chainDelay !== undefined && elapsed >= chainDelay && elapsed < chainDelay + .4 ) {
+						const strength = 1 - (elapsed - chainDelay) / .4;
+						roarAppearances.set( gid, {
+							pointLight: {
+								pose: { ...pose, y: pose.y + 12 },
+								ambient: [ .15 * strength, .35 * strength, .8 * strength ],
+								diffuse: [ .25 * strength, .6 * strength, 1.5 * strength ],
+								range: 70,
+								attenuation: .32
+							}
+						} );
+					}
 					// A short blood-red flare at the strike, a slower one for the howl.
 					const glow = kind === "howl" ?
 						Math.max( 0, Math.sin( Math.PI * Math.min( 1, elapsed / 1.4 ) ) ) :
@@ -3980,7 +4071,7 @@ export function createCharacterEffects(
 					}
 					for ( const [index, part] of parts.entries() ) {
 						const age = elapsed - part.at,
-							model = "/assets/effects/programs.json#" + encodeURIComponent( part.path );
+							model = effectProgramModel( part.path );
 						if ( age < 0 || !ready( model ) ) continue;
 						const life = duration( model, "effect" ) || 2;
 						if ( age >= life ) continue;
@@ -3993,6 +4084,7 @@ export function createCharacterEffects(
 							time: age,
 							loop: false,
 							scale: part.scale ?? 1,
+							effectEntity: true,
 							pickable: false,
 							pose: {
 								regionId: at.regionId,
@@ -4141,9 +4233,14 @@ export function createCharacterEffects(
 		appearance( gid: number ): EffectAppearance {
 			const spineRotation = spineAims.rotation( gid );
 			const roar = roarAppearances.get( gid );
+			// 85C590 makes no material call while +0x2B6 is 1: a berserk body
+			// wears only the Hwan register's SCT_MAT. The port-only flares (pet
+			// signals on their owner, absorb shields) keep their light but give
+			// way, or the red drops out for the flare's length (#3543).
+			const berserk = hwan.get( gid )?.active === true;
 			const pointLight = roar?.pointLight ?? hitLights.get( gid ),
 				weaponHidden = hiddenWeapons.has( gid ),
-				materialTint = roar?.materialTint ?? materials.get( gid )?.color,
+				materialTint = (berserk ? undefined : roar?.materialTint) ?? materials.get( gid )?.color,
 				scale = (hwan.get( gid )?.value ?? 1) * (roar?.scale ?? 1);
 			if ( spineRotation ) {
 				return Object.freeze( {
@@ -4348,6 +4445,7 @@ export function createCharacterEffects(
 			materials.clear();
 			materialOwners.clear();
 			hwan.clear();
+			firstSeen.clear();
 			roars.clear();
 			wolfSkills.clear();
 			penguinBolts.reset();
@@ -4397,6 +4495,7 @@ export function createCharacterEffects(
 			materials.clear();
 			materialOwners.clear();
 			hwan.clear();
+			firstSeen.clear();
 			roars.clear();
 			wolfSkills.clear();
 			roarAppearances.clear();

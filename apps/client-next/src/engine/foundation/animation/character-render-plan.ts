@@ -11,7 +11,7 @@ materials run a clock.
 */
 import type { CharacterModel, CharacterClip } from "@/engine/contracts/character";
 import {
-	CHARACTER_ACTORS,
+	RENDERED_ACTORS,
 	characterPoseBytes,
 	characterBatchBytes,
 	characterMeshBytes,
@@ -125,7 +125,7 @@ export function createCharacterRenderPlan( model: CharacterModel, caches?: Chara
 		================
 		*/
 		batchBytes( count: number ) {
-			if ( !Number.isInteger( count ) || count < 0 || count > CHARACTER_ACTORS ) {
+			if ( !Number.isInteger( count ) || count < 0 || count > RENDERED_ACTORS ) {
 				throw Error( "Character plan capacity exceeded" );
 			}
 			return count === 0 ?

@@ -50,21 +50,27 @@ const searchScan = 5000
 // account page shows.
 const historyLimit = 50
 
-// The categories, by item TypeID (TID1 3 = item; TID2 1 = equipment,
-// 2 = pet, 3 = consumable and the rest). The equipment TID3 values are
-// v1.150's itemdata: 1-3 Chinese garment/protector/armor, 9-11 European
-// robe/light/heavy armor, 4 shield, 5 and 12 accessories, 6 weapons, 13
-// and 14 avatars. "other" takes every item no row names.
-var categories = []publicstats.MarketCategory{
-	{Slug: "weapon", Name: "Weapons"},
-	{Slug: "shield", Name: "Shields"},
-	{Slug: "armor", Name: "Armor"},
-	{Slug: "accessory", Name: "Accessories"},
-	{Slug: "avatar", Name: "Avatars"},
-	{Slug: "pet", Name: "Pets"},
-	{Slug: "consumable", Name: "Consumables"},
-	{Slug: "other", Name: "Other"},
-}
+/*
+================
+WireRowLimit
+
+The one owner of the wire's row limit: the most rows any one list of
+the game's account answer (the "mine" answer) may carry. The window's
+decoder refuses a longer list outright (apps/client-next
+foundation/gameplay/market.ts MARKET_ROW_LIMIT, the same number), and
+#4111 was an account whose open-plus-finished listings passed it: the
+market could never open again, and the decode error ended the whole
+session. GameAccount bounds every list it hands the game to this
+limit, active rows first, then the newest history; Account (the
+website page) is not bounded by it. The two numbers are pinned
+together by behaviour, not text: TestMarketMineFixturePinned (in
+game/action) pins the largest mine answer this bound produces as a
+committed fixture, and the client's market suite decodes that fixture
+whole - raise this number and the regenerated fixture stops decoding
+until the client's follows.
+================
+*/
+const WireRowLimit = 50
 
 /*
 ================
@@ -78,9 +84,11 @@ type ItemInfo struct {
 	TypeIDs [4]int64
 	Degree  int
 	// Race is publicstats.MarketRaceChinese or MarketRaceEuropean, "" for
-	// an item either race uses; Sealed is a sealed (rare) item.
+	// an item either race uses; Sealed is a sealed (rare) item and Seal
+	// its tier (MarketRarityStar, Moon or Sun) when it is equipment.
 	Race   string
 	Sealed bool
+	Seal   string
 }
 
 /*
@@ -173,7 +181,10 @@ func (s *Service) Search(q publicstats.MarketSearch) (publicstats.MarketListings
 		if q.Race != "" && view.Item.Race != "" && view.Item.Race != q.Race {
 			continue
 		}
-		if q.Rarity != "" && view.Item.Sealed != (q.Rarity == publicstats.MarketRaritySealed) {
+		if !rarityMatches(view.Item, q.Rarity) {
+			continue
+		}
+		if q.Armor != "" && view.Item.Armor != q.Armor {
 			continue
 		}
 		if needle != "" && !strings.Contains(strings.ToLower(view.Item.Name), needle) {
@@ -307,7 +318,49 @@ func (s *Service) GameAccount(c *domain.Character) (publicstats.OwnMarketRespons
 	out.Purchases = kept(out.Purchases, func(v publicstats.MarketSaleView) bool { return heldBy(v.BuyerChar, c) })
 	out.OffersIn = kept(out.OffersIn, func(v publicstats.MarketOfferView) bool { return heldBy(v.SellerChar, c) })
 	out.OffersOut = kept(out.OffersOut, func(v publicstats.MarketOfferView) bool { return heldBy(v.BuyerChar, c) })
+	out.Listings = boundWireRows(out.Listings, func(v publicstats.MarketListingView) bool {
+		return v.State == domain.MarketOpen || v.State == domain.MarketHeld
+	})
+	out.Purchases = boundWireRows(out.Purchases, func(publicstats.MarketSaleView) bool { return false })
+	out.OffersIn = boundWireRows(out.OffersIn, func(v publicstats.MarketOfferView) bool {
+		return v.State == domain.MarketOpen
+	})
+	out.OffersOut = boundWireRows(out.OffersOut, func(v publicstats.MarketOfferView) bool {
+		return v.State == domain.MarketOpen
+	})
 	return out, nil
+}
+
+/*
+================
+boundWireRows
+
+One list of the mine answer under the wire limit: the active rows
+first, then the history, each side in the order it arrived (the
+store's newest first), at most WireRowLimit rows. An ordinary page
+keeps every row it had; only an account whose rows pass the limit
+loses the oldest history.
+================
+*/
+func boundWireRows[T any](rows []T, active func(T) bool) []T {
+	out := make([]T, 0, min(len(rows), WireRowLimit))
+	for _, row := range rows {
+		if len(out) == WireRowLimit {
+			return out
+		}
+		if active(row) {
+			out = append(out, row)
+		}
+	}
+	for _, row := range rows {
+		if len(out) == WireRowLimit {
+			return out
+		}
+		if !active(row) {
+			out = append(out, row)
+		}
+	}
+	return out
 }
 
 /*
@@ -921,42 +974,11 @@ func (s *Service) itemView(row domain.InventoryRow) publicstats.MarketItem {
 		view.Degree = info.Degree
 		view.Race = info.Race
 		view.Sealed = info.Sealed
+		view.Seal = info.Seal
 		view.Category = Category(info.TypeIDs)
+		view.Armor = ArmorType(info.TypeIDs)
 	}
 	return view
-}
-
-/*
-================
-Category
-
-The picker slug for an item's TypeIDs (the categories table above).
-================
-*/
-func Category(types [4]int64) string {
-	if types[0] != 3 {
-		return "other"
-	}
-	switch types[1] {
-	case 2:
-		return "pet"
-	case 3:
-		return "consumable"
-	case 1:
-		switch types[2] {
-		case 6:
-			return "weapon"
-		case 4:
-			return "shield"
-		case 1, 2, 3, 9, 10, 11:
-			return "armor"
-		case 5, 12:
-			return "accessory"
-		case 13, 14:
-			return "avatar"
-		}
-	}
-	return "other"
 }
 
 /*

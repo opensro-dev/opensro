@@ -13,7 +13,7 @@ equipment owner, with the port-only enchant sparks beside the rare glows.
 
 import fs from "node:fs";
 import path from "node:path";
-import { clientV150ResinfoRoot, retailTextdataRoot } from "../world/paths.mjs";
+import { clientV150ResinfoRoot, extractedRoot, retailTextdataRoot } from "../world/paths.mjs";
 import { loadEquipmentRecords } from "./equipmentVisualRecords.mjs";
 import { vsroItemGlowRoot } from "./equipmentGlowMetadata.mjs";
 import { dataAssetPath, loadDataAsset } from "../shared/jmxAssetIO.mjs";
@@ -38,6 +38,12 @@ const ENCHANT_SPARK_PLUS = 8;
 const SEALED_STATES = new Set( [ 2, 6 ] );
 // ModDataParticle set kind of the always-on ambient set (model-particles.ts).
 export const AMBIENT_MODIFIER_KIND = 2;
+// The mall avatar import's per-source markers (mall_avatar_import.py SOURCES).
+const MALL_AVATAR_MARKERS = [
+	".opensro-mall-avatars.json",
+	".opensro-mall-avatars-v1696.json",
+	".opensro-mall-avatars-archive.json"
+];
 
 /*
 ================
@@ -195,6 +201,55 @@ export function equipmentEnchantSparks(
 
 /*
 ================
+avatarWornEffects
+
+Port-only, not native: the worn auras of the later clients' mall avatars
+(mall_avatar_import.py avatar_effects), by item id. Each import source's
+marker lists its avatars' skilleffectset loops by codename; an off or
+absent source lists none, so a v1.150 build publishes an empty table.
+================
+*/
+export function avatarWornEffects( records = loadEquipmentRecords( retailTextdataRoot ), root = extractedRoot ) {
+	const byCode = new Map( [ ...records.values() ].map( r => [ r.code, r ] ) ), out = {};
+	for ( const name of MALL_AVATAR_MARKERS ) {
+		const file = path.join( root, name );
+		if ( !fs.existsSync( file ) ) continue;
+		const marker = JSON.parse( fs.readFileSync( file, "utf8" ) );
+		if ( !marker.enabled ) continue;
+		for ( const [code, rows] of Object.entries( marker.effects ?? {} ) ) {
+			const record = byCode.get( code );
+			if ( !record || !Array.isArray( rows ) ) throw Error( "Avatar effect for an unknown item " + code );
+			// The equipment records own what an avatar is (buildEquipmentVisuals
+			// avatarSlot comes from the same flag), so a marker naming a
+			// worn item that is not one refuses here, whichever dress asks.
+			if ( !record.avatar ) throw Error( "Avatar effect for a non-avatar item " + code );
+			out[record.id] = rows.map( row => {
+				const effectPath = String( row.effectPath ).replaceAll( "\\", "/" ).toLowerCase();
+				const offset = row.offset ?? [ 0, 0, 0 ];
+				if (
+					!effectPath.endsWith( ".efp" ) || effectPath.includes( ".." ) || typeof row.root !== "boolean" ||
+					typeof row.bone !== "string" || (!row.root && !row.bone) || !(row.scale > 0) ||
+					!Array.isArray( offset ) || offset.length !== 3 || !offset.every( Number.isFinite )
+				) throw Error( "Invalid avatar effect " + code + ": " + JSON.stringify( row ) );
+				// An authored scale replaces the wearer's model scale
+				// (modelParticleAttachment); without one the aura follows
+				// the wearer, as the body's own ambient set does. The offset
+				// takes the BSR particle's Z flip (model-particles.ts).
+				return {
+					effectPath,
+					bone: row.bone,
+					root: row.root,
+					...(row.scale !== 1 ? { scale: Math.fround( row.scale ) } : {}),
+					offset: [ Math.fround( offset[0] ), Math.fround( offset[1] ), Math.fround( -offset[2] ) || 0 ]
+				};
+			} );
+		}
+	}
+	return out;
+}
+
+/*
+================
 equipmentSources
 
 The native resources of one item on one body: 870040 pairs EU axes and
@@ -305,6 +360,10 @@ export async function publishEquipmentParticleMetadata( dress, vsroRoot = vsroIt
 		cache = new Map();
 	dress.specialGlows = particles;
 	dress.enchantSparks = sparks;
+	// Port-only, not native: avatarWornEffects. Their bones are the wearer's
+	// own, so no private branch is needed.
+	const avatarEffects = avatarWornEffects( records );
+	dress.avatarEffects = avatarEffects;
 	for ( const [id, record] of records ) {
 		// A shield needs its private branch for its sparks' bones too.
 		const effects = [ ...(particles[id] ?? []), ...(sparks[id] ?? []) ], visual = dress.equipment[id];
@@ -367,6 +426,7 @@ export async function publishEquipmentParticleMetadata( dress, vsroRoot = vsroIt
 	return {
 		items: Object.keys( particles ).length,
 		sparks: Object.keys( sparks ).length,
+		avatarEffects: Object.keys( avatarEffects ).length,
 		ambient: ambient.size,
 		sources: cache.size
 	};

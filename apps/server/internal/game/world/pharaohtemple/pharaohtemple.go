@@ -214,11 +214,13 @@ func Hides(code string, region uint16) bool {
 HidesBuilding
 
 Whether the shard hides a teleportbuilding row (by codename) while the
-switch is off: the two desert gates' objects.
+switch is off: the two desert gates' objects and the two sanctum
+teleporters (sanctum.go).
 ================
 */
 func HidesBuilding(code string) bool {
-	return !Enabled() && (code == DesertMerchantHunterBuilding || code == DesertThiefBuilding)
+	return !Enabled() && (code == DesertMerchantHunterBuilding || code == DesertThiefBuilding ||
+		code == TempleTeleporter || code == SethTeleporter)
 }
 
 //============================================================================

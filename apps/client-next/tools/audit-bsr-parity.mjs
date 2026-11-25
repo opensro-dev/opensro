@@ -6,9 +6,19 @@ import { pathToFileURL } from "node:url";
 import { spawnSync } from "node:child_process";
 import { build } from "esbuild";
 import { parseCharacterBsr } from "../../../scripts/build/char/formats.mjs";
-import { dataAssetPath } from "../../../scripts/build/shared/jmxAssetIO.mjs";
+import { entitySource } from "../../../scripts/build/char/publishEntityBsrModifiers.mjs";
 import { readPublishedAssetBytesSync, readPackedAssetBytesSync } from "../../../scripts/lib/publishedAsset.mjs";
 import { npcManifestModels } from "../../../scripts/build/shared/npcManifest.mjs";
+import { pythonExecutable } from "../../../scripts/build/shared/pythonRun.mjs";
+import { isOwnedModel } from "../../../scripts/build/char/ownedModels.mjs";
+import { bakeTables, skillScopedAnimationSets } from "../../../scripts/build/char/npcResourceBake.mjs";
+import { UNSELECTABLE_STATE_ID } from "../../../scripts/build/char/authoredAnimationBindings.mjs";
+import { isEmptyArchiveEffect } from "../../../scripts/build/effects/buildEffectPrograms.mjs";
+import {
+	readEffectCatalogSync,
+	readEffectIndexSync,
+	readEffectProgramSync
+} from "../../../scripts/lib/effectCatalog.mjs";
 const root = path.resolve( import.meta.dirname, ".." ), publicRoot = CLIENT_PUBLIC_ROOT;
 const output = path.join( root, "temp/artifacts/bsr-parity" );
 fs.mkdirSync( output, { recursive: true } );
@@ -35,28 +45,56 @@ const { modelAnimationParticles } = await load(
 );
 const { createEffectDecoder } = await load( "src/engine/runtime/assets/worker/effects/effects.ts", "decoder" );
 const decoder = createEffectDecoder(),
-	programBytes = read( "/assets/effects/programs.json" ),
-	programs = JSON.parse( programBytes );
+	programs = readEffectIndexSync( CLIENT_PUBLIC_ROOT );
+/*
+================
+compileEffect
+
+One effect through the worker's own parse and compile.
+================
+*/
+function compileEffect( resource ) {
+	const { bytes, meshes } = readEffectProgramSync( resource, CLIENT_PUBLIC_ROOT );
+	return decoder.model( decoder.program( bytes ), meshes, resource );
+}
 const report = {
 	format: "sro-bsr-parity-v1",
 	qualification:
 		"v1.150 original BSR -> published metadata -> production decoder; admission is not native pixel equivalence",
-	inputs: { programs: hash( programBytes ) },
+	// Every effect, mesh and texture of the closure, not only its index.
+	inputs: { programs: hash( JSON.stringify( readEffectCatalogSync( CLIENT_PUBLIC_ROOT ) ) ) },
 	models: [],
+	// Port-owned GLBs (ownedModels.mjs): no retail BSR to compare against.
+	owned: [],
 	effects: [],
 	issues: [],
 	open: [],
 	tests: null
 };
 const cache = new Map(), effects = new Set();
+// The states a bake binds: a compound keeps its skill-scoped sets
+// (skillScopedAnimationSets) and no bake binds an unselectable state.
+const skillStates = bakeTables().skillStates;
+const boundSets = ( source, sets ) =>
+	(/\.cpd$/i.test( source ) ? skillScopedAnimationSets( sets, skillStates ) : sets ?? []).map( set => ({
+		...set,
+		states: set.states.filter( state => state.stateId !== UNSELECTABLE_STATE_ID )
+	}) );
 for ( const domain of [ "itemdrop", "npc", "skillfx" ] ) {
 	const bytes = read( `/assets/${domain}/manifest.json` ), manifest = JSON.parse( bytes );
 	report.inputs[domain] = hash( bytes );
 	for ( const [key, row] of Object.entries( npcManifestModels( manifest ) ) ) {
 		const source = row.bsr ?? (key.startsWith( "res/" ) ? key : `res/${key}`);
+		if ( isOwnedModel( domain, source ) ) {
+			const particles = modelAmbientParticles( row.particleModifiers ?? [] );
+			for ( const p of particles ) effects.add( p.effectPath );
+			report.owned.push( { domain, key, source, ambient: particles.length } );
+			continue;
+		}
 		if ( !cache.has( source ) ) {
-			const bytes = fs.readFileSync( dataAssetPath( source ) );
-			cache.set( source, { bsr: parseCharacterBsr( bytes, source ), sha256: hash( bytes ) } );
+			// The BSR the publisher reads: a compound's body branch (entitySource).
+			const { buffer, path: bsrPath } = await entitySource( source );
+			cache.set( source, { bsr: parseCharacterBsr( buffer, bsrPath ), sha256: hash( buffer ) } );
 		}
 		const { bsr, sha256 } = cache.get( source ),
 			entry = {
@@ -102,12 +140,12 @@ for ( const domain of [ "itemdrop", "npc", "skillfx" ] ) {
 			report.issues.push( { domain, key, reason: String( e ) } );
 		}
 		if ( domain === "npc" || domain === "skillfx" ) {
-			const bindings = row.animationBindings;
+			const bindings = row.animationBindings, sets = boundSets( source, bsr.animationSets );
 			if (
 				!Array.isArray( bindings ) ||
-				bindings.length !== bsr.animationSets.reduce( ( n, s ) => n + s.states.length, 0 )
+				bindings.length !== sets.reduce( ( n, s ) => n + s.states.length, 0 )
 			) report.issues.push( { domain, key, reason: "incomplete authored animation bindings" } );
-			else {for ( const set of bsr.animationSets ) {
+			else {for ( const set of sets ) {
 					for ( const state of set.states ) {
 						const binding = bindings.find( b => b.set === set.name && b.stateId === state.stateId );
 						if (
@@ -169,7 +207,7 @@ const allEffects = new Set( [
 for ( const resource of [ ...allEffects ].sort() ) {
 	const entry = { resource, ambient: effects.has( resource ) };
 	try {
-		const { model, imagePaths } = decoder.model( programBytes, resource );
+		const { model, imagePaths } = compileEffect( resource );
 		for ( const url of imagePaths ) read( url );
 		entry.primitives = model.primitives.length;
 		entry.images = imagePaths.length;
@@ -182,13 +220,17 @@ for ( const resource of [ ...allEffects ].sort() ) {
 const archiveEvidence = JSON.parse(
 	fs.readFileSync( path.join( root, "../../scripts/build/reference/particle-archive.json" ), "utf8" )
 );
+// Native-empty: the certificate's archive-absent effects, plus effects whose
+// archive files are all zero-length (isEmptyArchiveEffect, the builder's rule).
+const published = programs.nativeUnavailable?.effects ?? [];
 if (
 	programs.nativeUnavailable?.archiveSha256 !== archiveEvidence.sha256 ||
-	JSON.stringify( programs.nativeUnavailable?.effects ) !== JSON.stringify( archiveEvidence.absent )
+	archiveEvidence.absent.some( name => !published.includes( name ) ) ||
+	published.some( name => !archiveEvidence.absent.includes( name ) && !isEmptyArchiveEffect( name ) )
 ) report.issues.push( { reason: "published native-empty resource list differs from original archive certificate" } );
 for ( const resource of archiveEvidence.absent ) {
 	try {
-		const { model, imagePaths } = decoder.model( programBytes, resource );
+		const { model, imagePaths } = compileEffect( resource );
 		if ( model.nodes.length || model.primitives.length || imagePaths.length ) {
 			throw Error( "Absent native resource produced a visual" );
 		}
@@ -201,7 +243,6 @@ report.nativeUnavailable = {
 	effects: archiveEvidence.absent,
 	behavior: "B1F270 reset, failed read; AFF730 retains empty stored object"
 };
-decoder.dispose();
 if ( process.argv.includes( "--verify" ) ) {
 	const args = [
 		"--test",
@@ -265,7 +306,8 @@ if ( process.argv.includes( "--verify" ) ) {
 	} );
 	if ( transforms.status !== 0 ) report.issues.push( { reason: "original particle transform verification failed" } );
 	for ( const script of [ "../../scripts/analysis/verify_particle_archive.py", "tools/verify-native-bsr.py" ] ) {
-		const result = spawnSync( process.env.SRO_PYTHON ?? "C:/Program Files/Python312/python.exe", [ script ], {
+		const python = pythonExecutable();
+		const result = spawnSync( python.command, [ ...python.args, script ], {
 			cwd: root,
 			encoding: "utf8",
 			timeout: 120000
@@ -285,6 +327,7 @@ console.log(
 	JSON.stringify(
 		{
 			models: report.models.length,
+			owned: report.owned.length,
 			ambientModels: report.models.filter( r => r.ambient ).length,
 			ambientEffects: effects.size,
 			issues: report.issues.length,

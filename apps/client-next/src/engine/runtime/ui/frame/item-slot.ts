@@ -20,7 +20,17 @@ import type { UiFrame } from "./frame-contract";
 import { EXPANSION_LEVEL_CAP } from "@/engine/foundation/gameplay/level-cap";
 import { itemCountQuads } from "@/engine/foundation/ui/item-count";
 import { equipmentWarningUv, itemEquipmentOverlay } from "@/engine/foundation/ui/item-equipment-overlay";
-import { itemSlotOverlays, itemSlotWash, slotSeed } from "@/engine/foundation/ui/item-slot-effects";
+import { isSpiritItem } from "@/engine/foundation/gameplay/avatar-socket";
+
+// The dead companion's rent state (item-slot-effects.ts RENT_DEAD), whose
+// wash a lapsed Spirit takes.
+const SUMMON_DEAD = 4;
+import {
+	itemSlotOverlays,
+	itemSlotWash,
+	slotSeed,
+	spiritActiveOverlay
+} from "@/engine/foundation/ui/item-slot-effects";
 import { image, rect } from "./draw";
 
 const ICON_ROOT = "/assets/images/Media_extracted/icon/";
@@ -36,7 +46,8 @@ export const ITEM_SLOT_PREFIXES = [
 	"cos-slot:",
 	"gacha-bag:",
 	"gacha-card",
-	"stall-slot:"
+	"stall-slot:",
+	"arena-chest-item:"
 ] as const;
 
 /*
@@ -51,8 +62,9 @@ unlimited items all come from it.
 */
 export interface ItemSlotContext {
 	readonly gameplay: GameplayState | null | undefined;
-	// The character's gender as the session lists it.
-	readonly gender: number | undefined;
+	// The local player's sex selector, off its live model (the value
+	// 789C60 reads), never the login roster's stale gender.
+	readonly sex: number | undefined;
 	readonly simulationTimeMs: number;
 	readonly warningPhase: number;
 	iconPath( icon: string | undefined ): string | null;
@@ -77,10 +89,9 @@ export function equipmentOverlay(
 ) {
 	const gameplay = slots.gameplay;
 	if ( !item || !gameplay ) return;
-	const gender = slots.gender;
 	const overlay = itemEquipmentOverlay( item, gameplay.progression ?? { masteries: [] }, {
 		country: gameplay.guide?.country,
-		sex: gender === 0 ? 1 : gender === 1 ? 0 : undefined
+		sex: slots.sex
 	}, gameplay.inventory );
 	if ( overlay ) {
 		const warning = overlay === EQUIPMENT_WARNING;
@@ -109,7 +120,12 @@ export function itemEffects(
 	// companion wash, then the animated sheets. 0x3645 flashes target
 	// the inventory and equipment slots.
 	const game = slots.gameplay;
-	const wash = itemSlotWash( owned );
+	// Port-only (SRO_NASRUN, #4384): a Devil's Spirit whose awakening has
+	// lapsed takes the dead companion's wash, as the later clients grey it
+	// (owner's reference screenshots; inference: the same 0x80004B7E wash).
+	const clock = isSpiritItem( owned.typeFlags ) ? owned.durability : 0;
+	const lapsedSpirit = clock !== 0 && clock * 1000 <= Date.now();
+	const wash = lapsedSpirit ? itemSlotWash( { summon: { state: SUMMON_DEAD } } ) : itemSlotWash( owned );
 	if ( wash ) rect( frame, { r, color: wash } );
 	const flashes = id.startsWith( "slot:" ) ?
 		(game?.itemFlashes ?? []).filter( f => f.slot === owned.slot ) :
@@ -124,6 +140,14 @@ export function itemEffects(
 	);
 	for ( const overlay of overlays ) {
 		image( frame, { r: overlay.rect, path: overlay.path, uv: overlay.uv } );
+		slots.markEffect();
+	}
+	// Port-only (SRO_NASRUN, #4384): a Devil's Spirit's icon animates for its
+	// whole awakening, worn or carried: its clock (unix seconds in the
+	// durability field, #4381) is still ahead.
+	if ( clock * 1000 > Date.now() ) {
+		const edge = spiritActiveOverlay( r, slotSeed( id + ":" + owned.refObjId ), slots.simulationTimeMs );
+		image( frame, { r: edge.rect, path: edge.path, uv: edge.uv } );
 		slots.markEffect();
 	}
 }

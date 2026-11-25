@@ -20,6 +20,7 @@ import (
 	"opensro.online/server/internal/game/restriction"
 	"opensro.online/server/internal/game/social/chatlog"
 	"opensro.online/server/internal/game/social/chatreport"
+	"opensro.online/server/internal/game/social/eventbot"
 	"opensro.online/server/internal/transport"
 )
 
@@ -68,6 +69,22 @@ func (rt *Runtime) chatHubHandler(hub *transport.Hub, deps Dependencies, presenc
 		if restriction.Report(s, transport.CommandRestrictionChat) {
 			return
 		}
+		// Port-only, not native (#3533): a whisper the EventBot host
+		// claims (its name) is consumed the same way: the sender gets
+		// the success ack and the bot's reply lines, and nothing
+		// reaches the room, the transcript or the feed. With no host
+		// wired the name is nobody's, natively.
+		if rt.EventBotWhisper != nil {
+			if request, err := DecodeChatRequestWithLinks(payload); err == nil && request.ChatType == ChatTypeWhisper {
+				if replies, handled := rt.EventBotWhisper(divisionID, character, request.TargetName, request.Message); handled {
+					_ = s.Send(OpChatAck, EncodeChatAckSuccess(request.ChatType, request.Second))
+					for _, reply := range replies {
+						_ = s.Send(OpChatBroadcast, EncodeChatBroadcastNamed(ChatTypeWhisper, eventbot.BotName, reply))
+					}
+					return
+				}
+			}
+		}
 		// Port-only, not native (#3358): a /contributor line sets the
 		// speaker's own title and is consumed the same way as /report.
 		if rt.Contributor != nil {
@@ -92,6 +109,19 @@ func (rt *Runtime) chatHubHandler(hub *transport.Hub, deps Dependencies, presenc
 				}
 			}
 		}
+		// Port-only, not native (#3682): a /plusfail line sets whether
+		// the speaker's failed high-plus reinforcements are announced
+		// and is consumed the same way. With no setter wired the line
+		// falls through as ordinary chat.
+		if rt.PlusFailNotice != nil {
+			if request, err := DecodeChatRequestWithLinks(payload); err == nil {
+				if answer, handled := PlusFailCommand(character, request.Message, rt.PlusFailNotice); handled {
+					_ = s.Send(OpChatAck, EncodeChatAckSuccess(request.ChatType, request.Second))
+					_ = s.Send(OpChatBroadcast, EncodeChatNotice(answer))
+					return
+				}
+			}
+		}
 		// Port-only, not native (#2959): a /report line is consumed
 		// whole - the reporter gets the ack and one notice line, and
 		// nothing reaches the room, the transcript or the feed. With
@@ -109,7 +139,7 @@ func (rt *Runtime) chatHubHandler(hub *transport.Hub, deps Dependencies, presenc
 		outcome := HandleChat(deps, Views{Presence: presence, Parties: parties, Unions: rt.Unions, Stalls: rt.Stalls, Links: rt.ItemLinks}, divisionID, character, payload)
 		// Port-only, not native: a shadow-muted author's lines reach only
 		// the author, who sees the same echo and acknowledgement as ever.
-		muted := rt.ShadowMuted != nil && rt.ShadowMuted(character.AccountID)
+		muted := rt.ShadowMuted != nil && rt.ShadowMuted(character.AccountID, outcome.PlainText)
 		rt.recordModerationLine(outcome, muted, character, payload)
 		if outcome.Refusal == "" && outcome.Broadcast != nil && ClosedBetaGlobalChat {
 			// The author's echo precedes the keyed receipt on the same reliable

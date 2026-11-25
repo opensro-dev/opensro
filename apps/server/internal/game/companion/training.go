@@ -85,10 +85,13 @@ func PetSkill(p *domain.CharacterCOS, id uint8) (SkillDef, bool) {
 /*
 ================
 Level
+
+Ranks saved above a since-lowered MaxLevel (third books were 10, now 1)
+read as MaxLevel; TrainingPoints refunds the excess.
 ================
 */
 func Level(p *domain.CharacterCOS, s SkillDef) uint8 {
-	return p.Training.Levels[s.Index()]
+	return min(p.Training.Levels[s.Index()], s.MaxLevel)
 }
 
 /*
@@ -138,8 +141,8 @@ Free points: earned by level plus operator bonus, less every learned level.
 */
 func TrainingPoints(p *domain.CharacterCOS) int {
 	spent := 0
-	for _, l := range p.Training.Levels {
-		spent += int(l)
+	for _, s := range SkillsForPet(p) {
+		spent += int(Level(p, s))
 	}
 	return max(0, 1+int(p.Level)/int(D.Rules.PointsPerPetLevels)+int(p.Training.BonusPoints)-spent)
 }

@@ -245,7 +245,7 @@ func TestRocSummitStepsToTheRocAndItsGate(t *testing.T) {
 	rt.noteRocKill(rocCodename, gid, fell)
 	monsters.alive[gid] = false
 	rocTick(rt, clock)
-	gates := rt.QuestGateNpcs(uint32(top.lease.ID))
+	gates := rt.QuestGateNpcs("", uint32(top.lease.ID))
 	if len(gates) != 1 || gates[0].Spawn.X != fell.X+questGateOffsetMin || gates[0].Spawn.RegionID != fell.RegionID {
 		t.Fatalf("the Roc's gate: %+v", gates)
 	}
@@ -261,7 +261,7 @@ func TestRocSummitStepsToTheRocAndItsGate(t *testing.T) {
 	}
 	clock.now = clock.now.Add(time.Second)
 	rocTick(rt, clock)
-	if rocLayerOpen(rt, rocTopWorld) || len(rt.QuestGateNpcs(uint32(top.lease.ID))) != 0 {
+	if rocLayerOpen(rt, rocTopWorld) || len(rt.QuestGateNpcs("", uint32(top.lease.ID))) != 0 {
 		t.Fatal("the summit or its gate outlived the thirty minutes")
 	}
 	if domain.CharacterWorldInstance(c) != domain.DefaultWorldInstance || c.World.InstanceReturn != nil {
@@ -332,7 +332,7 @@ func TestRocFrontGateAndSendOut(t *testing.T) {
 	}
 	monsters.alive[front.tahomet] = false
 	rocTick(rt, clock)
-	if len(rt.QuestGateNpcs(uint32(front.lease.ID))) != 1 {
+	if len(rt.QuestGateNpcs("", uint32(front.lease.ID))) != 1 {
 		t.Fatal("Tahomet's fall raised no gate")
 	}
 	if refusal := rt.rocEntry(testDivision, c, rocFrontWorld); refusal == 0 {
@@ -607,4 +607,152 @@ func rocSummitAtTheRoc(t *testing.T, rt *Runtime, clock *fakeClock, monsters *ro
 		t.Fatalf("the Roc did not appear: step %d", top.step)
 	}
 	return top
+}
+
+/*
+================
+TestRocEnragesAtTheHour
+
+An hour after the Roc appears it begins its enrage on itself; the buff
+lands after the cast's casting time, the layer sees both, and the timer
+fires once. A Roc that fell first never casts, and a variant without the
+row ends the timer at its first try.
+================
+*/
+func TestRocEnragesAtTheHour(t *testing.T) {
+	const castMs = 2633
+	type call struct {
+		kind string
+		gid  uint32
+		at   time.Duration
+	}
+	run := func(fall bool, staged bool) ([]call, int) {
+		rt, clock, monsters, c := rocFixture(t)
+		var calls []call
+		heard := 0
+		var rocAt time.Time
+		rt.PushCharacterFrames = func(_ string, _ string, frames []wire.Frame) {
+			for _, frame := range frames {
+				if frame.Opcode == 0xdead || frame.Opcode == 0xbeef {
+					heard++
+				}
+			}
+		}
+		rt.roc.beginCast = func(gid uint32, codename string, nowMs int64) (monsterEventCast, wire.Frame, bool) {
+			if codename != rocEnrageSkill {
+				t.Fatalf("cast %s", codename)
+			}
+			calls = append(calls, call{"begin", gid, clock.now.Sub(rocAt)})
+			return monsterEventCast{gid: gid, token: 5, releaseAtMs: nowMs + castMs}, wire.Frame{Opcode: 0xdead}, staged
+		}
+		rt.roc.landCast = func(_ string, cast monsterEventCast, nowMs int64) ([]wire.Frame, bool) {
+			calls = append(calls, call{"land", cast.gid, clock.now.Sub(rocAt)})
+			return []wire.Frame{{Opcode: 0xbeef}}, true
+		}
+		rocSummitAtTheRoc(t, rt, clock, monsters, c)
+		rocAt = clock.now
+		if fall {
+			monsters.alive[monsters.gidOf(rocCodename)] = false
+		}
+		for end := rocAt.Add(2 * time.Hour); clock.now.Before(end); {
+			clock.now = clock.now.Add(time.Second)
+			rocTick(rt, clock)
+		}
+		for i := range calls {
+			if calls[i].gid != monsters.gidOf(rocCodename) {
+				t.Fatalf("cast on %d, not the Roc", calls[i].gid)
+			}
+		}
+		return calls, heard
+	}
+	calls, heard := run(false, true)
+	want := fmt.Sprint([]call{{"begin", 0, time.Hour}, {"land", 0, time.Hour + 3*time.Second}})
+	for i := range calls {
+		calls[i].gid = 0
+	}
+	if fmt.Sprint(calls) != want || heard != 2 {
+		t.Fatalf("calls %v (the layer heard %d)\nwant  %v (2)", calls, heard, want)
+	}
+	if calls, _ := run(true, true); len(calls) != 0 {
+		t.Fatalf("a fallen Roc enraged: %v", calls)
+	}
+	if calls, _ := run(false, false); len(calls) != 1 {
+		t.Fatalf("an unstaged row was retried: %v", calls)
+	}
+}
+
+/*
+================
+TestRocSpiritsKeepThreeUp
+
+The Roc's 5-minute spirit timer: nothing before the first run, the first
+three slots at the first run (table order among equal flags), then each
+run fills 3 - alive into the slots empty longest, each codename at its
+own point; a fallen Roc stops the timer.
+================
+*/
+func TestRocSpiritsKeepThreeUp(t *testing.T) {
+	rt, clock, monsters, c := rocFixture(t)
+	top := rocSummitAtTheRoc(t, rt, clock, monsters, c)
+	spirits := func() []string {
+		var up []string
+		for i, gid := range top.spirits {
+			if gid != 0 {
+				if got := monsters.spawned[gid]; got.Codename != rocSpirits[i].codename || got.Position != rocSpirits[i].spawn || got.Population != top.lease {
+					t.Fatalf("slot %d spawned %+v", i, got)
+				}
+				up = append(up, rocSpirits[i].codename)
+			}
+		}
+		return up
+	}
+	step := func(d time.Duration) {
+		clock.now = clock.now.Add(d)
+		rocTick(rt, clock)
+	}
+
+	step(rocSpiritRespawnMs*time.Millisecond - time.Second)
+	if up := spirits(); len(up) != 0 {
+		t.Fatalf("spirits before the first run: %v", up)
+	}
+	step(time.Second)
+	if up := fmt.Sprint(spirits()); up != "[MOB_RM_SPIRITS MOB_RM_SPIRITS_CLON MOB_RM_SPIRITS_CLON2]" {
+		t.Fatalf("first run: %s", up)
+	}
+
+	// The fourth slot has been empty since the start, longer than the
+	// spirit felled now, so the next run fills it; a run with three up
+	// spawns nothing.
+	monsters.alive[top.spirits[0]] = false
+	step(time.Second)
+	step(rocSpiritRespawnMs * time.Millisecond)
+	if up := fmt.Sprint(spirits()); up != "[MOB_RM_SPIRITS_CLON MOB_RM_SPIRITS_CLON2 MOB_RM_SPIRITS_CLON3]" {
+		t.Fatalf("second run: %s", up)
+	}
+	spawned := len(monsters.spawned)
+	step(rocSpiritRespawnMs * time.Millisecond)
+	if len(monsters.spawned) != spawned {
+		t.Fatal("a run with three up spawned")
+	}
+
+	// Slot 0 is still empty from the first fall; two more fall a minute
+	// apart, leaving one alive. The run spawns two into the slots empty
+	// longest (0, then 1), so the last to fall (3) stays down.
+	monsters.alive[top.spirits[1]] = false
+	step(time.Minute)
+	monsters.alive[top.spirits[3]] = false
+	step(rocSpiritRespawnMs * time.Millisecond)
+	if up := fmt.Sprint(spirits()); up != "[MOB_RM_SPIRITS MOB_RM_SPIRITS_CLON MOB_RM_SPIRITS_CLON2]" {
+		t.Fatalf("after two fell, the run fills the longest-empty slots: %s", up)
+	}
+
+	// A fallen Roc stops the timer.
+	monsters.alive[monsters.gidOf(rocCodename)] = false
+	spawned = len(monsters.spawned)
+	for i := 0; i < 4; i++ {
+		step(rocSpiritRespawnMs * time.Millisecond)
+	}
+	if len(monsters.spawned) != spawned {
+		t.Fatal("the spirits came back after the Roc fell")
+	}
 }

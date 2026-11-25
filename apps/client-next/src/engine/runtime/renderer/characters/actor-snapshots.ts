@@ -20,7 +20,7 @@ value the row already holds.
 */
 import type { CharacterActor, CharacterLayer } from "@/engine/contracts/character";
 import type { Degradation } from "@/engine/contracts/network";
-import { CHARACTER_ACTORS } from "@/engine/foundation/animation/character-budget";
+import { RENDERED_ACTORS } from "@/engine/foundation/animation/character-budget";
 type Mutable<T> = { -readonly [K in keyof T]: T[K]; };
 type Actor = Mutable<CharacterActor>;
 // The held-clock report queue's bound, the world owner's degradation
@@ -472,7 +472,7 @@ export function createActorSnapshots( reuse = true ) {
 				if ( seen.has( actor.gid ) ) throw Error( "Character identity violation" );
 				seen.add( actor.gid );
 			}
-			const count = Math.min( value.length, CHARACTER_ACTORS );
+			const count = Math.min( value.length, RENDERED_ACTORS );
 			seen = new Set();
 			for ( let i = 0; i < count; i++ ) {
 				const source = value[i]!;

@@ -76,13 +76,9 @@ func (rt *Runtime) deriveSpirit(avatars *domain.AvatarInventory, nowUnix int64) 
 		}
 		effect := &domain.SpiritEffect{Slot: row.Slot, Plus: row.Plus,
 			HPPercent: ability.HPPercent, MPPercent: ability.MPPercent, Block: ability.Block}
-		if skills, named := rt.deps.SkillData().(interface {
-			SkillByCodename(string) (enterworld.SkillRow, bool)
-		}); named {
-			for _, codename := range ability.Skills {
-				if skill, found := skills.SkillByCodename(codename); found {
-					effect.Skills = append(effect.Skills, skill.ID)
-				}
+		for _, codename := range ability.Skills {
+			if skill, found := rt.skillByCodename(codename); found {
+				effect.Skills = append(effect.Skills, skill.ID)
 			}
 		}
 		return effect
@@ -236,9 +232,45 @@ func (rt *Runtime) expireSpiritInDivision(key string, job spiritExpiry, nowMs in
 			hp, mp := rt.clampStoredGaugeToKeeper(job.division, c)
 			actor = rt.gaugeDropFrames(job.division, c, hp, mp, true)
 		}
+		// The lapsed Spirit's skills leave the owner's strip (#4384).
+		actor = append(actor, wire.SpiritSkillsFrame(nil))
 		return true
 	})
 	rt.spiritActors.CompareAndDelete(key, job)
 	rt.indexSpirit(job.division, c)
 	return sourceGID, public, actor
+}
+
+/*
+================
+spiritSkills
+
+The skills the avatar storage's derived Spirit grants, or none: what the
+owner's skill strip shows (wire.OpSpiritSkills).
+================
+*/
+func spiritSkills(avatars *domain.AvatarInventory) []uint32 {
+	if avatars == nil || avatars.Spirit == nil {
+		return nil
+	}
+	return avatars.Spirit.Skills
+}
+
+/*
+================
+SpiritSkillsAt
+
+The skills the character's worn, awake Spirit lends now, derived from its
+stored avatar rows: the entry bootstrap names them (#4384).
+================
+*/
+func (rt *Runtime) SpiritSkillsAt(_ string, c *enterworld.Character) []uint32 {
+	if c == nil {
+		return nil
+	}
+	effect := rt.deriveSpirit(c.AvatarInventory, rt.Now().Unix())
+	if effect == nil {
+		return nil
+	}
+	return append([]uint32(nil), effect.Skills...)
 }

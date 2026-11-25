@@ -26,18 +26,24 @@ What the sources author, and what this import does with them:
 	          the garden). The ISRO-R backup binds only 173 of them;
 	          the reconciliation is explicit - terrain, navmesh, tile
 	          and object catalogues merge for every sector the client
-	          built (263: the boss lair's sector is a region code
-	          with no terrain or navmesh anywhere, skipped and
-	          logged), nests land only where the authored population
-	          names them.
+	          built (263: the boss lair is a dungeon-bit region with
+	          no sector files anywhere; its ground is its DOF
+	          template, below), nests land only where the authored
+	          population names them.
 	monsters  the 51 MOB_AR_*/MOB_ARABIA_* kinds the authored nests
 	          place, converted from the client's characterdata at
 	          their authored levels 120-130. Kinds the nests never
 	          place stay out, as the Sky Temple's unplaced kinds do.
-	nests     the extraction's 1,656 authored rows, projected into the
+	nests     the extraction's authored rows, projected into the
 	          population envelope the cap-110 families use: the town
 	          and fields in world 1, the dungeon (spawn kind 1) in
-	          world 112. The two uniques whose points share an
+	          world 112, and - while the extraction carries them -
+	          the Kalia hideout's nests in world 113, whose ground
+	          stages with them (the later client's dungeoninfo row 25:
+	          the Bagh_mong DOF template, the region's AINavData and
+	          the template's block through the resource closure) and
+	          leaves when they do; an extraction without them builds
+	          byte-identical to before. The two uniques whose points share an
 	          overwrite cap (MOB_ARABIA_KARKADANN, MOB_ARABIA_MUSTAFA)
 	          project onto the loader's hive key with the authored
 	          cap, the shared-cap projection the extraction asked
@@ -58,9 +64,12 @@ What the sources author, and what this import does with them:
 	gates     the dungeon chain stands as authored (its town portal
 	          building, absent from the source, is authored beside
 	          its arrival); travel into Baghdad is authored at Jangan,
-	          see arabia_gates.py. Worlds 113-115 (boss lair, Petra,
-	          garden) carry no nests and no gates in either source and
-	          stay unregistered; their regions import with the map.
+	          see arabia_gates.py. Worlds 114-115 (Petra, garden)
+	          carry no nests in either source and stay unregistered;
+	          their regions import with the map. The boss lair (world
+	          113, the Kalia hideout) is the nests exception above; its
+	          gate rides the gates step, and the server admits the
+	          world only under its own SRO_BAGHDAD_DUNGEON switch.
 
 Turning the flag off removes the shards, the population, the NPC
 standings and talk rows, the copied files and the owned table rows
@@ -78,11 +87,14 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
+sys.path.insert(0, str(Path(__file__).resolve().parent / "build"))
 import alexandria_npcs as characters  # noqa: E402
-import build_alexandria_variant as variant  # noqa: E402
+import variant_files as variant  # noqa: E402
+import variant_gates  # noqa: E402
 import cap110_monsters as monsters  # noqa: E402
 import cap110_skill_effects as effects  # noqa: E402
 import import_vsro_alexandria as tables  # noqa: E402
+import published_ids  # noqa: E402
 import skilldata_enc as skill_tables  # noqa: E402
 import sro_pk2  # noqa: E402
 from alexandria_map_tables import later_zone_rows, native_text_row, overview_box  # noqa: E402
@@ -93,7 +105,10 @@ from arabia_map_tiles import (  # noqa: E402
 	remove_map_labels,
 	restore_map_tiles,
 )
+import arabia_quest_items  # noqa: E402
+import arabia_quest_tables  # noqa: E402
 from arabia_gates import prepare_gates  # noqa: E402
+from arabia_people import SPEECH_ENGLISH, later_speech_texts, npc_placements, speech_english  # noqa: E402
 from prepare_client_resources import write_atomically  # noqa: E402
 from skytemple_import import (  # noqa: E402
 	copy_resource_closure,
@@ -107,6 +122,7 @@ from skytemple_import import (  # noqa: E402
 	source_root,
 	verify_archives,
 )
+from isror_nest_table import require_native_nest_table  # noqa: E402
 from later_world_import import missing_export  # noqa: E402
 from sro_paths import trees_overlap  # noqa: E402
 
@@ -131,6 +147,22 @@ FIRST_LEVEL = 120
 LAST_LEVEL = 130
 FIELD_WORLD = 1
 DUNGEON_WORLD = 112
+HIDEOUT_WORLD = 113
+HIDEOUT_REGION = 32793
+# The hideout's ground (the later client's own binding, v1.696
+# Data.pk2 dungeon\Dungeoninfo.txt row 25 -> Dungeon\Arabia\Bagh_mong\
+# bagh_mong_boss.dof, and the DOF's embedded generalRegionId is this
+# region): the template beside the table, the region's AINavData and
+# the template's block, staged only while the extraction carries
+# hideout nests (below). Archive names are the archive index's folded
+# keys; the DOF's written path is the dungeonInfo probe's own casing.
+HIDEOUT_DOF_ARCHIVE = "dungeon/arabia/bagh_mong/bagh_mong_boss.dof"
+HIDEOUT_DOF_PATH = "Data_extracted/dungeon/Arabia/Bagh_mong/bagh_mong_boss.dof"
+HIDEOUT_NAV_ARCHIVE = f"navmesh/ainavdata_{HIDEOUT_REGION}.dat"
+HIDEOUT_NAV_PATH = f"Data_extracted/navmesh/ainavdata_{HIDEOUT_REGION}.dat"
+HIDEOUT_BLOCK_SEED = "res/dun/arabia/bagh_mong/bagh_mong_boss.bsr"
+HIDEOUT_BLOCK_PATH = "Data_extracted/res/dun/arabia/bagh_mong/bagh_mong_boss.bsr"
+HIDEOUT_GROUND_PATHS = (HIDEOUT_DOF_PATH, HIDEOUT_NAV_PATH, HIDEOUT_BLOCK_PATH)
 # The population envelope's tactics shape (cap110_monsters.tactics_controls);
 # an extraction row naming anything else is a contract break, refused.
 CONTROL_KEYS = {
@@ -218,7 +250,7 @@ def project_row(row, regions):
 	champion = row.get("Champion")
 	if champion is not None and set(champion) != CONTROL_KEYS:
 		raise ValueError(f"Arabia nest {row['NestID']} champion tactics are malformed")
-	if int(row["WorldID"]) not in (FIELD_WORLD, DUNGEON_WORLD):
+	if int(row["WorldID"]) not in (FIELD_WORLD, DUNGEON_WORLD, HIDEOUT_WORLD):
 		raise ValueError(f"Arabia nest {row['NestID']} names world {row['WorldID']}")
 	if int(row["RegionID"]) not in regions:
 		raise ValueError(f"Arabia nest {row['NestID']} names region {row['RegionID']} outside the client continent")
@@ -255,6 +287,7 @@ def load_nests(path, regions):
 	rows = data.get("rows") if isinstance(data, dict) else None
 	if not isinstance(rows, list) or not rows:
 		raise ValueError(f"{path} is not an Arabia nest extraction")
+	require_native_nest_table(data.get("nestTable"), f"Arabia nest extraction {path}")
 	seen, monster_rows, npc_rows, capped, normalised = set(), [], [], [], []
 	for row in rows:
 		projected = project_row(row, regions)
@@ -314,130 +347,6 @@ def select_kinds(later, codes, window):
 	return refs
 
 
-# ================
-# npc_placements
-#
-# Where the continent's NPCs stand: the extraction's authored rows
-# first (they win a shared place), then the standings the client's own
-# npcpos names inside the continent that the extraction does not.
-# Returns [(codename, region, x, y, z)] in a stable order.
-# ================
-def npc_placements(npc_rows, npcpos_rows, codename_by_id, regions):
-	found, seen = [], set()
-	for row in npc_rows:
-		if not row["Codename"].startswith("NPC_"):
-			continue
-		key = (row["Codename"], int(row["RegionID"]), round(float(row["X"])), round(float(row["Z"])))
-		seen.add(key)
-		found.append((row["Codename"], int(row["RegionID"]),
-			float(row["X"]), float(row["Y"]), float(row["Z"])))
-	for row in npcpos_rows:
-		if len(row) < 5 or row[0] not in codename_by_id:
-			continue
-		code = codename_by_id[row[0]]
-		if not code.startswith("NPC_"):
-			continue
-		try:
-			region, x, y, z = int(row[1]) & 0xFFFF, float(row[2]), float(row[3]), float(row[4])
-		except ValueError:
-			continue
-		if region not in regions:
-			continue
-		key = (code, region, round(x), round(z))
-		if key in seen:
-			continue
-		seen.add(key)
-		found.append((code, region, x, y, z))
-	return sorted(found, key=lambda place: (place[0], place[1], place[2], place[4]))
-
-
-# ================
-# SPEECH_ENGLISH
-#
-# Authored English for the talk lines the v1.696 client ships in Korean
-# only (no English cell in any of its language columns). The asset
-# build refuses an active textquest row without English
-# (englishCompletions.mjs, assertEnglishCompletionCoverage), and the
-# shared catalog cannot hold these keys: it must name only rows the
-# native build has, and these exist only while SRO_ARABIA is on. So the
-# layer that adds the rows carries their English, under the catalog's
-# contract: each entry records the exact Korean it translates, applies
-# only while the source has no English, and a changed Korean refuses
-# the build as stale rather than showing an outdated line.
-# (key: (Korean source, English)). Translated from the v1.696 Korean,
-# 2026-11-15, freeze 2c9e87fdf's variant build.
-# ================
-SPEECH_ENGLISH = {
-	"SN_BOSS_DUNGEON_ALCHEMIST_BS": (
-		"저는 오랜 연구 끝에 마침내 유피테르 신전에 숨겨져 있다는 비밀의 방의 입구를 열 수 있었습니다. "
-		"하지만 전 입구만을 열 수 있을 뿐.. 비밀의 방이 어떤 곳인지 알지 못합니다.",
-		"After long research I was finally able to open the entrance to the secret chamber said to be "
-		"hidden in the Jupiter Temple. But I could only open the entrance.. I do not know what kind of "
-		"place the secret chamber is.",
-	),
-	"SN_LAST_FIELD_PRIEST_BS": (
-		"샴발라에 다녀는 와 봤나? 최근 많은 모험가들이 샴발라를 다녀온 후로  무언가에 홀리듯 사라졌다 "
-		"나타나곤 했지. 그리고 얼마 지나지 않아 대도시를 중심으로 역병이 창궐하고 있다네.",
-		"Have you ever been to Shambala? Lately many adventurers who came back from Shambala would vanish, "
-		"as if bewitched by something, and then turn up again. And not long after, a plague broke out, "
-		"spreading from the great cities.",
-	),
-	"SN_LOST_TOMB_DUNGEON_ALCHEMIST_BS": (
-		"유피테르 신전에 숨겨져 있는 또 다른 입구를 찾아냈습니다. 이곳은 상층, 하층으로 구성된 무덤으로 "
-		"파악이 됐으나  굳게 잠겨져 있어 조사가 중단됐습니다.",
-		"I have found another entrance hidden in the Jupiter Temple. It proved to be a tomb with an upper "
-		"and a lower level, but it is firmly locked, so the survey has stopped.",
-	),
-}
-
-
-# ================
-# speech_english
-#
-# A talk row's English: the source's own when it has one, else the
-# authored line (SPEECH_ENGLISH) for that key and Korean, else "".
-# ================
-def speech_english(key, korean, english):
-	if english:
-		return english
-	authored = SPEECH_ENGLISH.get(key)
-	if authored is None:
-		return ""
-	source, line = authored
-	if source.strip() != korean.strip():
-		raise ValueError(f"stale Arabia talk English for {key}: the v1.696 Korean changed")
-	return line
-
-
-# ================
-# later_speech_texts
-#
-# The later client's NPC talk strings (the SN_..._BS/_PS keys its
-# npcchat rows name), normalised to the row shape later_object_texts
-# returns for the name table. The later client keeps them in its
-# textquest_speech&name shards; the native client keeps its own talk
-# rows in textquest.txt itself.
-# ================
-def later_speech_texts(read):
-	manifest = tables.table_rows(read("textquest_speech&name.txt"))
-	shards = [row[0].lower() for row in manifest if row and row[0].lower().endswith(".txt")]
-	if not shards:
-		raise ValueError("v1.696 textquest_speech&name.txt names no shards")
-	rows = []
-	for shard in shards:
-		for row in characters.translation_rows(read(shard)):
-			# An untranslated row keeps only its first cells (the
-			# table reader trims the empty tail); it still rides,
-			# with no English, like the names that lack one.
-			if len(row) < 3 or not row[2]:
-				continue
-			english = next((row[at] for at in (9, 13, 14, 15, 16)
-				if len(row) > at and row[at] not in ("0", "")), "")
-			korean = row[3] if len(row) > 3 else ""
-			rows.append([row[0], row[2], korean,
-				"", "", "", "", "", speech_english(row[2], korean, english), ""])
-	return rows
-
 
 # ================
 # format_coord
@@ -483,6 +392,32 @@ def arabia_resource_closure(seeds, archives, native, output):
 
 
 # ================
+# copy_hideout_ground
+#
+# The Kalia hideout's ground: its DOF template and the region's
+# AINavData out of the v1.696 Data.pk2 (the template's block rides the
+# resource closure as a seed of add_arabia's). Both files are the
+# region's whole geometry - a dungeon-bit region has no sector files -
+# so a missing one is a source break, refused by name. A copy already
+# standing with the same bytes is left (the marker keeps owning it).
+# ================
+def copy_hideout_ground(data, data_index, output):
+	copied = []
+	for archive_name, relative in ((HIDEOUT_DOF_ARCHIVE, HIDEOUT_DOF_PATH),
+		(HIDEOUT_NAV_ARCHIVE, HIDEOUT_NAV_PATH)):
+		entry = data_index.get(archive_name)
+		if entry is None:
+			raise ValueError(f"v1.696 Data.pk2 has no {archive_name}")
+		target = output / relative
+		stored = sro_pk2.payload(data, entry)
+		if target.exists() and target.read_bytes() == stored:
+			continue
+		variant.replace_file(target, stored)
+		copied.append(relative)
+	return copied
+
+
+# ================
 # add_arabia
 # ================
 def add_arabia(native, output, source=None, nests=None, closure=arabia_resource_closure):
@@ -494,6 +429,8 @@ def add_arabia(native, output, source=None, nests=None, closure=arabia_resource_
 	if not enabled():
 		restore_map_tiles(output, prior)
 		remove_map_labels(output / TEXT_ROOT, prior)
+		arabia_quest_items.remove_quest_items(output)
+		arabia_quest_tables.remove_quest_tables(output)
 		return remove_owned(output, prior)
 	# Resolved before any archive is read: a missing extraction refuses
 	# here, by name, not after the continent's tables are loaded.
@@ -519,6 +456,11 @@ def add_arabia(native, output, source=None, nests=None, closure=arabia_resource_
 		regions = continent_regions(tables.table_rows(read("regioncode.txt")))
 		extraction = load_nests(nests, regions)
 		population = build_population(extraction["monsters"])
+		# The hideout rides its nests: an extraction carrying world-113
+		# rows stages the lair's ground with them (and the run that
+		# stops carrying them takes it away below); an extraction
+		# without them builds byte-identical to before.
+		hideout = any(int(row["WorldID"]) == HIDEOUT_WORLD for row in extraction["monsters"])
 		placements = npc_placements(extraction["npcs"], tables.table_rows(read("npcpos.txt")),
 			codename_by_id, regions)
 
@@ -560,7 +502,7 @@ def add_arabia(native, output, source=None, nests=None, closure=arabia_resource_
 		npc_refs = select_kinds(later, {place[0] for place in placements} - set(native_by_code), window=False)
 		all_refs = {**refs, **npc_refs}
 
-		occupied = {int(r[1]) for r in native_chars}
+		occupied = published_ids.occupied_objects(text_root, (CHARACTER_SHARD,))
 		allocated = monsters.allocate_characters(occupied, sorted(all_refs), prior.get("characters", {}))
 		for code, row in sorted(all_refs.items()):
 			row[1] = str(allocated[code])
@@ -624,10 +566,11 @@ def add_arabia(native, output, source=None, nests=None, closure=arabia_resource_
 			later_gate_tables,
 			tables.table_rows((native_text_root / "teleportdata.txt").read_bytes()),
 			{row[1] for row in tables.table_rows(current["teleportdata.txt"]) if len(row) > 1},
-			{row[1] for row in tables.table_rows(current["teleportbuilding.txt"]) if len(row) > 1},
+			variant_gates.gate_building_taken(current["teleportbuilding.txt"], text_root, CHARACTER_SHARD, allocated),
+			hideout=hideout,
 		)
-		merged_gates, gate_summary = variant.merge_gate_tables(
-			current, gate_tables, codes=gate_codes, level_cap=variant.gate_level_cap())
+		merged_gates, gate_summary = variant_gates.merge_gate_tables(
+			current, gate_tables, codes=gate_codes, level_cap=variant_gates.gate_level_cap())
 		for dropped in gate_summary.get("droppedConditions", []):
 			tables.log(f"arabia gates: link {dropped['from']} -> {dropped['to']}: condition kind "
 				f"{dropped['kind']} dropped; the v1.150 server has no evaluator for it")
@@ -728,6 +671,15 @@ def add_arabia(native, output, source=None, nests=None, closure=arabia_resource_
 		speech_symbols = sorted(({row[1] for row in speech_rows}
 			| (set(prior.get("speechSymbols", [])) & quest_keys)) - native_quest_keys)
 
+		# The continent's quest items (#4134): one step of this layer,
+		# gated with it, reaped against their own marker by
+		# arabia_quest_items.
+		quest_item_summary = arabia_quest_items.add_quest_items(read, root, native, output)
+		# The continent's quest rows and their strings (#4134): one
+		# step of this layer, gated with it, reaped against their own
+		# marker by arabia_quest_tables.
+		quest_summary = arabia_quest_tables.add_quest_tables(read, archive_hashes["Media"], output)
+
 		effect_path = text_root / "skilleffect.txt"
 		effect_text = tables.decode_table(effect_path.read_bytes())
 		later_effects = tables.decode_table(read("skilleffect.txt"))
@@ -781,9 +733,11 @@ def add_arabia(native, output, source=None, nests=None, closure=arabia_resource_
 				if any(path not in map_index for path in paths):
 					# The later client authors this region's code
 					# but never built its sector (the field-02 boss
-					# lair has no terrain or navmesh anywhere):
-					# the sector is skipped and logged, never
-					# fabricated; its region code row still imports.
+					# lair, a dungeon-bit region whose ground is
+					# the DOF template staged with its nests, not
+					# sector terrain): the sector is skipped and
+					# logged, never fabricated; its region code
+					# row still imports.
 					tables.log(f"arabia map: sector {sector_x}/{sector_y} has no terrain in the "
 						"v1.696 Map.pk2 and is skipped")
 					continue
@@ -854,6 +808,8 @@ def add_arabia(native, output, source=None, nests=None, closure=arabia_resource_
 			archives = {"Data": (data, data_index),
 				"Particles": (particles, tables.archive_index(particles))}
 			copied += copy_sector_navmesh(data, data_index, sectors, output, object_remap)
+			if hideout:
+				copied += copy_hideout_ground(data, data_index, output)
 			merged_objects = tables.object_catalog((output / "Map_extracted" / "object.ifo").read_bytes())
 			final_ids = {object_remap.get(object_id, object_id) for object_id in used_objects}
 			if not final_ids <= set(merged_objects):
@@ -866,6 +822,10 @@ def add_arabia(native, output, source=None, nests=None, closure=arabia_resource_
 				for row in all_refs.values()
 				for model in row[characters.MODEL_COLUMN].split(",")
 				if model not in ("", "xxx")}
+			# The hideout template's block is a seed of its own: the
+			# dungeon bundle reads the block's meshes from the tree.
+			if hideout:
+				seeds.add(HIDEOUT_BLOCK_SEED)
 			closure_result = closure(seeds, archives, native, output)
 			copied += closure_result["files"]
 		finally:
@@ -887,11 +847,22 @@ def add_arabia(native, output, source=None, nests=None, closure=arabia_resource_
 
 		files = sorted({entry for entry in set(prior.get("files", [])) | set(copied)
 			if not entry.startswith("clash:") and entry not in replaced_tiles})
+		if not hideout:
+			# The extraction carries no hideout nests: the lair's
+			# ground leaves with this run and the marker stops
+			# owning it. The block's own dependency bytes follow
+			# the closure's shared ownership, as every seed's do;
+			# without the template nothing publishes them.
+			for relative in HIDEOUT_GROUND_PATHS:
+				(output / relative).unlink(missing_ok=True)
+			files = [entry for entry in files if entry not in HIDEOUT_GROUND_PATHS]
 		summary = {
 			"enabled": True,
 			"characters": {code: int(row[1]) for code, row in all_refs.items()},
 			"skills": {row[3]: int(row[1]) for row in added},
 			"nests": len(population["Rows"]),
+			"hideoutNests": sum(1 for row in population["Rows"]
+				if int(row["WorldID"]) == HIDEOUT_WORLD),
 			"kinds": len(refs),
 			"npcs": len(npc_refs),
 			"npcPlacements": len(placements),
@@ -923,11 +894,18 @@ def add_arabia(native, output, source=None, nests=None, closure=arabia_resource_
 			"animationBases": sorted(set(prior.get("animationBases", []))
 				| {base for rows in selected.values() for base, _ in rows}),
 			"characterInfo": sorted(owned_info | {row[0] for row in info}),
-			"nameSymbols": sorted((({r[1] for r in characters.translation_rows(base_text) if len(r) > 1}
-				| {r[1] for r in texts}) & ({r[5] for r in all_refs.values()} | chat_keys))
-				- native_text_keys),
+			# Owned names follow characters.owned_name_symbols
+			# (#3767): the old union with the base table claimed rows
+			# an earlier layer added, and the off strip drops them.
+			# A native row is never in the added set, so the old
+			# native subtraction is subsumed.
+			"nameSymbols": characters.owned_name_symbols(
+				texts, prior.get("nameSymbols", []),
+				{r[5] for r in all_refs.values()} | chat_keys),
 			"speechSymbols": speech_symbols,
 			"speechUnresolved": speech_unresolved,
+			"questItems": quest_item_summary,
+			"quests": quest_summary,
 			"files": files,
 			"replacedTiles": replaced_tiles,
 			"mapPins": sorted(set(prior.get("mapPins", [])) | set(pins)),

@@ -22,6 +22,7 @@ import (
 	"sync"
 	"time"
 
+	"opensro.online/server/internal/game/enterworld"
 	"opensro.online/server/internal/game/social/chatfeed"
 	"opensro.online/server/internal/game/social/chatlog"
 	"opensro.online/server/internal/game/social/chatreport"
@@ -81,9 +82,9 @@ type Runtime struct {
 	// Feed receives every published public line for the website
 	// (chatfeed, port-only); nil keeps the transcript in-game only.
 	Feed *chatfeed.Feed
-	// ShadowMuted reports a staff shadow-muted account (shadowmute,
+	// ShadowMuted reports a staff shadow-muted line, by account or by word (shadowmute,
 	// port-only, not native); nil mutes no one.
-	ShadowMuted func(accountID string) bool
+	ShadowMuted func(accountID, text string) bool
 	// ModerationLog keeps every accepted line for the staff (chatlog,
 	// port-only, not native), muted lines included and marked; nil
 	// keeps no log.
@@ -99,6 +100,18 @@ type Runtime struct {
 	// CaravanCommand handles port-only AI caravan commands (!caravans,
 	// !memory, !accept, !hire, !attack) when SRO_AI_CARAVANS is on.
 	CaravanCommand func(divisionID, playerName string, playerJob uint8, message string) (answer string, handled bool)
+	// PlusFailNotice commits the speaker's failed-reinforcement
+	// announcement choice (the /plusfail command, plusfail.go,
+	// port-only, not native, #3682): on asks for the announcements on,
+	// and the result reports whether the choice was stored. Nil
+	// leaves "/plusfail" ordinary text.
+	PlusFailNotice func(character *enterworld.Character, on bool) bool
+	// EventBotWhisper is the EventBot host's intake (social/eventbot,
+	// port-only, not native, #3533): the host is asked about every
+	// whisper and claims the ones addressed to it (handled), answering
+	// with the bot's reply lines. Nil is never asked: a whisper to the
+	// bot's name is the native cannot-find-target refusal.
+	EventBotWhisper func(divisionID string, sender *enterworld.Character, target, text string) (replies []string, handled bool)
 }
 
 /*

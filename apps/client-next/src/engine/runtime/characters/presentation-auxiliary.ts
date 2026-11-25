@@ -40,7 +40,9 @@ import type {
 	SecondaryModel,
 	ItemPresentation
 } from "./internal/presentation-contract";
+import { compoundPart } from "@/engine/foundation/rendering/compound-part";
 import { STALL_TITLE_MODE } from "@/engine/foundation/gameplay/interaction-approach";
+import { effectProgramModel } from "@/engine/foundation/assets/effect-programs";
 
 // The ride transform modes 8602C0 reads from ride+0x29D (EffectSyntax_RotationType
 // table CCDB10: none = 0, RT_FIXED = 1, RT_DUMMY = 2).
@@ -154,7 +156,7 @@ StageBindings
 ================
 */
 interface StageBindings {
-	readonly renderer: Pick<Renderer, "setCharacterAssembly" | "sharedActorRoom">;
+	readonly renderer: Pick<Renderer, "setCharacterAssembly">;
 	readonly resources: { duration( path: string, clip: string ): number; };
 	readonly effects: {
 		animationModel( path: string ): {
@@ -176,7 +178,8 @@ createAuxiliaryPresentation
 */
 export function createAuxiliaryPresentation( allocateActor: () => number ) {
 	// The previous frame's effect actors' squared distances to the player,
-	// ascending, while the shared actor room is on (presentStages).
+	// ascending, for the shared actor room (presentStages); undefined with
+	// no local player.
 	let effectDistances: number[] | undefined;
 	const booths = new Map<number, {
 		gid: number;
@@ -267,9 +270,7 @@ export function createAuxiliaryPresentation( allocateActor: () => number ) {
 				const paths = [
 					resource.glb,
 					...(resource.animationParticlePaths ?? []),
-					...(resource.ambientParticles ?? []).map( particle =>
-						"/assets/effects/programs.json#" + encodeURIComponent( particle.effectPath )
-					)
+					...(resource.ambientParticles ?? []).map( particle => effectProgramModel( particle.effectPath ) )
 				];
 				// Start only after the model and particle programs are resident, so
 				// admission cannot consume a time-zero animation modifier key.
@@ -339,9 +340,10 @@ export function createAuxiliaryPresentation( allocateActor: () => number ) {
 		presentStages( frame: StageFrame, bindings: StageBindings ) {
 			const { orbActors, effectActors, next, seconds, animationHolders, player } = frame;
 			const { renderer, resources, effects, probe } = bindings;
-			// The Experimental shared actor room: next frame's selection ranks
-			// these effects with the characters (character-selection.ts).
-			effectDistances = renderer.sharedActorRoom?.() === true && player ?
+			// Port-only, not native (owner 2026-11-21: the default, no row): the
+			// shared actor room; next frame's selection ranks these effects with
+			// the characters (character-selection.ts).
+			effectDistances = player ?
 				effectActors.map( actor => effectDistanceSq( actor.pose, player ) ).filter( Number.isFinite )
 					.sort( ( a, b ) => a - b ) :
 				undefined;
@@ -436,7 +438,7 @@ export function createAuxiliaryPresentation( allocateActor: () => number ) {
 		================
 		effectDistances
 
-		The shared actor room's effect distances, or undefined when it is off.
+		The shared actor room's effect distances, or undefined with no player.
 		================
 		*/
 		effectDistances: () => effectDistances,
@@ -465,16 +467,12 @@ export function createAuxiliaryPresentation( allocateActor: () => number ) {
 				// AB5870 cancels the parent bind rotation and keeps its sampled position.
 				// A missing hair marker retains the renderer's existing parent fallback.
 				next.set( state.gid, {
+					...compoundPart( owner, entity.gid, hair.bone ),
 					shadowAttachment: true,
 					gid: state.gid,
 					model: hair.glb,
-					pose: owner.pose,
 					clip: hair.clip,
-					time: seconds - state.started,
-					loop: true,
-					scale: 1,
-					pickable: false,
-					attachment: { gid: entity.gid, bone: hair.bone, offset: [ 0, 0, 0 ], basis: "compound" }
+					time: seconds - state.started
 				} );
 			}
 			for ( const gid of hwanHairActors.keys() ) if ( !hairOwners.has( gid ) ) hwanHairActors.delete( gid );
@@ -573,17 +571,13 @@ export function createAuxiliaryPresentation( allocateActor: () => number ) {
 					if ( next.size >= CHARACTER_ACTORS ) continue;
 					// Auxiliary BSR skeletons use the same AB5870 attach-root frame as Hwan hair.
 					next.set( child.gid, {
+						...compoundPart( owner, entity.gid, entry.bone ),
 						shadowAttachment: true,
 						gid: child.gid,
 						model: entry.glb,
-						pose: owner.pose,
 						clip: child.motion.clip,
 						time: seconds - child.motion.started,
-						loop: true,
-						layers,
-						scale: 1,
-						pickable: false,
-						attachment: { gid: entity.gid, bone: entry.bone, offset: [ 0, 0, 0 ], basis: "compound" }
+						layers
 					} );
 					// The resource's own ambient set rides its animated bones
 					// (the EU shoulder crystals' glow).

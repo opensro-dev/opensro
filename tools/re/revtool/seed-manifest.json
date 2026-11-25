@@ -1,6 +1,7 @@
 {
 	"format": "sro-revtool-seed-manifest",
 	"version": 1,
+	"tag": "revtool-seed-2026-11-13",
 	"note": "Pins for the released seed assets (GitHub release assets, never git history). Rebuild with revtool.py seed build from the maintainer overlay DBs; seed verify checks a download against these pins, the target binary's hash, and the .text run scan.",
 	"assets": [
 		{

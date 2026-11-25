@@ -122,7 +122,7 @@ def nest(code, nest_id, world, region=27091):
 # ================
 def export_document(waves):
 	return {
-		"source": "fixture", "sourceSha256": muhan.POPULATION_SOURCE_SHA256,
+		"source": "fixture", "sourceSha256": muhan.POPULATION_SOURCE_SHA256, "nestTable": "Tab_RefNest_Back",
 		"worlds": {key: {**row, "Regions": list(row["Regions"])} for key, row in WORLDS.items()},
 		"waves": waves,
 		"npcNests": [nest("NPC_MUHAN_SOLO_75_MANAGER", 39604, 103), nest("NPC_MUHAN_CHANGE_SOLO_75_A", 39605, 103)],

@@ -80,24 +80,37 @@ import { recordClaims } from "./shared/publicationLedger.mjs";
 import {
 	importLaterDungeonMapsStep,
 	importLaterOptionalTeleportStep,
+	importLaterRenewalMallStep,
 	importLaterTombMinimapStep,
+	importLaterMacroGuideStep,
+	importLaterCentreBannerStep,
 	importLaterWorldMapButtonsStep,
+	importLaterResLayoutsStep,
 	importLaterWorldMapGuideStep
 } from "./laterClientImports.mjs";
 
 export {
 	laterDungeonMapImportPlan,
 	laterDungeonMapPublicPaths,
+	laterMacroGuideImportPlan,
+	laterMacroGuidePublicPaths,
+	laterCentreBannerImportPlan,
+	laterCentreBannerPublicPaths,
 	laterOptionalTeleportImportPlan,
+	laterRenewalMallImportPlan,
+	laterRenewalMallPublicPaths,
 	laterTombMinimapImportPlan,
 	laterTombMinimapPublicPaths,
 	laterWorldMapButtonsImportPlan,
 	laterWorldMapButtonPublicPaths,
+	laterResLayoutsImportPlan,
+	laterResLayoutPublicPaths,
 	laterWorldMapGuideImportPlan,
 	laterWorldMapGuidePublicPaths
 } from "./laterClientImports.mjs";
 import { createLaneMemo, outputSignatures, signatureHash } from "./shared/laneMemo.mjs";
-import { dataRootsHash, serverRosterRoots } from "./shared/resourceBuildFingerprint.mjs";
+import { dataRootsHash } from "./shared/resourceBuildFingerprint.mjs";
+import { serverRosterKey } from "./char/npcModelRoster.mjs";
 import { fileURLToPath } from "node:url";
 
 /*
@@ -217,9 +230,13 @@ export const RESOURCE_BUILD_STEPS = Object.freeze( {
 	buildHdTexturePacks: buildHdTexturePacksStep,
 	importLaterDungeonMaps: importLaterDungeonMapsStep,
 	importLaterWorldMapButtons: importLaterWorldMapButtonsStep,
+	importLaterResLayouts: importLaterResLayoutsStep,
 	importLaterWorldMapGuide: importLaterWorldMapGuideStep,
+	importLaterMacroGuide: importLaterMacroGuideStep,
+	importLaterCentreBanner: importLaterCentreBannerStep,
 	importLaterOptionalTeleport: importLaterOptionalTeleportStep,
 	importLaterTombMinimap: importLaterTombMinimapStep,
+	importLaterRenewalMall: importLaterRenewalMallStep,
 	packTree: packPublicTree
 } );
 
@@ -461,7 +478,7 @@ export async function buildSroResources( steps = RESOURCE_BUILD_STEPS, options =
 		audioLane,
 		cursorAssetsLane,
 		lane( "title-characters", { modules: laneModules( "titleCharacters" ) }, titleCharacterAssetsLane ),
-		lane( "npc", { modules: laneModules( "npc" ), roots: serverRosterRoots() }, npcAssetsLane ),
+		lane( "npc", { modules: laneModules( "npc" ), key: serverRosterKey }, npcAssetsLane ),
 		worldLane
 	] );
 	const titleRosterAssets = titleCharacterAssets.roster;
@@ -608,15 +625,24 @@ export async function buildSroResources( steps = RESOURCE_BUILD_STEPS, options =
 	// The dungeon pages' own buttons ride the same archive and rule
 	// (issue #3210): the step claims them before the pack tail.
 	const laterWorldMapButtons = await timed( "laterWorldMapButtons", () => steps.importLaterWorldMapButtons() );
+	// The quest windows' layouts and art (#4245), same archive and rule.
+	const laterResLayouts = await timed( "laterResLayouts", () => steps.importLaterResLayouts() );
 	// The M map guide's tables and art (#3387) come from the v1.696
 	// archive under the same rule, claimed before the pack tail.
 	const laterWorldMapGuide = await timed( "laterWorldMapGuide", () => steps.importLaterWorldMapGuide() );
+	const laterMacroGuide = await timed( "laterMacroGuide", () => steps.importLaterMacroGuide() );
+	// The centre banner's plate art (#3260) rides the v1.696 archive
+	// under the same rule, claimed before the pack tail.
+	const laterCentreBanner = await timed( "laterCentreBanner", () => steps.importLaterCentreBanner() );
 	// The reverse return map's destination table rides the v1.188 archive
 	// too, but lands in the game root for the server game-data build.
 	const laterOptionalTeleport = await timed( "laterOptionalTeleport", () => steps.importLaterOptionalTeleport() );
 	// The Ch'in Tomb's floor minimap rides the v1.188 archive under the same
 	// rule, claimed before the pack tail.
 	const laterTombMinimap = await timed( "laterTombMinimap", () => steps.importLaterTombMinimap() );
+	// The renewal Item Mall's layouts and art (the desktop Item Mall) ride
+	// the v1.188 archive under the same rule, claimed before the pack tail.
+	const laterRenewalMall = await timed( "laterRenewalMall", () => steps.importLaterRenewalMall() );
 	// The ordered pack tail lives in packPublicTree.mjs, shared with the
 	// standalone repack. Only the outdoor gate is per-caller: when the world lane
 	// produced no outdoor region group there is nothing to list. A full build
@@ -691,9 +717,13 @@ export async function buildSroResources( steps = RESOURCE_BUILD_STEPS, options =
 		hdTexturePacks,
 		laterDungeonMaps,
 		laterWorldMapButtons,
+		laterResLayouts,
 		laterWorldMapGuide,
+		laterMacroGuide,
+		laterCentreBanner,
 		laterOptionalTeleport,
 		laterTombMinimap,
+		laterRenewalMall,
 		packGroups,
 		claimAudit,
 		jsonOptimization,

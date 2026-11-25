@@ -8,8 +8,9 @@ Port-only, not native. SRO_ARABIA is off by default. The importer
 population's row schema (cap110.go); this is the consumer side, joining
 each nest's codename against the installed monster references. The town
 and the three fields are outdoor regions of the default world; the
-Baghdad dungeon's nests join its own port-only world (world/arabia),
-registered while the same switch is on.
+Baghdad dungeon's nests join its own port-only worlds (world/arabia),
+registered while SRO_BAGHDAD_DUNGEON is on (#4134): the two switches
+admit their own rows out of the one population file.
 
 Unlike the cap-110 families the population needs no second switch: its
 character rows ride its own shard (characterdata_200000.txt) and its
@@ -32,6 +33,12 @@ import (
 )
 
 const EnvArabia = "SRO_ARABIA"
+
+// Port-only, not native (#4134): the Baghdad dungeon worlds' own
+// switch, split out of SRO_ARABIA so a shard opens the dungeon apart
+// from the continent. Off is native.
+const EnvBaghdadDungeon = "SRO_BAGHDAD_DUNGEON"
+
 const arabiaPopulationFile = "arabia-monsters.txt"
 
 // Port-only, not native: the family's admitted level window, the
@@ -58,22 +65,38 @@ func ArabiaEnabled() bool {
 
 /*
 ================
-AppendArabia
-
-Off never reads the optional file. On fails before startup when the
-Arabia data is absent or malformed; a partial population must not
-reach gameplay.
+BaghdadDungeonEnabled
 ================
 */
-func AppendArabia(template Template, textdataDir string, enabled bool) (Template, error) {
-	if !enabled {
+func BaghdadDungeonEnabled() bool {
+	switch strings.ToLower(strings.TrimSpace(os.Getenv(EnvBaghdadDungeon))) {
+	case "1", "on", "true":
+		return true
+	}
+	return false
+}
+
+/*
+================
+AppendArabia
+
+Both switches off never reads the optional file. Either on fails
+before startup when the Arabia data is absent or malformed; a partial
+population must not reach gameplay. Each switch admits its own side
+of the one file: the continent's rows ride continentEnabled, the
+dungeon worlds' rows dungeonEnabled, and a switched-off side's rows
+are held back, never misjoined (appendNestRows counts them).
+================
+*/
+func AppendArabia(template Template, textdataDir string, continentEnabled, dungeonEnabled bool) (Template, error) {
+	if !continentEnabled && !dungeonEnabled {
 		return template, nil
 	}
 	data, err := os.ReadFile(filepath.Join(textdataDir, arabiaPopulationFile))
 	if err != nil {
 		return Template{}, fmt.Errorf("arabia population: %w", err)
 	}
-	return appendArabiaData(template, data)
+	return appendArabiaData(template, data, continentEnabled, dungeonEnabled)
 }
 
 /*
@@ -81,8 +104,21 @@ func AppendArabia(template Template, textdataDir string, enabled bool) (Template
 appendArabiaData
 ================
 */
-func appendArabiaData(template Template, data []byte) (Template, error) {
-	return appendNests(template, data, "arabia population", admitArabia, nil, arabiaWorldCode)
+func appendArabiaData(template Template, data []byte, continentEnabled, dungeonEnabled bool) (Template, error) {
+	return appendNestRows(template, data, nestRules{
+		Label: "arabia population",
+		Admit: admitArabia,
+		SkipRow: func(row cap110Nest) bool {
+			if arabia.IsDungeonWorld(row.WorldID) {
+				return !dungeonEnabled
+			}
+			return !continentEnabled
+		},
+		WorldOf: arabiaWorldCode,
+		// The lair's region carries the dungeon bit the default
+		// nest rule refuses; the leaf owns which regions are its own.
+		Region: arabia.IsRegion,
+	})
 }
 
 /*

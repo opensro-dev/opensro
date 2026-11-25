@@ -173,6 +173,11 @@ for ( const laneCount of [ 1, 8 ] ) {
 			position( events, "end:importLaterWorldMapButtons" ) < tail,
 			"the world map button import finishes before the final pack tail"
 		);
+		// The quest windows' layouts and art (#4245).
+		assert.ok(
+			position( events, "end:importLaterResLayouts" ) < tail,
+			"the quest layout import finishes before the final pack tail"
+		);
 		// The M map guide's tables and art too (issue #3387).
 		assert.ok(
 			position( events, "end:importLaterWorldMapGuide" ) < tail,
@@ -264,9 +269,13 @@ const AFTER_FAMILIES = [
 	"buildHdTexturePacks",
 	"importLaterDungeonMaps",
 	"importLaterWorldMapButtons",
+	"importLaterResLayouts",
 	"importLaterWorldMapGuide",
+	"importLaterMacroGuide",
+	"importLaterCentreBanner",
 	"importLaterOptionalTeleport",
-	"importLaterTombMinimap"
+	"importLaterTombMinimap",
+	"importLaterRenewalMall"
 ];
 
 for ( const laneCount of [ 1, 8 ] ) {

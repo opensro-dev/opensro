@@ -57,14 +57,22 @@ func tickUntilWarp(rt *Runtime, key petOwnerKey, state *petSession, owner simula
 ================
 TestWalledInPickupPetWarpsWhileFollowing
 
-A pickup pet (band 4) follows through the same FOLLOW state and
-warps on its tenth stalled stop.
+A pickup pet (band 4) follows through the same FOLLOW state: walled in
+with no way home it warps at once (petrecovery.go); with a known route
+whose steps are all refused it warps on its tenth stalled stop.
 ================
 */
 func TestWalledInPickupPetWarpsWhileFollowing(t *testing.T) {
 	rt, key, state := strandedPet(t, 4, stuckOwnerAt)
+	if _, at := tickUntilWarp(rt, key, state, stuckOwnerAt, 50); at < 0 || at > 1 {
+		t.Fatalf("a walled-in pickup pet with no way home warped on tick %d, want at once", at)
+	}
+	rt, key, state = strandedPet(t, 4, stuckOwnerAt)
+	rt.PlanCompanionRoute = func(from, goal simulation.Spawn) []simulation.Spawn {
+		return []simulation.Spawn{from, {RegionID: from.RegionID, X: from.X, Z: from.Z + 100}, goal}
+	}
 	if _, at := tickUntilWarp(rt, key, state, stuckOwnerAt, 50); at < 9 {
-		t.Fatalf("a walled-in pickup pet warped on tick %d, want after its tenth stalled stop", at)
+		t.Fatalf("a routed but refused pickup pet warped on tick %d, want after its tenth stalled stop", at)
 	}
 }
 
@@ -89,6 +97,10 @@ func TestWalledInPickupPetWarpsWhileCollecting(t *testing.T) {
 	if state.pickup == nil {
 		t.Fatal("fixture: the pickup did not start an approach")
 	}
+	// The order ran on the runtime's clock; the ticks below run later, so
+	// carry the deadline with them or the pickup retires on the first tick
+	// and only the follow lane is ever tested.
+	state.pickupDeadline = 2_000_000 + 60_000
 	if _, at := tickUntilWarp(rt, key, state, stuckOwnerAt, 50); at < 9 {
 		t.Fatalf("a walled-in collecting pet warped on tick %d, want after its tenth stalled stop", at)
 	}

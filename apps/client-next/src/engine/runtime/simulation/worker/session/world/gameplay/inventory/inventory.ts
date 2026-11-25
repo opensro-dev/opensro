@@ -8,7 +8,12 @@ Child owners handle process-specific state while this owner commits item rows.
 
 ===========================================================================
 */
-import { AVATAR_STORAGE_CAPACITY, avatarSlotFits, isAvatarItem } from "@/engine/foundation/gameplay/avatar-socket";
+import {
+	AVATAR_STORAGE_CAPACITY,
+	avatarSlotFits,
+	isAvatarItem,
+	isSpiritItem
+} from "@/engine/foundation/gameplay/avatar-socket";
 import {
 	companionItemUseNotice,
 	cosItemUseTail,
@@ -18,6 +23,8 @@ import { globalChatTail, isGlobalChatItem } from "@/engine/foundation/gameplay/g
 import { isTradeGoods } from "@/engine/foundation/gameplay/specialty-deal";
 import { type ChatLinkRef, encodeChatLinkRefs } from "@/engine/foundation/gameplay/chat-item-links";
 import { isNameChangeScrollItem, nameChangeTail } from "@/engine/foundation/gameplay/name-change";
+import { isWeaponSwitchScroll, weaponSwitchTail } from "@/engine/foundation/gameplay/weapon-switch";
+import { raceSwitchKindOf, raceSwitchTail } from "@/engine/foundation/gameplay/race-switch";
 import {
 	nativeStackIdentity,
 	planContainerMove,
@@ -201,7 +208,7 @@ preview
 			throw Error( "Conflicting commerce preview type" );
 		}
 		types.set( row.refObjId, row.typeFlags );
-		const decoded = decodeInventoryItem( bytes, 0, types, objRefs );
+		const decoded = decodeInventoryItem( bytes, 0, types, objRefs, rentRefs );
 		if ( !decoded.item || decoded.next !== bytes.length ) throw Error( "Invalid commerce preview body" );
 		return { ...decoded.item, name: row.name };
 	}
@@ -271,6 +278,9 @@ as natively; a good with no reference row never marks the page.
 	const objRefs = new Map<number, number>();
 	const useCooldowns = new Map<number, number>();
 	const refs = new Map<number, number>(), names = new Map<number, string>();
+	// The rental kinds (reference rows that carry a rent deadline in
+	// their item bodies, #4240), learned with the other references.
+	const rentRefs = new Set<number>();
 	const icons = new Map<number, string>();
 	const codenames = new Map<number, string>();
 	const tooltipRefs = new Map<number, ItemTooltipReference>();
@@ -325,6 +335,7 @@ present
 		const result = {
 			...item,
 			name: names.get( item.refObjId ) ?? item.name,
+			codename: codenames.get( item.refObjId ) ?? item.codename,
 			icon: icons.get( item.refObjId ) ?? item.icon,
 			tooltip,
 			nativeFields: tooltip?.fields,
@@ -450,7 +461,7 @@ body
 ================
 	*/
 	function body( p: Uint8Array, index: number ): InventoryItem | null {
-		const { item, next } = decodeInventoryItem( p, index, refs, objRefs );
+		const { item, next } = decodeInventoryItem( p, index, refs, objRefs, rentRefs );
 		if ( next !== p.length ) throw new Error( "Invalid inventory item body" );
 		return item ? { ...item, name: names.get( item.refObjId ), icon: icons.get( item.refObjId ) } : null;
 	}
@@ -484,7 +495,8 @@ decodeShopItems
 			if ( nextRefs.has( id ) && nextRefs.get( id ) !== flags ) throw Error( "Conflicting shop item reference" );
 			nextRefs.set( id, flags );
 			nextNames.set( id, row.name );
-			const bytes = Uint8Array.from( row.body ), decoded = decodeInventoryItem( bytes, 0, nextRefs, objRefs );
+			const bytes = Uint8Array.from( row.body ),
+				decoded = decodeInventoryItem( bytes, 0, nextRefs, objRefs, rentRefs );
 			if ( !decoded.item || decoded.item.refObjId !== id || decoded.next !== bytes.length ) {
 				throw Error( "Invalid shop item body" );
 			}
@@ -610,7 +622,7 @@ data and never fails the session.
 		*/
 		noticeItem( body: Uint8Array ): InventoryItem | undefined {
 			try {
-				const decoded = decodeInventoryItem( body, 0, refs, objRefs );
+				const decoded = decodeInventoryItem( body, 0, refs, objRefs, rentRefs );
 				return decoded.item && decoded.next === body.length ? present( decoded.item ) : undefined;
 			} catch {
 				return undefined;
@@ -739,6 +751,29 @@ useCooldown
 		present,
 		/*
 ================
+startAuthoredCooldown
+
+A limited use that ran without a bag item (a premium package's count job, the
+Energy of Life buff's charge) starts the cooldown its item's row authors, as an
+item-use answer starts a bag item's: the lane shows on every item that
+shares the group, in the bag and on the quick slots. Port-only for the Blue
+Berserk; nothing for an item without an authored cooldown.
+================
+		*/
+		startAuthoredCooldown( refObjId: number, now: number ) {
+			const fields = tooltipRefs.get( refObjId )?.fields ?? {};
+			const durationMs = fields.useCooldownDuration528 ?? 0;
+			if ( durationMs <= 0 ) return;
+			const group = fields.useCooldownGroup524 ?? 0;
+			itemCooldowns = [
+				...itemCooldowns.filter( row =>
+					row.category !== 18 || (group ? row.group !== group : !!row.group || row.refObjId !== refObjId)
+				),
+				{ category: 18, group, refObjId, startedAtMs: now, durationMs }
+			];
+		},
+		/*
+================
 objectRefs
 
 The summonable character references (refObjSnapshot) a summoner's
@@ -747,6 +782,17 @@ pet record names, for decoders of rows held elsewhere (the storage room).
 		*/
 		objectRefs(): ReadonlyMap<number, number> {
 			return objRefs;
+		},
+		/*
+================
+rentRefs
+
+The rental kinds whose bodies carry the rent deadline leg (#4240), for
+the storage-room list decoder the same way objectRefs serves it.
+================
+		*/
+		rentRefs(): ReadonlySet<number> {
+			return rentRefs;
 		},
 		/*
 ================
@@ -861,7 +907,11 @@ references
 			}
 			for ( const row of rows ) {
 				refs.set( row.refObjId, row.typeFlags );
+				if ( row.rent ) rentRefs.add( row.refObjId );
 				names.set( row.refObjId, row.name );
+				// An item bought after login (a switch scroll) is known by
+				// the delta's codename, as a bootstrap row is by its own.
+				if ( row.codename !== undefined ) codenames.set( row.refObjId, row.codename );
 				if ( row.icon !== undefined ) icons.set( row.refObjId, row.icon );
 				if ( row.tooltip ) tooltipRefs.set( row.refObjId, row.tooltip );
 			}
@@ -875,13 +925,14 @@ references
 bootstrap
 ================
 		*/
-		bootstrap( value: unknown ) {
+		bootstrap( value: unknown, receivedAtMs = 0 ) {
 			bindingMoves = [];
 			raisedGoldCaps = (value as { raisedGoldCaps?: unknown; } | null)?.raisedGoldCaps === true;
 			itemCooldowns = [];
 			presentations = new WeakMap();
 			gachaRows = null;
 			alchemy.reset();
+			alchemy.quickFuse( (value as { quickFuse?: unknown; } | null)?.quickFuse === true );
 			companionRentals.reset();
 			gacha.reset();
 			exchange = emptyExchange();
@@ -897,12 +948,14 @@ bootstrap
 			const b = value as {
 				inventorySlotCount?: number;
 				equipmentSlotCount?: number;
+				itemCooldowns?: { group: number; remainingMs: number; }[];
 				refItemSnapshot?: {
 					icon?: string;
 					name?: string;
 					codename?: string;
 					nativeFields?: { useCooldownDuration528?: number; };
 					descriptionSymbol?: string;
+					rent?: boolean;
 					refObjId: number;
 					typeFlags: number;
 				}[];
@@ -930,6 +983,7 @@ bootstrap
 					[]
 			) objRefs.set( row.refObjId, row.tidWord );
 			refs.clear();
+			rentRefs.clear();
 			useCooldowns.clear();
 			slots.clear();
 			avatars.clear();
@@ -951,9 +1005,29 @@ bootstrap
 					throw Error( "Invalid item cooldown authority" );
 				}
 				useCooldowns.set( r.refObjId, cooldown );
+				if ( r.rent ) rentRefs.add( r.refObjId );
 				refs.set( r.refObjId, r.typeFlags );
 				if ( typeof r.name === "string" ) names.set( r.refObjId, r.name );
 				if ( typeof r.codename === "string" ) codenames.set( r.refObjId, r.codename );
+			}
+			// Item groups still cooling down at entry (a teleport re-enters the world):
+			// the server keeps refusing them, so the icons keep their sweep. The sweep's
+			// length is the group's authored duration; unknown, it is the time left.
+			for ( const row of b.itemCooldowns ?? [] ) {
+				if ( !Number.isInteger( row.group ) || !Number.isInteger( row.remainingMs ) || row.remainingMs <= 0 ) {
+					continue;
+				}
+				const authored = [ ...tooltipRefs.values() ].map( t =>
+					t.fields
+				).find( f => f.useCooldownGroup524 === row.group && (f.useCooldownDuration528 ?? 0) > 0 )
+					?.useCooldownDuration528 ?? 0;
+				const durationMs = Math.max( authored, row.remainingMs );
+				itemCooldowns = [ ...itemCooldowns, {
+					category: 18,
+					group: row.group,
+					startedAtMs: receivedAtMs - (durationMs - row.remainingMs),
+					durationMs
+				} ];
 			}
 			const next = new Map<number, InventoryItem>(), seenSlots = new Set<number>();
 			for ( const row of b.equipItems ?? [] ) {
@@ -1000,8 +1074,8 @@ Folds an exchange frame; returns null when the frame is not the
 exchange's, else the category-1 notice code it raised (0 for none).
 ================
 		*/
-		exchangeReceive( frame: import("@/engine/contracts/network").WireFrame ): number | null {
-			const outcome = exchangeFrame( exchange, frame, refs, objRefs );
+		exchangeReceive( frame: import("@/engine/contracts/network").WireFrame, localGid = 0 ): number | null {
+			const outcome = exchangeFrame( exchange, frame, refs, objRefs, localGid, rentRefs );
 			if ( !outcome ) return null;
 			if ( outcome.swap ) {
 				slots = applyExchangeSwap( slots, outcome.swap, equipmentSlotCount ?? 13, inventorySlotCount ?? 45 );
@@ -1030,7 +1104,14 @@ not the stall's.
 ================
 		*/
 		stallReceive( frame: import("@/engine/contracts/network").WireFrame, localGid: number ): StallOutcome | null {
-			const outcome = stallFrame( stall, frame, { localGid, refs, objRefs, names, widePrice: raisedGoldCaps } );
+			const outcome = stallFrame( stall, frame, {
+				localGid,
+				refs,
+				objRefs,
+				rentRefs,
+				names,
+				widePrice: raisedGoldCaps
+			} );
 			if ( !outcome ) return null;
 			const firstBag = equipmentSlotCount ?? 13, endBag = inventorySlotCount ?? 45;
 			if ( outcome.receive?.length || outcome.give?.length ) {
@@ -1849,10 +1930,16 @@ use
 			}
 			if ( itemCooldown( itemCooldowns, item.typeFlags, now ) ) return null;
 			// The Global Chatting item carries its line (693C90); the
-			// name-change scroll carries its new name (#1689); nothing
-			// else leaves the companion tail path.
+			// name-change scroll carries its new name (#1689) and the
+			// weapon switch scroll its weapon and kind and the race switch
+			// scrolls their target (port-only); nothing else leaves the
+			// companion tail path.
 			const tail = isNameChangeScrollItem( item.refObjId ) ?
 				nameChangeTail( context?.renameName ?? "" ) :
+				isWeaponSwitchScroll( codenames.get( item.refObjId ) ) ?
+				weaponSwitchTail( context?.targetSlot, context?.weaponKind ) :
+				raceSwitchKindOf( codenames.get( item.refObjId ) ) ?
+				raceSwitchTail( context?.targetSlot ) :
 				isGlobalChatItem( item.typeFlags ) ?
 				Uint8Array.from( [ ...globalChatTail( message ?? "" ), ...encodeChatLinkRefs( links ) ] ) :
 				cosItemUseTail( item.typeFlags, [ ...slots.values() ], companionContext( item.typeFlags, context ) );
@@ -1898,7 +1985,17 @@ receive
 				return true;
 			}
 			if ( op === MARKET_CONTROL ) {
-				market.receive( p );
+				// The market lane is port-only and self-delimiting (JSON,
+				// versioned): a malformed answer fails its window, never
+				// the session (#4111). Every native lane below keeps the
+				// session-fatal rule - a bad native packet means the
+				// world stream itself is desynced. The contained error
+				// still files as a degraded incident, once per distinct
+				// message, or the mismatch would go unseen.
+				const rejected = market.receiveContained( p );
+				if ( rejected !== null ) {
+					degrade( { code: "market_answer_rejected", message: rejected } );
+				}
 				return true;
 			}
 			// After a timeout the inventory waits for the bootstrap that
@@ -2109,6 +2206,16 @@ receive
 			if ( op === 0x31e8 ) {
 				if ( p.length !== 5 ) throw Error( "Invalid durability result" );
 				const n = p[0]!;
+				// Port-only (SRO_NASRUN, #4381): a Devil's Spirit has no
+				// durability; the frame carries its new awakening clock after
+				// a wake or an extension, for any bag slot it sits in. It is
+				// written silently: no repair cue or flash.
+				const spirit = slots.get( n );
+				if ( spirit && isSpiritItem( spirit.typeFlags ) ) {
+					slots.set( n, { ...spirit, durability: viewOf( p ).getUint32( 1, true ) } );
+					published = null;
+					return true;
+				}
 				if ( n >= 0x3d ) return true;
 				const item = slots.get( n );
 				if ( !item ) {

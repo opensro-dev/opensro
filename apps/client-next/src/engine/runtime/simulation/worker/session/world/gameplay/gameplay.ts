@@ -30,12 +30,13 @@ import {
 	autoPotionTarget,
 	autoPotionTargetNotice,
 	createCosSelection,
-	isRideStateRefusedItem
+	isRideStateRefusedItem,
+	type CosItemUseContext
 } from "@/engine/foundation/gameplay/cos-item-use";
 import { ARENA_CHEST_OPCODE, ARENA_DECISION_OPCODE } from "@/engine/foundation/gameplay/arena-chest";
 import { createParamJobs } from "@/engine/foundation/gameplay/param-job";
 import { createCountJobs, countJobUseRequest } from "@/engine/foundation/gameplay/count-job";
-import { createStorageRoom, isWarehouseTicket } from "@/engine/foundation/gameplay/storage-room";
+import { createStorageRoom, isWarehouseTicket, STORAGE_MOVE_ROOM } from "@/engine/foundation/gameplay/storage-room";
 import type { PlayerModel } from "@/engine/foundation/gameplay/skin-change";
 import {
 	jobAliasRequest,
@@ -60,6 +61,8 @@ import { recallAppointmentRequest, recallAppointmentNotice } from "@/engine/foun
 import { createPickup } from "./pickup";
 import { createActionSession } from "./action-session";
 import { createCosPickup } from "./cos-pickup";
+import { createInventorySortRun } from "./inventory-sort-run";
+import type { InventorySortBag } from "@/engine/foundation/gameplay/inventory-sort";
 import {
 	withdrawalRequest,
 	withdrawalSkillBindings,
@@ -98,7 +101,7 @@ import {
 } from "@/engine/foundation/gameplay/avatar-magic-option";
 import { skillNotice } from "@/engine/foundation/gameplay/skill-notices";
 import { returnScrollCast, type ReturnScrollCast } from "@/engine/foundation/gameplay/return-scroll";
-import { isStallChangeItem } from "@/engine/foundation/gameplay/travel";
+import { isReturnScroll, isStallChangeItem } from "@/engine/foundation/gameplay/travel";
 import { fortressActive } from "@/engine/foundation/gameplay/fortress";
 import { itemCooldown } from "@/engine/foundation/gameplay/item-cooldowns";
 import { skillCooldown } from "@/engine/foundation/gameplay/skill-cooldowns";
@@ -114,6 +117,8 @@ import {
 	crestRegisterUploadPayload
 } from "@/engine/foundation/gameplay/crest-register";
 import { CREST_UPLOAD_CONTROL } from "@/engine/foundation/gameplay/commerce-controls";
+import { weaponSwitchFailureText } from "@/engine/foundation/gameplay/weapon-switch";
+import { raceSwitchFailureText, raceSwitchKindOf, type RaceSwitchKind } from "@/engine/foundation/gameplay/race-switch";
 import { alchemyNotice } from "@/engine/foundation/gameplay/alchemy-notices";
 import {
 	emptyPartyMatching,
@@ -300,8 +305,10 @@ import {
 	socialRequest,
 	withoutInstance,
 	withoutResurrection,
+	withoutSummonPrompt,
 	type SocialCommand
 } from "@/engine/foundation/gameplay/social";
+import { partySummonRefusalKey } from "@/engine/foundation/gameplay/party-summon";
 import { partyLootNotice } from "@/engine/foundation/gameplay/party-loot";
 import { COS_DISTANCE_ERROR, cosDistanceNotice } from "@/engine/foundation/gameplay/cos-distance-notice";
 import { pickupNotice } from "@/engine/foundation/gameplay/pickup-notice";
@@ -316,7 +323,7 @@ import {
 import { createCastMotionLock } from "@/engine/foundation/gameplay/cast-motion-lock";
 import { createSkillPressQueue, decidePress } from "@/engine/foundation/gameplay/skill-queue";
 import { combatAdmissionRadius, combatStopPoint, refBodyRadius } from "@/engine/foundation/gameplay/combat-spacing";
-import { equippedWeaponKind, pressAdmission } from "@/engine/foundation/gameplay/press-admission";
+import { equipmentBroken, equippedWeaponKind, pressAdmission } from "@/engine/foundation/gameplay/press-admission";
 import { movementHeading } from "@/engine/foundation/gameplay/native-movement";
 import {
 	bootstrapProgression,
@@ -326,6 +333,7 @@ import {
 } from "@/engine/foundation/gameplay/progression";
 import { skillBindings, quickSlotPacket } from "@/engine/foundation/gameplay/quickslots";
 import { decodeCosRecord } from "@/engine/foundation/gameplay/cos-record";
+import { decodeSpiritSkills, SPIRIT_SKILLS_OPCODE, spiritSkillList } from "@/engine/foundation/gameplay/spirit-skills";
 import { decodeWorldClock } from "@/engine/foundation/gameplay/world-clock";
 import { vitalsUpdate } from "@/engine/foundation/gameplay/vitals";
 import {
@@ -358,12 +366,91 @@ import { createMoveReservation, type GroundCommand } from "./reservation/reserva
 import { createBetaPlayerMap } from "./beta-map/beta-map";
 import { createCaravanStars } from "./caravan-stars/caravan-stars";
 import { createContributorTitles } from "./contributor-titles/contributor-titles";
+import { createSroMacro } from "./sro-macro/sro-macro";
+import {
+	BAG_FIRST_SLOT,
+	emptyMacroPotionQueue,
+	MACRO_ROW_BUFF_ITEM,
+	MACRO_ROW_PET_CURE,
+	MACRO_ROW_PET_HP,
+	MACRO_ROW_PET_HUNGER,
+	MACRO_ROW_PET_RESURRECT,
+	MACRO_ROW_PET_SUMMON,
+	macroPetFacts,
+	macroPetLiving,
+	macroPotionBagSlot,
+	macroPotionBuffSkillId,
+	macroPotionFired,
+	macroPotionWants,
+	rearmMacroPotion
+} from "@/engine/foundation/gameplay/sro-macro-potion";
+import {
+	emptyMacroSkillLoop,
+	MACRO_SKILL_SWAP_MS,
+	macroBuffAlreadyOn,
+	macroInventoryAfterSwap,
+	macroSkillCast,
+	macroSkillSwapCandidates,
+	macroSkillSwapHelps,
+	pickMacroSkill
+} from "@/engine/foundation/gameplay/sro-macro-skill";
+import {
+	HUNT_BYTE_PILLAR,
+	huntItemKind,
+	huntRangeReach,
+	isDimensionPillarTarget,
+	isMacroHuntNeverTarget,
+	macroUsageTimeEnded,
+	pickMacroHuntAction,
+	spiritNeedsWake
+} from "@/engine/foundation/gameplay/sro-macro-hunt";
+import {
+	MACRO_NOTICE_TELEPORT_OFF,
+	MACRO_NOTICE_TOWN_OFF,
+	macroHuntNoticeText,
+	macroPotionHasRegisteredItem,
+	macroSwitchRefuseNotice,
+	macroTownDisableKinds
+} from "@/engine/foundation/gameplay/sro-macro-notices";
+import { isSpiritItem } from "@/engine/foundation/gameplay/avatar-socket";
+import { macroRegionIsTown } from "@/engine/foundation/gameplay/region-combat";
+import {
+	MACRO_HUNT,
+	MACRO_ROW_HP,
+	MACRO_ROW_MP,
+	MACRO_SKILL,
+	potionSlot
+} from "@/engine/foundation/gameplay/sro-macro";
 import { createTradeProgress } from "./trade-progress/trade-progress";
 import { createCaravanHire } from "@/engine/foundation/gameplay/caravan-hire";
+import { createServerEvent } from "./server-event/server-event";
 import { createUniqueDamageRank } from "./unique-rank/unique-rank";
+import { createJobHonor } from "./job-honor/job-honor";
+import { createJobHonorTiers } from "./job-honor/job-honor-tiers";
+import { createStyria } from "./styria/styria";
+import { createUniqueStatus } from "./unique-status/unique-status";
+import { createHwanLevel } from "./hwan-level/hwan-level";
+import { createReverseUserPoint } from "./reverse-user-point/reverse-user-point";
+import {
+	REVERSE_RETURN_ENROLL,
+	REVERSE_RETURN_PARTY,
+	reverseReturnFailureKey
+} from "@/engine/foundation/gameplay/reverse-user-point";
+import {
+	decodeStaffRoster,
+	decodeStaffState,
+	OP_STAFF_ROSTER,
+	OP_STAFF_STATE,
+	type StaffRosterEntry
+} from "@/engine/foundation/gameplay/staff-roster";
 import { createMostWanted } from "./most-wanted/most-wanted";
 import { createPetTraining } from "./pet-training/pet-training";
-import type { GameplayCommand, GameplayState } from "@/engine/contracts/gameplay";
+import type {
+	GameplayCommand,
+	GameplayState,
+	InventoryItem,
+	InventorySortContainer
+} from "@/engine/contracts/gameplay";
 import type { EntityState } from "@/engine/contracts/world";
 import { nearestMonster } from "@/engine/foundation/gameplay/select-nearest";
 import { nearestPickable } from "@/engine/foundation/gameplay/pickup-nearest";
@@ -416,6 +503,7 @@ import {
 	MOVEMENT_ACK_OPCODE,
 	NPC_INTERACTION_ACK_OPCODE,
 	OBJECT_DESPAWN_OPCODE,
+	OBJECT_POSITION_UPDATE_OPCODE,
 	OBJECT_SELECT_RESULT_OPCODE,
 	OBJECT_SOURCE_CORRECTION_OPCODE,
 	OBJECT_SOURCE_MOVE_OPCODE,
@@ -480,6 +568,8 @@ interface WorldReferences {
 	readonly monster: (
 		codename: string
 	) => import("@/engine/foundation/gameplay/gm-command").GmMonsterReference | undefined;
+	// Catalog CodeName for a living monster's RefObjID (68c3d0 pillar skip).
+	readonly monsterCodename?: ( refObjId: number ) => string | undefined;
 	readonly npcs: () => readonly EntityState[];
 }
 
@@ -518,6 +608,9 @@ const CAPE_SOCKET = 8;
 const UNARMED_REACH = 6;
 // Movement mode 4 is seated (motion 4, which 58E0BF refuses ao/pw from).
 const MOVEMENT_SEATED = 4;
+// The abnormal bits whose move the server drops while navigation stays open:
+// sleep 0x40, root 0x80, petrify 0x1000 and stun 0x4000 (movementDropped).
+const MOVEMENT_DROPPED_ABNORMAL = 0x40 | 0x80 | 0x1000 | 0x4000;
 // B2CD kind 1 admits a command (75BAA0); count 2 queues it behind an open one.
 const ACTION_STATE_ARM = 1;
 const QUEUED_COMMANDS = 2;
@@ -539,6 +632,26 @@ const OP_TRADE_STAR_COUNT = 0x352d;
 // after sending a ground-targeted 0x72CD; 878410 ticks it down and 8782D0 /
 // 877D80 / 877540 / 8777B0 refuse to send any movement packet until it expires.
 const GROUND_SKILL_MOVE_SUPPRESS_MS = 500;
+// Port-only, not native: the player's own inventory, warehouse and
+// companion bag commands, each of which ends a sort in progress
+// (inventory-sort-run.ts).
+const INVENTORY_SORT_CANCELLERS: readonly GameplayCommand["kind"][] = [
+	"inventory-move",
+	"avatar-move",
+	"item-use",
+	"item-drop",
+	"gold-drop",
+	"shop-open",
+	"shop-buy",
+	"shop-sell",
+	"shop-buyback",
+	"storage-move",
+	"cos-inventory-move",
+	"cos-transfer",
+	"cos-drop",
+	"cos-shop-buy",
+	"cos-shop-sell"
+];
 
 /*
 ================
@@ -564,6 +677,10 @@ function skillPressAnswer( frame: WireFrame, localGid: number ): "answered" | "q
 	return ((p[6]! | p[7]! << 8 | p[8]! << 16 | p[9]! << 24) >>> 0) === localGid ? "answered" : null;
 }
 
+// Port-only (#3907): the Auto-Hunt tick resends an unanswered request at
+// most once a second.
+const MACRO_HUNT_RETRY_MS = 1000;
+
 /*
 ================
 createGameplay
@@ -582,7 +699,10 @@ export function createGameplay(
 			| import("@/engine/contracts/movement-diagnostic").MovementDiagnostic
 	) => void = () => {},
 	readEntity: ( gid: number ) => import("@/engine/contracts/world").EntityState | undefined = () => undefined,
-	playItem: ( cue: import("@/engine/contracts/audio").ItemSoundRequest, at: number ) => void = () => {}
+	playItem: ( cue: import("@/engine/contracts/audio").ItemSoundRequest, at: number ) => void = () => {},
+	// Port-only (#3907): Auto-Hunt's nearest-monster / pickup scanners.
+	listMonsters: () => readonly import("@/engine/contracts/world").EntityState[] = () => [],
+	listGroundItems: () => readonly import("@/engine/contracts/world").EntityState[] = () => []
 ) {
 	let entryVitals: Partial<
 		Pick<import("@/engine/contracts/gameplay").VitalState, "hp" | "mp" | "maxHp" | "maxMp" | "abnormal">
@@ -630,11 +750,17 @@ export function createGameplay(
 	// window may use the published wider overview and town pages.
 	let alexandria = false;
 	let raisedGoldCaps = false; // Port-only SRO_RAISED_GOLD_CAPS: the raised stall and warehouse caps.
+	// Port-only SRO_RAISED_GOLD_CAPS: the shard's chosen warehouse deposit cap, when published.
+	let publishedStorageGoldDepositLimit: number | undefined;
+	let inventorySortRule = false; // Port-only SRO_INVENTORY_SORT: the containers' sort button.
 	// The port-only reverse return map table (reverse-return-map.ts).
 	let reverseMapPoints: readonly ReverseMapPoint[] = [];
 	let warnings = [ false, false ];
 	let options = initialGameOptions();
 	let eligibility = { gm: false, pcRoomEvent: false };
+	// Port-only (staff-roster.ts): the staff roster, and this character's
+	// capability bits; 0x3FCC flips eligibility.gm live.
+	let staffRoster: readonly StaffRosterEntry[] = [], staffCapabilities = 0;
 	let autoPotionInputBlocked = false, autoPotionItemMallOpen = false;
 	let autoPotion = autoPotionBootstrap( {} );
 	let potionFacts: AutoPotionFacts = { alive: false, hp: 0, mp: 0, maxHp: 0, maxMp: 0, abnormal: 0 };
@@ -676,6 +802,9 @@ export function createGameplay(
 	const pickup = createPickup();
 	const actionSession = createActionSession();
 	const cosPickup = createCosPickup();
+	// Port-only, not native (SRO_INVENTORY_SORT): the container sort a
+	// window's sort button starts.
+	const inventorySort = createInventorySortRun();
 	const training = createTraining( send );
 	// The held skill press, the newest denial and the round-trip estimate
 	// (skill-queue.ts).
@@ -693,10 +822,18 @@ export function createGameplay(
 		betaMap = createBetaPlayerMap(),
 		caravanStars = createCaravanStars(),
 		contributorTitles = createContributorTitles(),
+		sroMacro = createSroMacro(),
 		tradeProgress = createTradeProgress(),
 		caravanHire = createCaravanHire(),
+		serverEvent = createServerEvent(),
 		uniqueRank = createUniqueDamageRank(),
+		jobHonor = createJobHonor(),
+		jobHonorTiers = createJobHonorTiers(),
+		styria = createStyria(),
+		uniqueStatus = createUniqueStatus(),
 		mostWanted = createMostWanted(),
+		hwanLevel = createHwanLevel(),
+		reverseUserPoint = createReverseUserPoint(),
 		// The wolf tree's worn gear resolves through the bag's references.
 		petTraining = createPetTraining( ( ref, slot, magic ) => inventory.petGearItem( ref, slot, magic ) );
 	/*
@@ -1117,6 +1254,26 @@ scroll's kind-0 row does not.
 	}
 	/*
 	================
+	movementDropped
+
+	Port-only, not native: sleep, root, petrify and stun leave navigation
+	open on the native client (only freeze's action state 9 closes it), so
+	it sends the click, and the server's move handler drops it (action
+	PlayerMovementBlocked). The native client walks only on the server's
+	answer and shows nothing. This client predicts walks and its server
+	answers every command, refusals included: a predicted walk snapped
+	back, and a refused one still started the walking gait. A ground or
+	arrow walk is therefore not sent at all, as while frozen (the outcome
+	is the server's), and any other walk (an NPC approach, a run-up) is
+	sent unpredicted (movement.holdPrediction).
+	================
+	*/
+	function movementDropped(): boolean {
+		return ((combat.state().vitals.find( v => v.gid === localGid )?.abnormal ?? 0) & MOVEMENT_DROPPED_ABNORMAL) !==
+			0;
+	}
+	/*
+	================
 	castLocked
 
 	The local player's cast holds a world click until its action window ends
@@ -1152,6 +1309,7 @@ scroll's kind-0 row does not.
 		if ( teleportMode === 1 ) return "teleport";
 		if ( interactionBlocked() || inventory.tradePinned() ) return "blocked";
 		if ( frozen() ) return "frozen";
+		if ( movementDropped() ) return "dropped";
 		if ( castLocked( now ) ) return "cast";
 		if ( local.mountedOn && (!activeCos || activeCos.gid !== local.mountedOn || activeCos.dead) ) return "mounted";
 		return null;
@@ -1299,11 +1457,27 @@ attack can arrive in the same batch as the previous close and starve the walk.
 	// those codes and must stay exact for every other use, so the
 	// translation lives here, keyed on the flight, not in the mapper.
 	let renameUseInFlight = false;
+	// Later-native (#3903): a reverse return party/user/enroll use in
+	// flight, by its choice (reverse-user-point.ts). Its 0xB5BD answer's
+	// refusal bytes read as the later client's own lines, and an enroll's
+	// success as "Location has been set."; keyed on the flight like the
+	// rename's, for the same reason.
+	let reverseFlight = 0;
+	// Port-only, not native (#4136): the required level of the gate link
+	// whose 0x7495 request is still unanswered, noted by the world core
+	// as the request goes out (noteGateTravel). The 0xB495 answer reads
+	// it (the level refusal names it) and retires it, whatever it says,
+	// so a later walk-in refusal never inherits a stale level.
+	let gateTravelLevel = 0;
 	// A crest register upload (#2282) stays in flight until the upload
 	// lane answers; a second confirmed register is held while one is
 	// outstanding. The success box is the 0xB5BD answer's business, not
 	// this flight's, exactly as a delete's box is.
 	let crestUploadInFlight = false;
+	// Port-only: a weapon switch scroll's use is in flight (weapon-switch.ts).
+	let weaponSwitchUseInFlight = false;
+	// Port-only: a race switch scroll's use is in flight, by kind (race-switch.ts).
+	let raceSwitchUseInFlight: RaceSwitchKind | null = null;
 	let flagWarTeam: number | null = null;
 	let progression: Progression = { masteries: [] };
 	const skillGroups = new Map<number, { group: number; level: number; }>();
@@ -1367,6 +1541,10 @@ attack can arrive in the same batch as the previous close and starve the walk.
 		return localPlayerModels().find( model => model.refObjId === local.refObjId )?.sex;
 	}
 	let bindings = skillBindings( {} );
+	// Port-only (SRO_NASRUN, #4384): the worn Spirit's lent skills, cast
+	// as if learned (spirit-skills.ts).
+	let spiritSkills: number[] = [];
+	const castableSkill = ( id: number ) => bindings.skills.includes( id ) || spiritSkills.includes( id );
 	let catalog: readonly SkillMetadata[] = [];
 	// The local cast's action-state-2 window (CIDecoSkill 8E0A23 / 877240).
 	const castMotion = createCastMotionLock();
@@ -1421,13 +1599,23 @@ fails; retry persistence without restoring stale slot occupancy.
 	// The Experimental "Homing projectiles" row: off by default so projectiles
 	// fly to their launch-captured endpoint as natively.
 	let homingProjectiles = false;
-	// The Experimental "Keep pet gold pickup when full" row: on unless turned
-	// off (experimentalGameplay); off is the native 0x0077DD61 disable.
-	let smartPetPickup = true;
 	// The Experimental pickup-pet item filter's kind mask (#841,
 	// experimentalGameplay); undefined while the row is off, which leaves
 	// the native pickup loop untouched.
 	let petPickupKinds: number | undefined;
+	// Port-only (#3907): the Experimental "SRO Macro" row, and the macro
+	// auto-potion's row order (checkMacroPotion), auto-skill cursors
+	// (checkMacroSkill), and auto-hunt start clock (checkMacroHunt).
+	let sroMacroEnabled = false;
+	let macroPotionQueue = emptyMacroPotionQueue();
+	let macroSkillLoop = emptyMacroSkillLoop();
+	let macroHuntStartedAtMs = 0;
+	let macroHuntWasOn = false;
+	// The last Auto-Hunt request and when it went out: one request per
+	// MACRO_HUNT_RETRY_MS, so a step the server has not answered yet
+	// (rebirth, berserk, pickup, select, hunt OFF) is not resent each tick.
+	let macroHuntLastAction = "";
+	let macroHuntLastActionAtMs = 0;
 	let approach: InteractionApproachState = { phase: "idle" };
 	let returnScroll: ReturnScrollCast | undefined, teleportMode = 0;
 	const cosSelection = createCosSelection();
@@ -1497,6 +1685,24 @@ reuse gate as manual activation. Recovery completion is server-owned.
 		// 561D50 checks the NPC interaction latch (69F870 includes storage)
 		// and the return-delay control. The retry timer itself stays armed.
 		if ( slot === null ) return;
+		useAutomaticItem( slot, now );
+	}
+	/*
+================
+useAutomaticItem
+
+The use gates every automatic item attempt shares (the v1.150 auto-potion
+and the port-only SRO Macro): interaction refusals, the category cooldown,
+the use target and one open inventory transaction. True when the use
+request went out.
+================
+	*/
+	function useAutomaticItem(
+		slot: number,
+		now: number,
+		quiet = false,
+		override?: CosItemUseContext
+	): boolean {
 		// 561E57..561E6B tests the visible stall control, including the owner
 		// editing a closed stall and a visitor. Naming and network are separate windows.
 		const stallVisible = inventory.stallPhase() === "owner" || inventory.stallPhase() === "visitor";
@@ -1507,12 +1713,12 @@ reuse gate as manual activation. Recovery completion is server-owned.
 			conversation.gid === targeting.state().target && inventory.state().shop?.npc === conversation.gid;
 		if ( stallVisible || autoPotionItemMallOpen || returnScroll || shopActive || storage.state() ) {
 			const notice = constantNativeNotice( ITEM_NOTICE_CATEGORY, ITEM_INTERACTION_REFUSAL );
-			if ( notice ) api.notice( notice );
-			return;
+			if ( notice && !quiet ) api.notice( notice );
+			return false;
 		}
 		const item = inventory.state().inventory.find( row => row.slot === slot )!;
-		if ( itemCooldown( inventory.state().itemCooldowns, item.typeFlags, now ) ) return;
-		const context = autoPotionTarget(
+		if ( itemCooldown( inventory.state().itemCooldowns, item.typeFlags, now ) ) return false;
+		const context = override ?? autoPotionTarget(
 			item.typeFlags,
 			[ ...cosRecords.values() ],
 			cosSelection.selected(),
@@ -1524,17 +1730,179 @@ reuse gate as manual activation. Recovery completion is server-owned.
 				[ ...cosRecords.values() ],
 				cosSelection.selected()
 			);
-			if ( notice ) api.notice( notice );
-			return;
+			if ( notice && !quiet ) api.notice( notice );
+			return false;
 		}
-		if ( inventory.state().inventoryPending ) return;
+		if ( inventory.state().inventoryPending ) return false;
 		const refusal = inventory.useNotice( slot, context );
 		if ( refusal ) {
-			api.notice( refusal );
-			return;
+			if ( !quiet ) api.notice( refusal );
+			return false;
 		}
 		inventory.use( slot, now, context );
 		dirty = true;
+		return true;
+	}
+	/*
+================
+stepInventorySort
+
+Port-only, not native (SRO_INVENTORY_SORT): one tick of a
+container sort. Returns true when the sort ended, so the view republishes.
+================
+	*/
+	function stepInventorySort( now: number ): boolean {
+		const container = inventorySort.container();
+		if ( !container ) return false;
+		const state = inventory.state(), target = inventorySortTarget( container, state );
+		const { move, ended } = inventorySort.step( {
+			items: target?.items ?? [],
+			bag: target?.bag ?? { first: 0, end: 0 },
+			pending: state.inventoryPending,
+			error: state.error,
+			locked: !target || !live || inventory.interactionWindowOpen() || inventory.tradePinned()
+		} );
+		if ( !move ) return ended;
+		try {
+			if ( container === "bag" ) inventory.move( move.source, move.destination, move.quantity, now );
+			else if ( container === "storage" ) {
+				inventory.storageMove(
+					storage.state()!,
+					{ type: STORAGE_MOVE_ROOM, ...move, gold: 0 },
+					now,
+					cosItemCaps
+				);
+			} else {
+				const record = cosRecords.get( inventorySort.gid() )!;
+				const item = record.inventory?.find( row => row.slot === move.source );
+				// A specialty good stays where it is inside a non-transport
+				// companion (the cos-inventory-move command's own refusal);
+				// the sort cannot place it.
+				if ( item && cosSpecialtyMoveRefused( item.typeFlags, record.band ) ) throw Error( "Specialty good" );
+				inventory.cosMove( cosContainerRequest( record, move.source, move.destination, move.quantity ), now );
+			}
+		} catch {
+			// The container refused to compose the request (a slot it no
+			// longer holds): nothing was sent, so the sort ends here.
+			inventorySort.cancel();
+			return true;
+		}
+		return false;
+	}
+	/*
+================
+inventorySortTarget
+
+The rows and slot range a sort of this container reads, or null when the
+container is gone: the warehouse closed, or the companion dead, dismissed
+or no longer the player's (the cos-inventory-move authority).
+================
+	*/
+	function inventorySortTarget(
+		container: InventorySortContainer,
+		state: ReturnType<typeof inventory.state>
+	): { readonly items: readonly InventoryItem[]; readonly bag: InventorySortBag; } | null {
+		if ( container === "bag" ) {
+			return {
+				items: state.inventory,
+				bag: { first: state.equipmentSlotCount ?? 13, end: state.inventorySlotCount ?? 0 }
+			};
+		}
+		if ( container === "storage" ) {
+			const room = presentedStorage();
+			return room?.phase === "open" ? { items: room.items, bag: { first: 0, end: room.capacity } } : null;
+		}
+		const record = cosRecords.get( inventorySort.gid() ), entity = record && readEntity( record.gid );
+		if (
+			!record?.inventory || record.dead || record.hp === 0 || entity?.kind !== "cos" ||
+			entity.ownerGid !== localGid || entity.refObjId !== record.refObjId
+		) return null;
+		return { items: record.inventory.map( inventory.present ), bag: { first: 0, end: record.status } };
+	}
+	/*
+================
+checkMacroPotion
+
+Port-only, not native (#3907): one tick of the SRO Macro's character and
+pet auto-potion (sro-macro-potion.ts), while the Experimental row is on and
+the server has accepted Auto-Potion ON. A row's item is the first bag
+stack of its RefItem ID. Pet revive (row 7) uses Grass with the summoner
+slot (006921a0 / 0x803dc0); summon (row 8) uses the summoner alone.
+The attempts are quiet: the loop retries every tick, so a standing
+refusal would otherwise repeat its notice.
+================
+	*/
+	function checkMacroPotion( now: number ) {
+		const settings = sroMacro.view();
+		if ( !live || !sroMacroEnabled || !settings?.potionOn || autoPotionInputBlocked ) {
+			macroPotionQueue = emptyMacroPotionQueue();
+			return;
+		}
+		const bag = inventory.state().inventory;
+		// 006930a0 asks 00809330 → 00abd630 whether the item's buff is live.
+		const activeBuffSkills = combat.state().attachedEffects
+			.filter( effect => {
+				if ( effect.gid !== localGid ) return false;
+				if ( effect.remainingMs === undefined ) return true;
+				const elapsed = Math.max( 0, now - (effect.receivedAtMs ?? now) );
+				return effect.remainingMs - elapsed > 0;
+			} )
+			.map( effect => effect.skill );
+		const facts = { ...potionFacts, activeBuffSkills };
+		const buffSkillId = macroPotionBuffSkillId( settings.potion, bag );
+		// COS vitals never carry max HP (0x33A6); the spawn catalog and the
+		// pet-training combat profile do (native pet object +0x2c / vtable).
+		const training = petTraining.state();
+		const pet = macroPetFacts( {
+			records: [ ...cosRecords.values() ].map( record => {
+				const trained = training?.gid === record.gid ? training.stats?.maxHp : undefined;
+				const spawned = readEntity( record.gid )?.maxHp;
+				return {
+					...record,
+					maxHp: trained || spawned || 0
+				};
+			} ),
+			selectedGid: cosSelection.selected(),
+			vitals: combat.state().vitals,
+			bag,
+			summonRef: potionSlot( settings.potion, MACRO_ROW_PET_SUMMON ).item
+		} );
+		const petGid = pet.present ? macroPetLiving( [ ...cosRecords.values() ], cosSelection.selected() ) : 0;
+		macroPotionQueue = rearmMacroPotion( macroPotionQueue, now );
+		for ( const row of macroPotionQueue.ready ) {
+			const skillId = row === MACRO_ROW_BUFF_ITEM ? buffSkillId : 0;
+			if ( !macroPotionWants( settings.potion, row, facts, skillId, pet ) ) continue;
+			const slot = macroPotionBagSlot( settings.potion, row, bag );
+			if ( slot === undefined ) continue;
+			let used = false;
+			if ( row === MACRO_ROW_PET_RESURRECT ) {
+				const summonSlot = macroPotionBagSlot( settings.potion, MACRO_ROW_PET_SUMMON, bag );
+				if ( summonSlot === undefined ) continue;
+				used = useAutomaticItem( slot, now, true, {
+					records: [ ...cosRecords.values() ],
+					selectedGid: cosSelection.selected(),
+					revivalSlot: summonSlot
+				} );
+			} else if (
+				row === MACRO_ROW_PET_HP || row === MACRO_ROW_PET_HUNGER || row === MACRO_ROW_PET_CURE
+			) {
+				if ( !petGid ) continue;
+				// Aim the pet item at the living pet through its use context,
+				// as resurrect does: the pet window's selection is the
+				// player's choice, and the macro never moves it.
+				const flags = inventory.state().inventory.find( item => item.slot === slot )?.typeFlags;
+				const aimed = flags === undefined ?
+					null :
+					autoPotionTarget( flags, [ ...cosRecords.values() ], petGid );
+				if ( !aimed ) continue;
+				used = useAutomaticItem( slot, now, true, aimed );
+			} else {
+				used = useAutomaticItem( slot, now, true );
+			}
+			if ( !used ) continue;
+			macroPotionQueue = macroPotionFired( macroPotionQueue, row, now );
+			return;
+		}
 	}
 
 	let localGid = 0, revision = 0, dirty = false, protocol = 0, localCountry: number | undefined;
@@ -1711,6 +2079,7 @@ clears it when another character enters.
 	*/
 	function clearState( keepChat = false ) {
 		actionSession.clear();
+		inventorySort.cancel();
 		// The next character's report must not carry this one's bag rows.
 		inventoryJournal = [];
 		journalRows = null;
@@ -1722,8 +2091,22 @@ clears it when another character enters.
 		betaMap.clear();
 		caravanStars.clear();
 		contributorTitles.clear();
+		sroMacro.clear();
+		macroPotionQueue = emptyMacroPotionQueue();
+		macroSkillLoop = emptyMacroSkillLoop();
+		macroHuntStartedAtMs = 0;
+		macroHuntWasOn = false;
+		macroHuntLastAction = "";
+		macroHuntLastActionAtMs = 0;
 		uniqueRank.clear();
+		jobHonor.clear();
+		jobHonorTiers.clear();
+		styria.clear();
+		uniqueStatus.clear();
 		mostWanted.clear();
+		hwanLevel.clear();
+		reverseUserPoint.clear();
+		reverseFlight = 0;
 		petTraining.clear();
 		partyMatching = emptyPartyMatching();
 		partyMatchAutoSession = false;
@@ -1732,6 +2115,8 @@ clears it when another character enters.
 		entryVitals = {};
 		warnings = [ false, false ];
 		eligibility = { gm: false, pcRoomEvent: false };
+		staffRoster = [];
+		staffCapabilities = 0;
 		autoPotion = autoPotionBootstrap( {} );
 		potionFacts = { alive: false, hp: 0, mp: 0, maxHp: 0, maxMp: 0, abnormal: 0 };
 		potionTimers.fill( emptyAutoPotionTimer() );
@@ -1746,6 +2131,7 @@ clears it when another character enters.
 		tradeStars = 0;
 		tradeProgress.clear();
 		caravanHire.reset();
+		serverEvent.clear();
 		notices = [];
 		crestUploadInFlight = false;
 		guide = undefined;
@@ -1763,6 +2149,7 @@ clears it when another character enters.
 		fortressPortalUntilMs = 0;
 		musicMode = 0;
 		bindings = skillBindings( {} );
+		spiritSkills = [];
 		catalog = [];
 		castMotion.clear();
 		progression = { masteries: [] };
@@ -1897,9 +2284,8 @@ The Experimental window's gameplay rows (experimentalGameplay).
 			christmasCarols = value.christmasCarols === true;
 			highlightEventNotices = value.highlightEventNotices !== false;
 			homingProjectiles = value.homingProjectiles === true;
-			smartPetPickup = value.smartPetPickup !== false;
-			if ( !smartPetPickup ) cosPickup.spaceChanged();
 			petPickupKinds = value.petPickupKinds;
+			sroMacroEnabled = value.sroMacro === true;
 		},
 		/*
 ================
@@ -1949,6 +2335,14 @@ next 0x3AC5 status-5 row throw "Unknown academy member status" (#2876).
 			moonlitThiefSuit = (value as { moonlitThiefSuit?: unknown; } | null)?.moonlitThiefSuit === true;
 			alexandria = (value as { alexandria?: unknown; } | null)?.alexandria === true;
 			raisedGoldCaps = (value as { raisedGoldCaps?: unknown; } | null)?.raisedGoldCaps === true;
+			const publishedDepositLimit = (value as { storageGoldDepositLimit?: unknown; } | null)
+				?.storageGoldDepositLimit;
+			publishedStorageGoldDepositLimit = typeof publishedDepositLimit === "number" &&
+					Number.isInteger( publishedDepositLimit ) && publishedDepositLimit >= 1 &&
+					publishedDepositLimit <= 0xffffffff ?
+				publishedDepositLimit :
+				undefined;
+			inventorySortRule = (value as { inventorySort?: unknown; } | null)?.inventorySort === true;
 			reverseMapPoints = decodeReverseMapPoints(
 				(value as { reverseMapPoints?: unknown; } | null)?.reverseMapPoints
 			);
@@ -1986,6 +2380,9 @@ next 0x3AC5 status-5 row throw "Unknown academy member status" (#2876).
 			tradeStars = 0;
 			tradeProgress.clear();
 			caravanHire.reset();
+			// The server sends the gauge's rows at login only; a teleport's
+			// continued bootstrap keeps them, as the native window stays up.
+			if ( !continued ) serverEvent.clear();
 			notices = entryEvents.notices.map( key => ({ key, value: 0, sequence: ++noticeSequence }) );
 			feedback.bootstrap( value );
 			const b = value as {
@@ -2058,6 +2455,7 @@ next 0x3AC5 status-5 row throw "Unknown academy member status" (#2876).
 				withoutResurrection( { ...social, invitation: null } ) :
 				emptySocial( entryName );
 			bindings = skillBindings( value );
+			spiritSkills = spiritSkillList( (value as { spiritSkills?: unknown; }).spiritSkills );
 			catalog = nextCatalog;
 			castMotion.catalog( nextCatalog );
 			worldClock = undefined;
@@ -2131,7 +2529,7 @@ next 0x3AC5 status-5 row throw "Unknown academy member status" (#2876).
 			combat.clear();
 			combat.restoreCooldowns( value, nextCatalog, receivedAtMs );
 			combat.references( b.refSkillSnapshot ?? [] );
-			inventory.bootstrap( value );
+			inventory.bootstrap( value, receivedAtMs );
 			journalBagChange( receivedAtMs, INVENTORY_JOURNAL_ENTRY, NO_PAYLOAD );
 			guide = queueGuide( guide, [
 				...guideInventoryEvents(
@@ -2207,11 +2605,14 @@ Bind the admitted local actor and initialize its authoritative movement.
 		/*
 ================
 correct
+
+keepTravel is the 0x3028 position resync, which reseeds a walk in
+flight instead of ending it (movement.correct).
 ================
 		*/
-		correct( entity: EntityState, now?: number ) {
+		correct( entity: EntityState, now?: number, keepTravel = false ) {
 			if ( entity.gid !== localGid ) throw Error( "Correction references non-local entity" );
-			movement.correct( { ...entity, angle: entity.heading }, now );
+			movement.correct( { ...entity, angle: entity.heading }, now, keepTravel );
 			dirty = true;
 		},
 		/*
@@ -2229,7 +2630,8 @@ nameInputs
 				fortress,
 				attackedName: combat.nameAttack( now ),
 				localItem: inventory.nameItem(),
-				localLevel: progression.level
+				localLevel: progression.level,
+				staffRoster
 			};
 		},
 		/*
@@ -2380,16 +2782,21 @@ state here before a command can claim a native wire conversation.
 			}
 			dirty = true;
 			soundClock = now;
+			movement.holdPrediction( movementDropped() );
 			if ( command.kind === "arena-decision" ) {
 				if ( command.operation === 0 && !inventory.requestArenaState() ) return null;
-				if ( !localGid || ![ 0, 1, 2 ].includes( command.operation ) || command.id.length > 128 ) {
+				if ( !localGid || ![ 0, 1, 2, 4, 5 ].includes( command.operation ) || command.id.length > 128 ) {
 					throw Error( "Invalid arena decision" );
 				}
 				const id = new TextEncoder().encode( command.id );
 				if ( id.length > 128 ) throw Error( "Invalid arena identity" );
+				const slots = command.operation === 4 ? [ command.source, command.destination ] : [];
+				if ( slots.some( slot => !Number.isInteger( slot ) || slot < 0 || slot > 255 ) ) {
+					throw Error( "Invalid arena reward slot" );
+				}
 				return sendFrame( {
 					opcode: ARENA_DECISION_OPCODE,
-					payload: Uint8Array.of( command.operation, ...id )
+					payload: Uint8Array.of( command.operation, ...slots, ...id )
 				} );
 			}
 			if ( command.kind === "arena-dismiss" ) {
@@ -2897,7 +3304,7 @@ state here before a command can claim a native wire conversation.
 				cancelActionForMovement();
 				if ( command.kind === "ground-move" && command.departing ) sendFrame( logoutCancelRequest() );
 			}
-			if ( frozen() && [ "move", "ground-move" ].includes( command.kind ) ) return null;
+			if ( (frozen() || movementDropped()) && [ "move", "ground-move" ].includes( command.kind ) ) return null;
 			// 693392..6933bd ground click / 692d07..692d1e entity click:
 			// seated interaction requests stand and RETURNS before any
 			// goal is stored, so the click is dropped, not walked later;
@@ -3005,7 +3412,11 @@ state here before a command can claim a native wire conversation.
 				}
 				return sendFrame( academyOpenRequest() );
 			}
-			if ( command.kind === "academy-page" || command.kind === "academy-join" ) {
+			if (
+				command.kind === "academy-page" || command.kind === "academy-join" ||
+				command.kind === "academy-register" || command.kind === "academy-modify" ||
+				command.kind === "academy-delete"
+			) {
 				if ( !academy || !localGid ) throw Error( "Academy session is not initialized" );
 				const next = academyRequest( academy, command, progression.level );
 				send( next.frame );
@@ -3086,6 +3497,29 @@ state here before a command can claim a native wire conversation.
 				for ( const kind of [ 0, 1, 2 ] as const ) {
 					if ( changed[kind] ) potionTimers[kind] = { ...potionTimers[kind], active: false };
 				}
+				return frame;
+			}
+			if ( command.kind === "macro-switch" ) {
+				const macroLive = sroMacro.view();
+				// 00dade90: town / empty-potion ON refuses before 0x7554.
+				const inTown = macroRegionIsTown( movement.state().pose?.regionId ?? -1 );
+				const refuse = macroLive ?
+					macroSwitchRefuseNotice( command.macro, command.on, {
+						inTown,
+						potionHasItem: macroPotionHasRegisteredItem( macroLive.potion )
+					} ) :
+					undefined;
+				if ( refuse ) {
+					api.notice( { key: refuse, value: 0, nativeType: 5 } );
+					return null;
+				}
+				const frame = sroMacro.switchFrame( command.macro, command.on );
+				if ( frame ) send( frame );
+				return frame;
+			}
+			if ( command.kind === "macro-save" ) {
+				const frame = sroMacro.saveFrame( command.macro, command.settings );
+				if ( frame ) send( frame );
 				return frame;
 			}
 			if ( command.kind === "guide-event" ) {
@@ -3203,6 +3637,18 @@ state here before a command can claim a native wire conversation.
 				}
 				return inventory.process( processCommand, now );
 			}
+			if ( command.kind === "inventory-sort" ) {
+				if (
+					!inventorySortRule ||
+					![ "bag", "storage", "cos" ].includes( command.container ) ||
+					command.container === "cos" && !cosRecords.has( command.gid ?? 0 )
+				) throw Error( "Invalid inventory sort" );
+				inventorySort.start( command.container, command.gid );
+				return null;
+			}
+			// A player's own inventory command ends a sort: the container is
+			// theirs again, and the sort never plans around a drag in flight.
+			if ( INVENTORY_SORT_CANCELLERS.includes( command.kind ) ) inventorySort.cancel();
 			if (
 				[
 					"inventory-move",
@@ -3499,6 +3945,11 @@ state here before a command can claim a native wire conversation.
 				if ( command.kind === "social-consent" && !social.invitation ) return null;
 				if ( command.kind === "resurrection-consent" && !social.resurrection ) return null;
 				if ( command.kind === "instance-consent" && !social.instance ) return null;
+				if ( command.kind === "party-summon-answer" && !social.summonPrompt ) return null;
+				if (
+					(command.kind === "party-summon-roster" || command.kind === "party-summon") &&
+					(!social.leader || social.self !== social.leader)
+				) return null;
 				// 0x52EDD0: confirming the instance box (simple_msgbox_type 4)
 				// while dead prints UIIT_MSG_QUEST_INS_DEATH on the centre
 				// banner only and swallows the submit - the box stays open
@@ -3539,6 +3990,7 @@ state here before a command can claim a native wire conversation.
 				if ( command.kind === "social-consent" ) social = { ...social, invitation: null };
 				if ( command.kind === "resurrection-consent" ) social = withoutResurrection( social );
 				if ( command.kind === "instance-consent" ) social = withoutInstance( social );
+				if ( command.kind === "party-summon-answer" ) social = withoutSummonPrompt( social );
 				return request;
 			}
 			if ( command.kind === "skill-withdraw" || command.kind === "mastery-withdraw" ) {
@@ -3569,7 +4021,7 @@ state here before a command can claim a native wire conversation.
 					quickSlot( command.binding ) :
 					{ slot: command.slot, kind: command.skillId === 0 ? 0 : 0x49, payload: command.skillId };
 				const frame = quickSlotPacket( row );
-				if ( row.kind === 0x49 && !bindings.skills.includes( row.payload ) ) {
+				if ( row.kind === 0x49 && !castableSkill( row.payload ) ) {
 					throw Error( "Skill is not learned" );
 				}
 				const itemSlot = quickSlotItemSlot( row );
@@ -3589,7 +4041,11 @@ state here before a command can claim a native wire conversation.
 				return frame;
 			}
 			if ( command.kind === "quest-abandon" || command.kind === "quest-reward" ) {
-				quests.request( command.refId, command.kind === "quest-reward" );
+				quests.request(
+					command.refId,
+					command.kind === "quest-reward",
+					command.kind === "quest-reward" ? command.picks : undefined
+				);
 				return null;
 			}
 			if ( command.kind === "whisper-block" ) {
@@ -3943,7 +4399,9 @@ state here before a command can claim a native wire conversation.
 					targetSlot: command.targetSlot,
 					reverseChoice: command.reverseChoice,
 					reverseMapPoint: command.reverseMapPoint,
-					renameName: command.renameName
+					reversePartyGid: command.reversePartyGid,
+					renameName: command.renameName,
+					weaponKind: command.weaponKind
 				};
 				const usedSlot = command.slot;
 				const usedItem = inventory.state().inventory.find( row => row.slot === usedSlot );
@@ -3986,6 +4444,16 @@ state here before a command can claim a native wire conversation.
 				// Port-only (#1689): the scroll's use went out; its answer
 				// is the one 0xB5BD the refusal chain reads as its lines.
 				if ( sent && command.renameName !== undefined ) renameUseInFlight = true;
+				// Later-native (#3903): the party/user/enroll use's answer
+				// reads the same way (reverse-user-point.ts).
+				if (
+					sent && command.reverseChoice !== undefined &&
+					command.reverseChoice >= REVERSE_RETURN_PARTY
+				) reverseFlight = command.reverseChoice;
+				// Port-only: the weapon switch scroll's refusal bytes likewise.
+				if ( sent && command.weaponKind !== undefined ) weaponSwitchUseInFlight = true;
+				// Port-only: the race switch scrolls' refusal bytes likewise.
+				if ( sent && usedItem ) raceSwitchUseInFlight = raceSwitchKindOf( usedItem.codename );
 				return sent;
 			}
 			if ( command.kind === "crest-register" ) {
@@ -4052,7 +4520,7 @@ state here before a command can claim a native wire conversation.
 			}
 			if ( command.kind === "skill" ) {
 				const skillId = command.skillId;
-				if ( !bindings.skills.includes( command.skillId ) ) throw Error( "Skill is not learned" );
+				if ( !castableSkill( command.skillId ) ) throw Error( "Skill is not learned" );
 				const metadata = catalog.find( row => row.id === skillId );
 				// skill-queue.ts: never send a press the server would refuse for
 				// its cooldown; hold one that is nearly ready, deny the rest.
@@ -4288,6 +4756,24 @@ references
 				);
 			}
 		},
+		/*
+================
+skillRecall
+
+Port-only: a skill reset scroll's result (control 21). The server
+already cleared and saved the forgotten skills' quick slots; the
+bindings mirror it, and the masteries take the reset levels.
+================
+		*/
+		skillRecall( recall: import("@/engine/foundation/gameplay/skill-recall").SkillRecall ) {
+			const kept = new Set( recall.skills );
+			bindings = {
+				skills: [ ...recall.skills ],
+				quickSlots: bindings.quickSlots.filter( row => row.kind !== 0x49 || kept.has( row.payload ) )
+			};
+			progression = { ...progression, masteries: recall.masteries.map( row => ({ ...row }) ) };
+			dirty = true;
+		},
 		surface: movement.surface,
 		entityBlock: movement.entityBlock,
 		clipMovement: movement.clipMovement,
@@ -4344,6 +4830,12 @@ Packet handling must not depend on which HUD panel is currently open.
 					dirty = true;
 					return true;
 				}
+				if ( sroMacro.receive( frame ) ) {
+					const failure = sroMacro.takeNotice();
+					if ( failure ) notices = [ ...notices.slice( -99 ), { ...failure, sequence: ++noticeSequence } ];
+					dirty = true;
+					return true;
+				}
 				if ( contributorTitles.receive( frame ) ) {
 					// The login prompt raises its notice dialog (port-only 0x3FC2).
 					const prompt = contributorTitles.takePrompt();
@@ -4359,7 +4851,36 @@ Packet handling must not depend on which HUD panel is currently open.
 					dirty = true;
 					return true;
 				}
+				if ( serverEvent.receive( frame ) ) {
+					dirty = true;
+					return true;
+				}
 				if ( uniqueRank.receive( frame, uniqueRefs ) ) {
+					dirty = true;
+					return true;
+				}
+				if ( uniqueStatus.receive( frame ) ) {
+					dirty = true;
+					return true;
+				}
+				if ( jobHonor.receive( frame ) ) {
+					dirty = true;
+					return true;
+				}
+				if ( frame.opcode === SPIRIT_SKILLS_OPCODE ) {
+					spiritSkills = decodeSpiritSkills( frame.payload );
+					dirty = true;
+					return true;
+				}
+				// Port-only (#3648): the Styria Clash standing
+				// (styria.ts), under SRO_STYRIA_CLASH.
+				if ( styria.receive( frame ) ) {
+					dirty = true;
+					return true;
+				}
+				// Port-only (#3530): the tier titles' roster. Contained:
+				// a malformed roster costs the roster, never the session.
+				if ( jobHonorTiers.receiveContained( frame ) ) {
 					dirty = true;
 					return true;
 				}
@@ -4368,6 +4889,26 @@ Packet handling must not depend on which HUD panel is currently open.
 					return true;
 				}
 				if ( mostWanted.receive( frame, now ) ) {
+					dirty = true;
+					return true;
+				}
+				if ( hwanLevel.receive( frame ) ) {
+					dirty = true;
+					return true;
+				}
+				if ( reverseUserPoint.receive( frame ) ) {
+					dirty = true;
+					return true;
+				}
+				if ( frame.opcode === OP_STAFF_STATE ) {
+					const state = decodeStaffState( frame.payload );
+					eligibility = { ...eligibility, gm: state.gm };
+					staffCapabilities = state.capabilities;
+					dirty = true;
+					return true;
+				}
+				if ( frame.opcode === OP_STAFF_ROSTER ) {
+					staffRoster = decodeStaffRoster( frame.payload );
 					dirty = true;
 					return true;
 				}
@@ -4425,7 +4966,7 @@ Packet handling must not depend on which HUD panel is currently open.
 					return true;
 				}
 				if (
-					storage.receive( frame, cosItemRefs, inventory.objectRefs() ) &&
+					storage.receive( frame, cosItemRefs, inventory.objectRefs(), inventory.rentRefs() ) &&
 					frame.opcode !== NPC_INTERACTION_ACK_OPCODE
 				) {
 					dirty = true;
@@ -4547,7 +5088,7 @@ Packet handling must not depend on which HUD panel is currently open.
 					}
 				}
 				if ( academy ) {
-					const next = academyPacket( academy, frame, now );
+					const next = academyPacket( academy, frame, now, social.localName );
 					if ( next ) {
 						const statusNotice = academyStatusNotice( academy, next, frame );
 						if ( statusNotice ) {
@@ -4604,6 +5145,10 @@ Packet handling must not depend on which HUD panel is currently open.
 				if ( countUpdate ) {
 					// 770820: a refused limited use is a category-1 notice.
 					const notice = countUpdate.kind === "refused" ? constantNativeNotice( 1, countUpdate.code ) : null;
+					// A spent use starts its item's authored cooldown (the Energy of Life charge's 20 minutes).
+					if ( countUpdate.kind === "spent" ) {
+						inventory.startAuthoredCooldown( countUpdate.itemRefObjId, now );
+					}
 					if ( notice ) notices = [ ...notices.slice( -99 ), { ...notice, sequence: ++noticeSequence } ];
 					dirty = true;
 					return true;
@@ -4934,7 +5479,7 @@ Packet handling must not depend on which HUD panel is currently open.
 				// The exchange window (inventory owner) folds its frames first; its
 				// confirm, approve and cancel refusals stay the social lane's notices.
 				const exchangeWasOpen = inventory.exchangeState().open;
-				const exchangeNotice = inventory.exchangeReceive( frame );
+				const exchangeNotice = inventory.exchangeReceive( frame, localGid ?? 0 );
 				if ( exchangeNotice !== null ) {
 					dirty = true;
 					const opened = inventory.exchangeState();
@@ -4976,12 +5521,32 @@ Packet handling must not depend on which HUD panel is currently open.
 					for ( const flip of nextSocial.notices ?? [] ) {
 						notices = [ ...notices.slice( -99 ), { ...flip, sequence: ++noticeSequence } ];
 					}
+					// A party summon refusal (0xB4C6 kind 0) prints through
+					// the item-use error router's line for its code; a
+					// leader-side notice (kind 3) carries its UIIT key.
+					if ( nextSocial.summonNotice ) {
+						const key = nextSocial.summonNotice.key ??
+							partySummonRefusalKey( nextSocial.summonNotice.code ?? -1 );
+						if ( key ) {
+							notices = [ ...notices.slice( -99 ), {
+								key,
+								value: 0,
+								sequence: ++noticeSequence
+							} ];
+						}
+					}
 					if ( nextSocial.degradation && socialDegradations.length < MAX_SOCIAL_DEGRADATIONS ) {
 						socialDegradations.push( { ...nextSocial.degradation, frame } );
 					}
 					social = withMemberCountries(
-						nextSocial.notice || nextSocial.notices || nextSocial.degradation ?
-							{ ...nextSocial, notice: undefined, notices: undefined, degradation: undefined } :
+						nextSocial.notice || nextSocial.notices || nextSocial.degradation || nextSocial.summonNotice ?
+							{
+								...nextSocial,
+								notice: undefined,
+								notices: undefined,
+								degradation: undefined,
+								summonNotice: undefined
+							} :
 							nextSocial
 					);
 					// 634D30: a party that fills while the player's
@@ -5168,7 +5733,7 @@ Packet handling must not depend on which HUD panel is currently open.
 					return true;
 				}
 				if ( frame.opcode === COS_RECORD_CREATE_OPCODE ) {
-					const record = decodeCosRecord( frame.payload, cosRefs, cosItemRefs );
+					const record = decodeCosRecord( frame.payload, cosRefs, cosItemRefs, inventory.rentRefs() );
 					if ( !record ) return false;
 					if ( !cosRecords.has( record.gid ) && cosRecords.size >= 64 ) {
 						throw new Error( "COS record capacity exceeded" );
@@ -5257,12 +5822,10 @@ Packet handling must not depend on which HUD panel is currently open.
 						gid: v.getUint32( at, true ),
 						itemGid: p[1] === 8 ? v.getUint32( at + 4, true ) : undefined
 					};
-					if ( cosPickup.result( cosResult, now, smartPetPickup ) ) {
-						const record = cosRecords.get( cosResult.gid );
-						if ( record && !record.dead && record.hp && record.commandMode !== undefined ) {
-							sendWhenLive( cosBehaviorRequest( record, record.commandMode & ~0x80 ), true );
-						}
-					}
+					// Port-only, not native (owner 2026-11-21: the default, no row):
+					// a full bag pauses the refused pickup instead of the native
+					// 0x77DE3D disable request (cos-pickup.ts result).
+					cosPickup.result( cosResult, now );
 					// 74FD56..74FE15: selector 2 failures dispatch category 4
 					// (74FDEB) and clear the assist target (+0xAB2C, 74FE0B);
 					// pickup (74FDCC) and every other selector (74FD6C) dispatch
@@ -5383,7 +5946,7 @@ Packet handling must not depend on which HUD panel is currently open.
 							.getUint32( 2, true ),
 						record = cosRecords.get( gid );
 					if ( !record ) throw Error( "Absent COS ground owner" );
-					const next = cosGroundResult( record, frame.payload, cosItemRefs );
+					const next = cosGroundResult( record, frame.payload, cosItemRefs, inventory.rentRefs() );
 					if ( frame.payload[1] !== 0x11 || !cosPickup.receipt( gid ) ) {
 						inventory.cosGrounded( frame.payload );
 					}
@@ -5412,7 +5975,7 @@ Packet handling must not depend on which HUD panel is currently open.
 							.getUint32( 2, true ),
 						record = cosRecords.get( gid );
 					if ( !record ) throw Error( "Absent COS grant owner" );
-					const next = cosGrantResult( record, frame.payload, cosItemRefs );
+					const next = cosGrantResult( record, frame.payload, cosItemRefs, inventory.rentRefs() );
 					// 756CF0's print case (756EEC) is shared by ground (0) and
 					// quest (3) sources and dispatches on the destination: a
 					// grant into the pet bag (0x7A) prints with grant rules -
@@ -5543,7 +6106,11 @@ Packet handling must not depend on which HUD panel is currently open.
 							i.slot === frame.payload[1] && i.typeFlags === (frame.payload[4]! | frame.payload[5]! << 8)
 						) :
 						undefined;
-				const cast = used ? returnScrollCast( used, now, fastDenReturn ) : undefined;
+				// Later-native (#3903): an enroll's success starts no cast
+				// (nothing is spent, nobody travels), so it predicts none.
+				const cast = used && reverseFlight !== REVERSE_RETURN_ENROLL ?
+					returnScrollCast( used, now, fastDenReturn ) :
+					undefined;
 				// 755E40's codename chain: a crest delete's success raises
 				// the completion box (confirm variant, UIIT_STT_CONFIRM_BOX
 				// title, the DELETE_COMPLETE body); a crest register's
@@ -5891,21 +6458,52 @@ Packet handling must not depend on which HUD panel is currently open.
 					}
 					return true;
 				}
-				// Port-only (#1689): while the scroll's use is in flight its
-				// refusal bytes read as the scroll's own lines; any 0xB5BD
-				// answer retires the flight. All other refusals stay on
-				// the native mapper, byte-exact.
-				const renameLine =
-					renameUseInFlight && frame.opcode === ITEM_USE_RESPONSE_OPCODE && frame.payload[0] === 2 &&
-						frame.payload[1] !== undefined ?
-						nameChangeFailureText( frame.payload[1]! ) :
-						undefined;
-				if ( frame.opcode === ITEM_USE_RESPONSE_OPCODE ) renameUseInFlight = false;
-				const refusal = (renameLine ?
-					{ key: "", value: 0, text: renameLine, nativeType: 5 as const } :
+				// Port-only (#1689, and the weapon switch scroll): while a
+				// port scroll's use is in flight its refusal bytes read as
+				// that scroll's own lines; any 0xB5BD answer retires the
+				// flight. All other refusals stay on the native mapper,
+				// byte-exact.
+				const portRefusal = frame.opcode === ITEM_USE_RESPONSE_OPCODE && frame.payload[0] === 2 &&
+					frame.payload[1] !== undefined;
+				const portLine = renameUseInFlight && portRefusal ?
+					nameChangeFailureText( frame.payload[1]! ) :
+					weaponSwitchUseInFlight && portRefusal ?
+					weaponSwitchFailureText( frame.payload[1]! ) :
+					raceSwitchUseInFlight && portRefusal ?
+					raceSwitchFailureText( raceSwitchUseInFlight, frame.payload[1]! ) :
+					undefined;
+				// Later-native (#3903): a party/user/enroll flight's refusal
+				// byte names its text row; an enroll's success is the set
+				// line. Any 0xB5BD answer retires the flight.
+				const reverseKey = reverseFlight !== 0 && portRefusal ?
+					reverseReturnFailureKey( frame.payload[1]! ) :
+					undefined;
+				const reverseSet = frame.opcode === ITEM_USE_RESPONSE_OPCODE && frame.payload[0] === 1 &&
+					reverseFlight === REVERSE_RETURN_ENROLL;
+				if ( frame.opcode === ITEM_USE_RESPONSE_OPCODE ) {
+					renameUseInFlight = false;
+					weaponSwitchUseInFlight = false;
+					raceSwitchUseInFlight = null;
+					reverseFlight = 0;
+				}
+				// Port-only (#4136): a 0xB495 answer retires the noted
+				// gate level; the level refusal below reads the note.
+				const notedGateLevel = gateTravelLevel;
+				if ( frame.opcode === PORTAL_RESULT_OPCODE ) gateTravelLevel = 0;
+				const refusal = (portLine ?
+					{ key: "", value: 0, text: portLine, nativeType: 5 as const } :
 					undefined) ??
+					(reverseKey ? { key: reverseKey, value: 0, nativeType: 5 as const } : undefined) ??
+					(reverseSet ?
+						{
+							key: "UIIT_MSG_REVERSE_RETRUN_SCROLL_USER_APPOINT_SELECTION_END",
+							value: 0,
+							nativeType: 5 as const
+						} :
+						undefined) ??
 					recallAppointmentNotice( frame.opcode, frame.payload ) ??
-					targetNotice( frame.opcode, frame.payload ) ?? portalNotice( frame.opcode, frame.payload ) ??
+					targetNotice( frame.opcode, frame.payload ) ??
+					portalNotice( frame.opcode, frame.payload, notedGateLevel ) ??
 					repairNotice( frame.opcode, frame.payload ) ??
 					inventoryNotice( frame.opcode, frame.payload, localCountry, mallRequest ) ??
 					alchemyNotice( frame.opcode, frame.payload ) ??
@@ -5936,7 +6534,9 @@ Packet handling must not depend on which HUD panel is currently open.
 						)
 					);
 				}
-				if ( frame.opcode === OBJECT_SOURCE_MOVE_OPCODE ) dirty = true;
+				if ( frame.opcode === OBJECT_SOURCE_MOVE_OPCODE || frame.opcode === OBJECT_POSITION_UPDATE_OPCODE ) {
+					dirty = true;
+				}
 				if (
 					item || target || fight || frame.opcode === PORTAL_RESULT_OPCODE ||
 					frame.opcode === REBIRTH_POINT_APPOINT_RESULT_OPCODE
@@ -5975,6 +6575,19 @@ Packet handling must not depend on which HUD panel is currently open.
 		},
 		/*
 ================
+noteGateTravel
+
+Port-only, not native (#4136): the world core notes the clicked gate
+link's required level as its 0x7495 request goes out; the 0xB495
+answer reads the note (a level refusal names the level) and retires
+it. A level of 0 notes nothing.
+================
+		*/
+		noteGateTravel( level: number ) {
+			gateTravelLevel = level;
+		},
+		/*
+================
 outstandingSince
 
 When the oldest request still waiting for its answer left (a movement
@@ -6009,6 +6622,7 @@ before take assembles the presentation snapshot.
 		*/
 		step( now: number, local?: EntityState ) {
 			inventorySince = inventory.state().inventoryPending ? inventorySince ?? now : undefined;
+			movement.holdPrediction( movementDropped() );
 			if ( arrowKeys.step( now, arrowMover( local ), arrowGate( now, local ) === "open" ) ) {
 				pickup.clear();
 				selectionDecal = null;
@@ -6079,7 +6693,6 @@ before take assembles the presentation snapshot.
 					records: cosRecords.values(),
 					sharedOwners,
 					read: readEntity,
-					smartPetPickup,
 					pickupKinds: petPickupKinds
 				} )
 			) {
@@ -6195,6 +6808,11 @@ before take assembles the presentation snapshot.
 				dirty = true;
 			}
 			for ( const kind of [ 0, 1, 2 ] as const ) checkAutomaticPotion( kind, now, "timer" );
+			checkMacroPotion( now );
+			// Hunt selects (and survives) before the skill tick so a new
+			// target is visible to Auto-Skills on the same frame.
+			checkMacroHunt( now, local );
+			checkMacroSkill( now, local );
 
 			// A predicted attack chase follows its target: while the target
 			// moves, the leg re-aims at its new boundary, as the server's
@@ -6242,10 +6860,12 @@ before take assembles the presentation snapshot.
 				) || now - runUpSince > 4 * skillPress.oneWayMs() + SKILL_ANSWER_SLACK_MS)
 			) movement.endPrediction( now );
 			const combatChanged = combat.step( now ), inventoryStepped = inventory.step( now );
+			const sortEnded = stepInventorySort( now );
 			journalClock = now;
 			journalBagChange( now, INVENTORY_JOURNAL_LOCAL, NO_PAYLOAD );
 			const trained = training.step( now ), moved = movement.step( now ), targeted = targeting.step( now );
-			dirty = combatChanged || inventoryStepped || trained || chat.step( now ) || moved || targeted || dirty;
+			dirty = combatChanged || inventoryStepped || sortEnded || trained || chat.step( now ) || moved ||
+				targeted || dirty;
 		},
 		/*
 ================
@@ -6264,9 +6884,14 @@ die
 		},
 		takeDisplacements: combat.takeDisplacements,
 		takeCancellations: combat.takeCancellations,
-		// The inventory and social lanes' skipped cosmetic steps, for the
-		// world's degraded reports (core takeDegradations drains both owners).
-		takeDegradations: () => [ ...inventory.takeDegradations(), ...socialDegradations.splice( 0 ) ],
+		// The inventory, social and tier-roster lanes' skipped cosmetic
+		// steps, for the world's degraded reports (core takeDegradations
+		// drains every owner).
+		takeDegradations: () => [
+			...inventory.takeDegradations(),
+			...jobHonorTiers.takeDegradations(),
+			...socialDegradations.splice( 0 )
+		],
 		/*
 ================
 cancelCast
@@ -6275,22 +6900,6 @@ cancelCast
 		cancelCast( token: number, now: number ) {
 			movement.cancelCast( token, now );
 			dirty = true;
-		},
-		// The local player's live pose is owned by movement, not by its entity
-		// row (which only follows displacements). Clipping a local dash from
-		// the entity row sent Ghost Walk back toward a stale position.
-		/*
-================
-constrainDisplacement
-================
-		*/
-		constrainDisplacement(
-			command: import("@/engine/contracts/gameplay").CastDisplacement,
-			entityPose: import("@/engine/contracts/gameplay").Pose,
-			now: number
-		) {
-			const from = command.gid === localGid ? movement.current( now ) ?? entityPose : entityPose;
-			return movement.constrainDisplacement( command, from, command.gid === localGid, now );
 		},
 		guidedArrival: combat.guidedArrival,
 		/*
@@ -6371,6 +6980,8 @@ The published plane when something changed since the last take, else null.
 				...(caravanHire.state() ? { caravanHire: caravanHire.state()! } : {}),
 				...(caravanHire.lead() ? { caravanLead: caravanHire.lead()! } : {}),
 				...(caravanHire.hireNpc() ? { caravanHireNpc: caravanHire.hireNpc()! } : {}),
+				// The v1.696 Server Mission gauge 0x34F2 sets (server-event.ts).
+				...(serverEvent.state() ? { serverEventGauge: serverEvent.state()! } : {}),
 				eligibility,
 				...(gmCatalogPending && gmCatalog ? { gmCatalog } : {}),
 				autoPotion,
@@ -6394,10 +7005,16 @@ The published plane when something changed since the last take, else null.
 				...(moonlitThiefSuit ? { moonlitThiefSuit } : {}),
 				...(alexandria ? { alexandria } : {}),
 				...(raisedGoldCaps ? { raisedGoldCaps } : {}),
+				...(publishedStorageGoldDepositLimit !== undefined ?
+					{ storageGoldDepositLimit: publishedStorageGoldDepositLimit } :
+					{}),
+				...(inventorySortRule ? { inventorySort: true } : {}),
 				...(homingProjectiles ? { homingProjectiles } : {}),
 				...(reverseMapPoints.length ? { reverseMapPoints } : {}),
+				...(reverseUserPoint.point() ? { reverseUserPoint: reverseUserPoint.point()! } : {}),
 				storage: presentedStorage(),
 				playerModels: localPlayerModels(),
+				localSex: localPlayerSex(),
 				job,
 				jobRanks,
 				jobOutcome,
@@ -6407,6 +7024,7 @@ The published plane when something changed since the last take, else null.
 					reference: cosItemRefs2.get( row.itemRefObjId )!
 				}) ),
 				...bindings,
+				spiritSkills,
 				...training.state(),
 				social,
 				fortress,
@@ -6419,12 +7037,14 @@ The published plane when something changed since the last take, else null.
 				cosStatusRecords: cosSelection.statusRecords( cosRecords ),
 				cosRecords: [ ...cosRecords.values() ].map( record => {
 					const v = c.vitals.find( row => row.gid === record.gid );
+					const assistTarget = petAssists.get( record.gid );
 					return {
 						...record,
 						inventory: record.inventory?.map( inventory.present ),
 						hp: v?.hp ?? record.hp,
 						mp: v?.mp ?? record.mp,
-						satiety: v?.satiety ?? record.satiety
+						satiety: v?.satiety ?? record.satiety,
+						...(assistTarget ? { assistTarget } : {})
 					};
 				} ),
 				worldClock,
@@ -6446,6 +7066,7 @@ The published plane when something changed since the last take, else null.
 				moveHeld: moveReservation.holding(),
 				pickupPredictable,
 				...i,
+				inventorySorting: inventorySort.container(),
 				...(i.shop ? { shop: liveShop( i.shop ) } : {}),
 				inventoryJournal,
 				...c,
@@ -6458,8 +7079,28 @@ The published plane when something changed since the last take, else null.
 				// Port-only (#3358): the shown Contributor roster
 				// (contributor-titles.ts), under SRO_CONTRIBUTOR_TITLES.
 				contributorTitles: contributorTitles.names(),
+				// Port-only (staff-roster.ts): every staff member's tag and colours,
+				// and this character's own capability bits.
+				staffRoster,
+				staffCapabilities,
+				// Port-only (#3907): the SRO Macro settings (sro-macro.ts),
+				// under SRO_AUTO_MACRO.
+				...(sroMacro.view() ? { sroMacro: sroMacro.view() } : {}),
 				uniqueDamageRank: uniqueRank.current(),
+				jobHonor: jobHonor.current(),
+				// Port-only (#3648): the Styria Clash standing and its
+				// latched result (styria.ts), under SRO_STYRIA_CLASH.
+				styria: styria.current(),
+				styriaResult: styria.result(),
+				// Port-only (#3530): the tier titles' roster
+				// (job-honor-tiers.ts), under SRO_JOB_HONOR.
+				jobHonorTiers: jobHonorTiers.tiers(),
+				// Port-only (#3531): the Unique Status feed
+				// (unique-status.ts), under SRO_UNIQUE_STATUS.
+				uniqueStatus: uniqueStatus.current(),
 				mostWanted: mostWanted.current(),
+				hwanLevel: localGid === undefined ? undefined : hwanLevel.levelOf( localGid ) || undefined,
+				hwanLevels: hwanLevel.all(),
 				petTraining: petTraining.state(),
 				petTailwind: petTraining.tailwind(),
 				petGuidance: petTraining.guidance(),
@@ -6593,5 +7234,406 @@ dispose
 		journalBagChange( now, frame.opcode, frame.payload );
 		return handled;
 	};
+	/*
+================
+checkMacroSkill
+
+Port-only, not native (#3907): one tick of the SRO Macro's auto-skill
+loop (sro-macro-skill.ts), while the Experimental row is on and the
+server has accepted Auto-Skills ON. The pure picker advances past each
+entry; a cast goes out only when the skill is learned, off cooldown,
+not press-refused, and (for a buff) not already on the caster. Attack
+rows skip only while our own cast is running (replace gate) so a
+shield-loadout press cannot print wrong-weapon; buff rows still send
+on unknown so Grass Walk rebuffs during an attack cast. Ground-target
+and basic-attack entries are skipped. On wrong-weapon, a bound Weapon
+/ Shield bag item is equipped first (0068ede0) and the loop waits
+2000 ms instead of casting that tick. A cast arms the loop for the
+skill's action time; a skip leaves the re-arm alone so the next tick
+can look at the next entry. After one buff-list pass the attack step
+runs (native 00687520).
+================
+	*/
+	function checkMacroSkill( now: number, local: EntityState | undefined ) {
+		const settings = sroMacro.view();
+		if ( !live || !sroMacroEnabled || !settings?.skillOn || !potionFacts.alive || !local ) {
+			macroSkillLoop = emptyMacroSkillLoop();
+			return;
+		}
+		// selectionIntent: the clicked monster even before its B45A grant, as
+		// a hotbar press does (targeting.ts). state().target alone lagged the
+		// grant and left the attack step idle after a fresh click.
+		const targetGid = targeting.selectionIntent();
+		const target = targetGid ? readEntity( targetGid ) : undefined;
+		const monsterTargeted = !!target && target.kind === "monster" &&
+			target.appearanceState?.[0] !== 2;
+		const pick = pickMacroSkill(
+			macroSkillLoop,
+			{ buff: settings.buff, attack: settings.attack },
+			now,
+			monsterTargeted
+		);
+		macroSkillLoop = pick.loop;
+		if ( !("entry" in pick) ) return;
+		const skillId = pick.entry.skill;
+		if ( !castableSkill( skillId ) ) return;
+		const metadata = catalog.find( row => row.id === skillId );
+		if ( !metadata || metadata.groundTarget || metadata.basicAttack ) return;
+		if ( skillCooldown( combat.state().skillCooldowns, skillId, metadata.cooldownGroup ?? 0, now ) ) {
+			return;
+		}
+		// A rider is refused at the press with a notice; skip quietly here.
+		if ( local.mountedOn || local.movementMode === MOVEMENT_SEATED ) return;
+		// Buff list: skip when the caster already holds this buff
+		// (00686bc0 → 00abd630). Exact id, skilldata group, or replace
+		// group — a live shield must not be re-pressed every pass. An
+		// exhausted UI timer no longer counts (Grass Walk rebuff).
+		if ( pick.list === "buff" ) {
+			const mine = combat.state().attachedEffects.filter( effect => effect.gid === localGid );
+			if (
+				macroBuffAlreadyOn(
+					{
+						id: skillId,
+						group: metadata.group,
+						...(metadata.admit?.replace ? { replace: metadata.admit.replace } : {})
+					},
+					mine,
+					catalog.map( row => ({
+						id: row.id,
+						group: row.group,
+						...(row.admit?.replace ? { replace: row.admit.replace } : {})
+					}) ),
+					now
+				)
+			) {
+				return;
+			}
+		}
+		const bag = inventory.state().inventory;
+		// Only rows with a published replace descriptor feed DecideReplacement.
+		// Mapping missing ones to undefined made every attack with replace
+		// return "undecided effect" and, with the mid-cast skip below, never
+		// fire while any non-replace buff (or Grass Walk gap) was attached.
+		const replaceEffects = combat.state().attachedEffects.filter( effect => effect.gid === localGid ).map(
+			effect => catalog.find( row => row.id === effect.skill )?.admit?.replace
+		).filter( ( row ): row is NonNullable<typeof row> => !!row );
+		const casting = combat.state().casts.some(
+			cast => cast.caster === localGid && cast.cancelledAtMs === undefined
+		);
+		const admission = pressAdmission( {
+			admit: metadata.admit,
+			needsFooting: metadata.needsFooting,
+			mpCost: skillMpCost( metadata, potionFacts.maxMp )
+		}, {
+			abnormal: combat.state().vitals.find( v => v.gid === localGid )?.abnormal ?? 0,
+			hp: potionFacts.hp,
+			maxHp: potionFacts.maxHp,
+			mp: potionFacts.mp,
+			maxMp: potionFacts.maxMp,
+			body: local.appearanceState?.[2] ?? 0,
+			mounted: !!local.mountedOn,
+			seated: local.movementMode === MOVEMENT_SEATED,
+			equipped: bag,
+			effects: replaceEffects,
+			casting
+		} );
+		// Wrong weapon: try both bag binds (0068ede0). Native equips
+		// whichever weapon/shield sits in those slots — after a shield
+		// buff the primary often rests in the Shield bind and must come
+		// back from there. Each candidate is judged with an after-press
+		// check so a useless shield equip cannot clear a weaponKinds
+		// refuse and oscillate.
+		if ( admission.kind === "refuse" && macroSkillSwapHelps( admission.code ) ) {
+			for ( const swap of macroSkillSwapCandidates( settings.skillFlags, bag ) ) {
+				const after = pressAdmission( {
+					admit: metadata.admit,
+					needsFooting: metadata.needsFooting,
+					mpCost: skillMpCost( metadata, potionFacts.maxMp )
+				}, {
+					abnormal: combat.state().vitals.find( v => v.gid === localGid )?.abnormal ?? 0,
+					hp: potionFacts.hp,
+					maxHp: potionFacts.maxHp,
+					mp: potionFacts.mp,
+					maxMp: potionFacts.maxMp,
+					body: local.appearanceState?.[2] ?? 0,
+					mounted: !!local.mountedOn,
+					seated: local.movementMode === MOVEMENT_SEATED,
+					equipped: macroInventoryAfterSwap( bag, swap.source, swap.destination ),
+					effects: replaceEffects,
+					casting
+				} );
+				// Only equip when this candidate clears the wrong-weapon gate.
+				if ( after.kind === "refuse" && macroSkillSwapHelps( after.code ) ) continue;
+				try {
+					if ( !api.command( swap, now, undefined, local ) ) return;
+				} catch {
+					return;
+				}
+				// Native does not advance the list cursor on a swap
+				// (00687af5); rewind the picker's already-advanced entry.
+				const cursor = pick.list === "attack" ?
+					{ attack: Math.max( 0, macroSkillLoop.attack - 1 ) } :
+					{ buff: Math.max( 0, macroSkillLoop.buff - 1 ) };
+				macroSkillLoop = macroSkillCast( { ...macroSkillLoop, ...cursor }, now, MACRO_SKILL_SWAP_MS );
+				dirty = true;
+				return;
+			}
+			return;
+		}
+		// Refuse never casts. Attack skips only while our own cast is
+		// running (replace gate "own cast running") so a press cannot land
+		// on the shield loadout mid-swap and print wrong-weapon. Other
+		// unknowns still send — the hotbar does. Buffs always send on
+		// unknown so Grass Walk rebuffs during an attack cast.
+		if ( admission.kind === "refuse" ) return;
+		if (
+			pick.list === "attack" && admission.kind === "unknown" &&
+			admission.gate === "own cast running"
+		) return;
+		if ( pick.list === "attack" && (!targetGid || !target) ) return;
+		const command = pick.list === "attack" && targetGid ?
+			{ kind: "skill" as const, skillId, gid: targetGid } :
+			{ kind: "skill" as const, skillId };
+		try {
+			if ( !api.command( command, now, pick.list === "attack" ? target : undefined, local ) ) return;
+		} catch {
+			return;
+		}
+		macroSkillLoop = macroSkillCast( macroSkillLoop, now, metadata.actionMs ?? 0 );
+		dirty = true;
+	}
+	/*
+================
+requestMacroOff
+
+Send 0x7554 OFF for a kind that is currently on (006865e0 / 006861c0).
+================
+	*/
+	function requestMacroOff( kind: typeof MACRO_SKILL | typeof MACRO_HUNT ) {
+		const frame = sroMacro.switchFrame( kind, false );
+		if ( frame ) send( frame );
+	}
+
+	/*
+================
+macroHuntRepeats
+
+True while the same Auto-Hunt request went out less than
+MACRO_HUNT_RETRY_MS ago (port-only pacing: the native loop waits on its
+own request state, which the worker has no mirror of). Otherwise records
+this request and returns false.
+================
+	*/
+	function macroHuntRepeats( key: string, now: number ): boolean {
+		if ( key === macroHuntLastAction && now - macroHuntLastActionAtMs < MACRO_HUNT_RETRY_MS ) return true;
+		macroHuntLastAction = key;
+		macroHuntLastActionAtMs = now;
+		return false;
+	}
+
+	/*
+================
+checkMacroHunt
+
+Port-only, not native (#3907): one tick of the SRO Macro's Auto-Hunt
+(sro-macro-hunt.ts), while the Experimental row is on and the server has
+accepted Auto-Hunt ON. Survival steps (resurrect, return, repair, Energy
+of Life, berserk) run first; then pickup / nearest-monster select inside
+the configured range. Notices mirror 00dade90 / return-reason UIIT rows
+(sro-macro-notices.ts). Attack after select is the Auto-Skill tick
+(006882e0 needs skill-on).
+================
+	*/
+	function checkMacroHunt( now: number, local: EntityState | undefined ) {
+		const settings = sroMacro.view();
+		const pose = movement.state().pose;
+		const inTown = macroRegionIsTown( pose?.regionId ?? -1 );
+		// 006861c0: skill/hunt OFF in town (known non-battlefield region).
+		if ( settings && live && sroMacroEnabled ) {
+			for ( const kind of macroTownDisableKinds( settings.skillOn, settings.huntOn, inTown ) ) {
+				requestMacroOff( kind );
+				api.notice( { key: MACRO_NOTICE_TOWN_OFF, value: 0, nativeType: 5 } );
+			}
+		}
+		const huntOn = !!(live && sroMacroEnabled && settings?.huntOn);
+		if ( huntOn && !macroHuntWasOn ) macroHuntStartedAtMs = now;
+		if ( !huntOn ) {
+			macroHuntWasOn = false;
+			macroHuntStartedAtMs = 0;
+			macroHuntLastAction = "";
+			return;
+		}
+		macroHuntWasOn = true;
+		if ( !local || !settings ) return;
+
+		// 68b330: a teleport ends Auto-Hunt with TELEPORT_OFF. teleportMode is
+		// the 0x3057 state-11 latch, 1 while a teleport is under way. A region
+		// id change alone is a walk across a 192 m cell, not a teleport.
+		if ( teleportMode === 1 ) {
+			if ( !macroHuntRepeats( "teleport-off", now ) ) {
+				api.notice( { key: MACRO_NOTICE_TELEPORT_OFF, value: 0, nativeType: 5 } );
+				requestMacroOff( MACRO_HUNT );
+				dirty = true;
+			}
+			return;
+		}
+
+		const bag = inventory.state().inventory;
+		const countRef = ( ref: number ) => {
+			if ( !ref ) return 0;
+			let total = 0;
+			for ( const entry of bag ) {
+				if ( entry.slot >= BAG_FIRST_SLOT && entry.refObjId === ref ) total += entry.quantity;
+			}
+			return total;
+		};
+		const findKindSlot = ( kind: ReturnType<typeof huntItemKind> ) => {
+			for ( const entry of bag ) {
+				if ( entry.slot < BAG_FIRST_SLOT || entry.quantity <= 0 ) continue;
+				if ( huntItemKind( entry.typeFlags ) === kind ) return entry.slot;
+			}
+			return undefined;
+		};
+		const findSpiritWakeSlot = () => {
+			for ( const entry of bag ) {
+				if ( entry.slot < BAG_FIRST_SLOT || entry.quantity <= 0 ) continue;
+				if ( isSpiritItem( entry.typeFlags ) && spiritNeedsWake( entry.durability ) ) {
+					return entry.slot;
+				}
+			}
+			return undefined;
+		};
+		const hpRef = potionSlot( settings.potion, MACRO_ROW_HP ).item;
+		const mpRef = potionSlot( settings.potion, MACRO_ROW_MP ).item;
+		const targetGid = targeting.selectionIntent();
+		const target = targetGid ? readEntity( targetGid ) : undefined;
+		const targetLivingMonster = !!target && target.kind === "monster" &&
+			target.appearanceState?.[0] !== 2;
+		const reach = huntRangeReach( settings.hunt[0] ?? 0 );
+		const skipPillar = (settings.hunt[HUNT_BYTE_PILLAR] ?? 0) !== 0;
+		// 68c310 always drops summon flowers; 68c3d0 drops pillars when byte 10 is on.
+		const monsters = listMonsters().filter( monster => {
+			const code = worldReferences.monsterCodename?.( monster.refObjId ) ?? "";
+			if ( isMacroHuntNeverTarget( monster.name, code ) ) return false;
+			if ( skipPillar && isDimensionPillarTarget( monster.name, code ) ) return false;
+			return true;
+		} );
+		const nearest = pose ? nearestMonster( monsters, pose, reach ) : undefined;
+		const party = new Set( social.members.map( member => member.id ) );
+		const pickup = pose && localGid ?
+			nearestPickable(
+				listGroundItems(),
+				{ gid: localGid, regionId: pose.regionId, x: pose.x, z: pose.z },
+				party
+			) :
+			undefined;
+		const wornBroken = bag.some( entry =>
+			entry.slot < BAG_FIRST_SLOT && equipmentBroken( entry.typeFlags, entry.durability )
+		);
+		const spiritSlot = findSpiritWakeSlot();
+		// 006872d0 requires skill-on (+0x181) before the VIP walk.
+		const usageTimeEnded = !!settings.skillOn &&
+			macroUsageTimeEnded( paramJobs.state(), countJobs.state(), now );
+		const action = pickMacroHuntAction( settings.hunt, {
+			alive: potionFacts.alive,
+			startedAtMs: macroHuntStartedAtMs,
+			nowMs: now,
+			berserkGauge: feedback.gauge(),
+			potionOn: settings.potionOn,
+			hpPotionCount: countRef( hpRef ),
+			mpPotionCount: countRef( mpRef ),
+			hasReturnScroll: bag.some( e => e.slot >= BAG_FIRST_SLOT && isReturnScroll( e.typeFlags ) ),
+			hasResurrectScroll: findKindSlot( "resurrect" ) !== undefined,
+			hasRepairHammer: findKindSlot( "repair-hammer" ) !== undefined,
+			hasEnergyOfLife: findKindSlot( "energy" ) !== undefined,
+			equipmentBroken: wornBroken,
+			usageTimeEnded,
+			hasSpiritToWake: spiritSlot !== undefined,
+			targetGid,
+			targetLivingMonster,
+			nearestMonsterGid: nearest?.gid,
+			nearestPickupGid: pickup?.gid
+		} );
+
+		const announce = () => {
+			const key = macroHuntNoticeText( action );
+			if ( key ) api.notice( { key, value: 0, nativeType: 5 } );
+		};
+
+		if ( action.kind !== "none" && action.kind !== "wait-resurrect" ) {
+			const key = "gid" in action ? `${action.kind}:${action.gid}` : action.kind;
+			if ( macroHuntRepeats( key, now ) ) return;
+		}
+
+		try {
+			switch ( action.kind ) {
+				case "none":
+				case "wait-resurrect":
+					return;
+				case "resurrect-town":
+					if ( !api.command( { kind: "rebirth", choice: 1 }, now, undefined, local ) ) return;
+					announce();
+					dirty = true;
+					return;
+				case "resurrect-scroll": {
+					const slot = findKindSlot( "resurrect" );
+					if ( slot === undefined || !useAutomaticItem( slot, now, true ) ) return;
+					dirty = true;
+					return;
+				}
+				case "return-scroll": {
+					const slot = bag.find( e => e.slot >= BAG_FIRST_SLOT && isReturnScroll( e.typeFlags ) )?.slot;
+					if ( slot === undefined || !useAutomaticItem( slot, now, true ) ) return;
+					announce();
+					// 006865e0: queue hunt OFF after a return that ends the session.
+					if ( action.endHunt ) requestMacroOff( MACRO_HUNT );
+					dirty = true;
+					return;
+				}
+				case "repair-hammer": {
+					const slot = findKindSlot( "repair-hammer" );
+					if ( slot === undefined || !useAutomaticItem( slot, now, true ) ) return;
+					announce();
+					dirty = true;
+					return;
+				}
+				case "energy-of-life": {
+					const slot = findKindSlot( "energy" );
+					if ( slot === undefined || !useAutomaticItem( slot, now, true ) ) return;
+					announce();
+					dirty = true;
+					return;
+				}
+				case "spirit-use": {
+					const slot = findSpiritWakeSlot();
+					if ( slot === undefined || !useAutomaticItem( slot, now, true ) ) return;
+					dirty = true;
+					return;
+				}
+				case "berserk":
+					if ( !api.command( { kind: "berserk" }, now, undefined, local ) ) return;
+					dirty = true;
+					return;
+				case "select": {
+					const monster = readEntity( action.gid );
+					if ( !monster || !api.command( { kind: "select", gid: action.gid }, now, monster, local ) ) {
+						return;
+					}
+					dirty = true;
+					return;
+				}
+				case "pickup": {
+					const drop = readEntity( action.gid );
+					if ( !drop || !api.command( { kind: "pickup", gid: action.gid }, now, drop, local ) ) {
+						return;
+					}
+					dirty = true;
+					return;
+				}
+			}
+		} catch {
+			return;
+		}
+	}
 	return api;
 }

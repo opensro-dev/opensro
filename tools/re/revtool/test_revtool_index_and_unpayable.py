@@ -423,6 +423,21 @@ class PredicateSharingTestCase(unittest.TestCase):
         self.assertEqual(revtool.resolve_scan_symbol(self.con, "sub_401000"),
                          "sub_401000")
 
+    def test_an_anonymous_token_finds_the_function_the_seed_named(self):
+        # A disassembly line spells a call target `sub_964b60` (rizin
+        # `fcn.00964b60`) while the index holds the seed's name for it.
+        self.con.execute(
+            "INSERT INTO functions(addr,name,signature,start_byte,end_byte,start_line,"
+            "end_line) VALUES('00964b60','Seed_NamedHelper',"
+            "'void Seed_NamedHelper()',0,10,1,5)")
+        self.con.commit()
+        for token in ("sub_964b60", "fcn.00964b60", "Seed_NamedHelper"):
+            row = revtool.resolve_func(self.con, token)
+            self.assertIsNotNone(row, token)
+            self.assertEqual(row[1], "Seed_NamedHelper", token)
+        self.assertIsNone(revtool.resolve_func(self.con, "sub_964b61"))
+        self.assertIsNone(revtool.resolve_func(self.con, "sub_zz"))
+
 
 if __name__ == "__main__":
     unittest.main()

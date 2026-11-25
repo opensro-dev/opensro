@@ -40,6 +40,14 @@ export interface LoginCommand {
 	readonly divisionId?: string;
 }
 export type WorldExitCommand = { readonly kind: "exit"; };
+/** The Agent's answer to one filed bug report (worker/session/http), by operation. */
+export interface BugReportResult {
+	readonly operationId: number;
+	readonly ok: boolean;
+	/** The Agent's refusal code (UNAUTHORIZED, RATE_LIMITED, ...), when it refused. */
+	readonly code?: string;
+	readonly retryAfter?: number;
+}
 export type SessionCommand =
 	| WorldExitCommand
 	| { readonly kind: "chat-blocks"; readonly value: readonly string[]; }
@@ -83,6 +91,18 @@ export type SessionCommand =
 		readonly stack?: string;
 	}
 	| LoginCommand
+	// A composed bug report to file with the session's own credential
+	// (#4109): the parts ride to the session owner, which posts them as
+	// itself, and the answer lands in bugReportResult below.
+	| {
+		readonly kind: "bug-report";
+		readonly operationId: number;
+		readonly description: string;
+		readonly meta: string;
+		readonly diagnostics?: Blob;
+		readonly mediaField?: "clip" | "screenshot";
+		readonly media?: Blob;
+	}
 	| {
 		readonly kind: "logout";
 	}
@@ -112,11 +132,17 @@ export type SessionState = Readonly<{
 		| "disconnected";
 	revision: number;
 	characterOperation?: CharacterOperationResult;
+	/** The last filed bug report's answer, matched by operationId. */
+	bugReportResult?: BugReportResult;
 	character?: string;
 	restoringWorld?: boolean;
 	entityCount?: number;
 	crestPrefix?: number;
 	nativeServerName?: string;
+	// The shard's port-only suit-look rules as the roster published them
+	// (SRO_JOB_SUIT_HIDES_ARMOR / SRO_MOONLIT_THIEF_SUIT); absent is native.
+	jobSuitHidesArmor?: boolean;
+	moonlitThiefSuit?: boolean;
 	// A server answered that it speaks another release protocol (426): this
 	// page must be refreshed into the newer release.
 	releaseOutdated?: boolean;
@@ -177,12 +203,24 @@ export interface ServerRecord {
 	readonly nativeFarmId: number;
 	readonly isTest: boolean;
 	readonly operating: boolean;
+	// Port-only, not native (#3925): an announced shard the operator has
+	// not opened (server SRO_COMING_SOON_SHARDS). Its transportUrl is
+	// empty: it can be shown but never entered. Absent is false.
+	readonly comingSoon: boolean;
 	readonly transportUrl: string;
 }
 // One worn or avatar item of a character-list row: native (RefItemID, plus).
 export interface CharacterItem {
 	readonly refObjId: number;
 	readonly plus: number;
+}
+// The shard's port-only suit-look rules (SRO_JOB_SUIT_HIDES_ARMOR,
+// SRO_MOONLIT_THIEF_SUIT); both false is native. The roster and the world
+// entry publish the same pair, and a character is dressed by them the
+// same way on the select dock as in the world (#4128).
+export interface SuitRuleFlags {
+	readonly jobSuitHidesArmor: boolean;
+	readonly moonlitThiefSuit: boolean;
 }
 export interface CharacterRecord {
 	readonly id: number;

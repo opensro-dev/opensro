@@ -17,9 +17,12 @@ import {
 	type NameColorContext
 } from "@/engine/foundation/gameplay/name-color";
 import { fortressActive } from "@/engine/foundation/gameplay/fortress";
+import { OP_STAFF_ROSTER } from "@/engine/foundation/gameplay/staff-roster";
 import type { EntityState, WorldEvent } from "@/engine/contracts/world";
 import { travelMode, resetTravelRegion, gateRequest, isReturnScroll } from "@/engine/foundation/gameplay/travel";
 import { commerceReferences } from "@/engine/foundation/gameplay/commerce";
+import { SKILL_RECALL_CONTROL } from "@/engine/foundation/gameplay/commerce-controls";
+import { skillRecallFrame } from "@/engine/foundation/gameplay/skill-recall";
 import {
 	capturedMonsterCos,
 	cosInteraction,
@@ -44,6 +47,7 @@ import {
 	GUILD_WAR_SEED_OPCODE,
 	ITEM_USE_RESPONSE_OPCODE,
 	MOVEMENT_SPEED_OPCODE,
+	OBJECT_POSITION_UPDATE_OPCODE,
 	OBJECT_SOURCE_CORRECTION_OPCODE,
 	OBJECT_SOURCE_MOVE_OPCODE,
 	OBJECT_STATE_REFRESH_OPCODE,
@@ -80,7 +84,9 @@ export function createWorldCore( send: ( frame: WireFrame ) => void ) {
 			( handle, at ) => entities.publish( { kind: "ui-sound", handle, at } ),
 			event => entities.publish( event ),
 			gid => entities.read( gid ),
-			( cue, at ) => entities.publish( { kind: "item-sound", cue, at } )
+			( cue, at ) => entities.publish( { kind: "item-sound", cue, at } ),
+			() => entities.monsters(),
+			() => entities.groundItems()
 		);
 	gameplay.bindReferences( {
 		country: refObjId => entities.characterCountry( refObjId ),
@@ -88,6 +94,7 @@ export function createWorldCore( send: ( frame: WireFrame ) => void ) {
 		item: refObjId => entities.itemReference( refObjId ),
 		structure: refObjId => entities.structureReference( refObjId ),
 		monster: codename => entities.monsterReference( codename ),
+		monsterCodename: refObjId => entities.monsterCodename( refObjId ),
 		npcs: () => entities.npcs()
 	} );
 
@@ -368,6 +375,10 @@ cross-owner follow-ups (name colours, displacements, cancellations).
 			for ( const row of refs ) admitCape( row.refObjId, row.typeFlags, row.tooltip?.fields.itemParam2_2a0 );
 			return;
 		}
+		if ( frame.opcode === SKILL_RECALL_CONTROL ) {
+			gameplay.skillRecall( skillRecallFrame( frame.payload ) );
+			return;
+		}
 		const region = resetTravelRegion( frame );
 		if ( region !== null ) {
 			nameTimer = undefined;
@@ -426,6 +437,10 @@ cross-owner follow-ups (name colours, displacements, cancellations).
 			frame.opcode === GUILD_WAR_SEED_OPCODE ||
 			frame.opcode === GUILD_UPDATE_PUSH_OPCODE && (frame.payload[0] === 0x19 || frame.payload[0] === 0x1c)
 		) entities.recolor( e => e.kind === "player" || e.kind === "local-player" );
+		// Port-only (staff-roster.ts): a grant or revoke recolours every player.
+		if ( frame.opcode === OP_STAFF_ROSTER ) {
+			entities.recolor( e => e.kind === "player" || e.kind === "local-player" );
+		}
 		if ( frame.opcode === MOVEMENT_SPEED_OPCODE ) {
 			const local = entities.read( localGid ),
 				effective = local?.mountedOn ? entities.read( local.mountedOn ) : local;
@@ -467,18 +482,21 @@ cross-owner follow-ups (name colours, displacements, cancellations).
 		for ( const displacement of gameplay.takeDisplacements() ) {
 			const entity = entities.read( displacement.gid );
 			if ( !entity ) continue;
-			const resolved = gameplay.constrainDisplacement( displacement, {
-				regionId: entity.regionId,
-				x: entity.x,
-				y: entity.y,
-				z: entity.z,
-				angle: entity.heading
-			}, now );
-			entities.displace( resolved, now );
-			const localArrival = gameplay.displace( resolved, now );
-			if ( resolved.kind === 8 ) {
-				const arrival = localArrival ?? entities.castArrival( resolved.token );
-				if ( arrival !== undefined ) gameplay.guidedArrival( resolved.token, arrival );
+			// The published destination is authoritative: the server resolved
+			// it against its own navigation and already seats the actor
+			// there. Re-clipping it on the client navigation substituted a
+			// different endpoint (stopped or slid at the first edge the two
+			// navigations disagree on) and nothing reconciled the presented
+			// rest pose with the server's position afterwards, so the next
+			// ground move snapped and a follow-up cast presented from the
+			// wrong origin (#4154). The native client's guided trajectory
+			// likewise steps toward the packet point itself. Kind 2 already
+			// landed on the published point; every kind does now.
+			entities.displace( displacement, now );
+			const localArrival = gameplay.displace( displacement, now );
+			if ( displacement.kind === 8 ) {
+				const arrival = localArrival ?? entities.castArrival( displacement.token );
+				if ( arrival !== undefined ) gameplay.guidedArrival( displacement.token, arrival );
 			}
 		}
 		for ( const token of gameplay.takeCancellations() ) {
@@ -487,9 +505,12 @@ cross-owner follow-ups (name colours, displacements, cancellations).
 		}
 		const selectedMode = travelMode( frame, localGid, itemCooldown );
 		if ( selectedMode !== null ) loadingMode = selectedMode;
-		if ( frame.opcode === OBJECT_SOURCE_MOVE_OPCODE || frame.opcode === OBJECT_SOURCE_CORRECTION_OPCODE ) {
+		if (
+			frame.opcode === OBJECT_SOURCE_MOVE_OPCODE || frame.opcode === OBJECT_SOURCE_CORRECTION_OPCODE ||
+			frame.opcode === OBJECT_POSITION_UPDATE_OPCODE
+		) {
 			const v = viewOf( frame.payload );
-			const gid = v.getUint32( frame.opcode === OBJECT_SOURCE_MOVE_OPCODE ? 16 : 0, true ),
+			const gid = v.getUint32( frame.opcode === OBJECT_SOURCE_CORRECTION_OPCODE ? 0 : 16, true ),
 				e = entities.read( gid );
 			// 775B50 halts the named object's active mover, so a correction
 			// naming the mount the local player rides (a stunned transport,
@@ -515,7 +536,10 @@ cross-owner follow-ups (name colours, displacements, cancellations).
 							heading: mover.heading
 						} :
 						rider,
-					now
+					now,
+					// The 0x3028 resync reseeds a walk in flight; a source move or a
+					// B2F5 correction ends it.
+					frame.opcode === OBJECT_POSITION_UPDATE_OPCODE
 				);
 			}
 		}
@@ -602,6 +626,11 @@ UI and quickslot commands. A skill aims at the newest selection intent
 				if ( !entities.read( command.gid ) ) throw Error( "Travel source is not admitted" );
 				loadingMode = 2;
 				send( frame );
+				// Port-only, not native (#4136): note the clicked link's
+				// required level for the refusal that may answer it.
+				if ( command.kind === "travel-gate" && command.type === 2 ) {
+					gameplay.noteGateTravel( command.minLevel ?? 0 );
+				}
 				return;
 			}
 			// The worker chooses the shortcut's item: its table already holds every

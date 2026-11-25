@@ -6,10 +6,10 @@ english-text-fixes.test.mjs - retail English text defects, fixed
 A misspelled retail string is corrected in the reviewed English table
 (scripts/build/shared/englishCorrections.json), which the asset build
 applies; the hostile-guild row is drawn here from the built catalog through
-that same policy. "Fit window labels" breaks a speech board between words
-and trims the creation screen's "Unique check" caption to its plate. Off,
-it draws the original: a board broken at whichever glyph passes its width
-(CGFontTexture_UpdateExtent 7824F0).
+that same policy. Port-only, not native (owner 2026-11-21: the default, no
+row): a speech board breaks between words, where the original breaks at
+whichever glyph passes its width (CGFontTexture_UpdateExtent 7824F0), and
+the creation screen's "Unique check" caption is trimmed to its plate.
 
 ===========================================================================
 */
@@ -150,40 +150,35 @@ test("the empty hostile-guild row reads corrected", () => {
 	assert.ok( !f.hasText( "<No hopstile Guild>" ) );
 });
 
-for ( const fit of [ false, true ] ) {
-	test(`a speech board breaks ${fit ? "between words" : "at the glyph past its width"}`, () => {
-		const { f, draw } = fixture( { fitWindowLabels: fit } );
-		const speaker = f.state.entities.find( e => e.gid === f.state.gameplay.localGid );
-		assert.ok( speaker, "the fixture has a local player" );
-		Object.assign( f.state.gameplay, {
-			chat: {
-				pending: false,
-				error: null,
-				lines: [ { channel: 1, name: speaker.name, text: SPEECH, outgoing: false, sequence: 1 } ]
-			}
-		} );
-		draw();
-		// The board's first row ends "human r" retail (the glyph past the
-		// width moves down) and "human" fitted ("review" moves down whole).
-		const glyphs = ( value ) => value.replaceAll( " ", "" ).length;
-		const rows = boardRows( f, speaker.gid );
-		assert.equal(
-			rows[0],
-			glyphs( fit ? "Synthetic speech board for human" : "Synthetic speech board for human r" )
-		);
-	});
-}
+test("a speech board breaks between words", () => {
+	const { f, draw } = fixture( {} );
+	const speaker = f.state.entities.find( e => e.gid === f.state.gameplay.localGid );
+	assert.ok( speaker, "the fixture has a local player" );
+	Object.assign( f.state.gameplay, {
+		chat: {
+			pending: false,
+			error: null,
+			lines: [ { channel: 1, name: speaker.name, text: SPEECH, outgoing: false, sequence: 1 } ]
+		}
+	} );
+	draw();
+	// The board's first row ends "human" ("review" moves down whole);
+	// retail ends it "human r", the glyph past the width moving down.
+	const glyphs = ( value ) => value.replaceAll( " ", "" ).length;
+	const rows = boardRows( f, speaker.gid );
+	assert.equal( rows[0], glyphs( "Synthetic speech board for human" ) );
+});
 
 /*
 ================
 creationCaptions
 
 The Europe creation window drawn once from the published layout, font and
-text: the semantic button labels and the drawn glyph count (a run quad
+text: the name-check button and the glyphs drawn on its plate (a run quad
 carries its glyphs).
 ================
 */
-function creationCaptions( fitLabels ) {
+function creationCaptions() {
 	const layout = readPublishedAssetJsonSync( "/assets/cif/layouts/pscharactercreate_europe.json" ),
 		font = decodeUiFont( readPublishedAssetJsonSync( "/assets/fonts/native-ui-font-atlas.json" ) ),
 		catalog = readPublishedAssetJsonSync( "/assets/text/textuisystem.en.json" ).entries;
@@ -194,25 +189,24 @@ function creationCaptions( fitLabels ) {
 	const output = drawCreation( layout, font, catalog, defined( owner.snapshot() ), input, {
 		w: 1024,
 		h: 768,
-		interactive: true,
-		fitLabels
+		interactive: true
 	} );
-	const check = output.controls.find( control => control.id === "create:check" );
+	const check = defined( output.controls.find( control => control.id === "create:check" ) );
+	const [x, y, w, h] = check.rect;
 	owner.dispose();
 	return {
 		check,
-		glyphs: output.quads.filter( q => q.texture === font.image ).reduce(
-			( n, q ) => n + (q.run?.glyphs.length ?? 1),
-			0
-		)
+		glyphs: output.quads.filter( q =>
+			q.texture === font.image && q.rect[0] < x + w && q.rect[0] + q.rect[2] > x && q.rect[1] < y + h &&
+			q.rect[1] + q.rect[3] > y
+		).reduce( ( n, q ) => n + (q.run?.glyphs.length ?? 1), 0 )
 	};
 }
 
-test("the creation name-check caption fits its plate only under Fit window labels", () => {
-	const retail = creationCaptions( false ), fitted = creationCaptions( true );
-	// The control keeps the full caption for assistive tech either way.
-	assert.equal( retail.check?.label, "Unique check" );
-	assert.equal( fitted.check?.label, "Unique check" );
-	// " check" (its space is a glyph too) is dropped from the drawn caption.
-	assert.equal( retail.glyphs - fitted.glyphs, " check".length );
+test("the creation name-check caption fits its plate", () => {
+	const fitted = creationCaptions();
+	// The control keeps the full caption for assistive tech.
+	assert.equal( fitted.check.label, "Unique check" );
+	// Only "Unique" is drawn on the plate; " check" is dropped.
+	assert.equal( fitted.glyphs, "Unique".length );
 });

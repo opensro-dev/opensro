@@ -37,6 +37,7 @@ const LOCK_SOURCES = [
 	"rebuildLockCli.mjs",
 	"rebuild_lock.py",
 	"sro_paths.py",
+	"checkout_root.py",
 	"lib/generatedRoot.mjs"
 ];
 const NODE_DRIVER = `

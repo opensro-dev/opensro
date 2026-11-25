@@ -631,7 +631,7 @@ func (rt *Runtime) wolfExecuteVictim(step petCombatStep, skill companion.SkillDe
 		return
 	}
 	mob := *target.monster
-	unique := mob.Rarity()&0x0f == 3 || mob.Rarity()&0x0f == 8
+	unique := mob.IsUnique()
 	threshold := companion.ExecutionThreshold(skill, level, petTargetBleeds(mob))
 	if unique || mob.CurrentHP == 0 || float64(mob.CurrentHP)*100 >= float64(mob.Ref.MaxHP)*threshold {
 		return

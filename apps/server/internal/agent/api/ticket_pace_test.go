@@ -129,3 +129,51 @@ func TestEnterWorldTicketsArePacedBeforeTheCharacterRead(t *testing.T) {
 		t.Fatalf("after a refill = %d", code)
 	}
 }
+
+/*
+================
+TestTicketOutcomesAreCountedOnce
+
+Every request the pacer decides is counted exactly once: the shard
+totals and the census observer see each mint and each refusal, per
+kind and account, while a request refused for another reason (an
+unknown character) is no ticket outcome at all.
+================
+*/
+func TestTicketOutcomesAreCountedOnce(t *testing.T) {
+	api, _ := newTestAPI(t)
+	clock := api.now()
+	api.now = func() time.Time { return clock }
+	type outcome struct {
+		account string
+		kind    TicketKind
+		minted  bool
+	}
+	seen := map[outcome]int{}
+	api.InstallTicketObserver(func(account string, kind TicketKind, minted bool) {
+		seen[outcome{account, kind, minted}]++
+	})
+	alice := authenticatedHandler(t, api, "alice")
+	postJSON(t, alice, "/character/create", createBody("CountHero"))
+
+	for range transportTicketBurst + 3 {
+		mintStatus(t, alice, "/auth/transport-token", map[string]any{})
+	}
+	if code, _, _ := mintStatus(t, alice, "/auth/enterworld-token", map[string]any{"characterName": "Nobody"}); code != http.StatusOK {
+		t.Fatalf("an unknown character = %d, want the plain refusal", code)
+	}
+	for range enterWorldTicketBurst {
+		mintStatus(t, alice, "/auth/enterworld-token", map[string]any{"characterName": "CountHero"})
+	}
+
+	want := TicketTotals{TransportMinted: transportTicketBurst, TransportPaced: 3,
+		EnterWorldMinted: enterWorldTicketBurst - 1, EnterWorldPaced: 1}
+	if got := api.TicketTotals(); got != want {
+		t.Fatalf("totals %+v, want %+v", got, want)
+	}
+	account := "alice"
+	if seen[outcome{account, TicketTransport, true}] != transportTicketBurst || seen[outcome{account, TicketTransport, false}] != 3 ||
+		seen[outcome{account, TicketEnterWorld, true}] != enterWorldTicketBurst-1 || seen[outcome{account, TicketEnterWorld, false}] != 1 {
+		t.Fatalf("observer saw %v", seen)
+	}
+}

@@ -14,6 +14,7 @@ import test from "node:test";
 const { createCharacters } = await import( "../../src/engine/runtime/renderer/characters/characters.ts" );
 const { createPortrait } = await import( "../../src/engine/runtime/renderer/characters/portrait.ts" );
 const { radians } = await import( "../../src/engine/foundation/math/angles.ts" );
+const { effectProgramModel } = await import( "../../src/engine/foundation/assets/effect-programs.ts" );
 
 /*
 ================
@@ -328,8 +329,8 @@ test("a doll wears its items' glows, never the world's skill and buff effects", 
 	// (8EAA90) -> ApplyWeaponGlow (8EA960): a rare weapon's itemrare effects
 	// draw on the inventory doll and the viewer. Buff effects stay world-only.
 	const f = fixture();
-	const glowModel = "/assets/effects/programs.json#" + encodeURIComponent( "system/system_raretype_a_step1.efp" );
-	const buffModel = "/assets/effects/programs.json#" + encodeURIComponent( "skill/buff_aura.efp" );
+	const glowModel = effectProgramModel( "system/system_raretype_a_step1.efp" );
+	const buffModel = effectProgramModel( "skill/buff_aura.efp" );
 	for ( const model of [ "body", glowModel, buffModel ] ) {
 		f.characters.borrowModel( model, f.source.model, f.source.images );
 	}
@@ -352,6 +353,56 @@ test("a doll wears its items' glows, never the world's skill and buff effects", 
 		"the doll draws it without an occlusion query"
 	);
 	assert.equal( doll?.children?.[0]?.actor.attachment?.bone, "equipment:6:EQ0:ai_end" );
+	f.preview.dispose( f.geometry, f.images );
+});
+test("a doll wears its avatar handle's own effects, never the world's skill and buff effects", () => {
+	// An avatar dress's wings are an animated worn handle (8E9DD0, the item's
+	// second handle): the dress's smoke is emitted onto the handle's actor,
+	// and the composite the native doll rebuilds (8EAA90) carries it, as it
+	// carries an equipment socket's glow (#4219).
+	const f = fixture();
+	const smokeModel = effectProgramModel( "system/avatar_devil_smoke.efp" );
+	const buffModel = effectProgramModel( "skill/buff_aura.efp" );
+	for ( const model of [ "body", "wings", smokeModel, buffModel ] ) {
+		f.characters.borrowModel( model, f.source.model, f.source.images );
+	}
+	const wing = {
+		...f.source.actor,
+		gid: 2,
+		model: "wings",
+		attachment: { gid: 1, bone: "Bip01 Spine1", offset: [ 0, 0, 0 ], basis: "compound" }
+	};
+	const smoke = {
+		...f.source.actor,
+		gid: 3,
+		model: smokeModel,
+		clip: "effect",
+		attachment: { gid: 2, bone: "Dummy_wing", root: false, offset: [ 0, 0, 0 ], basis: "bsr" },
+		deferredParticle: { offset: 0, lodHidden: false }
+	};
+	const strut = {
+		...f.source.actor,
+		gid: 4,
+		model: "body",
+		attachment: { gid: 2, bone: "Dummy_wing", root: false, offset: [ 0, 0, 0 ], basis: "bsr" }
+	};
+	const buff = {
+		...f.source.actor,
+		gid: 10,
+		model: buffModel,
+		clip: "effect",
+		attachment: { gid: 1, bone: "Bip01 Spine", root: false, offset: [ 0, 0, 0 ], basis: "bsr" }
+	};
+	f.characters.actors( [ f.source.actor, wing, smoke, strut, buff ] );
+	const doll = f.characters.portraitSource( 1, true );
+	assert.deepEqual(
+		doll?.children?.map( child => child.actor.gid ),
+		[ 2, 3 ],
+		"the wing and its smoke follow the doll; the buff and the bare strut do not"
+	);
+	const part = doll?.children?.find( child => child.actor.gid === 3 );
+	assert.equal( part?.effect, true );
+	assert.equal( part?.actor.deferredParticle, undefined, "the doll draws it without an occlusion query" );
 	f.preview.dispose( f.geometry, f.images );
 });
 test("a doll that was not drawn resumes its clock where it stopped, however long it was closed", () => {
@@ -379,7 +430,7 @@ test("a glow that appears on a long-drawn doll starts its own clock, not the dol
 	// Equipping a rare item attaches a fresh itemrare effect (ApplyWeaponGlow
 	// 8EA960). Handing it the doll's age replayed that whole age in one frame.
 	const f = fixture();
-	const glowModel = "/assets/effects/programs.json#" + encodeURIComponent( "system/system_raretype_a_step1.efp" );
+	const glowModel = effectProgramModel( "system/system_raretype_a_step1.efp" );
 	f.characters.borrowModel( glowModel, f.source.model, f.source.images );
 	/** @type {import("../../src/engine/contracts/portrait.ts").PortraitPart} */
 	const glow = {

@@ -148,7 +148,7 @@ func cloneCharacterCompanion(source *Character) *Character {
 		RuntimeOnly:   source.RuntimeOnly,
 		ModelCodename: source.ModelCodename, BroodGeneration: source.BroodGeneration,
 		NativeTeleportMode: source.NativeTeleportMode, NativeBodyStatus: source.NativeBodyStatus,
-		BattleUntilMs: source.BattleUntilMs, Job: source.Job, GMPrivilege: source.GMPrivilege,
+		BattleUntilMs: source.BattleUntilMs, Job: source.Job, GMPrivilege: source.GMPrivilege, GMCapabilities: source.GMCapabilities,
 		PublicHidden: source.PublicHidden, TransformRefObjID: source.TransformRefObjID,
 		TransformMode: source.TransformMode, TransformShape: source.TransformShape,
 		TransformEquipment: source.TransformEquipment,
@@ -334,6 +334,7 @@ func cloneCharacterFilteredFrom(source *Character, rows cloneRows, previous *Cha
 	clone.Skills = stagedChild(source.Skills, previousChild.Skills, cloneSlice)
 	clone.OffensiveSkillCooldowns = stagedChild(source.OffensiveSkillCooldowns, previousChild.OffensiveSkillCooldowns, cloneMapValue)
 	clone.SharedSkillCooldowns = stagedChild(source.SharedSkillCooldowns, previousChild.SharedSkillCooldowns, cloneMapValue)
+	clone.ReverseUserPoint = stagedChild(source.ReverseUserPoint, previousChild.ReverseUserPoint, cloneWorldPoint)
 	clone.MostWanted = stagedChild(source.MostWanted, previousChild.MostWanted, clonePointer)
 	clone.VisualFlags = stagedChild(source.VisualFlags, previousChild.VisualFlags, clonePointer)
 	clone.Mission = stagedChild(source.Mission, previousChild.Mission, cloneMissionRuntime)

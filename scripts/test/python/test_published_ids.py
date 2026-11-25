@@ -51,18 +51,70 @@ class PublishedIdsTest(unittest.TestCase):
 		self.assertEqual(held, {11})
 
 	# ================
-	# test_a_live_collision_is_kept_for_both_codes
+	# test_a_pinned_live_collision_stays_with_the_item
 	#
-	# r202 shipped five ids under a monster and a pet scroll at once; the
-	# scroll keeps its id though the monster's row is in the tree.
+	# r202 shipped five ids under a monster and a pet scroll at once, and
+	# the client keeps one object per id (#3994). The refresh settles it in
+	# the pin: the scroll a player can hold keeps the id, the monster moves
+	# into "former" and is numbered afresh, and an unsettled pin refuses.
 	# ================
-	def test_a_live_collision_is_kept_for_both_codes(self):
-		pinned = {"MOB_ARABIA_MUSTAFA": 50331, "ITEM_PRE_COS_P_TOGUIDOL_SCROLL": 50331}
-		got = published_ids.allocate(published_ids.OBJECTS, {50331}, ["ITEM_PRE_COS_P_TOGUIDOL_SCROLL"], {}, pinned)
-		self.assertEqual(got, {"ITEM_PRE_COS_P_TOGUIDOL_SCROLL": 50331})
-		# Any other kept id a row holds still refuses.
+	def test_a_pinned_live_collision_stays_with_the_item(self):
+		pin = {"format": published_ids.PIN_FORMAT, "characters": {"MOB_ARABIA_MUSTAFA": 50331, "MOB_OTHER": 50330},
+			"items": {"ITEM_PRE_COS_P_TOGUIDOL_SCROLL": 50331}}
+		settled = published_ids.settle_shared(pin)
+		self.assertEqual(settled["characters"], {"MOB_OTHER": 50330})
+		self.assertEqual(settled["former"], {"characters": {"MOB_ARABIA_MUSTAFA": [50331]}})
+		self.assertEqual(published_ids.settle_shared(settled), settled)
+		with tempfile.TemporaryDirectory() as folder:
+			path = Path(folder) / "pin.json"
+			saved = published_ids.os.environ[published_ids.PIN_VARIABLE]
+			published_ids.os.environ[published_ids.PIN_VARIABLE] = str(path)
+			try:
+				path.write_text(json.dumps(pin), encoding="utf-8")
+				with self.assertRaises(ValueError):
+					published_ids.published(published_ids.OBJECTS)
+				path.write_text(json.dumps(settled), encoding="utf-8")
+				pinned = published_ids.published(published_ids.OBJECTS)
+				self.assertEqual(pinned, {"MOB_OTHER": 50330, "ITEM_PRE_COS_P_TOGUIDOL_SCROLL": 50331})
+				self.assertEqual(published_ids.former_ids("characters"), {"MOB_ARABIA_MUSTAFA": [50331]})
+				# Whichever importer runs first, the monster never takes 50331.
+				monsters = published_ids.allocate(published_ids.OBJECTS, set(), ["MOB_ARABIA_MUSTAFA"], {}, pinned)
+				self.assertEqual(monsters, {"MOB_ARABIA_MUSTAFA": 50332})
+				scrolls = published_ids.allocate(published_ids.OBJECTS, {50332}, ["ITEM_PRE_COS_P_TOGUIDOL_SCROLL"], {},
+					pinned)
+				self.assertEqual(scrolls, {"ITEM_PRE_COS_P_TOGUIDOL_SCROLL": 50331})
+			finally:
+				published_ids.os.environ[published_ids.PIN_VARIABLE] = saved
+		# Two items under one id has no holder to prefer, so it refuses.
+		with self.assertRaises(ValueError):
+			published_ids.settle_shared({**pin, "items": {"ITEM_PRE_COS_P_TOGUIDOL_SCROLL": 50331, "ITEM_TWIN": 50331}})
+		# A kept id another row of the tree holds still refuses.
 		with self.assertRaises(ValueError):
 			published_ids.allocate(published_ids.OBJECTS, {7}, ["A"], {}, {"A": 7})
+
+	# ================
+	# test_occupied_objects_reads_every_object_table
+	#
+	# #3994: the gears stones read the item tables alone and took the fox
+	# pets' character ids. Every object table counts; the asker's own
+	# shard and the manifests do not.
+	# ================
+	def test_occupied_objects_reads_every_object_table(self):
+		with tempfile.TemporaryDirectory() as folder:
+			root = Path(folder)
+			(root / "itemdata.txt").write_text("itemdata_5000.txt\n", encoding="utf-8")
+			(root / "itemdata_5000.txt").write_text("1\t10\tITEM_A\n", encoding="utf-8")
+			(root / "characterdata_130000.txt").write_text("1\t50853\tCOS_P_FOX_001\n", encoding="utf-8")
+			(root / "teleportbuilding.txt").write_text("1\t27751\tSTORE_GATE\n", encoding="utf-8")
+			(root / "itemdata_190000.txt").write_text("1\t50854\tITEM_STONE\n", encoding="utf-8")
+			(root / "skilldata_5000.txt").write_text("1\t99\tSKILL_X\n", encoding="utf-8")
+			self.assertEqual(published_ids.occupied_objects(root, ("ITEMDATA_190000.txt",)), {10, 50853, 27751})
+			stones = published_ids.allocate(published_ids.OBJECTS, published_ids.occupied_objects(root, ("itemdata_190000.txt",)),
+				["ITEM_STONE"], {}, {})
+			self.assertEqual(stones, {"ITEM_STONE": 50854})
+			self.assertEqual(published_ids.shared_objects(root), {})
+			(root / "itemdata_190000.txt").write_text("1\t50853\tITEM_STONE\n", encoding="utf-8")
+			self.assertEqual(published_ids.shared_objects(root), {50853: ["COS_P_FOX_001", "ITEM_STONE"]})
 
 	# ================
 	# test_equipment_keeps_released_ids_across_the_roc_flag
@@ -101,6 +153,33 @@ class PublishedIdsTest(unittest.TestCase):
 				published_ids.os.environ[published_ids.PIN_VARIABLE] = saved
 
 
+	# ================
+	# test_a_built_tree_that_moved_a_released_object_is_named
+	#
+	# #4019: a summoned fox names its pet by id, so a build that numbered a
+	# pinned code afresh locked its owner out. moved_objects names the
+	# code, its pinned id and its built id; a code at its pinned id and an
+	# unpinned code are not named.
+	# ================
+	def test_a_built_tree_that_moved_a_released_object_is_named(self):
+		with tempfile.TemporaryDirectory() as folder:
+			path = Path(folder) / "pin.json"
+			path.write_text(json.dumps({"format": published_ids.PIN_FORMAT, "release": "abc", "skills": {},
+				"characters": {"COS_P_FOX_001": 51295}, "items": {"ITEM_STONE": 50853}}), encoding="utf-8")
+			root = Path(folder) / "textdata"
+			root.mkdir()
+			(root / "itemdata_10000.txt").write_text("1\t50853\tITEM_STONE\n1\t7\tITEM_NEW\n", encoding="utf-8")
+			(root / "characterdata_10000.txt").write_text("1\t51295\tCOS_P_FOX_001\n", encoding="utf-8")
+			saved = published_ids.os.environ[published_ids.PIN_VARIABLE]
+			published_ids.os.environ[published_ids.PIN_VARIABLE] = str(path)
+			try:
+				self.assertEqual(published_ids.moved_objects(root), {})
+				(root / "characterdata_10000.txt").write_text("1\t51300\tCOS_P_FOX_001\n", encoding="utf-8")
+				self.assertEqual(published_ids.moved_objects(root), {"COS_P_FOX_001": (51295, 51300)})
+			finally:
+				published_ids.os.environ[published_ids.PIN_VARIABLE] = saved
+
+
 class PinToolTest(unittest.TestCase):
 	# ================
 	# test_a_refresh_keeps_a_dropped_code_and_refuses_a_move
@@ -121,9 +200,68 @@ class PinToolTest(unittest.TestCase):
 					("items.json", "items", [{"codename": "ITEM", "id": 4}]),
 					("skills.json", "skills", [{"codename": "SKILL", "id": 3}])):
 				(Path(folder) / file).write_text(json.dumps({"release": "abc", key: rows}), encoding="utf-8")
-			document = pin_tool.build_pin(folder, {"items": {"OLD": 9}})
+			textdata = served_textdata(folder, "1\t3\tMOB\n", "1\t4\tITEM\n")
+			document = pin_tool.build_pin(folder, {"items": {"OLD": 9}}, textdata)
 		self.assertEqual(document, {"format": published_ids.PIN_FORMAT, "release": "abc",
 			"characters": {"MOB": 3}, "items": {"ITEM": 4, "OLD": 9}, "skills": {"SKILL": 3}})
+
+	# ================
+	# test_build_pin_pins_every_served_object
+	#
+	# #4019: the catalogue lists monsters only, so a pet, a gate and an
+	# unlisted item a player's records name by id were never pinned and
+	# the next full build moved them. The served textdata pins them all,
+	# a disabled row too; a code the catalogue numbers differently from
+	# the textdata refuses, and a textdata with no object tables refuses
+	# rather than pin nothing.
+	# ================
+	def test_build_pin_pins_every_served_object(self):
+		with tempfile.TemporaryDirectory() as folder:
+			for file, key, rows in (("monsters.json", "monsters", [{"codename": "MOB", "id": 3}]),
+					("items.json", "items", []), ("skills.json", "skills", [])):
+				(Path(folder) / file).write_text(json.dumps({"release": "abc", key: rows}), encoding="utf-8")
+			textdata = served_textdata(folder, "1\t3\tMOB\n1\t51295\tCOS_P_FOX_001\n0\t51296\tCOS_P_FOX_002\n",
+				"1\t50853\tITEM_STONE\n")
+			(textdata / "teleportbuilding.txt").write_text("1\t49997\tSTORE_SD_GATE1\n", encoding="utf-8")
+			document = pin_tool.build_pin(folder, {}, textdata)
+			self.assertEqual(document["characters"],
+				{"COS_P_FOX_001": 51295, "COS_P_FOX_002": 51296, "MOB": 3, "STORE_SD_GATE1": 49997})
+			self.assertEqual(document["items"], {"ITEM_STONE": 50853})
+			with self.assertRaises(ValueError):
+				pin_tool.build_pin(folder, {}, served_textdata(folder, "1\t8\tMOB\n", "1\t4\tITEM\n"))
+			with self.assertRaises(ValueError):
+				pin_tool.build_pin(folder, {}, Path(folder))
+
+	# ================
+	# test_a_refresh_settles_a_shared_id_and_keeps_the_former_map
+	#
+	# A refresh from a catalogue that still lists a monster on a scroll's
+	# id settles it, and the former map of the previous pin carries over.
+	# ================
+	def test_a_refresh_settles_a_shared_id_and_keeps_the_former_map(self):
+		with tempfile.TemporaryDirectory() as folder:
+			for file, key, rows in (("monsters.json", "monsters", [{"codename": "MOB", "id": 4}]),
+					("items.json", "items", [{"codename": "ITEM", "id": 4}]),
+					("skills.json", "skills", [])):
+				(Path(folder) / file).write_text(json.dumps({"release": "abc", key: rows}), encoding="utf-8")
+			textdata = served_textdata(folder, "1\t7\tNPC\n", "1\t8\tITEM_B\n")
+			document = pin_tool.build_pin(folder, {"former": {"characters": {"OLD_MOB": [2]}}}, textdata)
+		self.assertEqual(document["characters"], {"NPC": 7})
+		self.assertEqual(document["former"], {"characters": {"MOB": [4], "OLD_MOB": [2]}})
+
+
+# ================
+# served_textdata
+#
+# A served textdata folder under folder with one character shard and one
+# item shard holding the given rows.
+# ================
+def served_textdata(folder, characters, items):
+	root = Path(folder) / "textdata"
+	root.mkdir(exist_ok=True)
+	(root / "characterdata_10000.txt").write_text(characters, encoding="utf-8")
+	(root / "itemdata_10000.txt").write_text(items, encoding="utf-8")
+	return root
 
 
 if __name__ == "__main__":

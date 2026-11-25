@@ -23,17 +23,27 @@ import (
 ================
 TestOpenRefusesThePreviousSchemaUntilUpgraded
 
-A fresh store stamped CurrentVersion-1 fails Open with the incompatible-schema
-error; the offline upgrade validates it, commits it, and Open then succeeds.
+A fresh store stamped with the previous release's schema fails Open with
+the incompatible-schema error; the offline upgrade validates it, commits
+it, and Open then succeeds. A step that skips versions past the read
+window has its predecessor several numbers back, so the stamp is the
+newest classified version below CurrentVersion.
 ================
 */
 func TestOpenRefusesThePreviousSchemaUntilUpgraded(t *testing.T) {
-	tier.Long(t, "an authority one schema behind refuses Open until the offline upgrade commits it")
+	tier.Long(t, "an authority one release behind refuses Open until the offline upgrade commits it")
 
 	dir := t.TempDir()
 	clock := newTestClock()
 	openTest(t, dir, clock).Close()
-	rewriteDatabaseMeta(t, dir, metaKeySchemaVersion, CurrentVersion-1)
+	previous := CurrentVersion - 1
+	for previous > UpgradeFromVersion {
+		if _, ok := storeSteps[previous]; ok {
+			break
+		}
+		previous--
+	}
+	rewriteDatabaseMeta(t, dir, metaKeySchemaVersion, previous)
 
 	if s, err := Open(dir, Options{Now: clock.Now, DefaultSkills: testSkillSeeder}); err == nil {
 		s.Close()

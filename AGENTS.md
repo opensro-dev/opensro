@@ -296,6 +296,9 @@ Reporting rules:
 - A PR that relies on native behaviour lists each claim in the native-claims
   table ([CONTRIBUTING.md](.github/CONTRIBUTING.md) section 6): claim, evidence, how
   it was checked, status.
+- Every item a PR leaves open (not ported, not covered, a claim marked
+  open) names its issue, or says why it needs none. An unnamed open item
+  is how work gets forgotten (#3542).
 - Another agent may be working in the tree at the same time. Before rewriting
   a shared file (task definitions, CI, manifests), check whether it changed in
   the last few minutes and keep your edit small.

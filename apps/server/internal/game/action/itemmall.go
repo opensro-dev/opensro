@@ -14,12 +14,16 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+
+	log "github.com/sirupsen/logrus"
 	"opensro.online/server/internal/domain"
 	"opensro.online/server/internal/game/enterworld"
 	"opensro.online/server/internal/game/item/commerce"
+	"opensro.online/server/internal/game/item/gacha"
 	"opensro.online/server/internal/game/item/grounditem"
 	"opensro.online/server/internal/game/item/inventory"
 	"opensro.online/server/internal/game/item/wire"
+	"opensro.online/server/internal/game/nasrun"
 	"opensro.online/server/internal/transport"
 )
 
@@ -50,6 +54,10 @@ type mallSilkHistoryRequest struct {
 /*
 ================
 mallSilkHistoryEntry
+
+One recorded use on the wire: exactly at and charged, the key set every
+shipped client's decoder pins. The earned part of the charge stays in
+the store's split (#4133); it does not ride this frame.
 ================
 */
 type mallSilkHistoryEntry struct {
@@ -77,10 +85,14 @@ mallProjection
 type mallProjection struct {
 	Version int `json:"version"`
 	domain.MallBalance
-	Tabs   []commerce.MallTab     `json:"tabs"`
-	Offers []commerce.MallPackage `json:"offers"`
-	Items  []shopInventoryRow     `json:"items,omitempty"`
-	Error  string                 `json:"error,omitempty"`
+	// EarnedTradable tells the mall whether a purchase paid wholly
+	// from earned silk comes out tradable (#4133), so its confirm can
+	// say which way this buy lands before the player commits.
+	EarnedTradable bool                   `json:"earnedTradable"`
+	Tabs           []commerce.MallTab     `json:"tabs"`
+	Offers         []commerce.MallPackage `json:"offers"`
+	Items          []shopInventoryRow     `json:"items,omitempty"`
+	Error          string                 `json:"error,omitempty"`
 }
 
 /*
@@ -100,8 +112,55 @@ func (rt *Runtime) ConfigureMall(dir string, authority domain.MallAuthority, ext
 	if err := catalog.Hydrate(rt.deps.ItemReferences()); err != nil {
 		return err
 	}
+	rt.withholdUniqueOnlyGoods(catalog)
 	rt.mallCatalog, rt.mallAuthority = catalog, authority
 	return nil
+}
+
+/*
+================
+withholdUniqueOnlyGoods
+
+Port-only, not native (owner 2026-11-25): goods a unique kill guarantees
+or rolls come from uniques only, so the mall stops selling every package
+that holds one. While SRO_UNIQUE_POP_TICKET adds a Magic Pop card to each
+unique kill the card leaves the mall; while the Devil's Spirit lucky drops
+run (NasrunTokens, nasrun_drops.go) their two prizes leave it: every
+Spirit, both sexes and colours, and Sabakun's Jewel. The token shop keeps
+selling Spirits: its tokens are unique rewards too. Both off, the mall is
+the one the built tree carries. The wiring sets
+UniqueRules before the mall loads (wiring_gameplay.go).
+================
+*/
+func (rt *Runtime) withholdUniqueOnlyGoods(catalog *commerce.MallCatalog) {
+	refs := rt.deps.ItemReferences()
+	if refs == nil {
+		return
+	}
+	var card uint32
+	if rt.UniqueRules.PopTicket {
+		if ref, ok := refs.ItemRefByCodename(gacha.CardCodename); ok && ref != nil {
+			card = ref.RefObjID
+		}
+	}
+	spirits := rt.NasrunTokens
+	if card == 0 && !spirits {
+		return
+	}
+	removed := catalog.WithholdPackagesHolding(func(refObjID uint32) bool {
+		if card != 0 && refObjID == card {
+			return true
+		}
+		if !spirits {
+			return false
+		}
+		ref, ok := refs.ItemRefByID(refObjID)
+		return ok && ref != nil && (nasrun.IsSpirit(ref.TypeFlags()) || ref.Codename == nasrunDropJewel)
+	})
+	if removed > 0 {
+		log.Infof("mall: %d unique-only offer(s) withheld (Magic Pop card %t, Devil's Spirit %t; port-only)",
+			removed, card != 0, spirits)
+	}
 }
 
 /*
@@ -120,7 +179,7 @@ mallFrame
 ================
 */
 func (rt *Runtime) mallFrame(balance domain.MallBalance, items []shopInventoryRow) (wire.Frame, error) {
-	payload, err := json.Marshal(mallProjection{Version: 1, MallBalance: balance, Tabs: rt.mallCatalog.Tabs, Offers: rt.mallCatalog.Offers, Items: items})
+	payload, err := json.Marshal(mallProjection{Version: 1, MallBalance: balance, EarnedTradable: rt.MallEarnedTradable, Tabs: rt.mallCatalog.Tabs, Offers: rt.mallCatalog.Offers, Items: items})
 	return wire.Frame{Opcode: opMallCatalog, Payload: payload}, err
 }
 
@@ -220,11 +279,19 @@ func (rt *Runtime) HandleMallPurchase(division string, character *enterworld.Cha
 	var delivery []shopInventoryRow
 	var response []byte
 	var reference wire.Frame
-	balance, err := rt.mallAuthority.PurchaseMall(character, quote.Cost, func(rows []domain.InventoryRow) ([]domain.InventoryRow, error) {
+	balance, err := rt.mallAuthority.PurchaseMall(character, quote.Cost, func(rows []domain.InventoryRow, earnedOnly bool) ([]domain.InventoryRow, error) {
+		// The one delivery decision (#4133): what paid is stamped on
+		// the items - the earned mark records the payment, the seal
+		// carries the tradable rule. Earned silk alone paid and the
+		// rule on delivers unsealed and marked (tradable); anything
+		// else lands sealed. Every door reads the outcome from the
+		// item, through the one predicate (Runtime.Tradeable) or the
+		// seal.
+		bound := !earnedOnly || !rt.MallEarnedTradable
 		bagEnd := inventory.BagEnd(character)
 		before := invItemsFromRowsWithin(rows, int64(bagEnd))
 		inv := inventory.New(before, bagEnd)
-		destinations, err := commerce.GrantPackage(inv, quote.Offer.Contents, quote.Quantity, uint16(bagEnd-inventory.EquipmentSlotEnd))
+		destinations, err := commerce.GrantPackage(inv, quote.Offer.Contents, quote.Quantity, uint16(bagEnd-inventory.EquipmentSlotEnd), commerce.GrantMarks{Bound: bound, EarnedBought: earnedOnly, NowUnix: rt.Now().Unix()})
 		if err != nil {
 			return nil, err
 		}

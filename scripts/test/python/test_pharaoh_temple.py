@@ -19,7 +19,8 @@ import tempfile
 import unittest
 from pathlib import Path
 
-import build_alexandria_variant as variant  # noqa: E402
+import variant_files as variant  # noqa: E402
+import variant_gates  # noqa: E402
 import import_vsro_alexandria as stage1  # noqa: E402
 import pharaoh_temple as temple  # noqa: E402
 from test_build_alexandria_variant import building, gate, link, table, text  # noqa: E402
@@ -58,6 +59,11 @@ class TempleSwitchTests(unittest.TestCase):
 	def test_a_value_nobody_defined_is_refused(self):
 		with self.assertRaises(ValueError):
 			temple.temple_enabled({temple.FLAG: "yes please"})
+
+	def test_the_two_teleporters_are_named_once(self):
+		# The server names the same two (pharaohtemple.TeleporterCodes).
+		self.assertEqual(temple.TELEPORTER_CODES, ("INS_TEMPLE_TELEPORT", "INS_TEMPLE_SETH_TELEPORT"))
+		self.assertFalse(set(temple.TELEPORTER_CODES) & set(temple.GATE_CODES), "a teleporter has no teleport row")
 
 
 # ================
@@ -140,7 +146,7 @@ class TempleGateTests(unittest.TestCase):
 		]
 		for at in (2, 3):
 			gates[at][5] = "-32752"
-			gates[at][variant.TELEPORT_WORLD_COLUMN] = "60"
+			gates[at][variant_gates.TELEPORT_WORLD_COLUMN] = "60"
 		vsro = {
 			"teleportdata.txt": table(gates),
 			"teleportbuilding.txt": table([
@@ -158,14 +164,14 @@ class TempleGateTests(unittest.TestCase):
 		return native, vsro
 
 	def test_the_four_gates_are_opt_in_and_named_once(self):
-		self.assertEqual(variant.TEMPLE_GATE_CODES, temple.GATE_CODES)
+		self.assertEqual(variant_gates.TEMPLE_GATE_CODES, temple.GATE_CODES)
 		self.assertEqual(len(set(temple.GATE_CODES)), 4)
-		self.assertFalse(set(temple.GATE_CODES) & set(variant.GATE_CODES), "temple gates are opt-in")
-		self.assertFalse(set(temple.GATE_CODES) & set(variant.TOMB_GATE_CODES))
+		self.assertFalse(set(temple.GATE_CODES) & set(variant_gates.GATE_CODES), "temple gates are opt-in")
+		self.assertFalse(set(temple.GATE_CODES) & set(variant_gates.TOMB_GATE_CODES))
 
 	def test_each_desert_gate_links_to_its_temple_gate_and_back_at_level_105(self):
 		native, vsro = self.tables()
-		merged, summary = variant.merge_gate_tables(
+		merged, summary = variant_gates.merge_gate_tables(
 			native, vsro, codes=self.CODES, level_cap=110, flatten=self.CODES)
 		self.assertEqual(summary["links"], 4)
 		self.assertEqual(summary["buildings"], 2, "the two walk-in gates have no object")
@@ -173,12 +179,51 @@ class TempleGateTests(unittest.TestCase):
 		self.assertEqual([(r[1], r[2]) for r in links], [("171", "173"), ("172", "174"), ("173", "171"), ("174", "172")])
 		self.assertTrue(all(r[6:9] == ["1", "105", "999"] for r in links))
 
+	def teleporter_tables(self):
+		native, vsro = self.tables()
+		rows = list(stage1.table_rows(vsro["teleportbuilding.txt"]))
+		rows += [building("27760", "INS_TEMPLE_TELEPORT", "SN_INS_TEMPLE_TELEPORT"),
+			building("27759", "INS_TEMPLE_SETH_TELEPORT", "SN_INS_TEMPLE_SETH_TELEPORT")]
+		vsro["teleportbuilding.txt"] = table(rows)
+		texts = list(stage1.table_rows(vsro["text"]))
+		texts += [text("SN_INS_TEMPLE_TELEPORT", "k", "t", "s", "j", "Temple gate"),
+			text("SN_INS_TEMPLE_SETH_TELEPORT", "k", "t", "s", "j", "Seth gate")]
+		vsro["text"] = table(texts)
+		return native, vsro
+
+	def test_the_sanctum_teleporters_ride_in_by_code_with_their_names(self):
+		native, vsro = self.teleporter_tables()
+		merged, summary = variant_gates.merge_gate_tables(
+			native, vsro, codes=self.CODES, level_cap=110, flatten=self.CODES, buildings=temple.TELEPORTER_CODES)
+		self.assertEqual(summary["buildings"], 4)
+		codes = {r[2]: r for r in stage1.table_rows(merged["teleportbuilding.txt"])}
+		for code in temple.TELEPORTER_CODES:
+			self.assertIn(code, codes)
+		names = {r[1] for r in stage1.table_rows(merged["text"])}
+		self.assertTrue({"SN_INS_TEMPLE_TELEPORT", "SN_INS_TEMPLE_SETH_TELEPORT"} <= names)
+		# No teleport row names a teleporter: the server places them.
+		pointed = {r[3] for r in stage1.table_rows(merged["teleportdata.txt"])}
+		self.assertFalse({codes[code][1] for code in temple.TELEPORTER_CODES} & pointed)
+
+	def test_without_the_teleporters_the_merge_is_unchanged(self):
+		native, vsro = self.teleporter_tables()
+		merged, summary = variant_gates.merge_gate_tables(
+			native, vsro, codes=self.CODES, level_cap=110, flatten=self.CODES)
+		self.assertEqual(summary["buildings"], 2)
+		self.assertFalse({r[2] for r in stage1.table_rows(merged["teleportbuilding.txt"])} & set(temple.TELEPORTER_CODES))
+
+	def test_a_teleporter_the_source_lacks_is_refused(self):
+		native, vsro = self.tables()
+		with self.assertRaises(SystemExit):
+			variant_gates.merge_gate_tables(
+				native, vsro, codes=self.CODES, level_cap=110, flatten=self.CODES, buildings=temple.TELEPORTER_CODES)
+
 	def test_the_world_column_is_flattened_to_the_persistent_world(self):
 		native, vsro = self.tables()
-		merged, summary = variant.merge_gate_tables(
+		merged, summary = variant_gates.merge_gate_tables(
 			native, vsro, codes=self.CODES, level_cap=110, flatten=self.CODES)
 		added = {r[2]: r for r in stage1.table_rows(merged["teleportdata.txt"]) if r[1] in {"171", "172", "173", "174"}}
-		self.assertEqual({code: row[variant.TELEPORT_WORLD_COLUMN] for code, row in added.items()},
+		self.assertEqual({code: row[variant_gates.TELEPORT_WORLD_COLUMN] for code, row in added.items()},
 			{code: "1" for code in self.CODES})
 		self.assertEqual(summary["worldsFlattened"], list(self.CODES))
 		# The destination region survives: the Temple's dungeon region 0x8010.
@@ -186,16 +231,82 @@ class TempleGateTests(unittest.TestCase):
 
 	def test_a_gate_not_named_in_flatten_keeps_its_authored_world(self):
 		native, vsro = self.tables()
-		merged, summary = variant.merge_gate_tables(native, vsro, codes=self.CODES, level_cap=110)
+		merged, summary = variant_gates.merge_gate_tables(native, vsro, codes=self.CODES, level_cap=110)
 		added = {r[2]: r for r in stage1.table_rows(merged["teleportdata.txt"]) if r[1] == "173"}
-		self.assertEqual(added["GATE_TEMPLE_MERCHANT_HUNTER_GATE"][variant.TELEPORT_WORLD_COLUMN], "60")
+		self.assertEqual(added["GATE_TEMPLE_MERCHANT_HUNTER_GATE"][variant_gates.TELEPORT_WORLD_COLUMN], "60")
 		self.assertNotIn("worldsFlattened", summary)
 
 	def test_the_native_cap_clamps_the_entry_level_like_every_other_gate(self):
 		native, vsro = self.tables()
-		merged, _ = variant.merge_gate_tables(native, vsro, codes=self.CODES, level_cap=90, flatten=self.CODES)
+		merged, _ = variant_gates.merge_gate_tables(native, vsro, codes=self.CODES, level_cap=90, flatten=self.CODES)
 		first = next(r for r in stage1.table_rows(merged["teleportlink.txt"]) if r[1:3] == ["171", "173"])
 		self.assertEqual(first[6:9], ["1", "90", "999"])
+
+
+# ================
+# AddGatesTempleTests
+# ================
+class AddGatesTempleTests(unittest.TestCase):
+	"""variant_gates.add_gates with the temple on and off.
+
+	The gate step itself must name the sanctum teleporters: through the merge
+	alone a variant build added neither teleporter while the gate tests stayed
+	green (7712aa385 dropped the buildings argument when main's add_gates move
+	took the file over). The fixture's baseline gates are named out so the
+	temple codes are the only ones in play (the AddGatesTests pattern).
+	"""
+
+	def run_add_gates(self, flag):
+		native_tables, vsro_tables = TempleGateTests().teleporter_tables()
+		vsro_files = {
+			variant.TEXTDATA + "teleportdata.txt": vsro_tables["teleportdata.txt"],
+			variant.TEXTDATA + "teleportbuilding.txt": vsro_tables["teleportbuilding.txt"],
+			variant.TEXTDATA + "teleportlink.txt": vsro_tables["teleportlink.txt"],
+			variant.TEXTDATA + "textdata_object.txt": vsro_tables["text"]
+		}
+		saved_read, saved_codes = variant_gates.read_vsro_file, variant_gates.GATE_CODES
+		saved_env = {
+			name: variant.os.environ.get(name)
+			for name in (temple.FLAG, variant_gates.LEVEL_CAP_FLAG, "SRO_PHARAOH_TOMB")
+		}
+		variant.os.environ[temple.FLAG] = flag
+		variant.os.environ[variant_gates.LEVEL_CAP_FLAG] = "110"
+		variant.os.environ.pop("SRO_PHARAOH_TOMB", None)
+		with tempfile.TemporaryDirectory() as scratch:
+			native, out = Path(scratch) / "native", Path(scratch) / "out"
+			textdata = native / "Media_extracted" / variant.TEXTDATA
+			textdata.mkdir(parents=True)
+			for name in ("teleportdata.txt", "teleportbuilding.txt", "teleportlink.txt"):
+				(textdata / name).write_bytes(native_tables[name])
+			(textdata / "textdataname.txt").write_bytes(native_tables["text"])
+			variant_gates.read_vsro_file = lambda root, archive, name: vsro_files[name]
+			variant_gates.GATE_CODES = ()
+			try:
+				summary, merged = variant_gates.add_gates(Path(scratch) / "vsro", native, out)
+				written = (out / "Media_extracted" / variant.TEXTDATA / "teleportbuilding.txt").read_bytes()
+			finally:
+				variant_gates.read_vsro_file, variant_gates.GATE_CODES = saved_read, saved_codes
+				for name, value in saved_env.items():
+					if value is None:
+						variant.os.environ.pop(name, None)
+					else:
+						variant.os.environ[name] = value
+		return summary, merged, written
+
+	def written_building_codes(self, written):
+		return {row[2] for row in stage1.table_rows(written)}
+
+	def test_temple_on_adds_both_sanctum_teleporters_through_the_step(self):
+		summary, merged, written = self.run_add_gates("on")
+		self.assertTrue(set(temple.TELEPORTER_CODES) <= set(summary["buildingCodes"]))
+		self.assertTrue(set(temple.TELEPORTER_CODES) <= self.written_building_codes(merged["teleportbuilding.txt"]))
+		self.assertTrue(set(temple.TELEPORTER_CODES) <= self.written_building_codes(written))
+		self.assertEqual(summary["gates"], list(temple.GATE_CODES))
+
+	def test_temple_off_writes_no_sanctum_teleporter(self):
+		summary, _, written = self.run_add_gates("off")
+		self.assertFalse(set(temple.TELEPORTER_CODES) & set(summary["buildingCodes"]))
+		self.assertFalse(set(temple.TELEPORTER_CODES) & self.written_building_codes(written))
 
 
 # ================

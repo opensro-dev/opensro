@@ -90,6 +90,10 @@ type RefItemRow struct {
 	Kind                       string       `json:"kind"`
 	Name                       string       `json:"name"`
 	NativeFields               NativeFields `json:"nativeFields,omitempty"`
+	// Rent names a rental kind (native _RefRentItem, #4240): an owned
+	// row of this reference carries a rent deadline leg in its item
+	// body, which the client's decoder reads only for these refs.
+	Rent bool `json:"rent,omitempty"`
 }
 
 /*
@@ -187,6 +191,9 @@ BootstrapRequest is the /mission/bootstrap request body.
 type BootstrapRequest struct {
 	DivisionID    string
 	CharacterName string
+	// hold times the build's parts when a re-entry runs it under a
+	// publication-gate hold (ReentryPackets); nil times nothing.
+	hold *simulation.HoldBreakdown
 }
 
 /*
@@ -242,6 +249,10 @@ type BootstrapResult struct {
 	NativeErrorCode     int
 	NativeError         *NativeAgentError
 	Reason              string
+	// cause is a refusal's detail for the server log (Build logs every
+	// refusal): which row or companion failed and why. It never reaches
+	// the client, whose blob views name their fields.
+	cause string
 
 	DivisionID           string
 	Character            *Character
@@ -249,7 +260,9 @@ type BootstrapResult struct {
 	EventGuideStateMask  uint32
 	RefObjSnapshot       []RefObjRow
 	RefSkillSnapshot     []SpawnSkillRow
+	SpiritSkills         []uint32
 	SkillCooldowns       []EntrySkillCooldown
+	ItemCooldowns        []EntryItemCooldown
 	RefItemSnapshot      []RefItemRow
 	MagicOptionSnapshot  []MagicOptionRow
 	AvatarMagicOptions   []AvatarMagicOptionRow
@@ -294,9 +307,17 @@ type BootstrapResult struct {
 	// JobSuitHidesArmor tells the client that trader and hunter suits hide
 	// worn armour as thief suits do (port-only, not native; false is native).
 	JobSuitHidesArmor bool
+	// QuickFuse tells the client's alchemy window to send Fuse at once and
+	// not wait out its effects (action/quickfuse.go; port-only, not native;
+	// false is native).
+	QuickFuse bool
 	// MoonlitThiefSuit tells the client to draw the level-20 thief suits as
 	// Moonlit Ash (port-only, not native; false is native).
 	MoonlitThiefSuit bool
+	// InventorySort tells the client to put a sort button on the bag, the
+	// warehouses and companion bags (port-only, not native; false is
+	// native).
+	InventorySort bool
 	// Alexandria tells the client the shard runs the Alexandria area
 	// (SRO_ALEXANDRIA, port-only, not native; false is native): the M window
 	// then uses the published wider overview and town pages.
@@ -305,6 +326,10 @@ type BootstrapResult struct {
 	// deposit dialog to raise their native caps (port-only, not native;
 	// false is native).
 	RaisedGoldCaps bool
+	// StorageGoldDepositLimit is the effective warehouse deposit cap the
+	// dialog clamps to, beside RaisedGoldCaps (action/goldcaps.go); zero
+	// omits it and the client keeps the native cap.
+	StorageGoldDepositLimit uint32
 	// UiTuning is the shard's client tuning (port-only, uituning.go); nil
 	// while every value is its default, so the blob stays as before.
 	UiTuning *UiTuning
@@ -329,48 +354,55 @@ bootstrapSuccessView
 ================
 */
 type bootstrapSuccessView struct {
-	DiagnosticSessionID       string                   `json:"diagnosticSessionId,omitempty"`
-	InventorySlotCount        uint8                    `json:"inventorySlotCount"`
-	EquipmentSlotCount        uint8                    `json:"equipmentSlotCount"`
-	SimulationProtocolVersion int                      `json:"simulationProtocolVersion"`
-	NativeResult              int                      `json:"nativeResult"`
-	ProtocolVersion           int                      `json:"protocolVersion"`
-	DivisionID                string                   `json:"divisionId"`
-	Character                 *characterSnapshotView   `json:"character"`
-	BootstrapMode             string                   `json:"bootstrapMode"`
-	AcademyMember             bool                     `json:"academyMember"`
-	EventGuideStateMask       uint32                   `json:"eventGuideStateMask"`
-	RefObjSnapshot            []RefObjRow              `json:"refObjSnapshot"`
-	RefSkillSnapshot          []SpawnSkillRow          `json:"refSkillSnapshot"`
-	SkillCooldowns            []EntrySkillCooldown     `json:"skillCooldowns"`
-	RefItemSnapshot           []RefItemRow             `json:"refItemSnapshot"`
-	MagicOptionSnapshot       []MagicOptionRow         `json:"magicOptionSnapshot,omitempty"`
-	AvatarMagicOptions        []AvatarMagicOptionRow   `json:"avatarMagicOptions,omitempty"`
-	SiegeItemForgeGroups      []SiegeItemForgeGroupRow `json:"siegeItemForgeGroups"`
-	SiegeFortressData         []SiegeFortressDataRow   `json:"siegeFortressData"`
-	SiegeStructUpgrades       []SiegeStructUpgradeRow  `json:"siegeStructureUpgrades"`
-	GameWorldData             []GameWorldDataRow       `json:"gameWorldData"`
-	AvatarItems               []EquipItemRow           `json:"avatarItems"`
-	EquipItems                []EquipItemRow           `json:"equipItems"`
-	LocalPlayerEntry          *LocalPlayerEntry        `json:"localPlayerEntry"`
-	ChatPermissions           ChatPermissions          `json:"chatPermissions"`
-	ChatMessages              []string                 `json:"chatMessages"`
-	SystemMessages            interface{}              `json:"systemMessages"`
-	Packets                   []Packet                 `json:"packets"`
-	UnlimitedItems            []uint32                 `json:"unlimitedItems,omitempty"`
-	MasteryTotalOverride      int64                    `json:"masteryTotalOverride,omitempty"`
-	LevelCap                  int64                    `json:"levelCap,omitempty"`
-	EquipmentSets             []SetPublication         `json:"equipmentSets,omitempty"`
-	StorageAutoStack          bool                     `json:"storageAutoStack,omitempty"`
-	ChatItemLinks             int64                    `json:"chatItemLinks,omitempty"`
-	FastDenReturn             bool                     `json:"fastDenReturn,omitempty"`
-	TradeTiers                bool                     `json:"tradeTiers,omitempty"`
-	Consignment               bool                     `json:"consignment,omitempty"`
-	JobSuitHidesArmor         bool                     `json:"jobSuitHidesArmor,omitempty"`
-	MoonlitThiefSuit          bool                     `json:"moonlitThiefSuit,omitempty"`
-	Alexandria                bool                     `json:"alexandria,omitempty"`
-	RaisedGoldCaps            bool                     `json:"raisedGoldCaps,omitempty"`
-	UiTuning                  *UiTuning                `json:"uiTuning,omitempty"`
+	DiagnosticSessionID       string                 `json:"diagnosticSessionId,omitempty"`
+	InventorySlotCount        uint8                  `json:"inventorySlotCount"`
+	EquipmentSlotCount        uint8                  `json:"equipmentSlotCount"`
+	SimulationProtocolVersion int                    `json:"simulationProtocolVersion"`
+	NativeResult              int                    `json:"nativeResult"`
+	ProtocolVersion           int                    `json:"protocolVersion"`
+	DivisionID                string                 `json:"divisionId"`
+	Character                 *characterSnapshotView `json:"character"`
+	BootstrapMode             string                 `json:"bootstrapMode"`
+	AcademyMember             bool                   `json:"academyMember"`
+	EventGuideStateMask       uint32                 `json:"eventGuideStateMask"`
+	RefObjSnapshot            []RefObjRow            `json:"refObjSnapshot"`
+	RefSkillSnapshot          []SpawnSkillRow        `json:"refSkillSnapshot"`
+	// SpiritSkills are the skills a worn, awake Devil's Spirit grants
+	// (port-only, SRO_NASRUN; wire.OpSpiritSkills keeps them current).
+	SpiritSkills            []uint32                 `json:"spiritSkills,omitempty"`
+	SkillCooldowns          []EntrySkillCooldown     `json:"skillCooldowns"`
+	ItemCooldowns           []EntryItemCooldown      `json:"itemCooldowns,omitempty"`
+	RefItemSnapshot         []RefItemRow             `json:"refItemSnapshot"`
+	MagicOptionSnapshot     []MagicOptionRow         `json:"magicOptionSnapshot,omitempty"`
+	AvatarMagicOptions      []AvatarMagicOptionRow   `json:"avatarMagicOptions,omitempty"`
+	SiegeItemForgeGroups    []SiegeItemForgeGroupRow `json:"siegeItemForgeGroups"`
+	SiegeFortressData       []SiegeFortressDataRow   `json:"siegeFortressData"`
+	SiegeStructUpgrades     []SiegeStructUpgradeRow  `json:"siegeStructureUpgrades"`
+	GameWorldData           []GameWorldDataRow       `json:"gameWorldData"`
+	AvatarItems             []EquipItemRow           `json:"avatarItems"`
+	EquipItems              []EquipItemRow           `json:"equipItems"`
+	LocalPlayerEntry        *LocalPlayerEntry        `json:"localPlayerEntry"`
+	ChatPermissions         ChatPermissions          `json:"chatPermissions"`
+	ChatMessages            []string                 `json:"chatMessages"`
+	SystemMessages          interface{}              `json:"systemMessages"`
+	Packets                 []Packet                 `json:"packets"`
+	UnlimitedItems          []uint32                 `json:"unlimitedItems,omitempty"`
+	MasteryTotalOverride    int64                    `json:"masteryTotalOverride,omitempty"`
+	LevelCap                int64                    `json:"levelCap,omitempty"`
+	EquipmentSets           []SetPublication         `json:"equipmentSets,omitempty"`
+	StorageAutoStack        bool                     `json:"storageAutoStack,omitempty"`
+	ChatItemLinks           int64                    `json:"chatItemLinks,omitempty"`
+	FastDenReturn           bool                     `json:"fastDenReturn,omitempty"`
+	TradeTiers              bool                     `json:"tradeTiers,omitempty"`
+	Consignment             bool                     `json:"consignment,omitempty"`
+	JobSuitHidesArmor       bool                     `json:"jobSuitHidesArmor,omitempty"`
+	QuickFuse               bool                     `json:"quickFuse,omitempty"`
+	MoonlitThiefSuit        bool                     `json:"moonlitThiefSuit,omitempty"`
+	InventorySort           bool                     `json:"inventorySort,omitempty"`
+	Alexandria              bool                     `json:"alexandria,omitempty"`
+	RaisedGoldCaps          bool                     `json:"raisedGoldCaps,omitempty"`
+	StorageGoldDepositLimit uint32                   `json:"storageGoldDepositLimit,omitempty"`
+	UiTuning                *UiTuning                `json:"uiTuning,omitempty"`
 }
 
 /*
@@ -420,47 +452,54 @@ bootstrapBlobSuccessView
 ================
 */
 type bootstrapBlobSuccessView struct {
-	DiagnosticSessionID       string                   `json:"diagnosticSessionId,omitempty"`
-	InventorySlotCount        uint8                    `json:"inventorySlotCount"`
-	EquipmentSlotCount        uint8                    `json:"equipmentSlotCount"`
-	SimulationProtocolVersion int                      `json:"simulationProtocolVersion"`
-	NativeResult              int                      `json:"nativeResult"`
-	ProtocolVersion           int                      `json:"protocolVersion"`
-	DivisionID                string                   `json:"divisionId"`
-	Character                 *browserCharacterView    `json:"character"`
-	BootstrapMode             string                   `json:"bootstrapMode"`
-	AcademyMember             bool                     `json:"academyMember"`
-	EventGuideStateMask       uint32                   `json:"eventGuideStateMask"`
-	RefObjSnapshot            []RefObjRow              `json:"refObjSnapshot"`
-	RefSkillSnapshot          []SpawnSkillRow          `json:"refSkillSnapshot"`
-	SkillCooldowns            []EntrySkillCooldown     `json:"skillCooldowns"`
-	RefItemSnapshot           []RefItemRow             `json:"refItemSnapshot"`
-	MagicOptionSnapshot       []MagicOptionRow         `json:"magicOptionSnapshot,omitempty"`
-	AvatarMagicOptions        []AvatarMagicOptionRow   `json:"avatarMagicOptions,omitempty"`
-	SiegeItemForgeGroups      []SiegeItemForgeGroupRow `json:"siegeItemForgeGroups"`
-	SiegeFortressData         []SiegeFortressDataRow   `json:"siegeFortressData"`
-	SiegeStructUpgrades       []SiegeStructUpgradeRow  `json:"siegeStructureUpgrades"`
-	GameWorldData             []GameWorldDataRow       `json:"gameWorldData"`
-	AvatarItems               []EquipItemRow           `json:"avatarItems"`
-	EquipItems                []EquipItemRow           `json:"equipItems"`
-	LocalPlayerEntry          *LocalPlayerEntry        `json:"localPlayerEntry"`
-	ChatPermissions           ChatPermissions          `json:"chatPermissions"`
-	ChatMessages              []string                 `json:"chatMessages"`
-	SystemMessages            interface{}              `json:"systemMessages"`
-	UnlimitedItems            []uint32                 `json:"unlimitedItems,omitempty"`
-	MasteryTotalOverride      int64                    `json:"masteryTotalOverride,omitempty"`
-	LevelCap                  int64                    `json:"levelCap,omitempty"`
-	EquipmentSets             []SetPublication         `json:"equipmentSets,omitempty"`
-	StorageAutoStack          bool                     `json:"storageAutoStack,omitempty"`
-	ChatItemLinks             int64                    `json:"chatItemLinks,omitempty"`
-	FastDenReturn             bool                     `json:"fastDenReturn,omitempty"`
-	TradeTiers                bool                     `json:"tradeTiers,omitempty"`
-	Consignment               bool                     `json:"consignment,omitempty"`
-	JobSuitHidesArmor         bool                     `json:"jobSuitHidesArmor,omitempty"`
-	MoonlitThiefSuit          bool                     `json:"moonlitThiefSuit,omitempty"`
-	Alexandria                bool                     `json:"alexandria,omitempty"`
-	RaisedGoldCaps            bool                     `json:"raisedGoldCaps,omitempty"`
-	UiTuning                  *UiTuning                `json:"uiTuning,omitempty"`
+	DiagnosticSessionID       string                `json:"diagnosticSessionId,omitempty"`
+	InventorySlotCount        uint8                 `json:"inventorySlotCount"`
+	EquipmentSlotCount        uint8                 `json:"equipmentSlotCount"`
+	SimulationProtocolVersion int                   `json:"simulationProtocolVersion"`
+	NativeResult              int                   `json:"nativeResult"`
+	ProtocolVersion           int                   `json:"protocolVersion"`
+	DivisionID                string                `json:"divisionId"`
+	Character                 *browserCharacterView `json:"character"`
+	BootstrapMode             string                `json:"bootstrapMode"`
+	AcademyMember             bool                  `json:"academyMember"`
+	EventGuideStateMask       uint32                `json:"eventGuideStateMask"`
+	RefObjSnapshot            []RefObjRow           `json:"refObjSnapshot"`
+	RefSkillSnapshot          []SpawnSkillRow       `json:"refSkillSnapshot"`
+	// SpiritSkills are the skills a worn, awake Devil's Spirit grants
+	// (port-only, SRO_NASRUN; wire.OpSpiritSkills keeps them current).
+	SpiritSkills            []uint32                 `json:"spiritSkills,omitempty"`
+	SkillCooldowns          []EntrySkillCooldown     `json:"skillCooldowns"`
+	ItemCooldowns           []EntryItemCooldown      `json:"itemCooldowns,omitempty"`
+	RefItemSnapshot         []RefItemRow             `json:"refItemSnapshot"`
+	MagicOptionSnapshot     []MagicOptionRow         `json:"magicOptionSnapshot,omitempty"`
+	AvatarMagicOptions      []AvatarMagicOptionRow   `json:"avatarMagicOptions,omitempty"`
+	SiegeItemForgeGroups    []SiegeItemForgeGroupRow `json:"siegeItemForgeGroups"`
+	SiegeFortressData       []SiegeFortressDataRow   `json:"siegeFortressData"`
+	SiegeStructUpgrades     []SiegeStructUpgradeRow  `json:"siegeStructureUpgrades"`
+	GameWorldData           []GameWorldDataRow       `json:"gameWorldData"`
+	AvatarItems             []EquipItemRow           `json:"avatarItems"`
+	EquipItems              []EquipItemRow           `json:"equipItems"`
+	LocalPlayerEntry        *LocalPlayerEntry        `json:"localPlayerEntry"`
+	ChatPermissions         ChatPermissions          `json:"chatPermissions"`
+	ChatMessages            []string                 `json:"chatMessages"`
+	SystemMessages          interface{}              `json:"systemMessages"`
+	UnlimitedItems          []uint32                 `json:"unlimitedItems,omitempty"`
+	MasteryTotalOverride    int64                    `json:"masteryTotalOverride,omitempty"`
+	LevelCap                int64                    `json:"levelCap,omitempty"`
+	EquipmentSets           []SetPublication         `json:"equipmentSets,omitempty"`
+	StorageAutoStack        bool                     `json:"storageAutoStack,omitempty"`
+	ChatItemLinks           int64                    `json:"chatItemLinks,omitempty"`
+	FastDenReturn           bool                     `json:"fastDenReturn,omitempty"`
+	TradeTiers              bool                     `json:"tradeTiers,omitempty"`
+	Consignment             bool                     `json:"consignment,omitempty"`
+	JobSuitHidesArmor       bool                     `json:"jobSuitHidesArmor,omitempty"`
+	QuickFuse               bool                     `json:"quickFuse,omitempty"`
+	MoonlitThiefSuit        bool                     `json:"moonlitThiefSuit,omitempty"`
+	InventorySort           bool                     `json:"inventorySort,omitempty"`
+	Alexandria              bool                     `json:"alexandria,omitempty"`
+	RaisedGoldCaps          bool                     `json:"raisedGoldCaps,omitempty"`
+	StorageGoldDepositLimit uint32                   `json:"storageGoldDepositLimit,omitempty"`
+	UiTuning                *UiTuning                `json:"uiTuning,omitempty"`
 }
 
 /*
@@ -469,46 +508,52 @@ bootstrapReferenceBlobSuccessView
 ================
 */
 type bootstrapReferenceBlobSuccessView struct {
-	DiagnosticSessionID       string                   `json:"diagnosticSessionId,omitempty"`
-	InventorySlotCount        uint8                    `json:"inventorySlotCount"`
-	EquipmentSlotCount        uint8                    `json:"equipmentSlotCount"`
-	SimulationProtocolVersion int                      `json:"simulationProtocolVersion"`
-	NativeResult              int                      `json:"nativeResult"`
-	ProtocolVersion           int                      `json:"protocolVersion"`
-	DivisionID                string                   `json:"divisionId"`
-	Character                 *browserCharacterView    `json:"character"`
-	BootstrapMode             string                   `json:"bootstrapMode"`
-	AcademyMember             bool                     `json:"academyMember"`
-	EventGuideStateMask       uint32                   `json:"eventGuideStateMask"`
-	RefObjSnapshot            []RefObjRow              `json:"refObjSnapshot"`
-	SkillCooldowns            []EntrySkillCooldown     `json:"skillCooldowns"`
-	RefItemSnapshot           []RefItemRow             `json:"refItemSnapshot"`
-	MagicOptionSnapshot       []MagicOptionRow         `json:"magicOptionSnapshot,omitempty"`
-	AvatarMagicOptions        []AvatarMagicOptionRow   `json:"avatarMagicOptions,omitempty"`
-	SiegeItemForgeGroups      []SiegeItemForgeGroupRow `json:"siegeItemForgeGroups"`
-	SiegeFortressData         []SiegeFortressDataRow   `json:"siegeFortressData"`
-	SiegeStructUpgrades       []SiegeStructUpgradeRow  `json:"siegeStructureUpgrades"`
-	GameWorldData             []GameWorldDataRow       `json:"gameWorldData"`
-	AvatarItems               []EquipItemRow           `json:"avatarItems"`
-	EquipItems                []EquipItemRow           `json:"equipItems"`
-	LocalPlayerEntry          *LocalPlayerEntry        `json:"localPlayerEntry"`
-	ChatPermissions           ChatPermissions          `json:"chatPermissions"`
-	ChatMessages              []string                 `json:"chatMessages"`
-	SystemMessages            interface{}              `json:"systemMessages"`
-	UnlimitedItems            []uint32                 `json:"unlimitedItems,omitempty"`
-	MasteryTotalOverride      int64                    `json:"masteryTotalOverride,omitempty"`
-	LevelCap                  int64                    `json:"levelCap,omitempty"`
-	EquipmentSets             []SetPublication         `json:"equipmentSets,omitempty"`
-	StorageAutoStack          bool                     `json:"storageAutoStack,omitempty"`
-	ChatItemLinks             int64                    `json:"chatItemLinks,omitempty"`
-	FastDenReturn             bool                     `json:"fastDenReturn,omitempty"`
-	TradeTiers                bool                     `json:"tradeTiers,omitempty"`
-	Consignment               bool                     `json:"consignment,omitempty"`
-	JobSuitHidesArmor         bool                     `json:"jobSuitHidesArmor,omitempty"`
-	MoonlitThiefSuit          bool                     `json:"moonlitThiefSuit,omitempty"`
-	Alexandria                bool                     `json:"alexandria,omitempty"`
-	RaisedGoldCaps            bool                     `json:"raisedGoldCaps,omitempty"`
-	UiTuning                  *UiTuning                `json:"uiTuning,omitempty"`
+	DiagnosticSessionID       string                `json:"diagnosticSessionId,omitempty"`
+	InventorySlotCount        uint8                 `json:"inventorySlotCount"`
+	EquipmentSlotCount        uint8                 `json:"equipmentSlotCount"`
+	SimulationProtocolVersion int                   `json:"simulationProtocolVersion"`
+	NativeResult              int                   `json:"nativeResult"`
+	ProtocolVersion           int                   `json:"protocolVersion"`
+	DivisionID                string                `json:"divisionId"`
+	Character                 *browserCharacterView `json:"character"`
+	BootstrapMode             string                `json:"bootstrapMode"`
+	AcademyMember             bool                  `json:"academyMember"`
+	EventGuideStateMask       uint32                `json:"eventGuideStateMask"`
+	RefObjSnapshot            []RefObjRow           `json:"refObjSnapshot"`
+	// SpiritSkills: as bootstrapSuccessView's (#4384).
+	SpiritSkills            []uint32                 `json:"spiritSkills,omitempty"`
+	SkillCooldowns          []EntrySkillCooldown     `json:"skillCooldowns"`
+	ItemCooldowns           []EntryItemCooldown      `json:"itemCooldowns,omitempty"`
+	RefItemSnapshot         []RefItemRow             `json:"refItemSnapshot"`
+	MagicOptionSnapshot     []MagicOptionRow         `json:"magicOptionSnapshot,omitempty"`
+	AvatarMagicOptions      []AvatarMagicOptionRow   `json:"avatarMagicOptions,omitempty"`
+	SiegeItemForgeGroups    []SiegeItemForgeGroupRow `json:"siegeItemForgeGroups"`
+	SiegeFortressData       []SiegeFortressDataRow   `json:"siegeFortressData"`
+	SiegeStructUpgrades     []SiegeStructUpgradeRow  `json:"siegeStructureUpgrades"`
+	GameWorldData           []GameWorldDataRow       `json:"gameWorldData"`
+	AvatarItems             []EquipItemRow           `json:"avatarItems"`
+	EquipItems              []EquipItemRow           `json:"equipItems"`
+	LocalPlayerEntry        *LocalPlayerEntry        `json:"localPlayerEntry"`
+	ChatPermissions         ChatPermissions          `json:"chatPermissions"`
+	ChatMessages            []string                 `json:"chatMessages"`
+	SystemMessages          interface{}              `json:"systemMessages"`
+	UnlimitedItems          []uint32                 `json:"unlimitedItems,omitempty"`
+	MasteryTotalOverride    int64                    `json:"masteryTotalOverride,omitempty"`
+	LevelCap                int64                    `json:"levelCap,omitempty"`
+	EquipmentSets           []SetPublication         `json:"equipmentSets,omitempty"`
+	StorageAutoStack        bool                     `json:"storageAutoStack,omitempty"`
+	ChatItemLinks           int64                    `json:"chatItemLinks,omitempty"`
+	FastDenReturn           bool                     `json:"fastDenReturn,omitempty"`
+	TradeTiers              bool                     `json:"tradeTiers,omitempty"`
+	Consignment             bool                     `json:"consignment,omitempty"`
+	JobSuitHidesArmor       bool                     `json:"jobSuitHidesArmor,omitempty"`
+	QuickFuse               bool                     `json:"quickFuse,omitempty"`
+	MoonlitThiefSuit        bool                     `json:"moonlitThiefSuit,omitempty"`
+	InventorySort           bool                     `json:"inventorySort,omitempty"`
+	Alexandria              bool                     `json:"alexandria,omitempty"`
+	RaisedGoldCaps          bool                     `json:"raisedGoldCaps,omitempty"`
+	StorageGoldDepositLimit uint32                   `json:"storageGoldDepositLimit,omitempty"`
+	UiTuning                *UiTuning                `json:"uiTuning,omitempty"`
 }
 
 /*
@@ -561,7 +606,9 @@ func (r *BootstrapResult) blobView() any {
 		EventGuideStateMask:       r.EventGuideStateMask,
 		RefObjSnapshot:            r.RefObjSnapshot,
 		RefSkillSnapshot:          r.RefSkillSnapshot,
+		SpiritSkills:              r.SpiritSkills,
 		SkillCooldowns:            cooldowns,
+		ItemCooldowns:             r.ItemCooldowns,
 		RefItemSnapshot:           r.RefItemSnapshot,
 		MagicOptionSnapshot:       r.MagicOptionSnapshot,
 		AvatarMagicOptions:        r.AvatarMagicOptions,
@@ -585,9 +632,12 @@ func (r *BootstrapResult) blobView() any {
 		TradeTiers:                r.TradeTiers,
 		Consignment:               r.Consignment,
 		JobSuitHidesArmor:         r.JobSuitHidesArmor,
+		QuickFuse:                 r.QuickFuse,
 		MoonlitThiefSuit:          r.MoonlitThiefSuit,
+		InventorySort:             r.InventorySort,
 		Alexandria:                r.Alexandria,
 		RaisedGoldCaps:            r.RaisedGoldCaps,
+		StorageGoldDepositLimit:   r.StorageGoldDepositLimit,
 		UiTuning:                  r.UiTuning,
 	}
 }
@@ -623,7 +673,9 @@ func (r *BootstrapResult) referenceBlobView() any {
 		AcademyMember:             r.AcademyMember,
 		EventGuideStateMask:       r.EventGuideStateMask,
 		RefObjSnapshot:            r.RefObjSnapshot,
+		SpiritSkills:              r.SpiritSkills,
 		SkillCooldowns:            cooldowns,
+		ItemCooldowns:             r.ItemCooldowns,
 		RefItemSnapshot:           r.RefItemSnapshot,
 		MagicOptionSnapshot:       r.MagicOptionSnapshot,
 		AvatarMagicOptions:        r.AvatarMagicOptions,
@@ -647,9 +699,12 @@ func (r *BootstrapResult) referenceBlobView() any {
 		TradeTiers:                r.TradeTiers,
 		Consignment:               r.Consignment,
 		JobSuitHidesArmor:         r.JobSuitHidesArmor,
+		QuickFuse:                 r.QuickFuse,
 		MoonlitThiefSuit:          r.MoonlitThiefSuit,
+		InventorySort:             r.InventorySort,
 		Alexandria:                r.Alexandria,
 		RaisedGoldCaps:            r.RaisedGoldCaps,
+		StorageGoldDepositLimit:   r.StorageGoldDepositLimit,
 		UiTuning:                  r.UiTuning,
 	}
 }
@@ -698,7 +753,9 @@ func (r *BootstrapResult) MarshalJSON() ([]byte, error) {
 		EventGuideStateMask:       r.EventGuideStateMask,
 		RefObjSnapshot:            r.RefObjSnapshot,
 		RefSkillSnapshot:          r.RefSkillSnapshot,
+		SpiritSkills:              r.SpiritSkills,
 		SkillCooldowns:            cooldowns,
+		ItemCooldowns:             r.ItemCooldowns,
 		RefItemSnapshot:           r.RefItemSnapshot,
 		MagicOptionSnapshot:       r.MagicOptionSnapshot,
 		AvatarMagicOptions:        r.AvatarMagicOptions,
@@ -723,11 +780,30 @@ func (r *BootstrapResult) MarshalJSON() ([]byte, error) {
 		TradeTiers:                r.TradeTiers,
 		Consignment:               r.Consignment,
 		JobSuitHidesArmor:         r.JobSuitHidesArmor,
+		QuickFuse:                 r.QuickFuse,
 		MoonlitThiefSuit:          r.MoonlitThiefSuit,
+		InventorySort:             r.InventorySort,
 		Alexandria:                r.Alexandria,
 		RaisedGoldCaps:            r.RaisedGoldCaps,
+		StorageGoldDepositLimit:   r.StorageGoldDepositLimit,
 		UiTuning:                  r.UiTuning,
 	})
+}
+
+/*
+================
+FailureCause
+
+A failed bootstrap result whose log line carries cause: the record that
+failed, which Reason alone does not name (#4019).
+================
+*/
+func FailureCause(nativeErrorCode int, reason string, cause error) *BootstrapResult {
+	result := Failure(nativeErrorCode, reason)
+	if cause != nil {
+		result.cause = cause.Error()
+	}
+	return result
 }
 
 /*

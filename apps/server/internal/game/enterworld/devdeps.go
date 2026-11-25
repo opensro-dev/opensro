@@ -19,6 +19,7 @@ import (
 	"opensro.online/server/internal/game/world/instance"
 	"opensro.online/server/internal/game/world/monster"
 	"opensro.online/server/internal/game/world/simulation"
+	"opensro.online/server/internal/game/world/styria"
 	"opensro.online/server/internal/game/world/worldarea"
 )
 
@@ -170,6 +171,18 @@ func NewDevDepsWithRoster(paths DevPaths, textdata *TextdataCatalogs, roster *Ro
 			)
 		}
 	}
+	if len(npcSpawns.WorldNpcs) == 0 {
+		// Port-only (#3314): the Muhan arenas' managers and change NPCs
+		// stand in their arena worlds while SRO_MUHAN is on.
+		var err error
+		npcSpawns.WorldNpcs, err = simulation.LoadMuhanArenaNpcs(textdataDir, monster.MuhanEnabled())
+		if err != nil {
+			return nil, fmt.Errorf("bootstrap: %w", err)
+		}
+		// Port-only (#3648): the Styria Clash treasure boxes stand in
+		// the arena world while SRO_STYRIA_CLASH is on.
+		npcSpawns.WorldNpcs = append(npcSpawns.WorldNpcs, simulation.StyriaArenaBoxes()...)
+	}
 	if npcSpawns.Enabled {
 		if err := simulation.ValidateNpcRoster(npcSpawns.Roster); err != nil {
 			return nil, fmt.Errorf("bootstrap: invalid NPC roster: %w", err)
@@ -240,15 +253,15 @@ func NewDevDepsWithRoster(paths DevPaths, textdata *TextdataCatalogs, roster *Ro
 		if err != nil {
 			return nil, fmt.Errorf("bootstrap: %w", err)
 		}
-		if monster.ArabiaEnabled() {
-			// Port-only (#3268): the Baghdad dungeon world joins the
-			// catalogue only while its switch is on, before any
-			// division opens.
+		if monster.BaghdadDungeonEnabled() {
+			// Port-only (#4134): the Baghdad dungeon worlds join the
+			// catalogue only while their own switch is on, apart from
+			// the continent's, before any division opens.
 			if err := instance.RegisterPortOnly(instance.ArabiaDefinitions()); err != nil {
 				return nil, fmt.Errorf("bootstrap: %w", err)
 			}
 		}
-		template, err = monster.AppendArabia(template, textdataDir, monster.ArabiaEnabled())
+		template, err = monster.AppendArabia(template, textdataDir, monster.ArabiaEnabled(), monster.BaghdadDungeonEnabled())
 		if err != nil {
 			return nil, fmt.Errorf("bootstrap: %w", err)
 		}
@@ -283,15 +296,17 @@ func NewDevDepsWithRoster(paths DevPaths, textdata *TextdataCatalogs, roster *Ro
 				return nil, fmt.Errorf("bootstrap: %w", err)
 			}
 		}
+		if styria.Enabled() {
+			// Port-only (#3648): the Styria Clash arena world joins
+			// the catalogue only while its switch is on, before any
+			// division opens.
+			if err := instance.RegisterPortOnly(instance.StyriaDefinitions()); err != nil {
+				return nil, fmt.Errorf("bootstrap: %w", err)
+			}
+		}
 		muhanWaves, err := monster.LoadMuhanWaves(textdataDir, monster.MuhanEnabled())
 		if err != nil {
 			return nil, fmt.Errorf("bootstrap muhan waves: %w", err)
-		}
-		// Port-only (#3314): the arenas' manager and change NPCs join
-		// their wave worlds while the same switch is on.
-		template, err = monster.AppendMuhanNPCs(template, textdataDir, monster.MuhanEnabled())
-		if err != nil {
-			return nil, fmt.Errorf("bootstrap: %w", err)
 		}
 		// Before the second hunting grounds: five of their kinds are the
 		// tomb overlay's MOB_TQ_* rows while the tomb is on (the build

@@ -67,10 +67,46 @@ func (rt *Runtime) cancelPetCombat(key petOwnerKey, state *petSession, now int64
 	if state == nil || state.combat == nil {
 		return
 	}
-	if token := state.combat.castToken; token != 0 {
-		rt.queueSkillFinalize(key.division, fmt.Sprintf("@pet:%d", key.gid), key.gid, now, wire.SkillCastFinalizeFrame(token))
-	}
+	rt.closePetCast(key, state.combat, now)
 	state.combat = nil
 	// Leaving BATTLE is a state change.
 	resetPetStuck(state)
+}
+
+/*
+================
+pausePetCombat
+
+A movement-blocking status (freeze, sleep, root, stun) holds the fight,
+it does not end it: the prepared cast is interrupted, but the BATTLE
+intent stays, so the pet takes its target up again when the status
+expires, with no new order from the owner (#4214). The reference
+server's abnormal block ends its records on its own clock and never
+touches the creature's battle target; the port's intent is the same
+record. A pet that is gone, dead or mounted still leaves BATTLE
+through cancelPetCombat.
+================
+*/
+func (rt *Runtime) pausePetCombat(key petOwnerKey, state *petSession, now int64) {
+	if state == nil || state.combat == nil {
+		return
+	}
+	rt.closePetCast(key, state.combat, now)
+}
+
+/*
+================
+closePetCast
+
+Closes the intent's prepared cast once, if one is open, and clears it
+from the intent: the one finalize both leaving BATTLE and a paused
+fight send.
+================
+*/
+func (rt *Runtime) closePetCast(key petOwnerKey, intent *petCombatIntent, now int64) {
+	if intent.castToken == 0 {
+		return
+	}
+	rt.queueSkillFinalize(key.division, fmt.Sprintf("@pet:%d", key.gid), key.gid, now, wire.SkillCastFinalizeFrame(intent.castToken))
+	intent.skillID, intent.castToken, intent.releaseAtMs = 0, 0, 0
 }

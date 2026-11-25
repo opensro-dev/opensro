@@ -14,6 +14,7 @@ import { test } from "node:test";
 import { defined } from "../helpers/defined.mjs";
 import { uiFixture } from "../helpers/ui-fixture.mjs";
 const { createMarketHud } = await import( "../../src/engine/runtime/ui/hud/market-hud.ts" );
+const { experimentalOptions } = await import( "../../src/engine/foundation/ui/experimental-options.ts" );
 
 /** @typedef {import("../../src/engine/contracts/gameplay.ts").InventoryItem} InventoryItem */
 /** @typedef {import("../../src/engine/contracts/market.ts").MarketRow} MarketRow */
@@ -141,7 +142,8 @@ function storageKeeper( enabled ) {
 		social: { ...(f.state.gameplay.social ?? {}), localName: "Me" }
 	};
 	const sent = () => commands.filter( c => c.command?.kind === "market" ).map( c => c.command.request );
-	return { f, step, sent };
+	const released = () => commands.some( c => c.command?.kind === "npc-close" );
+	return { f, step, sent, released };
 }
 
 test("the storage keeper offers the market only while the server runs it", () => {
@@ -162,6 +164,103 @@ test("the storage keeper offers the market only while the server runs it", () =>
 		} finally {
 			f.dispose();
 		}
+	}
+});
+
+test("opening the market ends the keeper's talk, so the keeper's rows show again after it closes", () => {
+	// Player report, 2026-11-21: open the market from the storage keeper,
+	// close it with X, click the keeper again: no rows.
+	const { f, step, released } = storageKeeper( true );
+	try {
+		step();
+		f.ui.event( { kind: "activate", id: "market-open" } );
+		step();
+		assert.ok( f.hasText( "Consignment Market" ) );
+		assert.ok( released(), "opening the market releases the NPC (npc-close)" );
+		// The server answers the release: the conversation ends.
+		f.state.gameplay = { ...f.state.gameplay, npcConversation: undefined };
+		step();
+		f.ui.event( { kind: "activate", id: "market-close" } );
+		step();
+		assert.equal( f.hasText( "Consignment Market" ), false );
+		// The player talks to the keeper again.
+		f.state.gameplay = { ...f.state.gameplay, npcConversation: { gid: 77, phase: "menu" } };
+		const controls = step();
+		assert.ok( controls.has( "storage-open" ), "the keeper's storage row shows again" );
+		assert.ok( controls.has( "market-open" ), "and its market row" );
+	} finally {
+		f.dispose();
+	}
+});
+
+test("the System menu's market entry follows its Experimental row and opens the window", () => {
+	for ( const rowOn of [ false, true ] ) {
+		const commands = [], f = uiFixture( command => commands.push( command ) );
+		let now = 1000, seen = null;
+		const step = () => {
+			for ( let i = 0; i < 20; i++ ) seen = f.ui.step( f.state, now += 50 ) ?? seen;
+			return new Map( (seen?.controls ?? []).map( control => [ control.id, control ] ) );
+		};
+		try {
+			f.ui.event( {
+				kind: "experimental-preferences",
+				value: experimentalOptions( { consignmentMarket: rowOn } )
+			} );
+			f.state.gameplay = {
+				...f.state.gameplay,
+				consignment: true,
+				market: market(),
+				social: { ...(f.state.gameplay.social ?? {}), localName: "Me" }
+			};
+			step();
+			f.ui.event( { kind: "activate", id: "open-window:System" } );
+			let controls = step();
+			assert.equal(
+				controls.has( "system-menu-market" ),
+				rowOn,
+				`the menu entry with the row ${rowOn ? "on" : "off"}`
+			);
+			assert.equal( f.hasText( "Consignment Market" ), rowOn, "the entry's label" );
+			if ( !rowOn ) continue;
+			// Choosing the entry leaves the menu and opens the window.
+			f.ui.event( { kind: "activate", id: "system-menu-market" } );
+			controls = step();
+			assert.ok( controls.has( "market-close" ), "the entry opens the window" );
+			assert.equal( controls.has( "close-window:System" ), false, "and closes the menu" );
+			// From the menu again, the same entry closes the window.
+			f.ui.event( { kind: "activate", id: "open-window:System" } );
+			step();
+			f.ui.event( { kind: "activate", id: "system-menu-market" } );
+			controls = step();
+			assert.equal( controls.has( "market-close" ), false, "the entry toggles the window shut" );
+		} finally {
+			f.dispose();
+		}
+	}
+});
+
+test("the System menu's port-only entries each name their window and its route", () => {
+	const f = uiFixture( () => {} );
+	let now = 1000, seen = null;
+	const step = () => {
+		for ( let i = 0; i < 20; i++ ) seen = f.ui.step( f.state, now += 50 ) ?? seen;
+		return seen;
+	};
+	try {
+		f.ui.event( {
+			kind: "experimental-preferences",
+			value: experimentalOptions( { eventCalendar: true, uniqueStatus: true, consignmentMarket: true } )
+		} );
+		step();
+		f.ui.event( { kind: "activate", id: "open-window:System" } );
+		const controls = new Map( (step()?.controls ?? []).map( control => [ control.id, control ] ) );
+		// Each entry's control id is the click it sends and its label the
+		// window it opens (SYSTEM_MENU_ENTRIES in ui.ts).
+		assert.equal( controls.get( "open-window:Event Calendar" )?.label, "Event Calendar" );
+		assert.equal( controls.get( "open-window:Unique Status" )?.label, "Unique Status" );
+		assert.equal( controls.get( "system-menu-market" )?.label, "Consignment Market" );
+	} finally {
+		f.dispose();
 	}
 });
 
@@ -380,8 +479,16 @@ test("the chips, the dropdowns and a pick from the bag", () => {
 	assert.equal( raced.race, "eu" );
 	assert.equal( raced.degree, 11, "the other filters stay" );
 	assert.equal( search( hud, "market-choose:rarity:sealed", context ).rarity, "sealed" );
+	// One seal tier and one body armour type each narrow the search.
+	assert.equal( search( hud, "market-choose:rarity:moon", context ).rarity, "moon" );
+	const armored = search( hud, "market-choose:armor:protector", context );
+	assert.equal( armored.armor, "protector" );
+	assert.equal( armored.rarity, "moon", "the tier stays beside the type" );
+	assert.equal( search( hud, "market-choose:armor:", context ).armor, undefined, "All types" );
 	for (
 		const bad of [
+			"market-choose:armor:plate",
+			"market-choose:rarity:unique",
 			"market-choose:race:kr",
 			"market-choose:degree:12",
 			"market-choose:degree:",
@@ -448,11 +555,36 @@ test("every page of the window draws with unique controls", () => {
 				"market-sell-pick",
 				"market-menu:degree",
 				"market-menu:race",
+				"market-menu:armor",
 				"market-tab:mine"
 			]
 		) {
 			f.ui.event( { kind: "activate", id } );
 			const controls = step();
+			if ( id === "market-menu:armor" ) {
+				assert.ok( controls.has( "market-choose:armor:heavy" ), "the armour type list drew" );
+				// The six dropdowns share the search line with the name field and
+				// the Search button without overlapping either.
+				const line = [
+					"market-query",
+					"market-menu:degree",
+					"market-menu:race",
+					"market-menu:rarity",
+					"market-menu:armor",
+					"market-menu:currency",
+					"market-menu:sort",
+					"market-search"
+				]
+					.map( name => controls.get( name )?.rect );
+				line.forEach( ( rect, i ) => assert.ok( rect, `the search line drew control ${i}` ) );
+				for ( let i = 1; i < line.length; i++ ) {
+					assert.equal(
+						intersects( line[i - 1], line[i] ),
+						false,
+						`search line controls ${i - 1} and ${i} overlap`
+					);
+				}
+			}
 			if ( id === "market-sell-pick" ) assert.ok( f.hasText( "Pick the item to sell" ), "the bag page drew" );
 			if ( id === "market-menu:race" ) assert.ok( controls.has( "market-choose:race:eu" ), "the race list drew" );
 		}

@@ -333,7 +333,7 @@ const WINDOW_TILE_INSET = 10;
 // The tile's top: under the title row (the title sits at 12..24).
 const WINDOW_TILE_TOP = 30;
 // A label closer than this to its window's left edge has left its window
-// (the frame's border is about this wide; the Experimental "Fit window labels").
+// (the frame's border is about this wide; the former Experimental "Fit window labels").
 const WINDOW_LABEL_MARGIN = 6;
 // A bold caption's run is this much wider than its ink at most (the last
 // glyph's advance past its ink and the first glyph's origin): "Set game"
@@ -415,7 +415,7 @@ export function authoredText(
 			return;
 		}
 	}
-	// Port-only (Experimental "Fit window labels", off is the original):
+	// Port-only, not native (owner 2026-11-21: the default, no row):
 	// an authored label (the static carries a text key; value fields
 	// with an empty authored text keep the native fitting) wider than
 	// its box (the trade window's "Purchase amount", right-aligned in
@@ -430,7 +430,7 @@ export function authoredText(
 	// (clipToControl, the guild page's "Guild master" before the race
 	// mark) wraps too, its lines inside the box's columns, instead of
 	// being cut to "Guild ma..." (#3674).
-	if ( clipToControl !== "clip" && frame.fitWindowLabels() && label && value.includes( " " ) ) {
+	if ( clipToControl !== "clip" && label && value.includes( " " ) ) {
 		const measure = ( line: string ) => text.run( line, 0, node.fontIndex ).width;
 		const width = measure( value );
 		if ( width > box[2] ) {
@@ -734,6 +734,8 @@ export interface MessageBox {
 	// Per drawn line; white where absent. 52E720's SetTextAndResize takes
 	// each appended line's own colour (5D3EB0's gold name line).
 	readonly colors?: readonly UiQuad["color"][];
+	// A dragged box's frame origin; centred where absent.
+	readonly position?: readonly [number, number] | null;
 }
 
 /*
@@ -752,7 +754,12 @@ export function simpleMessageBox( frame: UiAuthoredFrame, box: MessageBox ) {
 	const quads = frame.quads, text = frame.text, resources = frame.resources, full = frame.full;
 	const white: UiQuad["color"] = frame.white, PARTS = frame.chrome.parts;
 	const lines = messageBoxLines( box.lines, value => text.run( value ).width );
-	const layout = textMessageBoxLayout( frame.w, frame.h, lines.map( line => text.run( line ).width ) );
+	const layout = textMessageBoxLayout(
+		frame.w,
+		frame.h,
+		lines.map( line => text.run( line ).width ),
+		box.position ?? null
+	);
 	frame.paths.push( ...partyProposalAssets() );
 	quads.push(
 		...normalTile( layout.background, MESSAGE_TILE, resources.size( MESSAGE_TILE ), full ),
@@ -808,7 +815,7 @@ export function simpleMessageBox( frame: UiAuthoredFrame, box: MessageBox ) {
 
 const IFCOMMON = "/assets/images/Media_extracted/interface/ifcommon/";
 const FRAME_PARTS = frameParts();
-// An unavailable tab with "Grey disabled tabs" on: half-alpha plate, grey label.
+// An unavailable tab (port-only): half-alpha plate, grey label.
 const GREY_TAB_PLATE = [ 1, 1, 1, 0x80 / 255 ] as const;
 const GREY_TAB_LABEL = [ 0x99 / 255, 0x99 / 255, 0x99 / 255, 1 ] as const;
 // CIFMainFrame::OnCreate 6F8230: shared title/drag width is frame minus 21.
@@ -883,7 +890,9 @@ export function nativeTab(
 		r[3] - client[1] - client[3]
 	];
 	const path = IFCOMMON + family + (selected ? "_on" : "_off") + ".png";
-	const grey = disabled && frame.greyDisabledTabs();
+	// Port-only, not native (owner 2026-11-21: the default, no row): a tab
+	// the player cannot use is dimmed; the original drew it like any other.
+	const grey = disabled;
 	image( frame, { r, path, color: grey ? GREY_TAB_PLATE : frame.white } );
 	frame.controls.push( { id, label: caption, rect: r, kind: "button", selected, disabled: disabled || busy } );
 	frame.quads.push(
@@ -912,7 +921,7 @@ stall's "Items to sell" on 80) keeps the native face, as all do off.
 */
 function tabCaptionFace( frame: UiAuthoredFrame, caption: string, room: number, fontStyle: number ) {
 	const native = { fontIndex: 0, fontStyle };
-	if ( !frame.fitWindowLabels() || frame.text.run( caption, fontStyle, 0 ).width - TAB_RUN_OVERHANG <= room ) {
+	if ( frame.text.run( caption, fontStyle, 0 ).width - TAB_RUN_OVERHANG <= room ) {
 		return native;
 	}
 	const measure = ( line: string, face: number ) => frame.text.run( line, 0, face ).width;

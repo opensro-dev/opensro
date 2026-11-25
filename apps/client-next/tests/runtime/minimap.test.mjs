@@ -22,6 +22,7 @@ const {
 	minimapEdge,
 	minimapHunting,
 	minimapOffset,
+	minimapWaypoint,
 	questMarkerTargets
 } = await import(
 	"../../src/engine/foundation/ui/minimap-markers.ts"
@@ -34,6 +35,7 @@ const { minimapSameFloor, minimapPoseKey, minimapFloorQueries } = await import(
 	"../../src/engine/foundation/ui/minimap-floor.ts"
 );
 const { academyPacket } = await import( "../../src/engine/foundation/gameplay/academy.ts" );
+const { huntingPose } = await import( "../../src/engine/foundation/gameplay/hunting.ts" );
 const { createCombat } = await import(
 	"../../src/engine/runtime/simulation/worker/session/world/gameplay/combat/combat.ts"
 );
@@ -155,6 +157,15 @@ test("party and academy retain separate self, offline, world, order and edge rul
 		assert.equal( minimapEdge( [ 46, 0 ], kind ).size, kind === "quest" ? 16 : 8 );
 	}
 });
+test("guide waypoint rings its point on the radar and arrow-clamps off it (#3394)", () => {
+	const inside = defined( minimapWaypoint( pose, { ...pose, x: 810, z: 790 }, 1920 ) );
+	assert.deepEqual( [ inside.x, inside.y, inside.size, inside.rotation ], [ 10, 10, 16, 0 ] );
+	assert.ok( inside.path.endsWith( "wmap_sign_huntingpoint.png" ) );
+	const outside = defined( minimapWaypoint( pose, { ...pose, x: 900 }, 1920 ) );
+	assert.deepEqual( [ outside.x, outside.size, outside.rotation ], [ 47, 32, -Math.PI ] );
+	assert.ok( outside.y === 0 );
+	assert.ok( outside.path.endsWith( "mm_sign_questarrow.png" ) );
+});
 test("academy location and online lifecycle packets preserve detached snapshots and signed coordinates", () => {
 	let state = { member: true, localMemberId: 1, members: [ { id: 2, name: "Peer", offline: true } ], rows: [] };
 	const old = state;
@@ -210,6 +221,18 @@ test("B5ED creates hunting records; duplicate owner, unspawned movement and orde
 	assert.deepEqual( c.state().huntingPoints.map( p => p.gid ), [ 9 ] );
 	c.clear();
 	assert.deepEqual( c.state().huntingPoints, [] );
+});
+test("a hunted peer in view turns its marker by its live heading, not the last 0x30E3 sample", () => {
+	// Native movement (#3721) sends one B738 per move and no per-tick 0x30E3,
+	// so a peer in view walks and turns without the marker's sample changing.
+	const point = { ...pose, z: 900, gid: 8, token: 4, name: "Hunt", angle: 0 };
+	const live = entity( 8, { x: 900, z: 900, heading: 16384 } );
+	assert.deepEqual( huntingPose( point, [ live ] ), { regionId: 257, x: 900, y: 10, z: 900, angle: 16384 } );
+	assert.equal( huntingPose( point, [] ), point );
+	const [marker] = minimapHunting( pose, { huntingPoints: [ point ] }, [ live ], 1920 );
+	assert.equal( marker.rotation, -Math.PI / 2 );
+	assert.ok( marker.x > 0 );
+	assert.equal( minimapHunting( pose, { huntingPoints: [ point ] }, [], 1920 )[0].rotation, -0 );
 });
 test("B5ED linked source retains its subject and authored duration without creating a hunting point", () => {
 	const c = createCombat();
@@ -363,6 +386,82 @@ test("a walking dungeon entity keeps its floor answer across the query round tri
 	const upper = entity( 21, { regionId: 32769, x: 12, y: 100, z: 50 } );
 	m.minimapFloors( minimapFloorQueries( { pose: p }, [], [ upper ] ) );
 	assert.equal( minimapSameFloor( p, { ...upper, x: upper.x + 3 }, m.state() ), false );
+});
+test("a party member on the same Ch'in Tomb floor passes the floor gate (issue #3775)", async () => {
+	// The Tomb spreads its floors over regions 0x8002..0x8007, one DOF
+	// each; B3 is jinsi_floor03 (32773). Its blocks all author floor 0,
+	// so a member broadcast on the player's own floor resolves to it.
+	const { dungeonNavigation } = await import( "../../src/engine/foundation/navigation/dungeon-navigation.ts" );
+	const { rosterPositions } = await import( "../../src/engine/foundation/ui/minimap-markers.ts" );
+	const { gunzipSync } = await import( "node:zlib" );
+	const raw = await readFile( `${CLIENT_PUBLIC_ROOT}/assets/world/dungeon/dungeon-resources.json.gz` );
+	const manifest = JSON.parse( gunzipSync( raw ).toString( "utf8" ) );
+	const regionId = 32773, product = dungeonNavigation( manifest, regionId );
+	// A standable point: the yaw-applied centroid of the first object's
+	// mesh that owns one (decorative pieces own no cell within 2 units).
+	const stand = ( object ) => {
+		const vs = object.mesh.vertices, c = Math.cos( object.yaw ), s = Math.sin( object.yaw );
+		let x = 0, y = 0, z = 0;
+		for ( let i = 0; i < vs.length; i += 3 ) {
+			x += object.x + c * vs[i] - s * vs[i + 2];
+			y += object.y + vs[i + 1];
+			z += object.z + s * vs[i] + c * vs[i + 2];
+		}
+		const n = vs.length / 3;
+		return { regionId, x: x / n, y: y / n, z: z / n, angle: 0 };
+	};
+	const m = createMovement( () => {} );
+	let p, stood;
+	for ( const object of product.objects ) {
+		const candidate = stand( object );
+		m.seed( candidate );
+		m.navigation( regionId, product );
+		if ( m.state().navigationFloor === 0 ) {
+			p = candidate;
+			stood = object;
+			break;
+		}
+	}
+	assert.ok( p && stood, "a standable point on B3 resolves floor 0" );
+	// The mate stands on a vertex of the same floor mesh.
+	const vs = stood.mesh.vertices, c = Math.cos( stood.yaw ), s = Math.sin( stood.yaw );
+	const mate = {
+		x: stood.x + c * vs[0] - s * vs[2],
+		y: stood.y + vs[1],
+		z: stood.z + s * vs[0] + c * vs[2]
+	};
+	const social = {
+		localName: "me",
+		self: 1,
+		members: [
+			{
+				id: 1,
+				name: "me",
+				region: regionId,
+				x: Math.trunc( p.x ),
+				y: Math.trunc( p.y ),
+				z: Math.trunc( p.z ),
+				war: 0x10001
+			},
+			{
+				id: 2,
+				name: "mate",
+				region: regionId,
+				x: Math.trunc( mate.x ),
+				y: Math.trunc( mate.y ),
+				z: Math.trunc( mate.z ),
+				war: 0x10001
+			}
+		]
+	};
+	const game = { pose: p, fortress: { worldId: 0x10001 }, social };
+	m.minimapFloors( minimapFloorQueries( game, [], [] ) );
+	const state = m.state();
+	assert.equal( state.navigationFloor, 0 );
+	assert.deepEqual(
+		rosterPositions( p, { ...state, fortress: { worldId: 0x10001 }, social }, [] ).map( row => row.name ),
+		[ "mate" ]
+	);
 });
 test("dungeon tiles use floor-specific art and negative logical coordinate sectors; absent art stays absent", () => {
 	const floor = {

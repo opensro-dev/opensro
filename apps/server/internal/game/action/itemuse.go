@@ -16,10 +16,13 @@ import (
 	"math"
 	"slices"
 
+	log "github.com/sirupsen/logrus"
+
 	"opensro.online/server/internal/domain"
 	"opensro.online/server/internal/game/abnormal"
 	"opensro.online/server/internal/game/combat"
 	"opensro.online/server/internal/game/enterworld"
+	"opensro.online/server/internal/game/item/commerce"
 	"opensro.online/server/internal/game/item/inventory"
 	"opensro.online/server/internal/game/item/recovery"
 	"opensro.online/server/internal/game/item/wire"
@@ -158,6 +161,44 @@ func (rt *Runtime) HandleItemUse(
 	character *enterworld.Character,
 	payload []byte,
 ) OpResult {
+	result := rt.handleItemUse(divisionID, character, payload)
+	// A refused use is otherwise silent on the server: name it, so an operator
+	// can tell a use that never arrived from one the rules turned away.
+	if character != nil && len(payload) >= 3 && (result.DiagnosticRefusal != "" || itemUseRefused(result)) {
+		log.WithFields(log.Fields{"character": character.Name, "slot": payload[0], "typeFlags": binary.LittleEndian.Uint16(payload[1:3]),
+			"code": itemUseFailureCode(result), "reason": result.DiagnosticRefusal}).Info("item-use: refused")
+	}
+	return result
+}
+
+/*
+================
+itemUseRefused
+
+Whether the result is the [2][code] refusal of an item use.
+================
+*/
+func itemUseRefused(result OpResult) bool {
+	for _, frame := range result.Frames {
+		if frame.Opcode == wire.OpItemUseResponse && len(frame.Payload) == 2 && frame.Payload[0] == wire.ResultError {
+			return true
+		}
+	}
+	return false
+}
+
+/*
+================
+handleItemUse
+
+The item use itself (HandleItemUse names a refusal in the log).
+================
+*/
+func (rt *Runtime) handleItemUse(
+	divisionID string,
+	character *enterworld.Character,
+	payload []byte,
+) OpResult {
 	request, tail, err := wire.ReadItemUseRequest(payload)
 	// Check the wire's maximum here; the authority door checks the current
 	// character capacity before a persisted row can authorize an effect.
@@ -194,10 +235,17 @@ func (rt *Runtime) HandleItemUse(
 	// A crest delete the closure admitted: the crest clears after this
 	// door closes, then the item is spent (crestdelete.go).
 	var crestDelete string
+	// A warehouse addition the closure admitted: the room grows after
+	// this door closes, then the item is spent (expansion.go).
+	var warehouseUse *pendingWarehouseUse
 	// A guild recall the closure admitted: the gates judge, the scroll
 	// is spent and the guild is asked after this door closes
 	// (guildrecall.go).
 	var recallUse *guildRecallUse
+	// A reverse party move the closure admitted: the member's standing
+	// point is judged and the cast started after this door closes
+	// (reverseuser.go).
+	var reverseParty *reversePartyMove
 	// The object the 0x3449 sparkle plays on: the user, unless the item
 	// names a pet (petItemVisualTarget).
 	var visualGID uint32
@@ -250,6 +298,20 @@ func (rt *Runtime) HandleItemUse(
 			result.DiagnosticRefusal = "item-use: name change scroll is off (" + EnvNameChangeScroll + ")"
 			return false
 		}
+		// Port-only: a reset scroll with its own switch off is the native
+		// game, its item sold nowhere (commerce/resetscrolls.go).
+		if scroll, isReset := commerce.ResetScrollByCodename(ref.Codename); isReset && !rt.ResetScrolls[scroll.Kind] {
+			result.DiagnosticRefusal = "item-use: reset scroll is off (" + scroll.Env + ")"
+			return false
+		}
+		if family == itemUseEquipSwitch {
+			// Port-only: with its own flag off a switch scroll is the
+			// native game (commerce/equipswitch.go).
+			if scroll, _ := commerce.EquipSwitchScrollByCodename(ref.Codename); !rt.EquipSwitch[scroll.Kind] {
+				result.DiagnosticRefusal = "item-use: equipment switch scroll is off (" + scroll.Env + ")"
+				return false
+			}
+		}
 		if code := itemUseRequirements(character, ref); code != 0 {
 			result = itemUseFailure(code)
 			return false
@@ -259,6 +321,10 @@ func (rt *Runtime) HandleItemUse(
 				return false
 			}
 			return rt.wakeSpirit(character, ref, rowIndex, request, &result)
+		}
+		if code := rt.hwanItemRequirement(character, ref); code != 0 {
+			result = itemUseFailure(code)
+			return false
 		}
 		nowMs := rt.Now().UnixMilli()
 		if family == itemUseMercenary {
@@ -278,6 +344,12 @@ func (rt *Runtime) HandleItemUse(
 				return false
 			}
 			return rt.usePartySummonScroll(persistentSummonUse{division: divisionID, character: character, ref: ref, row: rowIndex, request: request, nowMs: nowMs}, &result)
+		}
+		if family == itemUseRigidSummonScroll {
+			if len(tail) != 0 {
+				return false
+			}
+			return rt.useRigidSummonScroll(persistentSummonUse{division: divisionID, character: character, ref: ref, row: rowIndex, request: request, nowMs: nowMs}, &result)
 		}
 		if family == itemUsePandoraBox {
 			if len(tail) != 0 {
@@ -339,14 +411,28 @@ func (rt *Runtime) HandleItemUse(
 		}
 		if family == itemUseReverseReturn {
 			// The tail is the u8 point the client's choice box picked (6971B0),
-			// or the port-only map choice 7 with its u32 point id (reversemap.go).
+			// or the port-only map choice 7 with its u32 point id (reversemap.go),
+			// or one of the two later destinations (reverseuser.go): the party
+			// choice 4 with its u32 member gid, the user choice 5 and the
+			// enroll choice 6 with no tail behind the byte.
 			target := reverseReturnTarget{}
 			switch {
 			case len(tail) == 1:
 				target.choice = tail[0]
 			case len(tail) == reverseMapTailBytes && tail[0] == reverseReturnMapChoice:
 				target.choice, target.point = tail[0], binary.LittleEndian.Uint32(tail[1:])
+			case len(tail) == reverseMapTailBytes && tail[0] == reverseReturnPartyChoice:
+				target.choice, target.member = tail[0], binary.LittleEndian.Uint32(tail[1:])
 			default:
+				return false
+			}
+			if target.choice == reverseReturnEnrollChoice {
+				return rt.enrollReverseUserPoint(divisionID, character, request, uint16(row.StackCount), nowMs, &result)
+			}
+			if target.choice == reverseReturnPartyChoice {
+				// The member's standing point is read after this door
+				// closes (finishReversePartyMove): admit the shape here.
+				reverseParty = &reversePartyMove{member: target.member, nowMs: nowMs}
 				return false
 			}
 			return rt.beginReverseReturnScroll(divisionID, character, ref, rowIndex, target, nowMs, &result)
@@ -396,6 +482,16 @@ func (rt *Runtime) HandleItemUse(
 				division: divisionID, ref: ref, row: rowIndex, request: request, nowMs: nowMs,
 			}, character, tail, family == itemUseSkillTimeTicket, &result)
 		}
+		if family == itemUseExpScroll {
+			return rt.useExpScroll(skillItemUse{
+				division: divisionID, ref: ref, row: rowIndex, request: request, nowMs: nowMs,
+			}, character, tail, &result)
+		}
+		if family == itemUseExpansion {
+			return rt.useExpansion(skillItemUse{
+				division: divisionID, ref: ref, row: rowIndex, request: request, nowMs: nowMs,
+			}, character, tail, &result, &warehouseUse)
+		}
 		if family == itemUseNameChange {
 			// The queue door takes the store's own lock, so it cannot
 			// run inside this character door: admit here, queue and
@@ -431,6 +527,11 @@ func (rt *Runtime) HandleItemUse(
 		}
 		if family == itemUseModelSwitcher {
 			return rt.useModelSwitcher(skillItemUse{
+				division: divisionID, ref: ref, row: rowIndex, request: request, nowMs: nowMs,
+			}, character, tail, &result)
+		}
+		if family == itemUseEquipSwitch {
+			return rt.useEquipSwitchScroll(skillItemUse{
 				division: divisionID, ref: ref, row: rowIndex, request: request, nowMs: nowMs,
 			}, character, tail, &result)
 		}
@@ -473,6 +574,11 @@ func (rt *Runtime) HandleItemUse(
 				Payload: wire.EncodeItemUseSuccess(request.Slot, remaining, request.TypeWord)}}, recalled...)}
 			result.Frames = append(result.Frames, rt.updateQuestInventory(character)...)
 			return true
+		}
+		if family == itemUseSkillRecall {
+			return rt.useSkillRecall(skillItemUse{
+				division: divisionID, ref: ref, row: rowIndex, request: request, nowMs: nowMs,
+			}, character, tail, &result)
 		}
 		if family == itemUseResurrection {
 			return rt.useResurrectionScroll(character, skillItemUse{
@@ -832,58 +938,17 @@ func (rt *Runtime) HandleItemUse(
 	} else {
 		committed = rt.deps.Update(character, "item-use", update)
 	}
-	if committed && after != nil {
-		after()
-	}
-	if committed && used != nil {
-		rt.publishItemUseVisual(character, used, visualGID, &result)
-	}
-	if queuedName != "" {
-		rt.finishNameChangeUse(divisionID, character, request, used, queuedName, queuedNowMs, &result)
-	}
-	if crestDelete != "" {
-		rt.finishCrestDeleteUse(divisionID, character, request, used, crestDelete, &result)
-	}
-	if recallUse != nil {
-		rt.finishGuildRecallUse(divisionID, character, request, used, recallUse, &result)
-	}
+	rt.settleItemUseFinishes(divisionID, character, request, itemUseFinishes{
+		committed:    committed,
+		after:        after,
+		used:         used,
+		visualGID:    visualGID,
+		queuedName:   queuedName,
+		queuedNowMs:  queuedNowMs,
+		crestDelete:  crestDelete,
+		warehouseUse: warehouseUse,
+		recallUse:    recallUse,
+		reverseParty: reverseParty,
+	}, &result)
 	return result
-}
-
-/*
-================
-publishItemUseVisual
-
-The native item use (v1.188) ends every successful use the same
-way: the 0xB04C success, then 0x305C {gid, item reference} to the nearby
-sessions, v1.150's 0x3449 (the client's external item effect, 74F540).
-The gid is the user's, unless the item's handler named another object
-(petItemVisualTarget); target 0 is the user:
-the potion sparkle, the scroll glow, the firework. The native client holds
-every item record; the browser holds only the references it was sent, so
-both audiences, the user and the observers, get the item's reference right
-before the visual names it (peer_references.go). The user's copy matters
-when the used row was the last of its kind the browser knew of: a repeat
-of a known reference is harmless.
-================
-*/
-func (rt *Runtime) publishItemUseVisual(character *enterworld.Character, ref *enterworld.ItemRef, target uint32, result *OpResult) {
-	at := -1
-	for index, frame := range result.Frames {
-		if frame.Opcode == wire.OpItemUseResponse && len(frame.Payload) > 0 && frame.Payload[0] == wire.ResultSuccess {
-			at = index
-			break
-		}
-	}
-	if at < 0 {
-		return
-	}
-	reference := rt.commerceReferences([]inventory.Item{{RefObjID: ref.RefObjID, Codename: ref.Codename, TypeFlags: ref.TypeFlags()}}, nil)
-	if target == 0 {
-		target = enterworld.ObjectIDForCharacter(character)
-	}
-	visual := wire.Frame{Opcode: wire.OpItemUseVisual,
-		Payload: wire.NewWriter(8).U32(target).U32(ref.RefObjID).Payload()}
-	result.Frames = append(result.Frames[:at+1], append([]wire.Frame{reference, visual}, result.Frames[at+1:]...)...)
-	result.Broadcast = append(result.Broadcast, reference, visual)
 }

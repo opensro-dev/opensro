@@ -133,12 +133,15 @@ The rizin backend and the live commands use the venv from the quick
 start above (`.state/re-venv`: pefile, capstone, rzpipe 0.6.2).
 
 Per-machine state (overlay DB, JSONL ledger, evidence lock, derived
-evidence tree) lives in `.state/revtool/` inside the repo and is never
-committed. Every path resolves through `revtool_paths`:
+evidence tree) lives in `.state/revtool/` inside the main checkout and
+is never committed: run from a linked worktree, revtool resolves there
+(the worktree rule's one owner is `scripts/checkout_root.py`, which
+`sro_paths` resolves through too). Every path resolves through
+`revtool_paths`:
 
 | override | default |
 | --- | --- |
-| `REVTOOL_DATA_DIR` | `<repo>/.state/revtool` |
+| `REVTOOL_DATA_DIR` | `<main checkout>/.state/revtool` |
 | `REVTOOL_DB` / `--db` | `<data>/revtool.db` |
 | `REVTOOL_DUMP` / `--dump` | `<data>/SRO_Client_psuedo.txt` |
 | `REVTOOL_BINARY` / `--binary` | the workspace's `SRO_Client.exe` |
@@ -179,6 +182,8 @@ rz --db revtool.db coverage sub_402a70
 rz --db revtool.db find CIFMain
 rz --db revtool.db audit some_writeup.md
 rz --db revtool.db rename global sub_402a70 WidgetDraw
+rz --db revtool.db seen sub_402a70 "draws the widget; sizing unmeasured"
+rz --db revtool.db note add sub_402a70 "CORRECTION: not the widget ctor"
 rz --db revtool.db doctor
 ```
 
@@ -194,6 +199,15 @@ until rizin reads the code once; without it every `xref` and
 `strings` answers 0. `--refs none` skips it, and `xref` then warns
 before you trust a 0.
 
+`seed apply` records the applied seed's sha256 beside the project
+(`<rzdb>.seed.json`). `index`, and `find` when it finds nothing,
+compare that sha with the pin in `seed-manifest.json` and print one
+line when they differ ("project seeded from ... but the manifest
+pins ...; re-run seed apply"): a project applied from an older seed
+otherwise loads silently, and its missing names read as "the
+maintainers never named it" (#4043). A project applied before
+records existed has no record and warns about nothing.
+
 `strings PATTERN` (case-insensitive; `--regex` for a regex) lists the
 binary's data strings that match and every function referencing each,
 tagged `[labeled]` or `[NEEDS RE]`: the usual first step from a
@@ -205,12 +219,14 @@ feature's UI or log text to its code.
 | -------- | -------------------------- | ----- |
 | index    | `aflj` + `afsj`            | names normalized `fcn.00402a70` -> `sub_402a70`; signatures are rizin's |
 | find     | overlay DB (delegated)     | identical to the dump backend |
-| view     | `pdfj`                     | disassembly at true addresses, overlay applied by revtool; rizin 0.8.2 has no `pdc`/`pdg` |
+| view     | `pdfj`                     | disassembly at true addresses, overlay applied by revtool; a call target reads as its indexed name (`call sub_964b60` -> `call Seed_NamedHelper`), and `view sub_964b60` / `fcn.00964b60` open the function by address; rizin 0.8.2 has no `pdc`/`pdg` |
 | xref     | `axtj`                     | analysis-derived; un-analyzed code is invisible (printed on every run); takes a `sub_`/`data_` token or an indexed function name |
 | strings  | `izj` + `axtj`             | refs checked at every character boundary up to the match (izj can start a string early) |
 | coverage | `aflj` call/data refs      | exact refs; field depth from disassembly (see below) |
 | audit    | overlay DB (delegated)     | identical to the dump backend |
 | rename   | overlay DB (delegated)     | the strict depth gate measures the function's disassembly (below) |
+| note     | overlay DB (delegated)     | identical to the dump backend |
+| seen     | overlay DB (delegated)     | identical to the dump backend |
 | doctor   | overlay DB + artifact rows | rizin provenance audit; the BN evidence checks do not apply |
 | sync     | overlay DB (delegated)     | identical to the dump backend |
 

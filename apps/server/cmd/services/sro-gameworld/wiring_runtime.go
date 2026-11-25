@@ -20,7 +20,6 @@ import (
 	"opensro.online/server/internal/game/action"
 	"opensro.online/server/internal/game/market"
 	"opensro.online/server/internal/game/world/monster"
-	"opensro.online/server/internal/game/world/movement"
 	"opensro.online/server/internal/game/world/simulation"
 	"opensro.online/server/internal/security/auth"
 	"opensro.online/server/internal/transport"
@@ -73,6 +72,8 @@ func (game *gameplayPlane) newMissionTicker(peerReferences *action.PeerReference
 	// A slow publication-gate hold names its holder there too
 	// (publication_holds), so a waiting step is not mistaken for the stall.
 	game.items.PublicationHold = game.hub.RecordPublicationHold
+	// The re-entry rebuild those holds wait on names its own parts (#2802).
+	game.deps.PublicationHold = game.hub.RecordPublicationHold
 	// Every hook carries the name slow-hook reports print (#2294): the
 	// closures below would otherwise report as newMissionTicker.funcN.
 	hooks := []simulation.NamedTickHook{
@@ -106,6 +107,13 @@ func (game *gameplayPlane) newMissionTicker(peerReferences *action.PeerReference
 		// The fortress war's schedule edges run on the mission clock.
 		{Name: "siege", Hook: game.siege.Tick},
 		{Name: "guild-wars", Hook: game.guildWars.Tick},
+		// Hunted GP lands once a set-aside reaches the native threshold
+		// (issue #4051); sub-threshold remainders wait for more hunting (a
+		// leave keeps them, natively) or session close.
+		{Name: "guild-gp-accrual", Hook: func(nowMs int64) []simulation.DivisionFrames {
+			game.gpAccrual.Drain()
+			return nil
+		}},
 		// The job guilds' week closes on the mission clock (jobrank.go).
 		{Name: "job-week", Hook: func(nowMs int64) []simulation.DivisionFrames {
 			game.items.JobWeekTick(game.divisionID, nowMs)
@@ -117,6 +125,28 @@ func (game *gameplayPlane) newMissionTicker(peerReferences *action.PeerReference
 			game.creditOnlineSessions(sessionViews(ticker.Source), nowMs)
 			return nil
 		}},
+	}
+	// Port-only: every client learns each online player's Blue Berserk level (body
+	// colour and title); the runtime paces the push, and a native shard sends nothing.
+	hooks = append(hooks, simulation.NamedTickHook{Name: "hwan-levels", Hook: func(nowMs int64) []simulation.DivisionFrames {
+		frames := game.items.HwanRosterFrames(game.divisionID, sessionViews(ticker.Source), nowMs)
+		if len(frames) != 0 {
+			ticker.Push.PushToDivision(game.divisionID, frames, "")
+		}
+		return nil
+	}})
+	// Port-only (#3533): the EventBot host's rounds run on the mission
+	// clock. Off installs no hook and nothing is ever announced.
+	if game.eventBot != nil {
+		hooks = append(hooks, simulation.NamedTickHook{Name: "event-bot", Hook: func(nowMs int64) []simulation.DivisionFrames {
+			game.eventBot.Tick(time.UnixMilli(nowMs))
+			return nil
+		}})
+		// Hide & Seek's world check (#3536): no-op until a hider is live.
+		hooks = append(hooks, simulation.NamedTickHook{Name: "event-bot-seek", Hook: func(nowMs int64) []simulation.DivisionFrames {
+			game.eventSeekTick(nowMs)
+			return nil
+		}})
 	}
 	// Port-only (#3529, SRO_CONSIGNMENT): gold a market sale owes a
 	// character reaches it once it is in the world (action market.go).
@@ -153,6 +183,32 @@ func (game *gameplayPlane) newMissionTicker(peerReferences *action.PeerReference
 			return game.contributorRosterTick(ticker, nowMs)
 		}})
 	}
+	// Port-only (#3530): the Job Honor ranking feed's snapshots; the
+	// service paces the pass and sends only what changed.
+	if game.honorFeed != nil {
+		hooks = append(hooks, simulation.NamedTickHook{Name: "job-honor", Hook: func(nowMs int64) []simulation.DivisionFrames {
+			return game.jobHonorTick(ticker, nowMs)
+		}})
+		// Port-only (#3530): the hourly hot route announcement.
+		hooks = append(hooks, simulation.NamedTickHook{Name: "hot-route", Hook: func(nowMs int64) []simulation.DivisionFrames {
+			return game.hotRouteTick(ticker, nowMs)
+		}})
+		// Port-only (#3530): the tier's Academy honor buff convergence.
+		hooks = append(hooks, simulation.NamedTickHook{Name: "job-honor-buffs", Hook: func(nowMs int64) []simulation.DivisionFrames {
+			return game.honorBuffTick(ticker, nowMs)
+		}})
+		// Port-only (#3530): the tier titles' roster.
+		hooks = append(hooks, simulation.NamedTickHook{Name: "job-honor-tiers", Hook: func(nowMs int64) []simulation.DivisionFrames {
+			return game.jobHonorTierTick(ticker, nowMs)
+		}})
+	}
+	// Port-only (#3531): the Unique Status feed's snapshots and
+	// updates; the service paces the pass itself.
+	if game.uniqueStatus != nil {
+		hooks = append(hooks, simulation.NamedTickHook{Name: "unique-status", Hook: func(nowMs int64) []simulation.DivisionFrames {
+			return game.uniqueStatusTick(ticker, nowMs)
+		}})
+	}
 	if game.caravanAgents != nil {
 		hooks = append(hooks, simulation.NamedTickHook{Name: "caravan-ai", Hook: func(nowMs int64) []simulation.DivisionFrames {
 			return game.caravanAgentsTick(ticker, nowMs)
@@ -168,8 +224,8 @@ func (game *gameplayPlane) newMissionTicker(peerReferences *action.PeerReference
 		}
 	}
 	ticker.Source.(*worldsession.Bridge).PopulationLease = game.items.CharacterPopulationLease
-	// A quest instance's exit gate (and optional AI caravan NPCs) join its world's NPC scope pass.
-	ticker.WorldNpcs = game.worldNpcsForInstance
+	// Quest gates and static world NPCs join their world's NPC scope pass.
+	ticker.WorldNpcs = game.items.WorldNpcs
 	// A seasonal look (Santa So-Ok, port-only) changes which reference
 	// the static roster spawns under for its window.
 	if look, ok := game.deps.NpcSpawns.Looks.Look(); ok && look.RefObjID != 0 {
@@ -181,6 +237,19 @@ func (game *gameplayPlane) newMissionTicker(peerReferences *action.PeerReference
 	ticker.BeforeHooks = []simulation.NamedTickHook{{Name: "monster-actions", Hook: game.items.MonsterActionTickHook()}}
 	// A peer's spawn row is preceded by the item references it names (#340).
 	ticker.ItemReferences = peerReferences.Frames
+	// A GM-invisible character spawns for its current party only (#4122):
+	// the division's parties as member-gid groups for the peer leg.
+	ticker.Parties = func(division string) []simulation.PeerParty {
+		var out []simulation.PeerParty
+		for _, p := range game.parties.Registry().RewardSnapshots(division) {
+			row := simulation.PeerParty{Order: p.ObjectOrder}
+			for _, m := range p.Members {
+				row.Members = append(row.Members, m.MemberID)
+			}
+			out = append(out, row)
+		}
+		return out
+	}
 	// A deadlocked tick dumps its stacks and exits for the supervisor to
 	// restart (tick_watchdog.go); the dumps sit beside the authority store.
 	ticker.StallExit = simulation.TickStallExitFromEnv()
@@ -206,7 +275,7 @@ func (game *gameplayPlane) newMissionTicker(peerReferences *action.PeerReference
 		// The mover's routes come from the plane that owns the
 		// region: the open-terrain search outdoors, the cave's
 		// region route inside a dungeon floor (#1645/#1646).
-		planes := movement.NewPlanes(game.movement, game.water)
+		planes := game.planes
 		ticker.Monsters = &simulation.MonsterMoverOps{
 			Navigation: navigation,
 			Monsters:   game.deps.MonsterState,
@@ -233,6 +302,16 @@ func (game *gameplayPlane) newMissionTicker(peerReferences *action.PeerReference
 					return monster.UnresolvedNavigationRoute(goal, monster.NavigationRouteBlocked)
 				}
 				return plane.NextWaypoint(from, fromOwner, goal)
+			},
+			// The homing budget's global search, through the same
+			// plane gate: a plane with no global search (the caves)
+			// answers nil and the mover keeps its wait (#4124).
+			PlanGlobalRoute: func(from monster.Pose, fromOwner simulation.NavOwner, goal monster.Pose) *monster.NavigationRoute {
+				plane, ok := planes.Between(from.RegionID, goal.RegionID)
+				if !ok {
+					return monster.UnresolvedNavigationRoute(goal, monster.NavigationRouteBlocked)
+				}
+				return plane.GlobalRoute(from, fromOwner, goal)
 			},
 			// The failed-route memo may answer a retry only where the
 			// plane's routes are pure (#1820 part B).

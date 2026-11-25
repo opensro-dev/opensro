@@ -51,10 +51,10 @@ test("a projection without the template is unchanged", () => {
 	assert.deepEqual( completeItemReferenceProjection( source ), source );
 });
 
-test("all108 pet items share slot-and-degree icons across ordinary and sealed references", () => {
-	assert.equal( PORT_ITEMS.length, 108 );
-	assert.equal( new Set( PORT_ITEMS.map( item => item.id ) ).size, 108 );
-	assert.equal( new Set( PORT_ITEMS.map( item => item.icon ) ).size, 27 );
+test("all 120 pet items keep unique IDs and share the slot icons across seal tiers", () => {
+	assert.equal( PORT_ITEMS.length, 120 );
+	assert.equal( new Set( PORT_ITEMS.map( item => item.id ) ).size, 120 );
+	assert.equal( new Set( PORT_ITEMS.map( item => item.icon ) ).size, 30 );
 	for ( const item of PORT_ITEMS ) {
 		assert.match( item.description, /Up to [1-6] blues/ );
 		assert.equal(

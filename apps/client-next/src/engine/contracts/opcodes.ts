@@ -23,6 +23,7 @@ foundation/gameplay/arena-chest.ts.
 
 // 0x3xxx: one-way notices (mostly server pushes; 0x3012 rides client to server)
 export const GAME_READY_OPCODE = 0x3012;
+export const OBJECT_POSITION_UPDATE_OPCODE = 0x3028;
 export const EVENT_NOTICE_OPCODE = 0x3058;
 export const FLAG_WAR_EVENT_OPCODE = 0x30a9;
 export const POINTS_UPDATE_OPCODE = 0x30b3;
@@ -134,6 +135,7 @@ export const STALL_CREATE_RESULT_OPCODE = 0xb049;
 export const GACHA_RESULT_OPCODE = 0xb053;
 export const COS_BEHAVIOR_RESULT_OPCODE = 0xb05b;
 export const ITEM_MOVE_RESPONSE_OPCODE = 0xb06d;
+export const MENTOR_MODIFY_ACK_OPCODE = 0xb13e;
 export const MASTERY_LEVEL_UP_RESPONSE_OPCODE = 0xb165;
 export const COMPOUND_RESULT_OPCODE = 0xb16f;
 export const STALL_EDIT_RESULT_OPCODE = 0xb1a8;
@@ -166,6 +168,7 @@ export const COS_RIDE_STATE_OPCODE = 0xb4b5;
 export const PARTY_DELETE_ACK_OPCODE = 0xb535;
 export const DISSOLVE_RESULT_OPCODE = 0xb549;
 export const ALLOC_INT_RESPONSE_OPCODE = 0xb552;
+export const MENTOR_REGISTER_ACK_OPCODE = 0xb55d;
 export const COS_CANCEL_RESPONSE_OPCODE = 0xb56c;
 export const MENTOR_JOIN_ACK_OPCODE = 0xb592;
 export const GM_COMMAND_ACK_OPCODE = 0xb5b6;
@@ -182,6 +185,7 @@ export const STALL_LEAVE_RESULT_OPCODE = 0xb6e7;
 export const STALL_NETWORK_RESULT_OPCODE = 0xb6f9;
 export const PARTY_REGISTER_ACK_OPCODE = 0xb6ff;
 export const MENTOR_LISTING_PAGE_OPCODE = 0xb701;
+export const MENTOR_DELETE_ACK_OPCODE = 0xb70b;
 export const MOVEMENT_ACK_OPCODE = 0xb738;
 export const QUEST_GATHER_CANCEL_REPLY_OPCODE = 0xb75d;
 export const TC_DISBAND_ANSWER_OPCODE = 0xb7c5;

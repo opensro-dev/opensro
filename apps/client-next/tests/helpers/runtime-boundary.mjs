@@ -43,7 +43,10 @@ real function instead (bug-report-actors.test.mjs).
 ================
 */
 const plainExports = {
-	"bug-report": [ "diagnosticActors" ]
+	"bug-report": [ "diagnosticActors", "diagnosticCompanions" ],
+	// releaseNotice's empty-world value is its "none": no newer page is
+	// served and the server does not refuse this one.
+	release: [ [ "releaseNotice", '"none"' ] ]
 };
 const compiled = await build( {
 	entryPoints: [ "src/engine/runtime/runtime.ts" ],
@@ -80,7 +83,10 @@ setup
 ( globalThis.__runtimeCalls ??= [] ).push( { owner: ${JSON.stringify( args.path )}, args } );
 return globalThis.__runtimeOwners[${JSON.stringify( args.path )}];}` +
 						(plainExports[args.path] ?? []).map(
-							name => `\nexport function ${name}() { return []; }`
+							entry => {
+								const [name, value] = Array.isArray( entry ) ? entry : [ entry, "[]" ];
+								return `\nexport function ${name}() { return ${value}; }`;
+							}
 						).join( "" )
 				})
 			);
@@ -202,6 +208,9 @@ presentUpdate
 	owners.renderer.setWorldLayers = () => {};
 	owners.frontend.step = () => ({ phase: "loading-title" });
 	Object.assign( owners.navigation, {
+		// No navigation published yet (navigation.ts view): the own-walk
+		// mover reads it every frame.
+		view: () => null,
 		error: () => null,
 		reconnecting: () => false,
 		terminalFailure: () => undefined,
@@ -209,6 +218,8 @@ presentUpdate
 	} );
 	owners.characters.previewReady = () => false;
 	owners.characters.dockReady = () => false;
+	// The diagnostics' shown-character count (characters.ts shownCharacters).
+	owners.characters.shownCharacters = () => 0;
 	owners.characters.entryReady = () => false;
 	owners.ui.entryReady = () => false;
 	owners.characters.profile = () => {};

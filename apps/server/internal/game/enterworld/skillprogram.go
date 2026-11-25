@@ -64,15 +64,20 @@ func CompileSkillProgram(fields []string) (SkillProgram, error) {
 programParamSpec
 
 The server's parameter strides: the v1.150 client's table
-(spawnParamSpec, pinned against the client) plus the one later tag a
-port-only row carries. msid (one word) has no v1.150 row; the Devil's
+(spawnParamSpec, pinned against the client) plus the later tags a
+staged row carries. msid (one word) has no v1.150 row; the Devil's
 Spirit's Monster Defence Ignore rows author it (SRO_NASRUN), and the
-v1.188 server's parameter index keeps its one word at +0x4C4.
+v1.188 server's parameter index keeps its one word at +0x4C4. mom (four
+words) is the Roc's hour-mark enrage (MSKILL_RM_ROC_ATTACK10, staged by
+the Roc import); the v1.188 index keeps a pointer to its four words.
 ================
 */
 func programParamSpec(tag uint32) (int, bool) {
-	if tag == tagTimedIgnoreDefense {
+	switch tag {
+	case tagTimedIgnoreDefense:
 		return 1, true
+	case TagMonsterStacking:
+		return 4, true
 	}
 	return spawnParamSpec(tag)
 }

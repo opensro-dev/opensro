@@ -24,6 +24,7 @@ import {
 } from "@/engine/foundation/animation/equipment-appearance";
 import type { ModelParticle } from "@/engine/foundation/animation/model-particles";
 import { radians } from "@/engine/foundation/math/angles";
+import { compoundPart } from "@/engine/foundation/rendering/compound-part";
 
 // Above both the unsigned wire GID range and the party portrait range.
 export const MALL_PREVIEW_GID = 0x200000000;
@@ -217,16 +218,16 @@ export function createMallPreview() {
 						),
 					pickable: false
 				};
+				// The mannequin is one compound too, so its children take
+				// compoundPart; the preview actor carries no tint and its
+				// parts cast no attachment shadow, so both arrive unset,
+				// exactly as the hand-built fields had them.
 				const children: CharacterActor[] = planned.assembly.auxiliary.map( ( { entry }, index ) => ({
+					...compoundPart( actor, MALL_PREVIEW_GID, entry.bone ),
 					gid: MALL_PREVIEW_GID + index + 1,
 					model: entry.glb,
-					pose: actor.pose,
 					clip: entry.clips.includes( "stand" ) ? "stand" : entry.clips[0]!,
-					time: frame.seconds,
-					loop: true,
-					scale: 1,
-					pickable: false,
-					attachment: { gid: MALL_PREVIEW_GID, bone: entry.bone, offset: [ 0, 0, 0 ], basis: "compound" }
+					time: frame.seconds
 				}) );
 				committed = {
 					actors: [ actor, ...children ],

@@ -18,6 +18,7 @@ import (
 	"opensro.online/server/internal/game/enterworld"
 	"opensro.online/server/internal/game/gmcommand"
 	"opensro.online/server/internal/game/item/wire"
+	"opensro.online/server/internal/game/staff"
 	"opensro.online/server/internal/game/world/instance"
 	"opensro.online/server/internal/game/world/monster"
 	"opensro.online/server/internal/game/world/simulation"
@@ -43,7 +44,7 @@ type gmTeleportFixture struct {
 func newGMTeleportFixture(t *testing.T) *gmTeleportFixture {
 	t.Helper()
 	gm := rebirthTestCharacter(20, 100)
-	gm.GMPrivilege = true
+	gm.GMPrivilege, gm.GMCapabilities = true, uint32(staff.All)
 	target := rebirthTestCharacter(20, 100)
 	target.ID, target.Name = 4, "Target"
 	rt, clock := newTestRuntime(gm, testItems())
@@ -204,9 +205,6 @@ func TestGMPlayerTeleportRefusals(t *testing.T) {
 		}},
 		{"dead target recalled", gmcommand.SubRecallUser, "Target", func(f *gmTeleportFixture) { *f.target.CurrentHP = 0 }},
 		{"dead target sent to town", gmcommand.SubToTown, "Target", func(f *gmTeleportFixture) { *f.target.CurrentHP = 0 }},
-		{"target riding", gmcommand.SubRecallUser, "Target", func(f *gmTeleportFixture) {
-			f.target.ActiveCOS = &enterworld.CharacterCOS{Summoned: true}
-		}},
 		{"dead GM", gmcommand.SubMoveToUser, "Target", func(f *gmTeleportFixture) { *f.gm.CurrentHP = 0 }},
 		{"dead GM to town", gmcommand.SubGoTown, "", func(f *gmTeleportFixture) { *f.gm.CurrentHP = 0 }},
 	}

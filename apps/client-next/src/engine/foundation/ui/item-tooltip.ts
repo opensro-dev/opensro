@@ -9,6 +9,8 @@ appends the seal after the requirement rows; the under-heading place
 
 ===========================================================================
 */
+import { isSpiritItem } from "@/engine/foundation/gameplay/avatar-socket";
+import { spiritGaugePercent } from "@/engine/foundation/gameplay/spirit-skills";
 import type { InventoryItem } from "@/engine/contracts/gameplay";
 import type { Progression } from "../gameplay/progression";
 import { itemRarityIsSealed, sealTextSymbol } from "../gameplay/item-seal";
@@ -22,6 +24,34 @@ import { itemTooltipStone } from "./item-tooltip-stone";
 import { itemTooltipSetName } from "./item-tooltip-set";
 import type { EquipmentSet } from "../gameplay/equipment-sets";
 import { tooltipFormat, type TooltipRow } from "./tooltip-rows";
+/*
+================
+weaponTypeSymbol
+
+The text symbol naming a weapon kind (its fourth TypeID), or undefined.
+The tooltip's weapon type row and the weapon switch box share it.
+================
+*/
+export function weaponTypeSymbol( kind: number ): string | undefined {
+	return ({
+		2: "PARAM_WEAPON_SWORD",
+		3: "PARAM_WEAPON_BLADE",
+		4: "PARAM_WEAPON_SPEAR",
+		5: "PARAM_WEAPON_TBLADE",
+		6: "PARAM_WEAPON_BOW",
+		7: "UIO_NEWCHAR_STT_EU_ONEHANDSWORD",
+		8: "UIO_NEWCHAR_STT_EU_TWOHANDSWORD",
+		9: "UIO_NEWCHAR_STT_EU_DUELAXE",
+		10: "UIO_NEWCHAR_STT_EU_DARKSTAFF",
+		11: "UIO_NEWCHAR_STT_EU_TWOHANDSTAFF",
+		12: "UIO_NEWCHAR_STT_EU_CROSSBOW",
+		13: "UIO_NEWCHAR_STT_EU_DAGGER",
+		14: "UIO_NEWCHAR_STT_EU_HARP",
+		15: "UIO_NEWCHAR_STT_EU_ONEHANDSTAFF",
+		16: "UIIT_STT_FORT_ETC_SIEGEWEAPON"
+	} as Record<number, string>)[kind];
+}
+
 // 56CDA0/56CB80 family dispatch, 564230 name, 558CB0 degree and
 // 568500 requirements. This takes an item instance, never just a ref id.
 /*
@@ -149,23 +179,7 @@ export function itemTooltip(
 				add( `${text( "UIIT_STT_ARMOR_POSITION" )}: ${text( "UIIT_STT_ARMOR_POSITION_" + position )}` );
 			}
 		} else if ( t === 6 ) {
-			const symbol = ({
-				2: "PARAM_WEAPON_SWORD",
-				3: "PARAM_WEAPON_BLADE",
-				4: "PARAM_WEAPON_SPEAR",
-				5: "PARAM_WEAPON_TBLADE",
-				6: "PARAM_WEAPON_BOW",
-				7: "UIO_NEWCHAR_STT_EU_ONEHANDSWORD",
-				8: "UIO_NEWCHAR_STT_EU_TWOHANDSWORD",
-				9: "UIO_NEWCHAR_STT_EU_DUELAXE",
-				10: "UIO_NEWCHAR_STT_EU_DARKSTAFF",
-				11: "UIO_NEWCHAR_STT_EU_TWOHANDSTAFF",
-				12: "UIO_NEWCHAR_STT_EU_CROSSBOW",
-				13: "UIO_NEWCHAR_STT_EU_DAGGER",
-				14: "UIO_NEWCHAR_STT_EU_HARP",
-				15: "UIO_NEWCHAR_STT_EU_ONEHANDSTAFF",
-				16: "UIIT_STT_FORT_ETC_SIEGEWEAPON"
-			} as Record<number, string>)[k];
+			const symbol = weaponTypeSymbol( k );
 			if ( symbol ) add( `${text( "UIIT_STT_WEAPON_TYPE" )}: ${text( symbol )}` );
 		} else if ( t === 4 ) add( text( "UIIT_STT_SHIELD" ) );
 		else if ( t === 5 || t === 12 ) {
@@ -280,6 +294,60 @@ export function itemTooltip(
 		}
 		if ( !(t === 13 && k === 15 && ((f.itemParam6_2b0 ?? 0) & 2)) ) {
 			add( `${text( "UIIT_STT_AMOUNT" )} ${item.quantity}`, 0xffffffff );
+		}
+	}
+	// The rental clock native keeps on the instance (#4240): the later
+	// client renders the remainder from the 64-bit milliseconds it holds
+	// (ItemTooltip_BuildLines kind 0x15, 9AFB10), whole hours and minutes
+	// with the UIIT_STT_RENT_... rows. The deadline rides the item body
+	// only for a rental kind the session's references taught it.
+	if ( item.rentExpiresUnixMs !== undefined ) {
+		const remainingMs = item.rentExpiresUnixMs - Date.now();
+		if ( remainingMs <= 0 ) {
+			add( text( "UIIT_STT_RENT_USED_TIME_OVER" ), 0xffffffff );
+		} else {
+			add(
+				tooltipFormat(
+					text( "UIIT_STT_RENT_REMNANTS_TIME" ),
+					Math.trunc( remainingMs / 3600000 ),
+					text( "PARAM_HOUR" ),
+					Math.trunc( remainingMs % 3600000 / 60000 ),
+					text( "PARAM_MINUTE" )
+				),
+				0xffffffff
+			);
+		}
+	}
+	// Port-only (SRO_NASRUN, #4384): a Devil's Spirit's awakening clock (its
+	// data word, unix seconds in the durability field; #4381). Dormant,
+	// awake with the time left, or lapsed, in the later client's
+	// UIIT_STT_NASRUN_* words. Inference (the later client's tooltip is not
+	// traced): the time left reads in days, hours and minutes, as a
+	// 28-day period would not fit the rental rows' hours.
+	if ( isSpiritItem( item.typeFlags ) ) {
+		const clock = item.durability ?? 0, remainingMs = clock * 1000 - Date.now();
+		// The basic option the worn Spirit grants: its HP and MP percent
+		// (spirit-skills.ts spiritGaugePercent), in the magic option words.
+		const gauge = spiritGaugePercent( item.codename, item.plus );
+		if ( gauge !== undefined ) {
+			space();
+			add( text( "UIIT_STT_NASRUN_BASIC_OPTION" ), 0xffffffff );
+			for ( const param of [ "PARAM_HP", "PARAM_MP" ] ) {
+				add( `${text( param )} ${gauge}% ${text( "PARAM_INCREASE" )}`, 0xff00eaff );
+			}
+		}
+		space();
+		if ( clock === 0 ) add( text( "UIIT_STT_NASRUN_NOT_AWAKE" ), 0xffffffff );
+		else if ( remainingMs <= 0 ) add( text( "UIIT_STT_NASRUN_AWAKE_TIMEOVER" ), 0xffffffff );
+		else {
+			const minutes = Math.trunc( remainingMs / 60000 );
+			add( text( "UIIT_STT_NASRUN_AWAKE_TIME" ), 0xffffffff );
+			add(
+				`${Math.trunc( minutes / 1440 )} ${text( "PARAM_DAY" )} ${Math.trunc( minutes % 1440 / 60 )} ${
+					text( "PARAM_HOUR" )
+				} ${minutes % 60} ${text( "PARAM_MINUTE" )}`,
+				0xffffffff
+			);
 		}
 	}
 	if ( petDegree ) {

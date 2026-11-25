@@ -2,6 +2,11 @@
 	"version": 1,
 	"capabilities": [
 		{
+			"consumer": "src/engine/runtime/bug-report/journal.ts",
+			"provider": "src/engine/runtime/runtime.ts",
+			"functions": ["firstError"]
+		},
+		{
 			"consumer": "src/engine/runtime/ui/frame/draw.ts",
 			"provider": "src/engine/runtime/ui/resources/resources.ts",
 			"functions": ["has"]
@@ -37,29 +42,14 @@
 			"functions": ["compactCloseControl"]
 		},
 		{
-			"consumer": "src/engine/runtime/ui/frame/admission.ts",
-			"provider": "src/engine/runtime/ui/ui.ts",
-			"functions": ["fitWindowLabels"]
-		},
-		{
 			"consumer": "src/engine/runtime/ui/ui.ts",
 			"provider": "src/engine/runtime/ui/frame/admission.ts",
 			"functions": ["beginWindow", "endWindow", "unloadedImages"]
 		},
 		{
-			"consumer": "src/engine/runtime/ui/frame/frame.ts",
-			"provider": "src/engine/runtime/ui/ui.ts",
-			"functions": ["greyDisabledTabs"]
-		},
-		{
 			"consumer": "src/engine/foundation/ui/text-lines.ts",
 			"provider": "src/engine/runtime/ui/title/creation.ts",
 			"functions": ["callback:captionWords:2"]
-		},
-		{
-			"consumer": "src/engine/runtime/ui/title/title.ts",
-			"provider": "src/engine/runtime/ui/ui.ts",
-			"functions": ["callback:createTitleUi:2"]
 		},
 		{
 			"consumer": "src/engine/foundation/ui/text-lines.ts",
@@ -83,11 +73,6 @@
 		},
 		{
 			"consumer": "src/engine/runtime/ui/frame/label-fit.ts",
-			"provider": "src/engine/runtime/ui/ui.ts",
-			"functions": ["fitWindowLabels"]
-		},
-		{
-			"consumer": "src/engine/runtime/ui/frame/label-fit.ts",
 			"provider": "src/engine/runtime/ui/text/text.ts",
 			"functions": ["run", "extentHeight", "lineInk", "quads"]
 		},
@@ -104,7 +89,7 @@
 		{
 			"consumer": "src/engine/runtime/ui/frame/frame.ts",
 			"provider": "src/engine/runtime/ui/ui.ts",
-			"functions": ["fitWindowLabels", "hudCopy"]
+			"functions": ["hudCopy"]
 		},
 		{
 			"consumer": "src/engine/runtime/ui/frame/frame.ts",
@@ -249,6 +234,13 @@
 				"setUi",
 				"frame",
 				"readDoll"
+			]
+		},
+		{
+			"consumer": "src/engine/foundation/animation/character-pick.ts",
+			"provider": "src/engine/runtime/renderer/renderer.ts",
+			"functions": [
+				"visible"
 			]
 		},
 		{
@@ -413,6 +405,13 @@
 			"functions": [
 				"characterShadows",
 				"writeVertices"
+			]
+		},
+		{
+			"consumer": "src/engine/runtime/ui/hud/unique-status-hud.ts",
+			"provider": "src/engine/runtime/ui/ui.ts",
+			"functions": [
+				"callback:createUniqueStatusHud:0"
 			]
 		},
 		{
@@ -1040,8 +1039,9 @@
 			"consumer": "src/engine/runtime/assets/worker/loader.ts",
 			"provider": "src/engine/runtime/assets/worker/effects/program/program.ts",
 			"functions": [
-				"decode",
-				"clear"
+				"parseEffectProgram",
+				"decodeEffectMeshes",
+				"compileEffectProgram"
 			]
 		},
 		{
@@ -1172,6 +1172,8 @@
 				"saveVideo",
 				"saveExperimental",
 				"saveWindowPositions",
+				"uniqueNotifyBook",
+				"saveUniqueNotify",
 				"setCameraWaypoints"
 			]
 		},
@@ -1373,6 +1375,8 @@
 			"functions": [
 				"callback:createGameplay:1",
 				"callback:createGameplay:4",
+				"callback:createGameplay:5",
+				"callback:createGameplay:6",
 				"structure"
 			]
 		},
@@ -1491,7 +1495,8 @@
 			"consumer": "src/engine/foundation/ui/title-status.ts",
 			"provider": "src/engine/runtime/ui/title/title.ts",
 			"functions": [
-				"catalog"
+				"catalog",
+				"callback:serverStateBand:1"
 			]
 		},
 		{
@@ -1525,13 +1530,6 @@
 				"upload",
 				"release",
 				"updatePositions"
-			]
-		},
-		{
-			"consumer": "src/engine/runtime/renderer/weather/weather.ts",
-			"provider": "src/engine/runtime/renderer/world/world.ts",
-			"functions": [
-				"weatherGround"
 			]
 		},
 		{
@@ -2101,7 +2099,6 @@
 			"provider": "src/engine/runtime/renderer/renderer.ts",
 			"functions": [
 				"audioListener",
-				"dungeonCharacterPvs",
 				"presentationCamera"
 			]
 		},
@@ -2197,6 +2194,7 @@
 			"provider": "src/engine/runtime/simulation/worker/session/world/core.ts",
 			"functions": [
 				"country",
+				"monsterCodename",
 				"npcs",
 				"playerModels"
 			]
@@ -2259,10 +2257,34 @@
 			]
 		},
 		{
+			"consumer": "src/engine/runtime/bug-report/bug-report.ts",
+			"provider": "src/engine/runtime/bug-report/diagnostic-state.ts",
+			"functions": [
+				"diagnosticCompanions"
+			]
+		},
+		{
+			"consumer": "src/engine/runtime/runtime.ts",
+			"provider": "src/engine/runtime/bug-report/diagnostic-state.ts",
+			"functions": [
+				"diagnosticActors"
+			]
+		},
+		{
 			"consumer": "src/engine/runtime/bug-report/recorder.ts",
 			"provider": "src/engine/runtime/runtime.ts",
 			"functions": [
 				"sound"
+			]
+		},
+		{
+			"consumer": "src/engine/runtime/bug-report/filing.ts",
+			"provider": "src/engine/runtime/runtime.ts",
+			"functions": [
+				"failed",
+				"file",
+				"state",
+				"wake"
 			]
 		},
 		{
@@ -2495,6 +2517,13 @@
 		},
 		{
 			"consumer": "src/engine/runtime/renderer/frame/frame.ts",
+			"provider": "src/engine/runtime/renderer/device/brightness.ts",
+			"functions": [
+				"encode"
+			]
+		},
+		{
+			"consumer": "src/engine/runtime/renderer/frame/frame.ts",
 			"provider": "src/engine/runtime/renderer/device/ambient-occlusion.ts",
 			"functions": [
 				"encode"
@@ -2674,6 +2703,17 @@
 		},
 		{
 			"consumer": "src/engine/runtime/ui/hud/map-tools.ts",
+			"provider": "src/engine/runtime/ui/hud/map-catalogues.ts",
+			"functions": [
+				"createMapCatalogues",
+				"dispose",
+				"guide",
+				"regions",
+				"step"
+			]
+		},
+		{
+			"consumer": "src/engine/runtime/ui/hud/map-catalogues.ts",
 			"provider": "src/engine/runtime/assets/assets.ts",
 			"functions": [
 				"available",
@@ -2785,6 +2825,13 @@
 			]
 		},
 		{
+			"consumer": "src/engine/runtime/ui/hud/sro-macro-window.ts",
+			"provider": "src/engine/runtime/ui/text/text.ts",
+			"functions": [
+				"quads"
+			]
+		},
+		{
 			"consumer": "src/engine/foundation/gameplay/market.ts",
 			"provider": "src/engine/runtime/simulation/worker/session/world/gameplay/inventory/inventory.ts",
 			"functions": [
@@ -2814,9 +2861,103 @@
 				"createSunDropMarkers",
 				"step"
 			]
+		},
+		{
+			"consumer": "src/engine/runtime/ui/hud/quest-list.ts",
+			"provider": "src/engine/runtime/ui/res-layout/res-layout.ts",
+			"functions": ["createResLayoutWindow"]
+		},
+		{
+			"consumer": "src/engine/runtime/ui/ui.ts",
+			"provider": "src/engine/runtime/ui/res-layout/res-layout-resources.ts",
+			"functions": ["step", "data", "error"]
+		},
+		{
+			"consumer": "src/engine/runtime/ui/ui.ts",
+			"provider": "src/engine/runtime/ui/hud/quest-list.ts",
+			"functions": ["createQuestList", "observe", "trackedCount", "handleControl", "drawList", "drawTracker", "scrollBy", "locateQuest", "lastLocated", "trackerEntries"]
+		},
+		{
+			"consumer": "src/engine/runtime/ui/ui.ts",
+			"provider": "src/engine/runtime/ui/hud/world-map.ts",
+			"functions": ["activate", "surface", "drag", "scroll", "step", "present", "details", "position", "shortcut", "follow", "reset", "restorePosition", "guideWaypoint", "locate"]
+		},
+		{
+			"consumer": "src/engine/runtime/ui/hud/quest-list.ts",
+			"provider": "src/engine/runtime/ui/text/text.ts",
+			"functions": ["quads"]
+		},
+		{
+			"consumer": "src/engine/runtime/ui/res-layout/res-layout-resources.ts",
+			"provider": "src/engine/runtime/assets/assets.ts",
+			"functions": ["take", "available", "request", "cancel"]
+		},
+		{
+			"consumer": "src/engine/runtime/ui/res-layout/res-layout.ts",
+			"provider": "src/engine/runtime/ui/resources/resources.ts",
+			"functions": ["has", "size"]
+		},
+		{
+			"consumer": "src/engine/runtime/ui/res-layout/res-layout.ts",
+			"provider": "src/engine/runtime/ui/text/text.ts",
+			"functions": ["quads"]
+		},
+		{
+			"consumer": "src/engine/foundation/ui/quest-list.ts",
+			"provider": "src/engine/runtime/ui/ui.ts",
+			"functions": ["hudCopy"]
+		},
+		{
+			"consumer": "src/engine/runtime/ui/hud/quest-list.ts",
+			"provider": "src/engine/runtime/ui/hud/quest-timers.ts",
+			"functions": ["text"]
+		},
+		{
+			"consumer": "src/engine/runtime/ui/hud/quest-list.ts",
+			"provider": "src/engine/runtime/ui/ui.ts",
+			"functions": ["hudCopy"]
+		},
+		{
+			"consumer": "src/engine/runtime/assets/worker/packs/packs.ts",
+			"provider": "src/engine/runtime/assets/worker/packs/shared-blocks.ts",
+			"functions": [
+				"createSharedBlocks",
+				"read",
+				"sharedLocks"
+			]
+		},
+		{
+			"consumer": "src/engine/runtime/assets/worker/packs/shared-blocks.ts",
+			"provider": "src/engine/runtime/assets/worker/packs/packs.ts",
+			"functions": [
+				"fetched",
+				"neighbours",
+				"stored"
+			]
 		}
 	],
 	"boundaries": [
+		{
+			"file": "src/engine/runtime/ui/hud/styria-view.ts",
+			"expression": "copy",
+			"function": "styriaView",
+			"kind": "callback",
+			"reason": "The renderer (ui.ts) lends its copy lookup (hudCopy) to the Styria view: the view asks for its window strings by key and never reads the text tables itself."
+		},
+		{
+			"file": "src/engine/runtime/ui/hud/styria-view.ts",
+			"expression": "copy",
+			"function": "styriaScoreOps",
+			"kind": "callback",
+			"reason": "The renderer (ui.ts) lends its copy lookup (hudCopy) to the Styria view: the view asks for its window strings by key and never reads the text tables itself."
+		},
+		{
+			"file": "src/engine/runtime/ui/hud/styria-view.ts",
+			"expression": "copy",
+			"function": "styriaResultOps",
+			"kind": "callback",
+			"reason": "The renderer (ui.ts) lends its copy lookup (hudCopy) to the Styria view: the view asks for its window strings by key and never reads the text tables itself."
+		},
 		{
 			"file": "src/engine/runtime/characters/viewer-queries.ts",
 			"expression": "resourceFor",
@@ -2911,9 +3052,9 @@
 		{
 			"file": "src/engine/runtime/assets/worker/loader.ts",
 			"expression": "restart",
-			"function": "syncWork",
+			"function": "restartStallWindows",
 			"kind": "callback",
-			"reason": "Stall-window restarts of the downloads in flight (loader.ts downloadAttempt): a synchronous span restarts each attempt's own restart closure when the loop frees."
+			"reason": "Stall-window restarts of the downloads in flight (loader.ts downloadAttempt): a synchronous span (syncWork) or a world decode (decodeWorld) restarts each attempt's own restart closure when it ends."
 		},
 		{
 			"file": "src/engine/runtime/platform/keep-awake.ts",
@@ -3684,6 +3825,13 @@
 			"function": "callback:map:0",
 			"kind": "callback",
 			"reason": "Character resource owner admits the requested authored motion; synchronously borrowed from characters.ts at the original action-phase position."
+		},
+		{
+			"file": "src/engine/runtime/characters/presentation-actions.ts",
+			"expression": "resources.animation",
+			"function": "step",
+			"kind": "callback",
+			"reason": "Character resource owner admits the clock's BAN phases against the caster's current body before the cast publishes layers; synchronously borrowed from characters.ts at the original action-phase position."
 		},
 		{
 			"file": "src/engine/runtime/characters/presentation-auxiliary.ts",
@@ -4594,6 +4742,27 @@
 			"function": "readBytes",
 			"kind": "callback",
 			"reason": "Asset loader keeps each accepted chunk through ReadBytesOptions so a stalled read resumes after it (#3354); callers that do not resume leave it absent."
+		},
+		{
+			"file": "src/engine/runtime/assets/worker/packs/shared-blocks.ts",
+			"expression": "want.resolve",
+			"function": "serve",
+			"kind": "callback",
+			"reason": "Queued block member: each want carries its own caller's promise settlement, settled once when the member is served or fails (shared-blocks, #4324)."
+		},
+		{
+			"file": "src/engine/runtime/assets/worker/packs/shared-blocks.ts",
+			"expression": "want.reject",
+			"function": "serve",
+			"kind": "callback",
+			"reason": "Queued block member: each want carries its own caller's promise settlement, settled once when the member is served or fails (shared-blocks, #4324)."
+		},
+		{
+			"file": "src/engine/runtime/assets/worker/packs/shared-blocks.ts",
+			"expression": "queued.reject",
+			"function": "abandon",
+			"kind": "callback",
+			"reason": "Queued block member: each want carries its own caller's promise settlement, settled once when the member is served or fails (shared-blocks, #4324)."
 		}
 	],
 	"sequences": [
@@ -4638,8 +4807,8 @@
 		{
 			"file": "src/engine/runtime/runtime.ts",
 			"function": "frame",
-			"sourceSha256": "893da64950193bd65446cd52e4606326470850be5d3b216b693d5e9b1dfc6b6d",
-			"reason": "AEBD90 synchronously waits for visibility before AEC180 advances EFP ticks. The browser issues the GPU readback from the frame, but the answer is delivered between frames and folded into the next frame's advance: AEC0D0 ramps alpha at 1.5 per ms, so consuming it a frame late changes nothing visible, and no frame waits for the queue to drain (#2573). Ordinary frames issue no readback at all. A hidden frame renders only while a load awaits scene admission - a world entry awaiting game-ready, or a post-login frontend loading phase (loading-dock, loading-create, loading-race: their completion gate waits on the stage the renderer admits, and the frontend's stall watch runs on the step clock these frames advance) - under the same delivery: native keeps updating while inactive (A0F430 OnUpdate; A11650 skips drawing) and finishes loading in CPSMission_OnUpdate (728E10). A visible window that gets no RAF for STARVED_FRAME_MS runs the same delivery-paced maintenance frames. Device disposal cancels pending mapping. Startup also hands the asset owner the device texture features once (port-only texture variants), outside the frame. The frame also derives the own-mover step at its existing call site (the local mover's next frame, or the published own cast displacement adopted as a fixed segment, #1569); the delivery ordering above is unchanged by it. The frame also files terminal asset-failure incidents (#2337) from its existing report block and, on renderer failure, one renderer incident before disposal; both are synchronous sends at existing call sites and do not change the delivery ordering above. The own-mover world also carries the worker's relocation generation (a field read from the published gameplay state at the existing moverWorld call site), so a teleport inside the smoothing bound snaps; the delivery ordering above is unchanged by it. The same report block now files its runtime-error incidents under cause-named codes (#2559: asset_failed with the retry owner's facts, runtime_exception with a bounded stack, asset_offline for fetch bursts and offline, fatal_asset_failed only for the asset worker's death); these are likewise synchronous sends at the existing call site and do not change the delivery ordering above. The frame also suppresses the target selection ring while the followed target is blind-hidden (#2570): a pure read of the published entity and the held V key at the existing setSelectionDecal call site, so the delivery ordering above is unchanged by it. Startup now hands createUi one ports record instead of seventeen positional arguments (#2516); the frame body and its ordering are unchanged by that. The experimental-preferences event also hands the asset owner the HD row's live state on every change (port-only HD textures, #2061), outside the frame; the delivery ordering above is unchanged by it. The viewer startup now hands the asset owner the device texture features once, as startRuntime does (port-only, #2772), outside any frame. Startup now also hands createUi the crest image picker port (#2282), outside the frame; the delivery ordering above is unchanged by it. The same report block now defers an asset_offline filing until fetch failures persist a full OFFLINE_REPORT_GAP_MS after the burst first armed it (#2869), so a burst the retry owner already recovered files nothing, and a failure arriving more than a full gap after the previous one buries the arm so a later blink starts a fresh streak instead of filing the old streak's report; this is a synchronous timing check plus one performance.now read at the existing call site and does not change the delivery ordering above. The own-mover world also carries the worker's terrain-retention flag beside its navigation owner (#3006: a field read from the published gameplay state at the existing moverWorld call site), so the mover steps a retained terrain stand with the same resident seat the worker uses; the delivery ordering above is unchanged by it. The bug report's state provider now also shapes the presented entities' poses for the report's state.json (#2997), read at the existing state call site when a report is composed, outside any frame; the delivery ordering above is unchanged by it. The frame also hands the renderer the seasonal world layers the published event groups switch on (#3265: activeWorldLayers, a fresh set built from gameplay eventGroups each frame beside the existing setWeather call, #3402), a synchronous set the renderer compares by value (sameWorldLayers) so resident slots are re-found only when the layers change; the delivery ordering above is unchanged by it. The hidden frame also runs the renderer's maintenance release (BUG-070: a hidden tab's retired scenes, draws and texture sources otherwise wait for the next visible frame), one synchronous free call beside the skipped renderer.frame that issues no readback and no submit; native keeps freeing its objects from the update path while inactive (A0F430), so the delivery ordering above is unchanged by it. The same report block also drains the character presentation's skipped steps (#3504: a missing action timeline or recovery duration skips that motion) and files each as a degraded client report; a synchronous drain and send at the existing call site, so the delivery ordering above is unchanged by it.",
+			"sourceSha256": "e9d2e17398615737ee794005c430b9565012b1261314cd39a2f33a0e7b9b61da",
+			"reason": "AEBD90 synchronously waits for visibility before AEC180 advances EFP ticks. The browser issues the GPU readback from the frame, but the answer is delivered between frames and folded into the next frame's advance: AEC0D0 ramps alpha at 1.5 per ms, so consuming it a frame late changes nothing visible, and no frame waits for the queue to drain (#2573). Ordinary frames issue no readback at all. A hidden frame renders only while a load awaits scene admission - a world entry awaiting game-ready, or a post-login frontend loading phase (loading-dock, loading-create, loading-race: their completion gate waits on the stage the renderer admits, and the frontend's stall watch runs on the step clock these frames advance) - under the same delivery: native keeps updating while inactive (A0F430 OnUpdate; A11650 skips drawing) and finishes loading in CPSMission_OnUpdate (728E10). A visible window that gets no RAF for STARVED_FRAME_MS runs the same delivery-paced maintenance frames. Device disposal cancels pending mapping. Startup also hands the asset owner the device texture features once (port-only texture variants), outside the frame. The frame also derives the own-mover step at its existing call site (the local mover's next frame, or the published own cast displacement adopted as a fixed segment, #1569); the delivery ordering above is unchanged by it. The frame also files terminal asset-failure incidents (#2337) from its existing report block and, on renderer failure, one renderer incident before disposal; both are synchronous sends at existing call sites and do not change the delivery ordering above. The own-mover world also carries the worker's relocation generation (a field read from the published gameplay state at the existing moverWorld call site), so a teleport inside the smoothing bound snaps; the delivery ordering above is unchanged by it. The same report block now files its runtime-error incidents under cause-named codes (#2559: asset_failed with the retry owner's facts, runtime_exception with a bounded stack, asset_offline for fetch bursts and offline, fatal_asset_failed only for the asset worker's death); these are likewise synchronous sends at the existing call site and do not change the delivery ordering above. The frame also suppresses the target selection ring while the followed target is blind-hidden (#2570): a pure read of the published entity and the held V key at the existing setSelectionDecal call site, so the delivery ordering above is unchanged by it. Startup now hands createUi one ports record instead of seventeen positional arguments (#2516); the frame body and its ordering are unchanged by that. The experimental-preferences event also hands the asset owner the HD row's live state on every change (port-only HD textures, #2061), outside the frame; the delivery ordering above is unchanged by it. The viewer startup now hands the asset owner the device texture features once, as startRuntime does (port-only, #2772), outside any frame. Startup now also hands createUi the crest image picker port (#2282), outside the frame; the delivery ordering above is unchanged by it. The same report block now defers an asset_offline filing until fetch failures persist a full OFFLINE_REPORT_GAP_MS after the burst first armed it (#2869), so a burst the retry owner already recovered files nothing, and a failure arriving more than a full gap after the previous one buries the arm so a later blink starts a fresh streak instead of filing the old streak's report; this is a synchronous timing check plus one performance.now read at the existing call site and does not change the delivery ordering above. The own-mover world also carries the worker's terrain-retention flag beside its navigation owner (#3006: a field read from the published gameplay state at the existing moverWorld call site), so the mover steps a retained terrain stand with the same resident seat the worker uses; the delivery ordering above is unchanged by it. The bug report's state provider now also shapes the presented entities' poses for the report's state.json (#2997), read at the existing state call site when a report is composed, outside any frame; the delivery ordering above is unchanged by it. The frame also hands the renderer the seasonal world layers the published event groups switch on (#3265: activeWorldLayers, a fresh set built from gameplay eventGroups each frame beside the existing setWeather call, #3402), a synchronous set the renderer compares by value (sameWorldLayers) so resident slots are re-found only when the layers change; the delivery ordering above is unchanged by it. The hidden frame also runs the renderer's maintenance release (BUG-070: a hidden tab's retired scenes, draws and texture sources otherwise wait for the next visible frame), one synchronous free call beside the skipped renderer.frame that issues no readback and no submit; native keeps freeing its objects from the update path while inactive (A0F430), so the delivery ordering above is unchanged by it. The same report block also drains the character presentation's skipped steps (#3504: a missing action timeline or recovery duration skips that motion) and files each as a degraded client report; a synchronous drain and send at the existing call site, so the delivery ordering above is unchanged by it. The own-mover step no longer waits for the Experimental own-walk preference (owner 2026-11-21: the default, no row): the frame derives it at the same call site on every frame, so the delivery ordering above is unchanged by it. Startup now also hands createUi the unique-notify book and save ports (port-only, #3531), outside any frame; the delivery ordering above is unchanged by it. Startup now also hands the bug reporter the session owner's filing (#4109: the composed report posts with the session token and its answer is read from the published session state), outside any frame; the delivery ordering above is unchanged by it. Startup now also hands the bug report a firstError port that files an uncaught failure's first throw as a redacted client incident (#3684), outside any frame; the delivery ordering above is unchanged by it. The diagnostics report block now also prints the characters the frame shows beside the renderer's actor total (#4312: characters.shownCharacters, a synchronous map size read at the existing report call site); the delivery ordering above is unchanged by it.",
 			"evidence": "tests/fixtures/native/bsr-query-native.json",
 			"nativeFunction": 11451792,
 			"tests": [
@@ -4654,7 +4823,7 @@
 		{
 			"file": "src/engine/runtime/renderer/device/particle-query.ts",
 			"function": "query",
-			"sourceSha256": "5f5a585a19404f5e40d03e73b53ffff290eec615db97f9a1b5291e214309a45d",
+			"sourceSha256": "af139a5b6c0e44ec8b682c64c547415b2466c15ac6d2da231a3f2badc0149868",
 			"reason": "AEBD90 synchronously waits for visibility before AEC180 advances EFP ticks. The browser issues the readback without waiting: the answer is delivered between frames and folded into the next frame's advance (#2573). Ordinary frames issue no readback. Device disposal cancels pending mapping and ends the wait quietly - one all-invisible answer - so a late delivery is skipped instead of wedging on the cancelled readback (#2560).",
 			"evidence": "tests/fixtures/native/bsr-query-native.json",
 			"nativeFunction": 11451792,

@@ -6,7 +6,7 @@ portonly.go - port-only world definitions, registered behind their switches
 The shipped catalogue (catalog.go) is the v1.150 table extract and never
 grows: optional port-only content (the Pharaoh Tombs, #1750; the temple
 bands, #1800 step 3; the Jupiter worlds, #3267; the Muhan wave worlds,
-#3273) registers its own world definitions here while its
+#3273; the Styria Clash arena, #3648) registers its own world definitions here while its
 bands, #1800 step 3; the Jupiter worlds, #3267) registers its own world definitions here while its
 switch is on, so Lookup
 and the registry builders see one catalogue. Registration is idempotent
@@ -25,6 +25,7 @@ import (
 	"opensro.online/server/internal/game/world/jupiter"
 	"opensro.online/server/internal/game/world/muhan"
 	"opensro.online/server/internal/game/world/pharaohtomb"
+	"opensro.online/server/internal/game/world/styria"
 	"opensro.online/server/internal/game/world/temple"
 )
 
@@ -99,8 +100,9 @@ func TempleDefinitions() []Definition {
 ================
 ArabiaDefinitions
 
-The one port-only Arabia dungeon world. Type zero, one resident
-layer, no player limit: the default world's own shape.
+The port-only Arabia dungeon worlds (the dungeon and its boss lair).
+Type zero, one resident layer, no player limit: the default world's
+own shape.
 ================
 */
 func ArabiaDefinitions() []Definition {
@@ -189,6 +191,27 @@ func MuhanDefinitions() []Definition {
 		}
 	}
 	return definitions
+}
+
+/*
+================
+StyriaDefinitions
+
+The one port-only Styria Clash arena world (#3648). The later
+client's gameworlddata row 107 (INS_ARENA_JOB_WAR) is native type 1
+with a single layer and no resident limit, so the shape is the row's:
+one match per division at a time, as many entrants as the match
+owner fields. It registers while SRO_STYRIA_CLASH is on.
+================
+*/
+func StyriaDefinitions() []Definition {
+	return []Definition{{
+		ID:          DefinitionID(styria.WorldID),
+		CodeName:    styria.WorldCodeName,
+		NativeType:  1,
+		LayerLimit:  1,
+		PlayerLimit: 0,
+	}}
 }
 
 /*

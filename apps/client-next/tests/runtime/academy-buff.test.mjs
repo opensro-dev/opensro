@@ -34,6 +34,7 @@ function state() {
 		page: 0,
 		pages: 0,
 		rows: [],
+		own: null,
 		request: null,
 		result: null,
 		localMemberId: 11,

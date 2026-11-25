@@ -35,15 +35,19 @@ func rewriteDatabaseMeta(t *testing.T, dir, key string, value int) {
 func TestDatabaseVersionMismatchRefusesInPlace(t *testing.T) {
 	t.Parallel()
 
+	// The stamps sit outside the read window (StoreReadHeadroom wide
+	// since #3093): one past it on the newer side, one before it on the
+	// older side. Inside-window stamps boot; read_window_test.go and
+	// layout_steps_test.go pin those.
 	cases := []struct {
 		name  string
 		key   string
 		value int
 	}{
 		{name: "older character schema", key: metaKeySchemaVersion, value: CurrentVersion - 1},
-		{name: "newer character schema", key: metaKeySchemaVersion, value: CurrentVersion + 1},
-		{name: "older table layout", key: metaKeyLayoutVersion, value: CurrentLayoutVersion - 1},
-		{name: "newer table layout", key: metaKeyLayoutVersion, value: CurrentLayoutVersion + 1},
+		{name: "newer character schema", key: metaKeySchemaVersion, value: CurrentVersion + StoreReadHeadroom + 1},
+		{name: "older table layout", key: metaKeyLayoutVersion, value: CurrentLayoutVersion - StoreReadHeadroom - 1},
+		{name: "newer table layout", key: metaKeyLayoutVersion, value: CurrentLayoutVersion + StoreReadHeadroom + 1},
 	}
 	for _, test := range cases {
 		t.Run(test.name, func(t *testing.T) {

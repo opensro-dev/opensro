@@ -21,6 +21,9 @@ import unittest
 from pathlib import Path
 
 import build_alexandria_variant as variant  # noqa: E402
+import alexandria_map_tables  # noqa: E402
+import variant_files  # noqa: E402
+import variant_gates  # noqa: E402
 import import_vsro_alexandria as stage1  # noqa: E402
 from test_import_vsro_alexandria import terrain  # noqa: E402
 from alexandria_map_tables import overview_tiles  # noqa: E402
@@ -45,7 +48,7 @@ VSRO_TILES = (
 
 class CatalogMergeTests(unittest.TestCase):
 	def test_native_wins_and_vsro_fills_only_new_ids(self):
-		merged, remap = variant.merge_tile_catalog(NATIVE_TILES, VSRO_TILES, {4})
+		merged, remap = variant_files.merge_tile_catalog(NATIVE_TILES, VSRO_TILES, {4})
 		tiles = stage1.tile_catalog(merged)
 		self.assertEqual(remap, {})
 		self.assertEqual(tiles[1], ("X", "xxx.ddj"))
@@ -55,14 +58,14 @@ class CatalogMergeTests(unittest.TestCase):
 		self.assertIn(5, tiles)
 
 	def test_a_used_placeholder_moves_to_a_new_id_too(self):
-		merged, remap = variant.merge_tile_catalog(NATIVE_TILES, VSRO_TILES, {1})
+		merged, remap = variant_files.merge_tile_catalog(NATIVE_TILES, VSRO_TILES, {1})
 		self.assertEqual(remap, {1: 6})
 		tiles = stage1.tile_catalog(merged)
 		self.assertEqual(tiles[1], ("X", "xxx.ddj"))
 		self.assertEqual(tiles[6], ("Pharaoh", "pha.ddj"))
 
 	def test_a_used_disagreement_gets_a_new_id_and_an_unused_one_stays_native(self):
-		merged, remap = variant.merge_tile_catalog(NATIVE_TILES, VSRO_TILES, {2})
+		merged, remap = variant_files.merge_tile_catalog(NATIVE_TILES, VSRO_TILES, {2})
 		self.assertEqual(remap, {2: 6})
 		tiles = stage1.tile_catalog(merged)
 		self.assertEqual(tiles[6], ("B", "other.ddj"))
@@ -72,29 +75,29 @@ class CatalogMergeTests(unittest.TestCase):
 	def test_object_catalog_keeps_the_native_flag_on_a_conflict(self):
 		native = b'JMXVOBJI1000\r\n2\r\n00001 0x00000001 "a.bsr"\r\n00002 0x00000000 "xxx"\r\n'
 		vsro = b'JMXVOBJI1000\r\n3\r\n00001 0x00000000 "a.bsr"\r\n00002 0x00000000 "b.bsr"\r\n00003 0x00000000 "c.bsr"\r\n'
-		rows = stage1.object_catalog(variant.merge_object_catalog(native, vsro))
+		rows = stage1.object_catalog(variant_files.merge_object_catalog(native, vsro))
 		self.assertEqual(rows, {1: (1, "a.bsr"), 2: (0, "b.bsr"), 3: (0, "c.bsr")})
 
 
 class TerrainTests(unittest.TestCase):
 	def test_remap_changes_the_id_and_keeps_the_scale_bits(self):
-		mapped = variant.remap_terrain(terrain([5, 262]), {262: 605})
+		mapped = variant_files.remap_terrain(terrain([5, 262]), {262: 605})
 		self.assertEqual(stage1.terrain_tile_ids(mapped), {5, 605})
 		at = stage1.MAPM_SIGNATURE_BYTES + stage1.MAPM_BLOCK_HEAD_BYTES + stage1.MAPM_VERTEX_TEXTURE_OFFSET
-		self.assertEqual(struct.unpack_from("<H", mapped, at)[0] & variant.MAPM_TEXTURE_SCALE_MASK, 0x8400)
+		self.assertEqual(struct.unpack_from("<H", mapped, at)[0] & variant_files.MAPM_TEXTURE_SCALE_MASK, 0x8400)
 
 	def test_an_empty_remap_returns_the_terrain_unchanged(self):
 		source = terrain([5])
-		self.assertEqual(variant.remap_terrain(source, {}), source)
+		self.assertEqual(variant_files.remap_terrain(source, {}), source)
 
 
 class AvailabilityTests(unittest.TestCase):
 	def test_enable_regions_sets_only_the_named_bits(self):
-		mapinfo = variant.MFO_SIGNATURE + bytes(variant.MFO_HEADER_BYTES - len(variant.MFO_SIGNATURE)) + bytes(0x1000)
-		enabled = variant.enable_regions(mapinfo, [(48, 90), (46, 89)])
+		mapinfo = variant_files.MFO_SIGNATURE + bytes(variant_files.MFO_HEADER_BYTES - len(variant_files.MFO_SIGNATURE)) + bytes(0x1000)
+		enabled = variant_files.enable_regions(mapinfo, [(48, 90), (46, 89)])
 		bits = [
 			(index * 8 + bit)
-			for index, byte in enumerate(enabled[variant.MFO_HEADER_BYTES:])
+			for index, byte in enumerate(enabled[variant_files.MFO_HEADER_BYTES:])
 			for bit in range(8)
 			if byte & (0x80 >> bit)
 		]
@@ -103,17 +106,17 @@ class AvailabilityTests(unittest.TestCase):
 
 	def test_a_non_mfo_file_is_refused(self):
 		with self.assertRaises(ValueError):
-			variant.enable_regions(b"nope" * 10, [(1, 1)])
+			variant_files.enable_regions(b"nope" * 10, [(1, 1)])
 
 
 
 def table(rows):
-	return b"\xff\xfe" + variant.table_text(rows).encode("utf-16-le")
+	return b"\xff\xfe" + alexandria_map_tables.table_text(rows).encode("utf-16-le")
 
 
 def link(source, target, fee, level_min="0", scheduling="0"):
 	row = ["1", source, target, fee, scheduling, "0", "1", level_min, "999", "2", "0", "0"]
-	return row + ["0"] * (variant.LINK_COLUMNS - len(row))
+	return row + ["0"] * (variant_gates.LINK_COLUMNS - len(row))
 
 
 def gate(teleport_id, code, building, zone):
@@ -121,7 +124,7 @@ def gate(teleport_id, code, building, zone):
 
 
 def building(object_id, code, name):
-	return ["1", object_id, code, "k", "xxx", name] + ["0"] * (variant.BUILDING_COLUMNS - 6)
+	return ["1", object_id, code, "k", "xxx", name] + ["0"] * (variant_gates.BUILDING_COLUMNS - 6)
 
 
 def text(key, korean, trad, simp, jp, en):
@@ -158,9 +161,33 @@ class GateTests(unittest.TestCase):
 		}
 		return native, vsro
 
+	def test_a_building_on_a_taken_object_id_moves_and_its_gate_follows(self):
+		# r203q: six released avatars stood on the gate buildings' VSRO ids.
+		native, vsro = self.tables()
+		merged, _ = variant_gates.merge_gate_tables(native, vsro, codes=SYNTHETIC_GATES, taken={27753, 27755})
+		buildings = {row[2]: row[1] for row in stage1.table_rows(merged["teleportbuilding.txt"])}
+		self.assertEqual(buildings["STORE_SD_GATE2"], "27754")
+		self.assertNotIn(int(buildings["STORE_SD_GATE1"]), {27753, 27754, 27755})
+		gates = {row[2]: row[3] for row in stage1.table_rows(merged["teleportdata.txt"])}
+		self.assertEqual(gates["GATE_SD1"], buildings["STORE_SD_GATE1"])
+		self.assertEqual(gates["GATE_SD2"], "27754")
+
+	def test_a_later_gate_import_steps_over_every_other_object(self):
+		# r203r: the Sky Temple gate took max(teleportbuilding) + 1, a fox pet's id.
+		with tempfile.TemporaryDirectory() as scratch:
+			root = Path(scratch)
+			(root / "characterdata_5000.txt").write_bytes(table([["1", "51301", "COS_P_FOX_001"]]))
+			(root / "characterdata_160000.txt").write_bytes(table([["1", "60000", "MOB_OWN_OLD"]]))
+			(root / "itemdata_5000.txt").write_bytes(table([["1", "700", "ITEM_X"]]))
+			(root / "teleportbuilding.txt").write_bytes(table([["1", "900", "STORE_OWN_OLD"]]))
+			taken = variant_gates.gate_building_taken(
+				table([["1", "950", "STORE_KEPT"]]), root, "characterdata_160000.txt", {"MOB_NEW": 51400}
+			)
+		self.assertEqual(taken, {"51301", "700", "950", "51400"})
+
 	def test_gates_links_buildings_and_texts_are_added_to_the_native_tables(self):
 		native, vsro = self.tables()
-		merged, summary = variant.merge_gate_tables(native, vsro, codes=SYNTHETIC_GATES)
+		merged, summary = variant_gates.merge_gate_tables(native, vsro, codes=SYNTHETIC_GATES)
 		self.assertEqual(summary, {
 			"gates": ["GATE_SD1", "GATE_SD2"], "links": 4, "buildings": 2, "texts": 3,
 			"buildingCodes": ["STORE_SD_GATE1", "STORE_SD_GATE2"]
@@ -174,9 +201,9 @@ class GateTests(unittest.TestCase):
 
 	def test_links_take_the_scheduling_word_the_native_server_accepts_and_clamp_the_level(self):
 		native, vsro = self.tables()
-		merged, _ = variant.merge_gate_tables(native, vsro, codes=SYNTHETIC_GATES, level_cap=90)
+		merged, _ = variant_gates.merge_gate_tables(native, vsro, codes=SYNTHETIC_GATES, level_cap=90)
 		added = [row for row in stage1.table_rows(merged["teleportlink.txt"])][1:]
-		self.assertTrue(all(row[4] == "1" and row[5] == "0" and len(row) == variant.LINK_COLUMNS for row in added))
+		self.assertTrue(all(row[4] == "1" and row[5] == "0" and len(row) == variant_gates.LINK_COLUMNS for row in added))
 		entry = next(row for row in added if row[1:3] == ["1", "175"])
 		self.assertEqual(entry[6:9], ["1", "90", "999"])
 		leave = next(row for row in added if row[1:3] == ["175", "1"])
@@ -184,13 +211,13 @@ class GateTests(unittest.TestCase):
 
 	def test_a_condition_kind_the_server_does_not_evaluate_is_dropped_and_the_others_stay(self):
 		row = ["1", "3", "4", "5000", "0", "0", "1", "95", "999", "2", "0", "0", "3", "9", "9"] + ["0"] * 6
-		columns = variant.translate_link(row, {"3": "3", "4": "4"}, 90)
+		columns = variant_gates.translate_link(row, {"3": "3", "4": "4"}, 90)
 		self.assertEqual(columns[6:15], ["1", "90", "999", "2", "0", "0", "0", "0", "0"])
 
 	def test_a_dropped_condition_is_reported_with_its_link_and_operands(self):
 		row = ["1", "3", "4", "5000", "0", "0", "1", "95", "999", "2", "0", "0", "3", "5", "6"] + ["0"] * 6
 		dropped = []
-		variant.translate_link(row, {"3": "3", "4": "4"}, 90, dropped)
+		variant_gates.translate_link(row, {"3": "3", "4": "4"}, 90, dropped)
 		self.assertEqual(dropped, [{"from": "3", "to": "4", "kind": 3, "operands": ["5", "6"]}])
 
 	def test_an_item_condition_takes_the_variant_item_id(self):
@@ -198,32 +225,32 @@ class GateTests(unittest.TestCase):
 		row = ["1", "3", "4", "0", "0", "0", "4", "23973", "0", "5", "23973", "0", "1", "80", "102", "6", "0", "0"]
 		row += ["0"] * 3
 		dropped = []
-		columns = variant.translate_link(row, {"3": "3", "4": "4"}, 90, dropped, {"23973": "50100"})
+		columns = variant_gates.translate_link(row, {"3": "3", "4": "4"}, 90, dropped, {"23973": "50100"})
 		self.assertEqual(columns[6:18], ["4", "50100", "0", "5", "50100", "0", "1", "80", "102", "6", "0", "0"])
 		self.assertEqual(dropped, [])
 
 	def test_an_item_condition_without_its_item_keeps_the_link_out(self):
 		# Dropping the condition would open a keyed gate to everyone.
 		row = ["1", "3", "4", "0", "0", "0", "5", "23973", "0"] + ["0"] * 12
-		self.assertIsNone(variant.translate_link(row, {"3": "3", "4": "4"}, 90))
-		self.assertIsNone(variant.translate_link(row, {"3": "3", "4": "4"}, 90, None, {"1": "2"}))
+		self.assertIsNone(variant_gates.translate_link(row, {"3": "3", "4": "4"}, 90))
+		self.assertIsNone(variant_gates.translate_link(row, {"3": "3", "4": "4"}, 90, None, {"1": "2"}))
 
 	def test_the_gate_summary_lists_a_keyed_link_left_out(self):
 		native, vsro = self.tables()
 		keyed = link("175", "176", "0")
 		keyed[12:15] = ["4", "23973", "0"]
 		vsro["teleportlink.txt"] = table([keyed, link("176", "175", "0")])
-		merged, summary = variant.merge_gate_tables(native, vsro, codes=SYNTHETIC_GATES)
+		merged, summary = variant_gates.merge_gate_tables(native, vsro, codes=SYNTHETIC_GATES)
 		self.assertEqual(summary["omittedLinks"], [{"from": "175", "to": "176", "items": ["23973"]}])
 		added = [row for row in stage1.table_rows(merged["teleportlink.txt"])][1:]
 		self.assertEqual([row[1:3] for row in added], [["176", "175"]])
-		_, mapped = variant.merge_gate_tables(native, vsro, codes=SYNTHETIC_GATES, items={"23973": "7"})
+		_, mapped = variant_gates.merge_gate_tables(native, vsro, codes=SYNTHETIC_GATES, items={"23973": "7"})
 		self.assertNotIn("omittedLinks", mapped)
 
 	def test_the_thief_suit_condition_kind_survives_unreported(self):
 		row = ["1", "3", "4", "5000", "0", "0", "1", "95", "999", "2", "0", "0", "7", "0", "0"] + ["0"] * 6
 		dropped = []
-		columns = variant.translate_link(row, {"3": "3", "4": "4"}, 90, dropped)
+		columns = variant_gates.translate_link(row, {"3": "3", "4": "4"}, 90, dropped)
 		self.assertEqual(columns[6:15], ["1", "90", "999", "2", "0", "0", "7", "0", "0"])
 		self.assertEqual(dropped, [])
 
@@ -232,7 +259,7 @@ class GateTests(unittest.TestCase):
 		conditional = link("175", "176", "0")
 		conditional[12:15] = ["3", "42", "7"]
 		vsro["teleportlink.txt"] = table([conditional])
-		merged, summary = variant.merge_gate_tables(native, vsro, codes=SYNTHETIC_GATES)
+		merged, summary = variant_gates.merge_gate_tables(native, vsro, codes=SYNTHETIC_GATES)
 		self.assertEqual(summary["droppedConditions"],
 			[{"from": "175", "to": "176", "kind": 3, "operands": ["42", "7"]}])
 		added = [row for row in stage1.table_rows(merged["teleportlink.txt"])][1:]
@@ -243,7 +270,7 @@ class GateTests(unittest.TestCase):
 		conditional = link("175", "176", "0")
 		conditional[12:15] = ["6", "0", "0"]
 		vsro["teleportlink.txt"] = table([conditional])
-		merged, summary = variant.merge_gate_tables(native, vsro, codes=SYNTHETIC_GATES)
+		merged, summary = variant_gates.merge_gate_tables(native, vsro, codes=SYNTHETIC_GATES)
 		self.assertNotIn("droppedConditions", summary)
 		added = [row for row in stage1.table_rows(merged["teleportlink.txt"])][1:]
 		self.assertEqual(added[0][12:15], ["6", "0", "0"])
@@ -253,14 +280,14 @@ class GateTests(unittest.TestCase):
 		conditional = link("175", "176", "0")
 		conditional[12:15] = ["7", "0", "0"]
 		vsro["teleportlink.txt"] = table([conditional])
-		merged, summary = variant.merge_gate_tables(native, vsro, codes=SYNTHETIC_GATES)
+		merged, summary = variant_gates.merge_gate_tables(native, vsro, codes=SYNTHETIC_GATES)
 		self.assertNotIn("droppedConditions", summary)
 		added = [row for row in stage1.table_rows(merged["teleportlink.txt"])][1:]
 		self.assertEqual(added[0][12:15], ["7", "0", "0"])
 
 	def test_texts_use_the_native_column_layout_and_never_replace_a_native_key(self):
 		native, vsro = self.tables()
-		merged, _ = variant.merge_gate_tables(native, vsro, codes=SYNTHETIC_GATES)
+		merged, _ = variant_gates.merge_gate_tables(native, vsro, codes=SYNTHETIC_GATES)
 		rows = {row[1]: row for row in stage1.table_rows(merged["text"])}
 		self.assertEqual(rows["SN_ZONE_15"], ["1", "SN_ZONE_15", "kor15", "", "", "simp15", "trad15", "jp15", "South", "vi", ""])
 		self.assertEqual(rows["SN_Z1"][8], "Jangan")
@@ -269,7 +296,7 @@ class GateTests(unittest.TestCase):
 		native, vsro = self.tables()
 		native["teleportdata.txt"] = table([gate("175", "GATE_CH", "2094", "SN_Z1")])
 		with self.assertRaises(SystemExit):
-			variant.merge_gate_tables(native, vsro, codes=SYNTHETIC_GATES)
+			variant_gates.merge_gate_tables(native, vsro, codes=SYNTHETIC_GATES)
 
 	# ================
 	# test_outdoor_crossings_keep_both_directions_and_authored_conditions
@@ -284,27 +311,27 @@ class GateTests(unittest.TestCase):
 		vsro["teleportbuilding.txt"] = table(buildings)
 		vsro["teleportlink.txt"] = table(links)
 		vsro["text"] = table([text(r[4], "k", "t", "s", "j", "Outdoor") for r in gates])
-		merged, summary = variant.merge_gate_tables(native, vsro, codes=codes, level_cap=110)
+		merged, summary = variant_gates.merge_gate_tables(native, vsro, codes=codes, level_cap=110)
 		self.assertEqual(summary["buildings"], 4)
 		self.assertEqual(summary["links"], 4)
 		actual = [r for r in stage1.table_rows(merged["teleportlink.txt"]) if r[1] in {"178", "179", "180", "181"}]
 		self.assertEqual([r[1:4] for r in actual], [r[1:4] for r in links])
 		self.assertEqual([r[6:9] for r in actual], [r[6:9] for r in links])
 		self.assertEqual(list(stage1.table_rows(merged["teleportbuilding.txt"]))[-4:], buildings)
-		self.assertTrue(set(codes).issubset(variant.GATE_CODES))
+		self.assertTrue(set(codes).issubset(variant_gates.GATE_CODES))
 
 	# ================
 	# test_tomb_gates_link_the_entrance_to_three_exits_and_drop_unplaced_rows
 	# ================
 	def test_tomb_gates_link_the_entrance_to_three_exits_and_drop_unplaced_rows(self):
 		native, vsro = self.tables()
-		codes = variant.TOMB_GATE_CODES
+		codes = variant_gates.TOMB_GATE_CODES
 		self.assertEqual(codes[0], "GATE_TOMB_GATE_IN")
 		self.assertEqual(len(codes), 4)
-		self.assertFalse(set(codes) & set(variant.GATE_CODES), "tomb gates are opt-in")
+		self.assertFalse(set(codes) & set(variant_gates.GATE_CODES), "tomb gates are opt-in")
 		gates = [gate(str(164 + i), code, str(27744 + i), "SN_TOMB_" + str(i)) for i, code in enumerate(codes)]
 		for at in (1, 2, 3):
-			gates[at][variant.TELEPORT_WORLD_COLUMN] = str(56 + at)  # the source's worlds 57, 58, 59
+			gates[at][variant_gates.TELEPORT_WORLD_COLUMN] = str(56 + at)  # the source's worlds 57, 58, 59
 		unplaced = gate("168", "GATE_TOMBOSIRIS_GATE_OUT_1", "27748", "SN_TOMB_OSIRIS")
 		buildings = [building(str(27744 + i), code.replace("GATE_", "STORE_", 1), "SN_TOMB_" + str(i)) for i, code in enumerate(codes)]
 		links = [link("164", "165", "0"), link("164", "166", "0"), link("164", "167", "0"),
@@ -313,7 +340,7 @@ class GateTests(unittest.TestCase):
 		vsro["teleportbuilding.txt"] = table(buildings)
 		vsro["teleportlink.txt"] = table(links + [link("168", "164", "0")])
 		vsro["text"] = table([text(r[4], "k", "t", "s", "j", "Tomb") for r in gates])
-		merged, summary = variant.merge_gate_tables(native, vsro, codes=codes, level_cap=110)
+		merged, summary = variant_gates.merge_gate_tables(native, vsro, codes=codes, level_cap=110)
 		self.assertEqual(summary["buildings"], 4)
 		self.assertEqual(summary["links"], 6, "the unplaced Osiris exit's link is not carried")
 		added = [r for r in stage1.table_rows(merged["teleportdata.txt"]) if r[1] in {"164", "165", "166", "167", "168"}]
@@ -321,7 +348,7 @@ class GateTests(unittest.TestCase):
 		# The three exits keep their authored destination worlds 57, 58, 59: the
 		# port defines one permanent world per tomb while SRO_PHARAOH_TOMB is on
 		# (#1750). The entrance stays in the persistent world, as authored.
-		worlds = {r[2]: r[variant.TELEPORT_WORLD_COLUMN] for r in added}
+		worlds = {r[2]: r[variant_gates.TELEPORT_WORLD_COLUMN] for r in added}
 		self.assertEqual(worlds, {
 			"GATE_TOMB_GATE_IN": "1", "GATE_TOMB_GATE_OUT_1": "57",
 			"GATE_TOMB_GATE_OUT_2": "58", "GATE_TOMB_GATE_OUT_3": "59"})
@@ -372,7 +399,7 @@ class MapTests(unittest.TestCase):
 
 	def test_region_codes_fill_native_placeholders_for_the_city_regions_only(self):
 		native, vsro = self.tables()
-		merged, summary = variant.merge_map_tables(native, vsro, self.REGIONS)
+		merged, summary = alexandria_map_tables.merge_map_tables(native, vsro, self.REGIONS)
 		codes = {row[1]: row[2] for row in stage1.table_rows(merged["regioncode.txt"])}
 		self.assertEqual(codes[str((90 << 8) | 48)], "RN_SD_EGYPT01")
 		self.assertEqual(codes[str((90 << 8) | 49)], "RN_SD_EGYPT01")
@@ -382,12 +409,12 @@ class MapTests(unittest.TestCase):
 
 	def test_zone_names_map_entry_pins_and_texts_are_added_in_the_native_layout(self):
 		native, vsro = self.tables()
-		merged, summary = variant.merge_map_tables(native, vsro, self.REGIONS)
+		merged, summary = alexandria_map_tables.merge_map_tables(native, vsro, self.REGIONS)
 		zones = {row[1]: row for row in stage1.table_rows(merged["textzonename.txt"])}
 		self.assertEqual(sorted(zones), sorted(["25255", str((90 << 8) | 48), "RN_SD_EGYPT01_01", "RN_SD_EGYPT01_02"]))
 		self.assertEqual(zones["RN_SD_EGYPT01_01"][8], "Alexandria")
 		maps = [row for row in stage1.table_rows(merged["worldmap_mapinfo.txt"]) if row[0] == "12"]
-		self.assertEqual([len(row) for row in maps], [variant.MAPINFO_COLUMNS])
+		self.assertEqual([len(row) for row in maps], [alexandria_map_tables.MAPINFO_COLUMNS])
 		pins = [row[0] for row in stage1.table_rows(merged["worldmap_localinfo.txt"])]
 		self.assertEqual(pins, ["11001", "26000", "92706"])
 		keys = {row[1]: row for row in stage1.table_rows(merged["textdataname.txt"])}
@@ -414,7 +441,7 @@ class MapTests(unittest.TestCase):
 			icon("99020", (10, 85)),
 			icon("99021", (52, 85), size=("0", "0"))
 		])
-		merged, summary = variant.merge_map_tables(native, vsro, self.REGIONS)
+		merged, summary = alexandria_map_tables.merge_map_tables(native, vsro, self.REGIONS)
 		kept = [row[0] for row in stage1.table_rows(merged["worldmap_localinfo.txt"])]
 		self.assertEqual(kept, ["11001", "99001", "99005"])
 		self.assertEqual(summary["pins"], 2)
@@ -422,8 +449,8 @@ class MapTests(unittest.TestCase):
 	def test_texts_already_in_the_base_table_survive_the_map_step(self):
 		native, vsro = self.tables()
 		gate_texts = [["1", "SN_ZONE_21836_15", "k", "", "", "s", "t", "j", "Alexandria (South)", "v", ""]]
-		native["textdataname.txt"] = variant.append_rows(native["textdataname.txt"], gate_texts)
-		merged, _ = variant.merge_map_tables(native, vsro, self.REGIONS)
+		native["textdataname.txt"] = alexandria_map_tables.append_rows(native["textdataname.txt"], gate_texts)
+		merged, _ = alexandria_map_tables.merge_map_tables(native, vsro, self.REGIONS)
 		keys = {row[1] for row in stage1.table_rows(merged["textdataname.txt"])}
 		self.assertTrue({"SN_ZONE_21836_15", "SN_ZONE_23501"} <= keys)
 
@@ -441,11 +468,11 @@ class MapTests(unittest.TestCase):
 		zero_size[0], zero_size[13] = "91523", "0"
 		other_page = list(npc)
 		other_page[0], other_page[7] = "91599", "13"
-		vsro["worldmap_localinfo.txt"] = variant.append_rows(vsro["worldmap_localinfo.txt"],
+		vsro["worldmap_localinfo.txt"] = alexandria_map_tables.append_rows(vsro["worldmap_localinfo.txt"],
 			[["1"] + row + ["0"] for row in [shop, npc, unplaced, zero_size, other_page]])
-		vsro["textdata_object.txt"] = variant.append_rows(vsro["textdata_object.txt"],
+		vsro["textdata_object.txt"] = alexandria_map_tables.append_rows(vsro["textdata_object.txt"],
 			[text("SN_ZONE_11050", "k", "t", "s", "j", "Blacksmith")])
-		merged, _ = variant.merge_map_tables(native, vsro, self.REGIONS)
+		merged, _ = alexandria_map_tables.merge_map_tables(native, vsro, self.REGIONS)
 		rows = {r[0]: r for r in stage1.table_rows(merged["worldmap_localinfo.txt"])}
 		self.assertEqual(rows["91501"], npc)
 		self.assertEqual(rows["11050"], shop)
@@ -463,13 +490,13 @@ class MapTests(unittest.TestCase):
 		native, vsro = self.tables()
 		shop = pin("11050", "SN_ZONE_11050")
 		npc = pin("99010", "SN_NPC_SD_M_AREA_POTION")
-		vsro["worldmap_localinfo.txt"] = variant.append_rows(vsro["worldmap_localinfo.txt"],
+		vsro["worldmap_localinfo.txt"] = alexandria_map_tables.append_rows(vsro["worldmap_localinfo.txt"],
 			[["1"] + row + ["0"] for row in [shop, npc]])
-		vsro["textdata_object.txt"] = variant.append_rows(vsro["textdata_object.txt"], [
+		vsro["textdata_object.txt"] = alexandria_map_tables.append_rows(vsro["textdata_object.txt"], [
 			text("SN_ZONE_11050", "k", "t", "s", "j", "Blacksmith"),
 			text("SN_NPC_SD_M_AREA_POTION", "k", "t", "s", "j", "Potion Merchant Titi")
 		])
-		merged, _ = variant.merge_map_tables(native, vsro, self.REGIONS)
+		merged, _ = alexandria_map_tables.merge_map_tables(native, vsro, self.REGIONS)
 		rows = {r[0]: r for r in stage1.table_rows(merged["worldmap_localinfo.txt"])}
 		self.assertEqual(rows["11050"], shop)
 		self.assertNotIn("99010", rows)
@@ -487,11 +514,11 @@ class MapTests(unittest.TestCase):
 		other[0], other[8] = "26399", "99"
 		untranslated = list(field)
 		untranslated[0], untranslated[2] = "15200", "SN_ZONE_15200"
-		vsro["worldmap_localinfo.txt"] = variant.append_rows(vsro["worldmap_localinfo.txt"],
+		vsro["worldmap_localinfo.txt"] = alexandria_map_tables.append_rows(vsro["worldmap_localinfo.txt"],
 			[["1"] + row + ["0"] for row in [field, other, untranslated]])
-		vsro["textdata_object.txt"] = variant.append_rows(vsro["textdata_object.txt"],
+		vsro["textdata_object.txt"] = alexandria_map_tables.append_rows(vsro["textdata_object.txt"],
 			[text("SN_ZONE_CHAOS", "k", "t", "s", "j", "Chaos Maze")])
-		merged, _ = variant.merge_map_tables(native, vsro, self.REGIONS)
+		merged, _ = alexandria_map_tables.merge_map_tables(native, vsro, self.REGIONS)
 		rows = {r[0]: r for r in stage1.table_rows(merged["worldmap_localinfo.txt"])}
 		self.assertEqual(rows["26306"], field)
 		self.assertNotIn("26399", rows)
@@ -501,8 +528,8 @@ class MapTests(unittest.TestCase):
 
 	def test_nothing_is_added_twice(self):
 		native, vsro = self.tables()
-		merged, _ = variant.merge_map_tables(native, vsro, self.REGIONS)
-		again, summary = variant.merge_map_tables(merged, vsro, self.REGIONS)
+		merged, _ = alexandria_map_tables.merge_map_tables(native, vsro, self.REGIONS)
+		again, summary = alexandria_map_tables.merge_map_tables(merged, vsro, self.REGIONS)
 		self.assertEqual(
 			summary,
 			{"regionCodes": 0, "zoneNames": 0, "maps": 0, "pins": 0, "texts": 0, "overview": (46, 113, 177, 70)}
@@ -511,7 +538,7 @@ class MapTests(unittest.TestCase):
 
 	def test_the_overview_row_grows_west_and_south_and_keeps_its_other_columns(self):
 		native, vsro = self.tables()
-		merged, _ = variant.merge_map_tables(native, vsro, self.REGIONS)
+		merged, _ = alexandria_map_tables.merge_map_tables(native, vsro, self.REGIONS)
 		row = next(row for row in stage1.table_rows(merged["worldmap_mapinfo.txt"]) if row[:2] == ["0", "0"])
 		self.assertEqual(row[10:14], ["46", "113", "177", "70"])
 		self.assertEqual(row[3], "map_worldmap.ddj")
@@ -529,14 +556,14 @@ class MapTests(unittest.TestCase):
 		wide = overview_tiles((46, 113, 177, 70))
 		native = overview_tiles((66, 113, 177, 82))
 		self.assertEqual((len(native), len(wide)), (28 * 8, 33 * 11))
-		paths = variant.map_media_paths([], (46, 113, 177, 70), (66, 113, 177, 82))
+		paths = alexandria_map_tables.map_media_paths([], (46, 113, 177, 70), (66, 113, 177, 82))
 		self.assertEqual([path for path in paths if "map_world_" in path], wide)
 		self.assertIn("interface/worldmap/map/map_world_118x85.ddj", paths)
 		self.assertIn("interface/worldmap/map/map_world_66x101.ddj", paths)
 		self.assertIn("interface/worldmap/map/map_world_46x113.ddj", paths)
 
 	def test_media_paths_name_the_map_art_and_one_minimap_tile_per_region(self):
-		paths = variant.map_media_paths(self.REGIONS)
+		paths = alexandria_map_tables.map_media_paths(self.REGIONS)
 		self.assertIn("interface/worldmap/map/map_alex.ddj", paths)
 		self.assertIn("minimap/48x90.ddj", paths)
 		self.assertIn("minimap/49x90.ddj", paths)
@@ -546,8 +573,8 @@ class MapTests(unittest.TestCase):
 	# ================
 	def test_an_unwidened_page_keeps_its_art_beside_the_import(self):
 		box = (66, 113, 177, 82)
-		self.assertEqual(variant.page_tiles(box, box, [(67, 84)]), ["interface/worldmap/map/map_world_66x85.ddj"])
-		paths = variant.map_media_paths([(67, 84)], box, box)
+		self.assertEqual(alexandria_map_tables.page_tiles(box, box, [(67, 84)]), ["interface/worldmap/map/map_world_66x85.ddj"])
+		paths = alexandria_map_tables.map_media_paths([(67, 84)], box, box)
 		self.assertIn("interface/worldmap/map/map_world_66x85.ddj", paths)
 		self.assertNotIn("interface/worldmap/map/map_world_70x85.ddj", paths)
 
@@ -558,8 +585,8 @@ class LinkTests(unittest.TestCase):
 			root = Path(scratch)
 			(root / "native" / "sub").mkdir(parents=True)
 			(root / "native" / "sub" / "a.txt").write_bytes(b"native")
-			variant.link_tree(root / "native", root / "variant")
-			variant.replace_file(root / "variant" / "sub" / "a.txt", b"changed")
+			variant_files.link_tree(root / "native", root / "variant")
+			variant_files.replace_file(root / "variant" / "sub" / "a.txt", b"changed")
 			self.assertEqual((root / "native" / "sub" / "a.txt").read_bytes(), b"native")
 			self.assertEqual((root / "variant" / "sub" / "a.txt").read_bytes(), b"changed")
 
@@ -573,11 +600,11 @@ class GateLevelCapTests(unittest.TestCase):
 
 	def test_native_values_keep_the_v1150_cap(self):
 		for value in ("", "0", "off", "OFF", "false", "90", " 90 "):
-			self.assertEqual(variant.gate_level_cap({variant.LEVEL_CAP_FLAG: value}), variant.NATIVE_LEVEL_CAP, value)
-		self.assertEqual(variant.gate_level_cap({}), variant.NATIVE_LEVEL_CAP)
+			self.assertEqual(variant_gates.gate_level_cap({variant_gates.LEVEL_CAP_FLAG: value}), variant_gates.NATIVE_LEVEL_CAP, value)
+		self.assertEqual(variant_gates.gate_level_cap({}), variant_gates.NATIVE_LEVEL_CAP)
 
 	def test_110_lifts_the_cap(self):
-		self.assertEqual(variant.gate_level_cap({variant.LEVEL_CAP_FLAG: "110"}), variant.EXPANSION_LEVEL_CAP)
+		self.assertEqual(variant_gates.gate_level_cap({variant_gates.LEVEL_CAP_FLAG: "110"}), variant_gates.EXPANSION_LEVEL_CAP)
 
 	def test_port_stock_defaults_to_the_official_stock(self):
 		"""#2846: unset or off keeps each store's official goods."""
@@ -597,7 +624,7 @@ class GateLevelCapTests(unittest.TestCase):
 	def test_a_value_the_server_refuses_is_refused(self):
 		for value in ("on", "true", "1", "100", "yes"):
 			with self.assertRaises(ValueError, msg=value):
-				variant.gate_level_cap({variant.LEVEL_CAP_FLAG: value})
+				variant_gates.gate_level_cap({variant_gates.LEVEL_CAP_FLAG: value})
 
 
 class AddGatesTests(unittest.TestCase):
@@ -606,33 +633,33 @@ class AddGatesTests(unittest.TestCase):
 	def run_add_gates(self, cap):
 		native_tables, vsro_tables = GateTests().tables()
 		vsro_files = {
-			variant.TEXTDATA + "teleportdata.txt": vsro_tables["teleportdata.txt"],
-			variant.TEXTDATA + "teleportbuilding.txt": vsro_tables["teleportbuilding.txt"],
-			variant.TEXTDATA + "teleportlink.txt": vsro_tables["teleportlink.txt"],
-			variant.TEXTDATA + "textdata_object.txt": vsro_tables["text"]
+			variant_files.TEXTDATA + "teleportdata.txt": vsro_tables["teleportdata.txt"],
+			variant_files.TEXTDATA + "teleportbuilding.txt": vsro_tables["teleportbuilding.txt"],
+			variant_files.TEXTDATA + "teleportlink.txt": vsro_tables["teleportlink.txt"],
+			variant_files.TEXTDATA + "textdata_object.txt": vsro_tables["text"]
 		}
-		original_read, original_merge = variant.read_vsro_file, variant.merge_gate_tables
-		original_cap = variant.os.environ.get(variant.LEVEL_CAP_FLAG)
+		original_read, original_merge = variant_gates.read_vsro_file, variant_gates.merge_gate_tables
+		original_cap = variant.os.environ.get(variant_gates.LEVEL_CAP_FLAG)
 		with tempfile.TemporaryDirectory() as scratch:
 			native, out = Path(scratch) / "native", Path(scratch) / "out"
-			textdata = native / "Media_extracted" / variant.TEXTDATA
+			textdata = native / "Media_extracted" / variant_files.TEXTDATA
 			textdata.mkdir(parents=True)
 			for name in ("teleportdata.txt", "teleportbuilding.txt", "teleportlink.txt"):
 				(textdata / name).write_bytes(native_tables[name])
 			(textdata / "textdataname.txt").write_bytes(native_tables["text"])
-			variant.read_vsro_file = lambda root, archive, name: vsro_files[name]
+			variant_gates.read_vsro_file = lambda root, archive, name: vsro_files[name]
 			# merge_gate_tables binds GATE_CODES at definition; route the synthetic gates in.
-			variant.merge_gate_tables = lambda *a, **k: original_merge(*a, **{**k, "codes": SYNTHETIC_GATES})
-			variant.os.environ[variant.LEVEL_CAP_FLAG] = cap
+			variant_gates.merge_gate_tables = lambda *a, **k: original_merge(*a, **{**k, "codes": SYNTHETIC_GATES})
+			variant.os.environ[variant_gates.LEVEL_CAP_FLAG] = cap
 			try:
-				summary, merged = variant.add_gates(Path(scratch) / "vsro", native, out)
-				written = (out / "Media_extracted" / variant.TEXTDATA / "teleportlink.txt").read_bytes()
+				summary, merged = variant_gates.add_gates(Path(scratch) / "vsro", native, out)
+				written = (out / "Media_extracted" / variant_files.TEXTDATA / "teleportlink.txt").read_bytes()
 			finally:
-				variant.read_vsro_file, variant.merge_gate_tables = original_read, original_merge
+				variant_gates.read_vsro_file, variant_gates.merge_gate_tables = original_read, original_merge
 				if original_cap is None:
-					variant.os.environ.pop(variant.LEVEL_CAP_FLAG, None)
+					variant.os.environ.pop(variant_gates.LEVEL_CAP_FLAG, None)
 				else:
-					variant.os.environ[variant.LEVEL_CAP_FLAG] = original_cap
+					variant.os.environ[variant_gates.LEVEL_CAP_FLAG] = original_cap
 		return summary, merged, written
 
 	def entry_level(self, merged):
@@ -681,7 +708,7 @@ class ClearContentTests(unittest.TestCase):
 		(self.variant / variant.VARIANT_MANIFEST).write_text("{}", encoding="utf-8")
 		out = variant.clear_content(self.variant, self.native)
 		out.mkdir(parents=True)
-		variant.link_tree(self.native / "Media_extracted", out / "Media_extracted")
+		variant_files.link_tree(self.native / "Media_extracted", out / "Media_extracted")
 		self.assertEqual((out / "Media_extracted" / "a.txt").read_bytes(), b"new native bytes")
 		self.assertFalse((out / "Media_extracted" / "dropped.txt").exists())
 		self.assertFalse((self.variant / variant.VARIANT_MANIFEST).exists())
@@ -691,7 +718,7 @@ class ClearContentTests(unittest.TestCase):
 	def test_clearing_a_linked_tree_leaves_the_native_file(self):
 		out = variant.clear_content(self.variant, self.native)
 		out.mkdir(parents=True)
-		variant.link_tree(self.native / "Media_extracted", out / "Media_extracted")
+		variant_files.link_tree(self.native / "Media_extracted", out / "Media_extracted")
 		variant.clear_content(self.variant, self.native)
 		self.assertEqual(self.native_file.read_bytes(), b"new native bytes")
 

@@ -88,17 +88,49 @@ func TestStrandedPetWarpsToAnOwnerTwoSectorsAway(t *testing.T) {
 
 /*
 ================
-TestWalledInPetWarpsToAnAdjacentOwnerAfterTenStalledStops
+TestWalledInPetWarpsToAnAdjacentOwnerAtOnce
 
-The adjacency test holds one sector either way, so the sector warp never fires there;
-the stuck rule does. Every refused step is a stalled stop (event 8,
-counted as stuck); the tenth relocates the pet onto its owner. The
-port's earlier test had the walled-in pet stay put, which is not native.
+The adjacency test holds one sector either way, so the sector warp never
+fires there. A pet walled in with no route home is relocated onto its owner
+as soon as its follow move finds no way (port-only, petrecovery.go), not
+after ten refused steps.
 ================
 */
-func TestWalledInPetWarpsToAnAdjacentOwnerAfterTenStalledStops(t *testing.T) {
+func TestWalledInPetWarpsToAnAdjacentOwnerAtOnce(t *testing.T) {
 	owner := simulation.Spawn{RegionID: 0x62a9, X: 300, Z: 500}
 	rt, key, state := strandedWolf(t, owner)
+	warpedAt := -1
+	for now := int64(2_000_000); now < 2_005_000 && warpedAt < 0; now += 100 {
+		rt.advancePet(key, now)
+		if at := state.mover.AnyFollower().Position(now); at.RegionID == owner.RegionID && at.X == owner.X {
+			warpedAt = int(now-2_000_000) / 100
+		}
+	}
+	// The first tick's follow move records the verdict; the next acts on it.
+	if warpedAt < 0 || warpedAt > 1 {
+		t.Fatalf("the walled-in pet warped on tick %d, want on the tick after its first follow move", warpedAt)
+	}
+	if got := rt.PetCombatCounters()["recovery.follow_no_route"]; got != 1 {
+		t.Fatalf("recovery.follow_no_route = %d, want the one warp counted", got)
+	}
+}
+
+/*
+================
+TestRoutedButRefusedPetWarpsAfterTenStalledStops
+
+The native stuck rule still answers a pet whose way is known but whose every
+step is refused: each refused step is a stalled stop (event 8, counted as
+stuck) and the tenth relocates the pet onto its owner, inside the
+watchdog's window.
+================
+*/
+func TestRoutedButRefusedPetWarpsAfterTenStalledStops(t *testing.T) {
+	owner := simulation.Spawn{RegionID: 0x62a9, X: 300, Z: 500}
+	rt, key, state := strandedWolf(t, owner)
+	rt.PlanCompanionRoute = func(from, goal simulation.Spawn) []simulation.Spawn {
+		return []simulation.Spawn{from, {RegionID: from.RegionID, X: from.X, Z: from.Z + 100}, goal}
+	}
 	warpedAt := -1
 	var frames []simulation.Frame
 	for now := int64(2_000_000); now < 2_005_000 && warpedAt < 0; now += 100 {

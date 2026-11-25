@@ -9,8 +9,9 @@ same facts from the contributor's own retail binary via rizin
 `afsj`, a function's text from `pdfj` disassembly, cross references
 from `axtj`. Commands that never touched the dump (they read the
 overlay DB) delegate to revtool unchanged: `find`, `audit`, `rename`,
-`doctor`, `sync`. `revtool.py --backend rizin` dispatches here; this
-module is also runnable on its own, with the same argument shapes.
+`note`, `seen`, `doctor`, `sync`. `revtool.py --backend rizin`
+dispatches here; this module is also runnable on its own, with the
+same argument shapes.
 
     py revtool_rizin.py --binary SRO_Client.exe index
     py revtool_rizin.py --binary SRO_Client.exe view sub_402a70
@@ -88,6 +89,8 @@ except ImportError:  # repo layout not merged yet: allow an explicit home
 		raise SystemExit(
 			"error: revtool_rizin needs revtool.py beside it "
 			"(tools/re/revtool/) or REVTOOL_HOME pointing at it.")
+
+import revtool_seed  # noqa: E402  (the applied-seed record, #4043)
 
 RIZIN_VERSION = "0.8.2"
 ANALYSIS_CHOICES = ("aac", "aap", "aaa", "none")
@@ -221,6 +224,17 @@ class RizinSession:
 		doc = self.cmdj(f"pdfj @ {va:#x}") or {}
 		return doc.get("ops") or []
 
+	def containing_function(self, va):
+		"""Start of the analyzed function whose body holds va, or None.
+
+		A string or immediate search lands inside a function, never on
+		its first byte; afij answers for any address the function covers.
+		"""
+		rows = self.cmdj(f"afij @ {va:#x}") or []
+		if not rows or rows[0].get("offset") is None:
+			return None
+		return int(rows[0]["offset"])
+
 	def xrefs_to(self, va):
 		"""axtj rows pointing at va: [{from, to, type}]."""
 		self.cmd(f"s {va:#x}")
@@ -309,7 +323,11 @@ def bn_signature(entry, sig_parts, token):
 
 
 def token_maps(con):
-	"""VA -> overlay token for functions and named data (from the DB)."""
+	"""(func_by_va, data_by_va): VA -> token for functions and named data.
+
+	normalize_line and function_lines take the pair whole: a call target
+	needs the function names, a bare address the data names.
+	"""
 	func_by_va = {}
 	for addr, name in con.execute("SELECT addr,name FROM functions"):
 		va = int(addr, 16)
@@ -326,18 +344,30 @@ def token_maps(con):
 	return func_by_va, data_by_va
 
 
-_FCN_TEXT_RE = re.compile(r"\b(?:fcn|sub)\.([0-9a-fA-F]{8})\b")
+# A call target as rizin spells it: its analysis name (`fcn.00964b60`) or
+# a seeded project's own flag (`sub_964b60`).
+_FCN_TEXT_RE = re.compile(r"\b(?:(?:fcn|sub)\.([0-9a-fA-F]{8})|sub_([0-9a-fA-F]+))\b")
 _DATA_TEXT_RE = re.compile(r"\b0x([0-9a-fA-F]{4,8})\b")
 
 
-def normalize_line(text, data_by_va):
+def normalize_line(text, tokens):
 	"""BN spelling inside one disassembly line.
 
-	Call targets become `sub_...`; a bare address that the overlay
-	knows as a named datum becomes its `data_...` token. Everything
-	else (registers, immediates, comments) is rizin's text unchanged.
+	tokens is token_maps' pair. A call target becomes the name the index
+	holds for it (a seed-applied project names most of them), else its
+	`sub_...` token: rizin's own flags lag the seed, and a raw `sub_` on
+	a named function reads as unexplored code. A bare address that the
+	overlay knows as a named datum becomes its `data_...` token.
+	Everything else (registers, immediates, comments) is rizin's text
+	unchanged.
 	"""
-	text = _FCN_TEXT_RE.sub(lambda m: "sub_" + m.group(1).lower().lstrip("0"), text)
+	func_by_va, data_by_va = tokens
+
+	def fcn_sub(m):
+		digits = m.group(1) or m.group(2)
+		return func_by_va.get(int(digits, 16)) or "sub_" + digits.lower().lstrip("0")
+
+	text = _FCN_TEXT_RE.sub(fcn_sub, text)
 
 	def data_sub(m):
 		va = int(m.group(1), 16)
@@ -346,7 +376,7 @@ def normalize_line(text, data_by_va):
 	return _DATA_TEXT_RE.sub(data_sub, text)
 
 
-def function_lines(rz, va, signature, data_by_va, raw=False):
+def function_lines(rz, va, signature, tokens, raw=False):
 	"""Addressed text lines for one function, header first.
 
 	Each line is `<8hex><2sp><code>` - the dump's wire shape - but the
@@ -362,7 +392,7 @@ def function_lines(rz, va, signature, data_by_va, raw=False):
 			continue
 		code = op.get("disasm") or op.get("opcode") or ""
 		if not raw:
-			code = normalize_line(code, data_by_va)
+			code = normalize_line(code, tokens)
 		lines.append(f"{off:08x}  {code}")
 	return lines
 
@@ -431,8 +461,9 @@ def cmd_index(args, con, rz):
 	# reference step run on it, or a fresh session's analysis.
 	analysis = (f"project+{refs_step}" if from_project
 	            else getattr(args, "analyze", "aac"))
+	target_sha = revtool.sha256_file(binary)
 	revtool.meta_set(con, "backend", "rizin")
-	revtool.meta_set(con, "target_sha256", revtool.sha256_file(binary))
+	revtool.meta_set(con, "target_sha256", target_sha)
 	revtool.meta_set(con, "rizin_analysis", analysis)
 	revtool.record_artifact(
 		con, "target", binary, record_count=len(rows), producer="PE file")
@@ -461,26 +492,85 @@ def cmd_index(args, con, rz):
 		print("note: rizin sees analysis-reachable code only; the BN dump "
 		      "index holds roughly 4x this many functions. The two "
 		      "backends are not interchangeable views of one set.")
+	# A project applied from a seed other than the pinned one indexes
+	# without a word otherwise (#4043); say so once, here.
+	stale = revtool_seed.stale_seed_warning(target_sha, rz.rzdb)
+	if stale:
+		print(stale)
 	return 0
+
+
+# =====================================================================
+# find
+# =====================================================================
+
+def warn_stale_seed(args, con):
+	"""Print the stale-seed line for args' project, when it is stale (#4043).
+
+	The project is the one the session would load: --rzdb, else the
+	project beside --db (open_session's default).
+	"""
+	binary = revtool.get_binary(con, args) or getattr(args, "binary", None) \
+		or revtool.DEFAULT_BINARY
+	if not binary or not os.path.isfile(binary):
+		return
+	rzdb = getattr(args, "rzdb", None)
+	if rzdb is None and getattr(args, "db", None):
+		rzdb = os.path.splitext(args.db)[0] + ".rzdb"
+	line = revtool_seed.stale_seed_warning(revtool.sha256_file(binary), rzdb)
+	if line:
+		print(line)
+
+
+def cmd_find(args, con, _rz):
+	"""find (delegated); an empty result also checks the project's seed.
+
+	"(no matches)" on a stale project reads as "the maintainers never
+	named it" when the pinned seed names it (#4043).
+	"""
+	return revtool.cmd_find(
+		args, con, on_empty=lambda: warn_stale_seed(args, con))
 
 
 # =====================================================================
 # view
 # =====================================================================
 
+def resolve_view_target(con, rz, target):
+	"""The function row `view` shows for target, and the address it held.
+
+	A name or a function's first address resolves as everywhere else. An
+	address inside a function (what `strings` or a byte search reports)
+	resolves to the function that contains it, so the reader lands on
+	the code that uses the hit instead of a "not found".
+	"""
+	row = revtool.resolve_func(con, target)
+	if row:
+		return row, None
+	addr = revtool.norm_addr(target)
+	if not addr:
+		return None, None
+	owner = rz.containing_function(int(addr, 16))
+	if owner is None:
+		return None, None
+	return revtool.resolve_func(con, f"{owner:08x}"), int(addr, 16)
+
+
 def cmd_view(args, con, rz):
-	row = revtool.resolve_func(con, args.target)
+	row, inside = resolve_view_target(con, rz, args.target)
 	if not row:
 		print(f"error: function not found: {args.target}", file=sys.stderr)
-		print("  (run `index` first, or try `find`)", file=sys.stderr)
+		print("  (no indexed function starts at or contains it; run `index` first, or try `find`)",
+		      file=sys.stderr)
 		return 1
+	if inside is not None:
+		print(f"note: {args.target} is inside {row[1]} @ 0x{row[0]}", file=sys.stderr)
 	addr, name, sig, _sb, _eb, _sl, _el = row
 	va = int(addr, 16)
 	gate = revtool.investigation_gate(con, args, name)
 	if gate is not None:
 		return gate
-	_func_by_va, data_by_va = token_maps(con)
-	lines = function_lines(rz, va, sig, data_by_va, raw=args.raw)
+	lines = function_lines(rz, va, sig, token_maps(con), raw=args.raw)
 
 	# --lines is a FUNCTION-LOCAL 1-based range under this backend
 	# (the dump's are whole-dump line numbers; see module docstring).
@@ -626,9 +716,8 @@ def cmd_rename(args, con, rz):
 		if row:
 			session = open_session(args, con, True)
 			try:
-				_func_by_va, data_by_va = token_maps(con)
 				args.gate_lines = function_lines(
-					session, int(row[0], 16), row[2], data_by_va)
+					session, int(row[0], 16), row[2], token_maps(con))
 			finally:
 				session.close()
 	return revtool.cmd_rename(args, con)
@@ -662,7 +751,7 @@ def cmd_xref(args, con, rz):
 	func_rows = sorted(
 		(int(a, 16), n) for a, n in
 		con.execute("SELECT addr,name FROM functions"))
-	_func_by_va, data_by_va = token_maps(con)
+	tokens = token_maps(con)
 
 	refs = rz.xrefs_to(va)
 	hits = []
@@ -675,7 +764,7 @@ def cmd_xref(args, con, rz):
 		if doc:
 			line = doc[0].get("disasm") or doc[0].get("opcode") or ""
 		hits.append((f"{src:08x}", owner_of(func_rows, src),
-		             normalize_line(line, data_by_va), ref.get("type")))
+		             normalize_line(line, tokens), ref.get("type")))
 
 	applied = gmap.get(scan_sym)
 	label = scan_sym + (f" ({applied[0]})" if applied else "")
@@ -846,8 +935,7 @@ def cmd_coverage(args, con, rz):
 	renamed = len(refs) - n_unl - n_noteonly
 	read_pct = 100.0 if not refs else 100.0 * renamed / len(refs)
 
-	_func_by_va, data_by_va = token_maps(con)
-	lines = function_lines(rz, va, sig, data_by_va)
+	lines = function_lines(rz, va, sig, token_maps(con))
 	offsets = revtool.function_field_offsets(lines)
 	bindings = revtool.load_bindings(con, addr)
 	fields_by_type = {t: revtool.load_fields(con, t)
@@ -960,7 +1048,7 @@ def main(argv=None) -> int:
 	sp = sub.add_parser("find", help="find functions by name/signature substring")
 	sp.add_argument("pattern")
 	sp.add_argument("--limit", type=int, default=40)
-	sp.set_defaults(handler=lambda a, c, _rz: revtool.cmd_find(a, c), need_rizin=False)
+	sp.set_defaults(handler=cmd_find, need_rizin=False)
 
 	sp = sub.add_parser("view", help="render one function (rizin disassembly + overlay)")
 	sp.add_argument("target", help="sub_xxxx | applied name | address")
@@ -1007,6 +1095,29 @@ def main(argv=None) -> int:
 	rl.add_argument("--tier", default="guess", help=f"confidence: {'|'.join(revtool.TIERS)}")
 	rl.add_argument("--evidence", default=None)
 	sp.set_defaults(handler=cmd_rename, need_rizin=False)
+
+	# view's label-debt footer tells the reader to run `seen`/`note`;
+	# both are overlay-only (like find/audit/rename), so they delegate
+	# with the same argument shapes as the dump CLI (#4043).
+	sp = sub.add_parser("note", help="attach/list/remove notes")
+	sp.add_argument("action", choices=["add", "list", "rm"])
+	sp.add_argument("target", nargs="?",
+	                help="addr | symbol | symbol@addr | (list filter) | (rm id)")
+	sp.add_argument("body", nargs="?")
+	sp.add_argument("--tier", default="mechanism",
+	                help=f"confidence: {'|'.join(revtool.TIERS)}")
+	sp.add_argument("--supersedes", default=None,
+	                help="comma-separated note ids this note RETIRES "
+	                     "(they get a visible [SUPERSEDED by #N] prefix). Use when "
+	                     "correcting an earlier claim instead of letting both coexist.")
+	sp.set_defaults(handler=lambda a, c, _rz: revtool.cmd_note(a, c), need_rizin=False)
+
+	sp = sub.add_parser("seen",
+	                    help="one-shot triage: label an investigated symbol with a hypothesis")
+	sp.add_argument("symbol", help="sub_/data_ token (or applied name) you investigated")
+	sp.add_argument("body", help="what it does / your best guess (required, >=8 chars)")
+	sp.add_argument("--tier", default="guess", help=f"confidence: {'|'.join(revtool.TIERS)}")
+	sp.set_defaults(handler=lambda a, c, _rz: revtool.cmd_seen(a, c), need_rizin=False)
 
 	sp = sub.add_parser("doctor",
 	                    help="fail-closed provenance, DB, and ledger audit (rizin checks)")

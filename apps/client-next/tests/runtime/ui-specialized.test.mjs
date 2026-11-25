@@ -122,7 +122,9 @@ test("quest abandonment sends only confirmation and preserves the authoritative 
 	try {
 		const hud = hudControls( fixture, state );
 		fixture.ui.event( { kind: "key", code: "KeyQ" } );
-		hud.activate( "quest:7" );
+		// The quest list window (#4245) opens a quest's details from its
+		// content button; Abandon lives in that details window.
+		hud.activate( "quest-list-content:7" );
 		hud.activate( "quest-abandon" );
 		assert.ok( hud.draw().controls.some( control => control.id === "quest-abandon-yes" ) );
 		assert.deepEqual( commands.filter( value => value.command?.kind === "quest-abandon" ), [] );

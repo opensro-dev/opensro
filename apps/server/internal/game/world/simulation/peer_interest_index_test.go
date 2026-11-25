@@ -82,17 +82,17 @@ func TestPeerVisibilityChangeKeysCoverPublicationInputs(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			state := &divisionTickState{}
 			live := map[string]bool{base.SessionID: true}
-			if full, _ := state.peerVisibilityChanges([]SessionSnapshot{base}, 0, live); !full {
+			if full, _ := state.peerVisibilityChanges([]SessionSnapshot{base}, 0, live, nil); !full {
 				t.Fatal("first pass skipped")
 			}
 			state.peerVisibilityValid = true
 			next := base
 			tt.change(&next)
-			full, crossers := state.peerVisibilityChanges([]SessionSnapshot{next}, 0, live)
+			full, crossers := state.peerVisibilityChanges([]SessionSnapshot{next}, 0, live, nil)
 			if full != tt.full || (len(crossers) == 1) != tt.crossing {
 				t.Fatalf("full %v crossers %v, want full %v crossing %v", full, crossers, tt.full, tt.crossing)
 			}
-			if full, _ := state.peerVisibilityChanges(nil, 0, nil); !full {
+			if full, _ := state.peerVisibilityChanges(nil, 0, nil, nil); !full {
 				t.Fatal("disconnect skipped")
 			}
 			if len(state.peerVisibilityKeys) != 0 {

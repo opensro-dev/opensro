@@ -83,6 +83,10 @@ type RewardChoice struct {
 	// country is the single item's itemdata Country, resolved at load:
 	// 0 China, 1 Europe, 3 every character.
 	country int64
+	// refID is the single item's RefObjID, resolved at load: the pick
+	// the client sends names items by it (the later client's
+	// reward-selection packet carries item ids, not row indices).
+	refID uint32
 }
 
 /*
@@ -226,11 +230,22 @@ type QuestSpec struct {
 	RewardExp      int64
 	RewardGold     int64
 	RewardSkillExp int64
+	// RewardHwanLevel is the Blue Berserk level the completion raises the
+	// character to (_RefQuestReward.Hwan; the Lua LuaSetHwanLevel call). Zero
+	// grants none. The character's level is the highest of its completed
+	// quests' (Runtime.HwanLevel), so it needs no persisted field of its own.
+	// Port-only, not native: only the cap-110 Blue Berserk quests set it.
+	RewardHwanLevel uint8
 	// RewardItems are committed atomically through the inventory owner.
 	RewardItems []RewardItemLead
-	// RewardChoices are granted on top of RewardItems: exactly one, picked
-	// from the completing NPC's rows (RewardChoice).
+	// RewardChoices are granted on top of RewardItems: RewardSelectionCount
+	// of them, picked in the reward window (RewardChoice).
 	RewardChoices []RewardChoice
+	// RewardSelectionCount is _RefQuestReward SelectionCnt: how many of
+	// RewardChoices the player picks. The v1.188 server refuses a pick
+	// count other than this (its reward-selection handler checks the
+	// count against the row before granting).
+	RewardSelectionCount int
 	// RewardChoiceCheckCountry is _RefQuestReward IsCheckCountry: a choice
 	// whose item belongs to the other country is not offered.
 	RewardChoiceCheckCountry bool
@@ -323,6 +338,29 @@ type QuestSpec struct {
 	HandOverPages      []OfferPage
 	ExchangeItems      []RewardItemLead
 	ExchangeFullSymbol string
+	// AcceptanceGrants are items the acceptance hands out on top of any
+	// delivery items, in the same inventory transaction (the Blue Berserk
+	// chains: the purified bell, the traps, the Shaman's Talisman).
+	AcceptanceGrants []RewardItemLead
+	// ClearOnEnd are items taken from the bag, every stack held, when the quest
+	// completes or is abandoned (the quest scripts' reset handlers).
+	ClearOnEnd []string
+	// HeldItemGold pays gold for the items still held when the quest
+	// completes, before ClearOnEnd takes them (the Flutter Spirit pay step).
+	HeldItemGold []HeldItemGold
+}
+
+/*
+================
+HeldItemGold
+
+Gold paid per held item at completion, at most GoldCap in total.
+================
+*/
+type HeldItemGold struct {
+	ItemCodename string
+	GoldEach     int64
+	GoldCap      int64
 }
 
 // curatedQuestSpecs is the curated table. SMALL BY DESIGN: the starter
@@ -475,6 +513,23 @@ type Definition struct {
 
 /*
 ================
+windowKindByte
+
+The CIFQuestReward kind byte (wire u10) this quest's record carries:
+2 for the quests whose claim is the reward window - kind-2 quests and
+selection quests (RewardChoices), whose completing NPC never settles -
+and the definition's own kind otherwise.
+================
+*/
+func (def *Definition) windowKindByte() uint8 {
+	if len(def.RewardChoices) > 0 {
+		return 2
+	}
+	return def.KindByte
+}
+
+/*
+================
 Definitions
 
 Stable source order also owns the one-byte NPC choice order.
@@ -558,6 +613,9 @@ func LoadDefinitions(catalog *Catalog, items enterworld.ItemRefSource) (*Definit
 		if spec.RewardExp < 0 || spec.RewardGold < 0 || spec.RewardSkillExp < 0 {
 			return nil, fmt.Errorf("quest %s negative reward", spec.Codename)
 		}
+		if spec.RewardHwanLevel > domain.HwanLevelMax {
+			return nil, fmt.Errorf("quest %s Blue Berserk level %d exceeds the level table", spec.Codename, spec.RewardHwanLevel)
+		}
 		if spec.DeliveryNpcCodename != "" && (spec.Objective != ObjectiveCollect || spec.DeliveryPromptSymbol == "" || spec.InventoryFullSymbol == "") {
 			return nil, fmt.Errorf("quest %s incomplete delivery contract", spec.Codename)
 		}
@@ -629,6 +687,9 @@ func LoadDefinitions(catalog *Catalog, items enterworld.ItemRefSource) (*Definit
 			return nil, err
 		}
 		if err := validateChainItems(spec, items); err != nil {
+			return nil, err
+		}
+		if err := validateHeldItemSpec(spec, items); err != nil {
 			return nil, err
 		}
 		if err := loadStages(def, items); err != nil {

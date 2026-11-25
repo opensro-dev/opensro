@@ -16,7 +16,9 @@ only on two independent signals, so an address alone - a NAT, a
 household, a VPN exit - never merges strangers. No raw address and
 no hash value ever leaves this package: answers carry account and
 character names, times and counts, and link evidence reduced to
-kinds and sharing counts.
+kinds and sharing counts. A session is named by a per-answer label
+("Session 1", ...), never by the journal's session name, whose half
+is a per-boot random hex id (sessionLabels).
 
 Port-only, not native: the whole census runs behind
 SRO_CONNECTION_JOURNAL (connjournal), default off. With the flag off
@@ -28,6 +30,7 @@ installed (wiring_census.go).
 package census
 
 import (
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -37,7 +40,35 @@ import (
 )
 
 // SchemaVersion is the answer shape's version; the console checks it.
+// Fields added to an answer (the no-user-agent signal and count, the
+// person view's ticket hours, #3307) keep it: a reader of version 1
+// ignores a field it does not know.
 const SchemaVersion = 1
+
+/*
+================
+sessionLabels
+
+Names each session of one answer by its first-seen order: "Session 1",
+"Session 2", ... Rows of one session share a label, and the journal's
+session name (connjournal: a per-boot random hex id joined to a
+transport counter) never leaves the package. The console's guard
+refused a whole person answer for that hex at history[199] (console#35):
+the id is an identifier, not evidence, so the answer carries only its
+grouping. A label means nothing across answers; a reader that needs one
+session asks by character and time.
+================
+*/
+type sessionLabels map[string]string
+
+func (labels sessionLabels) of(session string) string {
+	if label, ok := labels[session]; ok {
+		return label
+	}
+	label := "Session " + strconv.Itoa(len(labels)+1)
+	labels[session] = label
+	return label
+}
 
 // Path is the handler's route prefix on the operator listener.
 const Path = "/internal/operations/census"
@@ -58,20 +89,26 @@ One entered session as the census reasons about it. Times are UTC
 milliseconds; Ended 0 means still entered (its end is now). Client
 is the client fingerprint the session presented (user agent, build,
 screen), empty when it presented none - an absent fingerprint is no
-signal, never a shared one.
+signal, never a shared one. NoUserAgent is the one fact the absence
+does carry: every browser sends a User-Agent on both transports, so
+a session without one was not a browser (signals.go).
 ================
 */
 type Span struct {
-	Session   string
-	Account   string
-	Character string
-	Transport string
-	Started   int64
-	Ended     int64
-	Estimated bool
-	IPKey     string
-	NetKey    string
-	Client    string
+	Session     string
+	Account     string
+	Character   string
+	Transport   string
+	Started     int64
+	Ended       int64
+	Estimated   bool
+	IPKey       string
+	NetKey      string
+	Client      string
+	NoUserAgent bool
+	// Activity is the span's traffic (connjournal/activity.go), nil while
+	// it is open or when it closed without one.
+	Activity *connjournal.Activity
 }
 
 // end returns the span's effective end: its close, or now while open.
@@ -116,7 +153,8 @@ func JournalRows(journal *connjournal.Journal) RowSource {
 		for _, row := range rows {
 			spans = append(spans, Span{Session: row.Session, Account: row.Account, Character: row.Character,
 				Transport: row.Transport, Started: row.Started, Ended: row.Ended, Estimated: row.Estimated,
-				IPKey: row.IPKey, NetKey: row.NetKey, Client: clientFingerprint(row)})
+				IPKey: row.IPKey, NetKey: row.NetKey, Client: clientFingerprint(row), NoUserAgent: row.UserAgent == "",
+				Activity: row.Activity})
 		}
 		return spans, nil
 	}
@@ -132,6 +170,28 @@ func clientFingerprint(row connjournal.Row) string {
 		return ""
 	}
 	return row.UserAgent + "\x00" + row.Build + "\x00" + row.Screen
+}
+
+/*
+================
+TicketHours
+
+One account's world tickets per hour from sinceMs on (minted, and
+refused by the pacer, of each kind): the journal's ticket buckets in
+production (JournalTickets), a fixture in tests.
+================
+*/
+type TicketHours func(account string, sinceMs int64) ([]connjournal.TicketHour, error)
+
+/*
+================
+JournalTickets
+
+The connection journal's ticket buckets as TicketHours.
+================
+*/
+func JournalTickets(journal *connjournal.Journal) TicketHours {
+	return journal.TicketHours
 }
 
 /*
@@ -185,9 +245,10 @@ disagree about the same instant.
 ================
 */
 type Service struct {
-	source RowSource
-	chat   ChatCounts
-	now    func() time.Time
+	source  RowSource
+	chat    ChatCounts
+	tickets TicketHours
+	now     func() time.Time
 
 	mu    sync.Mutex
 	at    time.Time
@@ -197,12 +258,13 @@ type Service struct {
 }
 
 // NewService builds the census over a row source; chat may be nil,
-// which only silences the chat signal.
-func NewService(source RowSource, chat ChatCounts, now func() time.Time) *Service {
+// which only silences the chat signal, and tickets may be nil, which
+// leaves the person view's ticket hours empty.
+func NewService(source RowSource, chat ChatCounts, tickets TicketHours, now func() time.Time) *Service {
 	if now == nil {
 		now = time.Now
 	}
-	return &Service{source: source, chat: chat, now: now}
+	return &Service{source: source, chat: chat, tickets: tickets, now: now}
 }
 
 // nowMs is the service's one time form: UTC milliseconds.

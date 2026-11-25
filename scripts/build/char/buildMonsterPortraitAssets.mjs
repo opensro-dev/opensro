@@ -16,6 +16,16 @@ be drawn again; the drawn bytes live in a cache outside the public tree.
 The catalogue's switch to this manifest and retirement of its old publishing
 stage are a maintainer follow-up after this family lands.
 
+A machine without a usable GPU cannot draw stills at all (#4015). The
+viewer therefore starts lazily, on the first still the cache cannot
+serve, and when it cannot draw - the browser will not launch, or the
+first draw fails before any still exists - the family falls back to the
+stills the previous published manifest carries and says so in its note,
+instead of stopping the full build. A draw that fails after a still was
+drawn still names its row and stops the family: the viewer works, and
+the model is broken. Fallback bytes never enter the fingerprint cache;
+they were drawn by an older renderer.
+
 ===========================================================================
 */
 import { createHash } from "node:crypto";
@@ -35,16 +45,25 @@ import { clientBuildDefinitions } from "../../../apps/client-next/tools/build-me
 import { publishedAssets } from "../../../apps/client-next/tools/published-assets.mjs";
 import { compareText } from "../shared/textOrder.mjs";
 import { sha256Hex } from "../shared/hash.mjs";
+import {
+	EFFECT_PROGRAM_INDEX,
+	effectProgramIndexFiles
+} from "../../../apps/client-next/src/engine/foundation/assets/effect-programs.ts";
 
 const PREFIX = "/assets/npc/hunting-portraits/";
 // Drawn stills wait here between builds, outside the public tree: only the
 // content-named publication below is ever claimed or packed.
 const CACHE_ROOT = path.join( generatedRoot, "hunting-portrait-cache" );
 const CLIENT = path.resolve( import.meta.dirname, "../../../apps/client-next" );
+// The client files the viewer loaded on its last complete draw
+// (recordRendererClosure): the code every cached still depends on.
+const RENDERER_CLOSURE = path.join( CACHE_ROOT, "renderer-closure.json" );
+const RENDERER_CLOSURE_FORMAT = "sro-portrait-renderer-closure";
+// What a closure file that no longer exists hashes as.
+const MISSING_FILE = Buffer.from( "\0missing\0" );
 export const MONSTER_PORTRAIT_SIZE = 384;
 const STILL_TIMEOUT_MS = 45000;
 const PNG_DATA_URL = /^data:image\/png;base64,([A-Za-z0-9+/=]+)$/;
-const EFFECT_PROGRAMS = "/assets/effects/programs.json";
 const VIEWER_MANIFESTS = [
 	"assets/char/roster.json",
 	"assets/npc/manifest.json",
@@ -123,9 +142,22 @@ The viewer's owners and presentation inputs invalidate cached stills. Include
 the NPC resources too: a riding unique's still depends on its mount's bytes.
 Ambient effects are drawn by the viewer; both their programs and referenced
 texture bytes must invalidate a still, even when no model changed.
+
+The viewer's code is the closure when one is recorded: the client files it
+loaded on its last complete draw, plus the lockfile that pins the compiler.
+Without one it is the whole src/engine tree, so the first build after a cold
+cache still keys on every file. The whole tree moved with any client change:
+r204m's six UI files (#4356) redrew all 1,102 stills, 89 s of a no-asset
+freeze. The client has no import.meta.glob and no computed import(), so a
+module can only join the viewer's graph through a change to a file already
+in it, which misses the key and records the new closure.
 ================
 */
-export async function monsterPortraitRendererFingerprint( manifest, readAsset = readPortraitAsset ) {
+export async function monsterPortraitRendererFingerprint(
+	manifest,
+	readAsset = readPortraitAsset,
+	{ client = CLIENT, closure = null } = {}
+) {
 	const hash = createHash( "sha256" );
 	/*
 	================
@@ -140,17 +172,24 @@ export async function monsterPortraitRendererFingerprint( manifest, readAsset = 
 		) {
 			const file = path.join( directory, entry.name );
 			if ( entry.isDirectory() ) await visit( file );
-			else hash.update( path.relative( CLIENT, file ) ).update( await readFile( file ) );
+			else hash.update( path.relative( client, file ) ).update( await readFile( file ) );
 		}
 	}
-	await visit( path.join( CLIENT, "src/engine" ) );
+	if ( closure ) {
+		hash.update( "closure\n" );
+		for ( const file of [ ...closure, "../../pnpm-lock.yaml" ] ) {
+			hash.update( file ).update( await readOrMissing( path.join( client, file ) ) );
+		}
+	} else await visit( path.join( client, "src/engine" ) );
 	for ( const file of [ "src/bootstrap.ts", "viewer.html" ] ) {
-		hash.update( await readFile( path.join( CLIENT, file ) ) );
+		hash.update( await readFile( path.join( client, file ) ) );
 	}
 	for ( const file of VIEWER_MANIFESTS ) hash.update( await readAsset( "/" + file ) );
-	const effectBytes = await readAsset( EFFECT_PROGRAMS );
-	hash.update( EFFECT_PROGRAMS ).update( effectBytes );
-	const effects = JSON.parse( effectBytes.toString( "utf8" ) );
+	// The effect programs are one file per effect and per mesh (#3951).
+	const indexBytes = await readAsset( EFFECT_PROGRAM_INDEX );
+	hash.update( EFFECT_PROGRAM_INDEX ).update( indexBytes );
+	const effects = JSON.parse( indexBytes.toString( "utf8" ) );
+	for ( const file of effectProgramIndexFiles( effects ) ) hash.update( file ).update( await readAsset( file ) );
 	for ( const texture of [ ...new Set( Object.values( effects.textures ?? {} ) ) ].sort() ) {
 		hash.update( texture ).update( await readAsset( texture ) );
 	}
@@ -164,6 +203,101 @@ export async function monsterPortraitRendererFingerprint( manifest, readAsset = 
 	}
 	hash.update( await readFile( import.meta.filename ) );
 	return hash.digest( "hex" );
+}
+
+/*
+================
+readOrMissing
+
+A closure file's bytes, or MISSING_FILE when it was deleted since.
+================
+*/
+async function readOrMissing( file ) {
+	try {
+		return await readFile( file );
+	} catch ( error ) {
+		if ( error?.code === "ENOENT" ) return MISSING_FILE;
+		throw error;
+	}
+}
+
+/*
+================
+readRendererClosure
+
+The recorded closure, or null when none is recorded or it is not ours.
+================
+*/
+export async function readRendererClosure( file = RENDERER_CLOSURE ) {
+	let record;
+	try {
+		record = JSON.parse( await readFile( file, "utf8" ) );
+	} catch {
+		return null;
+	}
+	if ( record?.format !== RENDERER_CLOSURE_FORMAT || !Array.isArray( record.files ) ) return null;
+	if ( !record.files.every( entry => typeof entry === "string" && !entry.startsWith( ".." ) ) ) return null;
+	return record.files;
+}
+
+/*
+================
+viewerClosure
+
+The client files the dev server served to the viewer: every module in its
+graph inside the client tree, dependencies (pinned by the lockfile) aside,
+as sorted client-relative paths.
+================
+*/
+export function viewerClosure( moduleFiles, client = CLIENT ) {
+	const files = new Set();
+	for ( const file of moduleFiles ) {
+		const relative = path.relative( client, file ).split( path.sep ).join( "/" );
+		if ( relative.startsWith( "../" ) || path.isAbsolute( relative ) ) continue;
+		if ( relative.split( "/" ).includes( "node_modules" ) ) continue;
+		files.add( relative );
+	}
+	return [ ...files ].sort( compareText );
+}
+
+/*
+================
+nextRendererClosure
+
+The closure to record after a draw. A complete draw (every drawable row
+drawn) saw everything the stills need, so its set replaces the old one.
+A partial draw saw only its own rows, so it can only add to a closure the
+key already trusted; with none recorded it records nothing.
+================
+*/
+export function nextRendererClosure( previous, loaded, complete ) {
+	if ( complete ) return loaded;
+	if ( !previous ) return null;
+	return [ ...new Set( [ ...previous, ...loaded ] ) ].sort( compareText );
+}
+
+/*
+================
+recordRendererClosure
+
+Writes the closure and, when it moves the key, the stills under the new key
+first: a build that dies between the two keeps the old closure, whose
+stills are all still there.
+================
+*/
+async function recordRendererClosure( closure, manifest, fingerprint, outcomes ) {
+	const next = await monsterPortraitRendererFingerprint( manifest, readPortraitAsset, { closure } );
+	if ( next !== fingerprint ) {
+		await mkdir( CACHE_ROOT, { recursive: true } );
+		for ( const outcome of outcomes ) {
+			if ( outcome.source === "published" ) continue;
+			await writeFile(
+				path.join( CACHE_ROOT, monsterPortraitCacheKey( next, outcome.refObjId ) + ".png" ),
+				outcome.bytes
+			);
+		}
+	}
+	await writeJsonIfChanged( RENDERER_CLOSURE, { format: RENDERER_CLOSURE_FORMAT, files: closure } );
 }
 
 /*
@@ -231,61 +365,200 @@ export async function renderMonsterPortrait( page, base, refObjId, row ) {
 
 /*
 ================
+portraitManifestIndex
+
+The stills a previous build published, refObjId -> public path, read
+from its manifest rows. Malformed rows are skipped: the fallback must
+never invent a name the family did not publish.
+================
+*/
+export function portraitManifestIndex( manifest ) {
+	const index = new Map();
+	for ( const row of manifest?.rows ?? [] ) {
+		if ( !Array.isArray( row ) ) continue;
+		const [refObjId, published] = row;
+		if (
+			Number.isInteger( refObjId ) && refObjId > 0 && typeof published === "string" &&
+			published.startsWith( PREFIX ) && published.endsWith( ".png" ) && !index.has( refObjId )
+		) {
+			index.set( refObjId, published );
+		}
+	}
+	return index;
+}
+
+/*
+================
+portraitRowDrawable
+
+A reference the viewer can be asked to draw: a model under the NPC tree.
+Rows without one are missing models, not failures.
+================
+*/
+function portraitRowDrawable( row ) {
+	return typeof row.glb === "string" && /^\/assets\/npc\/[a-zA-Z0-9/_.-]+\.glb$/.test( row.glb ) &&
+		!row.glb.includes( ".." );
+}
+
+/*
+================
+collectPortraitRows
+
+Where each reference's still comes from, in order: the fingerprint
+cache, the viewer, or - only when the viewer cannot draw at all - the
+still the previous manifest published. ports.cached and ports.draw
+answer PNG bytes or null; ports.publishedBytes answers the published
+still's bytes or null. The first draw failure before any still is drawn
+means the environment cannot draw (#4015): it is kept in `down` and no
+later row asks the viewer again. A draw failure after a drawn still is
+the viewer's named error and propagates.
+================
+*/
+export async function collectPortraitRows( references, ports ) {
+	const outcomes = [], missing = [];
+	let drawn = 0, reused = 0, down = null;
+	for ( const row of references ) {
+		if ( !portraitRowDrawable( row ) ) {
+			missing.push( row.refObjId );
+			continue;
+		}
+		let bytes = await ports.cached( row ), source = bytes ? "cache" : null;
+		if ( !bytes && !down ) {
+			try {
+				bytes = await ports.draw( row );
+				source = "drawn";
+				drawn++;
+			} catch ( error ) {
+				if ( drawn > 0 ) throw error;
+				down = error;
+			}
+		}
+		if ( !bytes && down ) {
+			bytes = await ports.publishedBytes( row );
+			if ( bytes ) {
+				source = "published";
+				reused++;
+			}
+		}
+		if ( !bytes ) {
+			missing.push( row.refObjId );
+			continue;
+		}
+		outcomes.push( { refObjId: row.refObjId, bytes, source } );
+	}
+	return { outcomes, missing, drawn, reused, down };
+}
+
+/*
+================
 buildMonsterPortraitAssets
 ================
 */
 export async function buildMonsterPortraitAssets() {
 	const manifestData = JSON.parse( await readFile( path.join( publicRoot, "assets/npc/manifest.json" ), "utf8" ) );
 	const references = monsterPortraitReferences( manifestData );
-	const fingerprint = await monsterPortraitRendererFingerprint( manifestData ), rows = [], missing = [], files = [];
-	const require = createRequire( path.join( CLIENT, "package.json" ) );
-	const { createServer } = await import( pathToFileURL( require.resolve( "vite" ) ).href );
-	const server = await createServer( {
-		configFile: false,
-		root: CLIENT,
-		publicDir: false,
-		logLevel: "error",
-		define: clientBuildDefinitions( CLIENT ),
-		resolve: { alias: { "@": path.join( CLIENT, "src" ) } },
-		server: { host: "127.0.0.1", port: 0 },
-		plugins: [ publishedAssets() ]
-	} );
-	let browser;
-	try {
-		await server.listen();
-		const launched = await launchProbeBrowser( {
-			viewport: { width: MONSTER_PORTRAIT_SIZE, height: MONSTER_PORTRAIT_SIZE }
+	const closure = await readRendererClosure();
+	const fingerprint = await monsterPortraitRendererFingerprint( manifestData, readPortraitAsset, { closure } ),
+		rows = [],
+		files = [];
+	const publishedIndex = await readFile( path.join( publicRoot, (PREFIX + "manifest.json").slice( 1 ) ), "utf8" )
+		.then( text => portraitManifestIndex( JSON.parse( text ) ) ).catch( () => new Map() );
+	// The viewer starts on the first still the cache cannot serve, so a
+	// fully cached build never needs a browser - or a GPU - at all.
+	let viewer = null;
+	/*
+	================
+	startViewer
+
+	The Vite server and probe browser behind ports.draw, started once.
+	================
+	*/
+	async function startViewer() {
+		const require = createRequire( path.join( CLIENT, "package.json" ) );
+		const { createServer } = await import( pathToFileURL( require.resolve( "vite" ) ).href );
+		const server = await createServer( {
+			configFile: false,
+			root: CLIENT,
+			publicDir: false,
+			logLevel: "error",
+			define: clientBuildDefinitions( CLIENT ),
+			resolve: { alias: { "@": path.join( CLIENT, "src" ) } },
+			server: { host: "127.0.0.1", port: 0 },
+			plugins: [ publishedAssets() ]
 		} );
-		browser = launched.browser;
-		const base = `http://127.0.0.1:${server.httpServer.address().port}/`;
-		let rendered = 0;
-		for ( const row of references ) {
-			if (
-				typeof row.glb !== "string" || !/^\/assets\/npc\/[a-zA-Z0-9/_.-]+\.glb$/.test( row.glb ) ||
-				row.glb.includes( ".." )
-			) {
-				missing.push( row.refObjId );
-				continue;
-			}
-			// Ref ids have their own presentation (rides, scale, effects). Never
-			// collapse them solely because they alias the same base GLB.
-			const cacheFile = path.join( CACHE_ROOT, monsterPortraitCacheKey( fingerprint, row.refObjId ) + ".png" );
-			let bytes = await stat( cacheFile ).then( value => value.size > 100 ).catch( () => false ) ?
-				await readFile( cacheFile ) :
-				null;
-			if ( !bytes ) {
-				bytes = await renderMonsterPortrait( launched.page, base, row.refObjId, row );
+		// A launch that fails here is the GPU-less case this family falls
+		// back for (#4015): the server must not outlive it, or its open
+		// listener keeps the build process from exiting.
+		let launched;
+		try {
+			await server.listen();
+			launched = await launchProbeBrowser( {
+				viewport: { width: MONSTER_PORTRAIT_SIZE, height: MONSTER_PORTRAIT_SIZE }
+			} );
+		} catch ( error ) {
+			await server.close();
+			throw error;
+		}
+		return {
+			server,
+			browser: launched.browser,
+			page: launched.page,
+			base: `http://127.0.0.1:${server.httpServer.address().port}/`
+		};
+	}
+	try {
+		const collected = await collectPortraitRows( references, {
+			async cached( row ) {
+				const cacheFile = path.join(
+					CACHE_ROOT,
+					monsterPortraitCacheKey( fingerprint, row.refObjId ) + ".png"
+				);
+				return await stat( cacheFile ).then( value => value.size > 100 ).catch( () => false ) ?
+					await readFile( cacheFile ) :
+					null;
+			},
+			async draw( row ) {
+				viewer ??= await startViewer();
+				// Ref ids have their own presentation (rides, scale, effects). Never
+				// collapse them solely because they alias the same base GLB.
+				const bytes = await renderMonsterPortrait( viewer.page, viewer.base, row.refObjId, row );
+				const cacheFile = path.join(
+					CACHE_ROOT,
+					monsterPortraitCacheKey( fingerprint, row.refObjId ) + ".png"
+				);
 				await mkdir( CACHE_ROOT, { recursive: true } );
 				await writeFile( cacheFile, bytes );
-				rendered++;
+				return bytes;
+			},
+			async publishedBytes( row ) {
+				const published = publishedIndex.get( row.refObjId );
+				if ( !published ) return null;
+				const file = containedPublicFile( publicRoot, published );
+				return await stat( file ).then( value => value.size > 100 ).catch( () => false ) ?
+					await readFile( file ) :
+					null;
 			}
-			const output = monsterPortraitPublishedPath( bytes ), target = path.join( publicRoot, output.slice( 1 ) );
+		} );
+		if ( viewer ) {
+			const graph = viewer.server.environments?.client?.moduleGraph ?? viewer.server.moduleGraph;
+			const drawable = references.filter( portraitRowDrawable ).length;
+			const next = nextRendererClosure(
+				closure,
+				viewerClosure( graph.fileToModulesMap.keys() ),
+				collected.drawn === drawable && !collected.down
+			);
+			if ( next ) await recordRendererClosure( next, manifestData, fingerprint, collected.outcomes );
+		}
+		for ( const outcome of collected.outcomes ) {
+			const output = monsterPortraitPublishedPath( outcome.bytes ),
+				target = path.join( publicRoot, output.slice( 1 ) );
 			if ( await stat( target ).then( value => value.size > 100 ).catch( () => false ) ) {
 				claimPublicFile( target );
-			} else await writeIntoPublicTree( target, bytes );
-			rows.push( [ row.refObjId, output ] );
+			} else await writeIntoPublicTree( target, outcome.bytes );
+			rows.push( [ outcome.refObjId, output ] );
 			files.push( output );
 		}
+		const missing = collected.missing;
 		const manifest = path.join( publicRoot, (PREFIX + "manifest.json").slice( 1 ) );
 		await writeJsonIfChanged( manifest, {
 			format: "sro-hunting-portraits",
@@ -301,12 +574,16 @@ export async function buildMonsterPortraitAssets() {
 		} );
 		await refreshPrecompressedSidecars( [ manifest ], { onlyWhenStale: true } );
 		files.push( PREFIX + "manifest.json.gz" );
+		const note = `${rows.length} native references (${collected.drawn} rendered), ${missing.length} missing models`;
 		return {
 			files,
-			note: `${rows.length} native references (${rendered} rendered), ${missing.length} missing models`
+			note: collected.down ?
+				`${note}; the viewer could not draw (${collected.down.message}), ` +
+				`${collected.reused} stills reused from the published set` :
+				note
 		};
 	} finally {
-		await browser?.close();
-		await server.close();
+		await viewer?.browser?.close();
+		await viewer?.server.close();
 	}
 }

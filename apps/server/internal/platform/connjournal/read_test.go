@@ -26,7 +26,7 @@ func TestRowsReadsBackOpenAndClosedSpans(t *testing.T) {
 		Transport: "webtransport", Address: "203.0.113.7:5000", UserAgent: "TestBrowser/1.0"})
 	journal.RecordEntered(Entry{Session: "s2", Account: "acct-b", Character: "Mage", Shard: "global-official",
 		Transport: "websocket", Address: "198.51.100.9:6000", UserAgent: "TestBrowser/2.0"})
-	journal.CloseSession("s1")
+	journal.CloseSession("s1", nil)
 	rows(t, journal, 2)
 
 	found, err := journal.Rows(0)

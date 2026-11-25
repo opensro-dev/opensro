@@ -390,6 +390,10 @@ export interface CommerceItemReference {
 	readonly refObjId: number;
 	readonly typeFlags: number;
 	readonly name: string;
+	readonly codename?: string;
+	// A rental kind (native _RefRentItem, #4240): an owned row of this
+	// reference carries a rent deadline in its item body.
+	readonly rent?: boolean;
 }
 
 /*
@@ -408,10 +412,14 @@ export function commerceReferences( p: Uint8Array ): readonly CommerceItemRefere
 		if ( row.icon !== undefined && (typeof row.icon !== "string" || row.icon.length > 256) ) {
 			throw Error( "Invalid item icon" );
 		}
+		if ( row.codename !== undefined && (typeof row.codename !== "string" || row.codename.length > 256) ) {
+			throw Error( "Invalid item codename" );
+		}
 		const id = commerceInteger( row.refObjId, 0xffffffff, 1 );
 		commerceInteger( row.typeFlags, 65535 );
 		if ( row.maxStack !== undefined ) commerceInteger( row.maxStack, 65535, 1 );
 		if ( row.purchaseLimit !== undefined ) commerceInteger( row.purchaseLimit, 65535, 1 );
+		if ( row.rent !== undefined && typeof row.rent !== "boolean" ) throw Error( "Invalid item rent mark" );
 		if ( seen.has( id ) ) throw Error( "Duplicate commerce reference" );
 		seen.add( id );
 	}

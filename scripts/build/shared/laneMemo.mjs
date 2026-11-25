@@ -156,6 +156,22 @@ export function decodeResult( text ) {
 
 /*
 ================
+coveredFolderKey
+
+True when a data key the record lacks is a per-folder key ("<label>/<name>",
+resourceBuildFingerprint folderHashes) whose root hash the record holds:
+that root hash covers the folder's files already, so the key's first
+appearance is instrumentation, not a change (#4337). Any other missing key,
+a new data root above all, is a change.
+================
+*/
+function coveredFolderKey( key, recordedData ) {
+	const slash = key.indexOf( "/" );
+	return slash > 0 && key.slice( 0, slash ) in recordedData;
+}
+
+/*
+================
 changedParts
 
 The names of the record parts that differ from this build's, so a lane
@@ -165,13 +181,39 @@ that runs says why.
 function changedParts( recorded, current ) {
 	if ( !recorded ) return [ "record format" ];
 	const changed = KEY_PARTS.filter( name => recorded[name] !== current[name] );
-	for ( const root of new Set( [ ...Object.keys( recorded.data ?? {} ), ...Object.keys( current.data ) ] ) ) {
-		if ( recorded.data?.[root] !== current.data[root] ) changed.push( `data ${root}` );
+	const recordedData = recorded.data ?? {};
+	// Keys the record holds still name every move and deletion.
+	for ( const root of Object.keys( current.data ) ) {
+		if (
+			root in recordedData ?
+				recordedData[root] !== current.data[root] :
+				!coveredFolderKey( root, recordedData )
+		) {
+			changed.push( `data ${root}` );
+		}
+	}
+	for ( const root of Object.keys( recordedData ) ) {
+		if ( !(root in current.data) ) changed.push( `data ${root}` );
 	}
 	for ( const file of new Set( [ ...Object.keys( recorded.code ?? {} ), ...Object.keys( current.code ) ] ) ) {
 		if ( recorded.code?.[file] !== current.code[file] ) changed.push( `code ${file}` );
 	}
 	return changed;
+}
+
+/*
+================
+rootsPart
+
+The roots key part: the lane's own roots and its computed key. A lane
+with neither keeps the empty part older records hold.
+================
+*/
+async function rootsPart( roots, key ) {
+	const hashed = roots.length > 0 ? await hashRoots( roots ) : "";
+	return key ?
+		`${hashed}\nkey ${await key()}` :
+		hashed;
 }
 
 /*
@@ -200,7 +242,7 @@ export function createLaneMemo( {
 	laneParts
 	================
 	*/
-	async function laneParts( { modules, roots = [] } ) {
+	async function laneParts( { modules, roots = [], key } ) {
 		entryHash ??= createHash( "sha256" ).update( await readFile( entry ) ).digest( "hex" );
 		const code = {};
 		for ( const module of modules ) {
@@ -212,7 +254,7 @@ export function createLaneMemo( {
 			startup: upstream.startup,
 			environment,
 			entry: entryHash,
-			roots: roots.length > 0 ? await hashRoots( roots ) : "",
+			roots: await rootsPart( roots, key ),
 			code
 		};
 	}
@@ -245,6 +287,20 @@ export function createLaneMemo( {
 			log( `[resource-build] lane ${name}: runs (output ${moved[0]} changed)` );
 			return undefined;
 		}
+		// Data keys the record predates (the per-folder keys #4337 added
+		// beside each root hash) are instrumentation, not a change:
+		// changedParts already proved every shared key equal, so the
+		// record learns the new keys here, on the replay it earned.
+		// Without this the first build carrying folder keys reruns every
+		// lane and names folders that never moved.
+		if ( Object.keys( parts.data ?? {} ).some( key => !(key in (record.parts.data ?? {})) ) ) {
+			record.parts.data = parts.data;
+			try {
+				await writeStateJson( path.join( memoRoot, `${name}.json` ), record );
+			} catch {
+				// Bookkeeping only: a later build learns the keys instead.
+			}
+		}
 		claimPublicPaths( claims );
 		return decodeResult( record.result );
 	}
@@ -256,7 +312,8 @@ export function createLaneMemo( {
 
 		Runs the lane, or replays its record. inputs.modules are the files (URL
 		or path) that hold the lane's steps; inputs.roots are fingerprint roots
-		the lane alone reads beyond the shared upstream.
+		the lane alone reads beyond the shared upstream; inputs.key, when set,
+		digests an input that is no file tree (the npc lane's server rosters).
 		================
 		*/
 		async lane( name, inputs, run ) {

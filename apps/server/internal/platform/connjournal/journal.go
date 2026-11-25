@@ -70,7 +70,9 @@ One entered session as the transport reports it. Address is the real
 client address (the transport resolved the edge's forwarding at
 accept); the journal hashes it in RecordEntered and never stores it.
 Build and Screen stay empty until a client presents them on the wire;
-no client does today, and this journal adds no client field.
+no client does today, and this journal adds no client field. Closing
+is the traffic of the span this entry closes on the same session
+(activity.go), nil when there is none to record.
 ================
 */
 type Entry struct {
@@ -83,6 +85,7 @@ type Entry struct {
 	UserAgent string
 	Build     string
 	Screen    string
+	Closing   *Activity
 }
 
 /*
@@ -107,11 +110,13 @@ type storedRow struct {
 }
 
 // write is one queued change: a row to open, or (row nil) a session
-// whose open row closes. at is when the change was recorded.
+// whose open row closes. Either way the session's open row closes at
+// at, with closing as its traffic summary when one was taken.
 type write struct {
 	row     *storedRow
 	session string
 	at      int64
+	closing *Activity
 }
 
 /*
@@ -136,6 +141,12 @@ type Journal struct {
 	done    chan struct{}
 	dropped atomic.Uint64
 	failed  atomic.Uint64
+
+	// tickets are the ticket hours counted since the last checkpoint
+	// (tickets.go); ticketsDropped counts the outcomes past their bound.
+	ticketMu       sync.Mutex
+	tickets        map[ticketKey]TicketCounts
+	ticketsDropped atomic.Uint64
 }
 
 // millis is the journal's one time form: UTC milliseconds.
@@ -160,7 +171,8 @@ func Open(path, shard string, key []byte) (*Journal, error) {
 	}
 	db.SetMaxOpenConns(1)
 	j := &Journal{db: db, shard: shard, key: append([]byte(nil), key...), now: time.Now,
-		queue: make(chan write, queueCapacity), stop: make(chan struct{}), done: make(chan struct{})}
+		queue: make(chan write, queueCapacity), stop: make(chan struct{}), done: make(chan struct{}),
+		tickets: map[ticketKey]TicketCounts{}}
 	if err := j.initialize(); err != nil {
 		_ = db.Close()
 		return nil, err
@@ -196,8 +208,11 @@ CREATE INDEX IF NOT EXISTS connections_session ON connections(session);
 CREATE INDEX IF NOT EXISTS connections_account ON connections(account, started);
 CREATE INDEX IF NOT EXISTS connections_ip_key ON connections(ip_key, started);
 CREATE INDEX IF NOT EXISTS connections_started ON connections(started);
-UPDATE connections SET ended=seen, estimated=1 WHERE ended=0;`)
-	return err
+UPDATE connections SET ended=seen, estimated=1 WHERE ended=0;` + ticketSchema)
+	if err != nil {
+		return err
+	}
+	return ensureActivityColumns(j.db)
 }
 
 /*
@@ -218,22 +233,23 @@ func (j *Journal) RecordEntered(entry Entry) bool {
 	row := &storedRow{session: entry.Session, account: entry.Account, character: entry.Character,
 		shard: entry.Shard, transport: entry.Transport, ipKey: ipKey, netKey: netKey,
 		userAgent: bounded(entry.UserAgent, maxUserAgentBytes), build: entry.Build, screen: entry.Screen}
-	return j.enqueue(write{row: row, session: entry.Session, at: millis(j.now())})
+	return j.enqueue(write{row: row, session: entry.Session, at: millis(j.now()), closing: entry.Closing})
 }
 
 /*
 ================
 CloseSession
 
-Closes the session's open row at now. A session that ends without
+Closes the session's open row at now, with closing as the row's
+traffic summary (nil leaves it unrecorded). A session that ends without
 entering has no row; the close is then a no-op on the writer.
 ================
 */
-func (j *Journal) CloseSession(session string) bool {
+func (j *Journal) CloseSession(session string, closing *Activity) bool {
 	if j == nil || session == "" {
 		return false
 	}
-	return j.enqueue(write{session: session, at: millis(j.now())})
+	return j.enqueue(write{session: session, at: millis(j.now()), closing: closing})
 }
 
 /*
@@ -302,17 +318,31 @@ the only goroutine here, so the pair cannot interleave.
 ================
 */
 func (j *Journal) apply(w write) error {
-	if w.row != nil {
-		if _, err := j.db.Exec(`UPDATE connections SET ended=? WHERE session=? AND ended=0`, w.at, w.session); err != nil {
-			return err
-		}
-		_, err := j.db.Exec(`INSERT INTO connections(session,account,character,shard,started,seen,transport,ip_key,net_key,build,user_agent,screen)
-VALUES(?,?,?,?,?,?,?,?,?,?,?,?)`,
-			w.row.session, w.row.account, w.row.character, w.row.shard, w.at, w.at,
-			w.row.transport, w.row.ipKey, w.row.netKey, w.row.build, w.row.userAgent, w.row.screen)
+	if err := j.closeOpen(w); err != nil || w.row == nil {
 		return err
 	}
-	_, err := j.db.Exec(`UPDATE connections SET ended=? WHERE session=? AND ended=0`, w.at, w.session)
+	_, err := j.db.Exec(`INSERT INTO connections(session,account,character,shard,started,seen,transport,ip_key,net_key,build,user_agent,screen)
+VALUES(?,?,?,?,?,?,?,?,?,?,?,?)`,
+		w.row.session, w.row.account, w.row.character, w.row.shard, w.at, w.at,
+		w.row.transport, w.row.ipKey, w.row.netKey, w.row.build, w.row.userAgent, w.row.screen)
+	return err
+}
+
+/*
+================
+closeOpen
+
+Closes the session's open row at w.at, writing the span's traffic
+summary when the write carries one.
+================
+*/
+func (j *Journal) closeOpen(w write) error {
+	if w.closing == nil {
+		_, err := j.db.Exec(`UPDATE connections SET ended=? WHERE session=? AND ended=0`, w.at, w.session)
+		return err
+	}
+	_, err := j.db.Exec(`UPDATE connections SET ended=?, frames_in=?, first_handled_ms=?, opcodes=? WHERE session=? AND ended=0`,
+		w.at, int64(w.closing.FramesIn), w.closing.FirstHandledMs, encodeOpcodes(w.closing), w.session)
 	return err
 }
 
@@ -320,9 +350,10 @@ VALUES(?,?,?,?,?,?,?,?,?,?,?,?)`,
 ================
 checkpoint
 
-Open rows advance their seen mark (the crash recovery's estimate), and
-rows closed longer than the retention are pruned. Open rows are never
-pruned: a session still entered is still evidence.
+Open rows advance their seen mark (the crash recovery's estimate), the
+ticket hours counted since the last checkpoint are written, and rows
+and ticket hours older than the retention are pruned. Open rows are
+never pruned: a session still entered is still evidence.
 ================
 */
 func (j *Journal) checkpoint() error {
@@ -330,8 +361,14 @@ func (j *Journal) checkpoint() error {
 	if _, err := j.db.Exec(`UPDATE connections SET seen=? WHERE ended=0`, now); err != nil {
 		return err
 	}
+	if err := j.flushTickets(); err != nil {
+		return err
+	}
 	cutoff := now - int64(retentionDays)*24*int64(time.Hour/time.Millisecond)
-	_, err := j.db.Exec(`DELETE FROM connections WHERE ended!=0 AND ended<?`, cutoff)
+	if _, err := j.db.Exec(`DELETE FROM connections WHERE ended!=0 AND ended<?`, cutoff); err != nil {
+		return err
+	}
+	_, err := j.db.Exec(`DELETE FROM ticket_hours WHERE hour_ms<?`, cutoff)
 	return err
 }
 
@@ -360,14 +397,16 @@ func (j *Journal) Close() error {
 Health
 
 The counts an operator read can show: records dropped at a full queue,
-records the writer failed to store, and the rows currently open.
+records the writer failed to store, ticket outcomes dropped past their
+bound, and the rows currently open.
 ================
 */
 func (j *Journal) Health() map[string]any {
 	var open int64
 	err := j.db.QueryRow(`SELECT count(*) FROM connections WHERE ended=0`).Scan(&open)
 	health := map[string]any{"dropped": j.dropped.Load(), "failed": j.failed.Load(), "open": open,
-		"shard": j.shard, "retentionDays": retentionDays}
+		"ticketsDropped": j.ticketsDropped.Load(),
+		"shard":          j.shard, "retentionDays": retentionDays}
 	if err != nil {
 		health["lastError"] = err.Error()
 	}

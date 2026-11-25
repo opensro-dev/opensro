@@ -51,10 +51,12 @@ const ADMISSION_TIMEOUT_MS = 10000;
 // whole, and the server's loading pings queue behind it on the same
 // ordered stream. A slow socket therefore shows total silence for the
 // whole download, and the ten-second admission window tore healthy
-// answers down mid-flight (#2867). The wait runs to the server's own
-// patience instead: the transport detaches a silent session at its
-// 60 s idle timeout (apps/server/internal/transport/config.go), so a
-// longer client wait buys nothing the server would have kept.
+// answers down mid-flight (#2867). The wait runs to the client's own
+// silence bound instead: the transport no longer detaches a session
+// that is loading its scene at its 60 s idle timeout (#4139), so a
+// longer wait would buy something the server keeps - but a full
+// window without one inbound byte is a dead link, not a slow one,
+// and this wait is where it fails.
 const ENTER_WORLD_ANSWER_TIMEOUT_MS = 60000;
 const REFERENCE_TIMEOUT_MS = 30000;
 // Progress may slide a deadline this many windows past its arm, no further:
@@ -250,6 +252,8 @@ onNetworkFailure
 	let completedDeparture: 1 | 2 | 0 = 0;
 	let phase: "disconnected" | "connecting" | "entering-world" | "world" | "reconnecting" = "disconnected";
 	let character = "", division = "", transport = "", endpoint = "", resume: Uint8Array | undefined;
+	// The advertised transport was an edge route (session.ts): no WebTransport.
+	let edgeRoute = false;
 	let completion: {
 		epoch: number;
 		kind: "transport" | "enterworld";
@@ -676,7 +680,7 @@ receive
 enter
 ================
 		*/
-		enter( name: string, shard: string, base: string ) {
+		enter( name: string, shard: string, base: string, viaEdgeRoute = false ) {
 			if ( disposed || !name || name.length > MAX_CHARACTER_NAME_LENGTH ) {
 				throw new Error( "Invalid character selection" );
 			}
@@ -694,6 +698,7 @@ enter
 			ready = false;
 			character = name;
 			division = shard;
+			edgeRoute = viaEdgeRoute;
 			// The transport base (possibly an edge route) serves the socket and its references.
 			// An advertised base may already name the socket itself (the public WebTransport
 			// posture's advertised URL ends /transport/ws): normalise once here, so the
@@ -842,7 +847,7 @@ step
 					} else {
 						try {
 							if ( result.kind === "transport" ) {
-								network.connect( endpoint, result.token!, resume );
+								network.connect( endpoint, result.token!, resume, edgeRoute );
 								armDeadline( ADMISSION_TIMEOUT_MS );
 							} else {
 								network.enterWorld( division, character, result.token! );

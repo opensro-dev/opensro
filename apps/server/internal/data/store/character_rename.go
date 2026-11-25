@@ -149,7 +149,7 @@ func (s *Store) renameCharacterLocked(division string, selected *domain.Characte
 			ground[division][i].DroppedBy = after
 		}
 	}
-	tx, err := s.beginCharacterTxLocked()
+	tx, err := s.beginCharacterTxLocked("character-rename")
 	if err != nil {
 		return err
 	}
@@ -301,9 +301,9 @@ func (s *Store) QueueCharacterRename(division string, character *domain.Characte
 	if s.nameReservedLocked(division, after, nowMs, character.ID) {
 		return fmt.Errorf("%w: %q", ErrNameReserved, after)
 	}
+	s.beginDoorLocked(character)
 	character.PendingRenameName = after
 	character.PendingRenameQueuedMs = nowMs
-	s.markCharacterLocked(character)
 	s.finishDoorLocked("queue-character-rename", false, []*domain.Character{character})
 	return nil
 }
@@ -350,9 +350,9 @@ func (s *Store) applyPendingRenameLocked(division string, c *domain.Character, n
 	target := c.PendingRenameName
 	outcome := PendingRenameOutcome{CharacterID: c.ID, OldName: c.Name, NewName: target}
 	cancel := func(reason string) (PendingRenameOutcome, bool) {
+		s.beginDoorLocked(c)
 		c.PendingRenameName = ""
 		c.PendingRenameQueuedMs = 0
-		s.markCharacterLocked(c)
 		s.finishDoorLocked("cancel-pending-rename", false, []*domain.Character{c})
 		outcome.Reason = reason
 		return outcome, true

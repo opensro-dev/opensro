@@ -13,6 +13,9 @@ import type { AuthoredControl, AuthoredLayout } from "./authored-layout";
 
 export const MALL_MENU_COUNT = 8;
 export const MALL_ROWS_PER_PAGE = 6;
+// The largest page any mall window shows: the renewal window's 2x5 goods
+// grid (port-only, foundation/ui/renewal-mall.ts RENEWAL_GOODS_PER_PAGE).
+export const MALL_PAGE_SIZE_LIMIT = 10;
 /*
 ================
 compactMallBagLayout
@@ -410,6 +413,54 @@ export function mallCurrencyRows(
 		} );
 	}
 	return { rows, height, growth: height - BASE_HEIGHT };
+}
+
+/*
+================
+mallPurchaseTradable
+
+Whether a purchase with these totals comes out tradable (#4133): the
+shard allows it (SRO_EARNED_SILK_TRADABLE), silk is the only currency
+spent, and the earned balance alone covers it - the store draws earned
+first, so the whole purchase is earned-paid. Anything else is
+account-bound. The confirm dialogs print this before the player buys;
+the server's bound flag at delivery is the authority.
+================
+*/
+export function mallPurchaseTradable(
+	state: import("@/engine/contracts/item-mall").MallState,
+	silkTotal: number,
+	giftSilkTotal: number,
+	points: number
+): boolean {
+	return state.earnedTradable && silkTotal > 0 && giftSilkTotal === 0 && points === 0 &&
+		silkTotal <= state.earnedSilk;
+}
+
+/*
+================
+mallPurchaseOutcomeText
+
+The one confirm sentence (#4133): what mallPurchaseTradable decides,
+stated before the player buys. Every confirm dialog prints this and
+nothing else words the outcome, so the sentence cannot drift from the
+rule it reports.
+================
+*/
+export function mallPurchaseOutcomeText(
+	state: import("@/engine/contracts/item-mall").MallState,
+	silkTotal: number,
+	giftSilkTotal: number,
+	points: number,
+	many: boolean
+): string {
+	const tradable = mallPurchaseTradable( state, silkTotal, giftSilkTotal, points );
+	if ( many ) {
+		return tradable ?
+			"Paid with earned Silk: these items will be tradable" :
+			"These items will be account-bound";
+	}
+	return tradable ? "Paid with earned Silk: this item will be tradable" : "This item will be account-bound";
 }
 
 /*

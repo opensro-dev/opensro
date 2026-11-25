@@ -150,7 +150,7 @@ func TestFailedDoorRetainsNoDigest(t *testing.T) {
 	}
 
 	s.mu.Lock()
-	tx, err := s.beginCharacterTxLocked()
+	tx, err := s.beginCharacterTxLocked("test-own-tx")
 	if err != nil {
 		s.mu.Unlock()
 		t.Fatal(err)
@@ -307,7 +307,7 @@ func TestOfflineDoorsRetainTheirWrittenDigests(t *testing.T) {
 		}
 		runOfflineDoorRevert(t, offlineDoorFixture{dir: dir, s: s, c: c,
 			door: func(t *testing.T) {
-				if _, err := s.PurchaseMall(c, domain.MallBalance{Silk: 30}, func(rows []domain.InventoryRow) ([]domain.InventoryRow, error) {
+				if _, err := s.PurchaseMall(c, domain.MallBalance{Silk: 30}, func(rows []domain.InventoryRow, _ bool) ([]domain.InventoryRow, error) {
 					rows[0].StackCount = 2
 					return rows, nil
 				}); err != nil {

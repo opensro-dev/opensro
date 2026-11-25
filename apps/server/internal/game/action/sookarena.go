@@ -514,6 +514,9 @@ func (rt *Runtime) endSookArena(run *sookArenaRun, c *enterworld.Character, win 
 		}
 		if (win || run.program.DeadAt != 0) && !run.paid {
 			reward := sookarena.KillReward(run.program.Kills)
+			if win && c.SookChest != nil {
+				reward = sookarena.StageReward(c.SookChest.Stage)
+			}
 			run.paid = rt.deps.Update(c, "sook-payout", func() bool {
 				if c.SookChest != nil && c.SookChest.GoldPaid {
 					return true
@@ -541,7 +544,7 @@ func (rt *Runtime) endSookArena(run *sookArenaRun, c *enterworld.Character, win 
 			return
 		}
 		fault := ""
-		if win {
+		if win && c.SookChest != nil && c.SookChest.Pending {
 			_, fault = rt.claimSookChest(c)
 		}
 		if rt.returnCharacterFromInstance(run.division, c, rt.handlerDoors()) != instance.Success {

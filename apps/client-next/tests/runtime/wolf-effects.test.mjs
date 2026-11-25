@@ -11,18 +11,30 @@ compile; none borrows the bear's roar or shield models.
 import "../helpers/native-source-loader.mjs";
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { readPublishedAssetBytesSync } from "../../../../scripts/lib/publishedAsset.mjs";
 import { publicRoot } from "../../../../scripts/build/world/paths.mjs";
+import { createCatalogEffects } from "../helpers/effect-programs.mjs";
+import { readEffectCatalogSync } from "../../../../scripts/lib/effectCatalog.mjs";
 
 const wolf = await import( "../../src/engine/foundation/animation/wolf-effects.ts" );
-const { createEffectPrograms } = await import( "../../src/engine/runtime/assets/worker/effects/program/program.ts" );
+
+test("gear Chain Lightning renders each victim in bounce order", () => {
+	for ( const [hop, signal] of [ 0xd7, 0xdb, 0xdc, 0xdd, 0xde ].entries() ) {
+		assert.equal( wolf.wolfEffectKind( signal ), "victim" );
+		const [part] = wolf.wolfEffectParts( signal );
+		assert.equal( part?.path, "skill/china/lightning_chundung_hit_a.efp" );
+		assert.equal( part?.at, hop * .12 );
+	}
+});
 
 test("every wolf signal plays published, compiling, wolf-only effect programs", () => {
-	const bytes = readPublishedAssetBytesSync( "assets/effects/programs.json", publicRoot );
-	const catalog = JSON.parse( new TextDecoder().decode( bytes ) );
-	const compiler = createEffectPrograms();
+	const published = readEffectCatalogSync( publicRoot );
+	const compiler = createCatalogEffects();
 	const signals = [
 		0xd7,
+		0xdb,
+		0xdc,
+		0xdd,
+		0xde,
 		0xd8,
 		0xd9,
 		0xda,
@@ -39,8 +51,8 @@ test("every wolf signal plays published, compiling, wolf-only effect programs", 
 		assert.ok( parts.length > 0, `signal ${action} draws nothing` );
 		assert.ok( parts.length <= wolf.WOLF_EFFECT_MAX_PARTS, `signal ${action} has more parts than actors` );
 		for ( const part of parts ) {
-			assert.ok( catalog.effects[part.path], `${part.path} is not published` );
-			assert.ok( compiler.decode( bytes, part.path ).model, `${part.path} does not compile` );
+			assert.ok( published.effects[part.path], `${part.path} is not published` );
+			assert.ok( compiler.decode( published, part.path ).model, `${part.path} does not compile` );
 			assert.doesNotMatch( part.path, /roar|iron-hide|shield/ );
 			assert.ok( part.at >= 0 && part.at < wolf.WOLF_EFFECT_SECONDS );
 		}

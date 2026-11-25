@@ -24,10 +24,7 @@ func Initialize(dir string) error {
 	if err != nil {
 		return err
 	}
-	defer func() {
-		_ = unlockFileExclusive(lockFile)
-		_ = lockFile.Close()
-	}()
+	defer releaseLock(lockFile)
 	if warning != "" {
 		fmt.Fprintf(os.Stderr, "store: %s\n", warning)
 	}

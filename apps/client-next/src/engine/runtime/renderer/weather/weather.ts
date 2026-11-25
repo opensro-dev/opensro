@@ -6,6 +6,15 @@ weather.ts - the native weather particle renderer
 Emits and draws rain and snow batches; batches rewrite their vertices
 every update, so they are uploaded with dynamicVertices.
 
+Native rain never grounds its drops (#4108, the 8CE9C0 census on the
+v1.150 client: no weather function calls any height or raycast
+function; SampleHeight serves nav movement only). A drop spawns at
+the player position plus a random offset and dies by the below-eye
+cull below, the way the spawned native effect object dies by its own
+lifetime. The per-drop scene pick and ground splash this file used to
+run were a port embellishment with no native counterpart; they are
+gone, so spawning a drop is O(1) in any scene.
+
 ===========================================================================
 */
 import { initialThunder, advanceThunder } from "@/engine/foundation/rendering/thunder";
@@ -23,13 +32,21 @@ type Particle = {
 	y: number;
 	z: number;
 	start: number;
-	ground: number | null;
 	age: number;
 	frame: number;
 	dx: boolean;
 	dz: boolean;
 };
-type Batch = { draw: GeometryDraw; capacity: number; positions: Float32Array; colors: Float32Array; image: ImageDraw; };
+type Batch = {
+	draw: GeometryDraw;
+	capacity: number;
+	positions: Float32Array;
+	colors: Float32Array;
+	image: ImageDraw;
+	// Vertices the last upload covered: the span the next frame must
+	// zero again where its rows no longer reach (#4108).
+	written: number;
+};
 // The weather owner retains particles and GPU batches. The manager's shared
 // remainder, frame-counter bits and draw-gated RNG follow 8CE9C0/8D1910.
 export function createWeather( random?: PresentationRandom, sound?: ( event: SoundEvent ) => void ) {
@@ -40,6 +57,10 @@ export function createWeather( random?: PresentationRandom, sound?: ( event: Sou
 		origin: number | null = null;
 	let thunder = initialThunder(), soundSequence = 0, overlayVisible = false, drawDelta = 0;
 	let particles: Particle[] = [];
+	// The per-kind visible rows of one prepare, reused across frames:
+	// prepare is synchronous, so retained buckets cannot be observed
+	// half-filled (#4108).
+	const buckets: Particle[][] = [ [], [], [], [] ];
 	const batches = new Map<number, Batch>();
 	const names = [ "rain1", "rain2", "snow1", "snow2" ] as const;
 	const path = ( kind: number ) => "/assets/images/Map_extracted/weather/" + names[kind] + ".png";
@@ -91,7 +112,6 @@ export function createWeather( random?: PresentationRandom, sound?: ( event: Sou
 			seconds: number,
 			region: number,
 			enabled: boolean,
-			ground: ( x: number, y: number, z: number ) => number | null,
 			reference: readonly [number, number, number] = camera.target
 		) {
 			if ( !Number.isFinite( seconds ) ) throw Error( "Invalid weather time" );
@@ -149,7 +169,6 @@ export function createWeather( random?: PresentationRandom, sound?: ( event: Sou
 						y,
 						z,
 						start: kind === 0 ? Math.fround( y + 100 * 4.900000095367432 ) : y,
-						ground: kind === 0 ? ground( x, y, z ) : null,
 						age: 0,
 						frame: 0,
 						dx: false,
@@ -161,10 +180,6 @@ export function createWeather( random?: PresentationRandom, sound?: ( event: Sou
 			for ( const p of particles ) {
 				p.age = (p.age + elapsedMs) >>> 0;
 				p.frame = (p.frame + 1) >>> 0;
-				if ( p.kind === 1 ) {
-					if ( p.age <= 1200 ) next.push( p );
-					continue;
-				}
 				if ( p.kind === 0 ) {
 					const t = Math.fround( (p.age + 10000) / 1000 );
 					p.y = Math.fround( p.start - t * t * 4.900000095367432 );
@@ -177,11 +192,11 @@ export function createWeather( random?: PresentationRandom, sound?: ( event: Sou
 						else if ( p.z - reference[2] < -100 ) p.z = Math.fround( p.z + 200 );
 					}
 				}
+				// The one death every kind shares: fallen far below the
+				// eye. Native drops end inside their effect object; the
+				// port's streak is depth-occluded by the ground it falls
+				// behind long before this cull, as the snow already was.
 				if ( p.y < camera.eye[1] - 500 ) continue;
-				if ( p.kind === 0 && p.ground !== null && p.y < p.ground ) {
-					next.push( { ...p, kind: 1, y: Math.fround( p.ground + .5 ), age: 0, frame: 0 } );
-					continue;
-				}
 				next.push( p );
 			}
 			particles = next;
@@ -217,9 +232,16 @@ export function createWeather( random?: PresentationRandom, sound?: ( event: Sou
 					z = matrix[2]! * p.x + matrix[6]! * p.y + matrix[10]! * p.z + matrix[14]!;
 				return w > 0 && Math.abs( x ) <= w && Math.abs( y ) <= w && z >= 0 && z <= w;
 			};
+			// One pass over the particles, one visibility test each: the
+			// per-kind filter this replaces recomputed the transform four
+			// times per particle per frame (#4108).
+			for ( const bucket of buckets ) bucket.length = 0;
+			for ( const p of particles ) {
+				if ( visible( p ) ) buckets[p.kind]!.push( p );
+			}
 			const output: GeometryDraw[] = [];
 			for ( let kind = 0; kind < 4; kind++ ) {
-				const rows = particles.filter( p => p.kind === kind && visible( p ) );
+				const rows = buckets[kind]!;
 				// Native 8CF730 traverses typed render lists; texture availability must
 				// not suppress the corresponding visible particle callbacks.
 				if ( kind >= 2 ) {
@@ -234,7 +256,7 @@ export function createWeather( random?: PresentationRandom, sound?: ( event: Sou
 				}
 				const image = images.get( path( kind ) );
 				if ( !rows.length || !image ) continue;
-				const vertices = kind === 1 ? 6 : 3;
+				const vertices = 3;
 				let batch = batches.get( kind );
 				if ( !batch || batch.capacity < rows.length || batch.image !== image ) {
 					if ( batch ) gpu.release( batch.draw );
@@ -242,31 +264,25 @@ export function createWeather( random?: PresentationRandom, sound?: ( event: Sou
 						positions = new Float32Array( capacity * vertices * 3 ),
 						colors = new Float32Array( capacity * vertices * 4 ).fill( 1 ),
 						uvs = new Float32Array( capacity * vertices * 2 );
-					const uv = kind === 1 ?
-						[ 0, 0, 1, 0, 1, 1, 0, 0, 1, 1, 0, 1 ] :
-						kind === 0 ?
-						[ .5, 0, .7, 1, .3, 1 ] :
-						[ .5, 0, 0, 1, 1, 1 ];
+					const uv = kind === 0 ? [ .5, 0, .7, 1, .3, 1 ] : [ .5, 0, 0, 1, 1, 1 ];
 					for ( let i = 0; i < capacity; i++ ) uvs.set( uv, i * vertices * 2 );
 					const transform = Float32Array.from( [ 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1 ] ),
-						instances = new Float32Array( (kind === 1 ? 1 : 9) * 16 );
+						instances = new Float32Array( 9 * 16 );
 					for ( let i = 0; i < instances.length / 16; i++ ) {
 						instances.set( transform, i * 16 );
-						if ( kind !== 1 ) {
-							const shifts = [
-								[ 0, 0 ],
-								[ 50, 0 ],
-								[ 50, -50 ],
-								[ 0, -50 ],
-								[ -50, -50 ],
-								[ -50, 0 ],
-								[ -50, 50 ],
-								[ 0, 50 ],
-								[ 50, 50 ]
-							];
-							instances[i * 16 + 12] = shifts[i]![0]!;
-							instances[i * 16 + 14] = shifts[i]![1]!;
-						}
+						const shifts = [
+							[ 0, 0 ],
+							[ 50, 0 ],
+							[ 50, -50 ],
+							[ 0, -50 ],
+							[ -50, -50 ],
+							[ -50, 0 ],
+							[ -50, 50 ],
+							[ 0, 50 ],
+							[ 50, 50 ]
+						];
+						instances[i * 16 + 12] = shifts[i]![0]!;
+						instances[i * 16 + 14] = shifts[i]![1]!;
 					}
 					const draw = gpu.upload( {
 						world: true,
@@ -286,16 +302,24 @@ export function createWeather( random?: PresentationRandom, sound?: ( event: Sou
 							fogDisabled: true
 						}
 					}, image );
-					batch = { draw, capacity, positions, colors, image };
+					batch = { draw, capacity, positions, colors, image, written: 0 };
 					batches.set( kind, batch );
 				}
-				batch.positions.fill( 0 );
-				batch.colors.fill( 1 );
+				// Upload only the span the draw can show (#4108): the live
+				// rows plus the tail earlier frames wrote, zeroed again here
+				// so the padded triangles stay degenerate at the origin,
+				// exactly as the full-capacity fill left them. The geometry
+				// owner's checks, mirror copy and GPU write then all run over
+				// the live span instead of the power-of-two capacity.
+				const live = rows.length * vertices,
+					span = Math.max( live, batch.written );
+				batch.positions.fill( 0, live * 3, span * 3 );
+				batch.colors.fill( 1, 0, span * 4 );
 				// The corners are the same for every particle of a kind - the
-				// camera axes and the rain's right are per-frame constants, and
-				// the splash's own scale is the only per-particle term. Hoisted
-				// out of the particle loop, the per-particle work is the vertex
-				// write itself, with no per-particle corner allocations.
+				// camera axes and the rain's right are per-frame constants.
+				// Hoisted out of the particle loop, the per-particle work is
+				// the vertex write itself, with no per-particle corner
+				// allocations.
 				let e0x = 0, e0y = 0, e0z = 0, e1x = 0, e1y = 0, e1z = 0, e2x = 0, e2y = 0, e2z = 0;
 				if ( kind === 0 ) {
 					e0y = 10;
@@ -303,7 +327,7 @@ export function createWeather( random?: PresentationRandom, sound?: ( event: Sou
 					e1z = rainRight[2]! * .3;
 					e2x = -rainRight[0]! * .3;
 					e2z = -rainRight[2]! * .3;
-				} else if ( kind !== 1 ) {
+				} else {
 					e0x = up[0]! * .5;
 					e0y = up[1]! * .5;
 					e0z = up[2]! * .5;
@@ -316,48 +340,26 @@ export function createWeather( random?: PresentationRandom, sound?: ( event: Sou
 				}
 				for ( let i = 0; i < rows.length; i++ ) {
 					const p = rows[i]!;
-					if ( kind === 1 ) {
-						const scale = Math.fround( p.age / 300 ),
-							alpha = (255 - Math.trunc( scale * 63 )) / 255;
-						let at = i * vertices * 3, ca = i * vertices * 4 + 3;
-						batch.positions[at] = p.x - scale;
-						batch.positions[at + 1] = p.y;
-						batch.positions[at + 2] = p.z + scale;
-						batch.positions[at + 3] = p.x + scale;
-						batch.positions[at + 4] = p.y;
-						batch.positions[at + 5] = p.z + scale;
-						batch.positions[at + 6] = p.x + scale;
-						batch.positions[at + 7] = p.y;
-						batch.positions[at + 8] = p.z - scale;
-						batch.positions[at + 9] = p.x - scale;
-						batch.positions[at + 10] = p.y;
-						batch.positions[at + 11] = p.z + scale;
-						batch.positions[at + 12] = p.x + scale;
-						batch.positions[at + 13] = p.y;
-						batch.positions[at + 14] = p.z - scale;
-						batch.positions[at + 15] = p.x - scale;
-						batch.positions[at + 16] = p.y;
-						batch.positions[at + 17] = p.z - scale;
-						batch.colors[ca] = alpha;
-						batch.colors[ca + 4] = alpha;
-						batch.colors[ca + 8] = alpha;
-						batch.colors[ca + 12] = alpha;
-						batch.colors[ca + 16] = alpha;
-						batch.colors[ca + 20] = alpha;
-					} else {
-						const at = i * vertices * 3;
-						batch.positions[at] = p.x + e0x;
-						batch.positions[at + 1] = p.y + e0y;
-						batch.positions[at + 2] = p.z + e0z;
-						batch.positions[at + 3] = p.x + e1x;
-						batch.positions[at + 4] = p.y + e1y;
-						batch.positions[at + 5] = p.z + e1z;
-						batch.positions[at + 6] = p.x + e2x;
-						batch.positions[at + 7] = p.y + e2y;
-						batch.positions[at + 8] = p.z + e2z;
-					}
+					const at = i * vertices * 3;
+					batch.positions[at] = p.x + e0x;
+					batch.positions[at + 1] = p.y + e0y;
+					batch.positions[at + 2] = p.z + e0z;
+					batch.positions[at + 3] = p.x + e1x;
+					batch.positions[at + 4] = p.y + e1y;
+					batch.positions[at + 5] = p.z + e1z;
+					batch.positions[at + 6] = p.x + e2x;
+					batch.positions[at + 7] = p.y + e2y;
+					batch.positions[at + 8] = p.z + e2z;
 				}
-				gpu.updatePositions( batch.draw, batch.positions, batch.colors );
+				gpu.updatePositions(
+					batch.draw,
+					batch.positions.subarray( 0, span * 3 ),
+					batch.colors.subarray( 0, span * 4 ),
+					undefined,
+					undefined,
+					0
+				);
+				batch.written = live;
 				output.push( batch.draw );
 			}
 			return output;

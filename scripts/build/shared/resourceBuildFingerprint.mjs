@@ -43,6 +43,7 @@ import { buildStatePath } from "../../lib/generatedRoot.mjs";
 import { codeClosure } from "./codeStamp.mjs";
 import { openFileHashCache } from "./fileHashCache.mjs";
 import { crossCityTeleportEnabled } from "./crossCityTeleport.mjs";
+import { skytempleEnabled } from "./skytemple.mjs";
 import { janganTombTeleportEnabled } from "./janganTombTeleport.mjs";
 import { resolveVsroRoot, VSRO_ROOT_ENV } from "./laterClientRoot.mjs";
 import { muhanEnabled } from "./muhan.mjs";
@@ -97,6 +98,9 @@ export const ENV_KNOBS = [
 	// Port-only, not native: the direct town-to-town gate links join the
 	// teleport bake (shared/crossCityTeleport.mjs).
 	"SRO_CROSS_CITY_TELEPORT",
+	// Port-only, not native: the Sky Temple fields leave the teleport
+	// bake while the switch is off (shared/skytemple.mjs).
+	"SRO_SKYTEMPLE",
 	"SRO_SOOK_SURVIVAL_ARENA",
 	"SRO_ALLOW_DEV_OUTDOOR_ROUTING",
 	"SRO_SKIP_TEXTURE_CONVERT",
@@ -124,7 +128,8 @@ export const BAKE_SWITCH_POSTURES = [
 	{ env: "SRO_QINSHI_TOMB", enabled: qinshiTombEnabled },
 	{ env: "SRO_MUHAN", enabled: muhanEnabled },
 	{ env: "SRO_JANGAN_TOMB_TELEPORT", enabled: janganTombTeleportEnabled },
-	{ env: "SRO_CROSS_CITY_TELEPORT", enabled: crossCityTeleportEnabled }
+	{ env: "SRO_CROSS_CITY_TELEPORT", enabled: crossCityTeleportEnabled },
+	{ env: "SRO_SKYTEMPLE", enabled: skytempleEnabled }
 ];
 
 /*
@@ -166,6 +171,11 @@ const FINGERPRINT_ROOTS = [
 	{
 		label: "survival-art",
 		absolutePath: path.join( rebuildRoot, "docs", "features", "assets", "survival" ),
+		source: true
+	},
+	{
+		label: "pet-art",
+		absolutePath: path.join( rebuildRoot, "docs", "pet-expansion", "assets" ),
 		source: true
 	},
 	{ label: "extracted", absolutePath: extractedRoot },
@@ -230,7 +240,8 @@ const DATA_ROOT_LABELS = new Set( [
 	"client-executable",
 	"particle-archive",
 	"rebuild-assets",
-	"survival-art"
+	"survival-art",
+	"pet-art"
 ] );
 
 /*
@@ -257,35 +268,49 @@ export async function hashRoots( roots, hashes = undefined ) {
 
 /*
 ================
-dataRootsHash
+folderHashes
 
-The stat hash of each data root, by label, so a lane that runs can say
-which root moved.
+A directory root's sorted fingerprint lines ("<label>/<path>|size|stamp"),
+hashed per top folder or file inside it, as "<label>/<name>".
 ================
 */
-export async function dataRootsHash() {
-	const hashes = {};
-	for ( const root of FINGERPRINT_ROOTS.filter( root => DATA_ROOT_LABELS.has( root.label ) ) ) {
-		hashes[root.label] = await hashRoots( [ root ] );
+export function folderHashes( label, lines ) {
+	const folders = new Map(), prefix = label + "/";
+	for ( const line of lines ) {
+		if ( !line.startsWith( prefix ) ) continue;
+		const name = line.slice( prefix.length ).split( /[/|]/, 1 )[0];
+		if ( !folders.has( name ) ) folders.set( name, [] );
+		folders.get( name ).push( line );
 	}
-	return hashes;
+	return Object.fromEntries(
+		[ ...folders ].map( ( [name, rows] ) => [ prefix + name, hashFingerprintLines( rows ) ] )
+	);
 }
 
 /*
 ================
-serverRosterRoots
+dataRootsHash
 
-The server sources the roster exporter (sro-evidence) compiles from: the
-whole internal tree, since the roster joins enterworld, monster and more.
+The stat hash of each data root, by label, and of each top folder (or
+file) inside a directory root, as "<label>/<name>", so a lane that runs
+says which folder moved: "data extracted changed" alone hid that the
+asset build's own optional-teleport import rewrote one file under
+extracted/ on every run, rerunning all three lanes (#4337).
 ================
 */
-export function serverRosterRoots() {
-	return [
-		{ label: "server-go-mod", absolutePath: path.join( serverSourceRoot, "go.mod" ), source: true },
-		{ label: "server-go-sum", absolutePath: path.join( serverSourceRoot, "go.sum" ), source: true },
-		{ label: "server-cmd", absolutePath: path.join( serverSourceRoot, "cmd" ), source: true },
-		{ label: "server-internal", absolutePath: path.join( serverSourceRoot, "internal" ), source: true }
-	];
+export async function dataRootsHash() {
+	const hashes = {}, files = await sourceHashes();
+	for ( const root of FINGERPRINT_ROOTS.filter( root => DATA_ROOT_LABELS.has( root.label ) ) ) {
+		// One walk: the root's hash as hashRoots( [ root ] ) gives it.
+		const lines = [];
+		await collectRoot( root, lines, files );
+		lines.sort();
+		hashes[root.label] = createHash( "sha256" ).update( `${root.label}\n${hashFingerprintLines( lines )}\n` )
+			.digest( "hex" );
+		Object.assign( hashes, folderHashes( root.label, lines ) );
+	}
+	await files.save();
+	return hashes;
 }
 
 /*

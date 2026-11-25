@@ -14,8 +14,10 @@ safe-zone vanish is weighed last.
 package simulation
 
 import (
+	"slices"
 	"time"
 
+	"opensro.online/server/internal/game/item/wire"
 	"opensro.online/server/internal/game/world/monster"
 )
 
@@ -52,13 +54,77 @@ func (ops *MonsterMoverOps) advanceAndPublish(divisionID string, actor *behavior
 		for i := range viewers {
 			sessionID := viewers[i].SessionID
 			if ops.scopeShown(sessionID)[instance.Gid] {
-				push.PushToSession(sessionID, frames)
+				push.PushToSession(sessionID, monsterFramesForViewer(frames, &viewers[i]))
 			}
 		}
 	}
 	// Private consequences follow the public result in the same operation.
 	deliverMonsterTargetFrames(divisionID, targeted, sessions, push)
 	ops.vanishInSafeZone(divisionID, actor, nowMs)
+}
+
+/*
+================
+monsterFramesForViewer
+
+The frames of one monster's publication that one of its viewers may
+take. Every frame reaches every viewer of the monster except a 0xB4B5
+ride state: a ride state names its rider, and the client applies it to
+that rider with no absent-actor arm (client 0x777F60: the registry
+find at client 0x777FB2 flows untested into CICharactor_SetMountedActionState
+at client 0x777FC3), so it may reach only a viewer that holds the rider - a
+session whose published set names it, or the rider's own session,
+which owns the mount. A slain mounted pet's dismount therefore leaves
+with the pet's death frames for the monster's viewers who hold the
+owner, and never reaches the rest (#4112). A ride state whose payload
+does not decode stays with the shared frames, as the action lane's
+frameSourceGID fallback keeps it under the caller's source. With no
+decodable ride state in the batch - the common step - the frames pass
+through untouched.
+================
+*/
+func monsterFramesForViewer(frames []Frame, viewer *SessionSnapshot) []Frame {
+	hasRide := false
+	for i := range frames {
+		if _, ok := wire.FrameRideRider(frames[i].Opcode, frames[i].Payload); ok {
+			hasRide = true
+			break
+		}
+	}
+	if !hasRide {
+		return frames
+	}
+	out := make([]Frame, 0, len(frames))
+	for i := range frames {
+		if !viewerHoldsRide(viewer, frames[i]) {
+			continue
+		}
+		out = append(out, frames[i])
+	}
+	return out
+}
+
+/*
+================
+viewerHoldsRide
+
+Whether this session may take one frame of the batch: any frame but a
+decodable ride state, or a ride state whose rider it holds (its
+published set names the rider gid) or is (it owns the mount the frame
+names). An undecodable ride state stays shared, as in
+monsterFramesForViewer above.
+================
+*/
+func viewerHoldsRide(viewer *SessionSnapshot, frame Frame) bool {
+	rider, ok := wire.FrameRideRider(frame.Opcode, frame.Payload)
+	if !ok {
+		return true
+	}
+	if _, found := slices.BinarySearch(viewer.PublishedObjects, rider); found {
+		return true
+	}
+	mount, ok := wire.CosRideStateMount(frame.Payload)
+	return ok && viewer.ownsCompanion(mount)
 }
 
 /*

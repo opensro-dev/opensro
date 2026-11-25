@@ -45,9 +45,9 @@ document's script elements).
 */
 /**
  * @param {import("node:test").TestContext} t
- * @param {{ document?: { scripts: { src: string }[] }, scripts?: Set<string> }} [page]
+ * @param {{ document?: { scripts: { src: string }[] }, scripts?: Set<string>, firstError?: (failure: import("../../src/engine/runtime/bug-report/journal.ts").UncaughtFailure) => void }} [page]
  */
-function installPage( t, { document, scripts = PAGE_SCRIPTS } = {} ) {
+function installPage( t, { document, scripts = PAGE_SCRIPTS, firstError } = {} ) {
 	let now = 0;
 	t.mock.method( performance, "now", () => now );
 	const saved = new Map(
@@ -65,7 +65,7 @@ function installPage( t, { document, scripts = PAGE_SCRIPTS } = {} ) {
 	if ( document ) Object.defineProperty( globalThis, "document", { value: document, configurable: true } );
 	const journal = createJournal(
 		/** @type {HTMLCanvasElement} */ ({}),
-		document ? {} : { scriptPaths: () => scripts }
+		document ? { firstError } : { scriptPaths: () => scripts, firstError }
 	);
 	t.after( () => journal.dispose() );
 	return {
@@ -450,4 +450,149 @@ test("dispose disconnects the error capture", t => {
 	Object.assign( event, { error: failWith( "too late" ), message: "too late" } );
 	page.window.dispatchEvent( event );
 	assert.equal( page.errors().length, 0 );
+});
+
+// ============================================================================
+// The automatic incident (#3684): the first throw of each failure, redacted
+// ============================================================================
+
+/*
+================
+incidentPage
+
+A fake page whose journal hands its first throws to `filed`.
+================
+*/
+function incidentPage( t ) {
+	const filed = [];
+	const page = installPage( t, { firstError: failure => filed.push( failure ) } );
+	return { page, filed };
+}
+
+test("the first stack overflow files one incident with its frames, repeats file none", t => {
+	const { page, filed } = incidentPage( t );
+	for ( let i = 0; i < 5; i++ ) {
+		throwNow( page, failWith( "Maximum call stack size exceeded" ) );
+		page.advance( 1000 );
+	}
+	assert.deepEqual( filed, [ {
+		message: "RangeError: Maximum call stack size exceeded",
+		frames: [ "    at /src/stall.ts:10:5", "    at /src/frame.ts:20:3" ]
+	} ] );
+});
+
+test("an error our code builds files its class name, never its text", t => {
+	const { page, filed } = incidentPage( t );
+	const error = new Error( "Trade with PlayerName failed" );
+	error.stack = `Error: Trade with PlayerName failed
+    at stallBuy (${ORIGIN}/src/stall.ts:10:5)`;
+	throwNow( page, error );
+	// A subclass of an engine class is still our code's text.
+	class StallError extends RangeError {}
+	const sub = new StallError( "PlayerName's stall" );
+	sub.stack = `RangeError: PlayerName's stall
+    at chat (${ORIGIN}/src/chat.ts:3:1)`;
+	throwNow( page, sub );
+	// A renamed error's name is text as well.
+	const renamed = new TypeError( "x" );
+	renamed.name = "TypeError PlayerName";
+	throwNow( page, renamed );
+	assert.deepEqual( filed.map( failure => failure.message ), [ "Error", "Error", "Error" ] );
+	assert.ok( !JSON.stringify( filed ).includes( "PlayerName" ), "no thrown free text leaves the page" );
+	assert.deepEqual( filed[0]?.frames, [ "    at /src/stall.ts:10:5" ] );
+});
+
+test("an overflow with no page frame files its frames' location classes, never their names or URLs", t => {
+	// 2026-11-25: seven live stack overflows filed with no frame at all.
+	const { page, filed } = incidentPage( t );
+	const deep = Array.from( { length: 6 }, () => "    at secretWalk (chrome-extension://abcdef/inject.js:3:9)" );
+	const error = new RangeError( "Maximum call stack size exceeded" );
+	error.stack = [
+		"RangeError: Maximum call stack size exceeded",
+		...deep,
+		"    at evalPlayerName (<anonymous>:1:168)",
+		"    at Array.map (<anonymous>)",
+		`    at step (blob:${ORIGIN}/0f3c-11aa:9:8)`,
+		"    at lure (https://elsewhere.example/assets/index-abc.js:5:6)"
+	].join( "\n" );
+	throwNow( page, error );
+	assert.deepEqual( filed, [ {
+		message: "RangeError: Maximum call stack size exceeded",
+		frames: [
+			"    at <extension> x6",
+			"    at <anonymous>",
+			"    at <native>",
+			"    at <blob>",
+			"    at <other-origin>"
+		]
+	} ] );
+	const text = JSON.stringify( page.journal.since( 0 ) );
+	for ( const secret of [ "secretWalk", "abcdef", "evalPlayerName", "elsewhere", "0f3c" ] ) {
+		assert.ok( !JSON.stringify( filed ).includes( secret ), `the incident carried ${secret}` );
+	}
+	assert.ok( !text.includes( "<extension>" ), "the journal's own events gained the incident-only classes" );
+});
+
+test("an overflow with a page frame files only the page frames", t => {
+	const { page, filed } = incidentPage( t );
+	const error = new RangeError( "Maximum call stack size exceeded" );
+	error.stack =
+		"RangeError: Maximum call stack size exceeded\n    at secretWalk (chrome-extension://abcdef/inject.js:3:9)\n" +
+		`    at stallBuy (${ORIGIN}/src/stall.ts:10:5)`;
+	throwNow( page, error );
+	assert.deepEqual( filed[0]?.frames, [ "    at /src/stall.ts:10:5" ] );
+});
+
+test("the journal keeps sixty-four frames per error while it listens, and restores the limit after", t => {
+	const before = Error.stackTraceLimit;
+	Error.stackTraceLimit = 10;
+	t.after( () => {
+		Error.stackTraceLimit = before;
+	} );
+	const page = installPage( t, {} );
+	assert.equal( Error.stackTraceLimit, 64 );
+	page.journal.dispose();
+	assert.equal( Error.stackTraceLimit, 10 );
+});
+
+test("a rejected non-error files as a rejection with no frames", t => {
+	const { page, filed } = incidentPage( t );
+	const event = new Event( "unhandledrejection" );
+	Object.assign( event, { reason: "secret text" } );
+	page.window.dispatchEvent( event );
+	assert.deepEqual( filed, [ { message: "Rejection", frames: [] } ] );
+});
+
+test("a storm of distinct failures files at most the kept eight", t => {
+	const { page, filed } = incidentPage( t );
+	for ( let i = 0; i < 20; i++ ) {
+		const error = new TypeError( `failure ${i}` );
+		error.stack = `TypeError: failure ${i}
+    at f${i} (${ORIGIN}/src/f.ts:${i + 1}:1)`;
+		throwNow( page, error );
+	}
+	assert.equal( filed.length, 8 );
+});
+
+test("a failure storming past the kept eight files once it proves a storm", t => {
+	const { page, filed } = incidentPage( t );
+	for ( let i = 0; i < 8; i++ ) {
+		const error = new TypeError( `failure ${i}` );
+		error.stack = `TypeError: failure ${i}
+    at f${i} (${ORIGIN}/src/f.ts:${i + 1}:1)`;
+		throwNow( page, error );
+	}
+	assert.equal( filed.length, 8 );
+	// One-off repeats prove nothing yet.
+	for ( let i = 0; i < 3; i++ ) throwNow( page, failWith( "Maximum call stack size exceeded" ) );
+	assert.equal( filed.length, 8 );
+	// The fourth throw is a storm, not an accident: it files, once.
+	throwNow( page, failWith( "Maximum call stack size exceeded" ) );
+	assert.equal( filed.length, 9 );
+	assert.deepEqual( filed[8], {
+		message: "RangeError: Maximum call stack size exceeded",
+		frames: [ "    at /src/stall.ts:10:5", "    at /src/frame.ts:20:3" ]
+	} );
+	throwNow( page, failWith( "Maximum call stack size exceeded" ) );
+	assert.equal( filed.length, 9 );
 });

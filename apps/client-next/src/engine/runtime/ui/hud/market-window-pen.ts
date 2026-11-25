@@ -203,7 +203,16 @@ export function penOf(
 		field( id: string, value: string, r: UiRect, placeholder: string, maxLength: number ) {
 			this.panel( r, view.focus === id ? GOLD : EDGE );
 			const inner: UiRect = [ r[0] + 6, r[1], r[2] - 12, r[3] ];
-			frame.controls.push( { id, label: placeholder, kind: "text", value, rect: r, maxLength } );
+			// The value is drawn 6 px into the frame (inner below).
+			frame.controls.push( {
+				id,
+				label: placeholder,
+				kind: "text",
+				value,
+				rect: r,
+				maxLength,
+				textInsets: [ 6, 0, 0, 0 ]
+			} );
 			if ( value ) this.text( value, inner );
 			else if ( view.focus !== id ) this.text( placeholder, inner, DIM );
 			if ( view.focus === id && view.caretVisible ) {

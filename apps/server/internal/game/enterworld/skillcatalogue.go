@@ -88,6 +88,10 @@ type SkillUiRow struct {
 	// to, once its weapon kinds match the loadout. The client resolves the
 	// same row to claim the chase's reach. Omitted for every other row.
 	BasicAttack bool `json:"basicAttack,omitempty"`
+	// Passive marks a learn-applied program (SkillExecutionPassive): never
+	// pressed. The client still receives Admit for its reqi display, so
+	// Auto-Skills must filter on this rather than on a missing Admit.
+	Passive bool `json:"passive,omitempty"`
 	// MP and MPPercent are the cast's authored MP cost (flat plus percent of
 	// maximum MP), before the caster's consumption rate (parameter 0x8D):
 	// the client does not stand a cooldown in for a press the caster cannot
@@ -380,6 +384,7 @@ func (t *TextdataSkills) SpawnSkillRows() []SpawnSkillRow {
 			}
 			projection.UI.RangeUp = row.BuffModifiers.Ru
 			projection.UI.BasicAttack = basicAttacks[row.Codename]
+			projection.UI.Passive = t.ExecutionPlan(row.ID).Kind() == SkillExecutionPassive
 			// Only a player's own skill is pressed from a shortcut slot; a
 			// monster row's cost would only grow the catalogue every client loads.
 			if row.Consumption.Pinned && playerSkillCodename(row.Codename) {

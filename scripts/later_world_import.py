@@ -10,7 +10,9 @@ and merge their regions' terrain, navmesh, names and Data files into
 the variant on the Alexandria catalog machinery. What differs is the
 worlds' shape - admission windows, population files, the summary each
 build reports - and that lives in each module's WorldImport spec and
-its small shape functions. Everything mechanical lives here, once.
+its small shape functions. Everything mechanical lives here, once;
+the population export's read, projection and stage selection live in
+later_world_population, the one owner of that file's shape.
 
 A switch off must leave the native tree behind. The variant root is
 NOT re-extracted between builds: build_variant links the native tree
@@ -42,9 +44,12 @@ import contextlib
 import json
 import mmap
 import os
+import sys
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Callable
+
+sys.path.insert(0, str(Path(__file__).resolve().parent / "build"))
 
 import alexandria_npcs as characters
 from alexandria_map_tables import (
@@ -53,8 +58,11 @@ from alexandria_map_tables import (
 import cap110_monsters as cap110
 import cap110_skill_effects as effects
 import import_vsro_alexandria as tables
+import later_world_population
+import published_ids
 import skilldata_enc as skill_tables
 import sro_pk2
+from isror_nest_table import require_native_nest_table
 from pin_file import read_pin_field
 from prepare_client_resources import file_digest, write_atomically
 from sro_paths import trees_overlap
@@ -132,6 +140,10 @@ class WorldImport:
 	build_populations: Callable = None
 	summarize_populations: Callable = None
 	regions_of: Callable = None
+	# A claimed kind another layer may already have staged is placed on
+	# its standing row, never staged twice (one codename, one row).
+	# Off, stage_kinds refuses such a kind by name.
+	place_standing: bool = False
 
 
 #============================================================================
@@ -201,78 +213,6 @@ def require_pin(spec, root, names, pins_for):
 def require_pairing(spec, env=os.environ):
 	if spec.requires and env.get(spec.requires, "").strip().lower() not in tables.FLAG_ON:
 		raise ValueError(f"{spec.flag} requires {spec.requires} (its population and drops)")
-
-
-#============================================================================
-# Population export
-#============================================================================
-
-
-# ================
-# read_population
-#
-# The population export: its recorded backup hash must be the pinned
-# one, and the spec's worlds must all be present.
-# ================
-def read_population(spec, source_root):
-	path = Path(source_root) / spec.population_name
-	try:
-		export = json.loads(path.read_text(encoding="utf-8"))
-	except (OSError, ValueError) as error:
-		raise SystemExit(f"{path} is unreadable: {error}")
-	if str(export.get("sourceSha256", "")).lower() != spec.source_sha256:
-		raise ValueError(
-			f"population export {path} records backup {export.get('sourceSha256') or 'none'}, "
-			f"not the pinned shard backup ({spec.source_sha256})"
-		)
-	worlds = export.get("worlds") or {}
-	for world in spec.worlds_required:
-		if str(world) not in worlds:
-			raise ValueError(f"population export {path} has no world {world}")
-	return export
-
-
-# ================
-# project_population
-#
-# The nest rows of the given worlds, in the cap-110 Version-2 row
-# schema the server reads. Extraction facts the schema does not carry
-# (the continent, the hive join) are validated, never kept: a nest
-# flag or a keep-count hive would need a projection this family does
-# not have, so it refuses by name instead of silently shrinking. A
-# hive total cap is the one exception: the row schema has no
-# cross-nest cap, so a capped kind projects onto its first nest with
-# the cap as its count. The spawn kind rides the row as SpawnType,
-# as the temple loader preserves it.
-# ================
-def project_population(spec, rows, worlds):
-	projected = []
-	hive_kept = set()
-	for row in sorted(rows, key=lambda item: item["NestID"]):
-		if row["WorldID"] not in worlds:
-			continue
-		hive = row.get("Hive") or {}
-		if row.get("NestFlag") or hive.get("KeepMonsterCountType"):
-			raise ValueError(f"{spec.label} nest requires a projection this family does not have: " + row["Codename"])
-		cap = hive.get("OverwriteMaxTotalCount") or 0
-		if cap:
-			if row["Codename"] in hive_kept:
-				continue
-			hive_kept.add(row["Codename"])
-		out = {
-			"Codename": row["Codename"], "NestID": row["NestID"], "WorldID": row["WorldID"],
-			"RegionID": row["RegionID"], "X": row["X"], "Y": row["Y"], "Z": row["Z"],
-			"Radius": row["Radius"], "GenerateRadius": row["GenerateRadius"],
-			"MaxCount": min(row["MaxCount"], cap) if cap else row["MaxCount"], "RespawnDelayMinSec": row["RespawnDelayMinSec"],
-			"RespawnDelayMaxSec": row["RespawnDelayMaxSec"], "Respawn": row["Respawn"],
-			"InitialDir": row["InitialDir"], "ChampionGenPercentage": row["ChampionGenPercentage"],
-			"Controls": row["Controls"], "Champion": row["Champion"],
-		}
-		if row.get("SpawnType"):
-			out["SpawnType"] = row["SpawnType"]
-		projected.append(out)
-	projected.sort(key=lambda row: row["NestID"])
-	return {"Version": 2, "Rows": projected}
 
 
 # ================
@@ -347,7 +287,7 @@ def add_monsters(spec, v1696_root, native, output, source_root, enabled, sub_ena
 	if not source_root and not os.environ.get(spec.source_env):
 		raise missing_export(spec.flag, spec.source_env, "its population export folder")
 	source_root = Path(source_root or os.environ[spec.source_env])
-	export = read_population(spec, source_root)
+	export = later_world_population.read_population(spec, source_root)
 	# The export's nests also place the worlds' NPCs (believers, commerce
 	# and garrison rows, all level 0): roster content, not monsters.
 	# They stay out of every population for the NPC slice to place.
@@ -384,7 +324,8 @@ def add_monsters(spec, v1696_root, native, output, source_root, enabled, sub_ena
 			missing = sorted(codes - set(refs))
 			if missing:
 				raise ValueError(f"{spec.label} {family} nests name unadmitted monsters: {missing}")
-		staged = stage_kinds(spec.label, read, has, refs, text_root, prior, spec.character_shard, spec.skill_shard,
+		staged = stage_kinds(spec.label, read, has, later_world_population.staged_refs(spec, text_root, refs), text_root, prior,
+			spec.character_shard, spec.skill_shard,
 			lambda code: code.startswith(spec.info_prefixes))
 		populations = spec.build_populations(rows, sub_enabled)
 		for group, filename in spec.population_files:
@@ -447,7 +388,7 @@ def stage_kinds(label, read, has, refs, text_root, prior, character_shard, skill
 	standing = sorted(set(refs) & {r[2] for r in native_chars if len(r) > 2})
 	if standing:
 		raise ValueError(f"{label} kinds {standing}: each already stands in the character tables")
-	occupied = {int(r[1]) for r in native_chars}
+	occupied = published_ids.occupied_objects(text_root, (character_shard,))
 	allocated = cap110.allocate_characters(occupied, sorted(refs), prior.get("characters", {}))
 	for code, row in refs.items():
 		row[1] = str(allocated[code])
@@ -508,12 +449,9 @@ def stage_kinds(label, read, has, refs, text_root, prior, character_shard, skill
 		"characters": {c: int(r[1]) for c, r in refs.items()}, "skills": {r[3]: int(r[1]) for r in added},
 		"animationBases": sorted(set(prior.get("animationBases", [])) | {base for rows in selected.values() for base, _ in rows}),
 		"characterInfo": sorted(owned_info | {r[0] for r in info}),
-		# Owned names are the rows this build added plus the ones a
-		# previous build added, never a row the table already held: a
-		# later kind may reuse a native symbol (MOB_RM_TAHOMET_ROC names
-		# itself SN_MOB_RM_TAHOMET), and the off reap drops every owned
-		# symbol, so claiming the native row would strip the native name.
-		"nameSymbols": sorted(({r[1] for r in texts} | set(prior.get("nameSymbols", []))) & {r[5] for r in refs.values()}),
+		# Owned names follow characters.owned_name_symbols (#3762).
+		"nameSymbols": characters.owned_name_symbols(texts, prior.get("nameSymbols", []),
+			{r[5] for r in refs.values()}),
 	}
 
 
@@ -591,7 +529,7 @@ def add_world(spec, native, out, v1696_root, source_root, sub_enabled, pins_for)
 	if not source_root:
 		raise missing_export(spec.flag, spec.source_env, "its population export folder")
 	require_pin(spec, v1696_root, MERGE_ARCHIVES, pins_for)
-	export = read_population(spec, source_root)
+	export = later_world_population.read_population(spec, source_root)
 	regions = spec.regions_of(export, sub_enabled)
 	return merge_world(spec, native, out, v1696_root, regions,
 		lambda: add_monsters(spec, v1696_root, native, out, source_root, True, sub_enabled, pins_for))
@@ -618,7 +556,7 @@ def add_world(spec, native, out, v1696_root, source_root, sub_enabled, pins_for)
 # name tables are undone from the record itself (reap_regions).
 # ================
 def merge_world(spec, native, out, v1696_root, regions, build_monsters):
-	import build_alexandria_variant as variant
+	import variant_files as variant
 	native, out = Path(native), Path(out)
 	v1696_root = Path(v1696_root)
 	# The temple sets' named interiors are dungeon regions (bit 15):
@@ -867,7 +805,7 @@ def reap_regions(spec, native, out, record):
 		target.unlink(missing_ok=True)
 	sectors = [tuple(sector) for sector in record.get("sectors", [])]
 	if sectors:
-		import build_alexandria_variant as variant
+		import variant_files as variant
 		mapinfo = out / "Data_extracted" / "navmesh" / "mapinfo.mfo"
 		if mapinfo.exists():
 			native_bits = availability(variant, native / "Data_extracted" / "navmesh" / "mapinfo.mfo")

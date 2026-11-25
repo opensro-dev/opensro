@@ -143,7 +143,12 @@ REQUIRED_MISSIONS = "vf17c"
 # instead: the MEETROC_ECT talks (90D9B0, 90E1C0, 90E9C0) count the ECT
 # token in the bag (player +0x224), refuse below 7, 10 or 15 and remove
 # that many (+0x230). Their tokens come from QNO_RM_MEETROC_6's reward.
-HELD_COUNT_GATHERS = {"QNO_RM_MEETROC_ECT_1", "QNO_RM_MEETROC_ECT_2", "QNO_RM_MEETROC_ECT_3"}
+# The ARCHEMY talks (90F270 and its seven siblings, #3399 step 5d) are
+# the same shape over each quest's own trophy: refuse below 3, remove 3.
+# Their trophies come from the Roc kinds' database fixed drops.
+HELD_COUNT_GATHERS = {"QNO_RM_MEETROC_ECT_1", "QNO_RM_MEETROC_ECT_2", "QNO_RM_MEETROC_ECT_3",
+	"QNO_RM_ARCHEMY_1", "QNO_RM_ARCHEMY_2", "QNO_RM_ARCHEMY_3", "QNO_RM_ARCHEMY_4",
+	"QNO_RM_ARCHEMY_5", "QNO_RM_ARCHEMY_6", "QNO_RM_ARCHEMY_7", "QNO_RM_ARCHEMY_8"}
 
 # Classes whose v1.188 mission captions v1.150 never shipped as contents:
 # v1.150's questcontentsdata names one caption per quest, which every
@@ -596,13 +601,14 @@ def rewards(code, text, sql):
 	if not row or row["selectionCount"] == 0:
 		spec["RewardItems"] = leads
 		return spec
-	# A selection reward: the player picks SelectionCnt of the listed items.
-	# The v1.150 rows pick one; the server offers each as an NPC row titled
-	# by the item's name (rewardchoice.go). Reward kinds 1-5 index dialogue
-	# rewards and never appear with a selection.
-	if row["selectionCount"] != 1 or any(i["choice"] != 0 for i in items) or len(items) < 2:
+	# A selection reward: the player picks SelectionCnt of the listed
+	# items in the reward window (rewardchoice.go). Reward kinds 1-5
+	# index dialogue rewards and never appear with a selection; choice
+	# indices above 0 would group items and refuse here.
+	if any(i["choice"] != 0 for i in items) or len(items) < 2 or row["selectionCount"] < 1 or row["selectionCount"] > len(items):
 		raise Unsupported("selection of %d" % row["selectionCount"])
 	spec["RewardItems"] = []
+	spec["RewardSelectionCount"] = row["selectionCount"]
 	spec["RewardChoices"] = [{"TitleSymbol": "", "Items": [lead]} for lead in leads]
 	if row["checkCountry"]:
 		spec["RewardChoiceCheckCountry"] = True

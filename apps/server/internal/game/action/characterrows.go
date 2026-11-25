@@ -87,7 +87,9 @@ func invItemsFromRowsWithin(rows []enterworld.InventoryRow, slotEnd int64) []inv
 			Quantity:     uint16(quantity),
 			MagicOptions: append([]uint64(nil), row.MagicOptions...),
 			Data:         row.Data, Summon: domain.CloneCOS(row.Summon),
-			ForgeBound: row.ForgeBound,
+			ForgeBound:      row.ForgeBound,
+			EarnedBought:    row.EarnedBought,
+			RentExpiresUnix: row.RentExpiresUnix,
 		})
 	}
 
@@ -123,7 +125,9 @@ func rowsFromInvItems(items []inventory.Item) []enterworld.InventoryRow {
 			StackCount:   int64(item.Quantity),
 			MagicOptions: append([]uint64(nil), item.MagicOptions...),
 			Data:         item.Data, Summon: summon,
-			ForgeBound: item.ForgeBound,
+			ForgeBound:      item.ForgeBound,
+			EarnedBought:    item.EarnedBought,
+			RentExpiresUnix: item.RentExpiresUnix,
 		})
 	}
 

@@ -55,6 +55,9 @@ export interface SystemNotice {
 	readonly key: string;
 	readonly value: number;
 	readonly text?: string;
+	// Port-only, not native (#4136): a literal tail the one notice text
+	// formatter appends after the localized line; native data has none.
+	readonly suffix?: string;
 	readonly arguments?: readonly string[];
 	readonly banner?: true;
 	readonly bannerUsesFormattedKey?: true;
@@ -221,6 +224,37 @@ export function sealDropTierFromText( text: string ): 0 | 1 | 2 | undefined {
 	if ( text.includes( "(Seal Of Moon)" ) ) return 1;
 	if ( text.includes( "(Seal Of Star)" ) ) return 0;
 	return undefined;
+}
+
+/*
+================
+isReinforceSuccessText
+
+Port-only, not native (#3260): whether a notice's text is the shard's
+reinforcement success announcement (server announce.go's one wording,
+pinned by its Go tests). The later client centres these lines on its
+centre banner (UIIT_MSG_REINFORCERR_SUCCESS_CENTER); a failed line says
+"has failed in augmenting" and a seal drop "has dropped", so the one
+verb phrase picks the successes out of the shared drop/plus bucket.
+================
+*/
+export function isReinforceSuccessText( text: string ): boolean {
+	return text.includes( " has succeded in augmenting " );
+}
+
+/*
+================
+reinforceSuccessNotice
+
+Whether a notice is a reinforcement success announcement: a drop/plus
+line carrying the success wording. The break channel's failures never
+qualify (the later client has no centre banner for them), and neither
+does a seal drop or a shard event on the same channel - neither says
+"augmenting".
+================
+*/
+export function reinforceSuccessNotice( notice: SystemNotice ): boolean {
+	return notice.dropPlus === true && notice.text !== undefined && isReinforceSuccessText( notice.text );
 }
 
 /*

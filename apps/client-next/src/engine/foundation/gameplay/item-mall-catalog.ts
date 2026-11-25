@@ -64,6 +64,10 @@ export function mallProjection( payload: Uint8Array ) {
 				tabs: [],
 				offers: [],
 				silk: commerceInteger( value.silk ),
+				// Absent against a server predating the split (#4133):
+				// no earned balance, everything granted.
+				earnedSilk: value.earnedSilk === undefined ? 0 : commerceInteger( value.earnedSilk ),
+				earnedTradable: value.earnedTradable === true,
 				giftSilk: commerceInteger( value.giftSilk ),
 				points: commerceInteger( value.points ),
 				pending: false,
@@ -138,6 +142,10 @@ export function mallProjection( payload: Uint8Array ) {
 		tabs,
 		offers,
 		silk: commerceInteger( value.silk ),
+		// Absent against a server predating the split (#4133):
+		// no earned balance, everything granted.
+		earnedSilk: value.earnedSilk === undefined ? 0 : commerceInteger( value.earnedSilk ),
+		earnedTradable: value.earnedTradable === true,
 		giftSilk: commerceInteger( value.giftSilk ),
 		points: commerceInteger( value.points ),
 		pending: false,

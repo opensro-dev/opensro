@@ -31,6 +31,7 @@ import { access, readFile } from "node:fs/promises";
 import path from "node:path";
 import { noteRead } from "../../graph/reads.mjs";
 import { decodeJmxText } from "../../shared/jmxBinaryReader.mjs";
+import { resolveOnDiskPath } from "../io.mjs";
 
 // Port-only, not native (#3295): the Mirror Dimension temple interiors
 // of the Jupiter import. The DOF file names are the later client's own
@@ -56,6 +57,21 @@ const JUPITER_TEMPLE_DUNGEON_INFO_ROWS = Object.freeze( [
 	{ regionId: 32790, dofName: "Dungeon\\jupiter\\hide\\hide.dof", relativeDofPath: "jupiter/hide/hide.dof" }
 ] );
 
+// The Kalia Hideout (#4134): the later client's own dungeoninfo.txt
+// row 25 names this DOF, a dungeon-bit region id is 0x8000 | index, and
+// the DOF's embedded generalRegionId header carries that same id
+// (32793, RN_ARABIA_FIELD_02_BOSS), so the binding is the source's own.
+// The Arabia import copies the DOF beside the table while its switch
+// is on; a build without the import has no such file, so the row - and
+// every byte built from it - is unchanged.
+const ARABIA_HIDEOUT_DUNGEON_INFO_ROWS = Object.freeze( [
+	{
+		regionId: 25,
+		dofName: "Dungeon\\Arabia\\Bagh_mong\\bagh_mong_boss.dof",
+		relativeDofPath: "Arabia/Bagh_mong/bagh_mong_boss.dof"
+	}
+] );
+
 const QINSHI_TOMB_DUNGEON_INFO_ROWS = Object.freeze( [
 	{ regionId: 7, dofName: "Dungeon\\china\\jinsi_floor01.dof", relativeDofPath: "china/jinsi_floor01.dof" },
 	{ regionId: 6, dofName: "Dungeon\\china\\jinsi_floor02.dof", relativeDofPath: "china/jinsi_floor02.dof" },
@@ -71,9 +87,15 @@ fileExists
 ================
 */
 async function fileExists( candidatePath ) {
-	noteRead( candidatePath );
+	// The probe names a DOF beside the table with authored case
+	// (Arabia/Bagh_mong/...) while an import writes the folded form:
+	// probe the on-disk spelling, or a case-sensitive file system
+	// silently drops the row (#3962). The read is recorded under the
+	// path that was actually probed.
+	const resolved = await resolveOnDiskPath( candidatePath );
+	noteRead( resolved );
 	try {
-		await access( candidatePath );
+		await access( resolved );
 		return true;
 	} catch {
 		return false;
@@ -85,9 +107,9 @@ async function fileExists( candidatePath ) {
 readDungeonInfoRows
 
 Read native dungeoninfo rows, treating a missing optional source as an
-empty table, and append the Qin-Shi Tomb floor rows and the Mirror
-Dimension temple interior rows whose DOF files exist in the same dungeon
-directory.
+empty table, and append the Qin-Shi Tomb floor rows, the Mirror
+Dimension temple interior rows and the Kalia Hideout row whose DOF
+files exist in the same dungeon directory.
 ================
 */
 export async function readDungeonInfoRows( filePath ) {
@@ -120,6 +142,7 @@ export async function readDungeonInfoRows( filePath ) {
 	const dungeonDir = path.dirname( filePath );
 	await appendRowsWithExistingDofs( rows, seenRegionIds, dungeonDir, QINSHI_TOMB_DUNGEON_INFO_ROWS );
 	await appendRowsWithExistingDofs( rows, seenRegionIds, dungeonDir, JUPITER_TEMPLE_DUNGEON_INFO_ROWS );
+	await appendRowsWithExistingDofs( rows, seenRegionIds, dungeonDir, ARABIA_HIDEOUT_DUNGEON_INFO_ROWS );
 	return rows;
 }
 

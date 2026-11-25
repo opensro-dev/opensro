@@ -31,7 +31,9 @@ import {
 } from "@/engine/contracts/opcodes";
 import { viewOf } from "@/engine/foundation/binary/byte-view";
 
-const MAX_QUESTS = 256;
+// The active quests one character's state holds; a login or an add past it
+// is refused whole. Exported for the tests that walk the published catalog.
+export const MAX_QUESTS = 256;
 const MAX_COMPLETED = 65535;
 const MAX_MARKERS = 255;
 const MAX_PROGRESS = 100;
@@ -52,6 +54,8 @@ export function createQuests( send: ( frame: WireFrame ) => void ) {
 	let completed: readonly number[] = [];
 	let progress: readonly QuestProgressEvent[] = [];
 	let pending = 0, pendingAck = 0, sequence = 0;
+	let pendingReward = false;
+	let refusal: { readonly refId: number; readonly reason: number; } | undefined;
 	let gathering: QuestGathering | undefined;
 
 	/*
@@ -68,6 +72,8 @@ export function createQuests( send: ( frame: WireFrame ) => void ) {
 		progress = [];
 		pending = 0;
 		pendingAck = 0;
+		pendingReward = false;
+		refusal = undefined;
 		gathering = undefined;
 	}
 
@@ -111,15 +117,26 @@ export function createQuests( send: ( frame: WireFrame ) => void ) {
 		Progress packets cannot release a pending journal operation.
 		================
 		*/
-		request( refId: number, reward: boolean ) {
+		request( refId: number, reward: boolean, picks?: readonly number[] ) {
 			if ( pending ) throw Error( "Quest transaction pending" );
 			const row = records.find( record => record.refId === refId );
 			if ( !row || reward && row.u10 !== 2 ) throw Error( "Quest action unavailable" );
-			const payload = new Uint8Array( 4 );
-			new DataView( payload.buffer ).setUint32( 0, refId, true );
+			if ( picks !== undefined && !reward ) throw Error( "Quest picks need a reward claim" );
+			// A selection claim appends its pick: [u8 count][count x u32
+			// itemRefId], the body the native reward handler reads.
+			const payload = new Uint8Array( picks?.length ? 5 + 4 * picks.length : 4 );
+			const view = new DataView( payload.buffer );
+			view.setUint32( 0, refId, true );
+			if ( picks?.length ) {
+				if ( picks.length > 255 ) throw Error( "Quest pick budget" );
+				view.setUint8( 4, picks.length );
+				picks.forEach( ( id, i ) => view.setUint32( 5 + 4 * i, id, true ) );
+			}
 			send( { opcode: reward ? 0x729a : 0x71eb, payload } );
 			pending = refId;
 			pendingAck = reward ? 0xb29a : 0xb1eb;
+			pendingReward = reward;
+			refusal = undefined;
 		},
 		/*
 		================
@@ -201,8 +218,12 @@ export function createQuests( send: ( frame: WireFrame ) => void ) {
 			if ( frame.opcode === QUEST_ACCEPT_RESPONSE_OPCODE || frame.opcode === QUEST_ABORT_RESPONSE_OPCODE ) {
 				const result = decodeQuestAcknowledgement( p );
 				if ( result === 2 && pending && pendingAck === frame.opcode ) {
+					// A refused reward claim keeps its reason for the HUD's
+					// error line; a refused give-up has none.
+					if ( pendingReward ) refusal = { refId: pending, reason: p[1] ?? 0 };
 					pending = 0;
 					pendingAck = 0;
+					pendingReward = false;
 				}
 				return true;
 			}
@@ -228,6 +249,7 @@ export function createQuests( send: ( frame: WireFrame ) => void ) {
 			if ( pending === delta.refId && delta.op >= 3 ) {
 				pending = 0;
 				pendingAck = 0;
+				pendingReward = false;
 			}
 			if ( gathering?.refId === delta.refId && delta.op >= 3 ) gathering = undefined;
 			return true;
@@ -245,6 +267,7 @@ export function createQuests( send: ( frame: WireFrame ) => void ) {
 				completedQuests: completed,
 				quests: records,
 				questPending: pending,
+				questRefusal: refusal,
 				questProgress: progress,
 				questGathering: gathering
 			};

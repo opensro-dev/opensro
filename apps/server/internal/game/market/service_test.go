@@ -191,6 +191,9 @@ func TestCategoryFollowsTheTypeIDs(t *testing.T) {
 		{3, 1, 6, 2}:  "weapon",
 		{3, 1, 4, 1}:  "shield",
 		{3, 1, 10, 1}: "armor",
+		{3, 1, 1, 1}:  "armor",
+		{3, 1, 5, 1}:  "accessory",
+		{3, 1, 14, 1}: "avatar",
 		{3, 1, 12, 1}: "accessory",
 		{3, 1, 13, 1}: "avatar",
 		{3, 2, 1, 1}:  "pet",
@@ -258,12 +261,20 @@ TestSearchFiltersRaceAndRarity
 
 A Chinese sword, a sealed European sword and a herb either race uses:
 the race filter keeps the race's items and the shared herb; the rarity
-filter splits sealed from normal.
+filter splits sealed from normal and one seal tier from another; the
+armour filter keeps one body armour type (a Moon-sealed CH protector).
 ================
 */
 func TestSearchFiltersRaceAndRarity(t *testing.T) {
+	for types, want := range map[[4]int64]string{{3, 1, 1, 1}: "garment", {3, 1, 3, 1}: "armor", {3, 1, 9, 1}: "robe",
+		{3, 1, 10, 1}: "light", {3, 1, 11, 1}: "heavy", {3, 1, 6, 2}: "", {3, 1, 4, 1}: ""} {
+		if got := ArmorType(types); got != want {
+			t.Errorf("ArmorType(%v) = %q, want %q", types, got, want)
+		}
+	}
 	store := &fakeServiceStore{}
-	for i, codename := range []string{"ITEM_CH_SWORD_01_A", "ITEM_EU_SWORD_01_A_RARE", "ITEM_ETC_HP_POTION_01"} {
+	for i, codename := range []string{"ITEM_CH_SWORD_01_A", "ITEM_EU_SWORD_01_A_RARE", "ITEM_ETC_HP_POTION_01",
+		"ITEM_CH_M_LIGHT_01_BA_B_RARE"} {
 		store.open = append(store.open, domain.MarketListing{ID: int64(i + 1), Item: domain.InventoryRow{Codename: codename},
 			Currency: domain.MarketGold, Price: 10, ListedMs: int64(i)})
 	}
@@ -275,7 +286,10 @@ func TestSearchFiltersRaceAndRarity(t *testing.T) {
 			return ItemInfo{Name: "Iron Sword", TypeIDs: [4]int64{3, 1, 6, 2}, Degree: 1, Race: publicstats.MarketRaceChinese}, true
 		case "ITEM_EU_SWORD_01_A_RARE":
 			return ItemInfo{Name: "Sword (Seal of Star)", TypeIDs: [4]int64{3, 1, 6, 7}, Degree: 1,
-				Race: publicstats.MarketRaceEuropean, Sealed: true}, true
+				Race: publicstats.MarketRaceEuropean, Sealed: true, Seal: publicstats.MarketRarityStar}, true
+		case "ITEM_CH_M_LIGHT_01_BA_B_RARE":
+			return ItemInfo{Name: "Protector (Seal of Moon)", TypeIDs: [4]int64{3, 1, 2, 1}, Degree: 1,
+				Race: publicstats.MarketRaceChinese, Sealed: true, Seal: publicstats.MarketRarityMoon}, true
 		}
 		return item(codename)
 	}
@@ -295,18 +309,23 @@ func TestSearchFiltersRaceAndRarity(t *testing.T) {
 		q    publicstats.MarketSearch
 		want []int64
 	}{
-		{publicstats.MarketSearch{Race: publicstats.MarketRaceChinese}, []int64{3, 1}},
+		{publicstats.MarketSearch{Race: publicstats.MarketRaceChinese}, []int64{4, 3, 1}},
 		{publicstats.MarketSearch{Race: publicstats.MarketRaceEuropean}, []int64{3, 2}},
-		{publicstats.MarketSearch{Rarity: publicstats.MarketRaritySealed}, []int64{2}},
+		{publicstats.MarketSearch{Rarity: publicstats.MarketRaritySealed}, []int64{4, 2}},
 		{publicstats.MarketSearch{Rarity: publicstats.MarketRarityNormal}, []int64{3, 1}},
-		{publicstats.MarketSearch{Race: publicstats.MarketRaceChinese, Rarity: publicstats.MarketRaritySealed}, []int64{}},
+		{publicstats.MarketSearch{Rarity: publicstats.MarketRarityStar}, []int64{2}},
+		{publicstats.MarketSearch{Rarity: publicstats.MarketRarityMoon}, []int64{4}},
+		{publicstats.MarketSearch{Rarity: publicstats.MarketRaritySun}, []int64{}},
+		{publicstats.MarketSearch{Armor: publicstats.MarketArmorProtector}, []int64{4}},
+		{publicstats.MarketSearch{Armor: publicstats.MarketArmorRobe}, []int64{}},
+		{publicstats.MarketSearch{Race: publicstats.MarketRaceEuropean, Rarity: publicstats.MarketRarityMoon}, []int64{}},
 	} {
 		if got := ids(c.q); !slices.Equal(got, c.want) {
 			t.Errorf("search %+v = %v, want %v", c.q, got, c.want)
 		}
 	}
-	for _, bad := range [][2]string{{"kr", ""}, {"", "unique"}} {
-		if publicstats.MarketFilterValid(bad[0], bad[1]) {
+	for _, bad := range [][3]string{{"kr", "", ""}, {"", "unique", ""}, {"", "", "plate"}} {
+		if publicstats.MarketFilterValid(bad[0], bad[1], bad[2]) {
 			t.Errorf("filter %v accepted", bad)
 		}
 	}
@@ -524,6 +543,85 @@ func TestGamePageIsTheCharacters(t *testing.T) {
 	}
 	if _, err := s.GameWithdraw(first, 20); err != nil {
 		t.Fatal(err)
+	}
+}
+
+/*
+================
+TestGameAccountBoundsMineRowsToTheWireLimit
+
+#4111: an account with 20 open listings and 60 sold ones got a mine
+answer over the window's row limit, the decoder refused it and the
+session ended. The game page now hands over at most WireRowLimit rows
+per list - the active rows first, then the newest history - while the
+website page keeps the whole account.
+================
+*/
+func TestGameAccountBoundsMineRowsToTheWireLimit(t *testing.T) {
+	const division = "global-official"
+	listing := func(id int64, state string) domain.MarketListing {
+		return domain.MarketListing{ID: id, Division: division, SellerAccount: "alpha", SellerChar: 1,
+			Currency: domain.MarketGold, State: state, ListedMs: id}
+	}
+	// The store's shape, newest first: the newest history ahead of the
+	// older open rows, as a long-lived account's union reads.
+	rows := []domain.MarketListing{}
+	for id := int64(80); id >= 71; id-- {
+		rows = append(rows, listing(id, domain.MarketSold))
+	}
+	for id := int64(20); id >= 1; id-- {
+		rows = append(rows, listing(id, domain.MarketOpen))
+	}
+	for id := int64(70); id >= 21; id-- {
+		rows = append(rows, listing(id, domain.MarketSold))
+	}
+	store := &fakeServiceStore{accountListings: rows,
+		byID: map[int64]domain.MarketListing{30: {ID: 30, Division: division, SellerAccount: "beta", SellerChar: 5}}}
+	for id := int64(63); id >= 59; id-- {
+		store.offersOut = append(store.offersOut, domain.MarketOffer{ID: id, ListingID: 30, BuyerChar: 1, State: domain.MarketOfferOpen})
+	}
+	for id := int64(58); id >= 1; id-- {
+		store.offersOut = append(store.offersOut, domain.MarketOffer{ID: id, ListingID: 30, BuyerChar: 1, State: domain.MarketOfferRejected})
+	}
+	for id := int64(60); id >= 1; id-- {
+		store.purchases = append(store.purchases, domain.MarketSale{ListingID: id, BuyerChar: 1})
+	}
+	s := testService(store)
+	first := &domain.Character{ID: 1, AccountID: "alpha", Name: "First"}
+
+	page, err := s.GameAccount(first)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(page.Listings) != WireRowLimit {
+		t.Fatalf("listings = %d, want the wire limit %d", len(page.Listings), WireRowLimit)
+	}
+	for i := 0; i < 20; i++ {
+		if page.Listings[i].State != domain.MarketOpen {
+			t.Fatalf("listing %d state = %q, want the open rows first", i, page.Listings[i].State)
+		}
+	}
+	if page.Listings[20].ID != 80 || page.Listings[49].ID != 51 {
+		t.Fatalf("history kept = ids %d..%d, want the newest 80..51", page.Listings[20].ID, page.Listings[49].ID)
+	}
+	if len(page.OffersOut) != WireRowLimit {
+		t.Fatalf("offers out = %d rows, want the wire limit %d", len(page.OffersOut), WireRowLimit)
+	}
+	for i := 0; i < 5; i++ {
+		if page.OffersOut[i].State != domain.MarketOfferOpen {
+			t.Fatalf("offer %d state = %q, want the open rows first", i, page.OffersOut[i].State)
+		}
+	}
+	if page.OffersOut[5].ID != 58 {
+		t.Fatalf("offer history starts at id %d, want the newest 58", page.OffersOut[5].ID)
+	}
+	if len(page.Purchases) != WireRowLimit || page.Purchases[49].ListingID != 11 {
+		t.Fatalf("purchases = %d rows ending at %d, want %d ending at 11",
+			len(page.Purchases), page.Purchases[len(page.Purchases)-1].ListingID, WireRowLimit)
+	}
+	whole, err := s.Account("alpha")
+	if err != nil || len(whole.Listings) != len(rows) {
+		t.Fatalf("the website page = %d listings, %v; want all %d", len(whole.Listings), err, len(rows))
 	}
 }
 

@@ -355,6 +355,7 @@ func (s SkillDef) CooldownAt(level uint8) float64 {
 RoarRadiusMeters
 
 Port-only tier I/III range tuning; tier II retains its existing progression.
+Tier III's single rank starts where its former rank 10 ended (39 m).
 ================
 */
 func (s SkillDef) RoarRadiusMeters(level uint8) float64 {
@@ -363,7 +364,7 @@ func (s SkillDef) RoarRadiusMeters(level uint8) float64 {
 	case 1:
 		return 10 + steps
 	case 3:
-		return 30 + steps
+		return 39 + steps
 	default:
 		return 12 + steps*0.4
 	}

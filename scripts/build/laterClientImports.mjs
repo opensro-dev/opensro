@@ -250,13 +250,98 @@ export async function importLaterWorldMapButtonsStep( stamped = stampedVsroRoot(
 	const output = result.stdout.trim();
 	if ( output ) console.log( output );
 	const paths = laterWorldMapButtonPublicPaths();
-	for ( const publicPath of paths ) {
-		const there = await stat( path.join( publicRoot, publicPath ) )
-			.then( ( entry ) => entry.isFile(), () => false );
-		if ( !there ) throw Error( `The world map button import published no ${publicPath}` );
-	}
+	await assertPublishedFiles( publicRoot, paths, "world map button" );
 	claimPublicPaths( paths );
 	return { buttons: paths.length };
+}
+
+/*
+================
+assertPublishedFiles
+
+Every public path an import step is about to claim must be a file under
+root: a step never claims what its importer did not write. label names
+the import in the refusal.
+================
+*/
+export async function assertPublishedFiles( root, publicPaths, label ) {
+	for ( const publicPath of publicPaths ) {
+		const there = await stat( path.join( root, publicPath ) )
+			.then( ( entry ) => entry.isFile(), () => false );
+		if ( !there ) throw Error( `The ${label} import published no ${publicPath}` );
+	}
+}
+
+// The later client's quest windows (#4245): res_ui/questlist.2dt and
+// res_ui/questminilist.2dt as JSON layouts, with the art they name.
+const LATER_RES_LAYOUT_INDEX = "/assets/data/res-ui/index.json";
+
+/*
+================
+laterResLayoutsImportPlan
+
+What the quest layout step does with one environment: the same contract
+as the world map buttons, because one pinned archive carries both.
+================
+*/
+export function laterResLayoutsImportPlan( env = process.env, archiveThere = false, stamped = stampedVsroRoot() ) {
+	return vsroImportPlan(
+		{
+			label: "Later quest window layouts",
+			without: "the quest list keeps the v1.150 page",
+			script: "scripts/import_vsro_res_layouts.py"
+		},
+		env,
+		archiveThere,
+		stamped
+	);
+}
+
+/*
+================
+laterResLayoutPublicPaths
+
+The public paths one layout import owns, read from the index it writes:
+the importer decides which art the layouts name, so the claim follows
+its record instead of a second list here.
+================
+*/
+export function laterResLayoutPublicPaths( index ) {
+	if ( !index || !Array.isArray( index.published ) || !Array.isArray( index.layouts ) ) {
+		throw Error( "The quest layout import wrote no usable index" );
+	}
+	return [ LATER_RES_LAYOUT_INDEX, ...index.published ];
+}
+
+/*
+================
+importLaterResLayoutsStep
+
+Runs the importer against the pinned archive, checks every file its index
+names is there, and claims them; skipped with one line without the archive.
+================
+*/
+export async function importLaterResLayoutsStep( stamped = stampedVsroRoot() ) {
+	const plan = await vsroStepPlan( laterResLayoutsImportPlan, stamped );
+	if ( !plan.run ) {
+		console.log( plan.line );
+		return { skipped: true };
+	}
+	const result = await runPython( plan.args, {
+		task: "[quest-layouts] later-client res_ui layout import",
+		cwd: rebuildRoot,
+		context: [
+			"The quest list and the mini quest tracker are the later client's res_ui windows (#4245); " +
+			"the build imports their layouts and art from the pinned VSRO archive (SRO_VSRO_ROOT)."
+		]
+	} );
+	const output = result.stdout.trim();
+	if ( output ) console.log( output );
+	const index = JSON.parse( await readFile( path.join( publicRoot, LATER_RES_LAYOUT_INDEX ), "utf8" ) );
+	const paths = laterResLayoutPublicPaths( index );
+	await assertPublishedFiles( publicRoot, paths, "quest layout" );
+	claimPublicPaths( paths );
+	return { layouts: index.layouts.length, files: paths.length };
 }
 
 // The renewal M map's guide (issue #3387): its tables, the hunting
@@ -343,6 +428,149 @@ export async function importLaterWorldMapGuideStep() {
 	);
 	claimPublicPaths( laterWorldMapGuidePublicPaths( catalog ) );
 	return { monsters: Array.isArray( catalog.monsters ) ? catalog.monsters.length : 0 };
+}
+
+// CIFMacroSystemGuide's under-minimap icon (#3907): icon/etc/mecro_0.ddj
+// from the pinned v1.696 Media.pk2 (SRO_V1696_ROOT).
+const LATER_MACRO_GUIDE_ICON = "/assets/images/Media_extracted/icon/etc/mecro_0.png";
+
+/*
+================
+laterMacroGuideImportPlan
+================
+*/
+export function laterMacroGuideImportPlan( env = process.env, archiveThere = false ) {
+	const root = (env.SRO_V1696_ROOT ?? "").trim();
+	if ( !root ) {
+		return {
+			run: false,
+			line: "Later macro guide: skipped (SRO_V1696_ROOT is not set; the under-minimap macro icon stays missing)"
+		};
+	}
+	if ( !archiveThere ) {
+		return { run: false, line: `Later macro guide: skipped (no Media.pk2 under SRO_V1696_ROOT ${root})` };
+	}
+	return { run: true, root, args: [ "scripts/import_v1696_macro_guide.py", "--v1696-root", root ] };
+}
+
+/*
+================
+laterMacroGuidePublicPaths
+================
+*/
+export function laterMacroGuidePublicPaths() {
+	return [ LATER_MACRO_GUIDE_ICON ];
+}
+
+/*
+================
+importLaterMacroGuideStep
+
+Publishes mecro_0.png for CIFMacroSystemGuide. Without the archive the
+build says so in one line; the HUD hides the button when the image is
+missing.
+================
+*/
+export async function importLaterMacroGuideStep() {
+	const root = (process.env.SRO_V1696_ROOT ?? "").trim();
+	const archiveThere = root !== "" &&
+		await stat( path.join( root, "Media.pk2" ) ).then( ( entry ) => entry.isFile(), () => false );
+	const plan = laterMacroGuideImportPlan( process.env, archiveThere );
+	if ( !plan.run ) {
+		console.log( plan.line );
+		return { skipped: true };
+	}
+	const result = await runPython( plan.args, {
+		task: "[macro-guide] later-client SRO Macro guide icon import",
+		cwd: rebuildRoot,
+		context: [
+			"CIFMacroSystemGuide's mecro_0 icon is native to the v1.696 client (#3907); the build imports " +
+			"it from the pinned archive (SRO_V1696_ROOT) beside the other Media_extracted icons."
+		]
+	} );
+	const output = result.stdout.trim();
+	if ( output ) console.log( output );
+	const paths = laterMacroGuidePublicPaths();
+	for ( const publicPath of paths ) {
+		const there = await stat( path.join( publicRoot, publicPath ) )
+			.then( ( entry ) => entry.isFile(), () => false );
+		if ( !there ) throw Error( `The macro guide import published no ${publicPath}` );
+	}
+	claimPublicPaths( paths );
+	return { icons: paths.length };
+}
+
+// The centre banner's plate art (#3260): interface/ifcommon/com_center_*
+// from the pinned v1.696 Media.pk2 (SRO_V1696_ROOT). v1.150 has neither
+// the banner nor the art; the success announcements wear this violet
+// plate centred on screen when the import is published.
+const LATER_CENTRE_BANNER_ROOT = "/assets/images/Media_extracted/interface/ifcommon/";
+
+/*
+================
+laterCentreBannerImportPlan
+================
+*/
+export function laterCentreBannerImportPlan( env = process.env, archiveThere = false ) {
+	const root = (env.SRO_V1696_ROOT ?? "").trim();
+	if ( !root ) {
+		return {
+			run: false,
+			line:
+				"Later centre banner: skipped (SRO_V1696_ROOT is not set; the success announcements keep the notice plate)"
+		};
+	}
+	if ( !archiveThere ) {
+		return { run: false, line: `Later centre banner: skipped (no Media.pk2 under SRO_V1696_ROOT ${root})` };
+	}
+	return { run: true, root, args: [ "scripts/import_v1696_centre_banner.py", "--v1696-root", root ] };
+}
+
+/*
+================
+laterCentreBannerPublicPaths
+================
+*/
+export function laterCentreBannerPublicPaths() {
+	return [ "corner", "edge", "edge2" ].map( ( part ) => LATER_CENTRE_BANNER_ROOT + `com_center_${part}.png` );
+}
+
+/*
+================
+importLaterCentreBannerStep
+
+Publishes the centre banner's three plate PNGs for the reinforcement
+success announcements. Without the archive the build says so in one
+line; the HUD keeps the native notice plate when the art is missing.
+================
+*/
+export async function importLaterCentreBannerStep() {
+	const root = (process.env.SRO_V1696_ROOT ?? "").trim();
+	const archiveThere = root !== "" &&
+		await stat( path.join( root, "Media.pk2" ) ).then( ( entry ) => entry.isFile(), () => false );
+	const plan = laterCentreBannerImportPlan( process.env, archiveThere );
+	if ( !plan.run ) {
+		console.log( plan.line );
+		return { skipped: true };
+	}
+	const result = await runPython( plan.args, {
+		task: "[centre-banner] later-client centre banner plate import",
+		cwd: rebuildRoot,
+		context: [
+			"The centre banner's plate art is native to the v1.696 client (#3260); the build imports " +
+			"it from the pinned archive (SRO_V1696_ROOT) beside the v1.150 notice plates."
+		]
+	} );
+	const output = result.stdout.trim();
+	if ( output ) console.log( output );
+	const paths = laterCentreBannerPublicPaths();
+	for ( const publicPath of paths ) {
+		const there = await stat( path.join( publicRoot, publicPath ) )
+			.then( ( entry ) => entry.isFile(), () => false );
+		if ( !there ) throw Error( `The centre banner import published no ${publicPath}` );
+	}
+	claimPublicPaths( paths );
+	return { plates: paths.length };
 }
 
 // The reverse return map's destination table (SRO_REVERSE_RETURN_MAP):
@@ -486,4 +714,83 @@ export async function importLaterTombMinimapStep( stamped = stampedVsroRoot() ) 
 	);
 	claimPublicPaths( laterTombMinimapPublicPaths( catalog ) );
 	return { tiles: Array.isArray( catalog.tilePaths ) ? catalog.tilePaths.length : 0 };
+}
+
+// The later client's renewal Item Mall window, the client's desktop Item
+// Mall whenever this import is published (owner 2026-11-20): its layouts,
+// caption strings and art. The art lands under Media_extracted/later/ so no v1.150 picture
+// of the same name is replaced; the client keeps the classic window when
+// the catalogue is absent.
+const LATER_RENEWAL_MALL_CATALOG = "/assets/data/renewal-mall.json";
+
+/*
+================
+laterRenewalMallImportPlan
+
+What the renewal mall step does with one environment: the same contract
+as the dungeon maps (SRO_VSRO_ROOT folder, else the one skip line),
+because one archive carries both. The importer verifies the archive
+against its pin before reading a byte.
+================
+*/
+export function laterRenewalMallImportPlan( env = process.env, archiveThere = false, stamped = stampedVsroRoot() ) {
+	return vsroImportPlan(
+		{
+			label: "Later renewal mall",
+			without: "the Item Mall keeps the classic window",
+			script: "scripts/import_vsro_renewal_mall.py"
+		},
+		env,
+		archiveThere,
+		stamped
+	);
+}
+
+/*
+================
+laterRenewalMallPublicPaths
+
+The public paths one import publishes, read back from its own catalogue
+so the publication ledger claims exactly what the client will ask for:
+the catalogue and every picture it lists.
+================
+*/
+export function laterRenewalMallPublicPaths( catalog ) {
+	const paths = [ LATER_RENEWAL_MALL_CATALOG ];
+	for ( const image of catalog?.images ?? [] ) {
+		if ( typeof image?.path === "string" && image.path ) paths.push( image.path );
+	}
+	return paths;
+}
+
+/*
+================
+importLaterRenewalMallStep
+
+The renewal mall's layouts and art land in the loose public tree with
+the other later-client imports, in time for the final pack tail, and
+the step claims them. Without the archive the build says so in one line.
+================
+*/
+export async function importLaterRenewalMallStep( stamped = stampedVsroRoot() ) {
+	const plan = await vsroStepPlan( laterRenewalMallImportPlan, stamped );
+	if ( !plan.run ) {
+		console.log( plan.line );
+		return { skipped: true };
+	}
+	const result = await runPython( plan.args, {
+		task: "[renewal-mall] later-client renewal Item Mall import",
+		cwd: rebuildRoot,
+		context: [
+			"The renewal Item Mall window is native to the later client; the build imports its layouts and art " +
+			"from the pinned VSRO archive (SRO_VSRO_ROOT); the client draws it as its desktop Item Mall."
+		]
+	} );
+	const output = result.stdout.trim();
+	if ( output ) console.log( output );
+	const catalog = JSON.parse(
+		await readFile( path.join( publicRoot, "assets", "data", "renewal-mall.json" ), "utf8" )
+	);
+	claimPublicPaths( laterRenewalMallPublicPaths( catalog ) );
+	return { images: Array.isArray( catalog.images ) ? catalog.images.length : 0 };
 }

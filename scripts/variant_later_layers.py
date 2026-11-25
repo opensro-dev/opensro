@@ -25,10 +25,15 @@ import gears_stone_import
 import god_import
 import hunting2_import
 import jupiter_import
+import later_mall_items
 import muhan_import
 import pharaoh_temple_import
+import reset_scroll_import
+import rigid_import
 import skytemple_import
 import styria_import
+import styria_items_import
+import switch_scroll_import
 import winter_event_import
 
 # (variant manifest key, layer entry point taking (native, out)), in
@@ -49,6 +54,10 @@ LATER_LAYERS = (
 	# The Styria Clash arena map (#3272): its own switch, on the
 	# later-world engine; the match rules are #3648.
 	("styria", styria_import.add_styria),
+	# The Styria Clash reward items (#4375): the same switch stages
+	# the four v1.696 rows the match reward grants, in their own
+	# item shard beside the arena.
+	("styriaItems", styria_items_import.add_styria_items),
 	# The Survival Arena's Colosseum (#3931): the arena's own switch,
 	# the map alone on the same engine path as the Styria Clash.
 	("colosseum", colosseum_import.add_colosseum),
@@ -69,9 +78,27 @@ LATER_LAYERS = (
 	# (SRO_MALL_CATEGORIES): on stages their item shard beside the mall
 	# layout that lists them.
 	("gearsStones", gears_stone_import.add_stones),
+	# The Item Mall reset scrolls (port-only): each its own switch
+	# (SRO_STAT_RESET_SCROLL, SRO_SKILL_RESET_SCROLL) stages its v1.696
+	# item in its own shard (300000).
+	("resetScrolls", reset_scroll_import.add_reset_scrolls),
+	# The Item Mall switch scrolls ride their own flags (SRO_WEAPON_,
+	# SRO_ARMOR_ and SRO_ACCESSORY_SWITCH_SCROLL): each on stages its
+	# item beside the mall listing the server authors.
+	("switchScrolls", switch_scroll_import.add_switch_scrolls),
 	# The winter event's monsters ride the Christmas event's switch
 	# (SRO_CHRISTMAS_EVENT): their own identity band, no placement.
 	("winterEvent", winter_event_import.add_winter_monsters),
+	# The Rigid L2 summon scrolls (#3785): later-native content with
+	# no switch of their own - on whenever the later client root is
+	# there, like the sources every layer above reads; band 320000,
+	# no placement.
+	("rigidScrolls", rigid_import.add_rigid),
+	# The v1.696 Item Mall items the later goods sell (#4240 part 3):
+	# later-native, no switch, on whenever the v1.696 client root is
+	# named; last of the layers, so the later mall goods step that
+	# follows in the builder sees their rows.
+	("laterMallItems", later_mall_items.add_later_mall_items),
 )
 
 

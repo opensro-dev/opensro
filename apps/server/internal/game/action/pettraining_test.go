@@ -474,12 +474,10 @@ func TestManualRoarAddsPetThreatWithoutDamageOrTarget(t *testing.T) {
 		for companion.Learn(c.ActiveCOS, id) == "" {
 		}
 	}
-	// The level-cap change permits all ten final-book ranks; this case tests rank one.
-	c.ActiveCOS.Training.Levels[2] = 1
 	c.ActiveCOS.Training.Rows[0] = domain.PetRowCooldown{}
 	lease, ok := rt.casterPopulation(testDivision, c)
 	position := rt.petSessionFor(testDivision, c.Name, c.ActiveCOS.GID).mover.AnyFollower().Position(clock.NowMs())
-	position.X += 290
+	position.X += 380
 	if !ok || rt.Monsters.SpawnGMMonsters(simulation.GMMonsterSpawn{
 		Division: testDivision, Population: lease, RefObjID: mob.Ref.RefObjID,
 		Count: 1, Position: position, NowMs: clock.NowMs(),
@@ -507,14 +505,14 @@ func TestManualRoarAddsPetThreatWithoutDamageOrTarget(t *testing.T) {
 	rt.TickHook()(clock.NowMs())
 	farAfter, _ := rt.Monsters.Get(testDivision, far[0].Gid)
 	if farAfter.Opponents[0].GID != c.ActiveCOS.GID {
-		t.Fatalf("level1 Roar III did not taunt at29m (30m radius): %+v", farAfter.Opponents)
+		t.Fatalf("level1 Roar III did not taunt at38m (39m radius): %+v", farAfter.Opponents)
 	}
 	if len(res3.Broadcast) != 1 || res3.Broadcast[0].Opcode != wire.OpActionEmote || res3.Broadcast[0].Payload[4] != 18 {
 		t.Fatalf("Challenging Roar III did not broadcast action emote 18: %+v", res3.Broadcast)
 	}
 	outsideAfter, _ := rt.Monsters.Get(testDivision, outside[0].Gid)
 	if outsideAfter.Opponents[0].GID != 0 {
-		t.Fatal("level1 Roar III taunted a monster outside30m")
+		t.Fatal("level1 Roar III taunted a monster outside39m")
 	}
 	row := c.ActiveCOS.Training.Rows[0]
 	again := rt.HandleCosCommand(testDivision, c, append(trainingCommand(c.ActiveCOS.GID, petTrainingUse, 16), 0, 0, 0, 0))

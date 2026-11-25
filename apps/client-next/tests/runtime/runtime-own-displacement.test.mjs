@@ -4,8 +4,8 @@
 runtime-own-displacement.test.mjs - the own cast displacement adoption
 
 A published own cast displacement (#1569) is adopted by the runtime's
-mover only while the mainThreadOwnWalk row is on and the segment is
-live; otherwise the interpolated presenter keeps it. Drives the real
+mover only while the segment is live; otherwise the interpolated
+presenter keeps it. Drives the real
 runtime across the synthetic boundary (helpers/runtime-boundary.mjs).
 
 ===========================================================================
@@ -153,7 +153,6 @@ test("a published own cast displacement is adopted only while the row is on and 
 	const runtime = startRuntime( {}, {} );
 	try {
 		const calls = globalThis.__runtimeCalls ?? [];
-		const uiEvent = defined( calls.find( call => call.owner === "platform" ) ).args[5];
 		const drive = async now => {
 			defined( callback )( now );
 			for ( let i = 0; i < 32; i++ ) await Promise.resolve();
@@ -182,17 +181,13 @@ test("a published own cast displacement is adopted only while the row is on and 
 			}
 		};
 		const walking = () => moverFrames.filter( f => f.kind === "walking" );
-		// Row off: the dash publishes and nothing is adopted; the mover
-		// reports idle and the presenter keeps the displacement.
-		await stepFrames( 5, () => publishDash( start, destination, 0, 400 ) );
-		assert.equal( walking().length, 0, "the row-off displacement was adopted" );
-		// Row on, finished and zero-duration publications: still nothing.
-		uiEvent( { kind: "experimental-preferences", value: { mainThreadOwnWalk: true } } );
+		// Finished and zero-duration publications: nothing is adopted; the
+		// mover reports idle and the presenter keeps the displacement.
 		await stepFrames( 5, () => publishDash( start, destination, -2000, 400 ) );
 		assert.equal( walking().length, 0, "a finished segment was adopted" );
 		await stepFrames( 5, () => publishDash( start, destination, simNow, 0 ) );
 		assert.equal( walking().length, 0, "a zero-duration segment was adopted" );
-		// Row on, a live segment: the drawn pose advances on the segment's
+		// A live segment: the drawn pose advances on the segment's
 		// own clock (200 units in 400 ms) until the authored end.
 		const dashStart = simNow;
 		await stepFrames( 12, () => publishDash( start, destination, dashStart, 400 ) );

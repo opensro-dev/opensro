@@ -3,7 +3,7 @@
 
 run_if_changed.mjs - skip a gate whose inputs have not changed since it passed
 
-	node scripts/checks/run_if_changed.mjs <name> <input>... -- <command> [args...]
+	node scripts/checks/run_if_changed.mjs <name> [<input>...] -- <command> [args...]
 
 Computes a fingerprint of everything the gate reads - the listed files and
 directories (tracked and untracked, git-ignored files excluded), plus any
@@ -17,6 +17,10 @@ edit, a new file, a toolchain upgrade - changes the fingerprint, so a gate is
 never skipped for inputs it has not checked. CI and fresh clones have no
 stamps and run everything. SRO_CHECK_FORCE=1 ignores stamps.
 
+With no inputs listed, the gate's inputs are the input set of its name
+(scripts/data/input-sets.json, inputSets.mjs), the one list the release
+graph keys its steps on too.
+
 Inputs prefixed with `@` are commands whose output joins the fingerprint
 (for example `@go,version`: the command and its arguments, comma-separated). Inputs prefixed with `!` are ignored-by-git
 files that still count (for example the generated asset manifest).
@@ -28,6 +32,7 @@ import { spawn } from "node:child_process";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { findPass, fingerprint, recordPass } from "./checkStamps.mjs";
+import { inputSet } from "../lib/inputSets.mjs";
 import { yieldCpu } from "../lib/processPriority.mjs";
 
 const rebuildRoot = path.resolve( path.dirname( fileURLToPath( import.meta.url ) ), "..", ".." );
@@ -39,11 +44,12 @@ main
 */
 async function main() {
 	const separator = process.argv.indexOf( "--" );
-	if ( separator < 4 ) {
-		throw new Error( "usage: run_if_changed.mjs <name> <input>... -- <command> [args...]" );
+	if ( separator < 3 ) {
+		throw new Error( "usage: run_if_changed.mjs <name> [<input>...] -- <command> [args...]" );
 	}
 	const name = process.argv[2];
-	const inputs = process.argv.slice( 3, separator );
+	const listed = process.argv.slice( 3, separator );
+	const inputs = listed.length > 0 ? listed : inputSet( name );
 	const [command, ...args] = process.argv.slice( separator + 1 );
 	const started = performance.now();
 	const key = fingerprint( inputs );

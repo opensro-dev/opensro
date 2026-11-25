@@ -5,7 +5,9 @@ gold-caps.test.mjs - the port-only raised stall and warehouse gold caps
 
 SRO_RAISED_GOLD_CAPS raises the stall price editor from 1,000,000,000 to
 10,000,000,000 and the warehouse gold deposit dialog from 100,000,000 to
-1,000,000,000. Off, both stay native, and the offer wire stays u32.
+1,000,000,000; a shard may instead publish its own deposit cap (up to the
+u32 a gold move carries), and the dialog clamps to that. Off, both stay
+native, and the offer wire stays u32.
 
 ===========================================================================
 */
@@ -116,13 +118,17 @@ test("raised gold caps carry a ten-billion offer across the stall wire", () => {
 	assert.equal( narrow.frames[0].payload.length, p.length - 4 );
 });
 
-test("the warehouse deposit dialog caps at 100m natively and 1b with the raised caps", () => {
-	assert.equal( storage.storageGoldDepositLimit( false ), 100000000n );
-	assert.equal( storage.storageGoldDepositLimit( true ), 1000000000n );
+test("the warehouse deposit dialog caps at 100m without a published cap and at the shard's cap with one", () => {
+	assert.equal( storage.storageGoldDepositLimit( undefined ), 100000000n );
+	assert.equal( storage.storageGoldDepositLimit( 1000000000 ), 1000000000n );
+	assert.equal( storage.storageGoldDepositLimit( 4294967295 ), 4294967295n );
+	assert.equal( storage.storageGoldDepositLimit( 0 ), 100000000n );
+	assert.equal( storage.storageGoldDepositLimit( 1.5 ), 100000000n );
+	assert.equal( storage.storageGoldDepositLimit( 0x100000000 ), 100000000n );
 	for (
-		const [raised, limit] of /** @type {[boolean, number][]} */ ([
-			[ false, 100000000 ],
-			[ true, 1000000000 ]
+		const [published, limit] of /** @type {[number | undefined, number][]} */ ([
+			[ undefined, 100000000 ],
+			[ 2000000000, 2000000000 ]
 		])
 	) {
 		const sent = [],
@@ -135,8 +141,8 @@ test("the warehouse deposit dialog caps at 100m natively and 1b with the raised 
 			const game = {
 				...f.state.gameplay,
 				inventoryPending: false,
-				raisedGoldCaps: raised,
-				progression: { gold: "2000000000", masteries: [] },
+				...(published !== undefined ? { storageGoldDepositLimit: published } : {}),
+				progression: { gold: "5000000000", masteries: [] },
 				storage: { npc: 7, phase: "open", capacity: 150, gold: "0", items: [] }
 			};
 			const state = { ...f.state, gameplay: game };

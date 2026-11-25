@@ -49,7 +49,7 @@ without its key - and the build log says so.
 
 The teleport, building, link and name tables need no reap: the
 Alexandria stage rewrites them from the native bytes on every build
-before this pass runs (build_alexandria_variant: add_gates, add_map),
+before this pass runs (variant_gates.add_gates, alexandria_map_tables.add_map),
 as it does the two map catalogs merge_world documents. The region
 merge's files are enrolled in the marker and reaped off.
 
@@ -65,7 +65,11 @@ VSRO client's questdata ships exactly six MEETROC quests
 while its textquest, questcontentsdata and items already carry them.
 Their rows join questdata.txt under the source ids (91, 92, 96 and
 374-376, all free in v1.150), so the compiled specs #3796 snapshots
-admit (quest catalogSpecs needs the catalog row). QNO_RM_MEETROC_1
+admit (quest catalogSpecs needs the catalog row). Step 5d appends the
+eight ARCHEMY trophy exchanges the same way (source ids 377-384;
+their questcontentsdata rows come from the client too). The trophies
+they exchange are native v1.150 items; their drops join with the
+database rewards below. QNO_RM_MEETROC_1
 gathers from two quest kinds v1.150 lacks, staged with the arena's:
 
 	MOB_QT_RM_FEATHERMASK_01  the feather mask the first drop rides
@@ -90,7 +94,8 @@ import os
 from pathlib import Path
 
 import alexandria_npcs as characters
-import build_alexandria_variant as variant
+import variant_files as variant
+import variant_gates
 import cap110_items
 import cap110_monsters as cap110
 import import_vsro_alexandria as tables
@@ -103,6 +108,9 @@ FLAG = "SRO_ROC"
 MARKER = ".opensro-roc.json"
 CHARACTER_SHARD = "characterdata_260000.txt"
 SKILL_SHARD = "skilldata_260000.txt"
+# Skills the summit event casts: the hour-mark enrage (MSKILL_RM_ROC_ATTACK10,
+# a stacking mom buff on the Roc itself).
+ROC_EVENT_SKILLS = ("MSKILL_RM_ROC_ATTACK10",)
 TEXT_ROOT = later_world_import.TEXT_ROOT
 # The Roc range's gates, by teleportdata code (step 1b).
 GATE_CODES = ("GATE_RC_MOUNTAIN_GATE", "GATE_RC_TAHOMET_GATE", "GATE_RC_ROC_GATE", "GATE_RC_ROC_FRONT_GATE")
@@ -116,12 +124,15 @@ QUEST_TABLE = "questdata.txt"
 QUEST_CODES = (
 	"QNO_RM_MEETROC_1", "QNO_RM_MEETROC_2", "QNO_RM_MEETROC_6",
 	"QNO_RM_MEETROC_ECT_1", "QNO_RM_MEETROC_ECT_2", "QNO_RM_MEETROC_ECT_3",
+	"QNO_RM_ARCHEMY_1", "QNO_RM_ARCHEMY_2", "QNO_RM_ARCHEMY_3", "QNO_RM_ARCHEMY_4",
+	"QNO_RM_ARCHEMY_5", "QNO_RM_ARCHEMY_6", "QNO_RM_ARCHEMY_7", "QNO_RM_ARCHEMY_8",
 )
 QUEST_COLUMNS = 11
 # v1.150 ships questcontentsdata rows for MEETROC_1, _2 and _6 but none
-# for the three ECT quests; those come from the client, cut to v1.150's
-# thirteen columns (the VSRO rows append four later ones the v1.150
-# parser never reads: the server's catalog.go questcontentsColumns).
+# for the ECT or ARCHEMY quests; those come from the client, cut to
+# v1.150's thirteen columns (the source rows append four later ones the
+# v1.150 parser never reads: the server's catalog.go
+# questcontentsColumns).
 CONTENTS_TABLE = "questcontentsdata.txt"
 CONTENTS_COLUMNS = 13
 POPULATION_FILE = "roc-monsters.txt"
@@ -200,8 +211,8 @@ def item_ids(rows_of, manifest):
 # ================
 def key_items(source_links, source_items, variant_items):
 	variant_ids = {code: identity for identity, code in variant_items.items()}
-	wanted = {row[at + 1] for row in source_links if len(row) >= variant.LINK_COLUMNS
-		for at in range(6, variant.LINK_COLUMNS, 3) if row[at].isdigit() and int(row[at]) in variant.LINK_KINDS_ITEM}
+	wanted = {row[at + 1] for row in source_links if len(row) >= variant_gates.LINK_COLUMNS
+		for at in range(6, variant_gates.LINK_COLUMNS, 3) if row[at].isdigit() and int(row[at]) in variant_gates.LINK_KINDS_ITEM}
 	return {item: variant_ids[source_items[item]] for item in sorted(wanted)
 		if item in source_items and source_items[item] in variant_ids}
 
@@ -295,8 +306,8 @@ def add_gates(read, text_root):
 		item_ids(source_rows, source_rows("itemdata.txt")),
 		item_ids(variant_rows, variant_rows("itemdata.txt")),
 	)
-	merged, summary = variant.merge_gate_tables(
-		current, source, codes=GATE_CODES, level_cap=variant.gate_level_cap(), items=items)
+	merged, summary = variant_gates.merge_gate_tables(
+		current, source, codes=GATE_CODES, level_cap=variant_gates.gate_level_cap(), items=items)
 	for dropped in summary.get("droppedConditions", []):
 		tables.log(f"Roc gates: link {dropped['from']} -> {dropped['to']}: condition kind {dropped['kind']} "
 			f"dropped; the v1.150 server has no evaluator for it")
@@ -379,14 +390,19 @@ def add_quests(read, text_root, prior):
 # ================
 # without_ui_texts
 #
-# The variant's textuisystem.txt rows without the given symbols, or None
-# when the variant has not written that table (it is the native one).
+# The variant's textuisystem.txt bytes without the records of the given
+# symbols, or None when the variant has not written that table (it is
+# the native one). Every other byte stays as it was: the rows are not
+# re-encoded (characters.without_rows, the asset build's record rule).
+# Read row by row and written back with CRLF, the table lost the blank
+# lines inside its multi-line messages, and r204's English coverage gate
+# found 12 of them stale.
 # ================
 def without_ui_texts(text_root, symbols):
 	path = text_root / UI_TABLE
 	if not path.exists():
 		return None
-	return [row for row in tables.table_rows(path.read_bytes()) if len(row) < 2 or row[1] not in symbols]
+	return characters.without_rows(path.read_bytes(), symbols)
 
 
 # ================
@@ -398,7 +414,7 @@ def without_ui_texts(text_root, symbols):
 # ================
 def add_ui_texts(read, native, text_root, prior):
 	kept = without_ui_texts(text_root, set(prior.get("uiTexts", [])))
-	base = cap110.encode_rows(kept) if kept is not None else (native / TEXT_ROOT / UI_TABLE).read_bytes()
+	base = kept if kept is not None else (native / TEXT_ROOT / UI_TABLE).read_bytes()
 	merged, added = cap110_items.merge_ui_texts(base, tables.table_rows(read(UI_TABLE)), UI_SYMBOLS)
 	missing = UI_SYMBOLS - set(added) - {row[1] for row in tables.table_rows(base) if len(row) > 1}
 	if missing:
@@ -484,7 +500,7 @@ def add_roc(vsro_root, native, output):
 		if prior.get("uiTexts"):
 			kept = without_ui_texts(text_root, set(prior["uiTexts"]))
 			if kept is not None:
-				write_atomically(text_root / UI_TABLE, cap110.encode_rows(kept))
+				write_atomically(text_root / UI_TABLE, kept)
 		roc_rewards.remove_rewards(text_root)
 		later_world_import.reap_world(SPEC, native, output)
 		return {"enabled": False}
@@ -527,8 +543,10 @@ def stage(vsro_root, native, output):
 		gates = add_gates(read, text_root)
 		native_codes = {row[2] for row in cap110.tree_characters(text_root, CHARACTER_SHARD) if len(row) > 2}
 		refs = select_kinds(later_world_import.later_characters(read))
+		# The Roc's hour-mark enrage is cast by the summit's event, not
+		# named in any kind's skill columns (#4054).
 		staged = later_world_import.stage_kinds("Roc", read, has, refs, text_root, prior, CHARACTER_SHARD, SKILL_SHARD,
-			lambda code: code in refs)
+			lambda code: code in refs, extra_skills=ROC_EVENT_SKILLS)
 		quests = add_quests(read, text_root, prior)
 		contents = add_contents(read, text_root, prior)
 		ui_texts = add_ui_texts(read, native, text_root, prior)
@@ -541,10 +559,10 @@ def stage(vsro_root, native, output):
 		"The arena kinds stand in no nest; the server spawns them when the arena opens (#3399 step 4).",
 		"QNO_RM_MEETROC_6's Soul Crystal has no source: the quests that fuse it (MEETROC_3 to _5) never shipped.",
 	]
-	limits.append("The trophies ISRO-R's fixed table drops (ITEM_QNO_RM_ARCHEMY_1 to _8) wait for their exchange "
-		"quests, QNO_RM_ARCHEMY_1 to _8 (#3399 step 5d).")
 	if rewards["waiting"]:
 		limits.append("Database rewards wait for items the variant lacks: " + ", ".join(rewards["waiting"]) + ".")
+	if rewards["waitingTrophies"]:
+		limits.append("Trophy drops wait for items the variant lacks: " + ", ".join(rewards["waitingTrophies"]) + ".")
 	if "omittedLinks" in gates:
 		limits.append("The summit link is out: the variant carries no key item its conditions name.")
 	summary = {

@@ -221,6 +221,8 @@ export const extendedRecipes: readonly ExtendedRecipe[] = [
 					itemIds: [ 3630 ]
 				}) ),
 				silk: 100,
+				earnedSilk: 60,
+				earnedTradable: true,
 				giftSilk: 0,
 				points: 15,
 				pending: false,
@@ -339,7 +341,7 @@ export const extendedRecipes: readonly ExtendedRecipe[] = [
 		source: "index.html / runtime/platform/platform.ts presentUpdate",
 		selector: "#update-notice:not([hidden])",
 		open( context ) {
-			context.platform.presentUpdate( true );
+			context.platform.presentUpdate( "newer" );
 		}
 	},
 	{

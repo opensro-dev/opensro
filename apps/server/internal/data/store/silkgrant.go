@@ -13,7 +13,6 @@ package store
 
 import (
 	"database/sql"
-	"errors"
 	"fmt"
 	"math"
 
@@ -59,10 +58,12 @@ proceeds share it.
 ================
 */
 func creditSilkTx(tx *sql.Tx, accountID string, amount uint32, atMs int64) (domain.MallBalance, error) {
-	var balance domain.MallBalance
-	err := tx.QueryRow("SELECT silk, gift_silk, points FROM mall_accounts WHERE account_id = ?", accountID).
-		Scan(&balance.Silk, &balance.GiftSilk, &balance.Points)
-	if err != nil && !errors.Is(err, sql.ErrNoRows) {
+	// The credit lands in granted silk (#4133): operator and GM grants,
+	// referral rewards and a market sale's proceeds are granted, never
+	// earned, so what they buy stays bound. readMallBalanceTx reports
+	// the earned balance beside it, untouched.
+	balance, err := readMallBalanceTx(tx, accountID)
+	if err != nil {
 		return domain.MallBalance{}, err
 	}
 	if amount == 0 {
@@ -77,7 +78,7 @@ ON CONFLICT(account_id) DO UPDATE SET silk = excluded.silk`, accountID, balance.
 	if err != nil {
 		return domain.MallBalance{}, err
 	}
-	if err := insertSilkHistoryTx(tx, accountID, atMs, silkHistoryCharge, domain.MallBalance{Silk: amount}); err != nil {
+	if _, err := insertSilkHistoryTx(tx, accountID, atMs, silkHistoryCharge, domain.MallBalance{Silk: amount}); err != nil {
 		return domain.MallBalance{}, err
 	}
 	return balance, nil
@@ -87,29 +88,36 @@ ON CONFLICT(account_id) DO UPDATE SET silk = excluded.silk`, accountID, balance.
 ================
 debitSilkTx
 
-Takes amount from the account's purchased silk (never gift silk, which
-must not turn into gold) inside tx, and records the use in silk_history.
-Not enough is domain.ErrMarketFunds and changes nothing.
+Takes amount from the account's silk (never gift silk, which must not
+turn into gold) inside tx, drawing the earned balance first as a mall
+purchase does (#4133), and records the use in silk_history. Not enough
+silk across both balances is domain.ErrMarketFunds and changes nothing.
 ================
 */
 func debitSilkTx(tx *sql.Tx, accountID string, amount uint32, atMs int64) (domain.MallBalance, error) {
-	var balance domain.MallBalance
-	err := tx.QueryRow("SELECT silk, gift_silk, points FROM mall_accounts WHERE account_id = ?", accountID).
-		Scan(&balance.Silk, &balance.GiftSilk, &balance.Points)
-	if errors.Is(err, sql.ErrNoRows) {
-		return domain.MallBalance{}, domain.ErrMarketFunds
-	}
+	balance, err := readMallBalanceTx(tx, accountID)
 	if err != nil {
 		return domain.MallBalance{}, err
 	}
-	if balance.Silk < amount {
+	if uint64(amount) > uint64(balance.Silk)+uint64(balance.EarnedSilk) {
 		return domain.MallBalance{}, domain.ErrMarketFunds
 	}
-	balance.Silk -= amount
+	earnedTaken := min(amount, balance.EarnedSilk)
+	balance.EarnedSilk -= earnedTaken
+	balance.Silk -= amount - earnedTaken
 	if _, err := tx.Exec("UPDATE mall_accounts SET silk = ? WHERE account_id = ?", balance.Silk, accountID); err != nil {
 		return domain.MallBalance{}, err
 	}
-	if err := insertSilkHistoryTx(tx, accountID, atMs, silkHistoryUse, domain.MallBalance{Silk: amount}); err != nil {
+	if earnedTaken > 0 {
+		if err := setEarnedSilkTx(tx, accountID, balance.EarnedSilk); err != nil {
+			return domain.MallBalance{}, err
+		}
+	}
+	seq, err := insertSilkHistoryTx(tx, accountID, atMs, silkHistoryUse, domain.MallBalance{Silk: amount})
+	if err != nil {
+		return domain.MallBalance{}, err
+	}
+	if err := insertSilkHistoryEarnedTx(tx, seq, earnedTaken); err != nil {
 		return domain.MallBalance{}, err
 	}
 	return balance, nil

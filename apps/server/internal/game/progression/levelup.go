@@ -35,6 +35,7 @@ import (
 	"opensro.online/server/internal/game/enterworld"
 	"opensro.online/server/internal/game/item/wire"
 	"opensro.online/server/internal/game/pk"
+	"opensro.online/server/internal/game/staff"
 )
 
 // LevelCap is the Legend III era character level cap: 90, pinned by the
@@ -112,7 +113,8 @@ const statPointWordMax int64 = 0xffff
 // it is REGISTERED ONLY when SRO_DEV_EXP_GRANT=1 (default off - see
 // Runtime.Register).
 //
-// The bound character must carry host-reconciled GMPrivilege. The env flag
+// The bound character must be a GM whose staff grant carries set_level
+// (staff.SetLevel; host-allowlist GMs hold every capability). The env flag
 // controls whether the diagnostic opcode exists at all; it never grants an
 // ordinary player a levelling primitive.
 //
@@ -146,7 +148,7 @@ It shares the production grant transaction after admission.
 ================
 */
 func (rt *Runtime) HandleDevGrantExp(divisionID string, character *enterworld.Character, payload []byte) OpResult {
-	if character == nil || !character.GMPrivilege {
+	if !staff.Allows(character, staff.SetLevel) {
 		return OpResult{}
 	}
 	r := wire.NewReader(payload)
@@ -225,7 +227,7 @@ func (rt *Runtime) GrantUnscaledExperience(character *enterworld.Character, expD
 	var frames []wire.Frame
 	rt.deps.Update(character, "grant-unscaled-exp", func() bool {
 		var changed bool
-		frames, changed = rt.commitExperience(character, expDelta, 0, 0)
+		frames, changed, _ = rt.commitExperience(character, expDelta, 0, 0)
 		return changed
 	})
 	return OpResult{
@@ -260,7 +262,8 @@ death penalty it offsets does. Call it from inside Dependencies.Update.
 */
 func (rt *Runtime) ExperienceRefundUpdater() func(*enterworld.Character, int64) ([]wire.Frame, bool) {
 	return func(character *enterworld.Character, exp int64) ([]wire.Frame, bool) {
-		return rt.commitExperience(character, exp, 0, 0)
+		frames, changed, _ := rt.commitExperience(character, exp, 0, 0)
+		return frames, changed
 	}
 }
 
@@ -463,7 +466,14 @@ func (rt *Runtime) applyExperience(
 		return nil, false
 	}
 	expDelta, skillExpDelta = rt.Growth.scale(rt.deps.LevelData(), characterLevel(character), expDelta, skillExpDelta)
-	return rt.commitExperience(character, expDelta, skillExpDelta, sourceGid)
+	frames, changed, spMinted := rt.commitExperience(character, expDelta, skillExpDelta, sourceGid)
+	if spMinted > 0 && rt.SPMintedHook != nil {
+		// Inside the caller's character transaction: the hook may only
+		// record (the guild GP accrual's in-memory note, issue #4051),
+		// never open a store door or send.
+		rt.SPMintedHook(character, spMinted)
+	}
+	return frames, changed
 }
 
 /*
@@ -472,28 +482,31 @@ commitExperience
 
 The caller already owns the character transaction. All fallible projection
 runs on a detached candidate before persisted fields or packets are exposed.
+The third return is the whole SP the skill-EXP conversion minted (0 when
+none) - the guild GP accrual's counting input (issue #4051).
 ================
 */
 func (rt *Runtime) commitExperience(
 	character *enterworld.Character,
 	expDelta, skillExpDelta int64,
 	sourceGid uint32,
-) ([]wire.Frame, bool) {
+) ([]wire.Frame, bool, int64) {
 	if character == nil || character.DeletePending {
-		return nil, false
+		return nil, false, 0
 	}
+	spMinted := int64(0)
 	next := character.Snapshot()
 	expDelta = clampExpDelta(expDelta)
 	skillExpDelta = clampSkillExpDelta(skillExpDelta)
 	if expDelta == 0 && skillExpDelta == 0 {
-		return nil, false
+		return nil, false, 0
 	}
 
 	// The curve is authority DATA (leveldata column 1); no table means
 	// no grant, never "level free" (the leveldata.go posture).
 	if expDelta != 0 && rt.deps.LevelData() == nil {
 		log.Warn("progression: exp update refused - no leveldata source wired")
-		return nil, false
+		return nil, false, 0
 	}
 
 	walk := rt.walkExpCurve(rt.deps.LevelData(), characterLevel(next), coercePoints(next.Experience), expDelta)
@@ -501,7 +514,7 @@ func (rt *Runtime) commitExperience(
 		// A level without a curve row cannot be walked on either side of
 		// the wire; refuse the whole grant.
 		log.Warnf("progression: exp grant refused - leveldata has no row for level %d", walk.level)
-		return nil, false
+		return nil, false, 0
 	}
 
 	// Skill exp: wrap exactly like the client accumulator; the quotient is
@@ -515,12 +528,16 @@ func (rt *Runtime) commitExperience(
 			remainingSP = clampSkillPoints(coercePoints(next.SkillPoints) + spGained)
 			next.SkillPoints = &remainingSP
 			spChanged = true
+			// The guild GP accrual (issue #4051) counts the whole SP
+			// minted here, before the balance clamp: natively the
+			// accumulator grows by the conversion quotient itself.
+			spMinted = spGained
 		}
 	}
 
 	if walk.applied == 0 && skillExpDelta == 0 {
 		// The cap clamped the entire grant away.
-		return nil, false
+		return nil, false, 0
 	}
 
 	statPoints := coercePoints(next.StatPoints)
@@ -591,13 +608,13 @@ func (rt *Runtime) commitExperience(
 		display, err := rt.playerBaseStats(next)
 		if err != nil {
 			log.Warnf("progression: exp grant refused - %v", err)
-			return nil, false
+			return nil, false, 0
 		}
 		statBlock = enterworld.BuildLoginStatBlock(next, display)
 		if walk.levelsGained > 0 {
 			if err := rt.recoverLevelVitals(next, display); err != nil {
 				log.Warnf("progression: level recovery refused - %v", err)
-				return nil, false
+				return nil, false, 0
 			}
 		}
 	}
@@ -684,7 +701,7 @@ func (rt *Runtime) commitExperience(
 	if beginnerMarkCleared {
 		character.VisualFlags = next.VisualFlags
 	}
-	return frames, true
+	return frames, true, spMinted
 }
 
 /*

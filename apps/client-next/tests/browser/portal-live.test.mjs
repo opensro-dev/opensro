@@ -19,7 +19,6 @@ try{
  await page.waitForFunction(()=>__portal.view.gameplay.npcConversation?.phase==='menu',null,{timeout:45000});
  await page.locator('[data-ui-id="npc-close"]').waitFor({timeout:20000});
  await page.screenshot({path:'temp/artifacts/portal-menu.png'});
- 
 
  await page.locator('[data-ui-id="npc-close"]').waitFor({timeout:20000});
  await page.keyboard.press('Escape');await page.waitForFunction(()=>__portal.view.gameplay.npcConversation?.phase==='closed');await page.locator('[data-ui-id="npc-close"]').waitFor({state:'detached'});await page.waitForFunction(()=>!__portal.view.gameplay.targetPending);
@@ -42,6 +41,6 @@ try{
  assert.deepEqual(errors,[]);
  const result=await page.evaluate(()=>({pose:__portal.view.gameplay.pose,entities:__portal.view.entities.filter(e=>e.kind==='npc'||e.kind==='teleport'),stats:__portal.owner.stats()}));
  await writeFile('temp/artifacts/portal-after.json',JSON.stringify({result,errors,qualification:BigInt(before.gold)<BigInt(price)?'live insufficient-gold refusal; paid travel covered by server integration':'live paid travel'},null,2));console.log('City gate live outcome:',BigInt(before.gold)<BigInt(price)?'native insufficient-gold refusal':'paid travel');
-}catch(error){console.log('FAILURE',await page.evaluate(()=>({hit:globalThis.__portalHit,pose:__portal.view.gameplay.pose,target:__portal.view.gameplay.target,pending:__portal.view.gameplay.targetPending,conversation:__portal.view.gameplay.npcConversation,stats:__portal.owner.stats()})));await page.screenshot({path:'temp/artifacts/portal-failure.png'});await writeFile('temp/artifacts/portal-failure.json',JSON.stringify({error:String(error),errors,state:await page.evaluate(()=>__portal.view.gameplay)},null,2));throw error;}finally{await browser.close();}
+}catch(error){console.log('FAILURE',await page.evaluate(()=>({hit:globalThis.__portalHit,pose:__portal.view.gameplay.pose,target:__portal.view.gameplay.target,pending:__portal.view.gameplay.targetPending,conversation:__portal.view.gameplay.npcConversation,stats:__portal.owner.stats()})));await writeFile('temp/artifacts/portal-failure.json',JSON.stringify({error:String(error),errors,state:await page.evaluate(()=>__portal.view.gameplay)},null,2));throw error;}finally{await browser.close();}
 
 });

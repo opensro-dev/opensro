@@ -13,7 +13,7 @@ CPSCharacterSelect::SCharacterInfo, runs 8EAA90 and its 8EA960.
 import type { CharacterActor } from "@/engine/contracts/character";
 import type { CreationSnapshot } from "@/engine/contracts/frontend";
 import type { Renderer } from "@/engine/contracts/runtime";
-import type { CharacterRecord } from "@/engine/contracts/session";
+import type { CharacterRecord, SuitRuleFlags } from "@/engine/contracts/session";
 import {
 	assembleEquipmentAppearance,
 	wornItemsFromList,
@@ -75,6 +75,10 @@ interface DockPreviewFrame {
 	readonly preview?: CreationSnapshot | null;
 	readonly lizard: boolean;
 	readonly nativeServerName?: string;
+	// The shard's port-only suit-look rules as the roster published them;
+	// absent is native. A roster character is dressed exactly as the
+	// world dresses it (#4128).
+	readonly suitRules?: SuitRuleFlags;
 }
 
 /*
@@ -116,7 +120,7 @@ export function createDockPreview( owners: DockPreviewOwners ) {
 		================
 		*/
 		step( frame: DockPreviewFrame, output: DockPreviewOutput, published: DockPreviewCatalog ) {
-			const { seconds, dock, preview, lizard, nativeServerName } = frame;
+			const { seconds, dock, preview, lizard, nativeServerName, suitRules } = frame;
 			output.previewReady = false;
 			output.dockReady = false;
 			if ( !preview ) {
@@ -169,7 +173,12 @@ export function createDockPreview( owners: DockPreviewOwners ) {
 							ownerless: true,
 							committedWear: oldWear?.resource === resource ? oldWear.keys : [],
 							freezeWear: freeze,
-							enchantSparks
+							enchantSparks,
+							// The shard's port-only suit-look rules, as the
+							// roster published them: the dock dresses a
+							// suited character exactly as the world does.
+							jobSuitHidesArmor: suitRules?.jobSuitHidesArmor === true,
+							moonlitThiefSuit: suitRules?.moonlitThiefSuit === true
 						} );
 						const parts = assembly.parts, wear = assembly.defaultWear;
 						if ( !resource.previewGlb || !resource.previewClips ) {

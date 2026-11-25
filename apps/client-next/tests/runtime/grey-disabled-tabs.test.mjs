@@ -3,8 +3,8 @@
 
 grey-disabled-tabs.test.mjs - a busy tab never takes the grey look
 
-The Experimental row Grey disabled tabs dims a tab that is unavailable
-(port-only). A tab that only waits for the server, the shop's tabs while a
+A tab that is unavailable is dimmed (port-only, not native; owner
+2026-11-21: the default, no row). A tab that only waits for the server, the shop's tabs while a
 buy or sell is pending, refuses input and keeps the original look: the
 request owner sets that reason, so no timing can turn it grey.
 
@@ -14,7 +14,6 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { defined } from "../helpers/defined.mjs";
 import { uiFixture } from "../helpers/ui-fixture.mjs";
-const { experimentalOptions } = await import( "../../src/engine/foundation/ui/experimental-options.ts" );
 
 /*
 ================
@@ -79,10 +78,9 @@ function tabLook( f, semantics, id ) {
 pending trade keeps the native tab look
 ================
 */
-test("a pending trade locks the shop tabs without greying them, with the row on", () => {
+test("a pending trade locks the shop tabs without greying them", () => {
 	const { f, game, settle } = shopFixture();
 	try {
-		f.ui.event( { kind: "experimental-preferences", value: experimentalOptions( { greyDisabledTabs: true } ) } );
 		settle();
 		f.ui.event( { kind: "activate", id: "shop-group:850" } );
 		game.shopCompletionRevision = 1;

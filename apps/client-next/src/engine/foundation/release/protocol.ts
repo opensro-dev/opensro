@@ -18,6 +18,19 @@ checks) reads the same numbers the client ships.
 ===========================================================================
 */
 
+// The port-only 0x3FCE saved reverse-return location (reverse-user-point.ts,
+// #3903) rides protocol 20 unbumped: a tab that predates it meets an
+// unmatched opcode, which the receive chain drops silently, so the tab
+// simply never learns a saved location until it reloads.
+// The port-only 0x3FC8 Styria Clash status (styria.ts, #3648) rides
+// protocol 20 unbumped the same way: only a shard running the arena
+// sends it, and a tab that predates it drops the frame and simply
+// never shows the arena windows.
+// Protocol 20 admits the port-only skill reset control (opcode 21,
+// commerce-controls.ts SKILL_RECALL_CONTROL; SRO_SKILL_RESET_SCROLL), which
+// 19's world gate ended the session on.
+// Protocol 19 adds the port-only 0x3FCB Blue Berserk level (cap-110 content,
+// hwan-level.ts), which 18 would drop as an unknown frame.
 // Protocol 18 admits the port-only consignment market's control frame
 // (opcode 20, commerce-controls.ts MARKET_CONTROL; SRO_CONSIGNMENT), which
 // the server pushes unasked to a seller or offer party and 17's world gate
@@ -52,10 +65,12 @@ checks) reads the same numbers the client ships.
 // every creatable monster's row in the reference file (#369); 5 added
 // populated persistent summoners and concurrent COS lifetimes.
 // Protocol 17 also adds survival checkpoint rewards (#3189).
-export const RELEASE_PROTOCOL = 18;
+// Protocol 21 reads the rent deadline leg on every row of a rental kind, 0
+// on a permanent one (inventory-item.ts, #4240); 19 and 20 are refused.
+export const RELEASE_PROTOCOL = 21;
 // The public reference file's contract (releaseprotocol.ReferencesContract).
 export const REFERENCES_CONTRACT = 3;
 export const RELEASE_PROTOCOL_HEADER = "X-OpenSRO-Protocol";
 // 426 Upgrade Required: the server speaks another release protocol.
 export const RELEASE_OUTDATED_STATUS = 426;
-export const ASSET_SCHEMA = 4;
+export const ASSET_SCHEMA = 5;

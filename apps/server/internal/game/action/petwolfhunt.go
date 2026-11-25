@@ -126,7 +126,7 @@ func (rt *Runtime) wolfBonusHit(step petCombatStep, mob monster.Instance, damage
 	if rt.jobMonsterTargetRefusal(step.snapshot, mob) != 0 {
 		return
 	}
-	hit, committed := rt.commitCompanionCreditedMonsterHit(step.key.division, step.state.character, step.snapshot, enterworld.SkillRow{}, mob, combat.Result{Damage: damage}, reason, step.nowMs)
+	hit, committed := rt.commitCompanionCreditedMonsterHit(step.key.division, step.state.character, step.snapshot, step.pet.GID, enterworld.SkillRow{}, mob, combat.Result{Damage: damage}, reason, step.nowMs)
 	if !committed {
 		return
 	}

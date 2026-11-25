@@ -113,13 +113,7 @@ func (rt *Runtime) useStructureRepair(c *enterworld.Character, use skillItemUse,
 		*result = itemUseFailure(code)
 		return false
 	}
-	source, ok := rt.deps.SkillData().(interface {
-		SkillByCodename(string) (enterworld.SkillRow, bool)
-	})
-	if !ok {
-		return false
-	}
-	skill, ok := source.SkillByCodename(use.ref.AssociatedSkillCodename)
+	skill, ok := rt.skillByCodename(use.ref.AssociatedSkillCodename)
 	if !ok || !skill.StructureRepair.Pinned {
 		return false
 	}

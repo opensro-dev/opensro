@@ -41,7 +41,11 @@ import {
 import { createCharacterHierarchy } from "@/engine/foundation/animation/character-hierarchy";
 import { attachedOpacity } from "@/engine/foundation/animation/character-fade";
 import { characterBindBounds, characterPickVolume } from "@/engine/foundation/animation/character-pick-volume";
-import { selectPickCandidate, type PickCandidate } from "@/engine/foundation/animation/character-pick";
+import {
+	dropOccludedCandidates,
+	selectPickCandidate,
+	type PickCandidate
+} from "@/engine/foundation/animation/character-pick";
 import { pickVolume, pickVolumeDepth } from "@/engine/foundation/rendering/pick-volume";
 import {
 	createRibbonChain,
@@ -70,7 +74,7 @@ import {
 	CHARACTER_ASSEMBLIES,
 	CHARACTER_MODELS,
 	characterBytes,
-	CHARACTER_ACTORS,
+	RENDERED_ACTORS,
 	CHARACTER_RENDER_BYTES,
 	CHARACTER_RESIDENT_BYTES,
 	characterClothJoints,
@@ -88,11 +92,12 @@ import {
 	prepareViewFrustum,
 	visibleFrustumSphere
 } from "@/engine/foundation/rendering/world-math";
-import type { CharacterActor, CharacterModel } from "@/engine/contracts/character";
+import type { CharacterActor, CharacterModel, CharacterNode } from "@/engine/contracts/character";
 import type { DungeonBlockLight } from "@/engine/contracts/scene";
 import { dungeonPointLight } from "@/engine/foundation/rendering/dungeon-lights";
 import type { GeometryCommands, GeometryDraw, ImageCommands, ImageDraw } from "../internal/gpu-contract";
 import { hypot3 } from "@/engine/foundation/math/hypot";
+import { isEffectProgramModel } from "@/engine/foundation/assets/effect-programs";
 
 /*
 ================
@@ -152,7 +157,7 @@ export function fillRowOpacities(
 	rows: readonly CharacterActor[],
 	opacity: ( actor: CharacterActor ) => number
 ): Float32Array {
-	if ( rows.length > CHARACTER_ACTORS ) throw Error( "Character row scratch exceeds actor limit" );
+	if ( rows.length > RENDERED_ACTORS ) throw Error( "Character row scratch exceeds actor limit" );
 	if ( !streams.rowScratch || streams.rowScratch.length < rows.length ) {
 		streams.rowScratch = new Float32Array( rows.length );
 	}
@@ -179,7 +184,7 @@ export function fillRowPointLights(
 	origin: number,
 	blocks?: readonly (readonly DungeonBlockLight[])[]
 ): Float32Array {
-	if ( rows.length > CHARACTER_ACTORS ) throw Error( "Character row scratch exceeds actor limit" );
+	if ( rows.length > RENDERED_ACTORS ) throw Error( "Character row scratch exceeds actor limit" );
 	const needed = rows.length * POINT_LIGHT_FLOATS;
 	if ( !streams.lightScratch || streams.lightScratch.length < needed ) {
 		streams.lightScratch = new Float32Array( needed );
@@ -237,8 +242,8 @@ array is reused by the next call.
 ================
 */
 export function createPoseOrder() {
-	let optional = new Uint8Array( CHARACTER_ACTORS );
-	let sampled = new Float64Array( CHARACTER_ACTORS );
+	let optional = new Uint8Array( RENDERED_ACTORS );
+	let sampled = new Float64Array( RENDERED_ACTORS );
 	const needed: CharacterActor[] = [];
 	const indices: number[] = [];
 	const ordered: CharacterActor[] = [];
@@ -290,10 +295,68 @@ const MAX_ATTACHMENT_DEPTH = 8;
 // An equipment socket's name (equipment-sockets.ts) and an effect actor's
 // model, which names its program in the effect bundle.
 const EQUIPMENT_SOCKET_PREFIX = "equipment:";
-const EFFECT_PROGRAMS = "/effects/programs.json#";
 // Missing-clip reports one renderer holds between takes: each pose evaluator
 // already reports a name once, so this only bounds an undrained owner.
 const MAX_POSE_DEGRADATIONS = 32;
+// graphHolderTransform's result, consumed by advanceGraphEmitter before the
+// next emitter asks for it.
+const graphHolder = new Float32Array( 16 );
+// The identity palette root exportGlb (avatarToGlb) gives a resource whose
+// vertices have no influence.
+const UNBOUND_JOINT = "NativeUnbound";
+
+/*
+================
+bodyAncestor
+
+The body's index of a resource node's nearest ancestor the body also has
+(by name; -1 at the root), passing only identity nodes on the way:
+exportGlb's NativeModelSpace group holds NativeUnbound beside Bip01, under
+the loader's __gltf_left_handed__ root. Undefined when an ancestor the
+body lacks would move the joint.
+================
+*/
+function bodyAncestor(
+	resource: readonly CharacterNode[],
+	parent: number,
+	body: ReadonlyMap<string, number>
+): number | undefined {
+	for ( let depth = 0; parent >= 0 && depth < resource.length; depth++ ) {
+		const node = resource[parent]!, index = body.get( node.name );
+		if ( index !== undefined ) return index;
+		const identity = !node.matrix && node.translation.every( v => v === 0 ) &&
+			node.rotation[0] === 0 && node.rotation[1] === 0 && node.rotation[2] === 0 && node.rotation[3] === 1 &&
+			node.scale.every( v => v === 1 );
+		if ( !identity ) return undefined;
+		parent = node.parent;
+	}
+	return parent < 0 ? -1 : undefined;
+}
+
+/*
+================
+graphHolderTransform
+
+The holder frame a program's particle graph simulates in: the holder's
+transform under the program's header scale (an .efp v12+ header float, the
+compiled model's "effect-scale" root node, program.ts). The compiled nodes
+already sit under that root, so their positions scale with it; the graph
+read only its palette, which sized the elements but left their positions,
+sphere and cone radii and velocities at full size (v1.696 Steam Punk's
+avatar_m_steampunk.efp, scale 0.175, burst ~6x too wide). INFERENCE: the
+header scale applies to the whole program, as it does to its nodes. Every
+v1.150 program is v11 (scale 1), so native content is unchanged.
+================
+*/
+function graphHolderTransform( model: CharacterModel, transform: Float32Array ): Float32Array {
+	const scale = model.nodes[0]!.scale;
+	if ( scale[0] === 1 && scale[1] === 1 && scale[2] === 1 ) return transform;
+	graphHolder.set( transform );
+	for ( let c = 0; c < 3; c++ ) {
+		for ( let n = 0; n < 3; n++ ) graphHolder[c * 4 + n] = transform[c * 4 + n]! * scale[c]!;
+	}
+	return graphHolder;
+}
 
 /*
 ================
@@ -1456,7 +1519,13 @@ the next full prepare pass, so this may run between frames.
 			history.cycle !== (frame.cycles.get( actor.gid ) ?? 0)
 		) {
 			const graph = model.particleGraph ?
-				createParticleGraph( model.particleGraph, particleRandom.index, plan.particleGraph ) :
+				createParticleGraph(
+					model.particleGraph,
+					particleRandom.index,
+					plan.particleGraph,
+					// The program header scale (graphHolderTransform) as its length unit.
+					model.nodes[0]!.scale[0]!
+				) :
 				undefined;
 			history = {
 				model: actor.model,
@@ -1658,7 +1727,7 @@ the next full prepare pass, so this may run between frames.
 		if ( !transform ) return;
 		const shift = regionOffsetXZ( origin, history.origin );
 		if ( history.graph && model.particleGraph ) {
-			advanceGraphEmitter( actor, model, history, transform, shift );
+			advanceGraphEmitter( actor, model, history, graphHolderTransform( model, transform ), shift );
 		} else {
 			advanceBirthEmitter( actor, model, history, transform, shift );
 		}
@@ -1775,7 +1844,7 @@ the next full prepare pass, so this may run between frames.
 	function batchKey( frame: PrepareFrame, actor: CharacterActor, plan: ModelResource["plan"] ) {
 		const opacity = frame.opacity;
 		const ownBatch = () =>
-			plan.drawClocked || plan.blended || opacity( actor ) < 1 || actor.model.includes( EFFECT_PROGRAMS );
+			plan.drawClocked || plan.blended || opacity( actor ) < 1 || isEffectProgramModel( actor.model );
 		const variant = (plan.cloth ?
 			"\0cloth:" + actor.gid :
 			"") +
@@ -2480,8 +2549,10 @@ the next full prepare pass, so this may run between frames.
 					Math.floor( age * ribbon.fps )
 				),
 				at = Math.min( material.colors.length / 4 - 1, Math.floor( age * material.fps ) );
+			// A graph element's frame already carries the header scale
+			// (graphHolderTransform); a birth's frame does not.
 			const scale = hypot3( matrices[b * 16]!, matrices[b * 16 + 1]!, matrices[b * 16 + 2]! ) *
-				group.model.nodes[0]!.scale[0]!;
+				(graph ? 1 : group.model.nodes[0]!.scale[0]!);
 			pushRibbonPoint(
 				points,
 				matrices,
@@ -3215,7 +3286,13 @@ the next full prepare pass, so this may run between frames.
 		Resolve world selection against visible actor volumes in ray order.
 		================
 		*/
-		pick( rays: readonly PickRay[], excluded: number, blindHeld = false, filtered = false ) {
+		pick(
+			rays: readonly PickRay[],
+			excluded: number,
+			blindHeld = false,
+			filtered = false,
+			visible?: ( ray: number, depth: number ) => boolean
+		) {
 			const current = snapshots.index, ride = current.get( excluded )?.mountedOn;
 			// Native 856540 uses the aggregate transformed box, independent of
 			// texture alpha and animated limb triangles. Preserve actor order.
@@ -3254,7 +3331,11 @@ the next full prepare pass, so this may run between frames.
 			// here used to hand such clicks to the farther confirmed body -
 			// the transport - and is removed for the native rule (thread
 			// 1562057167144493107 item 7).
-			const result = selectPickCandidate( candidates );
+			// #4125 (owner ruling 2026-11-23): when the caller supplies the
+			// scenery test, a candidate every hit ray loses to scenery is
+			// dropped first (dropOccludedCandidates); the nearest-box rule
+			// above then runs unchanged over what the player can see.
+			const result = selectPickCandidate( visible ? dropOccludedCandidates( candidates, visible ) : candidates );
 			if ( !result ) return null;
 			// 692680: a mounted winner answers with its rider, as does a linked ride.
 			const rider = actors.find( actor => actor.mountedOn === result!.gid ),
@@ -3304,16 +3385,24 @@ the next full prepare pass, so this may run between frames.
 					parents.add( child.gid );
 				}
 			}
-			// The worn items' effect glows (a rare weapon's itemrare rows, a
-			// garment's ambient set): effect actors on an equipment socket of
-			// the character. The doll runs no occlusion query, so they draw
-			// without the world's deferred-particle gate.
+			// The worn items' effects: a rare weapon's itemrare rows and a
+			// garment's ambient set ride an equipment socket of the character,
+			// and an animated worn handle (an avatar's wings, a garment's own
+			// skeleton) carries its ambient set on its own bones, emitted onto
+			// the handle's actor. Both belong to the composite the native doll
+			// rebuilds (8EAA90), so both follow it; effects the world hung on
+			// the character itself (skill and buff decorations) are no part of
+			// the composite and stay out. The doll runs no occlusion query, so
+			// they draw without the world's deferred-particle gate.
 			for ( const child of candidates ) {
 				if (
 					!child.attachment || !parents.has( child.attachment.gid ) ||
-					!child.attachment.bone?.startsWith( EQUIPMENT_SOCKET_PREFIX ) ||
-					!child.model.includes( EFFECT_PROGRAMS )
+					!isEffectProgramModel( child.model )
 				) {
+					continue;
+				}
+				const onWornHandle = child.attachment.gid !== gid;
+				if ( !onWornHandle && !child.attachment.bone?.startsWith( EQUIPMENT_SOCKET_PREFIX ) ) {
 					continue;
 				}
 				const childResource = models.get( child.model );
@@ -3384,7 +3473,7 @@ the next full prepare pass, so this may run between frames.
 			models.set( id, {
 				model,
 				plan: createCharacterRenderPlan( model, planCaches ),
-				effect: id.includes( EFFECT_PROGRAMS ),
+				effect: isEffectProgramModel( id ),
 				images: [ ...images ],
 				textures: [],
 				owned: false,
@@ -3633,7 +3722,7 @@ the next full prepare pass, so this may run between frames.
 				models.set( id, {
 					model: admitted,
 					plan: createCharacterRenderPlan( admitted, planCaches ),
-					effect: id.includes( EFFECT_PROGRAMS ),
+					effect: isEffectProgramModel( id ),
 					images: [ ...images ],
 					textures: [],
 					owned: true,
@@ -3701,7 +3790,19 @@ the next full prepare pass, so this may run between frames.
 				for ( const primitive of resource.model.primitives ) {
 					if ( part.parts.includes( primitive.name.replace( /^part:/, "" ) ) ) {
 						const joints = primitive.joints.map( joint => {
-							const name = resource.model.nodes[joint]!.name, index = nodes.get( name );
+							const node = resource.model.nodes[joint]!, name = node.name;
+							let index = nodes.get( name );
+							// exportGlb adds this model-space identity joint only to
+							// resources with unbound vertices (the v1.696 female
+							// Plague Doctor); carry it over when the body has none.
+							if ( index === undefined && name === UNBOUND_JOINT ) {
+								const parent = bodyAncestor( resource.model.nodes, node.parent, nodes );
+								if ( parent !== undefined ) {
+									index = assembledNodes.length;
+									assembledNodes = [ ...assembledNodes, { ...node, parent } ];
+									nodes.set( name, index );
+								}
+							}
 							if ( index === undefined ) {
 								throw new Error( `Attachment joint ${name} is absent from body` );
 							}
@@ -3730,7 +3831,7 @@ the next full prepare pass, so this may run between frames.
 			models.set( id, {
 				model: assembled,
 				plan: createCharacterRenderPlan( assembled, planCaches ),
-				effect: id.includes( EFFECT_PROGRAMS ),
+				effect: isEffectProgramModel( id ),
 				images: pixels,
 				textures: [],
 				owned: false,

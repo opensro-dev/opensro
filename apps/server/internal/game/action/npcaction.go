@@ -22,6 +22,7 @@ import (
 	"opensro.online/server/internal/game/item/gacha"
 	"opensro.online/server/internal/game/item/wire"
 	"opensro.online/server/internal/game/world/simulation"
+	"opensro.online/server/internal/game/world/styria"
 	"opensro.online/server/internal/transport"
 )
 
@@ -129,11 +130,6 @@ func (rt *Runtime) HandleNpcAction(divisionID string, character *enterworld.Char
 		}
 		return []wire.Frame{{Opcode: wire.OpNpcInteractionAck, Payload: wire.EncodeNpcInteractionAck(mask)}}, ""
 	}
-	// Port-only, not native (#3349): a Muhan change NPC is a nest entity,
-	// not a roster NPC, and its Talk is the change (muhan_change.go).
-	if change, instance, isChange := rt.muhanChangeAt(divisionID, character, gid); isChange {
-		return rt.handleMuhanChangeTalk(divisionID, character, change, instance, mask)
-	}
 	npc, ok := rt.npcForCurrentViewer(divisionID, character, gid)
 	if !ok {
 		return npcFunctionRefusal(selectObjectNotFound), fmt.Sprintf("gid %d is not a live in-scope NPC", gid)
@@ -146,6 +142,11 @@ func (rt *Runtime) HandleNpcAction(divisionID string, character *enterworld.Char
 	if !rt.npcWithinHitRange(divisionID, character, npc) {
 		return npcFunctionTooFar(), fmt.Sprintf("NPC %s is beyond its interaction range", npc.Codename)
 	}
+	// Port-only, not native (#3349): a Muhan change NPC's Talk is the
+	// change (muhan_change.go).
+	if change, isChange := rt.muhanChanges[npc.Codename]; isChange {
+		return rt.handleMuhanChangeTalk(divisionID, character, change, npc, mask)
+	}
 
 	switch mask {
 	case simulation.NpcTalkFlagTalk:
@@ -154,12 +155,15 @@ func (rt *Runtime) HandleNpcAction(divisionID string, character *enterworld.Char
 			// answer (code 3) retires the request.
 			return npcFunctionRefusal(selectObjectNotFound), fmt.Sprintf("NPC %s has no npcchat base-speech symbol", npc.Codename)
 		}
-		if rt.NpcQuests.Options != nil || rt.sookArena != nil {
+		if rt.NpcQuests.Options != nil || rt.sookArena != nil || rt.styria != nil {
 			var options []NpcQuestOption
 			if rt.NpcQuests.Options != nil {
 				options = rt.NpcQuests.Options(divisionID, character, npc.Codename)
 			}
 			options = append(options, rt.sookTalkOptions(npc.Codename)...)
+			// Port-only (#3648): the Styria Clash arena manager's
+			// application rows, while its switch is on.
+			options = append(options, rt.styriaTalkOptions(divisionID, character, npc.Codename)...)
 			if len(options) != 0 {
 				symbols := make([]string, 0, len(options))
 				for _, option := range options {
@@ -179,6 +183,14 @@ func (rt *Runtime) HandleNpcAction(divisionID string, character *enterworld.Char
 				frames := []wire.Frame{{
 					Opcode: wire.OpNpcDialog, Payload: wire.EncodeNpcDialogOptions(prompt, symbols),
 				}}
+				// Port-only (#3648): the arena manager's conversation
+				// carries the talker's Styria status, so the client's
+				// registration window opens current.
+				if rt.styria != nil && npc.Codename == styria.ManagerCodename {
+					if frame, ok := rt.styriaStatusFrame(divisionID, character); ok {
+						frames = append(frames, frame)
+					}
+				}
 
 				return frames, ""
 			}
@@ -272,6 +284,10 @@ func (rt *Runtime) npcForCurrentViewer(divisionID string, character *enterworld.
 			return simulation.NpcDef{}, false
 		}
 		return npc, true
+	}
+	// A static world NPC of the viewer's own world (worldnpc.go).
+	if npc := rt.worldNpcAt(character, gid); npc != nil && simulation.NpcVisibleAt(*npc, viewer) {
+		return *npc, true
 	}
 	return simulation.NpcDef{}, false
 }

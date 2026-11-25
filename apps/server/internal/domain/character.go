@@ -69,6 +69,19 @@ type InventoryRow struct {
 	// only, issue #1980): it refuses trade, NPC sale, stall offer and
 	// player drop. Absent on every native row.
 	ForgeBound bool `json:"forgeBound,omitempty"`
+	// EarnedBought marks an Item Mall item paid for wholly with earned
+	// Silk (port only, issue #4133): the instance carries the
+	// tradability its reference row denies - every shipped mall row is
+	// record-bound, so the row alone can never say it. The trade doors
+	// read it through the one predicate (action Runtime.Tradeable); the
+	// seal above still refuses first. Absent on every other row, which
+	// is the migration: pre-split mall items read as granted/bound.
+	EarnedBought bool `json:"earnedBought,omitempty"`
+	// RentExpiresUnix is a rental's deletion time in unix seconds
+	// (native _RentItemInfo: a rented item's PeriodEndTime, filled from
+	// its scrap's refrentitem term at delivery, #4240). The world-entry
+	// sweep deletes a row at or past it; absent or zero is not a rental.
+	RentExpiresUnix int64 `json:"rentExpiresUnix,omitempty"`
 }
 
 /*
@@ -384,6 +397,9 @@ type Character struct {
 	// stores the item's reference id in the persistent record. Zero is the
 	// country's default stall.
 	StallDecoration uint32 `json:"stallDecoration,omitempty"`
+	// The worn title (later-native, #3502, schema 49); character_title.go
+	// owns the title state.
+	TitleState
 	// PublicHidden keeps the character off the community site's public read
 	// API (port-only, not native: the opensro.online privacy choice). Its
 	// kills read as "a hunter" there and its profile answers 404.
@@ -398,6 +414,24 @@ type Character struct {
 	// the opensro.online account-page choice, schema 32). Off: their
 	// alchemy breaks are never announced.
 	BreakNotice bool `json:"breakNotice,omitempty"`
+	// PlusFailOptOut is the character's opt-out of the shard's failed
+	// reinforcement announcements (port-only, not native:
+	// SRO_ANNOUNCE_PLUS_FAIL, #3682, the opensro.online account-page
+	// choice or "/plusfail off" in game, schema 51). The #2852 failure
+	// notice rode the breakNotice opt-in; it is announced unless the
+	// character opted out. Set: their failed high-plus attempts are
+	// never announced.
+	PlusFailOptOut bool `json:"plusFailOptOut,omitempty"`
+	// ReverseUserPoint is the saved location of the reverse return
+	// scroll's user window (later-native v1.696, #3903; schema 52): the
+	// point its enroll button records and its move button returns to.
+	// It is the reverse-return twin of the world's LastRecallPoint and
+	// LastDeathPoint, but lives at the top level: a field nested in
+	// world cannot ride an additive schema step (a previous binary
+	// refuses nested additions on a rewrite, #3090), and this one must
+	// stay additive. Absent until the player enrolls one; like the
+	// recall and death points it records only in a type-0 world.
+	ReverseUserPoint *WorldPoint `json:"reverseUserPoint,omitempty"`
 	// MostWanted is the character's job-kill streak (port-only, not native:
 	// SRO_MOST_WANTED, action/mostwanted.go; schema 24). Nil is no streak.
 	MostWanted *MostWanted `json:"mostWanted,omitempty"`
@@ -461,6 +495,12 @@ type Character struct {
 	// the next entry presents them.
 	InventorySize      uint8 `json:"inventorySize,omitempty"`
 	InventoryExpansion uint8 `json:"inventoryExpansion,omitempty"`
+	// InventoryAdditionUsed marks the character's one use of the later
+	// inventory addition item (ITEM_MALL_INVENTORY_ADDITION, #4240 part
+	// 3; schema 58): its v1.696 text limits it to one time per character,
+	// so the record of the use is the character's own. A record from
+	// before the step reads as never used.
+	InventoryAdditionUsed bool `json:"inventoryAdditionUsed,omitempty"`
 
 	// AvatarInventory is the persisted costume inventory. Rows reuse the
 	// equipment item body and occupy native avatar slots 0..3. Every row's
@@ -633,20 +673,34 @@ type Character struct {
 	// Client_IsDebugCommandAllowed (console / GM-command availability),
 	// the GM default chat channel
 	// mode 3 in CIFChatViewer_HandleChatInputKey, and the 30F2/33C4/3647
-	// mission handlers. It is never writable from any
-	// network path. Normal startup requires strict accounts plus
+	// mission handlers. It is never writable from any gameplay or
+	// player network path. Normal startup requires strict accounts plus
 	// character-bound EnterWorld tickets; even the explicitly insecure
-	// local-development posture has no privilege setter. The only setter
-	// is the boot-time division-qualified operator allowlist reconcile
-	// (store.ReconcileGMPrivilege over SRO_GM_CHARACTERS), which is
-	// host-access-only by construction.
+	// local-development posture has no privilege setter. Two setters
+	// exist, both staff-only: the boot-time division-qualified host
+	// allowlist reconcile (store.ReconcileGMPrivilege over
+	// SRO_GM_CHARACTERS) and the staff book (package staff), changed
+	// only through the authenticated console operator endpoint, which
+	// projects its grants here at boot and through the character's
+	// mutation door on every grant or revoke.
 	// False means an ordinary player.
 	GMPrivilege bool `json:"gmPrivilege,omitempty"`
+	// GMCapabilities are the staff.Capability bits the GM may use
+	// (port-only, not native; owner decision 2026-11-23). The original
+	// has one GM bit; the staff book splits it per command, and the GM
+	// lane checks the bit at command time. Projected beside GMPrivilege
+	// by the same two setters; meaningless while GMPrivilege is false.
+	// A projection, never persisted: the staff book and the host
+	// allowlist are the durable sources, and the boot reconcile writes
+	// these bits onto every stored character (store.ReconcileGMPrivilege),
+	// so a record never outlives a revoked capability.
+	GMCapabilities uint32 `json:"-"`
 
 	// PC-room event eligibility is server-owned: client
 	// CICPlayer_PcRoomEventEligible_862a80 -> CIFEventInterface_OnCreate(1).
 	PCRoomEvent bool               `json:"pcRoomEvent,omitempty"`
 	AutoPotion  AutoPotionSettings `json:"autoPotion"`
+	Macro       MacroSettings      `json:"macro,omitzero"`
 
 	// Additional persisted presentation fields carried by the full snapshot.
 	CreatedAt string `json:"createdAt,omitempty"`

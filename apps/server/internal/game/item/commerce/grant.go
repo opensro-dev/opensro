@@ -21,13 +21,35 @@ const maxDeliverySlots = 255
 
 /*
 ================
+GrantMarks
+
+The instance marks a delivery stamps on every item it grants. Bound seals
+the item through the inventory's one bound flag
+(inventory.Item.ForgeBound); EarnedBought records a payment made wholly
+with earned Silk (inventory.Item.EarnedBought, #4133). NowUnix is the
+delivery clock a rental's expiry is stamped from (native _RentItemInfo:
+the clock runs from acquisition, #4240); a rental granted without one
+refuses - it would ship permanently. The Item Mall passes what its
+purchase's payment and session clock decided; a gold shop passes the
+zero value - neither mark.
+================
+*/
+type GrantMarks struct {
+	Bound        bool
+	EarnedBought bool
+	NowUnix      int64
+}
+
+/*
+================
 GrantPackage
 
 Bound expanded quantities before iterating. Wide multiplication prevents a
 malformed authored template from wrapping into a cheap or partial delivery.
+marks stamps every delivered item (see GrantMarks).
 ================
 */
-func GrantPackage(inv *inventory.Inventory, contents []Content, quantity uint16, capacity uint16) ([]uint8, error) {
+func GrantPackage(inv *inventory.Inventory, contents []Content, quantity uint16, capacity uint16, marks GrantMarks) ([]uint8, error) {
 	if inv == nil || quantity == 0 || capacity == 0 || len(contents) == 0 || len(contents) > maxPackageContents {
 		return nil, fmt.Errorf("commerce: invalid grant")
 	}
@@ -53,7 +75,14 @@ func GrantPackage(inv *inventory.Inventory, contents []Content, quantity uint16,
 			if stackable {
 				amount = uint16(min(units, math.MaxUint16))
 			}
-			item := inventory.Item{TradeOwner: template.TradeOwner, RefObjID: template.Ref.RefObjID, Codename: template.Ref.Codename, TypeFlags: template.Ref.TypeFlags(), Plus: template.Plus, VarianceBits: template.Variance, Durability: template.Data, MagicOptions: append([]uint64(nil), template.Magic...), Quantity: amount}
+			rentExpires := int64(0)
+			if template.RentMinutes > 0 {
+				if marks.NowUnix <= 0 {
+					return nil, fmt.Errorf("commerce: rental granted without a clock")
+				}
+				rentExpires = marks.NowUnix + int64(template.RentMinutes)*60
+			}
+			item := inventory.Item{TradeOwner: template.TradeOwner, RefObjID: template.Ref.RefObjID, Codename: template.Ref.Codename, TypeFlags: template.Ref.TypeFlags(), Plus: template.Plus, VarianceBits: template.Variance, Durability: template.Data, MagicOptions: append([]uint64(nil), template.Magic...), Quantity: amount, ForgeBound: marks.Bound, EarnedBought: marks.EarnedBought, RentExpiresUnix: rentExpires}
 			var slot uint8
 			if stackable {
 				grant, fault := inv.GrantStack(item, template.Stack)

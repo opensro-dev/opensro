@@ -156,6 +156,33 @@ export function bakeTables() {
 
 /*
 ================
+skillScopedAnimationSets
+
+The default set whole and, of each other set, only the states a monster
+skill selects (tables.skillStates). A compound's body is the generic
+character BSR with every weapon set, so its bake keeps only these; every
+bake takes its non-default skill clips from them; the BSR parity audit
+checks a compound's bindings against the same scope.
+================
+*/
+export function skillScopedAnimationSets( animationSets, skillStates ) {
+	const scoped = [];
+	for ( const set of animationSets ?? [] ) {
+		const setKey = set.name.toLowerCase();
+		if ( setKey === "default" ) {
+			scoped.push( set );
+			continue;
+		}
+		const wantedIds = skillStates.get( setKey );
+		if ( !wantedIds ) continue;
+		const states = set.states.filter( state => wantedIds.has( state.stateId ) );
+		if ( states.length > 0 ) scoped.push( { ...set, states } );
+	}
+	return scoped;
+}
+
+/*
+================
 materialVariantPath
 
 A body GLB's material-set variant beside it: x.glb -> x.material-<slot>.glb.
@@ -299,22 +326,10 @@ export async function bakeCharacterResource(
 	let avatar;
 	if ( isCpd ) {
 		const assembled = await assembleCompoundCharacter( bsrPath, source, { tombCombat: tables.tombCombat } );
-		const skillStatesBySet = tables.skillStates;
-		const scopedSets = [];
-		for ( const set of assembled.bsr.animationSets ?? [] ) {
-			const setKey = set.name.toLowerCase();
-			if ( setKey === "default" ) {
-				scopedSets.push( set );
-				continue;
-			}
-			const wantedIds = skillStatesBySet.get( setKey );
-			if ( !wantedIds ) continue;
-			const states = set.states.filter( ( state ) => wantedIds.has( state.stateId ) );
-			if ( states.length > 0 ) {
-				scopedSets.push( { ...set, states } );
-			}
-		}
-		bsr = { ...assembled.bsr, animationSets: scopedSets };
+		bsr = {
+			...assembled.bsr,
+			animationSets: skillScopedAnimationSets( assembled.bsr.animationSets, tables.skillStates )
+		};
 		materialSets = assembled.materialSets;
 		avatar = assembled.avatar;
 	} else {
@@ -437,13 +452,11 @@ export async function bakeCharacterResource(
 				...pickDefaultSetStateTableMetadata( bsr, state.stateId )
 			};
 		}
-		for ( const set of bsr.animationSets ?? [] ) {
+		for ( const set of skillScopedAnimationSets( bsr.animationSets, tables.skillStates ) ) {
 			const setKey = set.name.toLowerCase();
 			if ( setKey === "default" ) continue;
-			const wantedIds = tables.skillStates.get( setKey );
-			if ( !wantedIds ) continue;
 			for ( const state of set.states ) {
-				if ( !state.animationPath || !wantedIds.has( state.stateId ) ) continue;
+				if ( !state.animationPath ) continue;
 				const role = `native:${setKey}:${state.stateId}`;
 				if ( animationStates[role] ) continue;
 				const shared = clips.find( ( clip ) => clip.path === state.animationPath );

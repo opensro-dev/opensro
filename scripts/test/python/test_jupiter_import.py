@@ -148,7 +148,7 @@ class JupiterImportTest(unittest.TestCase):
 		media_bytes = archive_bytes(media)
 		(v1696 / "Media.pk2").write_bytes(media_bytes)
 		(source / jupiter.POPULATION_NAME).write_text(json.dumps({
-			"source": "fixture", "sourceSha256": jupiter.POPULATION_SOURCE_SHA256,
+			"source": "fixture", "sourceSha256": jupiter.POPULATION_SOURCE_SHA256, "nestTable": "Tab_RefNest_Back",
 			"worlds": WORLDS, "rows": export_rows,
 		}), encoding="utf-8")
 		pins = {"Media": hashlib.sha256(media_bytes).hexdigest()}
@@ -166,10 +166,30 @@ class JupiterImportTest(unittest.TestCase):
 			with self.assertRaises(ValueError):
 				jupiter.read_population(source)
 			(source / jupiter.POPULATION_NAME).write_text(json.dumps({
-				"sourceSha256": jupiter.POPULATION_SOURCE_SHA256, "worlds": {"90": WORLDS["90"]}, "rows": [],
+				"sourceSha256": jupiter.POPULATION_SOURCE_SHA256, "nestTable": "Tab_RefNest_Back", "worlds": {"90": WORLDS["90"]}, "rows": [],
 			}), encoding="utf-8")
 			with self.assertRaises(ValueError):
 				jupiter.read_population(source)
+
+	# ================
+	# test_an_export_from_the_operator_table_is_refused
+	#
+	# ISRO-R's active Tab_RefNest is its operator's tuning (#4149): an
+	# export that does not name the native archive never loads.
+	# ================
+	def test_an_export_from_the_operator_table_is_refused(self):
+		with tempfile.TemporaryDirectory() as root:
+			source = Path(root)
+			for table in ("Tab_RefNest", None):
+				document = {"sourceSha256": jupiter.POPULATION_SOURCE_SHA256, "worlds": WORLDS, "rows": []}
+				if table:
+					document["nestTable"] = table
+				(source / jupiter.POPULATION_NAME).write_text(json.dumps(document), encoding="utf-8")
+				with self.assertRaisesRegex(ValueError, "Tab_RefNest_Back"):
+					jupiter.read_population(source)
+			document["nestTable"] = "Tab_RefNest_Back"
+			(source / jupiter.POPULATION_NAME).write_text(json.dumps(document), encoding="utf-8")
+			self.assertEqual(jupiter.read_population(source)["nestTable"], "Tab_RefNest_Back")
 
 	# ================
 	# test_projection_strips_extraction_facts_and_carries_spawn_type

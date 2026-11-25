@@ -52,6 +52,7 @@ from pathlib import Path
 import cap110_monsters as cap110
 import import_vsro_alexandria as tables
 import later_world_import
+import later_world_population
 
 ROOT_ENV = "SRO_V1696_ROOT"
 SOURCE_ENV = "SRO_GOD_DATABASE"
@@ -251,7 +252,7 @@ def require_v1696_pin(root, names):
 # ================
 def read_population(source_root):
 	"""The pinned population export, all 22 worlds present."""
-	return later_world_import.read_population(SPEC, source_root)
+	return later_world_population.read_population(SPEC, source_root)
 
 
 # ================
@@ -259,7 +260,7 @@ def read_population(source_root):
 # ================
 def project_population(rows, worlds):
 	"""The nest rows of the given worlds in the Version-2 row schema."""
-	return later_world_import.project_population(SPEC, rows, worlds)
+	return later_world_population.project_population(SPEC, rows, worlds)
 
 
 # ================

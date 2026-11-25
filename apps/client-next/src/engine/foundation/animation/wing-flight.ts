@@ -1,7 +1,7 @@
 /*
 ===========================================================================
 
-wing-flight.ts - the Experimental "Silent wing flight" row's sound rule
+wing-flight.ts - a wing dress's flight drops its fallback footsteps
 
 Port-only, not native (#3547). The wing dresses select the avatar_wing
 animation set, which authors only state 7 (run: man_avatar_fly.ban, or
@@ -37,16 +37,16 @@ export function wingFlightClip( clip: string ): boolean {
 flightSoundDefinition
 
 The definition the sound pass advances for a clip: unchanged unless the
-row is on and the clip is a wing motion, then the same definition without
-its sound cues. Cursor timing (durationMs and the rest) is kept.
+clip is a wing motion, then the same definition without its sound cues
+(port-only, not native, #3547; owner 2026-11-21: the default, no row).
+Cursor timing (durationMs and the rest) is kept.
 ================
 */
 export function flightSoundDefinition(
 	clip: string,
-	definition: AnimationMetadata | undefined,
-	silent: boolean
+	definition: AnimationMetadata | undefined
 ): AnimationMetadata | undefined {
-	if ( !silent || !definition || definition.soundEvents.length === 0 || !wingFlightClip( clip ) ) {
+	if ( !definition || definition.soundEvents.length === 0 || !wingFlightClip( clip ) ) {
 		return definition;
 	}
 	// A small copy per flying actor per frame; the sound pass keeps no
