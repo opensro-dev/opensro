@@ -180,9 +180,10 @@ covers every path a row's fields travel: the wire `nativeFields`, the
 `item.tooltip.fields` copy itemTooltipReference makes of it (read
 directly and through its aliases - `f`, `fields`, `targetFields`,
 `stoneFields`), and the direct `nativeFields` reads that bypass the
-tooltip (mall-use, cos-timer, the macro rows). The census itself runs
-as a test (nativefields_census_test.go) so a new client read of an
-unpublished field fails CI instead of a player's tooltip.
+tooltip (mall-use, cos-timer, the macro rows); the output is pasted
+in PR #4447. Making the compiler enforce this list - the client-owned
+typed contract (ITEM_WIRE_FIELDS) - is #4448; until then this list is
+maintained by hand against the readers named in each group.
 ================
 */
 var wireItemFieldNames = []string{
