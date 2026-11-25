@@ -67,7 +67,7 @@ func (rt *Runtime) useExpansion(use skillItemUse, character *enterworld.Characte
 	case 0:
 		return rt.useInventoryAddition(use, character, slots, result)
 	case 1:
-		return rt.admitWarehouseAddition(use, character, slots, result, warehouse)
+		return rt.admitWarehouseAddition(use, slots, warehouse)
 	}
 	return false
 }
@@ -123,23 +123,19 @@ type pendingWarehouseUse struct {
 ================
 admitWarehouseAddition
 
-The door's half of the warehouse addition: read the standing count
-to refuse a third use before anything is queued; spend nothing here.
-The growth and the spend both wait for the finish, so a growth the
-storage lock refuses (a sibling character spent the last use first)
-leaves the item in the bag.
+The door's half of the warehouse addition: queue the pending use and
+spend nothing here. It reads no storage. This runs inside the item
+use's character door, which holds the store lock, and the storage
+authority's read takes that same lock: a read here deadlocked the
+live shard (tick stall 2026-11-25 22:04Z). Never open a door inside
+a door. The account limit is checked once, by finishWarehouseAddition
+under the storage lock after the door, which answers a third use with
+the same failure; a growth it refuses (a sibling character spent the
+last use first) leaves the item in the bag.
 ================
 */
-func (rt *Runtime) admitWarehouseAddition(use skillItemUse, character *enterworld.Character, slots int64, result *OpResult, warehouse **pendingWarehouseUse) bool {
+func (rt *Runtime) admitWarehouseAddition(use skillItemUse, slots int64, warehouse **pendingWarehouseUse) bool {
 	if rt.storageAuthority == nil {
-		return false
-	}
-	storage, err := rt.storageAuthority.AccountStorage(character)
-	if err != nil {
-		return false
-	}
-	if storage.ExpansionUses >= warehouseExpansionMaxUses || storage.Capacity+slots > domain.StorageMaxCapacity {
-		*result = itemUseFailure(wire.ErrCodeInvalidRequest)
 		return false
 	}
 	*warehouse = &pendingWarehouseUse{slots: slots, ref: use.ref, request: use.request}
