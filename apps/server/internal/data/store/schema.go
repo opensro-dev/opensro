@@ -297,6 +297,7 @@ var storeSteps = map[int]storeStep{
 	// layout it ran at, and its high end follows the current layout
 	// (layouts 25 and up always end at the current one). The current
 	// schema (62) takes the wide low end.
+<<<<<<< HEAD
 	44: {true, "optional top-level ravenRefugeReadyAtMs recovery deadline", 12, 17},
 	45: {true, "no record change; layout 13 adds trade_history", 13, 17},
 	46: {true, "optional per-character Nasrun token balance and daily count", 13, 17},
@@ -311,6 +312,23 @@ var storeSteps = map[int]storeStep{
 	59: {true, "no record change; layout 16 adds beta_silk_progress (the hourly silk clock, #4429)", 16, 17},
 	60: {true, "no record change; layout 17 adds caravan_escort_days (the AI caravan daily escort cap, #3704 slice 5)", 5, 17},
 	62: {false, "optional per-item linkedStorage (Magic Cube elixir rows, #3906)", 5, 17},
+=======
+	44: {true, "optional top-level ravenRefugeReadyAtMs recovery deadline", 12, 16},
+	45: {true, "no record change; layout 13 adds trade_history", 13, 16},
+	46: {true, "optional per-character Nasrun token balance and daily count", 13, 16},
+	47: {true, "no record change; layout 14 adds the AI caravan tables", 14, 16},
+	48: {true, "optional per-character SRO Macro settings", 14, 16},
+	49: {true, "optional per-character titleId (later-native titles, #3502)", 14, 16},
+	50: {true, "optional per-item earnedBought (#4133); layout 15 adds the earned-silk wallet and silk-history split tables", 15, 16},
+	51: {true, "optional per-character plusFailOptOut (failed-reinforcement announcement opt-out, #3682)", 15, 16},
+	54: {false, "optional per-item rentExpiresUnix (native _RentItemInfo, #4240)", 15, 16},
+	55: {true, "optional per-character reverseUserPoint (reverse return scroll saved location, #3903)", 15, 16},
+	58: {false, "optional per-character inventoryAdditionUsed and account expansionUses (later capacity addition items, #4240); the warehouse count nests in the guild record", 15, 16},
+	59: {true, "no record change; layout 16 adds beta_silk_progress (the hourly silk clock, #4429)", 15, 16},
+	// Current schema: wide low end so role repair can run on a store at
+	// any older layout (upgrade_tables_test.go).
+	62: {false, "optional per-item linkedStorage (Magic Cube elixir rows, #3906)", 5, 16},
+>>>>>>> 378556ce (fix: schema 62 layout window and Magic Cube import test icons)
 }
 
 // SkillSeedFunc resolves the current racial base-skill set while preserving

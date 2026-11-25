@@ -121,9 +121,15 @@ class MagicCubeImportTest(unittest.TestCase):
 				records.append({"archive": "Media", "path": path, "source": "later", "sha256": "x"})
 			return records
 
+		# The fixture Media has no icon payloads (same as the Nasrun
+		# tests); resolve_cube_icon only needs the path to stand.
+		def keep_icon(icon, media_index):
+			return icon.replace("/", "\\")
+
 		with mock.patch.dict(os.environ, env), \
 				mock.patch.object(avatars, "open_archives", open_archives), \
 				mock.patch.object(jupiter, "require_v1696_pin", lambda root, names: None), \
+				mock.patch.object(cubes, "resolve_cube_icon", keep_icon), \
 				mock.patch.object(shared, "copy_asset_closure", copy_asset_closure):
 			return cubes.add_magic_cubes(native, output, later)
 
