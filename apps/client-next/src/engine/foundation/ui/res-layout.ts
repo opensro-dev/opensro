@@ -85,7 +85,9 @@ export function decodeResLayout( value: unknown ): ResLayout {
 	if ( !record( value ) || value.format !== "res-ui-layout" || value.version !== 1 ) {
 		throw Error( "Not a res_ui layout" );
 	}
-	const name = string( value.name ), rootId = number( value.root );
+	// The root names a control by its key, as parent and children do
+	// (scripts/res_ui_layout.py writes str(root)).
+	const name = string( value.name ), rootKey = string( value.root );
 	if ( !Array.isArray( value.controls ) || !value.controls.length ) {
 		throw Error( "Invalid res layout control list" );
 	}
@@ -117,7 +119,7 @@ export function decodeResLayout( value: unknown ): ResLayout {
 		controls[key] = control;
 		order.push( key );
 	}
-	const root = controls[String( rootId )];
+	const root = controls[rootKey];
 	if ( !root || root.parent !== null ) throw Error( "Invalid res layout root" );
 	for ( const control of Object.values( controls ) ) {
 		for ( const child of control.children ) {

@@ -10,6 +10,7 @@ modules the client ships, not a per-test bundle.
 ===========================================================================
 */
 import { CLIENT_PUBLIC_ROOT } from "../../../../scripts/lib/generatedRoot.mjs";
+import { EXPANDED_BUILD } from "../helpers/expanded-build.mjs";
 import "../helpers/native-source-loader.mjs";
 import { pathToFileURL as sourceFileUrl } from "node:url";
 import { test } from "node:test";
@@ -337,7 +338,7 @@ test("native reference names survive admission; malformed numeric fields and bou
 });
 // 175 retail English descriptions plus 71 from the English completion layer
 // (englishCompletions/textdataname.json).
-test("all 246 English published rich item descriptions preserve native color and emphasis without leaking markup", () => {
+test("every English published rich item description (246 native) keeps native color and emphasis without leaking markup", () => {
 	let count = 0;
 	for ( const [key, value] of Object.entries( strings ) ) {
 		if ( !key.includes( "ITEM" ) || !value.startsWith( "<sml2>" ) ) continue;
@@ -346,7 +347,10 @@ test("all 246 English published rich item descriptions preserve native color and
 		assert.ok( rows.length );
 		assert.ok( rows.every( row => !/<[^>]+>/.test( row.value ) ) );
 	}
-	assert.equal( count, 246 );
+	// Every build checks each description; only a native build holds the
+	// native count (an expanded build adds its own items: expanded-build.mjs).
+	assert.ok( count > 0 );
+	if ( !EXPANDED_BUILD ) assert.equal( count, 246 );
 	const rows = tooltipDescription(
 		'<sml2><strong><font color="255,236,219,156">Heading</font></strong><br>Body</sml2>'
 	);
