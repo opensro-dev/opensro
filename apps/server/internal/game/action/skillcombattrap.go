@@ -55,7 +55,7 @@ func (rt *Runtime) acceptCombatTrap(division string, c, snapshot *enterworld.Cha
 	var refusal uint16
 	var effects []wire.Frame
 	if !doors.update(c, "release-combat-trap", func() bool {
-		if !enterworld.CharacterAlive(c) || !enterworld.SkillLearned(c, skill.ID) {
+		if !enterworld.CharacterAlive(c) || !enterworld.SkillUsable(c, skill) {
 			return false
 		}
 		cost, code := rt.offensivePhaseCost(division, c, skill, now, pending)

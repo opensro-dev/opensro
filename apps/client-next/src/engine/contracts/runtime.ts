@@ -182,6 +182,12 @@ export interface FrameTelemetry {
 	readonly frameId?: number;
 	readonly stages?: Readonly<Record<string, number>>;
 	readonly gpu?: GpuTimingStats & { readonly enabled: boolean; };
+	/** Queue work per presented frame over the window (gpu-work counters, #4392). */
+	readonly work?: {
+		readonly submitsPerFrame: number;
+		readonly uploadsPerFrame: number;
+		readonly uploadKiBPerFrame: number;
+	};
 	/** Frames per second averaged over the sampling window. */
 	readonly fps: number;
 	readonly pingMs?: number | null;
@@ -266,6 +272,8 @@ export interface Renderer extends Disposable {
 	setFrameWork?( work: FrameWork ): void;
 	scenery(): import("./scenery").SceneryPresentation | null;
 	gpuTiming(): GpuTimingStats & { readonly enabled: boolean; };
+	/** The device owner's queue-work totals so far (gpu-work counters, #4392). */
+	gpuWork(): import("@/engine/foundation/rendering/gpu-work").GpuWorkTotals;
 	/** The current device's adapter facts for bug reports, null before one. */
 	adapterFacts(): import("@/engine/foundation/rendering/gpu-facts").GpuFacts | null;
 	videoOptions( value: import("@/engine/foundation/rendering/video-options").VideoOptions ): void;
@@ -497,6 +505,8 @@ export interface RuntimeControl extends Disposable {
 	audioSnapshot(): import("./audio").AudioResidencySnapshot;
 	/** Bounded copied diagnostics; collecting them never waits for GPU readback. */
 	gpuTiming(): GpuTimingStats & { readonly enabled: boolean; };
+	/** The queue-work totals so far (gpu-work counters, #4392). */
+	gpuWork(): import("@/engine/foundation/rendering/gpu-work").GpuWorkTotals;
 	retryWorld(): void;
 	session( command: SessionCommand ): void;
 	sessionState(): SessionState | null;

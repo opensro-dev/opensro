@@ -35,6 +35,18 @@ const (
 	GuildErrLevelUpFull        byte = 0x21
 	GuildErrLevelUpGoldDeficit byte = 0x31
 	GuildErrLevelUpGPDeficit   byte = 0x32
+	// The manual GP donation's refusals, as the reference server's donate
+	// validation answers them (the v1.150 client reads them as 0xB40F
+	// result 2 in CNetProcess_OnResponse0xB40F, category 0x10): amount 0 ->
+	// 0x02, not alive -> 0x07, not in a guild -> 0x0D, more than the
+	// character's SP -> 0x32. Its guild-level arm (above 5 -> 0x02) cannot
+	// fire: v1.150 guilds stop at level 5.
+	GuildErrDonateInvalidAmount byte = 0x02
+	// A donor who is not alive, checked after the amount and before the
+	// guild, as the reference server orders it.
+	GuildErrDonateNotAlive  byte = 0x07
+	GuildErrDonateNotMember byte = 0x0D
+	GuildErrDonateSPDeficit byte = 0x32
 )
 
 // The category is supplied by the client opcode handler, not on the wire.

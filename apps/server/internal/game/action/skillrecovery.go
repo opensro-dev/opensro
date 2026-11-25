@@ -105,7 +105,7 @@ func (rt *Runtime) acceptSupportSkillPhase(
 	partyOverTime := overTime && !skill.TargetRequired
 	supported := skill.Recovery.SelfFlatPinned || cure || targeted || partyHeal || lowestHeal || partyResu || partyOverTime
 	selfHealOnly := skill.Recovery.SelfFlatPinned && !cure && !targeted
-	casterReady := enterworld.SkillLearned(snapshot, skill.ID) &&
+	casterReady := enterworld.SkillUsable(snapshot, skill) &&
 		enterworld.CharacterAlive(snapshot)
 
 	if !supported || skill.ChainSub || cast.HasGroundTarget || !casterReady ||
@@ -175,7 +175,7 @@ func (rt *Runtime) acceptSupportSkillPhase(
 		var refusal uint16
 		if !doors.update(character, "prepare-self-recovery", func() bool {
 			if !enterworld.CharacterAlive(character) ||
-				!enterworld.SkillLearned(character, skill.ID) {
+				!enterworld.SkillUsable(character, skill) {
 				return false
 			}
 
@@ -250,7 +250,7 @@ func (rt *Runtime) acceptSupportSkillPhase(
 	selfThreat := makeSkillHealingThreat(division, character, character, skill)
 
 	if !doors.update(character, "skill-self-recovery", func() bool {
-		if !enterworld.CharacterAlive(character) || !enterworld.SkillLearned(character, skill.ID) {
+		if !enterworld.CharacterAlive(character) || !enterworld.SkillUsable(character, skill) {
 			return false
 		}
 

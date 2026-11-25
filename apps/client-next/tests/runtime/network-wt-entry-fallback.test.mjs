@@ -159,7 +159,7 @@ async function openWtSession( t ) {
 	const transport = transports[0];
 	transport.receive( welcome( false ) );
 	await flushMicrotasks();
-	network.enterWorld( "0", "Hero", "token" );
+	network.enterWorld( "0", "Hero", "token", "" );
 	return { network, transport, transports, sockets, failures };
 }
 
@@ -209,7 +209,7 @@ test("a socket entry torn down unanswered never indicts WebTransport", async t =
 	const socket = sockets[0];
 	socket.onopen();
 	socket.receive( welcome( false ) );
-	network.enterWorld( "0", "Hero", "token" );
+	network.enterWorld( "0", "Hero", "token", "" );
 	network.disconnect();
 	network.webTransport( true );
 	network.connect( "ws://localhost/transport/ws", "ticket" );

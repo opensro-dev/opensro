@@ -208,6 +208,8 @@ func (rt *Runtime) acceptSkillStagePhaseAt(divisionID string, character, snapsho
 
 	skillSource := rt.deps.SkillData()
 	// A transformed player's strike is the monster's skill, never learned.
+	// Operator rows (enterworld.SkillUsable) are not admitted here: the one
+	// operator row ships as a field, which never reaches the executor.
 	transformStrike := rootID == 0 && cast.ActionId != 0 && cast.ActionId == rt.transformAttackSkill(snapshot)
 	if skillSource == nil || (rootID == 0 && !transformStrike && !enterworld.SkillLearned(snapshot, cast.ActionId)) {
 		return OpResult{}, skillCastRefused

@@ -191,6 +191,11 @@ BootstrapRequest is the /mission/bootstrap request body.
 type BootstrapRequest struct {
 	DivisionID    string
 	CharacterName string
+	// SessionConstants is the session-constants digest (bootstrap.go
+	// sessionConstantsDigest) the requesting client already holds,
+	// stated on re-entry so the answer can omit the constant sections
+	// (#4421). Empty states nothing.
+	SessionConstants string
 	// hold times the build's parts when a re-entry runs it under a
 	// publication-gate hold (ReentryPackets); nil times nothing.
 	hold *simulation.HoldBreakdown
@@ -254,17 +259,25 @@ type BootstrapResult struct {
 	// the client, whose blob views name their fields.
 	cause string
 
-	DivisionID           string
-	Character            *Character
-	AcademyMember        bool
-	EventGuideStateMask  uint32
-	RefObjSnapshot       []RefObjRow
-	RefSkillSnapshot     []SpawnSkillRow
-	SpiritSkills         []uint32
-	SkillCooldowns       []EntrySkillCooldown
-	ItemCooldowns        []EntryItemCooldown
-	RefItemSnapshot      []RefItemRow
-	MagicOptionSnapshot  []MagicOptionRow
+	DivisionID          string
+	Character           *Character
+	AcademyMember       bool
+	EventGuideStateMask uint32
+	RefObjSnapshot      []RefObjRow
+	RefSkillSnapshot    []SpawnSkillRow
+	SpiritSkills        []uint32
+	SkillCooldowns      []EntrySkillCooldown
+	ItemCooldowns       []EntryItemCooldown
+	RefItemSnapshot     []RefItemRow
+	MagicOptionSnapshot []MagicOptionRow
+	// SessionConstants is the digest the bootstrap's constant sections
+	// travel under (#4421), named in every browser answer so the client
+	// can state it on re-entry. OmitSessionConstants is Build's verdict
+	// that the request already stated it: the browser views then omit
+	// RefObjSnapshot and MagicOptionSnapshot. The detached views keep
+	// the rows for fixtures.
+	SessionConstants     string
+	OmitSessionConstants bool
 	AvatarMagicOptions   []AvatarMagicOptionRow
 	SiegeItemForgeGroups []SiegeItemForgeGroupRow
 	SiegeFortressData    []SiegeFortressDataRow
@@ -369,11 +382,15 @@ type bootstrapSuccessView struct {
 	RefSkillSnapshot          []SpawnSkillRow        `json:"refSkillSnapshot"`
 	// SpiritSkills are the skills a worn, awake Devil's Spirit grants
 	// (port-only, SRO_NASRUN; wire.OpSpiritSkills keeps them current).
-	SpiritSkills            []uint32                 `json:"spiritSkills,omitempty"`
-	SkillCooldowns          []EntrySkillCooldown     `json:"skillCooldowns"`
-	ItemCooldowns           []EntryItemCooldown      `json:"itemCooldowns,omitempty"`
-	RefItemSnapshot         []RefItemRow             `json:"refItemSnapshot"`
-	MagicOptionSnapshot     []MagicOptionRow         `json:"magicOptionSnapshot,omitempty"`
+	SpiritSkills        []uint32             `json:"spiritSkills,omitempty"`
+	SkillCooldowns      []EntrySkillCooldown `json:"skillCooldowns"`
+	ItemCooldowns       []EntryItemCooldown  `json:"itemCooldowns,omitempty"`
+	RefItemSnapshot     []RefItemRow         `json:"refItemSnapshot"`
+	MagicOptionSnapshot []MagicOptionRow     `json:"magicOptionSnapshot,omitempty"`
+	// SessionConstants names the digest the constant sections
+	// (RefObjSnapshot, MagicOptionSnapshot, the commerce seed) travel
+	// under (#4421); a re-entry stating it omits them.
+	SessionConstants        string                   `json:"sessionConstants,omitempty"`
 	AvatarMagicOptions      []AvatarMagicOptionRow   `json:"avatarMagicOptions,omitempty"`
 	SiegeItemForgeGroups    []SiegeItemForgeGroupRow `json:"siegeItemForgeGroups"`
 	SiegeFortressData       []SiegeFortressDataRow   `json:"siegeFortressData"`
@@ -467,11 +484,15 @@ type bootstrapBlobSuccessView struct {
 	RefSkillSnapshot          []SpawnSkillRow       `json:"refSkillSnapshot"`
 	// SpiritSkills are the skills a worn, awake Devil's Spirit grants
 	// (port-only, SRO_NASRUN; wire.OpSpiritSkills keeps them current).
-	SpiritSkills            []uint32                 `json:"spiritSkills,omitempty"`
-	SkillCooldowns          []EntrySkillCooldown     `json:"skillCooldowns"`
-	ItemCooldowns           []EntryItemCooldown      `json:"itemCooldowns,omitempty"`
-	RefItemSnapshot         []RefItemRow             `json:"refItemSnapshot"`
-	MagicOptionSnapshot     []MagicOptionRow         `json:"magicOptionSnapshot,omitempty"`
+	SpiritSkills        []uint32             `json:"spiritSkills,omitempty"`
+	SkillCooldowns      []EntrySkillCooldown `json:"skillCooldowns"`
+	ItemCooldowns       []EntryItemCooldown  `json:"itemCooldowns,omitempty"`
+	RefItemSnapshot     []RefItemRow         `json:"refItemSnapshot"`
+	MagicOptionSnapshot []MagicOptionRow     `json:"magicOptionSnapshot,omitempty"`
+	// SessionConstants names the digest the constant sections
+	// (RefObjSnapshot, MagicOptionSnapshot, the commerce seed) travel
+	// under (#4421); a re-entry stating it omits them.
+	SessionConstants        string                   `json:"sessionConstants,omitempty"`
 	AvatarMagicOptions      []AvatarMagicOptionRow   `json:"avatarMagicOptions,omitempty"`
 	SiegeItemForgeGroups    []SiegeItemForgeGroupRow `json:"siegeItemForgeGroups"`
 	SiegeFortressData       []SiegeFortressDataRow   `json:"siegeFortressData"`
@@ -521,11 +542,15 @@ type bootstrapReferenceBlobSuccessView struct {
 	EventGuideStateMask       uint32                `json:"eventGuideStateMask"`
 	RefObjSnapshot            []RefObjRow           `json:"refObjSnapshot"`
 	// SpiritSkills: as bootstrapSuccessView's (#4384).
-	SpiritSkills            []uint32                 `json:"spiritSkills,omitempty"`
-	SkillCooldowns          []EntrySkillCooldown     `json:"skillCooldowns"`
-	ItemCooldowns           []EntryItemCooldown      `json:"itemCooldowns,omitempty"`
-	RefItemSnapshot         []RefItemRow             `json:"refItemSnapshot"`
-	MagicOptionSnapshot     []MagicOptionRow         `json:"magicOptionSnapshot,omitempty"`
+	SpiritSkills        []uint32             `json:"spiritSkills,omitempty"`
+	SkillCooldowns      []EntrySkillCooldown `json:"skillCooldowns"`
+	ItemCooldowns       []EntryItemCooldown  `json:"itemCooldowns,omitempty"`
+	RefItemSnapshot     []RefItemRow         `json:"refItemSnapshot"`
+	MagicOptionSnapshot []MagicOptionRow     `json:"magicOptionSnapshot,omitempty"`
+	// SessionConstants names the digest the constant sections
+	// (RefObjSnapshot, MagicOptionSnapshot, the commerce seed) travel
+	// under (#4421); a re-entry stating it omits them.
+	SessionConstants        string                   `json:"sessionConstants,omitempty"`
 	AvatarMagicOptions      []AvatarMagicOptionRow   `json:"avatarMagicOptions,omitempty"`
 	SiegeItemForgeGroups    []SiegeItemForgeGroupRow `json:"siegeItemForgeGroups"`
 	SiegeFortressData       []SiegeFortressDataRow   `json:"siegeFortressData"`
@@ -592,7 +617,7 @@ func (r *BootstrapResult) blobView() any {
 	if cooldowns == nil {
 		cooldowns = []EntrySkillCooldown{}
 	}
-	return bootstrapBlobSuccessView{
+	view := bootstrapBlobSuccessView{
 		DiagnosticSessionID:       r.DiagnosticSessionID,
 		InventorySlotCount:        inventory.BagEnd(r.Character),
 		EquipmentSlotCount:        inventory.EquipmentSlotEnd,
@@ -611,6 +636,7 @@ func (r *BootstrapResult) blobView() any {
 		ItemCooldowns:             r.ItemCooldowns,
 		RefItemSnapshot:           r.RefItemSnapshot,
 		MagicOptionSnapshot:       r.MagicOptionSnapshot,
+		SessionConstants:          r.SessionConstants,
 		AvatarMagicOptions:        r.AvatarMagicOptions,
 		SiegeItemForgeGroups:      r.SiegeItemForgeGroups,
 		SiegeFortressData:         r.SiegeFortressData,
@@ -640,6 +666,13 @@ func (r *BootstrapResult) blobView() any {
 		StorageGoldDepositLimit:   r.StorageGoldDepositLimit,
 		UiTuning:                  r.UiTuning,
 	}
+	// A re-entry that stated the constants digest keeps its tables:
+	// the two constant sections stay home (#4421).
+	if r.OmitSessionConstants {
+		view.RefObjSnapshot = nil
+		view.MagicOptionSnapshot = nil
+	}
+	return view
 }
 
 /*
@@ -660,7 +693,7 @@ func (r *BootstrapResult) referenceBlobView() any {
 	if cooldowns == nil {
 		cooldowns = []EntrySkillCooldown{}
 	}
-	return bootstrapReferenceBlobSuccessView{
+	view := bootstrapReferenceBlobSuccessView{
 		DiagnosticSessionID:       r.DiagnosticSessionID,
 		InventorySlotCount:        inventory.BagEnd(r.Character),
 		EquipmentSlotCount:        inventory.EquipmentSlotEnd,
@@ -678,6 +711,7 @@ func (r *BootstrapResult) referenceBlobView() any {
 		ItemCooldowns:             r.ItemCooldowns,
 		RefItemSnapshot:           r.RefItemSnapshot,
 		MagicOptionSnapshot:       r.MagicOptionSnapshot,
+		SessionConstants:          r.SessionConstants,
 		AvatarMagicOptions:        r.AvatarMagicOptions,
 		SiegeItemForgeGroups:      r.SiegeItemForgeGroups,
 		SiegeFortressData:         r.SiegeFortressData,
@@ -707,6 +741,13 @@ func (r *BootstrapResult) referenceBlobView() any {
 		StorageGoldDepositLimit:   r.StorageGoldDepositLimit,
 		UiTuning:                  r.UiTuning,
 	}
+	// A re-entry that stated the constants digest keeps its tables:
+	// the two constant sections stay home (#4421).
+	if r.OmitSessionConstants {
+		view.RefObjSnapshot = nil
+		view.MagicOptionSnapshot = nil
+	}
+	return view
 }
 
 /*
@@ -758,6 +799,7 @@ func (r *BootstrapResult) MarshalJSON() ([]byte, error) {
 		ItemCooldowns:             r.ItemCooldowns,
 		RefItemSnapshot:           r.RefItemSnapshot,
 		MagicOptionSnapshot:       r.MagicOptionSnapshot,
+		SessionConstants:          r.SessionConstants,
 		AvatarMagicOptions:        r.AvatarMagicOptions,
 		SiegeItemForgeGroups:      r.SiegeItemForgeGroups,
 		SiegeFortressData:         r.SiegeFortressData,

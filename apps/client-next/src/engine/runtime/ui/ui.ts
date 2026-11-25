@@ -5371,8 +5371,15 @@ export function createUi( ports: UiPorts ) {
 			if ( socialSubject.split( "\0", 1 )[0] && socialContents.split( "\0", 1 )[0] ) guildDialog = "";
 		} else if ( id === "guild-notice" ) {
 			sendGameplay( { kind: id, subject: socialSubject, contents: socialContents } );
-		} else if ( id === "guild-donate" ) sendGameplay( { kind: id, amount: Number( socialAmount ) } );
-		else if ( id === "guild-title" ) {
+		} else if ( id === "guild-donate" ) {
+			// CIFGuildPointUp_OnConfirm 5F49F0 sends the typed amount and closes
+			// the window (5E3730 with 0): one press is one donation, and the
+			// server's 0xB40F answer is the feedback. OK stays greyed for a
+			// blank or zero box (native would send 0, refused silently).
+			const amount = Number( socialAmount );
+			if ( Number.isInteger( amount ) && amount > 0 ) sendGameplay( { kind: id, amount } );
+			guildDialog = "";
+		} else if ( id === "guild-title" ) {
 			// 5E35E0: the nickname under the guild-name filter, then box 0x17's
 			// question; the input box closes unless the name is too long.
 			const rules = hud.data()?.guildNameRules;
@@ -6723,6 +6730,13 @@ export function createUi( ports: UiPorts ) {
 				guildDialog = "academy-notice";
 				socialSubject = "";
 				socialContents = "";
+			}
+		} else if ( id === "academy-invite" ) {
+			// 5C4FD0: the leader invites the selected player (702C90: a
+			// mounted pet stands for its rider, oneself sends nothing).
+			if ( academyIsLeader( view.gameplay?.academy ) ) {
+				const player = targetPlayer( view.gameplay?.target, view.entities ?? [], view.gameplay?.localGid );
+				if ( player ) sendGameplay( { kind: "academy-invite", gid: player.gid } );
 			}
 		} else if ( id === "academy-dismiss" ) {
 			// 5C51A0 -> 5C53C0 case 1: leader confirms dissolution before 0x77C5.
@@ -16771,8 +16785,10 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 									"academy-dismiss" :
 									"academy-notice",
 								copy = node.id === 48 ? hudCopy( "UIIT_STT_PARTY_DISSOLVE" ) : hudCopy( node.text ),
+								// 5C5EF0 enables Invite (20), Dismiss (48) and the
+								// notice button for the academy's leader only.
 								disabled = node.id !== 22 &&
-									((id !== "academy-notice" && id !== "academy-dismiss") ||
+									((id !== "academy-notice" && id !== "academy-dismiss" && id !== "academy-invite") ||
 										!academyIsLeader( camp ));
 							authoredButton( node, ox, oy, id, copy, disabled );
 							if ( copy ) {
@@ -26367,9 +26383,11 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 								my,
 								id,
 								hudCopy( node.text ),
+								// No SP comparison: native 5F4B00/5F49F0 have none, and an
+								// OK greyed by it gave no reason (#4413); the server's
+								// 0xB40F refusal names the SP shortage.
 								!cancel && (donate ?
-									!/^\d+$/.test( socialAmount ) || Number( socialAmount ) < 1 ||
-									Number( socialAmount ) > (game.progression?.skillPoints ?? 0) :
+									!/^\d+$/.test( socialAmount ) || Number( socialAmount ) < 1 :
 									notice ?
 									false :
 									!socialMember)

@@ -326,6 +326,7 @@ that reached the worker.
 		owners.renderer.phase = () => "running";
 		owners.renderer.error = () => null;
 		owners.renderer.gpuTiming = () => null;
+		owners.renderer.gpuWork = () => ({ submits: 0, uploadWrites: 0, uploadBytes: 0 });
 		owners.renderer.frame = () => undefined;
 		owners.renderer.audioListener = () => null;
 		owners.renderer.setDamageText = () => {};
@@ -508,6 +509,7 @@ test("a move command starts a mover prediction while the row is on, and only the
 	owners.renderer.phase = () => "running";
 	owners.renderer.error = () => null;
 	owners.renderer.gpuTiming = () => null;
+	owners.renderer.gpuWork = () => ({ submits: 0, uploadWrites: 0, uploadBytes: 0 });
 	owners.renderer.frame = () => undefined;
 	owners.renderer.audioListener = () => null;
 	owners.renderer.setDamageText = () => {};
@@ -764,7 +766,8 @@ test("terminal asset failures reach the session as asset incidents, once per epi
 			limits: { maxBufferSize: 0, maxStorageBufferBindingSize: 0, maxTextureDimension2D: 0 }
 		}),
 		characterStats: () => ({ actors: 0, draws: 0 }),
-		gpuTiming: () => undefined
+		gpuTiming: () => undefined,
+		gpuWork: () => ({ submits: 0, uploadWrites: 0, uploadBytes: 0 })
 	} );
 	Object.assign( owners.platform, {
 		presentUi() {},

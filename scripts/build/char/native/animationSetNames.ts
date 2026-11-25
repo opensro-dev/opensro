@@ -3,7 +3,7 @@
 /** Native address of a global std::string animation-set name object. */
 type AnimationSetKey = number;
 /** Minimal view of a native std::string: only its text is compared. */
-type StdString = { readonly text?: string };
+type StdString = { readonly text?: string; };
 
 /**
  * Native v1.150 global std::string objects initialized by
@@ -32,45 +32,60 @@ export const TWOHAND_STAFF_ANIMATION_SET_KEY: AnimationSetKey = 0x00cccdf4;
  */
 export const ONEHAND_STAFF_DUPLICATE_ANIMATION_SET_KEY: AnimationSetKey = 0x00ccce10;
 
-export const ANIMATION_SET_NAME_BY_KEY = new Map<AnimationSetKey, string>([
-  [DEFAULT_ANIMATION_SET_KEY, "default"],
-  [SWORD_ANIMATION_SET_KEY, "sword"],
-  [SPEAR_ANIMATION_SET_KEY, "spear"],
-  [BOW_ANIMATION_SET_KEY, "bow"],
-  [CART_ANIMATION_SET_KEY, "cart"],
-  [ONEHAND_STAFF_ANIMATION_SET_KEY, "onehand_staff"],
-  [ONEHAND_SWORD_ANIMATION_SET_KEY, "onehand_sword"],
-  [TWOHAND_SWORD_ANIMATION_SET_KEY, "twohand_sword"],
-  [DAGGER_ANIMATION_SET_KEY, "dagger"],
-  [DUAL_AXE_ANIMATION_SET_KEY, "dual_axe"],
-  [HARF_ANIMATION_SET_KEY, "harf"],
-  [TWOHAND_STAFF_ANIMATION_SET_KEY, "twohand_staff"],
-  [ONEHAND_STAFF_DUPLICATE_ANIMATION_SET_KEY, "onehand_staff"]
-]);
+export const ANIMATION_SET_NAME_BY_KEY = new Map<AnimationSetKey, string>( [
+	[ DEFAULT_ANIMATION_SET_KEY, "default" ],
+	[ SWORD_ANIMATION_SET_KEY, "sword" ],
+	[ SPEAR_ANIMATION_SET_KEY, "spear" ],
+	[ BOW_ANIMATION_SET_KEY, "bow" ],
+	[ CART_ANIMATION_SET_KEY, "cart" ],
+	[ ONEHAND_STAFF_ANIMATION_SET_KEY, "onehand_staff" ],
+	[ ONEHAND_SWORD_ANIMATION_SET_KEY, "onehand_sword" ],
+	[ TWOHAND_SWORD_ANIMATION_SET_KEY, "twohand_sword" ],
+	[ DAGGER_ANIMATION_SET_KEY, "dagger" ],
+	[ DUAL_AXE_ANIMATION_SET_KEY, "dual_axe" ],
+	[ HARF_ANIMATION_SET_KEY, "harf" ],
+	[ TWOHAND_STAFF_ANIMATION_SET_KEY, "twohand_staff" ],
+	[ ONEHAND_STAFF_DUPLICATE_ANIMATION_SET_KEY, "onehand_staff" ]
+] );
 
 // Two native pointer identities carry the same comparator text. Name -> key
 // stays on the first/canonical object while key -> name accepts either one.
 export const ANIMATION_SET_KEY_BY_NAME = new Map<string, AnimationSetKey>();
-for (const [key, name] of ANIMATION_SET_NAME_BY_KEY) {
-  if (!ANIMATION_SET_KEY_BY_NAME.has(name)) {
-    ANIMATION_SET_KEY_BY_NAME.set(name, key);
-  }
+for ( const [key, name] of ANIMATION_SET_NAME_BY_KEY ) {
+	if ( !ANIMATION_SET_KEY_BY_NAME.has( name ) ) {
+		ANIMATION_SET_KEY_BY_NAME.set( name, key );
+	}
 }
 
 /** Collapse native pointer/StdString representations to the map comparator text. */
 export function animationSetNameOf(
-  value: AnimationSetKey | StdString | string
+	value: AnimationSetKey | StdString | string
 ): string | null {
-  if (typeof value === "string") {
-    return value.toLowerCase();
-  }
-  if (typeof value === "number") {
-    return ANIMATION_SET_NAME_BY_KEY.get(value) ?? null;
-  }
-  return typeof value.text === "string" ? value.text.toLowerCase() : null;
+	if ( typeof value === "string" ) {
+		return value.toLowerCase();
+	}
+	if ( typeof value === "number" ) {
+		return ANIMATION_SET_NAME_BY_KEY.get( value ) ?? null;
+	}
+	return typeof value.text === "string" ? value.text.toLowerCase() : null;
 }
 
 /** Resolve authored BSR/skilleffect group text to its v1.150 global string key. */
-export function animationSetKeyForName(name: string): AnimationSetKey | null {
-  return ANIMATION_SET_KEY_BY_NAME.get(name.toLowerCase()) ?? null;
+export function animationSetKeyForName( name: string ): AnimationSetKey | null {
+	const lower = name.toLowerCase();
+	return ANIMATION_SET_KEY_BY_NAME.get( lower ) ?? LATER_ANIMATION_SET_KEY_BY_NAME.get( lower ) ?? null;
 }
+
+/**
+ * Port-only, not native (SRO_NASRUN, #4407): the later clients' Devil's
+ * Spirit transformation sets. v1.150 has no such std::string objects, so
+ * these keys continue the native 28-byte stride after the last native
+ * object (twohand_staff duplicate, index 12): the client decodes a key by
+ * its index (skill-motion.ts skillMotionRole). Only the Nasrun skill rows,
+ * which SRO_NASRUN stages, name these groups; a native build never meets one.
+ */
+export const LATER_ANIMATION_SET_KEY_BY_NAME = new Map<string, AnimationSetKey>( [
+	[ "avatar_nasrun1", DEFAULT_ANIMATION_SET_KEY + 13 * 28 ],
+	[ "avatar_nasrun2", DEFAULT_ANIMATION_SET_KEY + 14 * 28 ],
+	[ "avatar_nasrun3", DEFAULT_ANIMATION_SET_KEY + 15 * 28 ]
+] );

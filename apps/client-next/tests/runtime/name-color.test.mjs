@@ -213,7 +213,7 @@ test("world timer preserves COS spawn color until the native fortress sweep", as
 			return b?.events ?? [];
 		};
 	core.bootstrap( {
-		protocolVersion: 2,
+		protocolVersion: 3,
 		nativeResult: 1,
 		refObjSnapshot: [ { refObjId: 10, kind: "cos", tidWord: 0x21c6 } ],
 		localPlayerEntry: {
@@ -256,7 +256,7 @@ test("party dissolution temporarily overrides even GM gold, then the player time
 		},
 		name = "[GM]Local";
 	core.bootstrap( {
-		protocolVersion: 2,
+		protocolVersion: 3,
 		nativeResult: 1,
 		character: { name },
 		refObjSnapshot: [],
@@ -297,7 +297,7 @@ test("guard decoder consumes guild identity after the inherited NPC prefix", () 
 test("PvP setter recolors on repeated values; hold-only packet retains the color latch", () => {
 	const owner = createEntities( undefined, undefined, () => context );
 	owner.bootstrap( {
-		protocolVersion: 2,
+		protocolVersion: 3,
 		nativeResult: 1,
 		refObjSnapshot: [ { refObjId: 10, kind: "npc" } ],
 		localPlayerEntry: {}

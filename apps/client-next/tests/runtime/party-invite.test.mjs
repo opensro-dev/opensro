@@ -58,7 +58,7 @@ test("the proposer's line names the invitee on the party channel", () => {
 test("the world core sends no invitation for a target that is not a player", () => {
 	const sent = [], core = createWorldCore( frame => sent.push( frame ) );
 	core.bootstrap( {
-		protocolVersion: 2,
+		protocolVersion: 3,
 		nativeResult: 1,
 		refObjSnapshot: [],
 		refItemSnapshot: [],

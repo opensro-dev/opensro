@@ -41,7 +41,7 @@ acceptInstantSelfEffect
 func (rt *Runtime) acceptInstantSelfEffect(division string, character, snapshot *enterworld.Character, cast wire.SkillAction, skill enterworld.SkillRow) OpResult {
 	instantShape := instantActivitySkill(skill) && !skill.ChainSub
 	selfOnly := !cast.HasTarget && !cast.HasGroundTarget
-	casterReady := enterworld.CharacterAlive(snapshot) && enterworld.SkillLearned(snapshot, skill.ID)
+	casterReady := enterworld.CharacterAlive(snapshot) && enterworld.SkillUsable(snapshot, skill)
 	if !instantShape || !selfOnly || !casterReady {
 		return OpResult{DiagnosticRefusal: "instant-effect-admission-refused"}
 	}
@@ -78,7 +78,7 @@ func (rt *Runtime) acceptInstantSelfEffect(division string, character, snapshot 
 		label = "skill-weapon-imbue"
 	}
 	if !rt.deps.Update(character, label, func() bool {
-		if !enterworld.CharacterAlive(character) || !enterworld.SkillLearned(character, skill.ID) {
+		if !enterworld.CharacterAlive(character) || !enterworld.SkillUsable(character, skill) {
 			return false
 		}
 		cost, code := rt.instantSelfEffectCost(division, character, skill, now)

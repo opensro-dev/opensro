@@ -26,6 +26,7 @@ const {
 const {
 	emptyUniqueNotify,
 	uniqueNotifyBook,
+	uniqueNotifySavedBook,
 	uniqueNotifySettings,
 	uniqueStatusAgo,
 	uniqueStatusAlertText,
@@ -268,6 +269,42 @@ test("a stored notify list reads back sanitized", () => {
 		}
 	);
 	assert.deepEqual( uniqueNotifyBook( [] ), {} );
+});
+
+test("two tabs saving notify lists keep each other's characters", () => {
+	// One store both writers share (the game and the website write the
+	// same record, #4433). A save re-reads the store and merges its
+	// character in, as saveUniqueNotify and the site both do.
+	let stored = "{}";
+	const save = ( character, value ) => {
+		stored = JSON.stringify( uniqueNotifySavedBook( JSON.parse( stored ), character, value ) );
+	};
+	// The game tab loaded an empty book; the website saves Bo first.
+	save( "Bo", { refs: [ 7 ], deathsToo: true, browser: true } );
+	// The game now saves Ann from its stale load: Bo's entry survives.
+	save( "Ann", { refs: [ TIGER_GIRL ], deathsToo: false, browser: false } );
+	// The website re-saving Bo keeps Ann, and its newer list lands.
+	save( "Bo", { refs: [ 7, 9 ], deathsToo: true, browser: true } );
+	// The book the game re-reads (a storage event, a save) shows both.
+	assert.deepEqual( uniqueNotifyBook( JSON.parse( stored ) ), {
+		Ann: { refs: [ TIGER_GIRL ], deathsToo: false, browser: false },
+		Bo: { refs: [ 7, 9 ], deathsToo: true, browser: true }
+	} );
+});
+
+test("a save against a corrupt or nameless store keeps what is readable", () => {
+	assert.deepEqual(
+		uniqueNotifySavedBook( "junk", "Ann", { refs: [ 1 ], deathsToo: false, browser: false } ),
+		{ Ann: { refs: [ 1 ], deathsToo: false, browser: false } }
+	);
+	assert.deepEqual(
+		uniqueNotifySavedBook( { Bo: { refs: [ 7 ], deathsToo: true, browser: true } }, "", {
+			refs: [ 1 ],
+			deathsToo: false,
+			browser: false
+		} ),
+		{ Bo: { refs: [ 7 ], deathsToo: true, browser: true } }
+	);
 });
 
 test("the window edits a draft and saves it once", () => {

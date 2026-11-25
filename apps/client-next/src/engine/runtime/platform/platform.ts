@@ -44,7 +44,7 @@ import {
 import { gameOptions, initialGameOptions, type GameOptions } from "@/engine/foundation/gameplay/game-options";
 import {
 	uniqueNotifyBook,
-	uniqueNotifySettings,
+	uniqueNotifySavedBook,
 	type UniqueNotifySettings
 } from "@/engine/foundation/gameplay/unique-status";
 import { windowPositions, type WindowPositions } from "@/engine/foundation/ui/window-positions";
@@ -186,6 +186,31 @@ export function createPlatform(
 	} catch ( error ) {
 		status.value = "Unique notify list could not be restored: " + String( error );
 	}
+	/*
+	================
+	storedUniqueNotifyBook
+
+	The book the store holds now (#4433): another tab (the website's
+	/uniques page writes the same record) may have saved since this
+	tab loaded, so saves and cross-tab edits re-read instead of
+	trusting the copy above. A corrupt record reads as the book we
+	already hold, so a bad write never shrinks it here.
+	================
+	*/
+	function storedUniqueNotifyBook(): Readonly<Record<string, UniqueNotifySettings>> {
+		try {
+			const stored = localStorage.getItem( uniqueNotifyKey );
+			return stored === null ? {} : uniqueNotifyBook( JSON.parse( stored ) );
+		} catch {
+			return uniqueNotify;
+		}
+	}
+	// A save in another tab reaches this one without a reload (#4433);
+	// our own writes never fire this event in the tab that made them.
+	addEventListener( "storage", ( event: StorageEvent ) => {
+		if ( event.key !== null && event.key !== uniqueNotifyKey ) return;
+		uniqueNotify = storedUniqueNotifyBook();
+	}, { signal: lifetime.signal } );
 	const preferenceKey = "sro:v1150:game-options:1";
 	let preferences = initialGameOptions();
 	try {
@@ -760,7 +785,10 @@ export function createPlatform(
 		*/
 		saveUniqueNotify( character: string, value: UniqueNotifySettings ) {
 			if ( !character ) return;
-			uniqueNotify = { ...uniqueNotify, [character]: uniqueNotifySettings( value ) };
+			// Re-read before writing (#4433): the website's /uniques
+			// page writes the same record, and writing this tab's
+			// stale in-memory book would silently erase its saves.
+			uniqueNotify = uniqueNotifySavedBook( storedUniqueNotifyBook(), character, value );
 			try {
 				localStorage.setItem( uniqueNotifyKey, JSON.stringify( uniqueNotify ) );
 			} catch ( error ) {

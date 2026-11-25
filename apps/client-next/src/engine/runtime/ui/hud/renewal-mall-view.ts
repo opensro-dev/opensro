@@ -46,7 +46,8 @@ import {
 	renewalSubTabRect,
 	renewalSubTabWindow,
 	type RenewalMallControl,
-	type RenewalMallData
+	type RenewalMallData,
+	type RenewalMallSection
 } from "@/engine/foundation/ui/renewal-mall";
 
 type Color = readonly [number, number, number, number];
@@ -163,6 +164,23 @@ const MUTED: Color = [ 0.62, 0.6, 0.55, 1 ];
 // The window title the outer frame carries: the classic window's own
 // (ginterface GDR_ITEM_MALL's Text, "Item Mall").
 const TITLE_KEY = "UIIT_STT_SILKMALL";
+// The authored wallet rows of ifnewitemmallmyinfo: caption, value and the
+// unit mark after the value.
+const WALLET_SILK = {
+	caption: "GDR_ITEM_MALL_MYINFO_STA_SILK_STR",
+	value: "GDR_ITEM_MALL_MYINFO_SILK",
+	mark: "GDR_ITEM_MALL_MYINFO_STA_SILK"
+} as const;
+const WALLET_POINT = {
+	caption: "GDR_ITEM_MALL_MYINFO_STA_POINT_STR",
+	value: "GDR_ITEM_MALL_MYINFO_POINT",
+	mark: "GDR_ITEM_MALL_MYINFO_STA_POINT_P"
+} as const;
+const WALLET_GIFT_SILK = {
+	caption: "GDR_ITEM_MALL_MYINFO_STA_GIFT_SILK_STR",
+	value: "GDR_ITEM_MALL_MYINFO_GIFT_SILK",
+	mark: "GDR_ITEM_MALL_MYINFO_STA_GIFT_SILK"
+} as const;
 const SEARCH_MAX = 32;
 
 /*
@@ -481,55 +499,46 @@ export function renewalMallView( input: RenewalMallInput ): RenewalMallOp[] {
 	if ( input.character.level !== undefined ) {
 		label( "Lv. " + input.character.level, infoRect( "GDR_ITEM_MALL_MYINFO_LEVEL" ), WHITE, 2 );
 	}
-	for (
-		const [caption, value, mark, amount] of [
-			[
-				"GDR_ITEM_MALL_MYINFO_STA_SILK_STR",
-				"GDR_ITEM_MALL_MYINFO_SILK",
-				"GDR_ITEM_MALL_MYINFO_STA_SILK",
-				input.balance?.silk
-			],
-			[
-				"GDR_ITEM_MALL_MYINFO_STA_GIFT_SILK_STR",
-				"GDR_ITEM_MALL_MYINFO_GIFT_SILK",
-				"GDR_ITEM_MALL_MYINFO_STA_GIFT_SILK",
-				input.balance?.giftSilk
-			],
-			[
-				"GDR_ITEM_MALL_MYINFO_STA_POINT_STR",
-				"GDR_ITEM_MALL_MYINFO_POINT",
-				"GDR_ITEM_MALL_MYINFO_STA_POINT_P",
-				input.balance?.points
-			]
-		] as const
-	) {
-		label( copy( infoControl( caption ).text ), infoRect( caption ), WHITE );
-		label( String( amount ?? 0 ), infoRect( value ), GOLD, 2 );
-		const markControl = infoControl( mark );
-		if ( markControl.texture ) authored( markControl, ix, iy );
-		else label( copy( markControl.text ), infoRect( mark ), WHITE );
-	}
-	// Port-only (#4133): a fourth row under Point shows the earned Silk
-	// balance next to the granted one above. No native control or string
-	// names it, so the caption is the port's own and the row steps by the
-	// authored pitch.
-	{
-		const giftRect = infoRect( "GDR_ITEM_MALL_MYINFO_GIFT_SILK" );
-		const pointRect = infoRect( "GDR_ITEM_MALL_MYINFO_POINT" );
-		const pointCaption = infoRect( "GDR_ITEM_MALL_MYINFO_STA_POINT_STR" );
-		const pitch = pointRect[1] - giftRect[1];
-		label(
-			"Earned silk",
-			[ pointCaption[0], pointCaption[1] + pitch, pointCaption[2], pointCaption[3] ],
-			WHITE
-		);
-		label(
-			String( input.balance?.earnedSilk ?? 0 ),
-			[ pointRect[0], pointRect[1] + pitch, pointRect[2], pointRect[3] ],
-			GOLD,
-			2
-		);
-	}
+	// The wallet rows in their authored order (Silk 29, Point 50, Gift Silk
+	// 69 in ifnewitemmallmyinfo.txt), with the port's earned row (#4133)
+	// under Silk: it reuses the Silk row's controls and coin mark, and only
+	// its caption is the port's own, as no native string names earned silk.
+	// The authored rows fill the box (its background ends at 88, the
+	// buttons start at 92), so the four rows share the space from the Silk
+	// row to the background's bottom, at no more than the authored pitch.
+	// Stepping one authored pitch past Point put the earned row onto the
+	// Silk row, because Gift Silk sits below Point (#4133 follow-up).
+	const walletRows = [
+		{
+			caption: copy( infoControl( "GDR_ITEM_MALL_MYINFO_STA_SILK_STR" ).text ),
+			names: WALLET_SILK,
+			amount: input.balance?.silk
+		},
+		{ caption: "Earned silk", names: WALLET_SILK, amount: input.balance?.earnedSilk },
+		...[ WALLET_POINT, WALLET_GIFT_SILK ]
+			.sort( ( a, b ) => infoControl( a.value ).rect[1] - infoControl( b.value ).rect[1] )
+			.map( names => ({
+				caption: copy( infoControl( names.caption ).text ),
+				names,
+				amount: names === WALLET_POINT ? input.balance?.points : input.balance?.giftSilk
+			}) )
+	];
+	const walletStep = renewalWalletStep( info, walletRows.length );
+	const walletTop = infoControl( WALLET_SILK.value ).rect[1];
+	walletRows.forEach( ( row, index ) => {
+		// The row moves as a whole: caption, value and mark keep their
+		// authored offsets from the row's value.
+		const dy = walletTop + index * walletStep - infoControl( row.names.value ).rect[1];
+		const shifted = ( name: string ): UiRect => {
+			const r = infoRect( name );
+			return [ r[0], r[1] + dy, r[2], r[3] ];
+		};
+		label( row.caption, shifted( row.names.caption ), WHITE );
+		label( String( row.amount ?? 0 ), shifted( row.names.value ), GOLD, 2 );
+		const markControl = infoControl( row.names.mark );
+		if ( markControl.texture ) authored( markControl, ix, iy + dy );
+		else label( copy( markControl.text ), shifted( row.names.mark ), WHITE );
+	} );
 	// Buy silk and Coupon open retail web pages; the port has none to
 	// link to, so both stay disabled as the classic window's do.
 	for ( const name of [ "GDR_ITEM_MALL_MYINFO_BUY_SILK_BTN", "GDR_ITEM_MALL_MYINFO_COUPON_EXCHANGE_BTN" ] ) {
@@ -568,6 +577,28 @@ export function renewalMallView( input: RenewalMallInput ): RenewalMallOp[] {
 		}
 	}
 	return ops;
+}
+
+/*
+================
+renewalWalletStep
+
+The wallet's row pitch for rows rows from the Silk row down: the authored
+pitch (the smallest gap between the authored rows), or less when that
+many rows would run past the box's background.
+================
+*/
+export function renewalWalletStep( info: RenewalMallSection, rows: number ): number {
+	const tops = [ WALLET_SILK, WALLET_POINT, WALLET_GIFT_SILK ]
+		.map( names => renewalMallControl( info, names.value ).rect[1] )
+		.sort( ( a, b ) => a - b );
+	let authored = Infinity;
+	for ( let i = 1; i < tops.length; i++ ) authored = Math.min( authored, tops[i]! - tops[i - 1]! );
+	if ( rows < 2 ) return authored;
+	const silk = renewalMallControl( info, WALLET_SILK.value ).rect;
+	const bg = renewalMallControl( info, "GDR_ITEM_MALL_MYINFO_BG" ).rect;
+	const room = bg[1] + bg[3] - silk[3] - silk[1];
+	return Math.min( authored, Math.floor( room / (rows - 1) ) );
 }
 
 /*

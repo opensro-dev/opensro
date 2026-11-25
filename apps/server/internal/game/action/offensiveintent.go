@@ -23,10 +23,13 @@ weapon and approach admission. Their release producers remain separate.
 ================
 */
 func (rt *Runtime) resolveOffensiveSkill(c *enterworld.Character, id uint32) (enterworld.SkillRow, combat.Loadout, string) {
-	if c == nil || !enterworld.CharacterAlive(c) || !enterworld.SkillLearned(c, id) || rt.deps.SkillData() == nil {
+	if c == nil || !enterworld.CharacterAlive(c) || rt.deps.SkillData() == nil {
 		return enterworld.SkillRow{}, combat.Loadout{}, "offensive-skill-unavailable"
 	}
 	skill, known := rt.deps.SkillData().SkillByID(id)
+	if !enterworld.SkillLearned(c, id) && (!known || !enterworld.SkillUsable(c, skill)) {
+		return enterworld.SkillRow{}, combat.Loadout{}, "offensive-skill-unavailable"
+	}
 	sequence, immediate := enterworld.OffensiveSequence(rt.deps.SkillData(), id)
 	if known && !offensiveShapeAdmitted(skill, immediate) && !skill.QueuedActivity() {
 		// A passive (activity 0) or other non-queued row with no owner of

@@ -84,7 +84,7 @@ player-targeted command walks first (the native admission never refuses for rang
 */
 func (rt *Runtime) acceptDuplicate(division string, c, snapshot *enterworld.Character, cast wire.SkillAction, skill enterworld.SkillRow, now int64) OpResult {
 	if !skill.Duplicate.Pinned || !cast.HasTarget || cast.HasGroundTarget || cast.TargetGid == 0 ||
-		!enterworld.CharacterAlive(snapshot) || !enterworld.SkillLearned(snapshot, skill.ID) {
+		!enterworld.CharacterAlive(snapshot) || !enterworld.SkillUsable(snapshot, skill) {
 		return OpResult{DiagnosticRefusal: "duplicate-admission-refused"}
 	}
 	target := rt.findCharacterByGid(division, cast.TargetGid)
@@ -120,7 +120,7 @@ func (rt *Runtime) acceptDuplicate(division string, c, snapshot *enterworld.Char
 	var refusal uint16
 	var installed []wire.Frame
 	if !rt.deps.Update(c, "duplicate", func() bool {
-		if !enterworld.CharacterAlive(c) || !enterworld.SkillLearned(c, skill.ID) {
+		if !enterworld.CharacterAlive(c) || !enterworld.SkillUsable(c, skill) {
 			return false
 		}
 		cost, code := rt.offensivePhaseCost(division, c, skill, now, nil)

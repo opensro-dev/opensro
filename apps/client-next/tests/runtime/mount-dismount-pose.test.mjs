@@ -121,7 +121,7 @@ presentation), so a ride that ended at END leaves exactly this state.
 function riddenCore() {
 	const core = createWorldCore( () => {} );
 	core.bootstrap( {
-		protocolVersion: 2,
+		protocolVersion: 3,
 		simulationProtocolVersion: 1,
 		nativeResult: 1,
 		refObjSnapshot: [ { refObjId: 2183, kind: "cos", tidWord: 0x11c6 } ],

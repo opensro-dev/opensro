@@ -287,7 +287,11 @@ type OwnMarketResponse struct {
 	WarehouseGold int64                 `json:"warehouseGold"`
 	Characters    []MarketCharacter     `json:"characters"`
 	Silk          uint32                `json:"silk"`
-	Rules         MarketRulesView       `json:"rules"`
+	// EarnedSilk is the earned balance a Silk purchase draws first
+	// (store debitSilkTx, #4133); Silk alone under-reports what the
+	// account can spend.
+	EarnedSilk uint32          `json:"earnedSilk"`
+	Rules      MarketRulesView `json:"rules"`
 	// OffersIn are the open offers on the account's listings, OffersOut
 	// the account's own.
 	OffersIn  []MarketOfferView `json:"offersIn"`

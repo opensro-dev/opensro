@@ -21,6 +21,10 @@ import (
 
 const harmonyPrefix = "SKILL_CH_WATER_HARMONY_"
 
+// operatorHarmony is the GM's Harmony (the client's /GMSKILL cast), the
+// one other buff field the shipped table holds (operatorskill.go).
+const operatorHarmony = "SKILL_OP_HARMONY_A_01"
+
 /*
 ================
 TestShippedHarmonyTherapyField
@@ -34,13 +38,16 @@ func TestShippedHarmonyTherapyField(t *testing.T) {
 	harmony := 0
 	for _, row := range source.rows.values() {
 		effect := row.TimedEffect
-		if !strings.HasPrefix(row.Codename, harmonyPrefix) {
+		operator := row.Codename == operatorHarmony
+		if !strings.HasPrefix(row.Codename, harmonyPrefix) && !operator {
 			if effect.Field.Present {
 				t.Errorf("%s turned into a buff field: %+v", row.Codename, effect.Field)
 			}
 			continue
 		}
-		harmony++
+		if !operator {
+			harmony++
+		}
 		want := SkillRecipientArea{Present: true, Radius: 60, Select: SelectCaster | SelectCharacter | SelectParty}
 		if !effect.Pinned || effect.Field != want || effect.Area.Present || effect.Targeted {
 			t.Errorf("%s pinned %v field %+v area %+v targeted %v", row.Codename, effect.Pinned, effect.Field, effect.Area, effect.Targeted)

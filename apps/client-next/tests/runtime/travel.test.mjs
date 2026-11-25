@@ -173,7 +173,7 @@ test("gate travel notes the level for its refusal without changing the native re
 	core.dispose();
 });
 const bootstrap = {
-	protocolVersion: 2,
+	protocolVersion: 3,
 	nativeResult: 1,
 	refObjSnapshot: [],
 	localPlayerEntry: { modelRef: 1933, startProfile: { regionId: 0x694f, x: 10, y: 20, z: 30, angle: 0 } }

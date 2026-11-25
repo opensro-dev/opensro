@@ -51,7 +51,7 @@ func (rt *Runtime) acceptUntargetedStatusCast(division string, c, snapshot *ente
 	var refusal uint16
 	roster := rt.monsterRewardRoster(division, c, now)
 	if !doors.updateMany(roster.characters, "release-status-area", func() bool {
-		if !enterworld.CharacterAlive(c) || !enterworld.SkillLearned(c, skill.ID) {
+		if !enterworld.CharacterAlive(c) || !enterworld.SkillUsable(c, skill) {
 			return false
 		}
 		cost, code := rt.offensivePhaseCost(division, c, skill, now, pending)

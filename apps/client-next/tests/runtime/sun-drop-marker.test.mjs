@@ -210,7 +210,7 @@ function dropRow( gid, ownerJid ) {
 test("the simulation stamps only the player's own Sun drops, and restamps when the row flips", () => {
 	const entities = createEntities();
 	entities.bootstrap( {
-		protocolVersion: 2,
+		protocolVersion: 3,
 		nativeResult: 1,
 		refObjSnapshot: [],
 		refItemSnapshot: [ {
