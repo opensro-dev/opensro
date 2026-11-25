@@ -289,7 +289,7 @@ func TestClientIncidentBeforeLoginKeepsTheReleaseProtocol(t *testing.T) {
 	request := httptest.NewRequest(http.MethodPost, clientIncidentPath,
 		strings.NewReader(`{"kind":"runtime","message":"x","phase":"title"}`))
 	request.Header.Set("Content-Type", "application/json")
-	request.Header.Set(releaseprotocol.Header, fmt.Sprint(releaseprotocol.Current-1))
+	request.Header.Set(releaseprotocol.Header, fmt.Sprint(releaseprotocol.Oldest-1))
 	response := httptest.NewRecorder()
 	fixture.handler.ServeHTTP(response, request)
 	if response.Code != http.StatusUpgradeRequired {
