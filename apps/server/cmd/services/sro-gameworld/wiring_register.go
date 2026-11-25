@@ -35,6 +35,7 @@ import (
 	"opensro.online/server/internal/game/social/shadowmute"
 	"opensro.online/server/internal/game/tunables"
 	"opensro.online/server/internal/game/world/simulation"
+	"opensro.online/server/internal/game/world/styria"
 	"opensro.online/server/internal/transport"
 )
 
@@ -177,6 +178,18 @@ func (game *gameplayPlane) register(hub *transport.Hub, loadQuests questDefiniti
 	log.Infof("flag war: daily start %02d:%02d UTC, minimum %d players (%s, %s)",
 		flagWar.StartMinuteOfDay/60, flagWar.StartMinuteOfDay%60, flagWar.MinPlayers,
 		action.EnvFlagWarStartUTC, action.EnvFlagWarMinPlayers)
+	// Styria Clash (port-only, not native, #3648): the daily start and
+	// the smallest side, read whenever the engine is configured.
+	styriaSettings, err := action.StyriaSettingsFromEnv()
+	if err != nil {
+		return err
+	}
+	game.items.Styria = styriaSettings
+	if styria.Enabled() {
+		log.Infof("styria clash: daily start %02d:%02d UTC, minimum %d per side (%s, %s)",
+			styriaSettings.StartMinuteOfDay/60, styriaSettings.StartMinuteOfDay%60, styriaSettings.MinPerSide,
+			action.EnvStyriaStartUTC, action.EnvStyriaMinPerSide)
+	}
 	// A team death revives in place natively; "off" is the port-only town rule.
 	teamDeathRevive, err := action.TeamDeathReviveFromEnv()
 	if err != nil {

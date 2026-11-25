@@ -4,17 +4,40 @@ Port-only, not native. The default stays v1.150, and the switch below is off by 
 later client's job arena ground (the `RN_ARENA_JOB_WAR` regions) on top of the native tables. Native rows, IDs and
 names never change.
 
-This is the first slice of #3272: the map alone. The match rules (registration, the Hunter and Thief sides, the
-match instance, treasure, scoring and rewards) are the Battle Arena engine, epic #3648, which will land behind the
-same switch. Until then nothing registers the arena's world or links a gate to it.
+This is the first slice of #3272: the map alone. The match rules are the Battle Arena engine, epic #3648, behind
+the same switch; its first server slice (registration, the Hunter and Thief sides, the match instance and its
+lifecycle) has landed - see "The engine" below. Treasure, scoring and rewards, and the client screens, are the
+epic's later slices.
 
 ## Switches
 
 | Switch | Where | Effect |
 | --- | --- | --- |
-| `SRO_STYRIA_CLASH` | Build (server from #3648) | The arena's four regions: terrain, navmesh, minimap tiles and region codes |
+| `SRO_STYRIA_CLASH` | Build and server | The arena's four regions: terrain, navmesh, minimap tiles and region codes; on the server, the arena world, its manager and the match engine |
+| `SRO_STYRIA_CLASH_START_UTC` | Server | The daily match start (HH:MM UTC, default 20:00) |
+| `SRO_STYRIA_CLASH_MIN_PER_SIDE` | Server | The smallest side that starts a match (default 1) |
 
 The build reads the later client from `SRO_V1696_ROOT` (checked against `scripts/v1696_archive_pins.json`).
+
+## The engine (first slice of #3648)
+
+With the switch on, the server registers world 107 (`INS_ARENA_JOB_WAR`) and the arena manager
+(`NPC_BATTLE_ARENA_MANAGER`, service 0x21) stands in the six towns the later client's npcpos authors. Talking to
+the manager offers one row - Apply, or Cancel application while an application is live. Applications open in a
+ten-minute participation window before the daily start (the two-window shape of the later server's
+`SCHEDULE_DEF_BATTLE_ARENA_JOB_PARTICIPATION` / `SCHEDULE_DEF_BATTLE_ARENA_JOB`; the clock itself is the port's
+daily UTC start). The manager's own conditions apply: a job suit worn (a thief suit fights for the Thieves, a
+trader or hunter suit for the Hunters), no party before entry, one live application per character. At the start,
+each division fields both sides equally from its queue, opens the arena's one layer and moves the entrants to
+their authored gates (`GATE_HUNTER_SPAWN` in region 32242, `GATE_THIEF_SPAWN` in 31985). The match ends on its
+clock; everyone returns to where they entered from, and death or leaving ends a seat at once. With the switch
+off, none of this exists and the roster is the shipped one.
+
+Two port choices are recorded in the code where the sources are silent: the match length (ten minutes) and the
+balanced fielding above. Treasure boxes, scoring, the five arena buffs, rewards (job EXP 20/3/6, the level-banded
+reward, rune seals, blue/black stones 5/1/2 - all already extracted from the later client's
+`gameworldconfigdata`), the exchanger and the achievement, and the registration/score screens, are the epic's
+remaining slices.
 
 ## What is imported
 
@@ -28,7 +51,7 @@ object catalog, navmesh and minimap tiles, the region code rows, and every Data 
 | Regions | 31985, 31986, 32241, 32242: outdoor sectors x 241-242, y 124-125; 16 map files, 4 navmesh, 4 minimap tiles, 4 region codes |
 | Data files | Every v1.696 Data file the native tree lacks (13,275 with no other later layer on; none new when an earlier v1.696 layer such as Arabia already added them) |
 | Monsters | None: the client places nothing in the arena |
-| World | None yet: world 107 (`INS_ARENA_JOB_WAR`) is the engine's |
+| World | None in the build: world 107 (`INS_ARENA_JOB_WAR`) is the engine's, registered by the server behind the same switch; the arena manager's roster row is likewise synthesized server-side from the client's characterdata 26790 at its six authored npcpos stands, so the reserved shard band stays unwritten |
 
 ## Decisions recorded
 

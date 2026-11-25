@@ -54,6 +54,7 @@ import (
 	"opensro.online/server/internal/game/world/movement"
 	"opensro.online/server/internal/game/world/pharaohtemple"
 	"opensro.online/server/internal/game/world/simulation"
+	"opensro.online/server/internal/game/world/styria"
 	"opensro.online/server/internal/game/world/worldarea"
 	"opensro.online/server/internal/platform/jobhonor"
 	"opensro.online/server/internal/transport"
@@ -165,6 +166,9 @@ func newGameplayPlane(
 	}
 	items := action.NewRuntime(deps, deps.MonsterState)
 	items.ConfigureSookArena(os.Getenv(sookarena.Env))
+	// SRO_STYRIA_CLASH (port-only, not native): the Styria Clash
+	// arena engine (#3648); its schedule is wired in wiring_register.
+	items.ConfigureStyria(os.Getenv(styria.Env))
 	// SRO_ROC (port-only, not native): the Roc worlds' schedule and steps.
 	items.ConfigureRoc(monster.RocEnabled())
 	// SRO_PHARAOH_TEMPLE (port-only, not native): the sanctums' scheduled gates.

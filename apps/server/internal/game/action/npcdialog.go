@@ -15,6 +15,7 @@ import (
 	"errors"
 	"fmt"
 	"opensro.online/server/internal/game/sookarena"
+	"opensro.online/server/internal/game/world/styria"
 	"sync"
 
 	log "github.com/sirupsen/logrus"
@@ -399,6 +400,15 @@ func (rt *Runtime) HandleNpcDialogResponse(divisionID string, character *enterwo
 			if conversation.Pending.Codename == sookarena.Service {
 				rt.NpcDialogs.Clear(divisionID, character.Name)
 				return rt.enterSookArena(divisionID, character), ""
+			}
+			// Port-only (#3648): the Styria Clash application rows.
+			if conversation.Pending.Codename == styria.ServiceApply {
+				rt.NpcDialogs.Clear(divisionID, character.Name)
+				return rt.styriaApply(divisionID, character), ""
+			}
+			if conversation.Pending.Codename == styria.ServiceCancel {
+				rt.NpcDialogs.Clear(divisionID, character.Name)
+				return rt.styriaCancel(divisionID, character), ""
 			}
 			if rt.NpcQuests.Finish == nil {
 				return rt.refuseNpcDialogChoice(divisionID, character, conversation, npcDialogRefusalOwnerMissing, "NPC service owner is unavailable")

@@ -246,6 +246,9 @@ func (rt *Runtime) TickHook() simulation.TickHook {
 		step("retireActionSessions", func() { out = append(out, rt.retireActionSessions()...) })
 		frames("advanceFlagWar", rt.advanceFlagWar)
 		frames("advanceFlagWarMatches", rt.advanceFlagWarMatches)
+		// Port-only (#3648): the Styria Clash schedule and matches;
+		// a nil step while SRO_STYRIA_CLASH is off.
+		frames("advanceStyriaClash", rt.advanceStyriaClash)
 		// After every step that can change a monster's HP or status, so
 		// the vitals a holder receives carry this tick's changes
 		// (monstervitals.go).

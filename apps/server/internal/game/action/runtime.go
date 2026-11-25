@@ -105,6 +105,14 @@ type Runtime struct {
 	// flagWarLive is the live Capture the Flag match book, keyed by
 	// division (flagwar_match.go).
 	flagWarLive flagWarMatches
+	// Styria is the Styria Clash schedule (port-only, #3648):
+	// SRO_STYRIA_CLASH_START_UTC and SRO_STYRIA_CLASH_MIN_PER_SIDE,
+	// wired from env. Read live by styriaSettings().
+	Styria StyriaSettings
+	// styria is the Styria Clash engine state (registration and
+	// match books), built by ConfigureStyria while SRO_STYRIA_CLASH
+	// is on; nil is the feature off (styria.go).
+	styria *styriaEvent
 	// TeamDeathTownRule sends a team death to the town rule (port-only,
 	// SRO_TEAM_DEATH_REVIVE off; the zero value is native, teamdeath.go).
 	TeamDeathTownRule bool
