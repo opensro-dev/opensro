@@ -75,7 +75,7 @@ func (game *gameplayPlane) wireCaravanAgents() {
 	// Slice 3a (#3704): the agents appear in the world as peers. The
 	// reference catalog is wired later than this constructor runs, so
 	// the closure reads it at tick time.
-	game.caravanPeers = newCaravanPeerLeg(game.caravanAgentAppearance, func(ids []uint32) []simulation.Frame {
+	game.caravanPeers = newCaravanPeerLeg(game.caravanAgentAppearance, game.caravanTransportRow, func(ids []uint32) []simulation.Frame {
 		if game.peerReferences == nil {
 			return nil
 		}
@@ -288,6 +288,12 @@ leg emits (item references ahead of the 0x30D7 spawn row, the movement
 channel + 0xB738 goal while marching, the 0x36AB despawn on leaving),
 targeted at the one viewer through DivisionFrames.OnlyCharacterID.
 Visibility is the peer rule itself, worldgeom.InterestVisible.
+
+A trader's transport (slice 3f) rides the same leg as a second,
+COS-shaped entity (wiring_caravanai_transport.go): the band-2 spawn
+row players' transports get, a running goal re-acked as the trail
+point behind the trader drifts, and the same despawn when the
+trader dies or leaves sight.
 ================================================================================
 */
 
@@ -314,14 +320,17 @@ type caravanPeerAck struct {
 // reference catalog; both are consulted lazily so boot order between
 // the caravan wiring and the catalog build does not matter.
 type caravanPeerLeg struct {
-	resolve func(entity caravanai.AgentEntity) (simulation.PeerAppearance, bool)
-	refs    func(ids []uint32) []simulation.Frame
+	resolve          func(entity caravanai.AgentEntity) (simulation.PeerAppearance, bool)
+	resolveTransport func(entity caravanai.AgentEntity) (wire.CosSpawnBand2, bool)
+	refs             func(ids []uint32) []simulation.Frame
 
-	appearances map[int64]*simulation.PeerAppearance
-	shown       map[string]map[uint32]bool
-	sentRefs    map[string]map[uint32]bool
-	acked       map[string]map[uint32]caravanPeerAck
-	heading     map[uint32]uint16
+	appearances  map[int64]*simulation.PeerAppearance
+	transportRow map[int64]*wire.CosSpawnBand2
+	shown        map[string]map[uint32]bool
+	sentRefs     map[string]map[uint32]bool
+	acked        map[string]map[uint32]caravanPeerAck
+	tacked       map[string]map[uint32]caravanPeerAck
+	heading      map[uint32]uint16
 }
 
 /*
@@ -331,16 +340,20 @@ newCaravanPeerLeg
 */
 func newCaravanPeerLeg(
 	resolve func(entity caravanai.AgentEntity) (simulation.PeerAppearance, bool),
+	resolveTransport func(entity caravanai.AgentEntity) (wire.CosSpawnBand2, bool),
 	refs func(ids []uint32) []simulation.Frame,
 ) *caravanPeerLeg {
 	return &caravanPeerLeg{
-		resolve:     resolve,
-		refs:        refs,
-		appearances: make(map[int64]*simulation.PeerAppearance),
-		shown:       make(map[string]map[uint32]bool),
-		sentRefs:    make(map[string]map[uint32]bool),
-		acked:       make(map[string]map[uint32]caravanPeerAck),
-		heading:     make(map[uint32]uint16),
+		resolve:          resolve,
+		resolveTransport: resolveTransport,
+		refs:             refs,
+		appearances:      make(map[int64]*simulation.PeerAppearance),
+		transportRow:     make(map[int64]*wire.CosSpawnBand2),
+		shown:            make(map[string]map[uint32]bool),
+		sentRefs:         make(map[string]map[uint32]bool),
+		acked:            make(map[string]map[uint32]caravanPeerAck),
+		tacked:           make(map[string]map[uint32]caravanPeerAck),
+		heading:          make(map[uint32]uint16),
 	}
 }
 
@@ -361,10 +374,23 @@ func (leg *caravanPeerLeg) frames(division string, viewers []caravanPeerViewer, 
 		live[viewer.SessionID] = true
 		shown := leg.shownFor(viewer.SessionID)
 		acked := leg.ackedFor(viewer.SessionID)
+		tacked := leg.tackedFor(viewer.SessionID)
 		visible := make(map[uint32]caravanai.AgentEntity, len(entities))
 		for _, entity := range entities {
 			if caravanEntityVisible(viewer.Pose, entity.Pose) {
 				visible[simulation.PlayerObjectID(entity.CharacterID)] = entity
+			}
+		}
+		// Slice 3f: a visible trader's transport is a second entity
+		// beside it, visible by its own pose (it trails the trader,
+		// so it can straddle the interest edge on its own).
+		visibleTransports := make(map[uint32]caravanai.AgentEntity, len(visible))
+		for _, entity := range visible {
+			if entity.TransportCharacterID == 0 {
+				continue
+			}
+			if caravanEntityVisible(viewer.Pose, entity.TransportPose) {
+				visibleTransports[simulation.PlayerObjectID(entity.TransportCharacterID)] = entity
 			}
 		}
 		for gid, entity := range visible {
@@ -381,8 +407,25 @@ func (leg *caravanPeerLeg) frames(division string, viewers []caravanPeerViewer, 
 				out = append(out, *batch)
 			}
 		}
+		for tgid, entity := range visibleTransports {
+			if !shown[tgid] {
+				if batch := leg.showTransportBatch(viewer, entity); batch != nil {
+					batch.DivisionID = division
+					out = append(out, *batch)
+					shown[tgid] = true
+				}
+				continue
+			}
+			if batch := leg.moveTransportBatch(viewer, entity, tacked[tgid]); batch != nil {
+				batch.DivisionID = division
+				out = append(out, *batch)
+			}
+		}
 		for gid := range shown {
 			if _, ok := visible[gid]; ok {
+				continue
+			}
+			if _, ok := visibleTransports[gid]; ok {
 				continue
 			}
 			out = append(out, simulation.DivisionFrames{
@@ -396,6 +439,7 @@ func (leg *caravanPeerLeg) frames(division string, viewers []caravanPeerViewer, 
 			})
 			delete(shown, gid)
 			delete(acked, gid)
+			delete(tacked, gid)
 		}
 	}
 	for sessionID := range leg.shown {
@@ -403,6 +447,7 @@ func (leg *caravanPeerLeg) frames(division string, viewers []caravanPeerViewer, 
 			delete(leg.shown, sessionID)
 			delete(leg.sentRefs, sessionID)
 			delete(leg.acked, sessionID)
+			delete(leg.tacked, sessionID)
 		}
 	}
 	return out

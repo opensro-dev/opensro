@@ -69,6 +69,10 @@ type AgentUnit struct {
 	MP          int
 	WeaponCode  string
 	JobSuitCode string
+	// TransportCode is the shipped transport creature a trader
+	// agent travels with (entities.go, slice 3f); empty for the
+	// agents who walk their route alone.
+	TransportCode string
 	// ModelCode is the shipped character model the agent wears
 	// (entities.go): the roster's men and women match their suits.
 	ModelCode      string
@@ -395,6 +399,7 @@ func defaultDivisionRoster(division string, heat map[uint16]int) []*AgentUnit {
 			MP:             6000,
 			WeaponCode:     "ITEM_CH_SPEAR_07_C_RARE",
 			JobSuitCode:    "ITEM_CH_M_TRADE_TRADER_02",
+			TransportCode:  "COS_T_CAMEL1",
 			PrimarySkillID: 318,
 			Level:          60,
 			CargoStars:     4,
@@ -423,6 +428,7 @@ func defaultDivisionRoster(division string, heat map[uint16]int) []*AgentUnit {
 			MP:             6500,
 			WeaponCode:     "ITEM_CH_BOW_07_C_RARE",
 			JobSuitCode:    "ITEM_CH_W_TRADE_TRADER_04",
+			TransportCode:  "COS_T_CAMEL2",
 			PrimarySkillID: 260,
 			Level:          60,
 			CargoStars:     5,

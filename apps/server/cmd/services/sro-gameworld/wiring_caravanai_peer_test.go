@@ -14,6 +14,7 @@ appearance itself is covered against the real textdata elsewhere.
 package main
 
 import (
+	"encoding/binary"
 	"testing"
 
 	"opensro.online/server/internal/game/caravanai"
@@ -33,6 +34,9 @@ func caravanPeerTestLeg() (*caravanPeerLeg, *[][]uint32) {
 				JobType:   entity.JobType,
 				Equipment: []wire.PlayerEquipItem{{RefObjID: 111}, {RefObjID: 222}},
 			}, true
+		},
+		func(entity caravanai.AgentEntity) (wire.CosSpawnBand2, bool) {
+			return wire.CosSpawnBand2{Band: 2, RefObjID: 3911, Walk: 20, Run: 70, Scale: 1}, true
 		},
 		func(ids []uint32) []simulation.Frame {
 			refCalls = append(refCalls, append([]uint32(nil), ids...))
@@ -175,6 +179,126 @@ func TestCaravanPeerDepartedViewerIsForgotten(t *testing.T) {
 	}
 }
 
+func caravanPeerTrader(moving bool, target caravanai.Pose) caravanai.AgentEntity {
+	entity := caravanPeerAgent(moving, target)
+	entity.TransportCode = "COS_T_CAMEL1"
+	entity.TransportCharacterID = caravanai.AgentTransportIDBase
+	entity.TransportPose = caravanai.Pose{RegionID: entity.Pose.RegionID, X: entity.Pose.X - 8, Y: entity.Pose.Y, Z: entity.Pose.Z}
+	entity.TransportTarget = entity.TransportPose
+	entity.TransportMoving = moving
+	return entity
+}
+
+/*
+================
+TestCaravanPeerTraderTransportFollows
+
+Slice 3f: a trader's transport spawns beside it as a band-2 COS row
+owned by the agent, runs on goals re-acked only as the trail point
+drifts, settles when the trader stops, and despawns with it.
+================
+*/
+func TestCaravanPeerTraderTransportFollows(t *testing.T) {
+	leg, _ := caravanPeerTestLeg()
+	viewer := peerTestViewer()
+	agentGID := simulation.PlayerObjectID(caravanai.AgentCharacterIDBase)
+	transportGID := simulation.PlayerObjectID(caravanai.AgentTransportIDBase)
+	if transportGID == agentGID {
+		t.Fatal("transport gid collides with the agent gid")
+	}
+	target := caravanai.Pose{RegionID: 25000, X: 400, Y: 3, Z: 100}
+	trader := caravanPeerTrader(true, target)
+
+	out := leg.frames("div", []caravanPeerViewer{viewer}, []caravanai.AgentEntity{trader})
+	if len(out) != 2 {
+		t.Fatalf("first sight batches = %d, want the agent and its transport", len(out))
+	}
+	var spawn *simulation.Frame
+	for i := range out[1].Frames {
+		if out[1].Frames[i].Opcode == wire.OpSingleObjectSpawn {
+			spawn = &out[1].Frames[i]
+		}
+	}
+	if spawn == nil {
+		t.Fatalf("transport batch opcodes = %x, want a COS spawn", opcodesOf(out[1]))
+	}
+	if spawn.ScopeGID != transportGID || binary.LittleEndian.Uint32(spawn.Payload[0:4]) != 3911 ||
+		binary.LittleEndian.Uint32(spawn.Payload[4:8]) != transportGID {
+		t.Fatalf("transport spawn scope/ref/gid = %d/%d/%d, want %d/3911/%d",
+			spawn.ScopeGID, binary.LittleEndian.Uint32(spawn.Payload[0:4]),
+			binary.LittleEndian.Uint32(spawn.Payload[4:8]), transportGID, transportGID)
+	}
+	owner := make([]byte, 4)
+	binary.LittleEndian.PutUint32(owner, agentGID)
+	found := false
+	for i := 0; i+4 <= len(spawn.Payload); i++ {
+		if string(spawn.Payload[i:i+4]) == string(owner) {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatal("transport spawn does not name the agent as its owner")
+	}
+	want := []uint16{wire.OpSingleObjectSpawn, wire.OpObjectStateRefresh, simulation.OpMovementAck}
+	if got := opcodesOf(out[1]); len(got) != len(want) {
+		t.Fatalf("transport first sight opcodes = %x, want %x", got, want)
+	} else {
+		for i := range want {
+			if got[i] != want[i] {
+				t.Fatalf("transport first sight opcodes = %x, want %x", got, want)
+			}
+		}
+	}
+
+	// A trail goal that barely drifted is not worth another ack.
+	drifted := trader
+	drifted.TransportTarget.X += 2
+	drifted.TransportPose.X += 2
+	if out := leg.frames("div", []caravanPeerViewer{viewer}, []caravanai.AgentEntity{drifted}); len(out) != 0 {
+		t.Fatalf("small trail drift produced %d batches, want none", len(out))
+	}
+	// A real drift re-acks once, bare.
+	drifted.TransportTarget.X += 8
+	drifted.TransportPose.X += 8
+	out = leg.frames("div", []caravanPeerViewer{viewer}, []caravanai.AgentEntity{drifted})
+	if len(out) != 1 || len(out[0].Frames) != 1 || out[0].Frames[0].Opcode != simulation.OpMovementAck {
+		t.Fatalf("trail drift = %+v, want one bare 0xB738", out)
+	}
+	// Stopping settles the beast where it stands.
+	stopped := drifted
+	stopped.Moving = false
+	stopped.TransportMoving = false
+	stopped.Target = stopped.Pose
+	stopped.TransportTarget = stopped.TransportPose
+	out = leg.frames("div", []caravanPeerViewer{viewer}, []caravanai.AgentEntity{stopped})
+	settles := 0
+	for _, batch := range out {
+		for _, frame := range batch.Frames {
+			if frame.Opcode == simulation.OpMovementAck {
+				settles++
+			}
+		}
+	}
+	if settles != 2 {
+		t.Fatalf("stop produced %d settling goals, want the agent's and the transport's", settles)
+	}
+	// Leaving sight despawns the pair.
+	far := peerTestViewer()
+	far.Pose = simulation.Spawn{RegionID: 23687, X: 100, Z: 100}
+	out = leg.frames("div", []caravanPeerViewer{far}, []caravanai.AgentEntity{stopped})
+	despawned := map[uint32]bool{}
+	for _, batch := range out {
+		for _, frame := range batch.Frames {
+			if frame.Opcode == wire.OpObjectDespawn {
+				despawned[frame.ScopeGID] = true
+			}
+		}
+	}
+	if !despawned[agentGID] || !despawned[transportGID] || len(despawned) != 2 {
+		t.Fatalf("departure despawned %v, want the agent and its transport", despawned)
+	}
+}
+
 /*
 ================
 TestCaravanPeerUnresolvedAppearanceStaysInvisible
@@ -193,6 +317,9 @@ func TestCaravanPeerUnresolvedAppearanceStaysInvisible(t *testing.T) {
 				return simulation.PeerAppearance{}, false
 			}
 			return simulation.PeerAppearance{RefObjID: 1907, Name: entity.Name}, true
+		},
+		func(entity caravanai.AgentEntity) (wire.CosSpawnBand2, bool) {
+			return wire.CosSpawnBand2{}, false
 		},
 		func(ids []uint32) []simulation.Frame { return nil },
 	)
