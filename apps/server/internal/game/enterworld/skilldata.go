@@ -862,6 +862,7 @@ func (t *TextdataSkills) parse(shards []string) {
 			parseSkillImbue(fields, &row)
 			parseSkillWall(fields, &row)
 			if replacement, err := compileSkillReplacement(fields); err == nil {
+				replacement.PackedStates = packedStatesFor(row.Codename, replacement.PackedStates)
 				row.Replacement = replacement
 				row.ReplacementPinned = true
 			} else {
