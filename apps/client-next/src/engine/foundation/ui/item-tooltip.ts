@@ -9,6 +9,7 @@ appends the seal after the requirement rows; the under-heading place
 
 ===========================================================================
 */
+import { isSpiritItem } from "@/engine/foundation/gameplay/avatar-socket";
 import type { InventoryItem } from "@/engine/contracts/gameplay";
 import type { Progression } from "../gameplay/progression";
 import { itemRarityIsSealed, sealTextSymbol } from "../gameplay/item-seal";
@@ -312,6 +313,28 @@ export function itemTooltip(
 					Math.trunc( remainingMs % 3600000 / 60000 ),
 					text( "PARAM_MINUTE" )
 				),
+				0xffffffff
+			);
+		}
+	}
+	// Port-only (SRO_NASRUN, #4384): a Devil's Spirit's awakening clock (its
+	// data word, unix seconds in the durability field; #4381). Dormant,
+	// awake with the time left, or lapsed, in the later client's
+	// UIIT_STT_NASRUN_* words. Inference (the later client's tooltip is not
+	// traced): the time left reads in days, hours and minutes, as a
+	// 28-day period would not fit the rental rows' hours.
+	if ( isSpiritItem( item.typeFlags ) ) {
+		const clock = item.durability ?? 0, remainingMs = clock * 1000 - Date.now();
+		space();
+		if ( clock === 0 ) add( text( "UIIT_STT_NASRUN_NOT_AWAKE" ), 0xffffffff );
+		else if ( remainingMs <= 0 ) add( text( "UIIT_STT_NASRUN_AWAKE_TIMEOVER" ), 0xffffffff );
+		else {
+			const minutes = Math.trunc( remainingMs / 60000 );
+			add( text( "UIIT_STT_NASRUN_AWAKE_TIME" ), 0xffffffff );
+			add(
+				`${Math.trunc( minutes / 1440 )} ${text( "PARAM_DAY" )} ${Math.trunc( minutes % 1440 / 60 )} ${
+					text( "PARAM_HOUR" )
+				} ${minutes % 60} ${text( "PARAM_MINUTE" )}`,
 				0xffffffff
 			);
 		}

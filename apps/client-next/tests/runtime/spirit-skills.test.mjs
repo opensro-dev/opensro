@@ -116,3 +116,36 @@ test("a worn, awake Spirit's socket loops the later clients' sixteen-cell edge",
 	assert.equal( next.uv[0] - first.uv[0], 1 / 16, "one cell per 50 ms" );
 	assert.deepEqual( spiritActiveOverlay( rect, 0, 16 * 50 ).uv, first.uv, "sixteen cells, then it loops" );
 });
+
+test("a Devil's Spirit's tooltip names its awakening: dormant, the time left, or over", async () => {
+	const { itemTooltip } = await import( "../../src/engine/foundation/ui/item-tooltip.ts" );
+	const english = {
+			UIIT_STT_NASRUN_NOT_AWAKE: "This devil's spirit is not awaken.",
+			UIIT_STT_NASRUN_AWAKE_TIME: "Awaken period.",
+			UIIT_STT_NASRUN_AWAKE_TIMEOVER: "Awaken period is over.",
+			PARAM_DAY: "day(s)",
+			PARAM_HOUR: "hour(s)",
+			PARAM_MINUTE: "min(s)"
+		},
+		text = s => english[s] ?? s;
+	// 3/1/14/1: the Spirit; its clock rides the durability field (#4381).
+	const spiritFlags = (3 << 2) | (1 << 5) | (14 << 7) | (1 << 11);
+	const item = {
+		slot: 13,
+		refObjId: 51681,
+		name: "Devil's Spirit",
+		typeFlags: spiritFlags,
+		quantity: 1,
+		plus: 0,
+		durability: 0,
+		variance: "0",
+		magic: [],
+		tooltip: { fields: {} }
+	};
+	const lines = durability => itemTooltip( { ...item, durability }, { masteries: [] }, text ).map( r => r.value );
+	assert.ok( lines( 0 ).includes( "This devil's spirit is not awaken." ) );
+	const awake = lines( Math.floor( Date.now() / 1000 ) + 27 * 86400 + 5 * 3600 + 30 * 60 );
+	assert.ok( awake.includes( "Awaken period." ) );
+	assert.ok( awake.some( line => /^27 day\(s\) 5 hour\(s\) (29|30) min\(s\)$/.test( line ) ), awake.join( "|" ) );
+	assert.ok( lines( Math.floor( Date.now() / 1000 ) - 60 ).includes( "Awaken period is over." ) );
+});

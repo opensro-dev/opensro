@@ -88,6 +88,10 @@ func TestWornSpiritLendsItsSkillsUntilItLapses(t *testing.T) {
 	if !domain.SkillLearned(c, spiritTestConfusion) || !domain.SkillLearned(c, spiritTestIgnore) {
 		t.Fatal("a worn +3 Spirit does not lend Confusion and Ignore 1")
 	}
+	// The entry bootstrap derives the same list from the stored rows (#4384).
+	if got := rt.SpiritSkillsAt(testDivision, c); !slices.Equal(got, s.Skills) {
+		t.Fatalf("entry spirit skills = %v, want %v", got, s.Skills)
+	}
 	// The owner's skill strip learns the lent skills with the move (#4384).
 	if got := spiritSkillsSent(t, wear.Frames); !slices.Equal(got, s.Skills) {
 		t.Fatalf("spirit skills sent = %v, want %v", got, s.Skills)

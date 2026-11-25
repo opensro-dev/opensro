@@ -255,3 +255,22 @@ func spiritSkills(avatars *domain.AvatarInventory) []uint32 {
 	}
 	return avatars.Spirit.Skills
 }
+
+/*
+================
+SpiritSkillsAt
+
+The skills the character's worn, awake Spirit lends now, derived from its
+stored avatar rows: the entry bootstrap names them (#4384).
+================
+*/
+func (rt *Runtime) SpiritSkillsAt(_ string, c *enterworld.Character) []uint32 {
+	if c == nil {
+		return nil
+	}
+	effect := rt.deriveSpirit(c.AvatarInventory, rt.Now().Unix())
+	if effect == nil {
+		return nil
+	}
+	return append([]uint32(nil), effect.Skills...)
+}
