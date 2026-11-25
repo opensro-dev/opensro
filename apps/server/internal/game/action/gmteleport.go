@@ -184,16 +184,16 @@ func (rt *Runtime) standingPoint(division string, c *enterworld.Character) trave
 ================
 gmTeleportMovable
 
-The mover rules WarpGM keeps. INFERENCE: a corpse is not teleported (death
-owns its revive flow), and a summoned COS needs a joint owner/follower
-migration the port does not split.
+The mover rules every GM teleport keeps. INFERENCE: a corpse is not
+teleported (death owns its revive flow). A summoned companion, a ridden
+vehicle included, travels with its owner: the native GM coordinate move
+goes through the actor's movement object with no transport test, and
+relocateCharacter carries every companion (relocateReturningPet) and
+re-enters a mounted transport with its ride state (#4422).
 ================
 */
 func gmTeleportMovable(c *enterworld.Character) bool {
-	if !enterworld.CharacterAlive(c) {
-		return false
-	}
-	return c.ActiveCOS == nil || !c.ActiveCOS.Summoned
+	return enterworld.CharacterAlive(c)
 }
 
 /*
