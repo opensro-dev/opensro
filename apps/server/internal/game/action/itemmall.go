@@ -14,7 +14,6 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
-	"os"
 
 	log "github.com/sirupsen/logrus"
 	"opensro.online/server/internal/domain"
@@ -125,10 +124,11 @@ withholdUniqueOnlyGoods
 Port-only, not native (owner 2026-11-25): goods a unique kill guarantees
 or rolls come from uniques only, so the mall stops selling every package
 that holds one. While SRO_UNIQUE_POP_TICKET adds a Magic Pop card to each
-unique kill the card leaves the mall; while SRO_NASRUN rolls a Devil's
-Spirit on each unique kill (nasrun_drops.go) every Spirit leaves it (the
-token shop keeps selling them: its tokens are unique rewards too). Both
-off, the mall is the one the built tree carries. The wiring sets
+unique kill the card leaves the mall; while the Devil's Spirit lucky drops
+run (NasrunTokens, nasrun_drops.go) their two prizes leave it: every
+Spirit, both sexes and colours, and Sabakun's Jewel. The token shop keeps
+selling Spirits: its tokens are unique rewards too. Both off, the mall is
+the one the built tree carries. The wiring sets
 UniqueRules before the mall loads (wiring_gameplay.go).
 ================
 */
@@ -143,7 +143,7 @@ func (rt *Runtime) withholdUniqueOnlyGoods(catalog *commerce.MallCatalog) {
 			card = ref.RefObjID
 		}
 	}
-	spirits := nasrun.Enabled(os.Getenv(nasrun.Env))
+	spirits := rt.NasrunTokens
 	if card == 0 && !spirits {
 		return
 	}
@@ -155,7 +155,7 @@ func (rt *Runtime) withholdUniqueOnlyGoods(catalog *commerce.MallCatalog) {
 			return false
 		}
 		ref, ok := refs.ItemRefByID(refObjID)
-		return ok && ref != nil && nasrun.IsSpirit(ref.TypeFlags())
+		return ok && ref != nil && (nasrun.IsSpirit(ref.TypeFlags()) || ref.Codename == nasrunDropJewel)
 	})
 	if removed > 0 {
 		log.Infof("mall: %d unique-only offer(s) withheld (Magic Pop card %t, Devil's Spirit %t; port-only)",
