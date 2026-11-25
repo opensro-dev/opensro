@@ -194,7 +194,7 @@ for ( const [width, height] of [ [ 375, 667 ], [ 667, 375 ] ] ) {
 			// The Letter page reflowed: its rows and commands, then the write and
 			// read windows narrowed into the viewport.
 			const row = { sender: "Berk", modelRefId: 1907, received: 0, read: false, body: "Hello" };
-			Object.assign( fixture.state.gameplay, { letters: { rows: [ row ], reading: -1 } } );
+			Object.assign( fixture.state.gameplay, { letters: { rows: [ row ], reading: -1, alarm: false } } );
 			fixture.ui.event( { kind: "activate", id: "guild-tab:5" } );
 			output = draw();
 			assert.ok( output.controls.some( control => control.id === "letter-row:0" ) );
@@ -205,10 +205,10 @@ for ( const [width, height] of [ [ 375, 667 ], [ 667, 375 ] ] ) {
 			assert.ok( output.controls.some( control => control.id === "letter-body" ) );
 			fixture.ui.event( { kind: "activate", id: "letter-write-cancel" } );
 			draw();
-			Object.assign( fixture.state.gameplay, { letters: { rows: [ row ], reading: 0 } } );
+			Object.assign( fixture.state.gameplay, { letters: { rows: [ row ], reading: 0, alarm: false } } );
 			output = draw();
 			assert.ok( output.controls.some( control => control.id === "letter-read-close" ) );
-			Object.assign( fixture.state.gameplay, { letters: { rows: [ row ], reading: -1 } } );
+			Object.assign( fixture.state.gameplay, { letters: { rows: [ row ], reading: -1, alarm: false } } );
 			draw();
 			fixture.ui.event( { kind: "activate", id: "guild-tab:4" } );
 			output = draw();
@@ -601,6 +601,44 @@ test("compact HUD draws EXP/SP progression and keeps quickslots 0..10 uncovered 
 				draw();
 			}
 		}
+	} finally {
+		fixture.dispose();
+	}
+});
+
+test("the LetterAlarmGuide reports the mailbox view once per lighting", () => {
+	const sent = [], fixture = uiFixture( command => sent.push( command ) );
+	let time = 0;
+	const draw = () => {
+		fixture.ui.step( fixture.state, ++time * 100 );
+		assert.equal( fixture.ui.stats().error, null );
+	};
+	const views = () => sent.filter( c => c.kind === "gameplay" && c.command.kind === "letter-view" ).length;
+	const alarmed = () => (fixture.scenes.at( -1 )?.quads ?? []).some( q => q.texture.endsWith( "letteralarm_1.png" ) );
+	const row = { sender: "Berk", modelRefId: 1907, received: 0, read: false, body: "Hello" };
+	try {
+		Object.assign(
+			fixture.state.gameplay,
+			{ social: guildState(), letters: { rows: [ row ], reading: -1, alarm: true } }
+		);
+		draw();
+		draw();
+		assert.equal( views(), 0, "lit, mailbox not on screen: no view" );
+		assert.equal( alarmed(), true, "lit and unviewed: the guide icon is drawn" );
+		fixture.ui.event( { kind: "activate", id: "open-window:Guild" } );
+		draw();
+		assert.equal( views(), 0, "another Guild tab is no view" );
+		fixture.ui.event( { kind: "activate", id: "guild-tab:5" } );
+		draw();
+		draw();
+		draw();
+		assert.equal( views(), 1, "the Message tab reports the view once while the light stands" );
+		assert.equal( alarmed(), false, "viewed: the guide icon is not drawn" );
+		Object.assign( fixture.state.gameplay, { letters: { rows: [ row ], reading: -1, alarm: false } } );
+		draw();
+		Object.assign( fixture.state.gameplay, { letters: { rows: [ row, row ], reading: -1, alarm: true } } );
+		draw();
+		assert.equal( views(), 2, "a new lighting while viewed is reported again" );
 	} finally {
 		fixture.dispose();
 	}
