@@ -43,24 +43,30 @@ const (
 
 // AgentUnit represents one active AI Caravan or Thief agent on the Silkroad.
 type AgentUnit struct {
-	Name           string
-	Division       string
-	Role           AgentRole
-	Personality    Personality
-	State          AgentState
-	HomeTown       TownID
-	OriginTown     TownID
-	DestTown       TownID
-	RegionID       uint16
-	X              float32
-	Y              float32
-	Z              float32
-	MaxHP          int
-	HP             int
-	MaxMP          int
-	MP             int
-	WeaponCode     string
-	JobSuitCode    string
+	// CharacterID is the agent's synthetic character identity
+	// (entities.go): stable per roster slot, never a store rowid.
+	CharacterID int64
+	Name        string
+	Division    string
+	Role        AgentRole
+	Personality Personality
+	State       AgentState
+	HomeTown    TownID
+	OriginTown  TownID
+	DestTown    TownID
+	RegionID    uint16
+	X           float32
+	Y           float32
+	Z           float32
+	MaxHP       int
+	HP          int
+	MaxMP       int
+	MP          int
+	WeaponCode  string
+	JobSuitCode string
+	// ModelCode is the shipped character model the agent wears
+	// (entities.go): the roster's men and women match their suits.
+	ModelCode      string
 	PrimarySkillID uint32
 	CargoStars     uint8
 	CargoStacks    int
@@ -341,6 +347,8 @@ func defaultDivisionRoster(division string, heat map[uint16]int) []*AgentUnit {
 
 	return []*AgentUnit{
 		{
+			CharacterID:    AgentCharacterIDBase,
+			ModelCode:      "CHAR_CH_MAN_MERCHANT",
 			Name:           "[AI]Trader_Jin",
 			Division:       division,
 			Role:           RoleTrader,
@@ -358,7 +366,7 @@ func defaultDivisionRoster(division string, heat map[uint16]int) []*AgentUnit {
 			MaxMP:          6000,
 			MP:             6000,
 			WeaponCode:     "ITEM_CH_SPEAR_07_C_RARE",
-			JobSuitCode:    "ITEM_CH_M_TRADE_01",
+			JobSuitCode:    "ITEM_CH_M_TRADE_TRADER_02",
 			PrimarySkillID: 318,
 			CargoStars:     4,
 			CargoStacks:    10,
@@ -366,6 +374,8 @@ func defaultDivisionRoster(division string, heat map[uint16]int) []*AgentUnit {
 			Route:          routeJD,
 		},
 		{
+			CharacterID:    AgentCharacterIDBase + 1,
+			ModelCode:      "CHAR_CH_WOMAN_MERCHANT",
 			Name:           "[AI]Trader_Mei",
 			Division:       division,
 			Role:           RoleTrader,
@@ -383,7 +393,7 @@ func defaultDivisionRoster(division string, heat map[uint16]int) []*AgentUnit {
 			MaxMP:          6500,
 			MP:             6500,
 			WeaponCode:     "ITEM_CH_BOW_07_C_RARE",
-			JobSuitCode:    "ITEM_CH_W_TRADE_01",
+			JobSuitCode:    "ITEM_CH_W_TRADE_TRADER_04",
 			PrimarySkillID: 260,
 			CargoStars:     5,
 			CargoStacks:    12,
@@ -391,6 +401,8 @@ func defaultDivisionRoster(division string, heat map[uint16]int) []*AgentUnit {
 			Route:          routeDH,
 		},
 		{
+			CharacterID:    AgentCharacterIDBase + 2,
+			ModelCode:      "CHAR_CH_MAN_FIGHTER",
 			Name:           "[AI]Hunter_Kwan",
 			Division:       division,
 			Role:           RoleHunter,
@@ -408,11 +420,13 @@ func defaultDivisionRoster(division string, heat map[uint16]int) []*AgentUnit {
 			MaxMP:          5500,
 			MP:             5500,
 			WeaponCode:     "ITEM_CH_BLADE_07_C_RARE",
-			JobSuitCode:    "ITEM_CH_M_HUNTER_01",
+			JobSuitCode:    "ITEM_CH_M_TRADE_HUNTER_02",
 			PrimarySkillID: 112,
 			Route:          routeHJ,
 		},
 		{
+			CharacterID:    AgentCharacterIDBase + 3,
+			ModelCode:      "CHAR_CH_MAN_ADVENTURER",
 			Name:           "[AI]Thief_Viper",
 			Division:       division,
 			Role:           RoleThief,
@@ -430,7 +444,7 @@ func defaultDivisionRoster(division string, heat map[uint16]int) []*AgentUnit {
 			MaxMP:          5500,
 			MP:             5500,
 			WeaponCode:     "ITEM_CH_TBLADE_07_C_RARE",
-			JobSuitCode:    "ITEM_CH_M_THIEF_01",
+			JobSuitCode:    "ITEM_CH_M_TRADE_THIEF_02",
 			PrimarySkillID: 318,
 			Route:          routeJD,
 			WaypointIndex:  viperIndex,
