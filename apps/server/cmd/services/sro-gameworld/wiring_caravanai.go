@@ -16,12 +16,15 @@ package main
 
 import (
 	"context"
+	"strings"
+	"time"
 
 	log "github.com/sirupsen/logrus"
 	"opensro.online/server/internal/game/action"
 	"opensro.online/server/internal/game/caravanai"
 	"opensro.online/server/internal/game/enterworld"
 	"opensro.online/server/internal/game/item/wire"
+	"opensro.online/server/internal/game/social/chat"
 	worldgeom "opensro.online/server/internal/game/world"
 	"opensro.online/server/internal/game/world/monster"
 	"opensro.online/server/internal/game/world/movement"
@@ -51,12 +54,12 @@ func (game *gameplayPlane) wireCaravanAgents() {
 		memStore = s
 	}
 	rt := caravanai.NewRuntime(cfg, memStore, caravanai.WorldHooks{
+		// Slice 4 (#3704): what an agent says goes out as local chat
+		// from its entity. The hook only buffers the line; the tick
+		// (caravanAgentsTick) addresses it to the viewers who can see
+		// the agent, like every other agent frame.
 		OnAgentChat: func(division, agentName string, regionID uint16, message string) {
-			log.WithFields(log.Fields{
-				"division": division,
-				"agent":    agentName,
-				"region":   regionID,
-			}).Debugf("caravan-ai chat: %s", message)
+			game.caravanChatLines = append(game.caravanChatLines, caravanChatLine{agentName: agentName, text: message})
 		},
 		// Slice 3e (#3704): agents strike back. The action runtime
 		// lands the blow through the player-victim lanes; the tick
@@ -132,16 +135,109 @@ func (game *gameplayPlane) caravanAgentsTick(ticker *simulation.Ticker, nowMs in
 	for _, unit := range roster {
 		_, _, _ = game.caravanAgents.StepAgent(ctx, game.divisionID, unit.Name, observedPlayersFor(unit, byRegion[unit.RegionID]), nowMs)
 	}
+	entities := game.caravanAgents.AgentEntities(game.divisionID)
 	var frames []simulation.DivisionFrames
 	if game.caravanPeers != nil {
-		entities := game.caravanAgents.AgentEntities(game.divisionID)
 		frames = game.caravanPeers.frames(game.divisionID, viewers, entities)
+	}
+	// Slice 4 (#3704): the lines the agents spoke this tick ride out
+	// with the presentation frames, then the buffer starts over.
+	if len(game.caravanChatLines) > 0 {
+		frames = append(frames, caravanChatFrames(game.divisionID, viewers, entities, game.caravanChatLines)...)
+		game.caravanChatLines = nil
 	}
 	// Slice 3e (#3704): this tick's agent-strike publications ride out
 	// with the presentation frames.
 	frames = append(frames, game.caravanStrikeFrames...)
 	game.caravanStrikeFrames = nil
 	return frames
+}
+
+// caravanChatLine is one line an agent spoke during the tick, waiting
+// for the tick to address it (slice 4 of #3704).
+type caravanChatLine struct {
+	agentName string
+	text      string
+}
+
+/*
+================
+caravanChatFrames
+
+One spoken line becomes a gid-authored All-chat frame (0x3667) for
+every viewer who can see the speaking agent (the peer interest rule),
+so the line renders with the agent's name and its overhead bubble,
+exactly like a player's local chat. A line whose agent has no entity
+(the flag's roster mid-change) is dropped, never broadcast wide.
+================
+*/
+func caravanChatFrames(division string, viewers []caravanPeerViewer, entities []caravanai.AgentEntity, lines []caravanChatLine) []simulation.DivisionFrames {
+	byName := make(map[string]caravanai.AgentEntity, len(entities))
+	for _, entity := range entities {
+		byName[entity.Name] = entity
+	}
+	var out []simulation.DivisionFrames
+	for _, line := range lines {
+		entity, ok := byName[line.agentName]
+		if !ok {
+			continue
+		}
+		payload := chat.EncodeChatBroadcastGid(chat.ChatTypeAll, simulation.PlayerObjectID(entity.CharacterID), line.text)
+		for _, viewer := range viewers {
+			if !caravanEntityVisible(viewer.Pose, entity.Pose) {
+				continue
+			}
+			out = append(out, simulation.DivisionFrames{
+				DivisionID:      division,
+				Frames:          []simulation.Frame{{Opcode: chat.OpChatBroadcast, Payload: payload}},
+				OnlyCharacterID: viewer.CharacterID,
+			})
+		}
+	}
+	return out
+}
+
+/*
+================
+installCaravanChat
+
+Seats the caravan command intake on the chat runtime (slice 4 of
+#3704): !accept/!hire/!memory lines are answered by the caravan
+runtime and never reach the room. Called after chat registration; a
+shard without the caravan runtime keeps the native posture (the lines
+are ordinary chat).
+================
+*/
+func (game *gameplayPlane) installCaravanChat() {
+	if game.chat == nil || game.caravanAgents == nil {
+		return
+	}
+	game.chat.CaravanCommands = caravanCommandsPort(game.caravanAgents)
+}
+
+/*
+================
+caravanCommandsPort
+
+The chat runtime's caravan intake over one caravan runtime: the reply
+is authored by the named agent when there is one (the chat lane sends
+it as that agent's whisper), and a system notice otherwise (an unknown
+agent, a wrong job). The rate limit's silent answer stays silent.
+================
+*/
+func caravanCommandsPort(rt *caravanai.Runtime) func(divisionID string, sender *enterworld.Character, message string) (string, string, bool) {
+	return func(divisionID string, sender *enterworld.Character, message string) (string, string, bool) {
+		reply, handled := rt.HandlePlayerCommand(divisionID, sender.Name, sender.Job.Type, message, time.Now().UnixMilli())
+		if !handled || reply == "" {
+			return "", reply, handled
+		}
+		if fields := strings.Fields(message); len(fields) >= 2 {
+			if name, ok := rt.AgentNamed(divisionID, fields[1]); ok {
+				return name, reply, true
+			}
+		}
+		return "", reply, true
+	}
 }
 
 // observedPlayerPose is one entered player beside the pose the caravan

@@ -14,7 +14,6 @@ package caravanai
 
 import (
 	"context"
-	"fmt"
 	"strings"
 	"sync"
 	"time"
@@ -130,6 +129,11 @@ type Walker interface {
 // WorldHooks is an optional consumer-owned callback port invoked when an AI
 // agent speaks in local chat, drops parley cargo stacks, or pays out an escort
 // contract to a player. Walker is the movement port above.
+//
+// OnAgentChat is paced by StepAgent: a line is reported once, and the
+// same line again only after the agent has said something else, so a
+// standing situation (a trusted friend idling beside the caravan) does
+// not repeat itself in chat every step.
 type WorldHooks struct {
 	OnAgentChat       func(division, agentName string, regionID uint16, message string)
 	OnParleyCargoDrop func(division, agentName string, regionID uint16, x, y, z float32, stacks int, stackGoldValue int64)
@@ -179,6 +183,9 @@ type Runtime struct {
 	contracts *ContractBook
 	hooks     WorldHooks
 	agents    map[string][]*AgentUnit
+	// lastCommandAt is the slice-4 command rate limit: when each
+	// player last got a caravan command answer, by division+player.
+	lastCommandAt map[string]int64
 	// inflight holds each agent's outstanding remote decision.
 	inflight map[string]*remoteDecision
 	// remoteCtx ends every remote request at Close.
@@ -210,17 +217,18 @@ func NewRuntime(cfg Config, store MemoryStore, hooks WorldHooks) *Runtime {
 	}
 	remoteCtx, cancelRemote := context.WithCancel(context.Background())
 	return &Runtime{
-		cfg:          cfg,
-		local:        NewHardcodedBrain(),
-		remote:       remote,
-		memories:     NewMemoryBook(store),
-		parleys:      NewParleyTracker(),
-		contracts:    NewContractBook(),
-		hooks:        hooks,
-		agents:       make(map[string][]*AgentUnit),
-		inflight:     make(map[string]*remoteDecision),
-		remoteCtx:    remoteCtx,
-		cancelRemote: cancelRemote,
+		cfg:           cfg,
+		local:         NewHardcodedBrain(),
+		remote:        remote,
+		memories:      NewMemoryBook(store),
+		parleys:       NewParleyTracker(),
+		contracts:     NewContractBook(),
+		hooks:         hooks,
+		agents:        make(map[string][]*AgentUnit),
+		lastCommandAt: make(map[string]int64),
+		inflight:      make(map[string]*remoteDecision),
+		remoteCtx:     remoteCtx,
+		cancelRemote:  cancelRemote,
 	}
 }
 
@@ -587,6 +595,10 @@ func (r *Runtime) StepAgent(
 	if remote, ok := r.remoteDecisionLocked(unit, sit, nowMs); ok {
 		decision = remote
 	}
+	// The line the agent last spoke, captured before this decision
+	// overwrites it: the chat hook below reports a line only when it
+	// differs from it (the OnAgentChat pacing on WorldHooks).
+	spokenBefore := unit.LastSpokenLine
 	r.applyDecisionLocked(unit, decision, nowMs)
 	// A strike lands when the brain's attack target stands within
 	// reach and the agent's own pace allows it; the consumer strikes
@@ -610,7 +622,7 @@ func (r *Runtime) StepAgent(
 			r.memories.RecordAgentKill(division, snapshot.Name, strikeTarget, snapshot.RegionID, "", nowMs)
 		}
 	}
-	if decision.Dialogue != "" && r.hooks.OnAgentChat != nil {
+	if decision.Dialogue != "" && decision.Dialogue != spokenBefore && r.hooks.OnAgentChat != nil {
 		r.hooks.OnAgentChat(division, snapshot.Name, snapshot.RegionID, decision.Dialogue)
 	}
 	return decision, &snapshot, true
@@ -834,76 +846,6 @@ func (r *Runtime) deliverAgentLocked(unit *AgentUnit, nowMs int64) {
 	heat := r.memories.HeatSnapshot(unit.Division)
 	unit.Route = SelectRoute(unit.OriginTown, unit.DestTown, unit.CargoStars, unit.Personality, heat)
 	unit.WaypointIndex = 0
-}
-
-/*
-/*
-==================
-HandlePlayerCommand
-
-HandlePlayerCommand parses interactive player chat commands directed at AI
-caravan agents:
-  - "!accept <TraderAgentName>" (Hunter player accepts an AI Trader escort run)
-  - "!hire <HunterAgentName>"   (Trader player hires an AI Hunter escort)
-  - "!memory <AgentName>"       (Inspects how an AI agent remembers the player)
-
-==================
-*/
-func (r *Runtime) HandlePlayerCommand(
-	division, playerName string,
-	playerJob uint8,
-	rawText string,
-	nowMs int64,
-) (reply string, handled bool) {
-	fields := strings.Fields(strings.TrimSpace(rawText))
-	if len(fields) < 2 {
-		return "", false
-	}
-	cmd := strings.ToLower(fields[0])
-	targetAgent := fields[1]
-	r.EnsureDivisionRoster(division)
-
-	switch cmd {
-	case "!accept":
-		if playerJob != domain.JobHunter {
-			return "Only Hunter guild members can accept a caravan escort contract.", true
-		}
-		r.mu.Lock()
-		unit := r.findAgentLocked(division, targetAgent)
-		if unit == nil || unit.Role != RoleTrader {
-			r.mu.Unlock()
-			return fmt.Sprintf("No AI Trader named %s is recruiting here.", targetAgent), true
-		}
-		contract := r.contracts.BindAITraderEscort(division, unit.Name, playerName, unit.OriginTown, unit.DestTown, unit.CargoStars, nowMs)
-		r.mu.Unlock()
-		return FormatContractReply(contract), true
-
-	case "!hire":
-		if playerJob != domain.JobTrader {
-			return "Only Traders can hire an AI Hunter mercenary escort.", true
-		}
-		r.mu.Lock()
-		unit := r.findAgentLocked(division, targetAgent)
-		if unit == nil || unit.Role != RoleHunter {
-			r.mu.Unlock()
-			return fmt.Sprintf("No AI Hunter named %s is available for hire.", targetAgent), true
-		}
-		contract := r.contracts.HireAIHunter(division, playerName, unit.Name, unit.OriginTown, unit.DestTown, nowMs)
-		r.mu.Unlock()
-		return FormatContractReply(contract), true
-
-	case "!memory":
-		row, ok := r.memories.Relationship(division, targetAgent, playerName)
-		if !ok {
-			return fmt.Sprintf("%s has no recorded history with %s yet (Trust: 0).", targetAgent, playerName), true
-		}
-		return fmt.Sprintf(
-			"%s's memory of %s -> Trust: %d, Kills: %d, Deaths: %d, Gold Stolen: %d (%s)",
-			row.AgentName, row.PlayerName, row.TrustScore, row.Kills, row.Deaths, row.GoldStolen, row.LastNote,
-		), true
-	default:
-		return "", false
-	}
 }
 
 func (r *Runtime) findAgentLocked(division, agentName string) *AgentUnit {

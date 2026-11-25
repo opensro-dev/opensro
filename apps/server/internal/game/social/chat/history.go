@@ -109,6 +109,15 @@ type Runtime struct {
 	// with the bot's reply lines. Nil is never asked: a whisper to the
 	// bot's name is the native cannot-find-target refusal.
 	EventBotWhisper func(divisionID string, sender *enterworld.Character, target, text string) (replies []string, handled bool)
+	// CaravanCommands is the AI caravan command intake (caravanai,
+	// port-only, not native, #3704 slice 4): it is offered every All
+	// line and claims the caravan commands (!accept/!hire/!memory),
+	// answering with a whisper authored by the named agent (speaker),
+	// a notice when no agent answers, or nothing when the reply is
+	// empty (the rate limit). Nil is never asked: the lines stay
+	// ordinary chat, the native posture for commands the original
+	// lacks.
+	CaravanCommands func(divisionID string, sender *enterworld.Character, message string) (speaker, reply string, handled bool)
 }
 
 /*
