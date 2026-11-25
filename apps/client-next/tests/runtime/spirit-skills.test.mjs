@@ -165,3 +165,11 @@ test("a Devil's Spirit's tooltip names its awakening: dormant, the time left, or
 	assert.ok( awake.some( line => /^27 day\(s\) 5 hour\(s\) (29|30) min\(s\)$/.test( line ) ), awake.join( "|" ) );
 	assert.ok( lines( Math.floor( Date.now() / 1000 ) - 60 ).includes( "Awaken period is over." ) );
 });
+
+test("a lent skill drags from the strip onto the hotbar; an unlent one does not", async () => {
+	const { quickSlotDrag } = await import( "../../src/engine/foundation/gameplay/quickslots.ts" );
+	const lent = quickSlotDrag( "skill:" + SPIRIT_SKILL, 3, { skills: [], spiritSkills: [ SPIRIT_SKILL ] } );
+	assert.equal( lent?.kind, 0x49 );
+	assert.equal( lent?.payload, SPIRIT_SKILL );
+	assert.equal( quickSlotDrag( "skill:" + SPIRIT_SKILL, 3, { skills: [], spiritSkills: [] } ), null );
+});

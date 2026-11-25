@@ -17300,6 +17300,20 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 								paths.push( icon );
 								if ( resources.has( icon ) ) rect( r, white, icon );
 							}
+							// The cooldown sweep the hotbar and the skill window draw.
+							if ( skill ) {
+								paths.push( ...quickslotTimerPaths() );
+								quads.push(
+									...quickslotCooldownQuads(
+										game?.skillCooldowns ?? [],
+										skill.id,
+										skill.cooldownGroup ?? 0,
+										quickslotTime,
+										r,
+										full
+									).filter( q => resources.has( q.texture ) )
+								);
+							}
 							const active = (hudData.tooltipSkills.get( skillId )?.basicActivity ?? 0) !== 0;
 							controls.push( {
 								id: "skill:" + skillId,

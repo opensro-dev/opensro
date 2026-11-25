@@ -257,7 +257,9 @@ export function quickSlotDrag(
 	}
 	if ( source.startsWith( "skill:" ) ) {
 		const id = Number( source.slice( 6 ) );
-		return state.skills?.includes( id ) ? quickSlot( { slot, kind: 0x49, payload: id } ) : null;
+		// A worn Spirit's lent skill binds as a learned one (#4384).
+		const castable = state.skills?.includes( id ) || state.spiritSkills?.includes( id );
+		return castable ? quickSlot( { slot, kind: 0x49, payload: id } ) : null;
 	}
 	if ( source.startsWith( "pet-skill:" ) ) {
 		const id = Number( source.slice( 10 ) );
