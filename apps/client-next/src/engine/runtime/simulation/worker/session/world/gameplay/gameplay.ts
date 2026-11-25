@@ -425,6 +425,7 @@ import { createServerEvent } from "./server-event/server-event";
 import { createUniqueDamageRank } from "./unique-rank/unique-rank";
 import { createJobHonor } from "./job-honor/job-honor";
 import { createJobHonorTiers } from "./job-honor/job-honor-tiers";
+import { createStyria } from "./styria/styria";
 import { createUniqueStatus } from "./unique-status/unique-status";
 import { createHwanLevel } from "./hwan-level/hwan-level";
 import { createReverseUserPoint } from "./reverse-user-point/reverse-user-point";
@@ -825,6 +826,7 @@ export function createGameplay(
 		uniqueRank = createUniqueDamageRank(),
 		jobHonor = createJobHonor(),
 		jobHonorTiers = createJobHonorTiers(),
+		styria = createStyria(),
 		uniqueStatus = createUniqueStatus(),
 		mostWanted = createMostWanted(),
 		hwanLevel = createHwanLevel(),
@@ -2092,6 +2094,7 @@ clears it when another character enters.
 		uniqueRank.clear();
 		jobHonor.clear();
 		jobHonorTiers.clear();
+		styria.clear();
 		uniqueStatus.clear();
 		mostWanted.clear();
 		hwanLevel.clear();
@@ -4839,6 +4842,12 @@ Packet handling must not depend on which HUD panel is currently open.
 					dirty = true;
 					return true;
 				}
+				// Port-only (#3648): the Styria Clash standing
+				// (styria.ts), under SRO_STYRIA_CLASH.
+				if ( styria.receive( frame ) ) {
+					dirty = true;
+					return true;
+				}
 				// Port-only (#3530): the tier titles' roster. Contained:
 				// a malformed roster costs the roster, never the session.
 				if ( jobHonorTiers.receiveContained( frame ) ) {
@@ -7044,6 +7053,10 @@ The published plane when something changed since the last take, else null.
 				...(sroMacro.view() ? { sroMacro: sroMacro.view() } : {}),
 				uniqueDamageRank: uniqueRank.current(),
 				jobHonor: jobHonor.current(),
+				// Port-only (#3648): the Styria Clash standing and its
+				// latched result (styria.ts), under SRO_STYRIA_CLASH.
+				styria: styria.current(),
+				styriaResult: styria.result(),
 				// Port-only (#3530): the tier titles' roster
 				// (job-honor-tiers.ts), under SRO_JOB_HONOR.
 				jobHonorTiers: jobHonorTiers.tiers(),
