@@ -10,7 +10,7 @@ the per-actor loop: a loop `continue` is `return null` here.
 
 ===========================================================================
 */
-import { isSpiritItem } from "@/engine/foundation/gameplay/avatar-socket";
+import { dressedAvatars } from "@/engine/foundation/gameplay/avatar-socket";
 import { visualChangeAvatars } from "@/engine/foundation/animation/visual-changes";
 import { fortressAppearance } from "@/engine/foundation/animation/fortress-appearance";
 import { isGoldHeapType, isSurvivalPowerEgg } from "@/engine/foundation/gameplay/ground-item";
@@ -378,7 +378,7 @@ export function createActorAppearance( owner: ActorOwner ) {
 				const skin = activeSkin( entity ),
 					avatars = skin ?
 						[] :
-						costume ?? (entity.avatars ?? []).filter( item => !isSpiritItem( item.typeFlags ) );
+						costume ?? dressedAvatars( entity.avatars ?? [] );
 				if ( skin && !skin.player ) {
 					// 85C060: a monster skin is its own body; the wearer's items are set aside.
 				} else if ( disguise ) {

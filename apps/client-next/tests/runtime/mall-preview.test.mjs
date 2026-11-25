@@ -504,3 +504,61 @@ test("body replacement clears incompatible local try-on before the next UI publi
 	assert.deepEqual( f.owner.state().wearable, [ 4 ] );
 	assert.ok( f.assemblies.at( -1 ).parts.every( part => ![ "garment-2", "garment-3" ].includes( part.model ) ) );
 });
+
+/*
+================
+tryOnAvatars
+
+The worn avatars publishCharacters hands the try-on for a player wearing
+avatars, with every other binding a stand-in.
+================
+*/
+async function tryOnAvatars( avatars ) {
+	const { publishCharacters } = await import( "../../src/engine/runtime/characters/presentation-finalize.ts" );
+	let handed = null;
+	publishCharacters(
+		{
+			local: { gid: 1, refObjId: 10, avatars },
+			gameplay: { inventory: [] },
+			next: new Map(),
+			seconds: 0,
+			blindHeld: false,
+			modelParticles: 0
+		},
+		{ displayed: new Map() },
+		{ catalog: new Map( [ [ 10, { codename: "CHAR_CH_MAN_ADVENTURER", glb: "body" } ] ] ), dress: {}, manifest: 3 },
+		{
+			renderer: {
+				setCharacterAssembly() {},
+				setCharacterActors() {},
+				vHidesCompanions: () => false,
+				enchantSparks() {}
+			},
+			resources: { ready: () => true, plan: () => true, retainWanted() {} },
+			portraitEmission: { step: () => [] },
+			mallPreview: {
+				skin: () => null,
+				glow: () => null,
+				/*
+				================
+				step
+				================
+				*/
+				step( frame ) {
+					handed = frame.avatars;
+					return [];
+				}
+			}
+		}
+	);
+	return handed;
+}
+
+test("the try-on dresses the worn avatars without the Devil's Spirit (#4384)", async () => {
+	const pack = ( tid1, tid2, tid3, tid4 ) => tid1 << 2 | tid2 << 5 | tid3 << 7 | tid4 << 11;
+	const hat = { slot: 0, refObjId: 1, typeFlags: pack( 3, 1, 13, 1 ), plus: 0 };
+	const spirit = { slot: 4, refObjId: 51680, typeFlags: pack( 3, 1, 14, 1 ), plus: 0 };
+	// The mannequin throws "Missing mannequin avatar slot" on a Spirit,
+	// which has no worn model; the world actor drops it the same way.
+	assert.deepEqual( await tryOnAvatars( [ hat, spirit ] ), [ hat ] );
+});
