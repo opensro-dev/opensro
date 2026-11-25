@@ -10,16 +10,24 @@ SRO_RAISED_GOLD_CAPS on, this shard admits a 10,000,000,000 stall price
 and a 1,000,000,000 deposit instead. Off is native: both caps and the
 native u32 stall-offer wire are unchanged.
 
-The browser learns the switch at world entry (enterworld Deps
-RaisedGoldCaps), so its price editor and deposit dialog raise their own
-caps in step; the server still checks every value it is sent.
+The switch also takes a value: a bare number names the warehouse deposit
+cap itself, clamped to the u32 a gold move carries (item/wire
+GoldAmount), so a shard can admit one deposit of 4,294,967,295 without
+touching the stall cap. The stall cap follows the switch alone.
+
+The browser learns both at world entry (enterworld Deps RaisedGoldCaps
+and StorageGoldDepositLimit), so its price editor and deposit dialog
+raise their own caps in step; the server still checks every value it
+is sent.
 
 ===========================================================================
 */
 package action
 
 import (
+	"errors"
 	"os"
+	"strconv"
 	"strings"
 )
 
@@ -37,6 +45,9 @@ const (
 	// RaisedStorageGoldDepositLimit is the port-only deposit cap; it still
 	// fits the native u32 amount on the wire.
 	RaisedStorageGoldDepositLimit uint64 = 1_000_000_000
+	// MaxStorageGoldDepositLimit is the most one deposit can ever name:
+	// the u32 amount on the gold-move wire (item/wire GoldAmount).
+	MaxStorageGoldDepositLimit uint64 = 4_294_967_295
 )
 
 /*
@@ -53,6 +64,52 @@ func RaisedGoldCapsFromEnv() bool {
 		return true
 	}
 	return false
+}
+
+/*
+================
+StorageGoldDepositLimitFromEnv
+
+The warehouse deposit cap the environment selects. "on", "1" and "true"
+keep the raised billion; a bare number names the cap itself, clamped to
+the u32 a gold move carries; unset, "off", junk and any number at or
+below the native cap keep the native cap: the switch only raises (owner
+2026-10-31), and a lower cap would refuse deposits the original admits.
+================
+*/
+func StorageGoldDepositLimitFromEnv() uint64 {
+	raw := strings.TrimSpace(os.Getenv(EnvRaisedGoldCaps))
+	switch strings.ToLower(raw) {
+	case "on", "1", "true":
+		return RaisedStorageGoldDepositLimit
+	}
+	value, err := strconv.ParseUint(raw, 10, 64)
+	if errors.Is(err, strconv.ErrRange) {
+		return MaxStorageGoldDepositLimit
+	}
+	if err == nil && value > NativeStorageGoldDepositLimit {
+		if value > MaxStorageGoldDepositLimit {
+			return MaxStorageGoldDepositLimit
+		}
+		return value
+	}
+	return NativeStorageGoldDepositLimit
+}
+
+/*
+================
+StallPriceLimitFromEnv
+
+The stall price cap the environment selects: the raised cap with the
+switch on, the native cap otherwise. A numeric deposit cap does not
+raise stall prices.
+================
+*/
+func StallPriceLimitFromEnv() uint64 {
+	if RaisedGoldCapsFromEnv() {
+		return RaisedStallPriceLimit
+	}
+	return NativeStallPriceLimit
 }
 
 /*
@@ -76,10 +133,14 @@ storageGoldDepositLimit
 
 The highest amount one warehouse gold deposit may name. The guild
 warehouse shares the personal handler (storageMutation), so it shares the
-cap.
+cap. A configured limit (the switch's numeric form, wired from
+StorageGoldDepositLimitFromEnv) wins over the switch's two values.
 ================
 */
 func (rt *Runtime) storageGoldDepositLimit() uint64 {
+	if rt.StorageGoldDepositLimit > 0 {
+		return rt.StorageGoldDepositLimit
+	}
 	if rt.RaisedGoldCaps {
 		return RaisedStorageGoldDepositLimit
 	}

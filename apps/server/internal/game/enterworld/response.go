@@ -325,6 +325,10 @@ type BootstrapResult struct {
 	// deposit dialog to raise their native caps (port-only, not native;
 	// false is native).
 	RaisedGoldCaps bool
+	// StorageGoldDepositLimit is the effective warehouse deposit cap the
+	// dialog clamps to, beside RaisedGoldCaps (action/goldcaps.go); zero
+	// omits it and the client keeps the native cap.
+	StorageGoldDepositLimit uint32
 	// UiTuning is the shard's client tuning (port-only, uituning.go); nil
 	// while every value is its default, so the blob stays as before.
 	UiTuning *UiTuning
@@ -393,6 +397,7 @@ type bootstrapSuccessView struct {
 	InventorySort             bool                     `json:"inventorySort,omitempty"`
 	Alexandria                bool                     `json:"alexandria,omitempty"`
 	RaisedGoldCaps            bool                     `json:"raisedGoldCaps,omitempty"`
+	StorageGoldDepositLimit   uint32                   `json:"storageGoldDepositLimit,omitempty"`
 	UiTuning                  *UiTuning                `json:"uiTuning,omitempty"`
 }
 
@@ -486,6 +491,7 @@ type bootstrapBlobSuccessView struct {
 	InventorySort             bool                     `json:"inventorySort,omitempty"`
 	Alexandria                bool                     `json:"alexandria,omitempty"`
 	RaisedGoldCaps            bool                     `json:"raisedGoldCaps,omitempty"`
+	StorageGoldDepositLimit   uint32                   `json:"storageGoldDepositLimit,omitempty"`
 	UiTuning                  *UiTuning                `json:"uiTuning,omitempty"`
 }
 
@@ -537,6 +543,7 @@ type bootstrapReferenceBlobSuccessView struct {
 	InventorySort             bool                     `json:"inventorySort,omitempty"`
 	Alexandria                bool                     `json:"alexandria,omitempty"`
 	RaisedGoldCaps            bool                     `json:"raisedGoldCaps,omitempty"`
+	StorageGoldDepositLimit   uint32                   `json:"storageGoldDepositLimit,omitempty"`
 	UiTuning                  *UiTuning                `json:"uiTuning,omitempty"`
 }
 
@@ -620,6 +627,7 @@ func (r *BootstrapResult) blobView() any {
 		InventorySort:             r.InventorySort,
 		Alexandria:                r.Alexandria,
 		RaisedGoldCaps:            r.RaisedGoldCaps,
+		StorageGoldDepositLimit:   r.StorageGoldDepositLimit,
 		UiTuning:                  r.UiTuning,
 	}
 }
@@ -685,6 +693,7 @@ func (r *BootstrapResult) referenceBlobView() any {
 		InventorySort:             r.InventorySort,
 		Alexandria:                r.Alexandria,
 		RaisedGoldCaps:            r.RaisedGoldCaps,
+		StorageGoldDepositLimit:   r.StorageGoldDepositLimit,
 		UiTuning:                  r.UiTuning,
 	}
 }
@@ -764,6 +773,7 @@ func (r *BootstrapResult) MarshalJSON() ([]byte, error) {
 		InventorySort:             r.InventorySort,
 		Alexandria:                r.Alexandria,
 		RaisedGoldCaps:            r.RaisedGoldCaps,
+		StorageGoldDepositLimit:   r.StorageGoldDepositLimit,
 		UiTuning:                  r.UiTuning,
 	})
 }

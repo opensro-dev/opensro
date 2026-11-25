@@ -507,7 +507,8 @@ func (rt *Runtime) storageMutation(movement uint8, q wire.ItemMoveRequest) func(
 		case wire.MoveTypeStorageGoldDeposit:
 			amount := int64(q.GoldAmount)
 			// The client caps a deposit at 100,000,000 natively (59A430);
-			// SRO_RAISED_GOLD_CAPS raises both sides to 1,000,000,000.
+			// SRO_RAISED_GOLD_CAPS raises both sides, to 1,000,000,000 or
+			// to the shard's chosen value (goldcaps.go).
 			if amount <= 0 || uint64(amount) > rt.storageGoldDepositLimit() {
 				return storageRefusal(wire.ErrCodeInvalidRequest)
 			}

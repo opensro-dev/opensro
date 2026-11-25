@@ -6429,14 +6429,15 @@ export function createUi( ports: UiPorts ) {
 			}
 		} else if ( id === "drop-gold" && view.gameplay && (goldDialog === "deposit" || goldDialog === "withdraw") ) {
 			// 59A430 caps warehouse deposits at min(carriedGold, 100_000_000);
-			// SRO_RAISED_GOLD_CAPS raises the deposit cap to 1,000,000,000.
+			// SRO_RAISED_GOLD_CAPS raises the deposit cap, to 1,000,000,000
+			// or the shard's published value.
 			// 59C510 closes the modal without sending when amount <= 0, as the
 			// exchange branch above does: an unsendable amount used to leave
 			// the dialog sitting open with no answer (BR-261022-2026-ED06).
 			const amount = Number( goldAmount ),
 				balance = goldDialog === "withdraw" ? view.gameplay.storage?.gold : view.gameplay.progression?.gold,
 				cap = goldDialog === "deposit" ?
-					Number( storageGoldDepositLimit( view.gameplay.raisedGoldCaps === true ) ) :
+					Number( storageGoldDepositLimit( view.gameplay.storageGoldDepositLimit ) ) :
 					0xffffffff;
 			if ( !/^\d+$/.test( goldAmount ) || amount === 0 ) {
 				goldDialog = false;
@@ -10192,7 +10193,7 @@ export function createUi( ports: UiPorts ) {
 					// (0x5f5e100). SRO_RAISED_GOLD_CAPS raises that cap.
 					const raw = event.value.replace( /[^0-9]/g, "" ).slice( 0, 20 ),
 						carried = BigInt( view?.gameplay?.progression?.gold ?? 0 ),
-						depositCap = storageGoldDepositLimit( view?.gameplay?.raisedGoldCaps === true ),
+						depositCap = storageGoldDepositLimit( view?.gameplay?.storageGoldDepositLimit ),
 						limit = goldDialog === "withdraw" ?
 							BigInt( view?.gameplay?.storage?.gold ?? 0 ) :
 							goldDialog === "deposit" && carried > depositCap ?

@@ -166,11 +166,11 @@ func TestAboveDegree9DropsOffJobVariable(t *testing.T) {
 TestRaisedGoldCapsJobVariable
 
 raised_gold_caps defaults to off, the native stall and deposit caps;
-"on" and "off" pass through as written.
+"on", "off" and a bare deposit-cap number pass through as written.
 ================
 */
 func TestRaisedGoldCapsJobVariable(t *testing.T) {
-	for env, want := range map[string]string{"": "off", "off": "off", "on": "on"} {
+	for env, want := range map[string]string{"": "off", "off": "off", "on": "on", "4294967295": "4294967295"} {
 		t.Setenv("SRO_RAISED_GOLD_CAPS", env)
 		variables := (&deployment{PortOnly: portOnlySettingsFromEnv()}).gameVariables(shardDeployment{})
 		if variables["raised_gold_caps"] != want {
