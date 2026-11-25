@@ -961,7 +961,7 @@ export function createEntities(
 			// On a held answer the installed catalogues stay: the
 			// reference tables and monster codenames keep their owners,
 			// and the commerce-seed rows in itemRefs survive (#4421).
-			if ( !heldConstants ) {
+			if ( !heldConstants && Array.isArray( b.refObjSnapshot ) ) {
 				refs.clear();
 				itemRefs.clear();
 				itemNames.clear();
