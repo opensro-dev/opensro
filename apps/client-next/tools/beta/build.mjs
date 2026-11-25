@@ -283,11 +283,16 @@ export async function buildBeta(
 	add
 	================
 	*/
+	// What add inspected, by path and sha256: verifyDirectory below skips
+	// re-inspecting a file whose bytes still match (#4337).
+	const inspected = new Map();
 	const add = async ( file, bytes, kind ) => {
 		safeName( file );
 		inspect( file, bytes, { application: kind === "application" } );
 		await write( path.join( packageRoot, file ), bytes );
-		manifest.files.push( { path: file, length: bytes.length, sha256: sha( bytes ), kind } );
+		const digest = sha( bytes );
+		inspected.set( file, digest );
+		manifest.files.push( { path: file, length: bytes.length, sha256: digest, kind } );
 	};
 	/*
 	================
@@ -434,7 +439,7 @@ export async function buildBeta(
 	manifest.routes.sort( ( a, b ) => a.url.localeCompare( b.url ) );
 	manifest.releaseId = releaseIdentity( manifest );
 	await write( path.join( packageRoot, "release.json" ), JSON.stringify( manifest, null, 2 ) );
-	await verifyDirectory( packageRoot );
+	await verifyDirectory( packageRoot, { inspected } );
 	if ( makeArchive ) await archiveRelease( packageRoot, path.join( destination, "client-beta.tar" ) );
 	await write( path.join( privateRoot, "release-id.txt" ), manifest.releaseId );
 	await write(
@@ -451,10 +456,28 @@ export async function buildBeta(
 	console.log( "[beta] verified", destination, manifest.releaseId );
 	return { destination, packageRoot, privateRoot, manifest };
 }
+/*
+================
+betaArguments
+
+The command line: [destination] [--source <snapshot>] [--no-archive].
+--no-archive skips client-beta.tar: the release build reads only
+<destination>/package (ops release_data.py), and the 4.18 GB archive took
+about two minutes of every release build for no reader (#4337).
+================
+*/
+export function betaArguments( argv ) {
+	const options = {}, rest = [ ...argv ];
+	if ( rest.length && !rest[0].startsWith( "--" ) ) options.destination = path.resolve( rest.shift() );
+	while ( rest.length ) {
+		const flag = rest.shift();
+		if ( flag === "--source" && rest.length ) options.sourceSnapshot = path.resolve( rest.shift() );
+		else if ( flag === "--no-archive" ) options.makeArchive = false;
+		else throw Error( `build.mjs: unknown argument ${flag}` );
+	}
+	return options;
+}
 if ( process.argv[1] && path.resolve( process.argv[1] ) === fileURLToPath( import.meta.url ) ) {
 	await mkdir( path.join( root, "temp/artifacts/beta" ), { recursive: true } );
-	await buildBeta( {
-		...(process.argv[2] ? { destination: path.resolve( process.argv[2] ) } : {}),
-		...(process.argv[3] === "--source" ? { sourceSnapshot: path.resolve( process.argv[4] ) } : {})
-	} );
+	await buildBeta( betaArguments( process.argv.slice( 2 ) ) );
 }

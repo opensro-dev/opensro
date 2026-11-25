@@ -53,3 +53,33 @@ func TestRentDeadlineBodyRoundTrip(t *testing.T) {
 		t.Fatal("a rent-reference body without its deadline leg was accepted")
 	}
 }
+
+/*
+================
+TestPermanentRowOfRentalRefCarriesZeroLeg
+
+The r204l outage: a permanent row (no deadline) of a reference the
+catalog names a rental kind must still write the leg, as 0, because the
+client measures the body by the reference. Without it the next row's
+bytes were read as the deadline and entry failed with S2.
+================
+*/
+func TestPermanentRowOfRentalRefCarriesZeroLeg(t *testing.T) {
+	SetRentRefs([]uint32{4242})
+	defer SetRentRefs(nil)
+	flags := PackTypeFlags(3, 1, 13, 1)
+	permanent := ItemBody{RefObjID: 4242, TypeFlags: flags, Plus: 1, Durability: 50}
+	other := permanent
+	other.RefObjID = 4243
+	encoded := permanent.Encode()
+	if len(encoded) != permanent.EncodedSize() || len(encoded)-len(other.Encode()) != 8 {
+		t.Fatalf("permanent rental-kind body = %d bytes, other = %d; want 8 more", len(encoded), len(other.Encode()))
+	}
+	if !bytes.Equal(encoded[len(encoded)-8:], make([]byte, 8)) {
+		t.Fatalf("permanent leg = %x, want zero", encoded[len(encoded)-8:])
+	}
+	back, err := readItemBody(NewReader(encoded), flags, IsRentRef)
+	if err != nil || back.RentExpiresUnixMs != 0 || back.Durability != 50 {
+		t.Fatalf("permanent rental-kind round trip = %+v, %v", back, err)
+	}
+}
