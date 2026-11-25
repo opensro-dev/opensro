@@ -470,6 +470,29 @@ class MallTests(unittest.TestCase):
 			self.assertIn("PACKAGE_KEEP", text)
 			self.assertNotIn("PACKAGE_DROP", text)
 
+	# ================
+	# test_strip_text_rows_keeps_multi_line_messages_whole
+	#
+	# A native message keeps bare LFs and blank lines inside one record.
+	# Dropping a previous run's tab label leaves its bytes as they were;
+	# split into lines and joined with CRLF, it came back as stale rows
+	# the asset build refused (#4362).
+	# ================
+	def test_strip_text_rows_keeps_multi_line_messages_whole(self):
+		with tempfile.TemporaryDirectory() as folder:
+			output = Path(folder)
+			path = output / importer.TEXT_ROOT / "textuisystem.txt"
+			path.parent.mkdir(parents=True)
+			message = "1\tUIIT_MSG_LONG\tfirst\nsecond\n\nafter a blank\t\t\t\t\t\tEnglish\r\n"
+			label = "1\tUIIT_STT_LABEL\tLabel\t\t\tLabel\r\n"
+			kept = "﻿" + message + "1\tUIIT_TAIL\ttail\r\n"
+			path.write_bytes((kept + label).encode("utf-16-le"))
+			importer.strip_text_rows(output, {"UIIT_STT_LABEL"})
+			self.assertEqual(path.read_bytes(), kept.encode("utf-16-le"))
+			# Nothing of the run's left to drop: the table is not rewritten.
+			importer.strip_text_rows(output, {"UIIT_STT_LABEL"})
+			self.assertEqual(path.read_bytes(), kept.encode("utf-16-le"))
+
 
 class BuildTests(unittest.TestCase):
 	# ================

@@ -526,7 +526,10 @@ def board_label_rows(boards):
 # ================
 # strip_text_rows
 #
-# Drops the textuisystem rows a previous run added, by key.
+# Drops the textuisystem records a previous run added, by key, and keeps
+# every other byte (text_tables.without_rows). A line split rejoined with
+# CRLF cut the table's multi-line messages into stale rows on every
+# rerun that had labels to drop (#4362).
 # ================
 def strip_text_rows(output, keys):
 	if not keys:
@@ -534,10 +537,10 @@ def strip_text_rows(output, keys):
 	path = safe_target(output / TEXT_ROOT, "textuisystem.txt")
 	if not path.exists():
 		return
-	lines = tables.decode_table(path.read_bytes()).splitlines()
-	kept = [line for line in lines if not (len(line.split("\t")) > 1 and line.split("\t")[1] in keys)]
-	if len(kept) != len(lines):
-		write_atomically(path, b"\xff\xfe" + ("\r\n".join(kept) + "\r\n").encode("utf-16-le"))
+	raw = path.read_bytes()
+	kept = text_tables.without_rows(raw, keys)
+	if kept != raw:
+		write_atomically(path, kept)
 
 
 # ================
