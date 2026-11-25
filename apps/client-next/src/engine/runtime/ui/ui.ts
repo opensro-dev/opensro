@@ -90,6 +90,9 @@ import {
 	SPIRIT_SOCKET
 } from "@/engine/foundation/gameplay/avatar-socket";
 import {
+	SPIRIT_SKILL_SLOT_BG_SIZE,
+	SPIRIT_SKILL_SLOT_BG_X,
+	SPIRIT_SKILL_SLOT_BG_Y,
 	SPIRIT_SKILL_SLOT_SIZE,
 	SPIRIT_SKILL_SLOT_X,
 	SPIRIT_SKILL_SLOT_Y,
@@ -17264,12 +17267,11 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 						// player holding one sees where it goes (#4364). The v1.150
 						// layout has no node for it; only a server with the switch on
 						// grants a Spirit, so a native shard draws four.
-						if (
-							sockets.length === 4 && (
-								game?.avatarInventory?.some( i => isSpiritItem( i.typeFlags ) ) ||
-								game?.inventory.some( i => isSpiritItem( i.typeFlags ) )
-							)
-						) {
+						const spiritShown = sockets.length === 4 && (
+							game?.avatarInventory?.some( i => isSpiritItem( i.typeFlags ) ) ||
+							game?.inventory.some( i => isSpiritItem( i.typeFlags ) )
+						);
+						if ( spiritShown ) {
 							sockets.push( {
 								type: SPIRIT_SOCKET,
 								r: [
@@ -17285,6 +17287,25 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 						// CIFEquipSkillSlotWnd). A slot casts its skill on a right-click
 						// and drags to the hotbar, as the skill window's do; the strip
 						// is empty while no awake Spirit is worn.
+						// The strip's four slot backgrounds show with the Spirit's
+						// socket, empty or filled, as the avatar sockets do.
+						const slotBackground = ROOT + "interface/pet/pt_block02.png";
+						if ( spiritShown ) {
+							paths.push( slotBackground );
+							for ( const x of SPIRIT_SKILL_SLOT_BG_X ) {
+								if ( !resources.has( slotBackground ) ) break;
+								rect(
+									[
+										ex + SPIRIT_SKILL_STRIP_RECT[0] + x,
+										ey + SPIRIT_SKILL_STRIP_RECT[1] + SPIRIT_SKILL_SLOT_BG_Y,
+										SPIRIT_SKILL_SLOT_BG_SIZE,
+										SPIRIT_SKILL_SLOT_BG_SIZE
+									],
+									white,
+									slotBackground
+								);
+							}
+						}
 						for ( const [index, skillId] of (game?.spiritSkills ?? []).entries() ) {
 							const x = SPIRIT_SKILL_SLOT_X[index];
 							if ( x === undefined ) break;
@@ -17328,7 +17349,7 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 						for ( const { type, r } of sockets ) {
 							const item = game?.avatarInventory?.find( i => avatarSocket( i.typeFlags ) === type ),
 								path = ROOT + "interface/equipment/equip_slot_" +
-									[ "helm", "cloth", "pandernt", "plag", "helm" ][type - 1] + ".png";
+									[ "helm", "cloth", "pandernt", "plag", "extraneous" ][type - 1] + ".png";
 							paths.push( path );
 							if ( resources.has( path ) ) {
 								rect( [ r[0] - 4, r[1] - 4, 40, 40 ], white, path );

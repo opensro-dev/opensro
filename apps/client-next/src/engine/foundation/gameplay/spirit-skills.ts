@@ -30,6 +30,11 @@ export const SPIRIT_SKILL_STRIP_RECT = [ 0, 240, 177, 50 ] as const;
 export const SPIRIT_SKILL_SLOT_X = [ 11, 52, 93, 134 ] as const;
 export const SPIRIT_SKILL_SLOT_Y = 4;
 export const SPIRIT_SKILL_SLOT_SIZE = 32;
+// GDR_AVATAR_SKILL_SLOT_BG_01..04: a 40x40 pt_block02.ddj under each slot,
+// drawn whether or not the slot holds a skill.
+export const SPIRIT_SKILL_SLOT_BG_X = [ 9, 50, 91, 132 ] as const;
+export const SPIRIT_SKILL_SLOT_BG_Y = 2;
+export const SPIRIT_SKILL_SLOT_BG_SIZE = 40;
 
 /*
 ================

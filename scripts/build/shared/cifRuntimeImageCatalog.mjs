@@ -285,7 +285,15 @@ lacks it and publishes nothing here (copyImageReference skips an absent
 source).
 ================
 */
-export const laterSlotEffectRuntimeImageReferences = [ "icon/item/etc/icon_edge_nasrun.ddj" ];
+export const laterSlotEffectRuntimeImageReferences = [
+	"icon/item/etc/icon_edge_nasrun.ddj",
+	// The later clients' Spirit socket frame (a bracelet, as the Spirit's
+	// mall guide names it) and its skill strip's slot backgrounds
+	// (ifequipskillslotwnd.txt GDR_AVATAR_SKILL_SLOT_BG_01..04): both ship
+	// in the v1.150 tree, but only the Spirit's avatar view draws them.
+	"interface/equipment/equip_slot_extraneous.ddj",
+	"interface/pet/pt_block02.ddj"
+];
 
 /*
 ================
