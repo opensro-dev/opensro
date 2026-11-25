@@ -52,7 +52,6 @@ apps/client-next/src/engine/foundation/gameplay/cos-behavior.ts
 apps/client-next/src/engine/foundation/gameplay/equipment-drop.ts
 apps/client-next/src/engine/foundation/gameplay/guide.ts
 apps/client-next/src/engine/foundation/gameplay/item-activation.ts
-apps/client-next/src/engine/foundation/gameplay/item-tooltip-reference.ts
 apps/client-next/src/engine/foundation/gameplay/merchant-branches.ts
 apps/client-next/src/engine/foundation/gameplay/party-notices.ts
 apps/client-next/src/engine/foundation/gameplay/player-stats.ts
@@ -89,7 +88,6 @@ apps/client-next/src/engine/foundation/ui/disconnect-dialog.ts
 apps/client-next/src/engine/foundation/ui/extended-quickslot.ts
 apps/client-next/src/engine/foundation/ui/frame-ring.ts
 apps/client-next/src/engine/foundation/ui/input-options.ts
-apps/client-next/src/engine/foundation/ui/item-tooltip-recovery.ts
 apps/client-next/src/engine/foundation/ui/loading-presentation.ts
 apps/client-next/src/engine/foundation/ui/main-popup.ts
 apps/client-next/src/engine/foundation/ui/mastery-tooltip.ts

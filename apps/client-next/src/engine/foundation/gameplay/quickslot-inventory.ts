@@ -10,6 +10,7 @@ existing product extension.
 ===========================================================================
 */
 import type { InventoryItem } from "@/engine/contracts/gameplay";
+import { ITEM_REQUIREMENT_SLOTS } from "@/engine/contracts/item-wire-fields";
 import type { Progression } from "./progression";
 import { quickSlotItemSlot, MAX_INVENTORY_SLOT_COUNT, type QuickSlot } from "./quickslots";
 import { recoveryCategory } from "./item-cooldowns";
@@ -52,8 +53,8 @@ function usable( item: InventoryItem, facts: PotionReplacementFacts ): boolean {
 		(f.reqStr ?? 0) > (facts.progression.stats?.strength ?? 0) ||
 		(f.reqInt ?? 0) > (facts.progression.stats?.intellect ?? 0)
 	) return false;
-	for ( let i = 1; i <= 4; i++ ) {
-		const type = f["reqLevelType" + i] ?? 0, required = f["requiredLevel" + (i === 1 ? "" : i)] ?? 0;
+	for ( const [typeKey, levelKey] of ITEM_REQUIREMENT_SLOTS ) {
+		const type = f[typeKey] ?? 0, required = f[levelKey] ?? 0;
 		if ( !type || !required ) continue;
 		const level = type === 1 ?
 			facts.progression.level :

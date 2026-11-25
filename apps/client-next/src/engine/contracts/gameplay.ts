@@ -12,6 +12,7 @@ undefined shop closes it; other fields belong to the newest snapshot.
 ===========================================================================
 */
 import type { MoverPublication } from "./mover-publication";
+import type { ItemFieldValues } from "./item-wire-fields";
 import type { ArenaChest } from "@/engine/foundation/gameplay/arena-chest";
 export type { MovementAim } from "./mover-publication";
 
@@ -592,7 +593,7 @@ export interface InventoryItem {
 	// The reference row's authored itemdata fields (the same record
 	// the tooltip reference carries), so activation rules can read
 	// them - the mall-use gate reads canUse (token 24).
-	readonly nativeFields?: Readonly<Record<string, number>>;
+	readonly nativeFields?: ItemFieldValues;
 	readonly slot: number;
 	readonly refObjId: number;
 	readonly typeFlags: number;
