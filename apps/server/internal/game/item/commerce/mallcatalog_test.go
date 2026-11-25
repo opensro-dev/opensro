@@ -12,6 +12,7 @@ import (
 	"testing"
 
 	"opensro.online/server/internal/game/enterworld"
+	"opensro.online/server/internal/game/nasrun"
 	"opensro.online/server/internal/testsupport/gamedatatest"
 	"opensro.online/server/internal/testsupport/tier"
 )
@@ -53,6 +54,87 @@ TestMallCatalogRequiresReferenceFiles
 func TestMallCatalogRequiresReferenceFiles(t *testing.T) {
 	if _, err := LoadMall(t.TempDir(), nil, false, nil); err == nil {
 		t.Fatal("accepted missing reference data")
+	}
+}
+
+/*
+================
+TestLoadMallNasrunShelvesFollowTheSwitch
+
+The built tree can carry the later mall's two Nasrun shelves
+(#4240 part 4): SRO_NASRUN on, the Spirit and the extension gear
+stand at the later mall's silk prices; off, neither the shelves
+nor their listings exist and the native stock is untouched.
+================
+*/
+func TestLoadMallNasrunShelvesFollowTheSwitch(t *testing.T) {
+	scrap := func(code string) []string {
+		row := []string{"1", "15", code, "ITEM"}
+		for len(row) < 20 {
+			row = append(row, "0")
+		}
+		return row
+	}
+	dir := t.TempDir()
+	writeMallTables(t, dir, map[string][][]string{
+		"refshopgroup":          {{"1", "15", "852", "GROUP_MALL"}},
+		"refmappingshopgroup":   {{"1", "15", "GROUP_MALL", "MALL_PREMIUM"}},
+		"refmappingshopwithtab": {{"1", "15", "MALL_PREMIUM", "MALL_PREMIUM_GROUP1"}},
+		"refshoptab": {
+			{"1", "11", "4401", "MALL_PREMIUM_ETC", "MALL_PREMIUM_GROUP1", "UIIT_STT_SILKMALL_ETC"},
+			{"1", "11", "4409", "MALL_PREMIUM_NASRUN", "MALL_PREMIUM_GROUP1", "UIIT_STT_SILKMALL_PREMIUM_NASRUN"},
+			{"1", "11", "4410", "MALL_PREMIUM_NASRUN_ETC", "MALL_PREMIUM_GROUP1", "UIIT_STT_SILKMALL_PREMIUM_NASRUN_ETC"},
+		},
+		"refshopgoods": {
+			{"1", "11", "MALL_PREMIUM_ETC", "PACKAGE_NATIVE", "0"},
+			{"1", "11", "MALL_PREMIUM_NASRUN", "PACKAGE_ITEM_MALL_AVATAR_M_NASRUN", "0"},
+			{"1", "11", "MALL_PREMIUM_NASRUN_ETC", "PACKAGE_ITEM_MALL_NASRUN_EXTENSION", "0"},
+		},
+		"refpackageitem": {
+			{"1", "11", "51001", "PACKAGE_NATIVE", "0", "0", "Name", "Description", "item/test.ddj"},
+			{"1", "11", "51522", "PACKAGE_ITEM_MALL_AVATAR_M_NASRUN", "0", "0", "Name", "Description", "item/test.ddj"},
+			{"1", "11", "51528", "PACKAGE_ITEM_MALL_NASRUN_EXTENSION", "0", "0", "Name", "Description", "item/test.ddj"},
+		},
+		"refpricepolicyofitem": {
+			{"1", "11", "PACKAGE_NATIVE", "2", "20"},
+			{"1", "11", "PACKAGE_ITEM_MALL_AVATAR_M_NASRUN", "2", "150"},
+			{"1", "11", "PACKAGE_ITEM_MALL_NASRUN_EXTENSION", "2", "50"},
+		},
+		"refscrapofpackageitem":            {scrap("PACKAGE_NATIVE"), scrap("PACKAGE_ITEM_MALL_AVATAR_M_NASRUN"), scrap("PACKAGE_ITEM_MALL_NASRUN_EXTENSION")},
+		"refconditiontosellpackageitem":    nil,
+		"refrewardpolicytosellpackageitem": nil,
+	})
+
+	t.Setenv(nasrun.Env, "on")
+	catalog, err := LoadMall(dir, nil, false, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(catalog.Tabs) != 3 {
+		t.Fatalf("tabs with %s on: %+v", nasrun.Env, catalog.Tabs)
+	}
+	byCode := map[string]MallPackage{}
+	for _, offer := range catalog.Offers {
+		byCode[offer.Code] = offer
+	}
+	if offer := byCode["PACKAGE_ITEM_MALL_AVATAR_M_NASRUN"]; offer.Silk != 150 || offer.Tab != 1 {
+		t.Fatalf("the Spirit's listing with %s on: %+v", nasrun.Env, offer)
+	}
+	if offer := byCode["PACKAGE_ITEM_MALL_NASRUN_EXTENSION"]; offer.Silk != 50 || offer.Tab != 2 {
+		t.Fatalf("the extension gear's listing with %s on: %+v", nasrun.Env, offer)
+	}
+
+	t.Setenv(nasrun.Env, "")
+	catalog, err = LoadMall(dir, nil, false, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(catalog.Tabs) != 1 || catalog.Tabs[0].Code != "MALL_PREMIUM_ETC" {
+		t.Fatalf("tabs with %s off: %+v", nasrun.Env, catalog.Tabs)
+	}
+	if len(catalog.Offers) != 1 || catalog.Offers[0].Code != "PACKAGE_NATIVE" ||
+		catalog.Offers[0].Silk != 20 || catalog.Offers[0].Tab != 0 {
+		t.Fatalf("offers with %s off: %+v", nasrun.Env, catalog.Offers)
 	}
 }
 

@@ -38,8 +38,8 @@ def empty():
 	return {name: [] for name in ("refpackageitem.txt", "refscrapofpackageitem.txt", "refpricepolicyofitem.txt", "refshopgoods.txt")}
 
 
-def tree_of(items, creatures=(), tabs=("MALL_ARCHEMY_ATHANASIA", "MALL_PET_B_SILK", "MALL_AVATAR_DRESS"), current=None):
-	return goods.TreeView(set(items), set(creatures), current or empty(), set(tabs))
+def tree_of(items, creatures=(), tabs=("MALL_ARCHEMY_ATHANASIA", "MALL_PET_B_SILK", "MALL_AVATAR_DRESS"), current=None, carry=()):
+	return goods.TreeView(set(items), set(creatures), current or empty(), set(tabs), set(carry))
 
 
 # ================
@@ -88,6 +88,40 @@ class LaterMallGoodsTest(unittest.TestCase):
 		self.assertEqual(sorted(summary["unlisted"]), sorted([
 			"item not in the tree", "creature not in the tree", "rent term without a row", "no tab MALL_PREMIUM_NASRUN",
 			"second-currency shop PRE_MALL_ARCHEMY_ATHANASIA"]))
+
+	# ================
+	# test_a_spirit_lists_in_its_carried_tab_at_its_later_price
+	#
+	# A Devil's Spirit (#4240 part 4): its tab is one the step may
+	# carry over, so the good lists at the later 150 silk (the
+	# second-currency rows stay behind) and the summary names the
+	# tab for add_goods to write.
+	# ================
+	def test_a_spirit_lists_in_its_carried_tab_at_its_later_price(self):
+		later = empty()
+		package = later_good(later, "MALL_PREMIUM_NASRUN", "ITEM_MALL_AVATAR_M_NASRUN", 0, "150", 51522,
+			payments=("2", "4", "2048"))
+		rows, summary = goods.goods_rows(later,
+			tree_of({"ITEM_MALL_AVATAR_M_NASRUN"}, carry=("MALL_PREMIUM_NASRUN",)))
+		self.assertEqual(summary["packages"], [package])
+		self.assertEqual(summary["tabs"], ["MALL_PREMIUM_NASRUN"])
+		self.assertEqual(rows["refshopgoods.txt"][0][2:5], ["MALL_PREMIUM_NASRUN", package, "0"])
+		self.assertEqual([(row[3], row[4]) for row in rows["refpricepolicyofitem.txt"]], [("2", "150"), ("4", "0")])
+
+	# ================
+	# test_a_carried_tab_without_its_item_stays_out
+	#
+	# The tab may be carried, but without the Spirit's item row the
+	# good stays out and no tab is written for it.
+	# ================
+	def test_a_carried_tab_without_its_item_stays_out(self):
+		later = empty()
+		later_good(later, "MALL_PREMIUM_NASRUN", "ITEM_MALL_AVATAR_M_NASRUN", 0, "150", 51522)
+		rows, summary = goods.goods_rows(later, tree_of(set(), carry=("MALL_PREMIUM_NASRUN",)))
+		self.assertEqual(summary["listed"], 0)
+		self.assertEqual(summary["tabs"], [])
+		self.assertEqual(summary["unlisted"], {"item not in the tree": 1})
+		self.assertTrue(all(not table for table in rows.values()))
 
 	# ================
 	# test_a_rental_lists_and_writes_its_rent_row

@@ -28,9 +28,12 @@ A good lists when:
 	  is the native load's fatal, so the build refuses it here.
 
 Not listed: the PRE_MALL_ tabs, v1.696's second-currency shop of ITEM_PRE_
-copies (no currency of that kind exists here); and the Devil's Spirit's
-own tabs, which the server lays out itself (mallcategories.go
-nasrunGoods). Every good sells at its v1.696 price, which continues
+copies (no currency of that kind exists here). The Devil's Spirit's two
+tabs the tree lacks are carried over from the later client when one of
+their goods lists (their tab rows and tab labels below), so the family
+sells in the ordinary mall at its later prices (#4240 part 4); the
+layout's Premium > Gears face keeps standing on the same packages
+(mallcategories.go nasrunGoods). Every good sells at its v1.696 price, which continues
 v1.150's ladder (degree 9 stones are 51 silk in both clients, a
 permanent outfit 130); only the payments v1.150's mall knows (silk,
 gift silk, the points row) are carried, since v1.696's 2048/4096 are its
@@ -60,6 +63,12 @@ FORMAT = "opensro-later-mall-v1"
 TEXT_ROOT = mall.TEXT_ROOT
 SHOP_TAB_TABLE = "refshoptab.txt"
 SHOP_TAB_CODE = 3
+TAB_LABEL = 5
+TEXT_TABLE = "textuisystem.txt"
+# The Devil's Spirit's tabs (#4240 part 4): the tree has neither, so a
+# good in one lists only when the step carries the tab over from the
+# later client, as mall_avatar_import carries the attachment tab.
+NASRUN_TABS = ("MALL_PREMIUM_NASRUN", "MALL_PREMIUM_NASRUN_ETC")
 GOODS_TAB, GOODS_PACKAGE, GOODS_SLOT = 2, 3, 4
 PACKAGE_ID, PACKAGE_CODE = 2, 3
 SCRAP_PACKAGE, SCRAP_ITEM = 2, 3
@@ -123,9 +132,13 @@ def sharded_codes(read, index_name, column):
 # codenames, its mall tables and its shop tab codes.
 # ================
 class TreeView:
-	def __init__(self, item_codes, creature_codes, mall_rows, shop_tabs):
+	def __init__(self, item_codes, creature_codes, mall_rows, shop_tabs, carry_tabs=frozenset()):
 		self.item_codes, self.creature_codes = item_codes, creature_codes
 		self.mall_rows, self.shop_tabs = mall_rows, shop_tabs
+		# Tabs the tree lacks that the step may carry over from the
+		# later client (add_goods names the Devil's Spirit's): a good
+		# in one lists, and the step writes the tab it landed in.
+		self.carry_tabs = carry_tabs
 
 
 # ================
@@ -159,7 +172,7 @@ def unlisted_reason(tab, package, later_index, tree):
 	package_row, scraps, prices, rent_rows, item_by_id = later_index
 	if not tab.startswith(MALL_TAB):
 		return "second-currency shop " + tab
-	if tab not in tree.shop_tabs:
+	if tab not in tree.shop_tabs and tab not in tree.carry_tabs:
 		return "no tab " + tab
 	if package not in package_row or not prices.get(package):
 		return "no package or price"
@@ -275,9 +288,69 @@ def goods_rows(later, tree, rent_rows=None, item_by_id=None):
 	for tab, slots in next_slot.items():
 		if slots > mall.MALL_SLOTS:
 			raise ValueError(f"{tab} would hold {slots} goods; the mall's one-byte slot holds {mall.MALL_SLOTS}")
+	# A carried tab the step must write: one a listed good landed in
+	# that the tree itself does not have.
+	carried = sorted({row[GOODS_TAB] for row in rows["refshopgoods.txt"]} & set(tree.carry_tabs))
 	return rows, {"packages": listed, "listed": len(listed), "rentals": rentals + staged_rentals,
-		"rentTerms": sorted(rent_terms), "unstage": sorted(unstage),
+		"rentTerms": sorted(rent_terms), "unstage": sorted(unstage), "tabs": carried,
 		"unlisted": dict(sorted(unlisted.items()))}
+
+
+# ================
+# carried_tab_row
+#
+# The later client's refshoptab row for tab, as the step carries it
+# over (mall_avatar_import.attach_tab_row does the same for the
+# attachment tab): its group, label and identity, the identity moved
+# past the tree's when it is taken. Appended last, it shifts no other
+# tab's index (mallcatalog.go numbers tabs by row order within a
+# shop). Refused when the later client has no such tab either.
+# ================
+def carried_tab_row(current, later, tab):
+	authored = [row for row in later if len(row) > SHOP_TAB_CODE and row[0] == mall.SERVICE_ON and row[SHOP_TAB_CODE] == tab]
+	if not authored:
+		raise ValueError(f"the later client has no {tab} tab to carry over")
+	row = list(authored[0])
+	row[1] = mall.NATIVE_SOURCE
+	taken = {int(cells[2]) for cells in current if len(cells) > 2 and cells[2].isdigit()}
+	identity = int(row[2])
+	while identity in taken:
+		identity += 1
+	row[2] = str(identity)
+	return row
+
+
+# ================
+# later_label_texts
+#
+# The later client's own English for the given textuisystem symbols,
+# read raw from its shards (the converted row stream drops a row of
+# the wrong width, #4328): key at column 2, English at column 9.
+# ================
+def later_label_texts(media, index, symbols):
+	found = {}
+	if not symbols:
+		return found
+	shards = [row[0].strip() for row in tables.table_rows(tables.table_text(media, index, TEXT_TABLE))
+		if row and row[0].strip()]
+	for shard in shards:
+		for row in tables.table_rows(tables.table_text(media, index, shard)):
+			if len(row) > 9 and row[2] in symbols and row[2] not in found:
+				found[row[2]] = row[9]
+		if len(found) == len(symbols):
+			break
+	return found
+
+
+# ================
+# tab_label_row
+#
+# One carried tab's textuisystem row in the built layout, the later
+# client's English in every text cell (mall_avatar_import's board
+# labels take the same shape).
+# ================
+def tab_label_row(symbol, text):
+	return ["1", symbol, text, "", "", text, text, text, text, text]
 
 
 # ================
@@ -330,6 +403,8 @@ def add_goods(later_root, native, output):
 		previous = json.loads(marker.read_text(encoding="utf-8"))
 		mall.strip_mall(output, set(previous.get("packages", [])))
 		strip_rent(output, set(previous.get("rentTerms", [])))
+		avatars.strip_tabs(output, set(previous.get("tabs", [])))
+		avatars.strip_text_rows(output, set(previous.get("tabLabels", [])))
 		marker.unlink()
 	if not avatars.source_present(later_root, avatars.V1696_SOURCE):
 		return {"enabled": False, "skipped": "no v1.696 client"}
@@ -342,7 +417,16 @@ def add_goods(later_root, native, output):
 		rent_rows = {row[RENT_CODE]: row for row in avatars.later_table_rows(media, index, RENT_TABLE)
 			if row and row[0] == mall.SERVICE_ON and len(row) > RENT_CODE}
 		item_by_id = {row[1]: row[2] for row in avatars.later_table_rows(media, index, "itemdata.txt") if len(row) > 2}
-	rows, summary = goods_rows(later, read_tree(read), rent_rows, item_by_id)
+		later_tabs = avatars.later_table_rows(media, index, SHOP_TAB_TABLE)
+		label_texts = later_label_texts(media, index,
+			{row[TAB_LABEL] for row in later_tabs if len(row) > TAB_LABEL and row[SHOP_TAB_CODE] in NASRUN_TABS})
+	tree = read_tree(read)
+	# The Spirit's tabs may be carried when the later client has them
+	# and the tree does not; a tab is written only if a good lands in
+	# it (goods_rows reports those in the summary's tabs).
+	tree.carry_tabs = {code for code in NASRUN_TABS if code not in tree.shop_tabs
+		and any(len(row) > SHOP_TAB_CODE and row[0] == mall.SERVICE_ON and row[SHOP_TAB_CODE] == code for row in later_tabs)}
+	rows, summary = goods_rows(later, tree, rent_rows, item_by_id)
 	if summary.get("unstage"):
 		mall.strip_mall(output, set(summary["unstage"]))
 	for name, _ in mall.MALL_TABLES:
@@ -353,6 +437,22 @@ def add_goods(later_root, native, output):
 	if rows[RENT_TABLE]:
 		write_atomically(safe_target(output / TEXT_ROOT, RENT_TABLE),
 			text_tables.append_rows(read(RENT_TABLE) or b"", rows[RENT_TABLE]))
+	summary["tabLabels"] = []
+	if summary.get("tabs"):
+		current = tables.table_rows(read(SHOP_TAB_TABLE) or b"")
+		carried = []
+		for code in summary["tabs"]:
+			row = carried_tab_row(current, later_tabs, code)
+			carried.append(row)
+			current.append(row)
+		write_atomically(safe_target(output / TEXT_ROOT, SHOP_TAB_TABLE),
+			text_tables.append_rows(read(SHOP_TAB_TABLE), carried))
+		labels = [tab_label_row(row[TAB_LABEL], label_texts[row[TAB_LABEL]]) for row in carried
+			if len(row) > TAB_LABEL and row[TAB_LABEL] in label_texts]
+		if labels:
+			write_atomically(safe_target(output / TEXT_ROOT, TEXT_TABLE),
+				text_tables.append_rows(read(TEXT_TABLE), labels))
+			summary["tabLabels"] = [row[1] for row in labels]
 	summary.update({"enabled": True, "format": FORMAT, "laterArchiveHashes": identities})
 	write_atomically(marker, (json.dumps(summary, indent=2) + "\n").encode("utf-8"))
 	return summary
