@@ -75,15 +75,38 @@ type AgentUnit struct {
 	// nextRemoteAtMs is the earliest time the next remote decision may be
 	// asked for this agent.
 	nextRemoteAtMs int64
+	// lastAdvanceMs is when the agent last moved along its route; the
+	// next step's distance budget is the elapsed time at walk speed.
+	// Zero means it has not moved yet.
+	lastAdvanceMs int64
+}
+
+// Pose is an agent's position on the world surface: a region and its
+// region-local coordinates, Y included (the surface height there).
+type Pose struct {
+	RegionID uint16
+	X        float32
+	Y        float32
+	Z        float32
+}
+
+// Walker is the consumer-owned movement port: one step of at most maxDist
+// world units from `from` toward `to` over the real nav surface, returning
+// the new pose and whether `to` was reached. The shard wires it to the
+// monster march (PlanMonsterPath); without a Walker an agent holds its
+// position instead of inventing movement.
+type Walker interface {
+	Step(from, to Pose, maxDist float64) (next Pose, arrived bool)
 }
 
 // WorldHooks is an optional consumer-owned callback port invoked when an AI
 // agent speaks in local chat, drops parley cargo stacks, or pays out an escort
-// contract to a player.
+// contract to a player. Walker is the movement port above.
 type WorldHooks struct {
 	OnAgentChat       func(division, agentName string, regionID uint16, message string)
 	OnParleyCargoDrop func(division, agentName string, regionID uint16, x, y, z float32, stacks int, stackGoldValue int64)
 	OnContractReward  func(division, hunterPlayerName string, rewardGold int64, traderAgentName string)
+	Walker            Walker
 }
 
 const (
@@ -95,6 +118,11 @@ const (
 	// memoryFlushInterval is how often the flush loop writes dirty
 	// memories and route heat to the store, off the tick.
 	memoryFlushInterval = 5 * time.Second
+
+	// walkSpeedUnitsPerSec is the agents' pace along the highway: the
+	// on-foot walk pace the world uses for characters (simulation
+	// WalkSpeed, 20 units/sec). Port-only tuning, not native.
+	walkSpeedUnitsPerSec = 20.0
 )
 
 // Runtime manages the division roster of AI Caravan & Thief agents.
@@ -309,6 +337,7 @@ func defaultDivisionRoster(division string, heat map[uint16]int) []*AgentUnit {
 	routeJD := SelectRoute(TownJangan, TownDonwhang, 4, PersonalityCautious, heat)
 	routeDH := SelectRoute(TownDonwhang, TownHotan, 5, PersonalityGreedy, heat)
 	routeHJ := SelectRoute(TownHotan, TownJangan, 3, PersonalityHonorable, heat)
+	viperDock, viperIndex := ferrySpawn(routeJD)
 
 	return []*AgentUnit{
 		{
@@ -389,9 +418,9 @@ func defaultDivisionRoster(division string, heat map[uint16]int) []*AgentUnit {
 			HomeTown:       TownDonwhang,
 			OriginTown:     TownJangan,
 			DestTown:       TownDonwhang,
-			RegionID:       waypointJanganFerry.RegionID,
-			X:              waypointJanganFerry.X,
-			Z:              waypointJanganFerry.Z,
+			RegionID:       viperDock.RegionID,
+			X:              viperDock.X,
+			Z:              viperDock.Z,
 			MaxHP:          11000,
 			HP:             11000,
 			MaxMP:          5500,
@@ -400,9 +429,31 @@ func defaultDivisionRoster(division string, heat map[uint16]int) []*AgentUnit {
 			JobSuitCode:    "ITEM_CH_M_THIEF_01",
 			PrimarySkillID: 318,
 			Route:          routeJD,
-			WaypointIndex:  2,
+			WaypointIndex:  viperIndex,
 		},
 	}
+}
+
+/*
+==================
+ferrySpawn
+
+Where the thief waits: the near dock of the route's first ferry
+crossing. Returns that dock and the route index of the far dock, so the
+agent's first step is the crossing itself. A route without a crossing
+starts at its first anchor.
+==================
+*/
+func ferrySpawn(route []Waypoint) (Waypoint, int) {
+	for i := 1; i < len(route); i++ {
+		if route[i].Ferry && route[i-1].Ferry {
+			return route[i-1], i
+		}
+	}
+	if len(route) > 0 {
+		return route[0], 0
+	}
+	return Waypoint{}, 0
 }
 
 /*
@@ -603,6 +654,18 @@ func (r *Runtime) applyDecisionLocked(unit *AgentUnit, d Decision, nowMs int64) 
 	}
 }
 
+/*
+==================
+advanceAlongRouteLocked
+
+Moves the agent one tick along its route. Between two Ferry anchors the
+step is the ferry ride: the pose lands on the far dock at once. Every
+other step goes through the consumer's Walker, budgeted by the time
+since the agent last moved at walkSpeedUnitsPerSec; with no Walker the
+agent holds its position. Reaching the final anchor completes the run
+(deliverAgentLocked).
+==================
+*/
 func (r *Runtime) advanceAlongRouteLocked(unit *AgentUnit, nowMs int64) {
 	if len(unit.Route) == 0 {
 		heat := r.memories.HeatSnapshot(unit.Division)
@@ -613,19 +676,61 @@ func (r *Runtime) advanceAlongRouteLocked(unit *AgentUnit, nowMs int64) {
 		return
 	}
 	target := unit.Route[unit.WaypointIndex]
-	nextX, nextZ, arrived := StepPosition(unit.X, unit.Z, target.X, target.Z, 240)
-	unit.X = nextX
-	unit.Z = nextZ
-	unit.RegionID = target.RegionID
-	if !arrived {
-		return
-	}
-	unit.WaypointIndex++
-	if unit.WaypointIndex < len(unit.Route) {
+
+	// The ferry ride: two adjacent Ferry anchors are the two docks of
+	// one crossing, so arrival is the hop itself.
+	if unit.WaypointIndex > 0 && target.Ferry && unit.Route[unit.WaypointIndex-1].Ferry {
+		unit.RegionID = target.RegionID
+		unit.X = target.X
+		unit.Z = target.Z
+		unit.lastAdvanceMs = nowMs
+		unit.WaypointIndex++
+		if unit.WaypointIndex >= len(unit.Route) {
+			r.deliverAgentLocked(unit, nowMs)
+		}
 		return
 	}
 
-	// Arrived at destination terminal: complete delivery & rotate route.
+	walker := r.hooks.Walker
+	if walker == nil {
+		unit.lastAdvanceMs = nowMs
+		return
+	}
+	var dtMs int64
+	if unit.lastAdvanceMs > 0 && nowMs > unit.lastAdvanceMs {
+		dtMs = nowMs - unit.lastAdvanceMs
+	}
+	unit.lastAdvanceMs = nowMs
+	from := Pose{RegionID: unit.RegionID, X: unit.X, Y: unit.Y, Z: unit.Z}
+	to := Pose{RegionID: target.RegionID, X: target.X, Y: target.Y, Z: target.Z}
+	next, arrived := walker.Step(from, to, walkSpeedUnitsPerSec*float64(dtMs)/1000)
+	unit.RegionID = next.RegionID
+	unit.X = next.X
+	unit.Y = next.Y
+	unit.Z = next.Z
+	if !arrived {
+		return
+	}
+	// On the anchor exactly, so the next chord starts from proven
+	// ground; Y stays the walker's surface height.
+	unit.X = target.X
+	unit.Z = target.Z
+	unit.RegionID = target.RegionID
+	unit.WaypointIndex++
+	if unit.WaypointIndex >= len(unit.Route) {
+		r.deliverAgentLocked(unit, nowMs)
+	}
+}
+
+/*
+==================
+deliverAgentLocked
+
+Completes a run whose final anchor was reached: pays any escort
+contract, restocks a trader, and rotates the route back the other way.
+==================
+*/
+func (r *Runtime) deliverAgentLocked(unit *AgentUnit, nowMs int64) {
 	unit.State = StateDelivering
 	if unit.Role == RoleTrader {
 		if contract, ok := r.contracts.CompleteAITraderRun(unit.Division, unit.Name, unit.RegionID, nowMs, r.memories); ok {
