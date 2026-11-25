@@ -1326,8 +1326,8 @@ export function createEntities(
 				const face = frame.opcode === PEER_GUILD_APPEARANCE_OPCODE ?
 					decodePeerGuildAppearance( p ) :
 					decodePeerGuildCleared( p );
-				const entity = entities.get( face.gid );
-				if ( entity ) {
+				const entity = face && entities.get( face.gid );
+				if ( face && entity ) {
 					apply( {
 						kind: "state",
 						entity: {

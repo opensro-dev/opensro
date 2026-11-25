@@ -9,10 +9,9 @@ grant name) has to reach the viewers who already hold the player, or their
 nameplates keep the old guild until the player walks out of sight and back
 (#4413, BUG-097).
 
-Native v1.188 sends 0x30FF to the nearby sessions on a bind
-(its guild-face broadcast 4EA2F0, called from the join commit
-5C8BF0 and the create commit 5C8D40) and 0x3100 {u32 uid} on an unbind
-(the dissolve broadcast 5C3D80 and the leave/kick path 5C3EA0).
+The reference server sends the guild face to the nearby sessions when a
+player binds a guild (join and create commit it) and a clear when one
+unbinds (dissolve, leave and kick).
 The v1.150 client registers the same two handlers under its own opcodes
 (CPSMission_RegisterPacketHandlers 74E833 / 74E854):
 
@@ -173,4 +172,29 @@ func (p peerFaces) refresh(divisionID string, names []string) {
 		}
 		p.hub.BroadcastObserved(divisionID, session.ID, gid, []transport.Frame{frame})
 	}
+}
+
+/*
+================
+refreshGuild
+
+Re-sends the face of every member of one guild: a union commit changes
+the alliance id and crest of the whole guild at once. The reference
+server's guild-wide refresh walks the members the same way.
+================
+*/
+func (p peerFaces) refreshGuild(divisionID string, guildID int64) {
+	guilds := p.deps.GuildAuthority()
+	if guilds == nil {
+		return
+	}
+	_, members, ok := guilds.Guild(divisionID, guildID)
+	if !ok {
+		return
+	}
+	names := make([]string, 0, len(members))
+	for _, member := range members {
+		names = append(names, member.Name)
+	}
+	p.refresh(divisionID, names)
 }

@@ -83,6 +83,13 @@ func HandleGpDonate(deps Dependencies, divisionID string, actor *enterworld.Char
 	if err != nil {
 		return refusedGpDonate(err.Error())
 	}
+	// A zero amount answers 0x02 first (the door's check); a dead donor
+	// answers 0x07 before the guild is looked at.
+	if request.Amount > 0 && !enterworld.CharacterAlive(actor) {
+		outcome := refusedGpDonate("donor is not alive")
+		outcome.ErrorPayload = EncodeGuildErrorResult(GuildErrDonateNotAlive)
+		return outcome
+	}
 	donation, refusal := deps.GuildAuthority().DonateGuildPoints(
 		divisionID,
 		actor.ID,

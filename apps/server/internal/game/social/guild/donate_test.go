@@ -133,7 +133,7 @@ func TestHandleGpDonateSuccess(t *testing.T) {
 // nothing and sends no ack or deltas: a zero amount, an amount over the
 // donor's SP, a donor with NO SP field at all, a guildless character,
 // nil/delete-pending identities and malformed bodies. The refusals the
-// v1.188 server names (5C7880) answer with their 0xB40F {2}{code}
+// reference server names answer with their 0xB40F {2}{code}
 // error, so an over-SP donation is never silent (#4413); the rest stay
 // silent.
 func TestHandleGpDonateRefusals(t *testing.T) {
@@ -182,6 +182,23 @@ func TestHandleGpDonateRefusals(t *testing.T) {
 	}
 	if berk.SkillPoints == nil || *berk.SkillPoints != 100 {
 		t.Errorf("donor SP after the refusals = %v, want the untouched 100", berk.SkillPoints)
+	}
+
+	// A dead donor answers 0x07, but a zero amount still answers 0x02
+	// first (the reference server's order); neither moves SP or GP.
+	zeroHP := int64(0)
+	authority.MutateCharacter(berk, "donate-test-dead", func() { berk.CurrentHP = &zeroHP })
+	for _, tc := range []struct {
+		amount uint32
+		error  []byte
+	}{{1, []byte{2, 0x07}}, {0, []byte{2, 0x02}}} {
+		outcome := guild.HandleGpDonate(deps, mutatorDivision, berk, mutatorDonatePayload(tc.amount))
+		if outcome.Refusal == "" || !bytes.Equal(outcome.ErrorPayload, tc.error) {
+			t.Errorf("dead donor, amount %d: refusal %q error % X, want % X", tc.amount, outcome.Refusal, outcome.ErrorPayload, tc.error)
+		}
+	}
+	if berk.SkillPoints == nil || *berk.SkillPoints != 100 {
+		t.Errorf("dead donor's SP = %v, want the untouched 100", berk.SkillPoints)
 	}
 
 	// The guildless arm needs a character with no FK.

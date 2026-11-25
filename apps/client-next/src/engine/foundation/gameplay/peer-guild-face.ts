@@ -44,10 +44,13 @@ export interface PeerGuildFace {
 decodePeerGuildAppearance
 
 Strict: a short or trailing-byte body throws, as the spawn decoder does.
-The ascii strings map byte for byte, like the spawn row's str().
+The ascii strings map byte for byte, like the spawn row's str(). An empty
+name is null: 75FE90 binds nothing then (its empty arm only touches the
+guild window's member tab), so the nameplate stays as it was. The server
+sends 0x37E6 for a guildless player instead.
 ================
 */
-export function decodePeerGuildAppearance( p: Uint8Array ): PeerGuildFace {
+export function decodePeerGuildAppearance( p: Uint8Array ): PeerGuildFace | null {
 	const v = viewOf( p );
 	let o = 0;
 	const take = ( n: number ) => {
@@ -65,14 +68,7 @@ export function decodePeerGuildAppearance( p: Uint8Array ): PeerGuildFace {
 	const gid = u32(), guildId = u32(), guildName = str();
 	if ( !guildName ) {
 		if ( o !== p.length ) throw new Error( "Invalid peer guild face" );
-		return {
-			gid,
-			guildName,
-			guildId: undefined,
-			guildGrantName: undefined,
-			guildCrests: undefined,
-			guildWarTeam: undefined
-		};
+		return null;
 	}
 	const guildGrantName = str();
 	const guildCrests = [ u32(), u32(), u32() ] as const;

@@ -98,6 +98,19 @@ test("a face frame binds the watched peer's guild, and a clear frame removes it"
 	owner.dispose();
 });
 
+test("an empty-name face frame binds nothing, as 75FE90's empty arm", () => {
+	const owner = world();
+	owner.receive( appearanceFrame( peer.gid, 42, "FaceBanner", "Scout", [ 3, 9, 4 ], 1 ) );
+	const empty = Buffer.alloc( 10 );
+	empty.writeUInt32LE( peer.gid, 0 );
+	empty.writeUInt32LE( 42, 4 );
+	owner.receive( { opcode: APPEARANCE_OPCODE, payload: empty } );
+	const entity = defined( owner.read( peer.gid ) );
+	assert.equal( entity.guildName, "FaceBanner" );
+	assert.equal( entity.guildId, 42 );
+	owner.dispose();
+});
+
 test("a face frame for an unseen gid changes nothing", () => {
 	const owner = world();
 	const before = defined( owner.read( peer.gid ) );

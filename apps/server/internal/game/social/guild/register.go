@@ -62,6 +62,9 @@ func Register(hub *transport.Hub, deps Dependencies, presence Presence, managers
 	// Every membership commit re-sends the changed nameplates to the
 	// players already looking at them (peerface.go, #4413).
 	faces := peerFaces{hub: hub, deps: deps, presence: presence, unions: unions}
+	if unions != nil {
+		unions.refreshGuildFaces = faces.refreshGuild
+	}
 	hub.Handle(OpGuildCreateRequest, func(s *transport.Session, opcode uint16, payload []byte) {
 		actor, divisionID, bound := enterworld.SessionCharacter(deps, s)
 		if !bound {
