@@ -10,6 +10,11 @@ any required one is missing:
 	the game root and its client files (SRO_GAME_ROOT or the checkout parent)
 	the prepared extraction, and whether it still matches the archives
 	Python and the build's modules, ffmpeg, and the Windows-only runtimes
+	the optional later clients, and what a build without each leaves out
+
+A v1.150 client alone builds the native game. The later clients add the
+later content (#4466); each is named by its variable, and an unset one is
+a warning, never a failure, because every later layer skips without it.
 
 ===========================================================================
 */
@@ -26,9 +31,35 @@ import {
 	readPreparationManifest
 } from "./build/shared/clientInputs.mjs";
 import { sha256File } from "./build/shared/hash.mjs";
+import { resolveVsroRoot } from "./build/shared/laterClientRoot.mjs";
 import { runPython } from "./build/shared/pythonRun.mjs";
 
 const D3DX_RUNTIME = "d3dx9_39.dll";
+
+// The optional later sources: the variable naming each, the archive its
+// folder must hold, the pin file the build checks it against, and what a
+// build without it leaves out. SRO_VSRO_ROOT also falls back to the root
+// the game tree's variant stamp names (laterClientRoot.mjs).
+const LATER_SOURCES = [
+	{
+		env: "SRO_VSRO_ROOT",
+		archive: "Media.pk2",
+		pin: "scripts/vsro_archive_pins.json",
+		without: "no Alexandria, later dungeon maps, tomb minimap or world-map buttons"
+	},
+	{
+		env: "SRO_V1696_ROOT",
+		archive: "Media.pk2",
+		pin: "scripts/v1696_archive_pins.json",
+		without: "no v1.696 worlds, Rigid scrolls, later mall goods or map and macro guides"
+	},
+	{
+		env: "SRO_AVATARS_ZIP",
+		archive: "",
+		pin: "scripts/avatars_archive_pins.json",
+		without: "no later mall avatars"
+	}
+];
 
 /*
 ================
@@ -112,6 +143,30 @@ function checkTools( report ) {
 
 /*
 ================
+checkLaterSources
+
+Each optional later source: ok when it is named and holds its archive,
+FAIL when it is named but holds none (that tree was meant to carry the
+later content, and the build would fail in its step), warn when unset,
+saying what the build leaves out. The archives' pins are checked by the
+build steps that read them, not here: hashing gigabytes is the build's.
+================
+*/
+function checkLaterSources( report, env = process.env ) {
+	for ( const source of LATER_SOURCES ) {
+		const named = source.env === "SRO_VSRO_ROOT" ? resolveVsroRoot( env ).root : (env[source.env] ?? "").trim();
+		if ( !named ) {
+			report.warn( source.env, `not set: ${source.without} (optional; pins in ${source.pin})` );
+			continue;
+		}
+		const file = source.archive ? path.join( named, source.archive ) : named;
+		if ( existsSync( file ) ) report.pass( source.env, named );
+		else report.fail( source.env, `${file} is missing; point ${source.env} at the pinned source or unset it` );
+	}
+}
+
+/*
+================
 createReport
 ================
 */
@@ -144,6 +199,7 @@ async function main() {
 	await checkPreparation( report );
 	await checkPython( report );
 	checkTools( report );
+	checkLaterSources( report );
 	for ( const row of report.rows ) {
 		console.log( `${row.status.padEnd( 4 )}  ${row.name.padEnd( 22 )}  ${row.detail}` );
 	}

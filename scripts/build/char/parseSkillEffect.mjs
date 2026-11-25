@@ -70,6 +70,7 @@ import {
 	loadQinShiTombSkillRows,
 	qinshiTombCombatEnabled
 } from "../shared/qinshiTomb.mjs";
+import { cap110ExpansionEnabled } from "../shared/levelCap.mjs";
 
 const SKILLDATA_COL_ID = 1;
 const SKILLDATA_COL_LEVEL_NAME = 3;
@@ -81,7 +82,10 @@ const SKILLDATA_COL_ANIMSET_BASE = 5;
 const SKILLDATA_COL_ORIGINAL = 6;
 // Port-only, not native: the Blue Berserk effect rows the later client marks Service == 0 and the
 // port draws: the second Hwan body, and the two quest traps (the Niya General spirit trap and the
-// level 100 trial's Annihilation Trap), whose ground model the player must see.
+// level 100 trial's Annihilation Trap), whose ground model the player must see. They are the
+// cap-110 expansion's records and stand only while it runs (cap110ExpansionEnabled): the second
+// Hwan body names system_hwan2_*.efp, which the v1.150 Particles.pk2 does not ship, so admitting
+// it on a native shard failed every build without the VSRO particles (#4466).
 export const HWAN_EFFECTS_WITHOUT_SERVICE = new Set( [
 	"SYSTEM_CH_HWAN2MODE",
 	"SKILL_QNO_CH_HWAN_1_4_04_01",
@@ -289,9 +293,9 @@ export function parseSkillAniSet( skillEffectPath ) {
 			// are already present. Admit them only when SRO_QINSHI_TOMB is on.
 			// Port-only, not native: the 2nd Hwan body record (hit_4_hwan2mode.efp) also has
 			// Service == 0. Only a Blue Berserk owner (level frame 0x3FCB, cap-110 server)
-			// selects it, so shipping the record changes nothing for a native shard.
+			// selects it, so it stands only on a shard running the expansion.
 			if (
-				!HWAN_EFFECTS_WITHOUT_SERVICE.has( baseName ) &&
+				!(HWAN_EFFECTS_WITHOUT_SERVICE.has( baseName ) && cap110ExpansionEnabled()) &&
 				(!qinshiTombCombatEnabled() || !isQinShiTombSkillEffectName( baseName ))
 			) {
 				continue;

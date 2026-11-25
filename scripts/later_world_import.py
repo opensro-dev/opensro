@@ -69,6 +69,9 @@ from sro_paths import trees_overlap
 
 TEXT_ROOT = Path("Media_extracted") / tables.TEXTDATA
 PIN_FORMAT = "opensro-vsro-archive-pins-v1"
+# The English cell of a staged textdataname row, in the v1.150 layout
+# (alexandria_map_tables.native_text_row).
+NAME_ENGLISH = 8
 
 _verified_archives = set()
 # The v1.696 archives a region merge reads. Particles carries the effect
@@ -360,6 +363,22 @@ def later_characters(read):
 
 
 # ================
+# fill_layer_english
+#
+# Give a staged name row the English its layer authors (english maps
+# symbol to text) where the later client left the English cell a
+# placeholder; a shipped translation stays. The row is the layer's, so
+# its text is too, and the layer's off path reaps both: an entry in the
+# retail completion catalog (englishCompletions/) would outlive the
+# layer and fail every build without it (#4466).
+# ================
+def fill_layer_english(texts, english):
+	for row in texts:
+		if row[1] in english and characters.is_placeholder_text(row[NAME_ENGLISH]):
+			row[NAME_ENGLISH] = english[row[1]]
+
+
+# ================
 # stage_kinds
 #
 # Stage converted later kinds into the variant: allocate their
@@ -373,9 +392,11 @@ def later_characters(read):
 # with a name symbol it gives no text row (Muhan's change forms, all
 # SN_MOB_MUHAN_SOLO_A_75 in v1.696): they are staged without one, as
 # the client ships them; every other name without a row refuses, by
-# symbol. A kind the tree already holds (native, or an earlier layer's)
-# refuses by name: one codename stands in one row, so an import places
-# such a kind on its own row instead of staging it (hunting2). has(name)
+# symbol. english maps a name symbol to the English the layer authors
+# for it (fill_layer_english). A kind the tree already holds (native,
+# or an earlier layer's) refuses by name: one codename stands in one
+# row, so an import places such a kind on its own row instead of
+# staging it (hunting2). has(name)
 # says whether the later archive holds a
 # textdata file: the client's skills are read the way the client reads
 # them (skilldata_enc.client_skill_rows), its encrypted set when it ships
@@ -383,7 +404,7 @@ def later_characters(read):
 # records, so the reap finds exactly what this build owned.
 # ================
 def stage_kinds(label, read, has, refs, text_root, prior, character_shard, skill_shard, info_owned, extra_skills=(),
-		unnamed=frozenset()):
+		unnamed=frozenset(), english=None):
 	native_chars = cap110.tree_characters(text_root, character_shard)
 	standing = sorted(set(refs) & {r[2] for r in native_chars if len(r) > 2})
 	if standing:
@@ -417,6 +438,7 @@ def stage_kinds(label, read, has, refs, text_root, prior, character_shard, skill
 	object_raw = b"\xff\xfe" + later_object_text(read).encode("utf-16-le")
 	texts = [[r[0], r[1], r[2], "", "", r[5], r[4], r[7], r[8], r[9], ""] for r in
 		(later_text_row(row) for row in characters.translation_rows(object_raw)) if len(r) >= 10 and r[1] in wanted]
+	fill_layer_english(texts, english or {})
 	required = {r[5] for code, r in refs.items() if code not in unnamed} - known
 	missing = required - {r[1] for r in texts}
 	if missing:
