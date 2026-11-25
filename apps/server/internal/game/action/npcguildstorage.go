@@ -295,19 +295,11 @@ func containerHoldsBoundRow(snapshot *enterworld.Character, row inventory.Item) 
 	if pet == nil {
 		return false
 	}
-	containers := []*domain.COSContainer{pet.Container}
-	if active := snapshot.ActiveCOS; active != nil && active.GID == pet.GID {
-		containers = append(containers, active.Container)
+	if cosContainerHoldsBoundRow(pet.Container) {
+		return true
 	}
-	for _, container := range containers {
-		if container == nil {
-			continue
-		}
-		for _, held := range container.Rows {
-			if held.ForgeBound {
-				return true
-			}
-		}
+	if active := snapshot.ActiveCOS; active != nil && active.GID == pet.GID {
+		return cosContainerHoldsBoundRow(active.Container)
 	}
 	return false
 }
