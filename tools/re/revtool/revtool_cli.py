@@ -448,6 +448,8 @@ def build_parser():
 					help="retail binary (default: the top-level --binary)")
 	sa.add_argument("--rzdb", default=None,
 					help="project to save (default: <seed stem>.rzdb beside the seed)")
+	sa.add_argument("--manifest", default=None,
+					help="pin manifest for verified second builds (default: seed-manifest.json beside revtool; 'none' for the seed's own build only)")
 	sa.add_argument("--limit", type=int, default=0,
 					help="apply only the first N functions (dogfood runs)")
 	sa.add_argument("--force", action="store_true",
