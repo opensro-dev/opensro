@@ -1,8 +1,8 @@
 {
 	"format": "sro-revtool-seed-manifest",
-	"version": 1,
+	"version": 2,
 	"tag": "revtool-seed-2026-11-13",
-	"note": "Pins for the released seed assets (GitHub release assets, never git history). Rebuild with revtool.py seed build from the maintainer overlay DBs; seed verify checks a download against these pins, the target binary's hash, and the .text run scan.",
+	"note": "Pins for the released seed assets (GitHub release assets, never git history). Rebuild with revtool.py seed build from the maintainer overlay DBs; seed verify checks a download against these pins, the target binary's hash, and the .text run scan. Each asset's builds pins every verified build of its target (#4467): the first build is the one the seed describes. A build whose text_sha256 matches the seed build's is byte-identical in .text and takes the seed unchanged; a build with an offsets table takes the seed with its function addresses translated; a build with neither is known but unmapped - revtool names it and says what to do instead of refusing silently. A build whose hash is not recorded yet keeps binary_sha256 null (a slot, never a guess).",
 	"assets": [
 		{
 			"target": "client",
@@ -11,7 +11,21 @@
 			"bytes": 378264,
 			"binary_sha256": "375e868234437e815af8ce9289ddea7ec9144430f4ea24e32988a6d6c9dd108a",
 			"functions": 95342,
-			"ledger_lines": 944
+			"ledger_lines": 944,
+			"builds": [
+				{
+					"label": "v1.150 client, the build the seed describes",
+					"binary_sha256": "375e868234437e815af8ce9289ddea7ec9144430f4ea24e32988a6d6c9dd108a",
+					"text_sha256": "cdd5d60c08e997f7252105269e0ab8195bb0aeb4a023bd23762eb4094b264388",
+					"offsets": null
+				},
+				{
+					"label": "v1.150 client, as supplied by the maintainer (#4467)",
+					"binary_sha256": "f6580bf65213c0c074efe312514c55c73040667e7a9ad1aae9b8595d48ccd3a2",
+					"text_sha256": null,
+					"offsets": null
+				}
+			]
 		},
 		{
 			"target": "server",
@@ -20,7 +34,21 @@
 			"bytes": 290384,
 			"binary_sha256": "bec2375e2c4c1073e3bf7761571470c430de251de74b452dbb86537348ef5290",
 			"functions": 77256,
-			"ledger_lines": 303
+			"ledger_lines": 303,
+			"builds": [
+				{
+					"label": "v1.188 server, guard-patched - the build the seed describes",
+					"binary_sha256": "bec2375e2c4c1073e3bf7761571470c430de251de74b452dbb86537348ef5290",
+					"text_sha256": "c2dc9aab84dcd818dbadcb833282a798e9baf2549210285a9cee900d00e48f75",
+					"offsets": null
+				},
+				{
+					"label": "v1.188 server, stock (#4478: hash not yet recorded; a slot, not a guess)",
+					"binary_sha256": null,
+					"text_sha256": null,
+					"offsets": null
+				}
+			]
 		}
 	]
 }
