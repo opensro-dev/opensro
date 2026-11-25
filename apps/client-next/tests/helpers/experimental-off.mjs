@@ -133,5 +133,8 @@ export const OFF = Object.freeze( {
 	// Off by default (#3532): the Event Calendar is port-only; off, the
 	// System menu has no calendar entry.
 	eventCalendar: false,
-	jobHonor: false
+	jobHonor: false,
+	// Off by default (#3925): the login maintenance notice is port-only;
+	// off, the title never reads the schedule feed.
+	maintenanceNotice: false
 } );
