@@ -449,12 +449,9 @@ def stage_kinds(label, read, has, refs, text_root, prior, character_shard, skill
 		"characters": {c: int(r[1]) for c, r in refs.items()}, "skills": {r[3]: int(r[1]) for r in added},
 		"animationBases": sorted(set(prior.get("animationBases", [])) | {base for rows in selected.values() for base, _ in rows}),
 		"characterInfo": sorted(owned_info | {r[0] for r in info}),
-		# Owned names are the rows this build added plus the ones a
-		# previous build added, never a row the table already held: a
-		# later kind may reuse a native symbol (MOB_RM_TAHOMET_ROC names
-		# itself SN_MOB_RM_TAHOMET), and the off reap drops every owned
-		# symbol, so claiming the native row would strip the native name.
-		"nameSymbols": sorted(({r[1] for r in texts} | set(prior.get("nameSymbols", []))) & {r[5] for r in refs.values()}),
+		# Owned names follow characters.owned_name_symbols (#3762).
+		"nameSymbols": characters.owned_name_symbols(texts, prior.get("nameSymbols", []),
+			{r[5] for r in refs.values()}),
 	}
 
 

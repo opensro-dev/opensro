@@ -11,7 +11,6 @@ apps/client-next/src/engine/contracts/navigation.ts
 apps/client-next/src/engine/contracts/presentation-random.ts
 apps/client-next/src/engine/foundation/animation/action-time.ts
 apps/client-next/src/engine/foundation/animation/animation-activation.ts
-apps/client-next/src/engine/foundation/animation/animation-dispatch.ts
 apps/client-next/src/engine/foundation/animation/avatar-override.ts
 apps/client-next/src/engine/foundation/animation/body-shape.ts
 apps/client-next/src/engine/foundation/animation/bsr-particle-transform.ts
@@ -53,7 +52,6 @@ apps/client-next/src/engine/foundation/gameplay/chat-blocks.ts
 apps/client-next/src/engine/foundation/gameplay/chat-feedback.ts
 apps/client-next/src/engine/foundation/gameplay/cos-behavior.ts
 apps/client-next/src/engine/foundation/gameplay/equipment-drop.ts
-apps/client-next/src/engine/foundation/gameplay/feedback-levels.ts
 apps/client-next/src/engine/foundation/gameplay/guide.ts
 apps/client-next/src/engine/foundation/gameplay/item-activation.ts
 apps/client-next/src/engine/foundation/gameplay/item-tooltip-reference.ts
@@ -337,6 +335,5 @@ scripts/test/mission/missionMinimapBuild.test.mjs
 scripts/test/suites/cif.mjs
 scripts/test/suites/index.mjs
 scripts/test/suites/region.mjs
-scripts/test/suites/world.mjs
 scripts/test/world/authoredWorldRegionResources.test.mjs
 scripts/test/world/worldMapImageReferences.test.mjs
