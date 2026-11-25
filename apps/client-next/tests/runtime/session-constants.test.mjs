@@ -22,7 +22,7 @@ const { createEntities } = await import(
 
 const localPlayerEntry = { modelRef: 1933, startProfile: { regionId: 0x6b4f, x: 1, y: 2, z: 3, angle: 0 } };
 
-function bootstrapFull(e) {
+function bootstrapFull( e ) {
 	e.bootstrap( {
 		protocolVersion: 3,
 		nativeResult: 1,
@@ -34,7 +34,7 @@ function bootstrapFull(e) {
 
 test("a digest-held answer keeps the reference tables and commerce rows", () => {
 	const e = createEntities();
-	bootstrapFull(e);
+	bootstrapFull( e );
 	// The commerce seed lands outside the entry answer (opcode 14).
 	e.references( [ { refObjId: 7777, typeFlags: 0x8ac, name: "ShopSword" } ] );
 	e.bootstrap( {
