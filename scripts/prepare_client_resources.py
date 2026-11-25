@@ -110,7 +110,22 @@ def safe_target(root, archive_path):
 	return target
 
 
+# ================
+# write_atomically
+#
+# Writes data to target through a rename, and keeps a target that already
+# holds exactly these bytes, mtime and all. Build caches key the extracted
+# tree by size and mtime (resourceBuildFingerprint.mjs dataRootsHash):
+# the asset build's own optional-teleport import rewrote one unchanged
+# file under extracted/ on every run, so every next run saw "data
+# extracted changed" and reran all three lanes (~450 s, r204l, #4337).
+# ================
 def write_atomically(target, data):
+	try:
+		if target.stat().st_size == len(data) and target.read_bytes() == data:
+			return
+	except OSError:
+		pass
 	target.parent.mkdir(parents=True, exist_ok=True)
 	partial = target.with_name(target.name + ".partial")
 	with open(partial, "wb") as out:
