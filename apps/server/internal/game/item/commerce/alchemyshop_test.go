@@ -70,10 +70,11 @@ func TestJanganAlchemyShopRegroupsTheDefaultList(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	// The same 66 goods the default list sells, regrouped: nothing on the
-	// smith's or grocer's authored tabs, 5 + 14 + 19 on the three new ones.
-	if len(goods) != 66 {
-		t.Fatalf("regrouped list = %d goods, want the default 66", len(goods))
+	// The same 74 goods the default list sells, regrouped: nothing on the
+	// smith's or grocer's authored tabs, 7 + 14 + 19 on the three new ones
+	// (the elixirs tab: four recipes and the degree 9-11 powders).
+	if len(goods) != 74 {
+		t.Fatalf("regrouped list = %d goods, want the default 74", len(goods))
 	}
 	counts := map[string]int{}
 	for _, good := range goods {
@@ -82,7 +83,7 @@ func TestJanganAlchemyShopRegroupsTheDefaultList(t *testing.T) {
 		}
 		counts[good.Tab]++
 	}
-	if counts[janganElixirsTab] != 5 || counts[janganAttrStonesTab] != 14 || counts[janganMagicStonesTab] != 19 {
+	if counts[janganElixirsTab] != 7 || counts[janganAttrStonesTab] != 14 || counts[janganMagicStonesTab] != 19 {
 		t.Fatalf("tab goods = %v", counts)
 	}
 
@@ -117,7 +118,8 @@ func TestJanganAlchemyShopRegroupsTheDefaultList(t *testing.T) {
 		"ITEM_ETC_ARCHEMY_POTION_SPEED_11", "ITEM_ETC_ARCHEMY_RONDO_01", "ITEM_ETC_ARCHEMY_RONDO_02",
 		"ITEM_ETC_ARCHEMY_REINFORCE_RECIPE_WEAPON_B", "ITEM_ETC_ARCHEMY_REINFORCE_RECIPE_SHIELD_B",
 		"ITEM_ETC_ARCHEMY_REINFORCE_RECIPE_ARMOR_B", "ITEM_ETC_ARCHEMY_REINFORCE_RECIPE_ACCESSARY_B",
-		"ITEM_ETC_ARCHEMY_REINFORCE_PROB_UP_A_09",
+		"ITEM_ETC_ARCHEMY_REINFORCE_PROB_UP_A_09", "ITEM_ETC_ARCHEMY_REINFORCE_PROB_UP_A_10",
+		"ITEM_ETC_ARCHEMY_REINFORCE_PROB_UP_A_11",
 	}
 	if got := tabCodenames(elixirs); !reflect.DeepEqual(got, wantElixirs) {
 		t.Fatalf("elixirs tab = %v", got)
@@ -180,7 +182,9 @@ func TestJanganAlchemyShopOffKeepsTodaysShops(t *testing.T) {
 		t.Fatalf("smith tab 3 = %d offers, want its arrows and the 9 goods", len(offers))
 	}
 	grocer := c.Tabs[c.tabIDs[janganGrocerTab]]
-	if len(grocer) != 7+29 || grocer[len(grocer)-1].Ref.Codename != "ITEM_ETC_ARCHEMY_REINFORCE_PROB_UP_A_09" {
+	// Her 7 authored goods, then 31 extra goods with the degree 9-11
+	// powders last.
+	if len(grocer) != 7+31 || grocer[len(grocer)-1].Ref.Codename != "ITEM_ETC_ARCHEMY_REINFORCE_PROB_UP_A_11" {
 		t.Fatalf("grocer tab 3 = %d offers", len(grocer))
 	}
 }

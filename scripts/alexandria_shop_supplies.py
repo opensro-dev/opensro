@@ -35,10 +35,12 @@ reported, never partly granted.
 The alchemy band is the port's invention (#2846): of the degree-11
 alchemy, both official databases have exactly the speed potion active -
 neither has the degree-11 stone band, and neither has the degree-10 or
-degree-11 prob-up active. The default build therefore stocks only that
-one package (OFFICIAL_ALCHEMY_ITEM) on the alchemy tab. The full band
-ships only behind the SRO_ALEXANDRIA_PORT_STOCK build flag
-(port_stock=True).
+degree-11 prob-up active. The default build therefore stocks that one
+package (OFFICIAL_ALCHEMY_ITEM) on the alchemy tab, plus the degree 10 and
+11 lucky powders (OWNER_ALCHEMY_ITEMS: port-only, not native; the owner's
+decision of 2026-11-25, after players found no way to reinforce degree 10
+gear). The rest of the band ships only behind the
+SRO_ALEXANDRIA_PORT_STOCK build flag (port_stock=True).
 
 ===========================================================================
 """
@@ -81,6 +83,13 @@ ALCHEMY_DEGREES = ("10", "11")
 # research on #2842): active in both official databases, where the stone
 # band and the degree-10/11 prob-up rows are inactive.
 OFFICIAL_ALCHEMY_ITEM = "ITEM_ETC_ARCHEMY_POTION_SPEED_11"
+# Port-only, not native (owner, 2026-11-25): the degree 10 and 11 lucky
+# powders, the reinforcement elixir the degree 10-11 gear has no other
+# source of, join the default stock beside the official speed potion.
+OWNER_ALCHEMY_ITEMS = (
+	"ITEM_ETC_ARCHEMY_REINFORCE_PROB_UP_A_10",
+	"ITEM_ETC_ARCHEMY_REINFORCE_PROB_UP_A_11",
+)
 
 
 # ================
@@ -276,8 +285,9 @@ def merge_supplies(raw, items, port_stock=False):
 		if not port_stock:
 			# Official stock (#2846): the one degree-11 alchemy package
 			# both official databases have active, minted like any band
-			# package. The band below is the port's, behind its flag.
-			stocked, count = stock_tab(alchemy_tab[3], [OFFICIAL_ALCHEMY_ITEM], degree9_source, goods_row)
+			# package, and the owner's lucky powders. The band below is
+			# the port's, behind its flag.
+			stocked, count = stock_tab(alchemy_tab[3], [OFFICIAL_ALCHEMY_ITEM, *OWNER_ALCHEMY_ITEMS], degree9_source, goods_row)
 			if count:
 				replaced_tabs[alchemy_tab[3]] = stocked
 				summary["goods"] += count

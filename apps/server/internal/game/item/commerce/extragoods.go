@@ -79,11 +79,23 @@ var shopExtraGoodsDefault = "" +
 	// at every grocer's alchemy tab (NPC_*_ACCESSORY, SN_TAB_ALCHEMY) for
 	// A_09's native price, 54,469 (refpricepolicyofitem, its Hotan package).
 	// Hotan's two grocer tabs already sell it natively. The large powder
-	// (B_09) waits for F8 (owner, 2026-10-14).
+	// (B_09) waits for F8 (owner, 2026-10-14). Degrees 10 and 11 join it
+	// (owner, 2026-11-25) at their itemdata prices, 63,656 and 70,875: no
+	// native gold shop sells a degree 10 or 11 powder, so degree 10-11
+	// gear had no reinforcement elixir to buy. Jangan's three ride its
+	// alchemy shop's powder list (alchemyshop.go janganPowderGoods).
 	"STORE_CH_ACCESSORY_TAB3:ITEM_ETC_ARCHEMY_REINFORCE_PROB_UP_A_09:54469," +
+	"STORE_CH_ACCESSORY_TAB3:ITEM_ETC_ARCHEMY_REINFORCE_PROB_UP_A_10:63656," +
+	"STORE_CH_ACCESSORY_TAB3:ITEM_ETC_ARCHEMY_REINFORCE_PROB_UP_A_11:70875," +
 	"STORE_WC_ACCESSORY_TAB3:ITEM_ETC_ARCHEMY_REINFORCE_PROB_UP_A_09:54469," +
+	"STORE_WC_ACCESSORY_TAB3:ITEM_ETC_ARCHEMY_REINFORCE_PROB_UP_A_10:63656," +
+	"STORE_WC_ACCESSORY_TAB3:ITEM_ETC_ARCHEMY_REINFORCE_PROB_UP_A_11:70875," +
 	"STORE_EU_ACCESSORY_TAB3:ITEM_ETC_ARCHEMY_REINFORCE_PROB_UP_A_09:54469," +
-	"STORE_CA_ACCESSORY_TAB3:ITEM_ETC_ARCHEMY_REINFORCE_PROB_UP_A_09:54469"
+	"STORE_EU_ACCESSORY_TAB3:ITEM_ETC_ARCHEMY_REINFORCE_PROB_UP_A_10:63656," +
+	"STORE_EU_ACCESSORY_TAB3:ITEM_ETC_ARCHEMY_REINFORCE_PROB_UP_A_11:70875," +
+	"STORE_CA_ACCESSORY_TAB3:ITEM_ETC_ARCHEMY_REINFORCE_PROB_UP_A_09:54469," +
+	"STORE_CA_ACCESSORY_TAB3:ITEM_ETC_ARCHEMY_REINFORCE_PROB_UP_A_10:63656," +
+	"STORE_CA_ACCESSORY_TAB3:ITEM_ETC_ARCHEMY_REINFORCE_PROB_UP_A_11:70875"
 
 // maxShopSlot is the last slot a tab can address: the offer slot is a byte.
 const maxShopSlot = math.MaxUint8

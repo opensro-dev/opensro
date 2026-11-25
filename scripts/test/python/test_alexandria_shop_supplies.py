@@ -122,17 +122,24 @@ class OfficialStockTests(unittest.TestCase):
 	speed potion active - neither has the degree-11 stone band and
 	neither has the degree-10 or degree-11 prob-up active - so the
 	alchemy tab gains that one package and no second tab is authored.
-	The port's band waits behind the port-stock build flag."""
+	The owner added the degree 10 and 11 lucky powders (2026-11-25); the
+	rest of the port's band waits behind the port-stock build flag."""
 
-	def test_the_alchemy_tab_gains_only_the_official_speed_potion(self):
+	def test_the_alchemy_tab_gains_the_speed_potion_and_the_owners_lucky_powders(self):
 		merged, summary = supplies.merge_supplies(tables(), ITEMS)
 		self.assertEqual(summary["alchemyTab"], "STORE_SD_ACCESSORY_TAB3")
 		ten = [r[3] for r in goods_of(merged, "STORE_SD_ACCESSORY_TAB3")]
-		self.assertEqual(ten, ALCHEMY_GOODS + ["PACKAGE_ITEM_ETC_ARCHEMY_POTION_SPEED_11"])
+		self.assertEqual(ten, ALCHEMY_GOODS + [
+			"PACKAGE_ITEM_ETC_ARCHEMY_POTION_SPEED_11",
+			"PACKAGE_ITEM_ETC_ARCHEMY_REINFORCE_PROB_UP_A_10",
+			"PACKAGE_ITEM_ETC_ARCHEMY_REINFORCE_PROB_UP_A_11"
+		])
+		self.assertNotIn("PACKAGE_ITEM_ETC_ARCHEMY_MAGICSTONE_LUCK_10", ten)
 		self.assertNotIn("STORE_SD_ACCESSORY_TAB4", {r[3] for r in table_rows(merged["refshoptab.txt"])})
 
-	def test_without_the_speed_item_the_tab_keeps_its_own_goods(self):
-		items = {k: v for k, v in ITEMS.items() if k != "ITEM_ETC_ARCHEMY_POTION_SPEED_11"}
+	def test_without_the_speed_item_or_the_powders_the_tab_keeps_its_own_goods(self):
+		gone = {"ITEM_ETC_ARCHEMY_POTION_SPEED_11", *supplies.OWNER_ALCHEMY_ITEMS}
+		items = {k: v for k, v in ITEMS.items() if k not in gone}
 		merged, _ = supplies.merge_supplies(tables(), items)
 		self.assertEqual([r[3] for r in goods_of(merged, "STORE_SD_ACCESSORY_TAB3")], ALCHEMY_GOODS)
 

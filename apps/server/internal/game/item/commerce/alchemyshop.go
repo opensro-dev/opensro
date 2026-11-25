@@ -69,9 +69,16 @@ var janganElixirGoods = []janganGood{
 	{"ITEM_ETC_ARCHEMY_REINFORCE_RECIPE_ACCESSARY_B", 1000000},
 }
 
-// Degree 9 Lucky Powder, owner 2026-10-13 at A_09's native price; it
-// closes the elixirs tab (the powders of "elixirs and powders").
-var janganPowderGood = janganGood{"ITEM_ETC_ARCHEMY_REINFORCE_PROB_UP_A_09", 54469}
+// The Lucky Powders that close the elixirs tab (the powders of "elixirs
+// and powders"), each at its own itemdata price. Degree 9: owner
+// 2026-10-13. Degrees 10 and 11: owner 2026-11-25, after players found no
+// shop selling them - no native gold shop carries a degree 10 or 11 powder,
+// so degree 10-11 gear had no reinforcement elixir to buy.
+var janganPowderGoods = []janganGood{
+	{"ITEM_ETC_ARCHEMY_REINFORCE_PROB_UP_A_09", 54469},
+	{"ITEM_ETC_ARCHEMY_REINFORCE_PROB_UP_A_10", 63656},
+	{"ITEM_ETC_ARCHEMY_REINFORCE_PROB_UP_A_11", 70875},
+}
 
 // The degree 9 attribute stones, owner 2026-10-13 at 2,000,000 on the
 // grocer's alchemy tab; here they are the attribute stones tab.
@@ -220,13 +227,13 @@ func janganGrocerDefault() string {
 janganAlchemyTabGoods
 
 The three tabs' custom goods as extra goods on the reserved tab names:
-the elixir recipes and the powder, the attribute stones, and the magic
+the elixir recipes and the powders, the attribute stones, and the magic
 stones (the grocer's, then the smith's at their prices).
 ================
 */
 func janganAlchemyTabGoods() []ExtraGood {
 	var goods []ExtraGood
-	for _, good := range append(append([]janganGood{}, janganElixirGoods...), janganPowderGood) {
+	for _, good := range append(append([]janganGood{}, janganElixirGoods...), janganPowderGoods...) {
 		goods = append(goods, ExtraGood{Tab: janganElixirsTab, Codename: good.codename, Price: good.price})
 	}
 	for _, good := range janganAttrStoneGoods {
