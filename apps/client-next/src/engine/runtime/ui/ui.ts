@@ -28577,8 +28577,15 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 					focus = drawFrame.focus = null;
 					composing = false;
 				}
-				paths.push( ...partyProposalAssets() );
-				const layout = instanceBoxLayout( instanceBoxView( w, h ), instancePrompt.position() );
+				// The simple message box's look (frame.ts simpleMessageBox);
+				// only the body and the drag region are this box's own.
+				const layout = simpleMessageBox( {
+					title: hudCopy( "UIIT_STT_CONFIRM_BOX" ),
+					lines: [ instanceBoxView( w, h ).question ],
+					yes: "instance-accept",
+					no: "instance-refuse",
+					position: instancePrompt.position()
+				} );
 				controls.push( {
 					id: "instance-body",
 					label: hudCopy( "UIIT_STT_CONFIRM_BOX" ),
@@ -28591,22 +28598,6 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 					draggable: true,
 					rect: layout.drag
 				} );
-				quads.push(
-					...normalTile( layout.background, MESSAGE_TILE, resources.size( MESSAGE_TILE ), full ),
-					...frameRing(
-						layout.frame,
-						MESSAGE_FRAME,
-						PARTS.map( p => resources.size( MESSAGE_FRAME + p + ".png" ) ),
-						full
-					),
-					...text.quads( hudCopy( "UIIT_STT_CONFIRM_BOX" ), layout.title, full, white, {
-						hAlign: 1,
-						vAlign: 0
-					} ),
-					...layout.lines.flatMap( line => text.quads( line.text, line.rect, full, white, { vAlign: 0 } ) )
-				);
-				button( "instance-accept", hudCopy( "UIIT_CTL_YES" ), layout.accept[0], layout.accept[1], 76 );
-				button( "instance-refuse", hudCopy( "UIIT_CTL_NO" ), layout.refuse[0], layout.refuse[1], 76 );
 			}
 			// The party summon invitation (0xB4C6 kind 2, #3918): the
 			// shared confirm box with the leader's question line. The

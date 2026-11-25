@@ -734,6 +734,8 @@ export interface MessageBox {
 	// Per drawn line; white where absent. 52E720's SetTextAndResize takes
 	// each appended line's own colour (5D3EB0's gold name line).
 	readonly colors?: readonly UiQuad["color"][];
+	// A dragged box's frame origin; centred where absent.
+	readonly position?: readonly [number, number] | null;
 }
 
 /*
@@ -752,7 +754,12 @@ export function simpleMessageBox( frame: UiAuthoredFrame, box: MessageBox ) {
 	const quads = frame.quads, text = frame.text, resources = frame.resources, full = frame.full;
 	const white: UiQuad["color"] = frame.white, PARTS = frame.chrome.parts;
 	const lines = messageBoxLines( box.lines, value => text.run( value ).width );
-	const layout = textMessageBoxLayout( frame.w, frame.h, lines.map( line => text.run( line ).width ) );
+	const layout = textMessageBoxLayout(
+		frame.w,
+		frame.h,
+		lines.map( line => text.run( line ).width ),
+		box.position ?? null
+	);
 	frame.paths.push( ...partyProposalAssets() );
 	quads.push(
 		...normalTile( layout.background, MESSAGE_TILE, resources.size( MESSAGE_TILE ), full ),
