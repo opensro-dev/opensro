@@ -13,6 +13,7 @@ package action
 
 import (
 	"encoding/binary"
+	"reflect"
 	"testing"
 
 	"opensro.online/server/internal/game/enterworld"
@@ -59,6 +60,12 @@ func TestUsingASpiritWakesItOnce(t *testing.T) {
 	if len(c.MissionInventory) != 1 || c.MissionInventory[0].Data != want || c.MissionInventory[0].StackCount != 1 {
 		t.Fatalf("after use: %+v, want the Spirit kept with its clock at now + 28 days (%d)", c.MissionInventory, want)
 	}
+	// The owner learns the new clock in the same answer (#4381): without
+	// it the client still reads a dormant Spirit and wakes it again.
+	clock := wire.ItemDurabilityFrame(request[0], want)
+	if !containsFrame(result.Frames[1:], clock) {
+		t.Fatalf("frames = %+v, want %+v after the use answer", result.Frames, clock)
+	}
 	// A woken Spirit refuses a second use and keeps its clock.
 	if again := rt.HandleItemUse(testDivision, c, request); len(again.Frames) == 0 || again.Frames[0].Payload[0] == 1 {
 		t.Fatalf("second use admitted: %+v", again)
@@ -81,4 +88,18 @@ func TestASpiritUseNeedsTheSwitch(t *testing.T) {
 	if c.MissionInventory[0].Data != 0 {
 		t.Fatalf("switch off: the clock moved to %d", c.MissionInventory[0].Data)
 	}
+}
+
+/*
+================
+containsFrame
+================
+*/
+func containsFrame(frames []wire.Frame, want wire.Frame) bool {
+	for _, frame := range frames {
+		if reflect.DeepEqual(frame, want) {
+			return true
+		}
+	}
+	return false
 }

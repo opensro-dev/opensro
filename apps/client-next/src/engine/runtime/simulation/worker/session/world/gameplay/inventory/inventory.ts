@@ -8,7 +8,12 @@ Child owners handle process-specific state while this owner commits item rows.
 
 ===========================================================================
 */
-import { AVATAR_STORAGE_CAPACITY, avatarSlotFits, isAvatarItem } from "@/engine/foundation/gameplay/avatar-socket";
+import {
+	AVATAR_STORAGE_CAPACITY,
+	avatarSlotFits,
+	isAvatarItem,
+	isSpiritItem
+} from "@/engine/foundation/gameplay/avatar-socket";
 import {
 	companionItemUseNotice,
 	cosItemUseTail,
@@ -2201,6 +2206,16 @@ receive
 			if ( op === 0x31e8 ) {
 				if ( p.length !== 5 ) throw Error( "Invalid durability result" );
 				const n = p[0]!;
+				// Port-only (SRO_NASRUN, #4381): a Devil's Spirit has no
+				// durability; the frame carries its new awakening clock after
+				// a wake or an extension, for any bag slot it sits in. It is
+				// written silently: no repair cue or flash.
+				const spirit = slots.get( n );
+				if ( spirit && isSpiritItem( spirit.typeFlags ) ) {
+					slots.set( n, { ...spirit, durability: viewOf( p ).getUint32( 1, true ) } );
+					published = null;
+					return true;
+				}
 				if ( n >= 0x3d ) return true;
 				const item = slots.get( n );
 				if ( !item ) {

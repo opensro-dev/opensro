@@ -85,6 +85,11 @@ func TestExtensionGearAddsAWeekAndIsSpent(t *testing.T) {
 	if got, want := c.MissionInventory[0].Data, now+10*extendTestDay; got != want {
 		t.Fatalf("clock %d, want the expiry + 7 days (%d)", got, want)
 	}
+	// The Spirit's new clock reaches its owner with the answer (#4381).
+	clock := wire.ItemDurabilityFrame(extendTestSpiritSlot, now+10*extendTestDay)
+	if !containsFrame(result.Frames[1:], clock) {
+		t.Fatalf("frames = %+v, want %+v after the use answer", result.Frames, clock)
+	}
 	if gearsLeft(c) != 1 {
 		t.Fatalf("gears left %d, want 1", gearsLeft(c))
 	}
