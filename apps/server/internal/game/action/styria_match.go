@@ -92,6 +92,11 @@ type styriaMatch struct {
 	score   [2]int
 	outcome int
 	boxes   []int64
+
+	// The rewards owed (styria_reward.go): collected under mu when
+	// the outcome lands, paid by the match tick's drain with no
+	// lane held.
+	pendingRewards []styriaDue
 }
 
 /*
@@ -230,6 +235,17 @@ func (rt *Runtime) advanceStyriaMatches(nowMs int64) []simulation.DivisionFrames
 	for _, match := range matches {
 		frames = append(frames, rt.styriaTickMatch(match, nowMs)...)
 
+		// Rewards pay here, after the match lock is released, in
+		// the flag war's drain shape: the grant lane takes the
+		// division lock itself.
+		match.mu.Lock()
+		dues := match.pendingRewards
+		match.pendingRewards = nil
+		match.mu.Unlock()
+		for _, due := range dues {
+			rt.styriaPayReward(match, due)
+		}
+
 		match.mu.Lock()
 		closeNow := match.closeMs != 0 && nowMs >= match.closeMs
 		match.mu.Unlock()
@@ -272,6 +288,14 @@ func (rt *Runtime) styriaTickMatch(match *styriaMatch, nowMs int64) []simulation
 		match.closeMs = nowMs + styriaCloseAfterEndMs
 		match.outcome = styriaVerdict(match.score)
 		ended = true
+		// Everyone still standing in the match is owed its reward
+		// (styria_reward.go); the drain pays it off this lock.
+		for _, id := range match.order {
+			if p := match.participants[id]; p != nil && p.entered {
+				match.pendingRewards = append(match.pendingRewards,
+					styriaDue{name: p.registrant.Name, side: p.registrant.Side})
+			}
+		}
 	}
 	match.mu.Unlock()
 	if !ended {
