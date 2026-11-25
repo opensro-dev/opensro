@@ -14,6 +14,7 @@ package guild_test
 
 import (
 	"bytes"
+	"encoding/binary"
 	"opensro.online/server/internal/domain"
 	"path/filepath"
 	"testing"
@@ -30,6 +31,8 @@ import (
 	"opensro.online/server/internal/game/world/simulation"
 	"opensro.online/server/internal/testsupport/entryauth"
 	"opensro.online/server/internal/transport"
+
+	"github.com/gorilla/websocket"
 )
 
 const (
@@ -207,6 +210,11 @@ func TestUnionFoundAndDissolveOverWire(t *testing.T) {
 	connG := guildDialWS(t, srv)
 	guildHelloWS(t, connG)
 	guildEnterWorldSeeds(t, connG, unionE2ENameG)
+	// Golf watches Fox: a union commit changes the alliance fields of
+	// Fox's nameplate, which must reach Golf at once (#4413).
+	foxGID := enterworld.ObjectIDForCharacter(fox)
+	peerFaceWatch(t, srv.Hub, unionE2ENameG, foxGID)
+	guildExpectFrame(t, connG, peerFaceIntroOpcode, "Fox's stand-in spawn")
 
 	// Natively a guildless proposer answers 0x0D, a guildless target 0x25.
 	guildSendFrame(t, connG, guild.OpUnionInvite, invE2EU32(enterworld.ObjectIDForCharacter(fox)))
@@ -243,6 +251,12 @@ func TestUnionFoundAndDissolveOverWire(t *testing.T) {
 		t.Fatalf("union chat reaches %v (%#x)", names, code)
 	}
 
+	record, ok := lane.Unions().Of(guildE2EDivision, alpha)
+	if !ok {
+		t.Fatal("no union record")
+	}
+	unionE2EExpectFaceAlliance(t, connG, foxGID, "UniBravo", uint32(record.AllianceID))
+
 	stored := union.New()
 	if err := stored.Restore(guildE2EDivision, authority.Alliances()); err != nil {
 		t.Fatal(err)
@@ -261,5 +275,31 @@ func TestUnionFoundAndDissolveOverWire(t *testing.T) {
 	}
 	if lane.Unions().Allied(guildE2EDivision, alpha, bravo) {
 		t.Fatal("a one-guild union survived")
+	}
+	unionE2EExpectFaceAlliance(t, connG, foxGID, "UniBravo", 0)
+}
+
+/*
+================
+unionE2EExpectFaceAlliance
+
+Reads the watcher's next 0x365F and checks it is gid's face of guild
+name with the given alliance id. Layout (client 75FE90): u32 gid, u32
+guild id, ascii name, ascii grant, u32 crest, u32 alliance id, ...
+================
+*/
+func unionE2EExpectFaceAlliance(t *testing.T, conn *websocket.Conn, gid uint32, name string, alliance uint32) {
+	t.Helper()
+	got := guildExpectFrame(t, conn, guild.OpPeerGuildAppearance, "watcher's 0x365F")
+	at := 8 + 2 + len(name)
+	if len(got) < at+2 {
+		t.Fatalf("short 0x365F % X", got)
+	}
+	at += 2 + int(binary.LittleEndian.Uint16(got[at:])) + 4
+	if len(got) < at+4 || binary.LittleEndian.Uint32(got) != gid || string(got[10:10+len(name)]) != name {
+		t.Fatalf("0x365F % X is not gid %d's face of %s", got, gid, name)
+	}
+	if a := binary.LittleEndian.Uint32(got[at:]); a != alliance {
+		t.Fatalf("0x365F alliance %d, want %d (% X)", a, alliance, got)
 	}
 }
