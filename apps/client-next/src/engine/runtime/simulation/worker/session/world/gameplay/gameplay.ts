@@ -237,6 +237,7 @@ import {
 	academyDisbandRequest,
 	academyGraduateRequest,
 	academyHonorRankRequest,
+	academyInviteRequest,
 	academyKickRequest,
 	academyLeaveRequest,
 	academyRequest,
@@ -3415,6 +3416,12 @@ state here before a command can claim a native wire conversation.
 					throw Error( "Select a storage NPC" );
 				}
 				return sendFrame( academyHonorRankRequest( command.gid ) );
+			}
+			if ( command.kind === "academy-invite" ) {
+				// 5C4FD0 -> 702C90: another player, never the sender.
+				if ( !academy || !localGid ) throw Error( "Academy session is not initialized" );
+				if ( !command.gid || command.gid === localGid ) return null;
+				return sendFrame( academyInviteRequest( command.gid ) );
 			}
 			if ( command.kind === "academy-disband" ) {
 				if ( !academy || !localGid ) throw Error( "Academy session is not initialized" );
