@@ -29856,7 +29856,7 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 						}
 						// Port-only, not native (#4133): the earned Silk balance rides
 						// the Point row's place (17 box, 18 value, 19 unit, 22
-						// caption), which this client never draws (6BDA60 above). It
+						// caption), which the English client never draws (6BDA60 above). It
 						// reads exactly like the Silk and Bonus Silk rows above it: a
 						// right-aligned caption, the black box, the value and the
 						// "Silk" unit. No native string names earned silk, so the
