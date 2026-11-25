@@ -112,17 +112,19 @@ const opMallBalance uint16 = 17
 ================
 mallBalancePush
 
-The push body: exactly silk, giftSilk and points. Every shipped client's
-decoder pins this key set, so the earned half of the split (#4133) never
-rides the push - a fourth key would toss the frame on an old tab. Earned
-silk reaches the client in the mall catalogue instead, whose decoder
-reads field by name.
+The push body: silk, earnedSilk, giftSilk and points. The hourly credit
+lands in earnedSilk (#4133), so a push without it left the open mall's
+Earned figure stale and the visible Silk unchanged - players read that
+as no credit at all (#4429). Every tab the release gate admits decodes
+the four-key body (mall.ts mallBalance accepts it since #4217, and the
+protocol has moved past that release since).
 ================
 */
 type mallBalancePush struct {
-	Silk     uint32 `json:"silk"`
-	GiftSilk uint32 `json:"giftSilk"`
-	Points   uint32 `json:"points"`
+	Silk       uint32 `json:"silk"`
+	EarnedSilk uint32 `json:"earnedSilk"`
+	GiftSilk   uint32 `json:"giftSilk"`
+	Points     uint32 `json:"points"`
 }
 
 /*
@@ -131,7 +133,12 @@ mallBalancePushPayload
 ================
 */
 func mallBalancePushPayload(balance domain.MallBalance) ([]byte, error) {
-	return json.Marshal(mallBalancePush{Silk: balance.Silk, GiftSilk: balance.GiftSilk, Points: balance.Points})
+	return json.Marshal(mallBalancePush{
+		Silk:       balance.Silk,
+		EarnedSilk: balance.EarnedSilk,
+		GiftSilk:   balance.GiftSilk,
+		Points:     balance.Points,
+	})
 }
 
 // maxBetaSilkRate bounds an operator override.

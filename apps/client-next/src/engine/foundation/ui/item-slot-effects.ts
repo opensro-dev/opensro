@@ -136,6 +136,30 @@ function loopFrame( nowMs: number, stepMs: number, frames: number, phase: number
 	return ((frames - phase + ticks) % frames + frames) % frames;
 }
 
+// Port-only (SRO_NASRUN, #4384): the later clients' active-Spirit edge,
+// icon_edge_nasrun.ddj, a 512x32 sheet of sixteen 32x32 cells in one row.
+// Its step is not traced in either later client: it takes the summoned
+// glow's 50 ms (inference).
+const SPIRIT_EDGE_FRAMES = 16;
+const SPIRIT_EDGE_STEP_MS = 50;
+
+/*
+================
+spiritActiveOverlay
+
+The looping edge over a Devil's Spirit's icon for its whole awakening,
+worn or carried (frame/item-slot.ts).
+================
+*/
+export function spiritActiveOverlay( rect: UiRect, seed: number, nowMs: number ): ItemSlotOverlay {
+	const frame = loopFrame( nowMs, SPIRIT_EDGE_STEP_MS, SPIRIT_EDGE_FRAMES, seed % SPIRIT_EDGE_FRAMES );
+	return {
+		path: SHEET + "icon/item/etc/icon_edge_nasrun.png",
+		uv: [ frame / SPIRIT_EDGE_FRAMES, 0, 1 / SPIRIT_EDGE_FRAMES, 1 ],
+		rect
+	};
+}
+
 /*
 ================
 itemIsRare

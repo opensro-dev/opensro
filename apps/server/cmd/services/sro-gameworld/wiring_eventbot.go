@@ -65,6 +65,9 @@ func buildEventBot(division string, deps *enterworld.Deps, presence *livepresenc
 		} else {
 			schedule = loaded
 			for _, event := range schedule.Events {
+				if event.Kind == "lottery" && !knownItem(eventbot.TicketCodename) {
+					log.Errorf("eventbot: %q enters on %s, which is not in the item catalogue; entries will be refused", event.Title, eventbot.TicketCodename)
+				}
 				if event.Hider != "" {
 					if _, known := items.Monsters.ReferenceByCodename(event.Hider); !known {
 						log.Errorf("eventbot: %q hider %q is not a monster codename; its rounds will run hiderless", event.Title, event.Hider)
@@ -148,6 +151,67 @@ func buildEventBot(division string, deps *enterworld.Deps, presence *livepresenc
 				log.Warnf("eventbot: win count for %s: %v (counts as at the cap)", accountID, err)
 			}
 			return eventbot.WinsAfterRead(n, err)
+		},
+		// The Lottery's ticket doors (#3539): entry spends one ticket
+		// and every unique's death drops one to its kill owner, both
+		// through the same plan-and-commit shape as the prize door,
+		// under their own audited door word (domain.GrantEventBotTicket),
+		// so a ticket never counts toward the daily win cap.
+		TakeItem: func(division string, character *enterworld.Character, codename string) bool {
+			taken := false
+			var frames []wire.Frame
+			deps.Mutate(character, domain.GrantEventBotTicket, func() {
+				rows, planned, err := items.PlanQuestInventory(character,
+					[]inventory.ItemAmount{{Codename: codename, Count: 1}}, nil)
+				if err != nil {
+					return
+				}
+				character.MissionInventory = rows
+				frames = planned
+				taken = true
+			})
+			if taken {
+				if session, online := presence.SessionByName(division, character.Name); online {
+					for _, frame := range frames {
+						_ = session.Send(frame.Opcode, frame.Payload)
+					}
+				}
+			}
+			return taken
+		},
+		GrantTicket: func(division, name string) bool {
+			var owner *enterworld.Character
+			deps.Read(division, func() {
+				for _, character := range deps.CharactersForDivision(division) {
+					if character != nil && !character.DeletePending && strings.EqualFold(character.Name, name) {
+						owner = character
+					}
+				}
+			})
+			if owner == nil {
+				return false
+			}
+			granted := false
+			var frames []wire.Frame
+			deps.Mutate(owner, domain.GrantEventBotTicket, func() {
+				rows, planned, err := items.PlanQuestInventory(owner, nil,
+					[]inventory.ItemAmount{{Codename: eventbot.TicketCodename, Count: 1}})
+				if err != nil {
+					log.Infof("eventbot: lottery ticket for %s refused: %v", name, err)
+					return
+				}
+				owner.MissionInventory = rows
+				frames = planned
+				granted = true
+			})
+			if granted {
+				if session, online := presence.SessionByName(division, name); online {
+					for _, frame := range frames {
+						_ = session.Send(frame.Opcode, frame.Payload)
+					}
+				}
+			}
+			return granted
 		},
 		// Hide & Seek's hider (#3536): a tracked GM spawn in the open
 		// world's population at the file's spot, so visibility,

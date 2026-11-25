@@ -89,6 +89,16 @@ import {
 	SPIRIT_SLOT,
 	SPIRIT_SOCKET
 } from "@/engine/foundation/gameplay/avatar-socket";
+import {
+	SPIRIT_SKILL_SLOT_BG_SIZE,
+	SPIRIT_SKILL_SLOT_BG_X,
+	SPIRIT_SKILL_SLOT_BG_Y,
+	SPIRIT_SKILL_SLOT_SIZE,
+	SPIRIT_SKILL_SLOT_X,
+	SPIRIT_SKILL_SLOT_Y,
+	SPIRIT_SKILL_STRIP_RECT,
+	SPIRIT_SOCKET_RECT
+} from "@/engine/foundation/gameplay/spirit-skills";
 import { ACTION_FORTRESS_RETURN } from "@/engine/foundation/gameplay/fortress-return";
 import {
 	FRIEND_LIST_LIMIT,
@@ -826,7 +836,13 @@ import { feedbackLevels } from "@/engine/foundation/gameplay/feedback-levels";
 import { systemMessageLayout } from "@/engine/foundation/ui/system-message-layout";
 import { verticalSpinChrome } from "@/engine/foundation/ui/vertical-spin";
 import { stretchRing } from "@/engine/foundation/ui/stretch-ring";
-import { comboListLayout } from "@/engine/foundation/ui/combo-box";
+import {
+	comboListLayout,
+	POPUP_LIST_HOVER_BAR,
+	POPUP_LIST_HOVER_TEXT,
+	POPUP_LIST_PRESSED_TEXT,
+	popupListRowBar
+} from "@/engine/foundation/ui/combo-box";
 import { chatLayout, sunDropChatColor } from "@/engine/foundation/ui/chat-layout";
 import { expandedWorldMapOn, worldMapFrame, worldMapImagePaths, worldMapQuads } from "@/engine/foundation/ui/world-map";
 import {
@@ -1003,7 +1019,7 @@ import {
 	resurrectionNoteColor,
 	resurrectionQuestion
 } from "@/engine/foundation/ui/resurrection-proposal";
-import { createInstancePrompt, instanceBoxLayout, instanceQuestion } from "@/engine/foundation/ui/instance-proposal";
+import { createInstancePrompt, instanceQuestion } from "@/engine/foundation/ui/instance-proposal";
 import {
 	createPartySummonPrompt,
 	partySummonBoxLayout,
@@ -1917,6 +1933,25 @@ export function createUi( ports: UiPorts ) {
 	const storagePanel = createStoragePanel();
 	const resurrectionPrompt = createResurrectionPrompt();
 	const instancePrompt = createInstancePrompt();
+	/*
+	================
+	instanceBoxFrame
+
+	The quest instance prompt's frame: the simple message box around its
+	question (7644E0 -> 6888C0), wrapped and measured as simpleMessageBox
+	draws it, so the drag moves the box the draw shows.
+	================
+	*/
+	const instanceQuestionText = () => hudCopy( instanceQuestion()[0]! );
+	const instanceBoxFrame = ( width: number, height: number, position: readonly [number, number] | null ) =>
+		textMessageBoxLayout(
+			width,
+			height,
+			messageBoxLines( [ instanceQuestionText() ], value => text.run( value ).width ).map( value =>
+				text.run( value ).width
+			),
+			position
+		).frame;
 	// The party summon window and its invitation box (#3918).
 	const partySummonPrompt = createPartySummonPrompt();
 	const partySummonHud = createPartySummonHud();
@@ -3262,7 +3297,10 @@ export function createUi( ports: UiPorts ) {
 	*/
 	function executeSkill( id: number ) {
 		const game = view?.gameplay;
-		if ( !game?.skills?.includes( id ) || hud.data()?.tooltipSkills.get( id )?.basicActivity === 0 ) return;
+		// Port-only (SRO_NASRUN, #4384): a worn Spirit's lent skills cast as learned.
+		if ( !game ) return;
+		const castable = game.skills?.includes( id ) || game.spiritSkills?.includes( id );
+		if ( !castable || hud.data()?.tooltipSkills.get( id )?.basicActivity === 0 ) return;
 		sendGameplay( { kind: "skill", skillId: id, ...(game.target ? { gid: game.target } : {}) } );
 	}
 	/*
@@ -9566,12 +9604,9 @@ export function createUi( ports: UiPorts ) {
 				return;
 			}
 			if ( event.kind === "drag" && event.id === "instance-drag" && view ) {
-				const layout = instanceBoxLayout( view.width, view.height, instancePrompt.position() ),
-					next = instanceBoxLayout( view.width, view.height, [
-						layout.frame[0] + event.dx,
-						layout.frame[1] + event.dy
-					] );
-				instancePrompt.place( [ next.frame[0], next.frame[1] ] );
+				const frame = instanceBoxFrame( view.width, view.height, instancePrompt.position() ),
+					next = instanceBoxFrame( view.width, view.height, [ frame[0] + event.dx, frame[1] + event.dy ] );
+				instancePrompt.place( [ next[0], next[1] ] );
 				dirty = true;
 				return;
 			}
@@ -17248,33 +17283,97 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 						const sockets = Object.values( equipment ).filter( n => n.id >= 113 && n.id <= 116 )
 							.sort( ( a, b ) => a.id - b.id )
 							.map( node => ({ type: node.id - 112, r: authoredRect( node, ex, ey ) }) );
-						// Port-only, not native (SRO_NASRUN, #3456): a Devil's Spirit,
-						// worn or carried, gets a fifth socket one socket pitch past
-						// the flag's, so a player holding one sees where it goes
-						// (#4364). The v1.150 layout has no node for it; only a
-						// server with the switch on grants a Spirit, so a native
-						// shard draws four.
-						if (
-							sockets.length === 4 && (
-								game?.avatarInventory?.some( i => isSpiritItem( i.typeFlags ) ) ||
-								game?.inventory.some( i => isSpiritItem( i.typeFlags ) )
-							)
-						) {
-							const third = sockets[2]!, fourth = sockets[3]!;
+						// Port-only, not native (SRO_NASRUN, #3456, #4384): a Devil's
+						// Spirit, worn or carried, gets the later clients' fifth socket
+						// under the dress (GDR_AVATAR_SLOT_05, spirit-skills.ts), so a
+						// player holding one sees where it goes (#4364). The v1.150
+						// layout has no node for it; only a server with the switch on
+						// grants a Spirit, so a native shard draws four.
+						const spiritShown = sockets.length === 4 && (
+							game?.avatarInventory?.some( i => isSpiritItem( i.typeFlags ) ) ||
+							game?.inventory.some( i => isSpiritItem( i.typeFlags ) )
+						);
+						if ( spiritShown ) {
 							sockets.push( {
 								type: SPIRIT_SOCKET,
 								r: [
-									fourth.r[0] * 2 - third.r[0],
-									fourth.r[1] * 2 - third.r[1],
-									fourth.r[2],
-									fourth.r[3]
+									ex + SPIRIT_SOCKET_RECT[0],
+									ey + SPIRIT_SOCKET_RECT[1],
+									SPIRIT_SOCKET_RECT[2],
+									SPIRIT_SOCKET_RECT[3]
 								]
+							} );
+						}
+						// Port-only (SRO_NASRUN, #4384): the worn Spirit's lent skills in
+						// the later clients' strip under its socket (GDR_AVATAR_SKILL_WND,
+						// CIFEquipSkillSlotWnd). A slot casts its skill on a right-click
+						// and drags to the hotbar, as the skill window's do; the strip
+						// is empty while no awake Spirit is worn.
+						// The strip's slot backgrounds show with the Spirit's socket,
+						// empty or filled, as the avatar sockets do: one per lent
+						// skill and at least one (the owner's reference screenshots).
+						const slotBackground = ROOT + "interface/pet/pt_block02.png";
+						if ( spiritShown ) {
+							paths.push( slotBackground );
+							const shownSlots = Math.max( 1, game?.spiritSkills?.length ?? 0 );
+							for ( const x of SPIRIT_SKILL_SLOT_BG_X.slice( 0, shownSlots ) ) {
+								if ( !resources.has( slotBackground ) ) break;
+								rect(
+									[
+										ex + SPIRIT_SKILL_STRIP_RECT[0] + x,
+										ey + SPIRIT_SKILL_STRIP_RECT[1] + SPIRIT_SKILL_SLOT_BG_Y,
+										SPIRIT_SKILL_SLOT_BG_SIZE,
+										SPIRIT_SKILL_SLOT_BG_SIZE
+									],
+									white,
+									slotBackground
+								);
+							}
+						}
+						for ( const [index, skillId] of (game?.spiritSkills ?? []).entries() ) {
+							const x = SPIRIT_SKILL_SLOT_X[index];
+							if ( x === undefined ) break;
+							const skill = training.skill( skillId ),
+								r: UiRect = [
+									ex + SPIRIT_SKILL_STRIP_RECT[0] + x,
+									ey + SPIRIT_SKILL_STRIP_RECT[1] + SPIRIT_SKILL_SLOT_Y,
+									SPIRIT_SKILL_SLOT_SIZE,
+									SPIRIT_SKILL_SLOT_SIZE
+								],
+								icon = iconPath( skill?.icon );
+							if ( icon ) {
+								paths.push( icon );
+								if ( resources.has( icon ) ) rect( r, white, icon );
+							}
+							// The cooldown sweep the hotbar and the skill window draw.
+							if ( skill ) {
+								paths.push( ...quickslotTimerPaths() );
+								quads.push(
+									...quickslotCooldownQuads(
+										game?.skillCooldowns ?? [],
+										skill.id,
+										skill.cooldownGroup ?? 0,
+										quickslotTime,
+										r,
+										full
+									).filter( q => resources.has( q.texture ) )
+								);
+							}
+							const active = (hudData.tooltipSkills.get( skillId )?.basicActivity ?? 0) !== 0;
+							controls.push( {
+								id: "skill:" + skillId,
+								label: skill ? localization.text( skill.nameSymbol, skill.name ) : "Spirit skill",
+								rect: r,
+								kind: "button",
+								rightActivate: active,
+								draggable: active,
+								inspect: experimental.state().saved.touchInspect
 							} );
 						}
 						for ( const { type, r } of sockets ) {
 							const item = game?.avatarInventory?.find( i => avatarSocket( i.typeFlags ) === type ),
 								path = ROOT + "interface/equipment/equip_slot_" +
-									[ "helm", "cloth", "pandernt", "plag", "helm" ][type - 1] + ".png";
+									[ "helm", "cloth", "pandernt", "plag", "extraneous" ][type - 1] + ".png";
 							paths.push( path );
 							if ( resources.has( path ) ) {
 								rect( [ r[0] - 4, r[1] - 4, 40, 40 ], white, path );
@@ -22208,9 +22307,24 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 						blocks.push( list.popup );
 						for ( const { index, rect: entry } of list.rows ) {
 							const id = "stall-net-choice:" + index;
-							// Inference from 536E20's colour triple (normal white, then
-							// 0xFF8080FF): the row under the cursor draws in the second.
-							const color: UiQuad["color"] = hover === id ? [ 128 / 255, 128 / 255, 1, 1 ] : white;
+							// The popup list's row look (combo-box.ts POPUP_LIST_*): a bar
+							// behind the hovered row, pressed text blue, hovered pale
+							// yellow, else white.
+							if ( hover === id || pressed === id ) {
+								quads.push( {
+									rect: popupListRowBar( entry, text.height() ),
+									uv: [ 0, 0, 1, 1 ],
+									color: POPUP_LIST_HOVER_BAR,
+									rightColor: POPUP_LIST_HOVER_BAR,
+									texture: "",
+									clip: full
+								} );
+							}
+							const color: UiQuad["color"] = pressed === id ?
+								POPUP_LIST_PRESSED_TEXT :
+								hover === id ?
+								POPUP_LIST_HOVER_TEXT :
+								white;
 							quads.push( ...text.quads( open.entries[index]!, entry, entry, color ) );
 							controls.push( { id, label: open.entries[index]!, rect: entry, kind: "button" } );
 						}
@@ -28572,8 +28686,15 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 					focus = drawFrame.focus = null;
 					composing = false;
 				}
-				paths.push( ...partyProposalAssets() );
-				const layout = instanceBoxLayout( w, h, instancePrompt.position() );
+				// The simple message box's look (frame.ts simpleMessageBox);
+				// only the body and the drag region are this box's own.
+				const layout = simpleMessageBox( {
+					title: hudCopy( "UIIT_STT_CONFIRM_BOX" ),
+					lines: [ instanceQuestionText() ],
+					yes: "instance-accept",
+					no: "instance-refuse",
+					position: instancePrompt.position()
+				} );
 				controls.push( {
 					id: "instance-body",
 					label: hudCopy( "UIIT_STT_CONFIRM_BOX" ),
@@ -28586,22 +28707,6 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 					draggable: true,
 					rect: layout.drag
 				} );
-				quads.push(
-					...normalTile( layout.background, MESSAGE_TILE, resources.size( MESSAGE_TILE ), full ),
-					...frameRing(
-						layout.frame,
-						MESSAGE_FRAME,
-						PARTS.map( p => resources.size( MESSAGE_FRAME + p + ".png" ) ),
-						full
-					),
-					...text.quads( hudCopy( "UIIT_STT_CONFIRM_BOX" ), layout.title, full, white, {
-						hAlign: 1,
-						vAlign: 0
-					} ),
-					...text.quads( hudCopy( instanceQuestion()[0]! ), layout.question, full, white, { vAlign: 0 } )
-				);
-				button( "instance-accept", hudCopy( "UIIT_CTL_YES" ), layout.accept[0], layout.accept[1], 76 );
-				button( "instance-refuse", hudCopy( "UIIT_CTL_NO" ), layout.refuse[0], layout.refuse[1], 76 );
 			}
 			// The party summon invitation (0xB4C6 kind 2, #3918): the
 			// shared confirm box with the leader's question line. The

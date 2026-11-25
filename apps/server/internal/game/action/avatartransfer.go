@@ -2,6 +2,7 @@ package action
 
 import (
 	log "github.com/sirupsen/logrus"
+	"slices"
 
 	"opensro.online/server/internal/domain"
 	"opensro.online/server/internal/game/enterworld"
@@ -148,6 +149,7 @@ func (rt *Runtime) applyAvatarTransfer(divisionID string, c *enterworld.Characte
 		// The Spirit's abilities ride the same snapshot (spiritability.go).
 		nextAvatars.Spirit = rt.deriveSpirit(nextAvatars, rt.Now().Unix())
 		detached := c.AvatarInventory != nil && c.AvatarInventory.Spirit != nil && nextAvatars.Spirit == nil
+		previousSkills := spiritSkills(c.AvatarInventory)
 		// The reference server installs or removes the avatar's contributions
 		// and the actor's stats refresh, as for equipment: the
 		// blessed options count only while the avatar is worn. Derived on
@@ -199,6 +201,10 @@ func (rt *Runtime) applyAvatarTransfer(divisionID string, c *enterworld.Characte
 			public, actor := rt.spiritDetachFrames(divisionID, c, rt.Now().UnixMilli())
 			result.Frames = append(append(result.Frames, public...), actor...)
 			result.Broadcast = append(result.Broadcast, public...)
+		}
+		// The owner's Spirit skill strip follows the worn Spirit (#4384).
+		if skills := spiritSkills(nextAvatars); !slices.Equal(skills, previousSkills) {
+			result.Frames = append(result.Frames, wire.SpiritSkillsFrame(skills))
 		}
 		return true
 	})
