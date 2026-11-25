@@ -43,7 +43,10 @@ real function instead (bug-report-actors.test.mjs).
 ================
 */
 const plainExports = {
-	"bug-report": [ "diagnosticActors", "diagnosticCompanions" ]
+	"bug-report": [ "diagnosticActors", "diagnosticCompanions" ],
+	// releaseNotice's empty-world value is its "none": no newer page is
+	// served and the server does not refuse this one.
+	release: [ [ "releaseNotice", '"none"' ] ]
 };
 const compiled = await build( {
 	entryPoints: [ "src/engine/runtime/runtime.ts" ],
@@ -80,7 +83,10 @@ setup
 ( globalThis.__runtimeCalls ??= [] ).push( { owner: ${JSON.stringify( args.path )}, args } );
 return globalThis.__runtimeOwners[${JSON.stringify( args.path )}];}` +
 						(plainExports[args.path] ?? []).map(
-							name => `\nexport function ${name}() { return []; }`
+							entry => {
+								const [name, value] = Array.isArray( entry ) ? entry : [ entry, "[]" ];
+								return `\nexport function ${name}() { return ${value}; }`;
+							}
 						).join( "" )
 				})
 			);
