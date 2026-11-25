@@ -60,6 +60,11 @@ type AgentEntity struct {
 	MaxHP        int
 	Level        uint8
 	LastAttacker string
+	// SkillID is the agent's strike skill and CombatTarget the
+	// player it is fighting (slice 3e): the directory's attacker
+	// snapshot and the fight-back admission.
+	SkillID      uint32
+	CombatTarget string
 }
 
 /*
@@ -102,6 +107,8 @@ func (u *AgentUnit) entityLocked() AgentEntity {
 		MaxHP:        u.MaxHP,
 		Level:        u.Level,
 		LastAttacker: u.LastAttacker,
+		SkillID:      u.PrimarySkillID,
+		CombatTarget: u.CombatTarget,
 	}
 	entity.Target = entity.Pose
 	if u.State == StateTraveling && u.WaypointIndex >= 0 && u.WaypointIndex < len(u.Route) {

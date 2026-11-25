@@ -67,6 +67,7 @@ func (r *Runtime) RecordPlayerAttack(
 		unit.CargoStacks = 0
 		unit.HP = 0
 		unit.UnderAttack = false
+		unit.CombatTarget = ""
 		unit.State = StateDead
 		unit.DeadUntilMs = nowMs + agentRespawnDelayMs
 	}
@@ -102,5 +103,6 @@ func (unit *AgentUnit) respawnAtHomeLocked(nowMs int64) {
 	unit.WaypointIndex = 0
 	unit.UnderAttack = false
 	unit.LastAttacker = ""
+	unit.CombatTarget = ""
 	unit.lastAdvanceMs = nowMs
 }
