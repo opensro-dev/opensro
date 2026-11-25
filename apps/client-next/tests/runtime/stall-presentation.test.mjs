@@ -15,7 +15,9 @@ import { test } from "node:test";
 import { defined } from "../helpers/defined.mjs";
 import { uiFixture, fontAtlas } from "../helpers/ui-fixture.mjs";
 const { emptyStall, stallRequest, stallFrame } = await import( "../../src/engine/foundation/gameplay/stall.ts" );
-const { stallTradingPresentation } = await import( "../../src/engine/runtime/ui/hud/stall-hud.ts" );
+const { stallTradingPresentation, STALL_NET_HOVER, STALL_NET_PRESSED } = await import(
+	"../../src/engine/runtime/ui/hud/stall-hud.ts"
+);
 
 const ICON_ROOT = "/assets/images/Media_extracted/interface/stall/";
 const ITEM_ICON = "/assets/images/Media_extracted/icon/item/etc/hp_potion_01.png";
@@ -730,4 +732,22 @@ test("an open stall network combo shows twelve rows at the font height plus four
 	assert.equal( short.rows.length, 3 );
 	assert.deepEqual( short.rows[2], { index: 2, rect: [ 104, 106, 88, 16 ] } );
 	assert.equal( short.track, undefined );
+});
+
+/*
+================
+argb
+
+A native 0xAARRGGBB colour as the renderer's [r, g, b, a].
+================
+*/
+function argb( value ) {
+	return [ (value >>> 16 & 255) / 255, (value >>> 8 & 255) / 255, (value & 255) / 255, (value >>> 24 & 255) / 255 ];
+}
+
+test("the stall network's combo rows hover pale yellow and press blue, as the original (#4403)", () => {
+	// 536E20 -> 523CD0: state 1 (a mouse move, 525695) 0xFFFFFF80,
+	// state 2 (a button down, 5256C2) 0xFF8080FF.
+	assert.deepEqual( [ ...STALL_NET_HOVER ], argb( 0xFFFFFF80 ) );
+	assert.deepEqual( [ ...STALL_NET_PRESSED ], argb( 0xFF8080FF ) );
 });

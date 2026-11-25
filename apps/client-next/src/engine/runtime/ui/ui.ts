@@ -472,6 +472,8 @@ import {
 	STALL_COMBO_LARGE,
 	STALL_COMBO_ROWS,
 	STALL_COMBO_MEDIUM,
+	STALL_NET_HOVER,
+	STALL_NET_PRESSED,
 	STALL_CHAT_LIMIT,
 	STALL_PROMPT_SIZE,
 	STALL_TEXT_LIMIT,
@@ -22206,9 +22208,13 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 						blocks.push( list.popup );
 						for ( const { index, rect: entry } of list.rows ) {
 							const id = "stall-net-choice:" + index;
-							// Inference from 536E20's colour triple (normal white, then
-							// 0xFF8080FF): the row under the cursor draws in the second.
-							const color: UiQuad["color"] = hover === id ? [ 128 / 255, 128 / 255, 1, 1 ] : white;
+							// Native row states (stall-hud.ts STALL_NET_*): pressed
+							// blue, hovered pale yellow, else white.
+							const color: UiQuad["color"] = pressed === id ?
+								STALL_NET_PRESSED :
+								hover === id ?
+								STALL_NET_HOVER :
+								white;
 							quads.push( ...text.quads( open.entries[index]!, entry, entry, color ) );
 							controls.push( { id, label: open.entries[index]!, rect: entry, kind: "button" } );
 						}

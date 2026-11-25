@@ -161,6 +161,13 @@ export const STALL_COMBO_MEDIUM = 42;
 export const STALL_COMBO_DEGREE = 43;
 // CIFStallNetwork_OnCreate: CIFComboBox_SetVisibleRowCount( combo, 0xC ) on each.
 export const STALL_COMBO_ROWS = 12;
+// A combo list row's text colour by state (536E20 -> 523CD0, read by
+// 5251D6..5251FC into the row's state slots 1 and 2): white at rest, state
+// 1 0xFFFFFF80 under the cursor (a 0x200 move, 525695) and state 2
+// 0xFF8080FF under a held button (a 0x201 down, 5256C2). #3896 had
+// inferred the blue for hover (#4403).
+export const STALL_NET_HOVER = [ 1, 1, 128 / 255, 1 ] as const;
+export const STALL_NET_PRESSED = [ 128 / 255, 128 / 255, 1, 1 ] as const;
 
 /*
 ================
