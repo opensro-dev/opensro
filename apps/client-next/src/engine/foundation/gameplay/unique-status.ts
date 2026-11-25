@@ -96,6 +96,28 @@ export function uniqueNotifyBook( value: unknown ): Readonly<Record<string, Uniq
 
 /*
 ================
+uniqueNotifySavedBook
+
+The book after one character's save joins it (#4433): the book the
+store holds now, with this character's entry replaced by the saved
+one. The game and the website write the same record; a save in either
+tab re-reads and merges like this, so it keeps the entries the other
+tab wrote since this tab loaded. An empty character name saves
+nothing.
+================
+*/
+export function uniqueNotifySavedBook(
+	stored: unknown,
+	character: string,
+	value: UniqueNotifySettings
+): Readonly<Record<string, UniqueNotifySettings>> {
+	const book: Record<string, UniqueNotifySettings> = { ...uniqueNotifyBook( stored ) };
+	if ( character ) book[character] = uniqueNotifySettings( value );
+	return book;
+}
+
+/*
+================
 uniqueStatusRows
 
 The rows one tab shows: the marked ones on the Notify tab, the living
