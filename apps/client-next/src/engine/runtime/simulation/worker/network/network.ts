@@ -27,6 +27,7 @@ import {
 	NET_JOURNAL_OUT
 } from "@/engine/contracts/network";
 import type { NetworkOwner, WireFrame, NetworkFailure } from "@/engine/contracts/network";
+import { gunzipBytes } from "@/engine/foundation/assets/read-bytes";
 
 const PING_INTERVAL_MS = 5000;
 const PING_STALE_MS = 15000;
@@ -91,6 +92,13 @@ const WS_NORMAL_CLOSE_CODE = 1000;
 // goodbye, the WT counterpart of the socket's clean 1000 above. The
 // session's closed promise resolves with it; an abrupt end rejects.
 const WT_CLEAN_CLOSE_CODE = 0;
+// What a WebTransport URL asks for: large server frames gzip-compressed. A
+// server without the form, or with its switch off, ignores it (conn_wt_compress.go).
+const WT_COMPRESS_QUERY = "compress", WT_COMPRESS_GZIP = "gzip";
+// A stream record's length prefix: the top bit marks a gzip-compressed frame,
+// the rest is the record's size. One frame holds at most MAX_STREAM_FRAME_BYTES.
+const STREAM_COMPRESSED_FLAG = 0x80000000, STREAM_SIZE_MASK = 0x7fffffff;
+const MAX_STREAM_FRAME_BYTES = 16 << 20;
 
 /*
 ================
@@ -617,11 +625,15 @@ export function createNetwork(
 	================
 	wtEndpoint
 
-	The WebTransport URL beside the socket's, over https.
+	The WebTransport URL beside the socket's, over https. It asks for
+	compressed records where the browser can inflate them.
 	================
 	*/
 	function wtEndpoint( endpoint: URL ): string | null {
-		return transportSibling( endpoint, "wt", "https:" )?.toString() ?? null;
+		const url = transportSibling( endpoint, "wt", "https:" );
+		if ( !url ) return null;
+		if ( typeof DecompressionStream !== "undefined" ) url.searchParams.set( WT_COMPRESS_QUERY, WT_COMPRESS_GZIP );
+		return url.toString();
 	}
 	/*
 	================
@@ -785,8 +797,9 @@ export function createNetwork(
 
 	Read the control stream: reassemble u32-length-prefixed records
 	across chunks and feed each frame's bytes to the one dispatch. A
-	malformed stream fails like a bad socket frame; a stream that ends
-	or errors reports through wtClosed.
+	compressed record is inflated before the next is looked at, so frames
+	keep their order. A malformed stream fails like a bad socket frame; a
+	stream that ends or errors reports through wtClosed.
 	================
 	*/
 	async function wtPump(
@@ -814,12 +827,18 @@ export function createNetwork(
 				pending = merged;
 				let offset = 0;
 				while ( pending.byteLength - offset >= 4 ) {
-					const size = new DataView( pending.buffer, pending.byteOffset + offset, 4 ).getUint32( 0, true );
-					if ( size < 2 || size > (16 << 20) ) throw invalid;
+					const prefix = new DataView( pending.buffer, pending.byteOffset + offset, 4 ).getUint32( 0, true );
+					const size = prefix & STREAM_SIZE_MASK;
+					if ( size < 2 || size > MAX_STREAM_FRAME_BYTES ) throw invalid;
 					if ( pending.byteLength - offset - 4 < size ) break;
-					const record = pending.subarray( offset + 4, offset + 4 + size );
+					let frame = pending.slice( offset + 4, offset + 4 + size );
 					offset += 4 + size;
-					if ( !disposed && generation === epoch && link === mine ) receiveBytes( record.slice() );
+					if ( (prefix & STREAM_COMPRESSED_FLAG) !== 0 ) {
+						frame = await gunzipBytes( frame, MAX_STREAM_FRAME_BYTES ).catch( () => {
+							throw invalid;
+						} );
+					}
+					if ( !disposed && generation === epoch && link === mine ) receiveBytes( frame );
 				}
 				pending = pending.slice( offset );
 			}

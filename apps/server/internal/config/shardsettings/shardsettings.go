@@ -719,6 +719,11 @@ var Settings = []Setting{
 	// origin list. Server only: clients learn endpoints from the shard
 	// catalogue, never from this switch.
 	{Env: "SRO_WEBTRANSPORT_PUBLIC", NomadVar: "webtransport_public", Default: "off"},
+	// Port-only, not native: large WebTransport records gzip-compressed
+	// for the clients that ask (about 9.5 MB of JSON per login and
+	// teleport otherwise). "off" sends every record raw. Server only: a
+	// client always asks, and the record itself says what it is.
+	{Env: "SRO_WEBTRANSPORT_COMPRESSION", NomadVar: "webtransport_compression", Default: "off"},
 }
 
 // NotSettings are the job's other SRO_ variables: what a deployment

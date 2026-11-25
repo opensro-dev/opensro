@@ -108,7 +108,8 @@ var unlistedSettings = map[string]string{
 	// Deployment plumbing: how the shard's transport is served, not a
 	// rule players meet (their client is offered the same world either
 	// way).
-	"SRO_WEBTRANSPORT_PUBLIC": "operator transport serving switch, not a gameplay rule",
+	"SRO_WEBTRANSPORT_PUBLIC":      "operator transport serving switch, not a gameplay rule",
+	"SRO_WEBTRANSPORT_COMPRESSION": "operator transport encoding switch, not a gameplay rule",
 	// Build-time inputs (#1745): the variant build's import tools read
 	// them when the server data is built; the GameWorld reads neither,
 	// so there is no running rule for the page to state.
