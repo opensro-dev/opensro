@@ -133,6 +133,27 @@ QUEST_ENGLISH = {
 	"SN_PAY_QNO_AR_106": ("섬뜩한 뜨거움", "An Eerie Heat"),
 	"SN_PAY_QNO_AR_107": ("뱀 조련사", "The Snake Tamer"),
 	"SN_PAY_QNO_AR_108": ("마녀의 흔적", "Traces of the Witch"),
+	# The lines of the twelve quests the dialog decision held back
+	# (owner, 2026-11-26, #4134). Their rows ship as Korean-only stub
+	# rows (4 columns, no English cell); project_later_row now carries
+	# them. The six _01 offers are the client's own SN_PAYCON scenario
+	# first paragraph, word for word (the Korean compared equal
+	# against the archive). The six one-line greetings, and
+	# QNO_AR_002's _02 accept line, which has no such twin, are
+	# translated from the shipped Korean.
+	"SN_TALK_QNO_AR_001_01": ("전 왕비에게 배신을 당했던 나는 그 충격에 차마 입에도 담기 힘든 끔찍한 일들을 저질러왔다네. 나의 새로운 왕비인 세라자드를 만나지 못했다면 나는 지금도 밤마다 왕국의 처녀들을 죽이는 일을 반복했을지도 모르지.", "After I was betrayed by the former queen, I committed terrible deeds that one can't even imagine.  Had I not met my new queen, Sheherazade, even now, I might be repeating the killing of the virgins of the kingdom every night."),
+	"SN_TALK_QNO_AR_001_05": ("당신께 알라의 은총이 깃들기를..", "May the grace of Allah be upon you.."),
+	"SN_TALK_QNO_AR_002_01": ("당신에 대한 이야기는 많이 들었습니다. 바다 건너에서 넘어오는 것은 바람만이 아니니까요.", "I have heard much about you.  Wind is not the only thing that travels over the sea."),
+	"SN_TALK_QNO_AR_002_02": ("알라의 은총으로 왕께서 다시 눈 뜨셨지만 민심은 땅에 떨어지고 왕국의 치안은 엉망이 되었습니다. 거기에 국왕을 폐위시키고 권력을 찬탈하려는 무리들까지 나타나 이빨을 드러내고 있답니다.", "By Allah's grace, the king has opened his eyes again, but the hearts of the people have fallen and the kingdom's order lies in ruin. And now those who would cast down the king and seize power have appeared, baring their fangs."),
+	"SN_TALK_QNO_AR_003_01": ("지금의 바그다드? 그야말로 태평성대가 아니겠는가. 국왕께선 온전한 정신을 되찾으시고 왕국을 뒤덮던 곡소리도 멎었으니 말이야. 하지만 그걸로 모든 것이 끝나는 것은 아니지. 어쨌거나 죽은 이들이 존재하고 누군가는 그들의 죽음에 대한 책임을 져야 할테니까. 뭐, 그런 마음들까지 모두 불온하다라고 몰아붙이는 건 억지가 아닐까 하는 생각이 드네. 오히려 나는 딸을 왕비의 자리에 올려놓고 국왕을 좌지우지하는 자들이 더 불온하고 불충한 무리들이 아닌가 생각한다네.", "Today's Baghdad? This place is really peaceful.  The king has fully recovered and the wailing that once covered the kingdom has ceased.  However, that does not settle everything.  The fact of the matter is, people died and somebody will have to take the blame for their death.  Some claim that such an attitude is a rebellious one, but I say such a claim is rather far-fetched.  On the contrary, if there is anyone who is rebellious and disloyal, it is the one who puts his daughter on the throne of the queen to wrap the king around his finger."),
+	"SN_TALK_QNO_AR_004_01": ("내가 세라자드를 이용해서 국왕을 좌지우지하고 있다고? 그 고약한 여우가 그렇게 이야기하던가? 하! 웃기지도 않는 이야기로군. 아직 직접적인 물증이 나오지 않았을 뿐, 그가 반란을 도모하고 있다는 것은 공공연한 사실일세. 문제는 반란을 일으키려면 많은 수의 병력과 군자금이 필요할텐데 그것을 어디다 숨겼는지 그야말로 감쪽같다는 것이지. 최근에야 그나마 수상한 곳을 발견해 정보를 모으고 있는 중인데 쉽지가 않네.", "I am controlling the king through Sheherazade?  Is that what that crafty fox told you?  Ha!  What nonsense!  There may be no hard evidence yet, everyone knows that he is seeking rebellion.  To rebel, he needs many men and the funds for the war.  The trouble is, we know not where he is hiding them.  Recently, we have managed to discover a suspicious place and are gathering information.  But, this is no easy task."),
+	"SN_TALK_QNO_AR_010_05": ("오, 정말로 약탈꾼을 물리쳐주셨군요. 알라여, 감사합니다!", "Oh, you really have driven off the marauders. Thank you, Allah!"),
+	"SN_TALK_QNO_AR_012_01": ("이 농장 주위에는 수많은 늑대들이 호시탐탐 양을 노리고 배회하고 있습니다. 그 중에서도 포악한 아도니스놈들은 이름 그대로 너무 흉폭한지라 손도 쓰지 못하는 실정이지요. 언제까지 늑대들을 두려워하면서 살아가야 할런지..", "Many wolves are wandering around this farm, looking for a chance to attack our sheep.  Of these, the Violent Adonises are so violent - as their name implies - that we can't do anything about them.  How long do we have to live in fear of wolves?"),
+	"SN_TALK_QNO_AR_014_05": ("아, 알라시여!", "Ah, Allah!"),
+	"SN_TALK_QNO_AR_018_06": ("쟈밀룬이 이것을 제게..", "Jyamilrun gave this to me.."),
+	"SN_TALK_QNO_AR_019_05": ("정지! 누구냐?", "Halt! Who goes there?"),
+	"SN_TALK_QNO_AR_026_05": ("자네는…", "You are…"),
+	"SN_TALK_QNO_AR_027_01": ("우리는 이 숲속에서 뭔가 수상한 자들이 발견되고 있다는 첩보를 조사하기 위해 파견되었다네. 하지만 갈색 갈기 쿨드라는 마물들이 숲을 막고 있어서 쉽사리 숲속으로 진군할 수 없는 실정이야. 원래 이 숲에는 이런 마물들은 없었는데.. 누군가가 인위적으로 풀어놓은 게 아닌가하는 의심마저 들 지경이라네.", "We are dispatched here to investigate the intelligence that suspicious people are found in the forest.  However, demons called Brown Mane Kulds are blocking the forest, impeding our advances into the forest.  There used to be no demons in the forest...  It makes me wonder whether someone released them intentionally."),
 }
 
 
@@ -319,13 +340,36 @@ def check_guide_text(guide, texts, variant_text):
 
 
 # ================
+# project_later_row
+#
+# One later text row in the layout fill_text reads. A full row takes the
+# shared projection. Two defect shapes in the archive name Arabia
+# quests and took the length rule's path out of the build: the
+# 4-column stub rows (key and Korean only), whose English QUEST_ENGLISH
+# carries, become a blank-English row so complete_english fills them;
+# a quest row a column short or long (SN_TALK_QNO_AR_026_03 at 15,
+# SN_PAYCON_QNO_AR_002 at 18) is padded or cut to 17 first, so its
+# English cell lands where the projection reads it. Any other short
+# row keeps today's path, untouched.
+# ================
+def project_later_row(row):
+	if len(row) == 17:
+		return map_tables.later_text_row(row)
+	if len(row) > 3 and row[1].strip().isdigit() and QUEST_CODE.search(row[2]):
+		if len(row) == 4:
+			return [row[0], row[2], row[3]] + [""] * 12
+		return map_tables.later_text_row((row + ["0"] * 17)[:17])
+	return row
+
+
+# ================
 # later_text_rows
 #
 # The three textquest families' rows, shards fanned out, each projected
 # from the later 17-column layout into the layout fill_text reads.
 # ================
 def later_text_rows(read):
-	return [[map_tables.later_text_row(row) for row in sharded_rows(read, family + ".txt")]
+	return [[project_later_row(row) for row in sharded_rows(read, family + ".txt")]
 		for family in TEXT_FAMILIES]
 
 

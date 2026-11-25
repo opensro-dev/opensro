@@ -22,11 +22,12 @@ import (
 	"opensro.online/server/internal/testsupport/clientdata"
 )
 
-// arabiaCollectWanted is the authored set, in table order: 13
-// deliveries and 24 collects (QNO_AR_091 is held: its NPC is unplaced).
+// arabiaCollectWanted is the authored set, in table order: 15
+// deliveries and 26 collects (QNO_AR_091 is held: its NPC is unplaced).
 var arabiaCollectWanted = []string{
-	"QNO_AR_006", "QNO_AR_007", "QNO_AR_011", "QNO_AR_013", "QNO_AR_015",
-	"QNO_AR_016", "QNO_AR_022", "QNO_AR_023", "QNO_AR_024", "QNO_AR_025",
+	"QNO_AR_006", "QNO_AR_007", "QNO_AR_011", "QNO_AR_012", "QNO_AR_013",
+	"QNO_AR_014", "QNO_AR_015", "QNO_AR_016", "QNO_AR_017", "QNO_AR_018",
+	"QNO_AR_022", "QNO_AR_023", "QNO_AR_024", "QNO_AR_025",
 	"QNO_AR_032", "QNO_AR_033", "QNO_AR_034", "QNO_AR_035", "QNO_AR_036",
 	"QNO_AR_037", "QNO_AR_038", "QNO_AR_039", "QNO_AR_044", "QNO_AR_046",
 	"QNO_AR_048", "QNO_AR_050", "QNO_AR_051", "QNO_AR_055", "QNO_AR_056",
@@ -86,6 +87,24 @@ func TestArabiaCollectTableIsTheEvidenceSet(t *testing.T) {
 		deliver.AchievedNowSymbol != "SN_TALK_QNO_AR_016_07" || deliver.EndNpcCodename != "NPC_AR_SPECIAL" {
 		t.Errorf("QNO_AR_016 %+v", deliver)
 	}
+	// Evidence: QNO_AR_012 is the repeatable wolf collect the later
+	// data marks ×2 (its contents next is QNO_AR_017); fields per
+	// questdata's RefQuest + refqusetreward.
+	ears := known["QNO_AR_012"]
+	if ears.Objective != ObjectiveCollect || ears.CollectItemCodename != "ITEM_QNO_AR_012_01" || ears.CollectCount != 270 ||
+		ears.MaxCompletions != 2 || ears.MonsterDrop == nil || ears.MonsterDrop.ChancePercent != 100 ||
+		len(ears.MonsterDrop.MonsterCodenames) != 1 || ears.MonsterDrop.MonsterCodenames[0] != "MOB_AR_BARUSWOLF_ADONIS2_CLONE" {
+		t.Errorf("QNO_AR_012 %+v", ears)
+	}
+	// Evidence: QNO_AR_018 is the one-shot thank-you delivery behind
+	// QNO_AR_013 (its contents next is 018); fields per questdata's
+	// RefQuest + refqusetreward.
+	jewels := known["QNO_AR_018"]
+	if jewels.Objective != ObjectiveDelivery || len(jewels.RequiredQuests) != 1 || jewels.RequiredQuests[0] != "QNO_AR_013" ||
+		len(jewels.DeliveryItems) != 1 || jewels.DeliveryItems[0].ItemCodename != "ITEM_QNO_AR_018_01" ||
+		jewels.CompletePromptSymbol != "SN_TALK_QNO_AR_018_06" || jewels.EndNpcCodename != "NPC_AR_CHOUKRI" {
+		t.Errorf("QNO_AR_018 %+v", jewels)
+	}
 	opening := known["QNO_AR_006"]
 	if len(opening.RequiredQuests) != 0 || opening.StartNpcCodename != "NPC_AR_SOLDIER_2" || opening.EndNpcCodename != "NPC_AR_FARMER3" {
 		t.Errorf("QNO_AR_006 %+v", opening)
@@ -94,11 +113,10 @@ func TestArabiaCollectTableIsTheEvidenceSet(t *testing.T) {
 	if len(last.RequiredQuests) != 1 || last.RequiredQuests[0] != "QNO_AR_100" {
 		t.Errorf("QNO_AR_101 %+v", last)
 	}
-	// Held back, by the file's own evidence rule (the stub talk lines,
-	// the delivery behind a held collect, the unplaced kinds, the
-	// quest whose target kind no source carries): none may appear.
-	for _, held := range []string{"QNO_AR_012", "QNO_AR_014", "QNO_AR_017", "QNO_AR_018",
-		"QNO_AR_059", "QNO_AR_066", "QNO_AR_068", "QNO_AR_091"} {
+	// Held back, by the file's own evidence rule (the unplaced kinds,
+	// the quest whose target kind no source carries, the unplaced
+	// NPC): none may appear.
+	for _, held := range []string{"QNO_AR_059", "QNO_AR_066", "QNO_AR_068", "QNO_AR_091"} {
 		if _, ok := known[held]; ok {
 			t.Errorf("%s is authored ahead of its evidence", held)
 		}
