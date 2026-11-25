@@ -146,6 +146,10 @@ type gameplayPlane struct {
 	// filled by the strike hook while the roster steps and flushed
 	// by caravanAgentsTick (slice 3e).
 	caravanStrikeFrames []simulation.DivisionFrames
+	// caravanChatLines are the lines the agents spoke this tick,
+	// filled by the chat hook while the roster steps and flushed as
+	// local chat by caravanAgentsTick (slice 4).
+	caravanChatLines []caravanChatLine
 }
 
 /*
