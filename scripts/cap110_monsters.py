@@ -792,8 +792,11 @@ def add_monsters(vsro_root, native, output, source_root=None):
 		# it is the reap list for shared effect vocabulary, which only
 		# the full-off path removes.
 		"characterInfo": sorted(owned_info | {r[0] for r in info}),
-			"nameSymbols": sorted(({r[1] for r in characters.translation_rows(base_text) if len(r) > 1}
-				| {r[1] for r in texts}) & {r[5] for r in refs.values()})}
+			# Owned names follow characters.owned_name_symbols
+			# (#3767): the old union with the base table claimed rows
+			# this build never added, and the off reap drops them.
+			"nameSymbols": characters.owned_name_symbols(texts, prior.get("nameSymbols", []),
+				{r[5] for r in refs.values()})}
 		summary["equipmentLootRows"] = loot_count
 		tomb_population = populations.get("pharaoh")
 		summary["tombNests"] = len(tomb_population["Rows"]) if tomb_population else 0
