@@ -14,13 +14,15 @@ trees only; no game data.
 ===========================================================================
 */
 import assert from "node:assert/strict";
+import { spawnSync } from "node:child_process";
+import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import test from "node:test";
 
 import { buildDungeonResourceManifest } from "../../build/world/assets/buildDungeonResources.mjs";
-import { notedExists, notedReadFile, resolveOnDiskPath } from "../../build/world/io.mjs";
+import { notedExists, notedReadFile, resolveOnDiskPath, resolveOnDiskPathSync } from "../../build/world/io.mjs";
 
 /*
 ================
@@ -109,6 +111,179 @@ function minimalDof() {
 	bytes.writeUInt16LE( 1, 64 ); // general region id
 	return bytes;
 }
+
+test("the synchronous resolver takes the on-disk spelling", async ( t ) => {
+	const root = await makeExtractedTree( t );
+	const onDisk = path.join( root, "Data_extracted", "dungeon", "wchina", "C_Rudolph.BSK" );
+	await writeFile( onDisk, "bsk" );
+
+	const asked = path.join( root, "Data_extracted", "Dungeon", "wchina", "c_rudolph.bsk" );
+	assert.equal( resolveOnDiskPathSync( asked ), onDisk );
+	assert.equal( readFileSync( resolveOnDiskPathSync( asked ), "utf8" ), "bsk" );
+	assert.equal( resolveOnDiskPathSync( onDisk ), onDisk );
+});
+
+test("the synchronous resolver keeps a missing file's spelling, then sees it created", async ( t ) => {
+	const root = await makeExtractedTree( t );
+	const asked = path.join( root, "Data_extracted", "Dungeon", "wchina", "absent.bms" );
+
+	assert.equal( resolveOnDiskPathSync( asked ), asked );
+	// The build creates files as it goes: a miss is re-listed once before
+	// it is believed, so a file created after the first probe still resolves.
+	await writeFile( path.join( root, "Data_extracted", "dungeon", "wchina", "absent.bms" ), "bms" );
+	assert.equal(
+		resolveOnDiskPathSync( asked ),
+		path.join( root, "Data_extracted", "dungeon", "wchina", "absent.bms" )
+	);
+});
+
+test("the synchronous resolver folds ASCII only, like the async one", async ( t ) => {
+	const root = await makeExtractedTree( t );
+	const onDisk = path.join( root, "Data_extracted", "prim", "Àname.bsr" );
+	await writeFile( onDisk, "bsr" );
+	const asked = path.join( root, "Data_extracted", "prim", "àname.bsr" );
+
+	assert.equal( resolveOnDiskPathSync( asked ), asked );
+	assert.equal( resolveOnDiskPathSync( onDisk ), onDisk );
+});
+
+test("the synchronous resolver answers from an injected listing", async ( t ) => {
+	// A platform whose file system folds case cannot prove the resolution
+	// from its own disk: the listing is the case-sensitive tree, served
+	// by the test, and the resolver must answer with its spelling.
+	const root = path.join( path.parse( process.cwd() ).root, "sro-virtual-case" );
+	const extracted = path.join( root, "extracted" );
+	const dataRoot = path.join( extracted, "Data_extracted" );
+	const cos = path.join( dataRoot, "Res", "Cos" );
+	const listings = new Map( [
+		[ path.parse( process.cwd() ).root, [ "sro-virtual-case" ] ],
+		[ root, [ "extracted" ] ],
+		[ extracted, [ "Data_extracted" ] ],
+		[ dataRoot, [ "Res" ] ],
+		[ path.join( dataRoot, "Res" ), [ "Cos" ] ],
+		[ cos, [ "C_Rudolph.BSK", "P_Goldpig01.BMS" ] ]
+	] );
+	const listDirectory = directory => {
+		const names = listings.get( directory );
+		if ( !names ) {
+			const error = new Error( `ENOENT: no such directory ${directory}` );
+			error.code = "ENOENT";
+			throw error;
+		}
+		return names;
+	};
+
+	const asked = path.join( dataRoot, "res", "cos", "c_rudolph.bsk" );
+	assert.equal( resolveOnDiskPathSync( asked, listDirectory ), path.join( cos, "C_Rudolph.BSK" ) );
+	assert.equal(
+		resolveOnDiskPathSync( path.join( dataRoot, "res", "cos", "absent.bms" ), listDirectory ),
+		path.join( dataRoot, "res", "cos", "absent.bms" )
+	);
+});
+
+/*
+================
+syntheticBsr
+
+The smallest JMXVRES 0109 the character parser admits with one particle
+modifier, the fixture shape of test/assets/bsrParticleModifiers.
+================
+*/
+function syntheticBsr() {
+	const bytes = Buffer.alloc( 1024 );
+	bytes.write( "JMXVRES 0109" );
+	let p = 0x80;
+	bytes.writeUInt32LE( p, 0x0c + 6 * 4 );
+	const u32 = value => {
+		bytes.writeUInt32LE( value >>> 0, p );
+		p += 4;
+	};
+	const str = value => {
+		u32( value.length );
+		p += bytes.write( value, p, "latin1" );
+	};
+	const vector = values => {
+		for ( const v of values ) {
+			bytes.writeFloatLE( v, p );
+			p += 4;
+		}
+	};
+	u32( 1 );
+	u32( 2 );
+	u32( -1 );
+	str( "ambient" );
+	u32( 1 );
+	u32( 0x30000 );
+	for ( let i = 1; i <= 6; i++ ) u32( i );
+	bytes.set( [ 7, 8, 9, 10 ], p );
+	p += 4;
+	u32( 2 );
+	for ( const optional of [ 0, 2 ] ) {
+		u32( 11 );
+		str( "system\\fixture.efp" );
+		str( "Bip01 Head" );
+		vector( [ 1.25, -2.5, 3.75 ] );
+		u32( 12 );
+		bytes.set( [ 13, 14, 15, optional ], p );
+		p += 4;
+		if ( optional ) vector( [ 4, 5, 6 ] );
+	}
+	u32( 0 );
+	u32( 1 );
+	u32( 4 );
+	u32( 2 );
+	u32( 1 );
+	u32( 77 );
+	u32( 99 );
+	return bytes.subarray( 0, p );
+}
+
+test("the synchronous data readers find files the tree holds in authored case", async ( t ) => {
+	// The readers root themselves at SRO_GAME_ROOT when their module
+	// loads, so they run in a child pointed at the fixture tree. The
+	// tree spells its directories and files the authored way
+	// (Res/Cos/C_Rudolph.BSK); every query below uses the folded
+	// spelling the game data carries.
+	const root = await mkdtemp( path.join( tmpdir(), "sro-data-case-" ) );
+	t.after( () => rm( root, { recursive: true, force: true } ) );
+	const dataDir = path.join( root, "extracted", "Data_extracted" );
+	mkdirSync( path.join( dataDir, "Res", "Cos" ), { recursive: true } );
+	mkdirSync( path.join( dataDir, "Res", "Char" ), { recursive: true } );
+	writeFileSync( path.join( dataDir, "Res", "Cos", "C_Rudolph.BSR" ), syntheticBsr() );
+	writeFileSync( path.join( dataDir, "Res", "Cos", "P_Goldpig01.BMS" ), "bms-bytes" );
+	writeFileSync( path.join( dataDir, "Res", "Char", "Test_Warrior.BSR" ), "entity-bytes" );
+
+	const moduleUrl = relative => JSON.stringify( new URL( relative, import.meta.url ).href );
+	const program = `
+import assert from "node:assert/strict";
+import fs from "node:fs";
+import path from "node:path";
+import { dataAssetPathOnDisk } from ${moduleUrl( "../../build/shared/jmxAssetIO.mjs" )};
+import { entitySource } from ${moduleUrl( "../../build/char/publishEntityBsrModifiers.mjs" )};
+import { readEntityModel } from ${moduleUrl( "../../build/effects/buildEffectPrograms.mjs" )};
+
+const dataDir = path.join( process.env.SRO_GAME_ROOT, "extracted", "Data_extracted" );
+assert.equal(
+	dataAssetPathOnDisk( "res/cos/c_rudolph.bsr" ),
+	path.join( dataDir, "Res", "Cos", "C_Rudolph.BSR" )
+);
+const model = readEntityModel( "res/cos/c_rudolph.bsr" );
+assert.equal( model.particleModifiers.length, 1 );
+assert.equal( model.particleModifiers[0].entries[0].effectPath, "system\\\\fixture.efp" );
+const entity = await entitySource( "res/char/test_warrior.bsr" );
+assert.equal( entity.buffer.toString( "utf8" ), "entity-bytes" );
+assert.equal( fs.existsSync( dataAssetPathOnDisk( "res/cos/p_goldpig01.bms" ) ), true );
+assert.equal( fs.readFileSync( dataAssetPathOnDisk( "res/cos/p_goldpig01.bms" ), "utf8" ), "bms-bytes" );
+assert.equal( fs.existsSync( dataAssetPathOnDisk( "res/cos/absent.bms" ) ), false );
+console.log( "READERS-OK" );
+`;
+	const run = spawnSync( process.execPath, [ "--input-type=module", "--eval", program ], {
+		env: { ...process.env, SRO_GAME_ROOT: root },
+		encoding: "utf8"
+	} );
+	assert.equal( run.status, 0, run.stderr || run.stdout );
+	assert.match( run.stdout, /READERS-OK/ );
+});
 
 test("the dungeon manifest reads a DOF the table names with authored case", async ( t ) => {
 	const root = await makeExtractedTree( t );

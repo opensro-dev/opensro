@@ -15,7 +15,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { parseCharacterBsr } from "./formats.mjs";
 import { compoundBodyBsr } from "./itemAttachments.mjs";
-import { dataAssetPath } from "../shared/jmxAssetIO.mjs";
+import { dataAssetPathOnDisk } from "../shared/jmxAssetIO.mjs";
 import { publicRoot } from "../world/paths.mjs";
 import { readPublishedAssetBytesSync } from "../../lib/publishedAsset.mjs";
 import { writeJsonIfChangedSync } from "../shared/jsonOut.mjs";
@@ -35,7 +35,7 @@ compound row (assembleCompoundCharacter).
 */
 export async function entitySource( resourcePath ) {
 	if ( !COMPOUND_RESOURCE.test( resourcePath ) ) {
-		return { path: resourcePath, buffer: fs.readFileSync( dataAssetPath( resourcePath ) ) };
+		return { path: resourcePath, buffer: fs.readFileSync( dataAssetPathOnDisk( resourcePath ) ) };
 	}
 	const body = await compoundBodyBsr( resourcePath );
 	return { path: body.bsrPath, buffer: body.buffer };

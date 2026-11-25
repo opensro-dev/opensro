@@ -24,7 +24,7 @@ import { assembleAvatar } from "../char/buildAvatar.mjs";
 import { avatarToGlb } from "../char/exportGlb.mjs";
 import { parseBan, parseCharacterBsr } from "../char/formats.mjs";
 import { parseJmxResourceBsr } from "./objects/formats.mjs";
-import { dataAssetPath, loadDataAsset, loadMaterialTextures } from "../shared/jmxAssetIO.mjs";
+import { dataAssetPathOnDisk, loadDataAsset, loadMaterialTextures } from "../shared/jmxAssetIO.mjs";
 import { isMainScript } from "../shared/fsUtils.mjs";
 
 const isCli = isMainScript( import.meta.url );
@@ -164,7 +164,7 @@ export async function buildWorldAnimatedObjects( { skipTextures = false } = {} )
 	// Classify every referenced BSR once (shared across areas).
 	const animatedByBsrPath = new Map();
 	for ( const bsrPath of [ ...allBsrPaths ].sort() ) {
-		if ( !fs.existsSync( dataAssetPath( bsrPath ) ) ) continue;
+		if ( !fs.existsSync( dataAssetPathOnDisk( bsrPath ) ) ) continue;
 		try {
 			const classified = await classifyBsr( bsrPath );
 			if ( classified ) animatedByBsrPath.set( bsrPath, classified );

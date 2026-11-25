@@ -16,7 +16,7 @@ import path from "node:path";
 import { clientV150ResinfoRoot, extractedRoot, retailTextdataRoot } from "../world/paths.mjs";
 import { loadEquipmentRecords } from "./equipmentVisualRecords.mjs";
 import { vsroItemGlowRoot } from "./equipmentGlowMetadata.mjs";
-import { dataAssetPath, loadDataAsset } from "../shared/jmxAssetIO.mjs";
+import { dataAssetPathOnDisk, loadDataAsset } from "../shared/jmxAssetIO.mjs";
 import { parseCharacterBsr, parseBsk } from "./formats.mjs";
 
 const WEAPON_TYPE = 6;
@@ -288,7 +288,7 @@ tree does not hold it.
 ================
 */
 function readEquipmentModel( source ) {
-	const file = dataAssetPath( source );
+	const file = dataAssetPathOnDisk( source );
 	return fs.existsSync( file ) ? parseCharacterBsr( fs.readFileSync( file ), source ) : null;
 }
 

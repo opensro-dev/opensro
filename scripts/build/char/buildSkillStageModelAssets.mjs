@@ -17,7 +17,7 @@ import path from "node:path";
 
 import { buildEffectRecordTable, parseSkillAniSet, parseSkillEffectSet } from "./parseSkillEffect.mjs";
 import { compileBsrVisualToGlb } from "./compileBsrVisual.mjs";
-import { dataAssetPath } from "../shared/jmxAssetIO.mjs";
+import { dataAssetPathOnDisk } from "../shared/jmxAssetIO.mjs";
 import { isMainScript } from "../shared/fsUtils.mjs";
 import { publicRoot, retailTextdataRoot } from "../world/paths.mjs";
 import {
@@ -131,7 +131,7 @@ export async function buildSkillStageModelAssets() {
 	fs.mkdirSync( outputRoot, { recursive: true } );
 
 	for ( const resourcePath of references ) {
-		const source = dataAssetPath( resourcePath );
+		const source = dataAssetPathOnDisk( resourcePath );
 		const output = resourceGlbOutput( resourcePath, {
 			namespace: "skillfx",
 			publicAssetsRoot: path.join( publicRoot, "assets" )
