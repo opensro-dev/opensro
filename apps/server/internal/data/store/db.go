@@ -98,7 +98,18 @@ CREATE TABLE IF NOT EXISTS silk_history_earned (
 );
 `
 
-const dbSchema = mallAccountsSchema + mallEarnedSilkSchema + silkHistoryEarnedSchema + marketSchema + accountStorageSchema + fortressSchema + allianceSchema + guildWarSchema + fortressItemForgeSchema + uniqueKillsSchema + economyLedgerSchema + economyBucketSchema + itemLedgerSchema + grantDaySchema + referralSchema + nameReservationsSchema + silkHistorySchema + tradeHistorySchema + caravanAgentSchema + `
+// betaSilkProgressSchema is layout 16 (port-only, #4429): the hourly
+// beta silk clock's uncredited in-world time per account, so a GameWorld
+// restart resumes an unfinished hour instead of dropping it. An account
+// without a row has earned nothing toward its next credit.
+const betaSilkProgressSchema = `
+CREATE TABLE IF NOT EXISTS beta_silk_progress (
+  account_id TEXT PRIMARY KEY,
+  earned_ms INTEGER NOT NULL CHECK (earned_ms >= 0)
+) WITHOUT ROWID;
+`
+
+const dbSchema = mallAccountsSchema + mallEarnedSilkSchema + silkHistoryEarnedSchema + betaSilkProgressSchema + marketSchema + accountStorageSchema + fortressSchema + allianceSchema + guildWarSchema + fortressItemForgeSchema + uniqueKillsSchema + economyLedgerSchema + economyBucketSchema + itemLedgerSchema + grantDaySchema + referralSchema + nameReservationsSchema + silkHistorySchema + tradeHistorySchema + caravanAgentSchema + `
 CREATE TABLE IF NOT EXISTS meta (
   key   TEXT PRIMARY KEY,
   value TEXT NOT NULL
@@ -191,10 +202,11 @@ const (
 // layout 8, the unique-kill record for layout 9, the economy ledger for
 // layout 10, the name-reservation table for layout 11, the silk-history
 // table for layout 12, the trade-history table for layout 13, the AI
-// caravan memory and route-heat tables for layout 14 and the earned-silk
-// wallet and silk-history split tables for layout 15 (authority_upgrade.go).
+// caravan memory and route-heat tables for layout 14, the earned-silk
+// wallet and silk-history split tables for layout 15 and the beta silk
+// hour-progress table for layout 16 (authority_upgrade.go).
 // The release receiver runs it.
-const CurrentLayoutVersion = 15
+const CurrentLayoutVersion = 16
 
 /*
 ==================

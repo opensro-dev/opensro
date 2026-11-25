@@ -34,6 +34,10 @@ type fakeSilkWallet struct {
 	starters int
 	exists   bool
 	fail     bool
+	// progress is the persisted hour clock, shared across a simulated
+	// restart (a second BetaSilk on the same wallet).
+	progress map[string]int64
+	saves    int
 }
 
 /*
@@ -55,7 +59,7 @@ func (w *fakeSilkWallet) GrantBetaSilkStarter(_ string, starter uint32) (bool, e
 CreditBetaSilk
 ================
 */
-func (w *fakeSilkWallet) CreditBetaSilk(_ string, amount, bankCap uint32) (domain.MallBalance, bool, error) {
+func (w *fakeSilkWallet) CreditBetaSilk(account string, amount, bankCap uint32, progressMs int64) (domain.MallBalance, bool, error) {
 	if w.fail {
 		return domain.MallBalance{}, false, errors.New("credit failure")
 	}
@@ -64,7 +68,92 @@ func (w *fakeSilkWallet) CreditBetaSilk(_ string, amount, bankCap uint32) (domai
 	}
 	w.silk = min(w.silk+amount, bankCap)
 	w.exists = true
+	w.setProgress(account, progressMs)
 	return domain.MallBalance{Silk: w.silk}, true, nil
+}
+
+/*
+================
+BetaSilkProgress
+================
+*/
+func (w *fakeSilkWallet) BetaSilkProgress(account string) (int64, error) {
+	return w.progress[account], nil
+}
+
+/*
+================
+setProgress
+================
+*/
+func (w *fakeSilkWallet) setProgress(account string, earnedMs int64) {
+	if w.progress == nil {
+		w.progress = make(map[string]int64)
+	}
+	w.progress[account] = earnedMs
+}
+
+/*
+================
+SaveBetaSilkProgress
+================
+*/
+func (w *fakeSilkWallet) SaveBetaSilkProgress(account string, earnedMs int64) error {
+	w.setProgress(account, earnedMs)
+	w.saves++
+	return nil
+}
+
+/*
+================
+TestBetaSilkHourSurvivesARestart
+
+#4429: a restart mid-hour used to drop the hour, so a player under the
+cap on a day of several deploys was never paid. 40 minutes, a restart
+(a new owner on the same store), then 20 minutes completes the hour;
+the payment leaves no persisted time behind, so a further restart
+cannot pay it twice.
+================
+*/
+func TestBetaSilkHourSurvivesARestart(t *testing.T) {
+	wallet := &fakeSilkWallet{}
+	character := &domain.Character{ID: 7, Name: "Tester", AccountID: "acct"}
+	lookup := func(_ string, id int64) *domain.Character {
+		if id == character.ID {
+			return character
+		}
+		return nil
+	}
+	online := []simulation.SessionView{{DivisionID: "d", CharacterID: character.ID}}
+	now := int64(0)
+	play := func(beta *BetaSilk, minutes int) {
+		beta.Tick(now, online, lookup)
+		for range minutes {
+			now += 60 * 1000
+			beta.Tick(now, online, lookup)
+		}
+	}
+	first := NewBetaSilk(wallet, 50)
+	first.Starter(character)
+	start := wallet.silk
+	play(first, 40)
+	if wallet.progress["acct"] != 40*60*1000 || wallet.saves > 40 {
+		t.Fatalf("after 40 minutes the store holds %d ms over %d saves", wallet.progress["acct"], wallet.saves)
+	}
+	// The restart: the boot's own sessions arrive a few seconds later.
+	now += 5 * 1000
+	play(NewBetaSilk(wallet, 50), 20)
+	if wallet.silk != start+50 {
+		t.Fatalf("40 + 20 minutes across a restart paid %d silk, want 50", wallet.silk-start)
+	}
+	if wallet.progress["acct"] != 0 {
+		t.Fatalf("the paid hour left %d ms persisted", wallet.progress["acct"])
+	}
+	now += 5 * 1000
+	play(NewBetaSilk(wallet, 50), 1)
+	if wallet.silk != start+50 {
+		t.Fatalf("a second restart paid the hour again: %d silk", wallet.silk-start)
+	}
 }
 
 /*
@@ -297,8 +386,8 @@ func TestBetaSilkAccountCountsOnceAndPushesEverySession(t *testing.T) {
 TestBetaSilkForgetsAccountsAwayForADay
 
 An absent account keeps its partial hour; one gone for betaSilkForgetMs
-is dropped, so the map holds only recent accounts, and it starts over on
-return.
+is dropped, so the map holds only recent accounts, and on return it
+resumes the persisted time (#4429), not zero.
 ================
 */
 func TestBetaSilkForgetsAccountsAwayForADay(t *testing.T) {
@@ -320,8 +409,8 @@ func TestBetaSilkForgetsAccountsAwayForADay(t *testing.T) {
 		t.Fatalf("an account away for a day kept its clock: %d clocks", len(b.clocks))
 	}
 	b.Tick(away+betaSilkMaxStepMs, both, lookup)
-	if clock := b.clocks["account-2"]; clock == nil || clock.earnedMs != 0 {
-		t.Fatalf("a returning account kept earlier time: %+v", clock)
+	if clock := b.clocks["account-2"]; clock == nil || clock.earnedMs != betaSilkMaxStepMs {
+		t.Fatalf("a returning account lost its persisted time: %+v", clock)
 	}
 }
 
