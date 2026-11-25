@@ -407,19 +407,7 @@ func (r *Runtime) memberRowFor(divisionID string, character *enterworld.Characte
 		currentMP = enterworld.CurrentMP(character)
 	}
 	row.StatusNibbles = VitalStatusNibbles(currentHP, maxHP, currentMP, maxMP)
-	if character.RuntimeOnly && r.livePose != nil {
-		pose := r.livePose(divisionID, character)
-		row.Region = pose.RegionID
-		row.PosX = int16(pose.X)
-		row.PosY = int16(pose.Y)
-		row.PosZ = int16(pose.Z)
-	} else {
-		world := enterworld.WorldStateForCharacter(character, enterworld.ResolveCharacterRaceKey(character))
-		row.Region = uint16(world.Spawn.RegionID)
-		row.PosX = int16(world.Spawn.X)
-		row.PosY = int16(world.Spawn.Y)
-		row.PosZ = int16(world.Spawn.Z)
-	}
+	row.Region, row.PosX, row.PosY, row.PosZ = r.memberPosition(divisionID, character)
 	return row
 }
 

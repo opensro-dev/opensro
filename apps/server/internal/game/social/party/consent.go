@@ -435,3 +435,20 @@ func (r *Runtime) partyHasHumanMember(divisionID string, members []Member) bool 
 	}
 	return false
 }
+
+/*
+================
+memberPosition
+
+A member row's position: a runtime-only (AI caravan) actor's live pose,
+since it is never saved; a player's saved world spawn otherwise.
+================
+*/
+func (r *Runtime) memberPosition(divisionID string, character *enterworld.Character) (uint16, int16, int16, int16) {
+	if character.RuntimeOnly && r.livePose != nil {
+		pose := r.livePose(divisionID, character)
+		return pose.RegionID, int16(pose.X), int16(pose.Y), int16(pose.Z)
+	}
+	world := enterworld.WorldStateForCharacter(character, enterworld.ResolveCharacterRaceKey(character))
+	return uint16(world.Spawn.RegionID), int16(world.Spawn.X), int16(world.Spawn.Y), int16(world.Spawn.Z)
+}
