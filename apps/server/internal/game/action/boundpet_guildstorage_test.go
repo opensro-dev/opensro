@@ -293,3 +293,31 @@ func TestBoundRowInsideAPetNeverReachesTheGuildWarehouse(t *testing.T) {
 		t.Fatalf("the member's bag holds %+v", b.MissionInventory)
 	}
 }
+
+/*
+================
+TestBoundRowInsideASummonedPetNeverReachesTheGuildWarehouse
+
+The pet stays summoned: its live companion record holds the bound
+stone, and the guild door still refuses its summoner row
+(containerHoldsBoundRow reads ActiveCOS as well as the dormant copy).
+================
+*/
+func TestBoundRowInsideASummonedPetNeverReachesTheGuildWarehouse(t *testing.T) {
+	rt, a, _, refs := boundPetGuildFixture(t)
+	useSummonerFixture(t, rt, a, 23, refs.staticItemSource["SUMMON_PICKUP"])
+	r := trade(t, rt, a, wire.ItemMoveRequest{
+		MovementType: wire.MoveTypePlayerToCos, CosGID: summonedPetGID(t, a), SourceSlot: 20, DestSlot: 0})
+	if len(r.Frames) == 0 || r.Frames[0].Payload[0] != 1 {
+		t.Fatalf("bag-to-pet move refused: %+v", r.Frames)
+	}
+	openBoundPetGuildWarehouse(t, rt, a)
+	res := rt.applyGuildStorageMove(testDivision, a, wire.ItemMoveRequest{
+		MovementType: wire.MoveTypeGuildStorageDeposit, SourceSlot: 23, DestSlot: 0, NpcGID: guildManagerGid})
+	if len(res.Frames) != 1 || !bytes.Equal(res.Frames[0].Payload, []byte{2, errCodeInvalidStorageTarget}) {
+		t.Fatalf("guild deposit of a summoned bound-loaded pet = %+v, want the storage-target refusal", res.Frames)
+	}
+	if bagRowByCodename(a, "SUMMON_PICKUP") == nil {
+		t.Fatal("the refused deposit took the summoner row out of the master's bag")
+	}
+}
