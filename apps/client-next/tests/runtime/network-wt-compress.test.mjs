@@ -90,7 +90,9 @@ test("a compressed stream record is inflated in its place among the raw ones", a
 	transport.push( bytes.slice( 9, 60 ) );
 	transport.push( bytes.slice( 60 ) );
 	await inflated( () => {
-		network.drain( frame => frames.push( frame ) );
+		network.drain( frame => {
+			frames.push( frame );
+		} );
 		return frames.length >= 5;
 	} );
 	assert.deepEqual( frames.map( frame => frame.opcode ), [ 2, 256, 14, 257, 258 ] );

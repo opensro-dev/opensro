@@ -24,6 +24,8 @@ export function socketHarness( t ) {
 		bufferedAmount = 0;
 		sent = [];
 		closed = false;
+		/** @type {any} */
+		onmessage = null;
 		constructor() {
 			sockets.push( this );
 		}
@@ -39,7 +41,10 @@ export function socketHarness( t ) {
 	}
 	const original = Object.getOwnPropertyDescriptor( globalThis, "WebSocket" );
 	Object.defineProperty( globalThis, "WebSocket", { value: Socket, configurable: true, writable: true } );
-	t.after( () => Object.defineProperty( globalThis, "WebSocket", original ) );
+	t.after( () => {
+		if ( original ) Object.defineProperty( globalThis, "WebSocket", original );
+		else Reflect.deleteProperty( globalThis, "WebSocket" );
+	} );
 	return sockets;
 }
 /*
@@ -97,6 +102,8 @@ fetch answers from fetchDoc, or not at all (a 404) when it is null.
 export function wtHarness( t, fetchDoc = null ) {
 	const transports = [];
 	class Transport {
+		/** @type {any} */
+		inbound = null;
 		constructor( url, options ) {
 			this.url = String( url );
 			this.options = options;

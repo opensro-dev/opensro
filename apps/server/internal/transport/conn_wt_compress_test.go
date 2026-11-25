@@ -140,7 +140,9 @@ func TestWebTransportCompressesLargeRecordsOnRequest(t *testing.T) {
 					t.Error(err)
 				}
 			})
-			_, str := dialWTQuery(t, srv, row.query)
+			sess, str := dialWTQuery(t, srv, row.query)
+			// A shutdown gives a connected client two seconds to hang up.
+			t.Cleanup(func() { _ = sess.CloseWithError(0, "") })
 			helloWT(t, str, nil)
 			if err := transport.WriteStreamFrame(str, transport.Frame{Opcode: compressBurstOp}); err != nil {
 				t.Fatal(err)
