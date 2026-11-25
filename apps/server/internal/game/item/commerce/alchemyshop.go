@@ -118,11 +118,13 @@ var janganGrocerMagicStones = []janganGood{
 	{"ITEM_ETC_ARCHEMY_MAGICSTONE_ZOMBIE_09", 2000000},
 }
 
-// The smith's five stones (owner 2026-10-13, prices 2026-10-18); they move
+// The smith's stones (owner 2026-10-13, prices 2026-10-18; the degree 10
+// Steady stone owner 2026-11-25 at the degree 9 price); they move
 // to the grocer's alchemy stones tab behind hers, at the same prices.
 var janganSmithMagicStones = []janganGood{
 	{"ITEM_ETC_ARCHEMY_MAGICSTONE_LUCK_09", 5000000},
 	{"ITEM_ETC_ARCHEMY_MAGICSTONE_SOLID_09", 5000000},
+	{"ITEM_ETC_ARCHEMY_MAGICSTONE_SOLID_10", 5000000},
 	{"ITEM_ETC_ARCHEMY_MAGICSTONE_ASTRAL_09", 50000000},
 	{"ITEM_ETC_ARCHEMY_MAGICSTONE_ATHANASIA_09", 25000000},
 	{"ITEM_ETC_ARCHEMY_MAGICSTONE_REPAIR_09", 5000000},

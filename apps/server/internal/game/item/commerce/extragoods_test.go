@@ -51,7 +51,7 @@ func TestParseExtraGoods(t *testing.T) {
 		}
 	}
 	on, err := ParseExtraGoods("on")
-	if err != nil || len(on) != 9+28+25+4*3 {
+	if err != nil || len(on) != 10+28+25+4*3 {
 		t.Fatalf("on = %d goods, %v", len(on), err)
 	}
 	list, err := ParseExtraGoods(" STORE_CH_POTION_TAB1 : ITEM_ETC_ALL_SPOTION_01 : 1000 ")
@@ -157,6 +157,7 @@ func TestDefaultExtraGoodsBetaBalance(t *testing.T) {
 	smithPrices := map[string]uint64{
 		"ITEM_ETC_ARCHEMY_MAGICSTONE_LUCK_09":      5000000,
 		"ITEM_ETC_ARCHEMY_MAGICSTONE_SOLID_09":     5000000,
+		"ITEM_ETC_ARCHEMY_MAGICSTONE_SOLID_10":     5000000,
 		"ITEM_ETC_ARCHEMY_MAGICSTONE_ASTRAL_09":    50000000,
 		"ITEM_ETC_ARCHEMY_MAGICSTONE_ATHANASIA_09": 25000000,
 		"ITEM_ETC_ARCHEMY_MAGICSTONE_REPAIR_09":    5000000,
@@ -172,7 +173,7 @@ func TestDefaultExtraGoodsBetaBalance(t *testing.T) {
 			smith[code] = true
 		}
 	}
-	if len(smith) != 5 {
+	if len(smith) != 6 {
 		t.Fatalf("smith sells %d stones, want Luck, Steady, Astral, Athanasia and Repair", len(smith))
 	}
 	for _, offer := range stones {

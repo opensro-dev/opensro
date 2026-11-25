@@ -73,8 +73,8 @@ func TestJanganAlchemyShopRegroupsTheDefaultList(t *testing.T) {
 	// The same 74 goods the default list sells, regrouped: nothing on the
 	// smith's or grocer's authored tabs, 7 + 14 + 19 on the three new ones
 	// (the elixirs tab: four recipes and the degree 9-11 powders).
-	if len(goods) != 74 {
-		t.Fatalf("regrouped list = %d goods, want the default 74", len(goods))
+	if len(goods) != 75 {
+		t.Fatalf("regrouped list = %d goods, want the default 75", len(goods))
 	}
 	counts := map[string]int{}
 	for _, good := range goods {
@@ -83,7 +83,7 @@ func TestJanganAlchemyShopRegroupsTheDefaultList(t *testing.T) {
 		}
 		counts[good.Tab]++
 	}
-	if counts[janganElixirsTab] != 7 || counts[janganAttrStonesTab] != 14 || counts[janganMagicStonesTab] != 19 {
+	if counts[janganElixirsTab] != 7 || counts[janganAttrStonesTab] != 14 || counts[janganMagicStonesTab] != 20 {
 		t.Fatalf("tab goods = %v", counts)
 	}
 
@@ -137,7 +137,7 @@ func TestJanganAlchemyShopRegroupsTheDefaultList(t *testing.T) {
 		t.Fatalf("attribute tab = %v", tabCodenames(attr))
 	}
 	magic := c.Tabs[authoredMax+3]
-	if len(magic) != 19 {
+	if len(magic) != 20 {
 		t.Fatalf("magic tab has %d offers", len(magic))
 	}
 	wantTail := []struct {
@@ -146,6 +146,7 @@ func TestJanganAlchemyShopRegroupsTheDefaultList(t *testing.T) {
 	}{
 		{"ITEM_ETC_ARCHEMY_MAGICSTONE_LUCK_09", 5000000},
 		{"ITEM_ETC_ARCHEMY_MAGICSTONE_SOLID_09", 5000000},
+		{"ITEM_ETC_ARCHEMY_MAGICSTONE_SOLID_10", 5000000},
 		{"ITEM_ETC_ARCHEMY_MAGICSTONE_ASTRAL_09", 50000000},
 		{"ITEM_ETC_ARCHEMY_MAGICSTONE_ATHANASIA_09", 25000000},
 		{"ITEM_ETC_ARCHEMY_MAGICSTONE_REPAIR_09", 5000000},
@@ -178,8 +179,8 @@ func TestJanganAlchemyShopOffKeepsTodaysShops(t *testing.T) {
 	if _, ok := c.tabIDs[janganElixirsTab]; ok {
 		t.Fatal("switch off registered the synthesized tabs")
 	}
-	if offers := c.Tabs[c.tabIDs[janganSmithTab]]; len(offers) != 1+9 {
-		t.Fatalf("smith tab 3 = %d offers, want its arrows and the 9 goods", len(offers))
+	if offers := c.Tabs[c.tabIDs[janganSmithTab]]; len(offers) != 1+10 {
+		t.Fatalf("smith tab 3 = %d offers, want its arrows and the 10 goods", len(offers))
 	}
 	grocer := c.Tabs[c.tabIDs[janganGrocerTab]]
 	// Her 7 authored goods, then 31 extra goods with the degree 9-11

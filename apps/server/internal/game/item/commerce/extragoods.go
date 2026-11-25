@@ -43,7 +43,8 @@ const EnvShopExtraGoods = "SRO_SHOP_EXTRA_GOODS"
 // 1M in the Jangan smith's third tab after its arrows. Owner, 2026-10-13:
 // the smith's Luck, Steady, Astral, Athanasia and Repair stones are degree 9
 // only (degrees 1-3 removed, agreed with the reporter); 2026-10-18: Astral is
-// 50M, Athanasia (Immortal) 25M and Luck, Steady and Repair 5M; the other
+// 50M, Athanasia (Immortal) 25M and Luck, Steady and Repair 5M (2026-11-25:
+// the degree 10 Steady stone joins them at 5M); the other
 // degree 9 stones at Jangan's grocer for 2M; the vigor potions at every
 // herbalist. The two Jangan segments are built from the alchemy shop's
 // goods tables (alchemyshop.go), which the three-tab regroup reads too.
