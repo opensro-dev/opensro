@@ -10,7 +10,7 @@ the only SKILL_OP_ row the v1.150 skilldata ships (id 3978, "operator:
 harmony therapy"), and no mastery or trainer teaches it, so a cast can
 succeed only if the server lets a GM use it unlearned.
 
-Inferred, not read: no v1.188 SR_GameServer binary was available to
+Inferred, not read: no v1.188 reference server binary was available to
 confirm the server rule. The inference is the one that makes the
 client's own command work: a GM-privileged character may use every
 SKILL_OP_ row as if learned; a player never may.
