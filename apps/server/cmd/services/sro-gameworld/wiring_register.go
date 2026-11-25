@@ -453,6 +453,9 @@ func (game *gameplayPlane) register(hub *transport.Hub, loadQuests questDefiniti
 	game.items.ModerationLog = moderationLog
 	wireChatReports(game)
 	game.installEventBotChat()
+	// Port-only, not native (#3704 slice 4): the AI caravans' chat
+	// commands, when the caravan runtime runs on this shard.
+	game.installCaravanChat()
 	if err := wireContributorTitles(game); err != nil {
 		return err
 	}
