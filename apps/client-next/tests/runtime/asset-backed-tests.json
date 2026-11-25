@@ -92,6 +92,7 @@
 		"hud-movement-regressions.test.mjs",
 		"hunting-guide-ui.test.mjs",
 		"id-plates.test.mjs",
+		"instance-prompt-layout.test.mjs",
 		"inventory-page-navigation.test.mjs",
 		"inventory-sort-button.test.mjs",
 		"item-mall-chrome.test.mjs",

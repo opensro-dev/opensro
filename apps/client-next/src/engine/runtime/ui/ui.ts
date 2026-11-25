@@ -1019,7 +1019,7 @@ import {
 	resurrectionNoteColor,
 	resurrectionQuestion
 } from "@/engine/foundation/ui/resurrection-proposal";
-import { createInstancePrompt, instanceBoxLayout, instanceQuestion } from "@/engine/foundation/ui/instance-proposal";
+import { createInstancePrompt, instanceQuestion } from "@/engine/foundation/ui/instance-proposal";
 import {
 	createPartySummonPrompt,
 	partySummonBoxLayout,
@@ -1933,6 +1933,25 @@ export function createUi( ports: UiPorts ) {
 	const storagePanel = createStoragePanel();
 	const resurrectionPrompt = createResurrectionPrompt();
 	const instancePrompt = createInstancePrompt();
+	/*
+	================
+	instanceBoxFrame
+
+	The quest instance prompt's frame: the simple message box around its
+	question (7644E0 -> 6888C0), wrapped and measured as simpleMessageBox
+	draws it, so the drag moves the box the draw shows.
+	================
+	*/
+	const instanceQuestionText = () => hudCopy( instanceQuestion()[0]! );
+	const instanceBoxFrame = ( width: number, height: number, position: readonly [number, number] | null ) =>
+		textMessageBoxLayout(
+			width,
+			height,
+			messageBoxLines( [ instanceQuestionText() ], value => text.run( value ).width ).map( value =>
+				text.run( value ).width
+			),
+			position
+		).frame;
 	// The party summon window and its invitation box (#3918).
 	const partySummonPrompt = createPartySummonPrompt();
 	const partySummonHud = createPartySummonHud();
@@ -9585,12 +9604,9 @@ export function createUi( ports: UiPorts ) {
 				return;
 			}
 			if ( event.kind === "drag" && event.id === "instance-drag" && view ) {
-				const layout = instanceBoxLayout( view.width, view.height, instancePrompt.position() ),
-					next = instanceBoxLayout( view.width, view.height, [
-						layout.frame[0] + event.dx,
-						layout.frame[1] + event.dy
-					] );
-				instancePrompt.place( [ next.frame[0], next.frame[1] ] );
+				const frame = instanceBoxFrame( view.width, view.height, instancePrompt.position() ),
+					next = instanceBoxFrame( view.width, view.height, [ frame[0] + event.dx, frame[1] + event.dy ] );
+				instancePrompt.place( [ next[0], next[1] ] );
 				dirty = true;
 				return;
 			}
@@ -28663,8 +28679,15 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 					focus = drawFrame.focus = null;
 					composing = false;
 				}
-				paths.push( ...partyProposalAssets() );
-				const layout = instanceBoxLayout( w, h, instancePrompt.position() );
+				// The simple message box's look (frame.ts simpleMessageBox);
+				// only the body and the drag region are this box's own.
+				const layout = simpleMessageBox( {
+					title: hudCopy( "UIIT_STT_CONFIRM_BOX" ),
+					lines: [ instanceQuestionText() ],
+					yes: "instance-accept",
+					no: "instance-refuse",
+					position: instancePrompt.position()
+				} );
 				controls.push( {
 					id: "instance-body",
 					label: hudCopy( "UIIT_STT_CONFIRM_BOX" ),
@@ -28677,22 +28700,6 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 					draggable: true,
 					rect: layout.drag
 				} );
-				quads.push(
-					...normalTile( layout.background, MESSAGE_TILE, resources.size( MESSAGE_TILE ), full ),
-					...frameRing(
-						layout.frame,
-						MESSAGE_FRAME,
-						PARTS.map( p => resources.size( MESSAGE_FRAME + p + ".png" ) ),
-						full
-					),
-					...text.quads( hudCopy( "UIIT_STT_CONFIRM_BOX" ), layout.title, full, white, {
-						hAlign: 1,
-						vAlign: 0
-					} ),
-					...text.quads( hudCopy( instanceQuestion()[0]! ), layout.question, full, white, { vAlign: 0 } )
-				);
-				button( "instance-accept", hudCopy( "UIIT_CTL_YES" ), layout.accept[0], layout.accept[1], 76 );
-				button( "instance-refuse", hudCopy( "UIIT_CTL_NO" ), layout.refuse[0], layout.refuse[1], 76 );
 			}
 			// The party summon invitation (0xB4C6 kind 2, #3918): the
 			// shared confirm box with the leader's question line. The
