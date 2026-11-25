@@ -165,8 +165,17 @@ that runs says why.
 function changedParts( recorded, current ) {
 	if ( !recorded ) return [ "record format" ];
 	const changed = KEY_PARTS.filter( name => recorded[name] !== current[name] );
-	for ( const root of new Set( [ ...Object.keys( recorded.data ?? {} ), ...Object.keys( current.data ) ] ) ) {
-		if ( recorded.data?.[root] !== current.data[root] ) changed.push( `data ${root}` );
+	// A data key the record lacks is a per-folder key written beside its
+	// root hash (#4337): the root hash covers the folder's files already,
+	// so the key's first appearance is instrumentation, not a change.
+	// Keys the record holds still name every move and deletion.
+	for ( const root of Object.keys( current.data ) ) {
+		if ( root in (recorded.data ?? {}) && recorded.data[root] !== current.data[root] ) {
+			changed.push( `data ${root}` );
+		}
+	}
+	for ( const root of Object.keys( recorded.data ?? {} ) ) {
+		if ( !(root in current.data) ) changed.push( `data ${root}` );
 	}
 	for ( const file of new Set( [ ...Object.keys( recorded.code ?? {} ), ...Object.keys( current.code ) ] ) ) {
 		if ( recorded.code?.[file] !== current.code[file] ) changed.push( `code ${file}` );
@@ -244,6 +253,20 @@ export function createLaneMemo( {
 		if ( moved ) {
 			log( `[resource-build] lane ${name}: runs (output ${moved[0]} changed)` );
 			return undefined;
+		}
+		// Data keys the record predates (the per-folder keys #4337 added
+		// beside each root hash) are instrumentation, not a change:
+		// changedParts already proved every shared key equal, so the
+		// record learns the new keys here, on the replay it earned.
+		// Without this the first build carrying folder keys reruns every
+		// lane and names folders that never moved.
+		if ( Object.keys( parts.data ?? {} ).some( key => !(key in (record.parts.data ?? {})) ) ) {
+			record.parts.data = parts.data;
+			try {
+				await writeStateJson( path.join( memoRoot, `${name}.json` ), record );
+			} catch {
+				// Bookkeeping only: a later build learns the keys instead.
+			}
 		}
 		claimPublicPaths( claims );
 		return decodeResult( record.result );
