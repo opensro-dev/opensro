@@ -39,7 +39,10 @@ const INCIDENT_MAX_ATTEMPTS = 4;
 const INCIDENT_RETRY_MS = 6000;
 // The build every incident from this worker carries (build-tag.ts), read once.
 const INCIDENT_BUILD = buildTag( import.meta.url );
-const RELEASE_OUTDATED_MESSAGE = "A newer version of the game is available. Refresh the page to continue.";
+// The page reloads itself once the newer release is served (release-watch.ts
+// releaseNotice), so the line names no click: during a publish the server
+// switches first and a manual reload would only be refused again.
+const RELEASE_OUTDATED_MESSAGE = "Silkroad Online is being updated. The game continues on its own in a moment.";
 /*
 ================
 createSession

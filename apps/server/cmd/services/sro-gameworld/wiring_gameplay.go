@@ -142,6 +142,10 @@ type gameplayPlane struct {
 	// catalog every peer-shaped spawn draws from (wiring.go).
 	caravanPeers   *caravanPeerLeg
 	peerReferences *action.PeerReferenceCatalog
+	// caravanStrikeFrames are this tick's agent-strike publications,
+	// filled by the strike hook while the roster steps and flushed
+	// by caravanAgentsTick (slice 3e).
+	caravanStrikeFrames []simulation.DivisionFrames
 }
 
 /*

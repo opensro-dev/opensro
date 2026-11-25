@@ -24,6 +24,7 @@ package action
 import (
 	"sync/atomic"
 
+	"opensro.online/server/internal/game/abnormal"
 	"opensro.online/server/internal/game/combat"
 	"opensro.online/server/internal/game/enterworld"
 	"opensro.online/server/internal/game/item/wire"
@@ -41,6 +42,8 @@ stays the authority on life and death.
 ================
 */
 type AgentTarget struct {
+	// GID is the agent's object gid in the player band.
+	GID          uint32
 	Name         string
 	JobType      uint8
 	Pose         simulation.Spawn
@@ -49,6 +52,15 @@ type AgentTarget struct {
 	HP           int
 	MaxHP        int
 	LastAttacker string
+	// SkillID is the agent's strike skill; the attack powers are its
+	// weapon's shipped ranges (slice 3e), the attacker side of the
+	// same impact formula.
+	SkillID                              uint32
+	PhysicalAttackMin, PhysicalAttackMax float64
+	MagicalAttackMin, MagicalAttackMax   float64
+	// CombatTarget is the player the agent is currently fighting:
+	// that player may always answer (agentAttackRefusal).
+	CombatTarget string
 }
 
 /*
@@ -109,6 +121,9 @@ func (rt *Runtime) agentAttackRefusal(division string, caster *enterworld.Charac
 		return 0
 	}
 	if agent.LastAttacker == caster.Name {
+		return 0
+	}
+	if agent.CombatTarget == caster.Name {
 		return 0
 	}
 	return 0x3006
@@ -338,6 +353,132 @@ func (rt *Runtime) strikeAgentTarget(st offensiveStage, target combatTarget) (Op
 	actor = append(actor, battle...)
 	broadcast = append(broadcast, battle...)
 	return OpResult{Frames: actor, Broadcast: broadcast, ActorPrivate: private}, skillCastAccepted
+}
+
+/*
+================
+AgentStrikeResult
+
+One agent strike's publication: the room's frames (the cast result
+under the agent's gid, the victim's struck frames), the victim's own
+frames, and whether the victim fell.
+================
+*/
+type AgentStrikeResult struct {
+	Public    []wire.Frame
+	Victim    RecipientFrames
+	Committed bool
+	Defeated  bool
+}
+
+// agentStrikeReach is the action side's re-judgement bound for an
+// agent strike the caravan runtime already ranged (its own strike
+// range, with grace for the poses having moved since).
+const agentStrikeReach = 16.0
+
+/*
+================
+StrikePlayerByAgent
+
+One caravan agent's strike on one player (slice 3e): the agent is a
+synthetic attacker - its weapon's shipped attack ranges and its own
+skill row feed the same impact formula a monster's strike uses, and
+the hit commits through the shared player-victim door with no killer
+record, so the victim's death settles as a death to the world (no PK
+bookkeeping on either side). Agents inflict no statuses, displace
+nobody, and take no returned damage in this slice; linked shares off
+the victim (a fence, Pain Quota) still split inside the victim's
+commit but do not land on their takers.
+================
+*/
+func (rt *Runtime) StrikePlayerByAgent(division string, agent AgentTarget, victimName string, now int64) AgentStrikeResult {
+	var victim *enterworld.Character
+	for _, candidate := range rt.deps.CharactersForDivision(division) {
+		if candidate != nil && candidate.Name == victimName {
+			victim = candidate
+			break
+		}
+	}
+	if victim == nil {
+		return AgentStrikeResult{}
+	}
+	snapshot := rt.characterSnapshotCombat(division, victim)
+	if snapshot == nil || snapshot.DeletePending || !enterworld.CharacterAlive(snapshot) {
+		return AgentStrikeResult{}
+	}
+	skillSource := rt.deps.SkillData()
+	if skillSource == nil {
+		return AgentStrikeResult{}
+	}
+	skill, known := skillSource.SkillByID(agent.SkillID)
+	if !known || !skill.Attack.Present {
+		return AgentStrikeResult{}
+	}
+	victimAt := rt.liveSpawn(simulation.WorldKey(division, snapshot.Name), snapshot, now)
+	if !worldgeom.SamePlane(victimAt.RegionID, agent.Pose.RegionID) ||
+		worldgeom.Distance(
+			worldgeom.RegionXZ{RegionID: victimAt.RegionID, X: victimAt.X, Z: victimAt.Z},
+			worldgeom.RegionXZ{RegionID: agent.Pose.RegionID, X: agent.Pose.X, Z: agent.Pose.Z},
+		) > agentStrikeReach {
+		return AgentStrikeResult{}
+	}
+	defender, _, err := rt.playerCombatStats(division, snapshot)
+	if err != nil {
+		return AgentStrikeResult{}
+	}
+	attacker := combat.Stats{
+		Level:             agent.Level,
+		PhysicalAttackMin: agent.PhysicalAttackMin,
+		PhysicalAttackMax: agent.PhysicalAttackMax,
+		MagicalAttackMin:  agent.MagicalAttackMin,
+		MagicalAttackMax:  agent.MagicalAttackMax,
+	}
+	agentGID := agent.GID
+	strike := playerStrike{division: division, victim: victim, killer: deathKiller{}, skill: skill, now: now}
+	actor := criticalActor{division: division, monster: agentGID}
+	if !rt.planPlayerStrike(&strike,
+		func(wall *enterworld.SkillWall) (combat.WallOutcome, error) {
+			outcome, outcomeErr := rt.resolveCombatBehindWall(actor, skill, attacker, defender, wall)
+			outcome.Defender = combat.FinishImpact(outcome.Defender, combat.ImpactTail{Percent: fullAreaPercent,
+				Attack: skill.Attack.Present, Covered: outcome.Covered})
+			return outcome, outcomeErr
+		},
+		func(wall *enterworld.SkillWall, _ combat.Result) ([]abnormal.Record, error) {
+			// Agents inflict no statuses in this slice.
+			return nil, nil
+		}) {
+		return AgentStrikeResult{}
+	}
+	var struck playerStruck
+	committed := rt.deps.UpdateDeferred(victim, "agent-strike-player", func() bool {
+		if victim.DeletePending || !enterworld.CharacterAlive(victim) {
+			return false
+		}
+		struck = rt.strikePlayerInDoor(strike)
+		return len(struck.impacts) > 0
+	})
+	if !committed || len(struck.impacts) == 0 {
+		return AgentStrikeResult{}
+	}
+	if struck.fatal {
+		rt.bindResidentRegion(simulation.WorldKey(division, victim.Name), now)
+	}
+	token := atomic.AddUint32(&rt.castTokenCounter, 1)
+	cast := wire.SkillCastSuccess{SkillId: skill.ID, CasterGid: agentGID, InstanceToken: token}
+	frame := wire.SkillCastSingleTargetResultFrame(
+		wire.NewStationarySkillCastSingleTargetResult(cast, enterworld.ObjectIDForCharacter(snapshot), struck.impacts))
+	rt.queueSkillFinalize(division, monsterCastOwner(agentGID), agentGID, now, wire.SkillCastReleaseFrame(token, enterworld.ObjectIDForCharacter(snapshot)))
+	actionLifecycleMs, _ := skill.ActionLifecycleMs()
+	rt.queueSkillFinalize(division, monsterCastOwner(agentGID), agentGID,
+		now+max(int64(actionLifecycleMs), 1), wire.SkillCastFinalizeFrame(token))
+	public, private := rt.playerStruckFrames(division, victim, struck, now)
+	public = append([]wire.Frame{frame}, public...)
+	return AgentStrikeResult{
+		Public:    public,
+		Victim:    RecipientFrames{CharacterID: victim.ID, Frames: private},
+		Committed: true,
+		Defeated:  struck.fatal,
+	}
 }
 
 /*

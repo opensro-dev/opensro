@@ -20,7 +20,7 @@ test('real browser refresh reuses verified startup payloads',{timeout:180000},as
   await page.locator('[data-ui-id="frontend:reveal"]').click();await page.locator('[data-ui-id="account"]').waitFor({timeout:60000});measurements[pass].loginMs=performance.now()-start;
   measurements[pass].progress=await page.evaluate(()=>window.__assetProgress);await page.screenshot({path:'temp/artifacts/loading-cache/startup-'+pass+'.png'});
  }
- pass=1;const persistent=await page.evaluate(async()=>{const cache=await caches.open('sro-next-verified-v1');return (await cache.keys()).length;});
+ pass=1;const persistent=await page.evaluate(async()=>{let count=0;for(const name of await caches.keys()){if(name.startsWith('sro-next-verified-'))count+=(await (await caches.open(name)).keys()).length;}return count;});
  await Promise.all(pending);await writeFile('temp/artifacts/loading-cache/startup.json',JSON.stringify({passes,persistent,measurements},null,2));
  assert.ok(persistent>0);const cold=passes[0].filter(p=>p!=='/assets/packs/manifest.json'),warm=passes[1].filter(p=>p!=='/assets/packs/manifest.json');
  console.info(JSON.stringify({cold:cold.length,warm:warm.length,persistent,measurements:measurements.map(({requests,...rest})=>({...rest,assetBodyBytes:requests.reduce((n,r)=>n+r.responseBodySize,0)}))}));

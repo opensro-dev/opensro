@@ -49,6 +49,13 @@ const SCRIPT_PATH = /\.(?:[cm]?js|jsx|tsx?)$/;
 const MAX_SCRIPT_PATHS = 4096;
 // The verified frames an error event keeps, the throw site first.
 export const MAX_ERROR_FRAMES = 12;
+// The frames V8 records per error (default 10). A stack overflow inside code
+// the page did not load (an extension's, an eval's) fills ten frames with that
+// code and cuts the page's own caller off; 64 keeps it.
+const STACK_TRACE_LIMIT = 64;
+// Where a frame that names no page script ran, the only part of it an
+// incident carries (foreignFrames): no function name and no URL.
+const EXTENSION_SCHEME = /^(?:chrome|moz|safari(?:-web)?|ms-browser)-extension:/;
 // The distinct failures kept for the page's life, each its first throw plus
 // a repeat count. Past this many, new failures fall back to the ring.
 const MAX_KEPT_ERRORS = 8;
@@ -150,7 +157,7 @@ function errorEventFields(
 	error: unknown,
 	fallback: string,
 	scripts: ReadonlySet<string>
-): { message: string; stack?: string; frames?: string[]; } {
+): { message: string; stack?: string; frames?: string[]; foreign?: string[]; } {
 	const thrown = error instanceof Error ? error : null,
 		message = (thrown?.message || fallback || String( error )).slice( 0, MAX_ERROR_MESSAGE ),
 		rawStack = thrown?.stack ?? (error as { stack?: unknown; } | null)?.stack,
@@ -160,7 +167,67 @@ function errorEventFields(
 			undefined;
 	if ( !stack ) return { message };
 	const frames = stackFrames( String( rawStack ), scripts );
-	return frames.length ? { message, stack, frames } : { message, stack };
+	return frames.length ?
+		{ message, stack, frames } :
+		{ message, stack, foreign: foreignFrames( String( rawStack ), scripts ) };
+}
+
+/*
+================
+recorded
+
+An error's journal fields without the incident-only foreign classes: the
+journal and its shared copy keep the reviewed fields alone.
+================
+*/
+function recorded( fields: ReturnType<typeof errorEventFields> ) {
+	const { foreign: _foreign, ...kept } = fields;
+	return kept;
+}
+
+/*
+================
+foreignFrames
+
+The location class of every frame in rawStack that names no page script,
+for an incident whose stack has none of the page's own (2026-11-25: seven
+stack overflows, each filed with no frame at all, so nothing could say
+whose code recursed). Each is "    at <class>", with consecutive repeats
+folded into one "    at <class> x<count>"; a class is one of extension,
+anonymous (eval and new Function code), blob, file, other-origin or
+native (a frame with no location, such as Array.map's). A class is the
+whole of what it keeps: never the function name, the URL or the line.
+================
+*/
+function foreignFrames( rawStack: string, scripts: ReadonlySet<string> ): string[] {
+	const classes: string[] = [];
+	for ( const line of rawStack.split( "\n" ) ) {
+		const match = STACK_FRAME_LOCATION.exec( line );
+		let kind: string;
+		if ( match ) {
+			const url = match[1] ?? match[4] ?? "", path = pagePath( url );
+			if ( path !== undefined && scripts.has( path ) ) continue;
+			kind = EXTENSION_SCHEME.test( url ) ?
+				"extension" :
+				url.startsWith( "blob:" ) ?
+				"blob" :
+				url.startsWith( "file:" ) ?
+				"file" :
+				/^[a-z][a-z0-9+.-]*:\/\//i.test( url ) ?
+				"other-origin" :
+				"anonymous";
+		} else if ( /^\s+at\s/.test( line ) ) kind = "native";
+		else continue;
+		classes.push( kind );
+	}
+	const folded: string[] = [];
+	for ( let i = 0; i < classes.length && folded.length < MAX_ERROR_FRAMES; ) {
+		let run = 1;
+		while ( classes[i + run] === classes[i] ) run++;
+		folded.push( run > 1 ? `    at <${classes[i]}> x${run}` : `    at <${classes[i]}>` );
+		i += run;
+	}
+	return folded;
 }
 
 /*
@@ -304,7 +371,11 @@ const ENGINE_ERRORS: ReadonlyMap<string, ErrorConstructor> = new Map( [
 uncaughtFailure
 ================
 */
-function uncaughtFailure( error: unknown, frames: readonly string[] | undefined ): UncaughtFailure {
+function uncaughtFailure(
+	error: unknown,
+	frames: readonly string[] | undefined,
+	foreign: readonly string[] | undefined
+): UncaughtFailure {
 	// The name is text too (code may rename an error), so it is trusted
 	// only when the object is exactly an engine class's instance.
 	const name = error instanceof Error ? error.name : "";
@@ -315,7 +386,9 @@ function uncaughtFailure( error: unknown, frames: readonly string[] | undefined 
 			error instanceof Error ?
 			"Error" :
 			"Rejection",
-		frames: frames ?? []
+		// The page's own frames name the failure; with none, the classes of
+		// the frames that ran say whose code it was (foreignFrames).
+		frames: frames?.length ? frames : foreign ?? []
 	};
 }
 
@@ -328,6 +401,13 @@ export function createJournal( canvas: HTMLCanvasElement, options: JournalOption
 	const lifetime = new AbortController();
 	const signal = lifetime.signal;
 	const scriptPaths = options.scriptPaths ?? pageScripts( signal );
+	// V8 only: record STACK_TRACE_LIMIT frames per error while the journal
+	// listens, so an overflow's page caller survives below the recursion.
+	const traces = Error as { stackTraceLimit?: number; };
+	const previousTraceLimit = traces.stackTraceLimit;
+	if ( typeof previousTraceLimit === "number" && previousTraceLimit < STACK_TRACE_LIMIT ) {
+		traces.stackTraceLimit = STACK_TRACE_LIMIT;
+	}
 	let events: JournalEvent[] = [];
 	let next = 0, count = 0, frameSlot = -1;
 	let errorTimes: number[] = [], lastErrorSignature = "";
@@ -405,8 +485,8 @@ export function createJournal( canvas: HTMLCanvasElement, options: JournalOption
 			return;
 		}
 		if ( keptErrors.size < MAX_KEPT_ERRORS ) {
-			keptErrors.set( signature, { ...fields, atMs, kind: "error", count: 1, lastAtMs: atMs } );
-			options.firstError?.( uncaughtFailure( error, fields.frames ) );
+			keptErrors.set( signature, { ...recorded( fields ), atMs, kind: "error", count: 1, lastAtMs: atMs } );
+			options.firstError?.( uncaughtFailure( error, fields.frames, fields.foreign ) );
 			return;
 		}
 		// A storm that began after the kept slots filled still files its
@@ -426,13 +506,13 @@ export function createJournal( canvas: HTMLCanvasElement, options: JournalOption
 			!overflowFiled.has( signature )
 		) {
 			overflowFiled.add( signature );
-			options.firstError?.( uncaughtFailure( error, fields.frames ) );
+			options.firstError?.( uncaughtFailure( error, fields.frames, fields.foreign ) );
 		}
 		errorTimes = errorTimes.filter( time => atMs - time < ERROR_RATE_WINDOW_MS );
 		if ( signature === lastErrorSignature || errorTimes.length >= ERROR_RATE_LIMIT ) return;
 		lastErrorSignature = signature;
 		errorTimes.push( atMs );
-		record( "error", fields );
+		record( "error", recorded( fields ) );
 	}
 	window.addEventListener( "error", event => recordError( event.error, event.message ), { signal } );
 	window.addEventListener(
@@ -556,6 +636,7 @@ export function createJournal( canvas: HTMLCanvasElement, options: JournalOption
 		*/
 		dispose() {
 			lifetime.abort();
+			if ( traces.stackTraceLimit === STACK_TRACE_LIMIT ) traces.stackTraceLimit = previousTraceLimit;
 			observer?.disconnect();
 			events = [];
 			next = count = 0;

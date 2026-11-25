@@ -447,10 +447,11 @@ under every loading layer (1000-1003).
 
 /*
 The release-skew update prompt (platform.ts presentUpdate): shown once a
-newer client release is live. An outdated page cannot keep playing, so it
+newer client release is live, or while the server refuses this page before
+the newer page is served. An outdated page cannot keep playing, so it
 covers the whole game, above every loading layer (1000-1002), and takes the
-keys; the player's click on Refresh reloads. It keeps the boot overlay's
-palette.
+keys; the player's click on Refresh reloads, and the waiting line has no
+button. It keeps the boot overlay's palette.
 */
 
 .sro-update-notice {

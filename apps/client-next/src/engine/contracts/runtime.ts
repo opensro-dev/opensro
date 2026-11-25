@@ -83,6 +83,18 @@ export type RuntimePhase = "starting" | "running" | "failed" | "disposed";
 
 /*
 ================
+ReleaseNotice
+
+The release-skew prompt (runtime/release/release-watch.ts releaseNotice):
+none; "updating" while the server refuses this page and no newer page is
+served yet; "newer" offers Refresh to a page still playing; "reload" is a
+refused page whose newer release is served.
+================
+*/
+export type ReleaseNotice = "none" | "updating" | "newer" | "reload";
+
+/*
+================
 RenderFrameProbe
 
 Optional synchronous measurements supplied by the frame owner. Renderer
@@ -224,12 +236,12 @@ export interface Platform extends Disposable {
 	presentUi( state: import("./ui").UiSemantics ): void;
 	// Release skew (runtime/release/release-watch.ts): the entry bundle this page
 	// loaded (null outside a release build), a one-shot "tab visible again"
-	// trigger, and the refresh offer once a newer release is live.
+	// trigger, and the update prompt (ReleaseNotice).
 	runningEntry(): string | null;
 	visibilityReturned(): boolean;
 	/** Consumes a browser online event independently of tab visibility. */
 	connectionReturned(): boolean;
-	presentUpdate( newer: boolean ): void;
+	presentUpdate( notice: ReleaseNotice ): void;
 	presentTelemetry( sample: FrameTelemetry ): void;
 	diagnosticsActive(): boolean;
 	/** Holds the tab awake (no background freeze) while a world session is live. */
