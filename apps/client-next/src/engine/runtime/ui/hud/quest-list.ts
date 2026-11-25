@@ -44,6 +44,12 @@ import type { UiFrame } from "./../frame/frame-contract";
 export const QUEST_LIST_SLOTS = 10;
 export const QUEST_TRACKER_SLOTS = 3;
 
+// The list window's scrollbar control (questlist.2dt id 6).
+export const QUEST_LIST_SCROLL_KEY = "6";
+
+// The list window's caption ("Quest list" in textuisystem).
+export const QUEST_LIST_CAPTION = "UIIT_STT_QUEST_LIST";
+
 // Control ids the draw binds (the layout children each slot carries).
 export const QUEST_TRACK_ID = 8;
 export const QUEST_TITLE_ID = 16;
@@ -99,6 +105,7 @@ export function createQuestList( questList: ResLayout, questMiniList: ResLayout 
 		tracked: readonly number[] = [],
 		folded = new Set<number>(),
 		scrollOffset = 0,
+		dragRest = 0,
 		playerLevel = 0;
 	let presentation: QuestPresentation | undefined;
 	let actions: QuestListAction[] = [];
@@ -226,6 +233,21 @@ export function createQuestList( questList: ResLayout, questMiniList: ResLayout 
 		},
 		/*
 ================
+		dragScroll
+
+		Scrollbar thumb drags arrive as fractional row deltas; the rest
+		carries between events so a slow drag still steps a row.
+================
+		*/
+		dragScroll( rows: number ) {
+			dragRest += rows;
+			const step = Math.trunc( dragRest );
+			if ( !step ) return;
+			dragRest -= step;
+			this.scrollBy( step );
+		},
+		/*
+================
 		scroll
 ================
 		*/
@@ -239,6 +261,20 @@ export function createQuestList( questList: ResLayout, questMiniList: ResLayout 
 		*/
 		maxScroll(): number {
 			return Math.max( 0, questRows().length - QUEST_LIST_SLOTS );
+		},
+		/*
+================
+		scrollRect
+
+		The list's scrollbar control (layout key 6, type 13) placed at
+		the window origin. The layout authors it without art, so the
+		caller draws the shared scrollbar over this rect.
+================
+		*/
+		scrollRect( ox: number, oy: number ): readonly [number, number, number, number] {
+			const control = listWindow.control( QUEST_LIST_SCROLL_KEY ), root = listWindow.layout.root.rect;
+			if ( !control ) return [ ox, oy, 0, 0 ];
+			return [ ox + control.rect[0] - root[0], oy + control.rect[1] - root[1], control.rect[2], control.rect[3] ];
 		},
 		/*
 ================
@@ -289,7 +325,6 @@ export function createQuestList( questList: ResLayout, questMiniList: ResLayout 
 				else folded.add( refId );
 				return true;
 			}
-			if ( id === "quest-list-scroll" ) return true;
 			return false;
 		},
 		/*
@@ -360,7 +395,9 @@ export function createQuestList( questList: ResLayout, questMiniList: ResLayout 
 					window.setTint( msgKey( slotKey, QUEST_STATUS_ID ), row.objective.color );
 				}
 			} );
-			window.setId( "6", "quest-list-scroll" );
+			// The archive's caption is Korean (" 퀘스트 목록", quest list);
+			// the window shows the same words from the text table.
+			window.setText( window.layout.root.key, copy( QUEST_LIST_CAPTION ) );
 			window.draw( frame, ox, oy );
 		},
 		/*
@@ -429,6 +466,7 @@ export function createQuestList( questList: ResLayout, questMiniList: ResLayout 
 			tracked = [];
 			folded = new Set();
 			scrollOffset = 0;
+			dragRest = 0;
 			actions = [];
 			located = 0;
 		}

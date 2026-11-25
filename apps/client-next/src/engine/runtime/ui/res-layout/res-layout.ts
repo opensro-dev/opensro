@@ -27,6 +27,7 @@ import { frameParts, frameRing } from "@/engine/foundation/ui/frame-ring";
 import { normalTile } from "@/engine/foundation/ui/normal-tile";
 import {
 	resLayoutFrameParts,
+	resLayoutFramePrefix,
 	resLayoutImagePath,
 	type ResLayout,
 	type ResLayoutControl
@@ -67,6 +68,10 @@ export const RES_LAYOUT_TYPE_TEXT = 5;
 export const RES_LAYOUT_TYPE_SLOT = 8;
 export const RES_LAYOUT_TYPE_CHECKBOX = 11;
 export const RES_LAYOUT_TYPE_SCROLLBAR = 13;
+
+// A framed root window's flat body, the colour frame.ts windowChrome
+// lays under every authored window's ring.
+export const RES_LAYOUT_WINDOW_BODY: readonly [number, number, number, number] = [ .06, .075, .065, .96 ];
 
 /*
 ================
@@ -171,25 +176,37 @@ export function createResLayoutWindow( layout: ResLayout ): ResLayoutWindow {
 		if (
 			control.parent === null || control.type === RES_LAYOUT_TYPE_WINDOW || control.type === RES_LAYOUT_TYPE_FRAME
 		) {
-			const prefix = control.frame ? resLayoutImagePath( control.frame ) : "";
+			const prefix = resLayoutFramePrefix( control.frame );
 			if ( prefix ) {
-				const partPaths = resLayoutFrameParts( control.frame );
-				paths.push( ...partPaths );
-				const parts = frameParts();
-				const stem = control.frame.toLowerCase().replace( /\.ddj$/, "" ).replace( /\.png$/, "" );
+				paths.push( ...resLayoutFrameParts( control.frame ) );
+				// The ring never fills its interior: a framed root window
+				// lays the same flat body the authored windows do
+				// (frame.ts windowChrome) under it.
+				if ( control.parent === null && r[2] > 0 && r[3] > 0 ) {
+					frame.quads.push( {
+						rect: r,
+						color: RES_LAYOUT_WINDOW_BODY,
+						texture: "",
+						uv: [ 0, 0, 1, 1 ],
+						clip: full
+					} );
+				}
 				frame.quads.push(
 					...frameRing(
 						r,
 						prefix,
-						parts.map( part => resources.size( resLayoutImagePath( stem + part ) ) ),
+						frameParts().map( part => resources.size( prefix + part + ".png" ) ),
 						full
 					)
 				);
 			}
-			if ( control.type === RES_LAYOUT_TYPE_WINDOW && control.text ) {
+			// The authored caption is the Korean archive text; the owner
+			// replaces it with its copy (setText on the window's key).
+			const caption = texts.get( control.key ) ?? control.text;
+			if ( control.type === RES_LAYOUT_TYPE_WINDOW && caption ) {
 				frame.quads.push(
 					...frame.text.quads(
-						control.text.trim(),
+						caption.trim(),
 						[ r[0] + 10, r[1] + 7, r[2] - 20, 12 ],
 						full,
 						frame.white,
@@ -211,8 +228,10 @@ export function createResLayoutWindow( layout: ResLayout ): ResLayoutWindow {
 		} else if ( control.type === RES_LAYOUT_TYPE_TILE ) {
 			// A tile with no texture draws nothing. Naming "" for loading
 			// would hold the whole window unadmitted: an empty path never
-			// becomes resident (frameDraw.unloadedImages).
-			const path = resLayoutImagePath( control.texture );
+			// becomes resident (frameDraw.unloadedImages). The importer
+			// files a tile's art under its frame word (questlist's body
+			// tile 3 names com_bg_tile_a.ddj there), so either names it.
+			const path = resLayoutImagePath( control.texture || control.frame );
 			if ( path ) {
 				paths.push( path );
 				frame.quads.push( ...normalTile( r, path, resources.size( path ), full ) );

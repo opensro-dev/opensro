@@ -544,11 +544,11 @@
 		},
 		{
 			"buckets": {
-				"anonymous@22438": {
+				"anonymous@22446": {
 					"reads": 1,
 					"writes": 0
 				},
-				"anonymous@22443": {
+				"anonymous@22451": {
 					"reads": 1,
 					"writes": 0
 				},
@@ -652,7 +652,7 @@
 		},
 		{
 			"buckets": {
-				"anonymous@22641": {
+				"anonymous@22649": {
 					"reads": 1,
 					"writes": 0
 				},
@@ -702,7 +702,7 @@
 		},
 		{
 			"buckets": {
-				"anonymous@22607": {
+				"anonymous@22615": {
 					"reads": 1,
 					"writes": 0
 				},
@@ -852,15 +852,15 @@
 		},
 		{
 			"buckets": {
-				"anonymous@13165": {
+				"anonymous@13156": {
 					"reads": 2,
 					"writes": 0
 				},
-				"anonymous@14046": {
+				"anonymous@14037": {
 					"reads": 1,
 					"writes": 0
 				},
-				"anonymous@24313": {
+				"anonymous@24321": {
 					"reads": 1,
 					"writes": 0
 				},
@@ -1054,7 +1054,7 @@
 		},
 		{
 			"buckets": {
-				"anonymous@13165": {
+				"anonymous@13156": {
 					"reads": 1,
 					"writes": 0
 				},
@@ -1069,7 +1069,7 @@
 		},
 		{
 			"buckets": {
-				"anonymous@13165": {
+				"anonymous@13156": {
 					"reads": 1,
 					"writes": 0
 				},
@@ -1165,7 +1165,7 @@
 		},
 		{
 			"buckets": {
-				"anonymous@13487": {
+				"anonymous@13478": {
 					"reads": 3,
 					"writes": 0
 				}
@@ -1202,7 +1202,7 @@
 		},
 		{
 			"buckets": {
-				"anonymous@13487": {
+				"anonymous@13478": {
 					"reads": 1,
 					"writes": 0
 				},
@@ -1326,7 +1326,7 @@
 		},
 		{
 			"buckets": {
-				"anonymous@11419": {
+				"anonymous@11410": {
 					"reads": 2,
 					"writes": 0
 				},
@@ -1560,11 +1560,15 @@
 					"writes": 0
 				},
 				"panel:Quests": {
-					"reads": 2,
+					"reads": 6,
+					"writes": 0
+				},
+				"panel:Skills": {
+					"reads": 3,
 					"writes": 0
 				},
 				"quest": {
-					"reads": 3,
+					"reads": 4,
 					"writes": 0
 				},
 				"step": {
@@ -2083,7 +2087,7 @@
 		},
 		{
 			"buckets": {
-				"anonymous@13950": {
+				"anonymous@13941": {
 					"reads": 1,
 					"writes": 0
 				},
@@ -2121,7 +2125,7 @@
 		},
 		{
 			"buckets": {
-				"anonymous@14046": {
+				"anonymous@14037": {
 					"reads": 1,
 					"writes": 0
 				},
@@ -2140,7 +2144,7 @@
 		},
 		{
 			"buckets": {
-				"anonymous@13950": {
+				"anonymous@13941": {
 					"reads": 1,
 					"writes": 0
 				},
@@ -2159,7 +2163,7 @@
 		},
 		{
 			"buckets": {
-				"anonymous@13950": {
+				"anonymous@13941": {
 					"reads": 1,
 					"writes": 0
 				},
@@ -2178,7 +2182,7 @@
 		},
 		{
 			"buckets": {
-				"anonymous@14046": {
+				"anonymous@14037": {
 					"reads": 2,
 					"writes": 0
 				},
@@ -2249,7 +2253,7 @@
 					"reads": 1,
 					"writes": 1
 				},
-				"anonymous@13165": {
+				"anonymous@13156": {
 					"reads": 1,
 					"writes": 0
 				},
@@ -2344,15 +2348,15 @@
 		},
 		{
 			"buckets": {
-				"anonymous@13950": {
+				"anonymous@13941": {
 					"reads": 1,
 					"writes": 0
 				},
-				"anonymous@14046": {
+				"anonymous@14037": {
 					"reads": 1,
 					"writes": 0
 				},
-				"anonymous@30784": {
+				"anonymous@30792": {
 					"reads": 1,
 					"writes": 0
 				},
@@ -2414,6 +2418,10 @@
 				},
 				"panel:Option": {
 					"reads": 3,
+					"writes": 0
+				},
+				"panel:Quests": {
+					"reads": 1,
 					"writes": 0
 				},
 				"panel:Shop": {
@@ -2451,11 +2459,11 @@
 		},
 		{
 			"buckets": {
-				"anonymous@13950": {
+				"anonymous@13941": {
 					"reads": 1,
 					"writes": 0
 				},
-				"anonymous@14046": {
+				"anonymous@14037": {
 					"reads": 1,
 					"writes": 0
 				},
@@ -2517,6 +2525,10 @@
 				},
 				"panel:Option": {
 					"reads": 3,
+					"writes": 0
+				},
+				"panel:Quests": {
+					"reads": 1,
 					"writes": 0
 				},
 				"panel:Shop": {
@@ -3433,10 +3445,6 @@
 					"reads": 12,
 					"writes": 0
 				},
-				"panel:Skills": {
-					"reads": 1,
-					"writes": 0
-				},
 				"panel:Storage": {
 					"reads": 12,
 					"writes": 0
@@ -4029,11 +4037,11 @@
 					"reads": 0,
 					"writes": 2
 				},
-				"anonymous@10379": {
+				"anonymous@10370": {
 					"reads": 1,
 					"writes": 0
 				},
-				"anonymous@13950": {
+				"anonymous@13941": {
 					"reads": 1,
 					"writes": 0
 				},
@@ -4176,7 +4184,7 @@
 					"reads": 3,
 					"writes": 0
 				},
-				"anonymous@13950": {
+				"anonymous@13941": {
 					"reads": 1,
 					"writes": 0
 				},
@@ -4287,7 +4295,7 @@
 		},
 		{
 			"buckets": {
-				"anonymous@13950": {
+				"anonymous@13941": {
 					"reads": 2,
 					"writes": 0
 				},
@@ -4427,7 +4435,7 @@
 					"reads": 0,
 					"writes": 1
 				},
-				"anonymous@11679": {
+				"anonymous@11670": {
 					"reads": 1,
 					"writes": 0
 				},
@@ -4454,7 +4462,7 @@
 		},
 		{
 			"buckets": {
-				"anonymous@11705": {
+				"anonymous@11696": {
 					"reads": 1,
 					"writes": 0
 				},
@@ -4711,11 +4719,11 @@
 		},
 		{
 			"buckets": {
-				"anonymous@22835": {
+				"anonymous@22843": {
 					"reads": 1,
 					"writes": 0
 				},
-				"anonymous@22938": {
+				"anonymous@22946": {
 					"reads": 1,
 					"writes": 0
 				},
@@ -5243,7 +5251,7 @@
 		},
 		{
 			"buckets": {
-				"anonymous@10833": {
+				"anonymous@10824": {
 					"reads": 1,
 					"writes": 0
 				},
@@ -5912,7 +5920,7 @@
 		},
 		{
 			"buckets": {
-				"anonymous@25840": {
+				"anonymous@25848": {
 					"reads": 1,
 					"writes": 0
 				},
@@ -5976,7 +5984,7 @@
 		},
 		{
 			"buckets": {
-				"anonymous@17941": {
+				"anonymous@17949": {
 					"reads": 1,
 					"writes": 0
 				},
@@ -6175,7 +6183,7 @@
 		},
 		{
 			"buckets": {
-				"anonymous@14259": {
+				"anonymous@14250": {
 					"reads": 1,
 					"writes": 0
 				},
@@ -6278,7 +6286,7 @@
 		},
 		{
 			"buckets": {
-				"anonymous@10888": {
+				"anonymous@10879": {
 					"reads": 1,
 					"writes": 0
 				},
@@ -6523,7 +6531,7 @@
 		},
 		{
 			"buckets": {
-				"anonymous@17868": {
+				"anonymous@17876": {
 					"reads": 1,
 					"writes": 0
 				},
@@ -6542,7 +6550,7 @@
 		},
 		{
 			"buckets": {
-				"anonymous@11000": {
+				"anonymous@10991": {
 					"reads": 1,
 					"writes": 0
 				},
@@ -6584,13 +6592,9 @@
 		},
 		{
 			"buckets": {
-				"panel:Skills": {
+				"quest": {
 					"reads": 2,
 					"writes": 2
-				},
-				"quest": {
-					"reads": 3,
-					"writes": 3
 				},
 				"step": {
 					"reads": 0,
@@ -6622,7 +6626,7 @@
 		},
 		{
 			"buckets": {
-				"anonymous@17941": {
+				"anonymous@17949": {
 					"reads": 1,
 					"writes": 0
 				},
@@ -6663,7 +6667,7 @@
 		},
 		{
 			"buckets": {
-				"anonymous@13950": {
+				"anonymous@13941": {
 					"reads": 1,
 					"writes": 0
 				},
@@ -6774,7 +6778,7 @@
 		},
 		{
 			"buckets": {
-				"anonymous@13950": {
+				"anonymous@13941": {
 					"reads": 1,
 					"writes": 0
 				},
@@ -7167,7 +7171,7 @@
 					"writes": 0
 				},
 				"panel:Skills": {
-					"reads": 9,
+					"reads": 8,
 					"writes": 0
 				},
 				"panel:Storage": {
@@ -7590,75 +7594,75 @@
 					"reads": 1,
 					"writes": 0
 				},
-				"anonymous@11965": {
+				"anonymous@11956": {
 					"reads": 1,
 					"writes": 0
 				},
-				"anonymous@12053": {
+				"anonymous@12044": {
 					"reads": 1,
 					"writes": 0
 				},
-				"anonymous@12105": {
+				"anonymous@12096": {
 					"reads": 2,
 					"writes": 0
 				},
-				"anonymous@13165": {
+				"anonymous@13156": {
 					"reads": 3,
 					"writes": 0
 				},
-				"anonymous@14430": {
+				"anonymous@14421": {
 					"reads": 1,
 					"writes": 0
 				},
-				"anonymous@14454": {
+				"anonymous@14445": {
 					"reads": 1,
 					"writes": 0
 				},
-				"anonymous@14637": {
+				"anonymous@14628": {
 					"reads": 4,
 					"writes": 0
 				},
-				"anonymous@17941": {
+				"anonymous@17949": {
 					"reads": 1,
 					"writes": 0
 				},
-				"anonymous@22388": {
+				"anonymous@22396": {
 					"reads": 1,
 					"writes": 0
 				},
-				"anonymous@22938": {
+				"anonymous@22946": {
 					"reads": 1,
 					"writes": 0
 				},
-				"anonymous@25840": {
+				"anonymous@25848": {
 					"reads": 1,
 					"writes": 0
 				},
-				"anonymous@27237": {
+				"anonymous@27245": {
 					"reads": 1,
 					"writes": 0
 				},
-				"anonymous@27311": {
+				"anonymous@27319": {
 					"reads": 1,
 					"writes": 0
 				},
-				"anonymous@27664": {
+				"anonymous@27672": {
 					"reads": 1,
 					"writes": 0
 				},
-				"anonymous@29297": {
+				"anonymous@29305": {
 					"reads": 1,
 					"writes": 0
 				},
-				"anonymous@29432": {
+				"anonymous@29440": {
 					"reads": 1,
 					"writes": 0
 				},
-				"anonymous@29454": {
+				"anonymous@29462": {
 					"reads": 1,
 					"writes": 0
 				},
-				"anonymous@31141": {
+				"anonymous@31149": {
 					"reads": 1,
 					"writes": 0
 				},
@@ -7835,7 +7839,7 @@
 					"writes": 0
 				},
 				"panel:Quests": {
-					"reads": 1,
+					"reads": 2,
 					"writes": 0
 				},
 				"panel:Shop": {
@@ -7917,35 +7921,35 @@
 		},
 		{
 			"buckets": {
-				"anonymous@11965": {
+				"anonymous@11956": {
 					"reads": 1,
 					"writes": 0
 				},
-				"anonymous@12053": {
+				"anonymous@12044": {
 					"reads": 1,
 					"writes": 0
 				},
-				"anonymous@12105": {
+				"anonymous@12096": {
 					"reads": 2,
 					"writes": 0
 				},
-				"anonymous@13165": {
+				"anonymous@13156": {
 					"reads": 4,
 					"writes": 0
 				},
-				"anonymous@13487": {
+				"anonymous@13478": {
 					"reads": 1,
 					"writes": 0
 				},
-				"anonymous@14259": {
+				"anonymous@14250": {
 					"reads": 1,
 					"writes": 0
 				},
-				"anonymous@14334": {
+				"anonymous@14325": {
 					"reads": 1,
 					"writes": 0
 				},
-				"anonymous@14637": {
+				"anonymous@14628": {
 					"reads": 1,
 					"writes": 0
 				},
@@ -8076,39 +8080,39 @@
 		},
 		{
 			"buckets": {
-				"anonymous@11965": {
+				"anonymous@11956": {
 					"reads": 1,
 					"writes": 0
 				},
-				"anonymous@12053": {
+				"anonymous@12044": {
 					"reads": 1,
 					"writes": 0
 				},
-				"anonymous@12105": {
+				"anonymous@12096": {
 					"reads": 2,
 					"writes": 0
 				},
-				"anonymous@13165": {
+				"anonymous@13156": {
 					"reads": 4,
 					"writes": 0
 				},
-				"anonymous@13487": {
+				"anonymous@13478": {
 					"reads": 3,
 					"writes": 0
 				},
-				"anonymous@14259": {
+				"anonymous@14250": {
 					"reads": 2,
 					"writes": 0
 				},
-				"anonymous@14334": {
+				"anonymous@14325": {
 					"reads": 2,
 					"writes": 0
 				},
-				"anonymous@14454": {
+				"anonymous@14445": {
 					"reads": 1,
 					"writes": 0
 				},
-				"anonymous@17941": {
+				"anonymous@17949": {
 					"reads": 1,
 					"writes": 0
 				},
@@ -8234,6 +8238,10 @@
 				},
 				"panel:Party Matching": {
 					"reads": 2,
+					"writes": 0
+				},
+				"panel:Quests": {
+					"reads": 1,
 					"writes": 0
 				},
 				"panel:Shop": {
@@ -13098,73 +13106,79 @@
 		{
 			"fn": "event",
 			"kind": "exact",
-			"line": 9769,
+			"line": 9760,
 			"pattern": "fortress-map-pan"
 		},
 		{
 			"fn": "event",
 			"kind": "exact",
-			"line": 9781,
+			"line": 9772,
 			"pattern": "guide-index-thumb"
 		},
 		{
 			"fn": "event",
 			"kind": "exact",
-			"line": 9789,
+			"line": 9780,
 			"pattern": "guide-thumb"
 		},
 		{
 			"fn": "event",
 			"kind": "exact",
-			"line": 9797,
+			"line": 9788,
 			"pattern": "guide-drag"
 		},
 		{
 			"fn": "event",
 			"kind": "prefix",
-			"line": 9902,
+			"line": 9893,
 			"pattern": "shop-offer:"
 		},
 		{
 			"fn": "event",
 			"kind": "prefix",
-			"line": 9907,
+			"line": 9898,
 			"pattern": "shop-offer:"
 		},
 		{
 			"fn": "event",
 			"kind": "prefix",
-			"line": 9953,
+			"line": 9944,
 			"pattern": "slot:"
 		},
 		{
 			"fn": "event",
 			"kind": "prefix",
-			"line": 9969,
+			"line": 9960,
 			"pattern": "slot:"
 		},
 		{
 			"fn": "event",
 			"kind": "prefix",
-			"line": 9969,
+			"line": 9960,
 			"pattern": "storage-slot:"
 		},
 		{
 			"fn": "event",
 			"kind": "prefix",
-			"line": 9996,
+			"line": 9987,
 			"pattern": "cos-slot:"
 		},
 		{
 			"fn": "event",
 			"kind": "prefix",
-			"line": 9997,
+			"line": 9988,
 			"pattern": "slot:"
 		},
 		{
 			"fn": "event",
 			"kind": "prefix",
-			"line": 10013,
+			"line": 10004,
+			"pattern": "slot:"
+		},
+		{
+			"fn": "event",
+			"kind": "prefix",
+			"line": 10014,
 			"pattern": "slot:"
 		},
 		{
@@ -13176,295 +13190,289 @@
 		{
 			"fn": "event",
 			"kind": "prefix",
-			"line": 10032,
+			"line": 10051,
 			"pattern": "slot:"
 		},
 		{
 			"fn": "event",
 			"kind": "prefix",
-			"line": 10060,
-			"pattern": "slot:"
-		},
-		{
-			"fn": "event",
-			"kind": "prefix",
-			"line": 10060,
+			"line": 10051,
 			"pattern": "cos-slot:"
 		},
 		{
 			"fn": "event",
 			"kind": "prefix",
-			"line": 10062,
+			"line": 10053,
 			"pattern": "slot:"
 		},
 		{
 			"fn": "event",
 			"kind": "prefix",
-			"line": 10091,
+			"line": 10082,
 			"pattern": "pet-gear:"
 		},
 		{
 			"fn": "event",
 			"kind": "prefix",
-			"line": 10103,
+			"line": 10094,
 			"pattern": "cos-status:"
 		},
 		{
 			"fn": "event",
 			"kind": "prefix",
-			"line": 10114,
+			"line": 10105,
 			"pattern": "cos-command:"
 		},
 		{
 			"fn": "event",
 			"kind": "prefix",
-			"line": 10118,
+			"line": 10109,
 			"pattern": "action:"
 		},
 		{
 			"fn": "event",
 			"kind": "prefix",
-			"line": 10122,
+			"line": 10113,
 			"pattern": "skill:"
 		},
 		{
 			"fn": "event",
 			"kind": "prefix",
-			"line": 10126,
+			"line": 10117,
 			"pattern": "hotbar:"
 		},
 		{
 			"fn": "event",
 			"kind": "prefix",
-			"line": 10131,
+			"line": 10122,
 			"pattern": "slot:"
 		},
 		{
 			"fn": "event",
 			"kind": "prefix",
-			"line": 10131,
+			"line": 10122,
 			"pattern": "storage-slot:"
 		},
 		{
 			"fn": "event",
 			"kind": "prefix",
-			"line": 10147,
+			"line": 10138,
 			"pattern": "slot:"
 		},
 		{
 			"fn": "event",
 			"kind": "prefix",
-			"line": 10163,
+			"line": 10154,
 			"pattern": "avatar:"
 		},
 		{
 			"fn": "event",
 			"kind": "prefix",
-			"line": 10187,
+			"line": 10178,
 			"pattern": "avatar:"
 		},
 		{
 			"fn": "event",
 			"kind": "prefix",
-			"line": 10194,
+			"line": 10185,
 			"pattern": "action:"
 		},
 		{
 			"fn": "event",
 			"kind": "prefix",
-			"line": 10198,
+			"line": 10189,
 			"pattern": "slot:"
 		},
 		{
 			"fn": "event",
 			"kind": "prefix",
-			"line": 10209,
+			"line": 10200,
 			"pattern": "server:"
 		},
 		{
 			"fn": "event",
 			"kind": "prefix",
-			"line": 10225,
+			"line": 10216,
 			"pattern": "party-search-"
 		},
 		{
 			"fn": "event",
 			"kind": "prefix",
-			"line": 10231,
+			"line": 10222,
 			"pattern": "party-form-"
 		},
 		{
 			"fn": "event",
 			"kind": "exact",
-			"line": 10237,
+			"line": 10228,
 			"pattern": "academy-form-detail"
 		},
 		{
 			"fn": "event",
 			"kind": "exact",
-			"line": 10239,
+			"line": 10230,
 			"pattern": "experimental-ui-scale"
 		},
 		{
 			"fn": "event",
 			"kind": "prefix",
-			"line": 10243,
+			"line": 10234,
 			"pattern": "option-audio:"
 		},
 		{
 			"fn": "event",
 			"kind": "prefix",
-			"line": 10249,
+			"line": 10240,
 			"pattern": "companion-potion-percent:"
 		},
 		{
 			"fn": "event",
 			"kind": "prefix",
-			"line": 10254,
+			"line": 10245,
 			"pattern": "potion-percent:"
 		},
 		{
 			"fn": "event",
 			"kind": "prefix",
-			"line": 10258,
+			"line": 10249,
 			"pattern": "market-"
 		},
 		{
 			"fn": "event",
 			"kind": "exact",
-			"line": 10260,
+			"line": 10251,
 			"pattern": "blocking-name"
 		},
 		{
 			"fn": "event",
 			"kind": "exact",
-			"line": 10262,
+			"line": 10253,
 			"pattern": "pet-name"
 		},
 		{
 			"fn": "event",
 			"kind": "exact",
-			"line": 10264,
+			"line": 10255,
 			"pattern": "friend-name"
 		},
 		{
 			"fn": "event",
 			"kind": "exact",
-			"line": 10266,
+			"line": 10257,
 			"pattern": "letter-receiver"
 		},
 		{
 			"fn": "event",
 			"kind": "exact",
-			"line": 10270,
+			"line": 10261,
 			"pattern": "academy-name"
 		},
 		{
 			"fn": "event",
 			"kind": "exact",
-			"line": 10271,
+			"line": 10262,
 			"pattern": "alchemy-quantity"
 		},
 		{
 			"fn": "event",
 			"kind": "exact",
-			"line": 10275,
+			"line": 10266,
 			"pattern": "shop-quantity"
 		},
 		{
 			"fn": "event",
 			"kind": "exact",
-			"line": 10289,
+			"line": 10280,
 			"pattern": "split-amount"
 		},
 		{
 			"fn": "event",
 			"kind": "exact",
-			"line": 10292,
+			"line": 10283,
 			"pattern": "exchange-count"
 		},
 		{
 			"fn": "event",
 			"kind": "exact",
-			"line": 10295,
+			"line": 10286,
 			"pattern": "gold-amount"
 		},
 		{
 			"fn": "event",
 			"kind": "exact",
-			"line": 10311,
+			"line": 10302,
 			"pattern": "social-name"
 		},
 		{
 			"fn": "event",
 			"kind": "exact",
-			"line": 10312,
+			"line": 10303,
 			"pattern": "social-subject"
 		},
 		{
 			"fn": "event",
 			"kind": "exact",
-			"line": 10313,
+			"line": 10304,
 			"pattern": "social-contents"
 		},
 		{
 			"fn": "event",
 			"kind": "exact",
-			"line": 10314,
+			"line": 10305,
 			"pattern": "social-amount"
 		},
 		{
 			"fn": "event",
 			"kind": "exact",
-			"line": 10317,
+			"line": 10308,
 			"pattern": "war-name"
 		},
 		{
 			"fn": "event",
 			"kind": "exact",
-			"line": 10317,
+			"line": 10308,
 			"pattern": "war-money"
 		},
 		{
 			"fn": "event",
 			"kind": "exact",
-			"line": 10321,
+			"line": 10312,
 			"pattern": "exchange-gold"
 		},
 		{
 			"fn": "event",
 			"kind": "exact",
-			"line": 10323,
+			"line": 10314,
 			"pattern": "gm-input"
 		},
 		{
 			"fn": "event",
 			"kind": "exact",
-			"line": 10324,
+			"line": 10315,
 			"pattern": "chat-text"
 		},
 		{
 			"fn": "event",
 			"kind": "exact",
-			"line": 10326,
+			"line": 10317,
 			"pattern": "chat-target"
 		},
 		{
 			"fn": "event",
 			"kind": "exact",
-			"line": 10327,
+			"line": 10318,
 			"pattern": "account"
 		},
 		{
 			"fn": "event",
 			"kind": "exact",
-			"line": 10328,
+			"line": 10319,
 			"pattern": "password"
 		},
 		{
 			"fn": "event",
 			"kind": "exact",
-			"line": 10329,
+			"line": 10320,
 			"pattern": "endpoint"
 		}
 	],
