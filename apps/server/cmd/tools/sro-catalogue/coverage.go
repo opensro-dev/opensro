@@ -97,6 +97,7 @@ var catalogueExempt = map[string]string{
 	"SRO_MALL_STARTER_SILK":                    "the silk a new account's wallet starts with; the catalogue publishes no account state",
 	"SRO_BETA_SILK_ACTIVE_ONLY":                "which hours count for the silk grant; the catalogue publishes no account state",
 	"SRO_MAINTENANCE_MESSAGE":                  "the refusal shown during a release window; no catalogue file carries it",
+	"SRO_COMING_SOON_SHARDS":                   "announced-but-unopened shards on the title server list; no catalogue file carries it",
 	"SRO_PET_PACING":                           "pet movement speed at runtime; the catalogue publishes no movement speeds",
 	"SRO_PET_INVENTORY_PAGES":                  "a pet's inventory size at runtime; the catalogue publishes no pet state",
 	"SRO_FORT_CONSTANTINOPLE":                  "the Constantinople fortress's registration and structures at runtime; the catalogue publishes no fortress state",

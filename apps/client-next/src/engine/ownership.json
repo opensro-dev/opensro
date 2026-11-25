@@ -11,6 +11,7 @@
     "src/engine/runtime/ui/hud/party-summon-hud.ts": "src/engine/runtime/ui/ui.ts",
     "src/engine/runtime/ui/hud/experimental-hud.ts": "src/engine/runtime/ui/ui.ts",
     "src/engine/runtime/ui/hud/event-calendar-hud.ts": "src/engine/runtime/ui/ui.ts",
+    "src/engine/runtime/ui/hud/maintenance-notice-hud.ts": "src/engine/runtime/ui/ui.ts",
     "src/engine/runtime/ui/hud/event-calendar-view.ts": "src/engine/runtime/ui/ui.ts",
     "src/engine/runtime/ui/hud/job-honor-hud.ts": "src/engine/runtime/ui/ui.ts",
     "src/engine/runtime/ui/hud/job-honor-view.ts": "src/engine/runtime/ui/ui.ts",

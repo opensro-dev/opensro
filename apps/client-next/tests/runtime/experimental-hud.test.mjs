@@ -207,11 +207,12 @@ test("six tabs group every preference once, in the spec's sections", () => {
 	// (#3394) joined Map and minimap; 59: the Event Calendar (#3532)
 	// joined Game; 60: the Unique Status window (#3531) joined Combat;
 	// 61: the Consignment Market's menu entry (#3529) joined Combat;
-	// 62: the Job Honor Rank (#3530) joined Game.
+	// 62: the Job Honor Rank (#3530) joined Game; 63: the login
+	// Maintenance notice (#3925) joined Game.
 	// The Server Mission gauge (#3803) has no row: it is the v1.696 client's
 	// own window, native here. Retail typos are fixed in the reviewed
 	// English table (englishCorrections.json), not by a row.
-	assert.equal( keys.length, 62 );
+	assert.equal( keys.length, 63 );
 	assert.deepEqual( [ ...keys ].sort(), Object.keys( OFF ).sort() );
 	const kinds = EXPERIMENTAL_TABS.flatMap( experimentalRows ).filter( row => row.parent );
 	assert.deepEqual(

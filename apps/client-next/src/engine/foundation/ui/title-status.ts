@@ -136,6 +136,42 @@ export function titleStatusMessage(
 	return message;
 }
 
+/*
+================
+serverStateBand
+
+One server-list row's state label and colour. Natively the band reads
+the row's load (CPSTitle 0x747E16 tests record +0x24, operating): not
+operating is "Check" (UIO_STT_SERVER_TEST), then the authored load
+thresholds (UIO_STT_SERVER_35 / _75) pick Excellent, Crowdedness, Full
+and Max Full. Port-only, not native (#3925): a coming-soon row (server
+SRO_COMING_SOON_SHARDS) has no native key; its label is the port's own
+words, drawn in the Full colour. The label is resolved through text so
+a missing key reads empty, exactly as the title drew before.
+================
+*/
+export function serverStateBand(
+	server: {
+		readonly operating: boolean;
+		readonly comingSoon?: boolean;
+		readonly onlinePlayers: number;
+		readonly capacity: number;
+	},
+	text: ( key: string ) => string | undefined
+): { readonly label: string; readonly color: number; } {
+	if ( server.comingSoon ) return { label: "Coming soon", color: 0xffb541 };
+	if ( !server.operating ) return { label: text( "UIO_STT_SERVER_TEST" ) ?? "", color: 0xc0bdff };
+	const ratio = server.capacity > 0 ? server.onlinePlayers / server.capacity : 0;
+	if ( ratio < Number( text( "UIO_STT_SERVER_35" ) ) / 100 ) {
+		return { label: text( "UIO_STT_EXCELLENT" ) ?? "", color: 0x6dffef };
+	}
+	if ( ratio < Number( text( "UIO_STT_SERVER_75" ) ) / 100 ) {
+		return { label: text( "UIO_STT_CROWDEDNESS" ) ?? "", color: 0xffda49 };
+	}
+	if ( ratio >= 1 ) return { label: text( "UIO_STT_SERVER_FULL" ) ?? "", color: 0xffb541 };
+	return { label: text( "UIO_STT_SERVER_MAX_FULL" ) ?? "", color: 0xff5858 };
+}
+
 // While no shard is operating (every row native "Check": maintenance, or a
 // fleet starting), the open server list asks again this often, so the rows
 // turn live without the player closing and reopening the list.

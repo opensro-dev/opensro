@@ -395,6 +395,14 @@ export const EXPERIMENTAL_TABS: readonly ExperimentalTab[] = [
 						description: "System menu: this week's events, in server time."
 					},
 					{
+						// Port-only, not native (#3925): the title screens
+						// gain one notice line while a maintenance runs.
+						key: "maintenanceNotice",
+						id: "experimental-maintenance-notice",
+						label: "Maintenance notice",
+						description: "Login screens: planned maintenance from the public schedule."
+					},
+					{
 						// Port-only, not native (#3530): the Job Honor Rank
 						// window over the honor feed; the row only adds its
 						// System menu entry and window.

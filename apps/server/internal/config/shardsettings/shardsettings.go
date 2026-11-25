@@ -296,6 +296,13 @@ var Settings = []Setting{
 	// answer different codes in the same window. Both read it with
 	// agentapi.MaintenanceMessageFromEnv (on, 1 or true).
 	{Env: "SRO_MAINTENANCE_MESSAGE", NomadVar: "maintenance_message", Default: "off"},
+	// Port-only, not native (#3925): announced-but-unopened shards (the
+	// catalog's disabled entries) also list on the Agent's title server
+	// list as coming soon, carrying no transport URL. Only the Agent
+	// reads it (agentVariables); the GameWorld job carries the value
+	// inertly like every table row. agentapi.ComingSoonShardsFromEnv
+	// (on, 1 or true).
+	{Env: "SRO_COMING_SOON_SHARDS", NomadVar: "coming_soon_shards", Default: "off"},
 	// Grab and growth pets at four fifths of their run speed (#320): never
 	// deployed, so the deployment default stays native.
 	{Env: "SRO_PET_PACING", NomadVar: "pet_pacing", Default: "off"},
