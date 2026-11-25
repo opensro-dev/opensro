@@ -480,7 +480,7 @@ export function createDevice( timingEnabled = false, gpuAnimationEnabled = true,
 				usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST
 			} );
 			animation = gpuAnimationEnabled ? createGpuAnimationResources( created, retirement.retire ) : undefined;
-			particles = createParticlePresentation( created, retirement.retire );
+			particles = createParticlePresentation( created, retirement.retire, work );
 			geometry = createGeometryResources(
 				created,
 				current,

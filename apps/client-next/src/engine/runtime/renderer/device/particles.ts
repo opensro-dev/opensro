@@ -46,6 +46,7 @@ import {
 } from "@/engine/foundation/animation/particle-records";
 import { multiply } from "@/engine/foundation/math/pose-math";
 import { faceEffectMesh } from "@/engine/foundation/rendering/effect-billboard";
+import type { GpuWork } from "@/engine/foundation/rendering/gpu-work";
 import type { GeometryDraw, GpuTimingFrame, ParticlePresentation } from "../internal/gpu-contract";
 import { particleShader } from "./particle-shader";
 import { destroyNow, type Retire } from "./retirement";
@@ -149,7 +150,7 @@ type Arena = {
 createParticlePresentation
 ================
 */
-export function createParticlePresentation( device: GPUDevice, retire: Retire = destroyNow ) {
+export function createParticlePresentation( device: GPUDevice, retire: Retire = destroyNow, work?: GpuWork ) {
 	let pipeline: GPUComputePipeline | undefined,
 		failure: string | null = null,
 		disposed = false,
@@ -453,9 +454,14 @@ export function createParticlePresentation( device: GPUDevice, retire: Retire = 
 		}
 		if ( dirtySlot ) {
 			device.queue.writeBuffer( page.buffers[0]!, 0, page.records.buffer, 0, dirtySlot * PARTICLE_RECORD * 4 );
+			work?.noteUpload( dirtySlot * PARTICLE_RECORD * 4 );
 		}
 		device.queue.writeBuffer( page.buffers[1]!, 0, page.frame.buffer, 0, at * 4 );
-		if ( material ) device.queue.writeBuffer( page.buffers[2]!, 0, page.material.buffer, 0, material * 4 );
+		work?.noteUpload( at * 4 );
+		if ( material ) {
+			device.queue.writeBuffer( page.buffers[2]!, 0, page.material.buffer, 0, material * 4 );
+			work?.noteUpload( material * 4 );
+		}
 		const pass = encoder.beginComputePass( {
 			label: "particle-presentation",
 			timestampWrites: timing?.pass( "particle-presentation" )
@@ -602,7 +608,9 @@ export function createParticlePresentation( device: GPUDevice, retire: Retire = 
 			bones.set( cpuPalette, slot * PALETTE_FLOATS );
 		}
 		device.queue.writeBuffer( stream.instances, 0, instances.buffer, 0, instances.byteLength );
+		work?.noteUpload( instances.byteLength );
 		device.queue.writeBuffer( stream.bones, 0, bones.buffer, 0, bones.byteLength );
+		work?.noteUpload( bones.byteLength );
 		stream.dirtyStart = size;
 		stream.dirtyEnd = 0;
 		stream.initialized = true;
