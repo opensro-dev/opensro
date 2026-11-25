@@ -58,6 +58,9 @@ const LOCATION_SET = "(set)";
 const clientRoot = path.resolve( path.dirname( fileURLToPath( import.meta.url ) ), ".." );
 const repoRoot = path.resolve( clientRoot, "../.." );
 const SKIP_FLAG = "--skip=";
+// Keeps only the directory files a list names: the release's asset lane runs
+// the asset-backed runtime files CI's source lane skips (check.mjs --assets).
+const ONLY_FLAG = "--only=";
 // The trees input ids are named against (test-cache-ids.mjs cacheRoots).
 const roots = cacheRoots( repoRoot );
 const statsPath = statsFilePath( repoRoot );
@@ -153,25 +156,43 @@ The files the targets name. A directory gives its test files except those a
 --skip=<list.json> argument names (a {"tests": [file name...]} list, as
 tests/runtime/asset-backed-tests.json): CI's source lane runs a directory
 minus its asset-backed files without one argument per file, which would
-pass Windows' 32 KiB command line at ~600 files.
+pass Windows' 32 KiB command line at ~600 files. --only=<list.json> is
+the complement: a directory gives only the files the list names.
 ================
 */
 function testFiles( args ) {
-	const skip = new Set();
-	for ( const arg of args.filter( ( a ) => a.startsWith( SKIP_FLAG ) ) ) {
-		const list = path.resolve( clientRoot, arg.slice( SKIP_FLAG.length ) );
-		for ( const name of JSON.parse( fs.readFileSync( list, "utf8" ) ).tests ) skip.add( name );
-	}
+	const skip = listedTests( args, SKIP_FLAG ), only = listedTests( args, ONLY_FLAG );
 	const files = [];
-	for ( const target of args.filter( ( a ) => !a.startsWith( SKIP_FLAG ) ) ) {
+	for ( const target of args.filter( ( a ) => !a.startsWith( SKIP_FLAG ) && !a.startsWith( ONLY_FLAG ) ) ) {
 		const full = path.resolve( clientRoot, target );
 		if ( fs.statSync( full ).isDirectory() ) {
 			for ( const name of fs.readdirSync( full ).sort() ) {
-				if ( name.endsWith( ".test.mjs" ) && !skip.has( name ) ) files.push( path.join( full, name ) );
+				if ( !name.endsWith( ".test.mjs" ) || skip?.has( name ) ) continue;
+				if ( only && !only.has( name ) ) continue;
+				files.push( path.join( full, name ) );
 			}
 		} else files.push( full );
 	}
 	return files;
+}
+
+/*
+================
+listedTests
+
+The file names the lists of one flag name, or undefined when no argument
+carries the flag.
+================
+*/
+function listedTests( args, flag ) {
+	const lists = args.filter( ( a ) => a.startsWith( flag ) );
+	if ( lists.length === 0 ) return undefined;
+	const names = new Set();
+	for ( const arg of lists ) {
+		const list = path.resolve( clientRoot, arg.slice( flag.length ) );
+		for ( const name of JSON.parse( fs.readFileSync( list, "utf8" ) ).tests ) names.add( name );
+	}
+	return names;
 }
 
 /*

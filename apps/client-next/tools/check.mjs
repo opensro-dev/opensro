@@ -19,121 +19,19 @@ The default remains the complete check, including asset audits. The UI gallery
 */
 
 import { spawn } from "node:child_process";
-import { readdirSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { withHeavyLock } from "../../../scripts/checks/heavyLock.mjs";
 import { withGeneratedAssetsLock } from "../../../scripts/rebuildLock.mjs";
-import { LIST_PATH as ASSET_BACKED_LIST } from "./list-asset-backed-tests.mjs";
+import { checkLane, sourcePart } from "./check-lanes.mjs";
 import { publishWarmCaches, seedWarmCaches } from "./warm-cache.mjs";
 
 const clientRoot = path.resolve( path.dirname( fileURLToPath( import.meta.url ) ), ".." );
 const node = process.execPath;
-const SOURCE_FLAG = "--source";
-// The test runner's timing lines: its run summary, its slowest files and
 // its per-file budget failures (printTimingLines, #2929).
 const TIMING_PREFIXES = [ "tests:", "tests slowest:", "tests budget:" ];
-const ASSET_ARCHITECTURE_TESTS = new Set( [ "audio-parity-audit.test.mjs" ] );
-// verify:ownership and verify:capabilities read only the source tree. Outside
-// this list a split file with no manifest row reached main unseen (#3740's
-// label-fit.ts): ownership.test.mjs checks fixtures, not the real manifest.
-const SOURCE_GATE_NAMES = new Set( [
-	"verify:test-types",
-	"typecheck",
-	"typecheck:gallery",
-	"verify:layout",
-	"verify:dependencies",
-	"verify:ui-census",
-	"verify:ownership",
-	"verify:capabilities"
-] );
-
-// Longest first, so the critical path starts immediately.
-const GATES = [
-	// Reuses each file's pass while every input it read is unchanged.
-	[ "test", [ "tools/run-tests.mjs", "tests/architecture", "tests/runtime" ] ],
-	// The joint-longest gate: keys its own inputs (ui.ts's import closure,
-	// the tool, the committed census, the built assets) and reuses the
-	// last pass while they are unchanged (ui-action-census-gate.mjs).
-	[ "verify:ui-action-census", [ "tools/ui-action-census-gate.mjs" ] ],
-	[ "verify:test-types", [ "tools/verify-test-types.mjs" ] ],
-	[ "typecheck", [
-		path.join( clientRoot, "node_modules", "typescript", "bin", "tsc" ),
-		"--noEmit",
-		"-p",
-		"tsconfig.json"
-	] ],
-	[ "typecheck:gallery", [
-		path.join( clientRoot, "node_modules", "typescript", "bin", "tsc" ),
-		"--noEmit",
-		"-p",
-		"tools/ui-gallery/tsconfig.json"
-	] ],
-	[ "verify:execution", [ "tools/generate-execution-map.mjs" ] ],
-	[ "verify:ownership", [ "tools/verify-ownership.mjs" ] ],
-	[ "verify:dependencies", [ "tools/verify-dependencies.mjs" ] ],
-	[ "verify:allocations", [ "--expose-gc", "tools/perf/bench/ui-allocation-gauge.mjs" ] ],
-	[ "verify:ui-census", [ "tools/ui-census.mjs" ] ],
-	[ "verify:capabilities", [ "tools/verify-capabilities.mjs" ] ],
-	[ "verify:layout", [ "tools/verify-layout.mjs" ] ],
-	[ "verify:retail-panels", [ "tools/audit-retail-panels.mjs" ] ],
-	[ "verify:delivery", [ "../../scripts/checks/check_asset_delivery.mjs" ] ],
-	[ "verify:item-sounds", [ "tools/generate-item-sounds.mjs" ] ],
-	[ "audit:audio", [ "tools/audit-audio-parity.mjs" ] ]
-];
-
-/*
-================
-sourcePart
-
-The source lane's part an argument names: --source runs both, CI runs
---source=gates and --source=runtime as two jobs on two runners, so the
-runtime files' ~600 processes never share a two-core runner with the
-typechecks (together they took the job from 87-132 s to 220-230 s and
-pushed execution.test.mjs past its cap; ops #335 row 1). Undefined for
-anything else.
-================
-*/
-const SOURCE_PARTS = {
-	all: ( gates, runtime ) => [ ...gates, ...runtime ],
-	gates: ( gates ) => gates,
-	runtime: ( _gates, runtime ) => runtime
-};
-
-function sourcePart( args ) {
-	if ( args[0] === SOURCE_FLAG ) return "all";
-	const named = args[0]?.startsWith( SOURCE_FLAG + "=" ) ? args[0].slice( SOURCE_FLAG.length + 1 ) : undefined;
-	return named !== undefined && Object.hasOwn( SOURCE_PARTS, named ) && named !== "all" ? named : undefined;
-}
-
-/*
-================
-sourceGates
-
-The audio parity audit consumes the extracted native sound and animation tables.
-Keep that file in the full asset lane; do not silently skip missing files inside
-its tests. Every other architecture suite runs from a clean source checkout.
-================
-*/
-function sourceGates( part ) {
-	const architecture = readdirSync( path.join( clientRoot, "tests/architecture" ) )
-		.filter( ( name ) => name.endsWith( ".test.mjs" ) && !ASSET_ARCHITECTURE_TESTS.has( name ) )
-		.sort()
-		.map( ( name ) => `tests/architecture/${name}` );
-	// Every runtime file but the asset-backed ones (ops #335 row 1: the lane
-	// ran a hand-picked 17 of 766, so the rest regressed unseen until a
-	// release build). The list is derived from what each file read
-	// (tools/list-asset-backed-tests.mjs).
-	const skip = "--skip=" + path.relative( clientRoot, ASSET_BACKED_LIST ).replaceAll( "\\", "/" );
-	const gates = [
-		[ "source tests", [ "tools/run-tests.mjs", ...architecture ] ],
-		...GATES.filter( ( [name] ) => SOURCE_GATE_NAMES.has( name ) )
-	];
-	const runtime = [ [ "source runtime tests", [ "tools/run-tests.mjs", skip, "tests/runtime" ] ] ];
-	return SOURCE_PARTS[part]( gates, runtime );
-}
 
 /*
 ================
@@ -199,18 +97,11 @@ main
 ================
 */
 async function main() {
-	const args = process.argv.slice( 2 );
-	const part = sourcePart( args );
-	if ( args.length > 1 || (args.length === 1 && part === undefined) ) {
-		throw new Error( `Usage: node tools/check.mjs [--source[=gates|runtime]]` );
-	}
-	const sourceOnly = part !== undefined;
-	const gates = sourceOnly ? sourceGates( part ) : GATES;
+	const lane = checkLane( process.argv.slice( 2 ) );
+	const gates = lane.gates, sourceOnly = lane.source === true;
 	const started = performance.now();
 	process.stdout.write(
-		`client check (${
-			sourceOnly ? "source " + part : "full"
-		}): ${gates.length} gates on ${os.availableParallelism()} cores\n`
+		`client check (${lane.name}): ${gates.length} gates on ${os.availableParallelism()} cores\n`
 	);
 	if ( sourceOnly ) {
 		process.stdout.write( "Retail audio parity and asset delivery remain required by the full check.\n" );
