@@ -679,8 +679,8 @@ func (dir caravanAgentDirectory) AgentByGID(division string, gid uint32) (action
 			continue
 		}
 		target := action.AgentTarget{
-			Name:         entity.Name,
-			JobType:      entity.JobType,
+			Name:    entity.Name,
+			JobType: entity.JobType,
 			Pose: simulation.Spawn{RegionID: entity.Pose.RegionID,
 				X: float64(entity.Pose.X), Y: float64(entity.Pose.Y), Z: float64(entity.Pose.Z)},
 			Level:        entity.Level,

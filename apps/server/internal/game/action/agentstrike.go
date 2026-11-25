@@ -88,10 +88,10 @@ agentAttackRefusal
 
 The job-PvP refusal for an agent victim (port-only rule): both regions
 must permit battle as for a player victim, then the fight is legal
-when the jobs are hostile (the native hostileJobs pair rule), when
-the agent is already fighting this caster, or when the caster stands
-as an aggressor or murderer. Anything else is the generic 0x3006.
-No PK bookkeeping follows from the answer in this slice.
+when the jobs are hostile (the native hostileJobs pair rule) or when
+the agent is already fighting this caster. Anything else is the
+generic 0x3006: agents carry no PK bookkeeping in this slice, so
+there is no murder branch to open on one.
 ================
 */
 func (rt *Runtime) agentAttackRefusal(division string, caster *enterworld.Character, agent AgentTarget, now int64) uint16 {
@@ -109,9 +109,6 @@ func (rt *Runtime) agentAttackRefusal(division string, caster *enterworld.Charac
 		return 0
 	}
 	if agent.LastAttacker == caster.Name {
-		return 0
-	}
-	if caster.PVPState() != 0 {
 		return 0
 	}
 	return 0x3006
