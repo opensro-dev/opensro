@@ -1,0 +1,9 @@
+{
+	"format": "sro-speed-variables",
+	"version": 1,
+	"why": "SRO_* variables that set only how many workers run, never what a build or a test produces. Every cache key that hashes the SRO_* environment leaves these out: the variant stamp (scripts/variant_stamp.py) and the client test cache (apps/client-next/tools/run-tests.mjs). r204l's rebuild added SRO_CENSUS_JOBS=10 and both missed: the variant rechecked every step and 910 of 910 client test files reran (637 s).",
+	"variables": [
+		"SRO_BUILD_JOBS",
+		"SRO_CENSUS_JOBS"
+	]
+}

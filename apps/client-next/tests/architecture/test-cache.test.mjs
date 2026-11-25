@@ -303,6 +303,32 @@ describe( "the test runner", { concurrency: true }, () => {
 		}
 	});
 
+	test("worker counts keep the key, and a key with no records names what moved", async () => {
+		// r204l's release added SRO_CENSUS_JOBS=10: under a fresh key all 910
+		// client test files reran (637 s) and the log said only "0 reused".
+		const suite = path.join( root, "temp", `test-cache-speed-${process.pid}` );
+		fs.mkdirSync( suite, { recursive: true } );
+		try {
+			fs.writeFileSync(
+				path.join( suite, "alone.test.mjs" ),
+				'import { test } from "node:test";\ntest( "alone", () => {} );\n'
+			);
+			assert.deepEqual( await runSuite( suite ), { status: 0, reused: 0, ran: 1, failed: 0 } );
+			assert.deepEqual(
+				await runSuite( suite, { SRO_CENSUS_JOBS: "10", SRO_BUILD_JOBS: "3" } ),
+				{ status: 0, reused: 1, ran: 0, failed: 0 },
+				"a worker count is no test input"
+			);
+			const flagged = await runRunner( suite, { SRO_ARABIA: "on" } );
+			assert.match(
+				flagged.stdout,
+				/test cache: no records under this key; the nearest recorded key differs in SRO_ARABIA: unset -> on\n/
+			);
+		} finally {
+			fs.rmSync( suite, { recursive: true, force: true } );
+		}
+	});
+
 	test("a worktree's .git link is recorded as the main checkout it names, not its worktree name", async () => {
 		// ops #335: the hub resolver reads each worktree's .git link, whose
 		// bytes name the worktree; hashed as bytes, 190 of 766 runtime files

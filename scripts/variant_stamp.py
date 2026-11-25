@@ -74,7 +74,11 @@ CODE_STAMP = REPO_ROOT / "scripts" / "build" / "shared" / "codeStamp.mjs"
 # release walked the whole cache as a source, and each build's own cache
 # writes made the next one rebuild the variant from scratch.
 SHARED_CACHE_ROOT_ENV = "SRO_SHARED_CACHE_ROOT"
-IGNORED_ENV = frozenset(("SRO_BUILD_JOBS", "SRO_CENSUS_JOBS", "SRO_GENERATED_ROOT", "SRO_SERVER_GAME_DATA_ROOT", "SRO_CHECK_FORCE",
+# The worker counts come from the one list every cache key shares
+# (scripts/data/speed-variables.json).
+SPEED_VARIABLES_PATH = REPO_ROOT / "scripts" / "data" / "speed-variables.json"
+SPEED_VARIABLES = frozenset(json.loads(SPEED_VARIABLES_PATH.read_text(encoding="utf-8"))["variables"])
+IGNORED_ENV = SPEED_VARIABLES | frozenset(("SRO_GENERATED_ROOT", "SRO_SERVER_GAME_DATA_ROOT", "SRO_CHECK_FORCE",
 	SHARED_CACHE_ROOT_ENV))
 ENV_PREFIX = "SRO_"
 # The importers' source variables, by their naming convention:
