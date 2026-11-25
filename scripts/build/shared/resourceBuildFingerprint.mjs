@@ -268,17 +268,48 @@ export async function hashRoots( roots, hashes = undefined ) {
 
 /*
 ================
+folderHashes
+
+A directory root's sorted fingerprint lines ("<label>/<path>|size|stamp"),
+hashed per top folder or file inside it, as "<label>/<name>".
+================
+*/
+export function folderHashes( label, lines ) {
+	const folders = new Map(), prefix = label + "/";
+	for ( const line of lines ) {
+		if ( !line.startsWith( prefix ) ) continue;
+		const name = line.slice( prefix.length ).split( /[/|]/, 1 )[0];
+		if ( !folders.has( name ) ) folders.set( name, [] );
+		folders.get( name ).push( line );
+	}
+	return Object.fromEntries(
+		[ ...folders ].map( ( [name, rows] ) => [ prefix + name, hashFingerprintLines( rows ) ] )
+	);
+}
+
+/*
+================
 dataRootsHash
 
-The stat hash of each data root, by label, so a lane that runs can say
-which root moved.
+The stat hash of each data root, by label, and of each top folder (or
+file) inside a directory root, as "<label>/<name>", so a lane that runs
+says which folder moved: "data extracted changed" alone hid that the
+asset build's own optional-teleport import rewrote one file under
+extracted/ on every run, rerunning all three lanes (#4337).
 ================
 */
 export async function dataRootsHash() {
-	const hashes = {};
+	const hashes = {}, files = await sourceHashes();
 	for ( const root of FINGERPRINT_ROOTS.filter( root => DATA_ROOT_LABELS.has( root.label ) ) ) {
-		hashes[root.label] = await hashRoots( [ root ] );
+		// One walk: the root's hash as hashRoots( [ root ] ) gives it.
+		const lines = [];
+		await collectRoot( root, lines, files );
+		lines.sort();
+		hashes[root.label] = createHash( "sha256" ).update( `${root.label}\n${hashFingerprintLines( lines )}\n` )
+			.digest( "hex" );
+		Object.assign( hashes, folderHashes( root.label, lines ) );
 	}
+	await files.save();
 	return hashes;
 }
 
