@@ -125,9 +125,8 @@ type AgentUnit struct {
 	// sellAt is the town whose shop a hired Trader's sale is priced at
 	// (set as it sells, read by endHireLocked).
 	sellAt TownID
-	// gatherSinceMs is when a leading hired Trader began waiting for the
-	// hire's other Traders; -1 once that wait timed out.
-	gatherSinceMs    int64
+	// lastAction is the decision the last step applied (!caravandebug).
+	lastAction       ActionKind
 	roamDX, roamDZ   float64
 	lastLeaderAt     Waypoint
 	roamAtMs         int64
@@ -609,6 +608,7 @@ func (r *Runtime) StepAgentWithWorldThreat(
 	} else if worldThreatActive {
 		decision = Decision{Action: ActionAttackTarget, Source: BrainHardcoded}
 	}
+	unit.lastAction = decision.Action
 	decision.Dialogue = SafeDialogue(decision.Dialogue)
 	decision.MemoryNote = SafeDialogue(decision.MemoryNote)
 	prevSpokeAtMs := unit.LastSpokeAtMs

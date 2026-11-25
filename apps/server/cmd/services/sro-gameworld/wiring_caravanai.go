@@ -213,7 +213,7 @@ func (game *gameplayPlane) wireCaravanChat() {
 			return "", false
 		}
 		switch strings.ToLower(fields[0]) {
-		case "!caravans", "!caravan", "!accept", "!hire", "!memory", "!attack", "!leed", "!lead", "!dismiss", "!grandcaravan":
+		case "!caravans", "!caravan", "!accept", "!hire", "!memory", "!attack", "!leed", "!lead", "!dismiss", "!grandcaravan", "!caravandebug":
 		default:
 			return "", false
 		}
@@ -232,6 +232,15 @@ func (game *gameplayPlane) wireCaravanChat() {
 		})
 		if !admitted {
 			return "Wait a second before another caravan command.", true
+		}
+		if strings.EqualFold(fields[0], "!caravandebug") {
+			// GM only: the live state of the speaker's hires, one line each.
+			gm := false
+			game.deps.Read(divisionID, func() { gm = c.GMPrivilege })
+			if !gm {
+				return "", false
+			}
+			return game.caravanAgents.DebugHires(divisionID, playerName), true
 		}
 		if strings.EqualFold(fields[0], "!grandcaravan") {
 			// GM only: start the grand caravan muster now (testing and events).

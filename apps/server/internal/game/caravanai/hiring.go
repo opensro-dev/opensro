@@ -488,8 +488,8 @@ func (r *Runtime) partyLeftLocked(division, player string, members []string, now
 ================
 stepHiredLeadLocked
 
-The leading hired Trader drives the run, waiting while its hirer is more
-than 120m behind.
+The leading hired Trader drives the run, standing still while its hirer
+or another hired Trader is out of range (HiredLeadStopDistance).
 ================
 */
 func (r *Runtime) stepHiredLeadLocked(unit *AgentUnit, nowMs int64) {
@@ -497,7 +497,7 @@ func (r *Runtime) stepHiredLeadLocked(unit *AgentUnit, nowMs int64) {
 		return
 	}
 	p, ok := r.hooks.Player(unit.Division, unit.HiredBy)
-	if !ok || WaypointDistance(position(unit), p.At) > EscortFollowDistance || r.hiredTraderBehindLocked(unit, nowMs) {
+	if !ok || WaypointDistance(position(unit), p.At) > HiredLeadStopDistance || r.hiredTraderBehindLocked(unit) {
 		unit.lastMoveAtMs, unit.progressAtMs = nowMs, 0
 		return
 	}
@@ -507,50 +507,28 @@ func (r *Runtime) stepHiredLeadLocked(unit *AgentUnit, nowMs int64) {
 	r.advanceAlongRouteLocked(unit, nowMs)
 }
 
-// HiredTraderGatherDistance is how far the hire's other Traders may fall
-// behind the leading one before it waits for them; HiredTraderGatherMaxMs
-// is the longest one wait lasts, so a Trader that cannot close in never
-// holds the caravan for good.
-const (
-	HiredTraderGatherDistance float64 = 50 * UnitsPerMeter
-	HiredTraderGatherMaxMs    int64   = 20_000
-)
+// HiredLeadStopDistance: the leading hired Trader stops while its hirer or
+// another hired Trader of the hire is farther than this, and sets off
+// again once all are within it.
+const HiredLeadStopDistance float64 = 80 * UnitsPerMeter
 
 /*
 ================
 hiredTraderBehindLocked
 
-The leading hired Trader waits while another living Trader of the same
-hire is more than HiredTraderGatherDistance behind, for at most
-HiredTraderGatherMaxMs a time: then it goes on, and waits afresh once the
-others are back within reach.
+Another living hired Trader of the lead's hire is out of range.
 ================
 */
-func (r *Runtime) hiredTraderBehindLocked(lead *AgentUnit, nowMs int64) bool {
-	behind := false
+func (r *Runtime) hiredTraderBehindLocked(lead *AgentUnit) bool {
 	for _, u := range r.hiresOfLocked(lead.Division, lead.HiredBy) {
 		if u == lead || u.Role != RoleTrader || u.HP <= 0 || u.DeadUntilMs > 0 || u.RespawnPending {
 			continue
 		}
-		if WaypointDistance(position(u), position(lead)) > HiredTraderGatherDistance {
-			behind = true
-			break
+		if WaypointDistance(position(u), position(lead)) > HiredLeadStopDistance {
+			return true
 		}
 	}
-	switch {
-	case !behind:
-		lead.gatherSinceMs = 0
-		return false
-	case lead.gatherSinceMs == 0:
-		lead.gatherSinceMs = nowMs
-	case lead.gatherSinceMs < 0:
-		// Waited its time out: it leads on until the others are back.
-		return false
-	case nowMs-lead.gatherSinceMs >= HiredTraderGatherMaxMs:
-		lead.gatherSinceMs = -1
-		return false
-	}
-	return true
+	return false
 }
 
 /*
@@ -742,4 +720,50 @@ func (r *Runtime) StarGoods(division, agentName string, stars uint8) int64 {
 		}
 	}
 	return GoodsForStars(stars)
+}
+
+/*
+================
+DebugHires
+
+!caravandebug (GM): each of player's hires as one line - state, last
+decision, whom it follows, route progress, and how far the hirer and the
+other hired Traders are. Lines stay under the client's chat limit.
+================
+*/
+func (r *Runtime) DebugHires(division, player string) string {
+	division = strings.TrimSpace(division)
+	var at Waypoint
+	hirerKnown := false
+	if r.hooks.Player != nil {
+		if p, ok := r.hooks.Player(division, player); ok {
+			at, hirerKnown = p.At, true
+		}
+	}
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	units := r.hiresOfLocked(division, player)
+	if len(units) == 0 {
+		return "You have no hired caravan agents."
+	}
+	var lines []string
+	for _, u := range units {
+		hirer := -1.0
+		if hirerKnown {
+			hirer = WaypointDistance(position(u), at) / UnitsPerMeter
+		}
+		far := 0.0
+		for _, o := range units {
+			if o != u && o.Role == RoleTrader {
+				far = max(far, WaypointDistance(position(u), position(o))/UnitsPerMeter)
+			}
+		}
+		lead := u.EscortingTrader
+		if lead == "" {
+			lead = "-"
+		}
+		lines = append(lines, fmt.Sprintf("%s %s %s f:%s r:%d/%d h:%.0fm t:%.0fm",
+			DisplayName(u.Name), u.State, u.lastAction, DisplayName(lead), u.WaypointIndex, len(u.Route), hirer, far))
+	}
+	return strings.Join(lines, "\n")
 }
