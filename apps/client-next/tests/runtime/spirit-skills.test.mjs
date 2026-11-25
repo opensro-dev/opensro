@@ -1,0 +1,107 @@
+/*
+===========================================================================
+
+spirit-skills.test.mjs - a worn Devil's Spirit's lent skills (#4384)
+
+The server names the skills a worn, awake Spirit lends in the bootstrap
+(spiritSkills) and in the port-only 0x3FC9 frame; the client casts them
+as learned and shows them in the equipment window's strip.
+
+===========================================================================
+*/
+import "../helpers/native-source-loader.mjs";
+import { test } from "node:test";
+import assert from "node:assert/strict";
+const { decodeSpiritSkills, spiritSkillList, SPIRIT_SKILLS_OPCODE } = await import(
+	"../../src/engine/foundation/gameplay/spirit-skills.ts"
+);
+const { createGameplay } = await import(
+	"../../src/engine/runtime/simulation/worker/session/world/gameplay/gameplay.ts"
+);
+
+const SPIRIT_SKILL = 31555;
+const local = {
+	gid: 7,
+	refObjId: 1907,
+	kind: "local-player",
+	name: "wearer",
+	regionId: 257,
+	x: 100,
+	y: 0,
+	z: 100,
+	heading: 0
+};
+
+/*
+================
+frame
+================
+*/
+function frame( ...ids ) {
+	const p = Buffer.alloc( 1 + 4 * ids.length );
+	p[0] = ids.length;
+	ids.forEach( ( id, i ) => p.writeUInt32LE( id, 1 + 4 * i ) );
+	return { opcode: SPIRIT_SKILLS_OPCODE, payload: p };
+}
+
+/*
+================
+skillRef
+================
+*/
+function skillRef( id ) {
+	return {
+		id,
+		group: id,
+		level: 1,
+		status: false,
+		effectRider: false,
+		ui: {
+			name: `SKILL_${id}`,
+			trainable: false,
+			spCost: 0,
+			targetRequired: false,
+			admit: { weaponKinds: [ 255, 255 ] },
+			cooldownMs: 0,
+			masteries: [ { ID: 0, Level: 0 }, { ID: 0, Level: 0 } ],
+			prerequisites: [ { ID: 0, Level: 0 }, { ID: 0, Level: 0 }, { ID: 0, Level: 0 } ]
+		}
+	};
+}
+
+test("the Spirit skill frame decodes strictly", () => {
+	assert.deepEqual( decodeSpiritSkills( frame( SPIRIT_SKILL, 31560 ).payload ), [ SPIRIT_SKILL, 31560 ] );
+	assert.deepEqual( decodeSpiritSkills( frame().payload ), [] );
+	assert.throws( () => decodeSpiritSkills( frame( SPIRIT_SKILL ).payload.subarray( 0, 4 ) ) );
+	assert.throws( () => decodeSpiritSkills( frame( 1, 2, 3, 4, 5 ).payload ) );
+	assert.throws( () => decodeSpiritSkills( frame( 7, 7 ).payload ) );
+	assert.deepEqual( spiritSkillList( undefined ), [] );
+	assert.throws( () => spiritSkillList( [ 0 ] ) );
+});
+
+test("a worn Spirit's lent skill casts and binds as learned until the server takes it back", () => {
+	const sent = [], game = createGameplay( f => sent.push( f ) );
+	game.bootstrap( {
+		simulationProtocolVersion: 1,
+		character: { skills: [] },
+		refSkillSnapshot: [ skillRef( SPIRIT_SKILL ) ],
+		spiritSkills: [ SPIRIT_SKILL ]
+	} );
+	game.seed( local );
+	assert.deepEqual( game.take()?.spiritSkills, [ SPIRIT_SKILL ] );
+	game.command( { kind: "quickslot-bind", slot: 0, skillId: SPIRIT_SKILL }, 0, undefined, local );
+	// The Spirit comes off: the strip empties and the skill is unlearned again.
+	assert.equal( game.receive( frame(), 10 ), true );
+	assert.deepEqual( game.take()?.spiritSkills, [] );
+	assert.throws(
+		() => game.command( { kind: "quickslot-bind", slot: 1, skillId: SPIRIT_SKILL }, 20, undefined, local ),
+		/not learned/
+	);
+	assert.throws(
+		() => game.command( { kind: "skill", skillId: SPIRIT_SKILL }, 20, undefined, local ),
+		/not learned/
+	);
+	// Worn again (0x3FC9 with the list), the skill binds again.
+	assert.equal( game.receive( frame( SPIRIT_SKILL ), 30 ), true );
+	game.command( { kind: "quickslot-bind", slot: 1, skillId: SPIRIT_SKILL }, 40, undefined, local );
+});

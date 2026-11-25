@@ -89,6 +89,13 @@ import {
 	SPIRIT_SLOT,
 	SPIRIT_SOCKET
 } from "@/engine/foundation/gameplay/avatar-socket";
+import {
+	SPIRIT_SKILL_SLOT_SIZE,
+	SPIRIT_SKILL_SLOT_X,
+	SPIRIT_SKILL_SLOT_Y,
+	SPIRIT_SKILL_STRIP_RECT,
+	SPIRIT_SOCKET_RECT
+} from "@/engine/foundation/gameplay/spirit-skills";
 import { ACTION_FORTRESS_RETURN } from "@/engine/foundation/gameplay/fortress-return";
 import {
 	FRIEND_LIST_LIMIT,
@@ -3262,7 +3269,10 @@ export function createUi( ports: UiPorts ) {
 	*/
 	function executeSkill( id: number ) {
 		const game = view?.gameplay;
-		if ( !game?.skills?.includes( id ) || hud.data()?.tooltipSkills.get( id )?.basicActivity === 0 ) return;
+		// Port-only (SRO_NASRUN, #4384): a worn Spirit's lent skills cast as learned.
+		if ( !game ) return;
+		const castable = game.skills?.includes( id ) || game.spiritSkills?.includes( id );
+		if ( !castable || hud.data()?.tooltipSkills.get( id )?.basicActivity === 0 ) return;
 		sendGameplay( { kind: "skill", skillId: id, ...(game.target ? { gid: game.target } : {}) } );
 	}
 	/*
@@ -17248,27 +17258,57 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 						const sockets = Object.values( equipment ).filter( n => n.id >= 113 && n.id <= 116 )
 							.sort( ( a, b ) => a.id - b.id )
 							.map( node => ({ type: node.id - 112, r: authoredRect( node, ex, ey ) }) );
-						// Port-only, not native (SRO_NASRUN, #3456): a Devil's Spirit,
-						// worn or carried, gets a fifth socket one socket pitch past
-						// the flag's, so a player holding one sees where it goes
-						// (#4364). The v1.150 layout has no node for it; only a
-						// server with the switch on grants a Spirit, so a native
-						// shard draws four.
+						// Port-only, not native (SRO_NASRUN, #3456, #4384): a Devil's
+						// Spirit, worn or carried, gets the later clients' fifth socket
+						// under the dress (GDR_AVATAR_SLOT_05, spirit-skills.ts), so a
+						// player holding one sees where it goes (#4364). The v1.150
+						// layout has no node for it; only a server with the switch on
+						// grants a Spirit, so a native shard draws four.
 						if (
 							sockets.length === 4 && (
 								game?.avatarInventory?.some( i => isSpiritItem( i.typeFlags ) ) ||
 								game?.inventory.some( i => isSpiritItem( i.typeFlags ) )
 							)
 						) {
-							const third = sockets[2]!, fourth = sockets[3]!;
 							sockets.push( {
 								type: SPIRIT_SOCKET,
 								r: [
-									fourth.r[0] * 2 - third.r[0],
-									fourth.r[1] * 2 - third.r[1],
-									fourth.r[2],
-									fourth.r[3]
+									ex + SPIRIT_SOCKET_RECT[0],
+									ey + SPIRIT_SOCKET_RECT[1],
+									SPIRIT_SOCKET_RECT[2],
+									SPIRIT_SOCKET_RECT[3]
 								]
+							} );
+						}
+						// Port-only (SRO_NASRUN, #4384): the worn Spirit's lent skills in
+						// the later clients' strip under its socket (GDR_AVATAR_SKILL_WND,
+						// CIFEquipSkillSlotWnd). A slot casts its skill on a right-click
+						// and drags to the hotbar, as the skill window's do; the strip
+						// is empty while no awake Spirit is worn.
+						for ( const [index, skillId] of (game?.spiritSkills ?? []).entries() ) {
+							const x = SPIRIT_SKILL_SLOT_X[index];
+							if ( x === undefined ) break;
+							const skill = training.skill( skillId ),
+								r: UiRect = [
+									ex + SPIRIT_SKILL_STRIP_RECT[0] + x,
+									ey + SPIRIT_SKILL_STRIP_RECT[1] + SPIRIT_SKILL_SLOT_Y,
+									SPIRIT_SKILL_SLOT_SIZE,
+									SPIRIT_SKILL_SLOT_SIZE
+								],
+								icon = iconPath( skill?.icon );
+							if ( icon ) {
+								paths.push( icon );
+								if ( resources.has( icon ) ) rect( r, white, icon );
+							}
+							const active = (hudData.tooltipSkills.get( skillId )?.basicActivity ?? 0) !== 0;
+							controls.push( {
+								id: "skill:" + skillId,
+								label: skill ? localization.text( skill.nameSymbol, skill.name ) : "Spirit skill",
+								rect: r,
+								kind: "button",
+								rightActivate: active,
+								draggable: active,
+								inspect: experimental.state().saved.touchInspect
 							} );
 						}
 						for ( const { type, r } of sockets ) {

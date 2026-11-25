@@ -1057,6 +1057,8 @@ export interface GameplayState extends MoverPublication {
 	readonly skillIndex?: ReadonlyMap<number, import("@/engine/foundation/gameplay/skill-catalog").SkillMetadata>;
 	readonly progression?: import("@/engine/foundation/gameplay/progression").Progression;
 	readonly skills?: readonly number[];
+	// Port-only (SRO_NASRUN, #4384): the worn Devil's Spirit's lent skills.
+	readonly spiritSkills?: readonly number[];
 	readonly quickSlots?: readonly import("@/engine/foundation/gameplay/quickslots").QuickSlot[];
 	readonly cosRecords?: readonly CosRecord[];
 	readonly selectedCosGid?: number;

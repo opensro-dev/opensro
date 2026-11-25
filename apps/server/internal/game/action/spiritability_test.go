@@ -15,6 +15,7 @@ package action
 import (
 	"os"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"strings"
 	"testing"
@@ -76,8 +77,9 @@ func TestWornSpiritLendsItsSkillsUntilItLapses(t *testing.T) {
 	if domain.SkillLearned(c, spiritTestConfusion) {
 		t.Fatal("the Spirit's skill is learned before it is worn")
 	}
-	if result := rt.HandleItemMove(testDivision, c, []byte{0x24, 20, nasrun.SpiritSlot}); result.Frames[0].Payload[0] != 1 {
-		t.Fatalf("wear: %+v", result)
+	wear := rt.HandleItemMove(testDivision, c, []byte{0x24, 20, nasrun.SpiritSlot})
+	if wear.Frames[0].Payload[0] != 1 {
+		t.Fatalf("wear: %+v", wear)
 	}
 	s := c.AvatarInventory.Spirit
 	if s == nil || s.Plus != spiritTestPlus || s.HPPercent != 18 || s.Block != 1 || len(s.Skills) != 2 {
@@ -85,6 +87,10 @@ func TestWornSpiritLendsItsSkillsUntilItLapses(t *testing.T) {
 	}
 	if !domain.SkillLearned(c, spiritTestConfusion) || !domain.SkillLearned(c, spiritTestIgnore) {
 		t.Fatal("a worn +3 Spirit does not lend Confusion and Ignore 1")
+	}
+	// The owner's skill strip learns the lent skills with the move (#4384).
+	if got := spiritSkillsSent(t, wear.Frames); !slices.Equal(got, s.Skills) {
+		t.Fatalf("spirit skills sent = %v, want %v", got, s.Skills)
 	}
 	// Not yet: a tick before the expiry keeps it.
 	rt.advanceSpirits(clock.Now().UnixMilli())
@@ -110,8 +116,12 @@ TestSpiritTakenOffLendsNothing
 func TestSpiritTakenOffLendsNothing(t *testing.T) {
 	c, rt, _ := abilityCharacter(t, true)
 	rt.HandleItemMove(testDivision, c, []byte{0x24, 20, nasrun.SpiritSlot})
-	if result := rt.HandleItemMove(testDivision, c, []byte{0x23, nasrun.SpiritSlot, 20}); result.Frames[0].Payload[0] != 1 {
-		t.Fatalf("take off: %+v", result)
+	off := rt.HandleItemMove(testDivision, c, []byte{0x23, nasrun.SpiritSlot, 20})
+	if off.Frames[0].Payload[0] != 1 {
+		t.Fatalf("take off: %+v", off)
+	}
+	if got := spiritSkillsSent(t, off.Frames); got == nil || len(got) != 0 {
+		t.Fatalf("spirit skills sent on take off = %v, want an empty list", got)
 	}
 	if c.AvatarInventory.Spirit != nil || domain.SkillLearned(c, spiritTestIgnore) {
 		t.Fatalf("a removed Spirit still lends: %+v", c.AvatarInventory.Spirit)
@@ -268,4 +278,40 @@ func openedCast(result OpResult) bool {
 		}
 	}
 	return false
+}
+
+/*
+================
+spiritSkillsSent
+
+The skill ids of the one Spirit skill frame among frames: nil when none
+was sent, an empty list for an empty frame.
+================
+*/
+func spiritSkillsSent(t *testing.T, frames []wire.Frame) []uint32 {
+	t.Helper()
+	var out []uint32
+	found := false
+	for _, frame := range frames {
+		if frame.Opcode != wire.OpSpiritSkills {
+			continue
+		}
+		if found {
+			t.Fatal("two Spirit skill frames")
+		}
+		found = true
+		out = []uint32{}
+		r := wire.NewReader(frame.Payload)
+		count, err := r.U8()
+		for i := 0; err == nil && i < int(count); i++ {
+			var id uint32
+			if id, err = r.U32(); err == nil {
+				out = append(out, id)
+			}
+		}
+		if err != nil || r.Done() != nil {
+			t.Fatalf("malformed Spirit skill frame % x", frame.Payload)
+		}
+	}
+	return out
 }

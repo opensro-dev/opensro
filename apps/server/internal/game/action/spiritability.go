@@ -232,9 +232,26 @@ func (rt *Runtime) expireSpiritInDivision(key string, job spiritExpiry, nowMs in
 			hp, mp := rt.clampStoredGaugeToKeeper(job.division, c)
 			actor = rt.gaugeDropFrames(job.division, c, hp, mp, true)
 		}
+		// The lapsed Spirit's skills leave the owner's strip (#4384).
+		actor = append(actor, wire.SpiritSkillsFrame(nil))
 		return true
 	})
 	rt.spiritActors.CompareAndDelete(key, job)
 	rt.indexSpirit(job.division, c)
 	return sourceGID, public, actor
+}
+
+/*
+================
+spiritSkills
+
+The skills the avatar storage's derived Spirit grants, or none: what the
+owner's skill strip shows (wire.OpSpiritSkills).
+================
+*/
+func spiritSkills(avatars *domain.AvatarInventory) []uint32 {
+	if avatars == nil || avatars.Spirit == nil {
+		return nil
+	}
+	return avatars.Spirit.Skills
 }

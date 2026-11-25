@@ -366,6 +366,9 @@ type bootstrapSuccessView struct {
 	EventGuideStateMask       uint32                   `json:"eventGuideStateMask"`
 	RefObjSnapshot            []RefObjRow              `json:"refObjSnapshot"`
 	RefSkillSnapshot          []SpawnSkillRow          `json:"refSkillSnapshot"`
+	// SpiritSkills are the skills a worn, awake Devil's Spirit grants
+	// (port-only, SRO_NASRUN; wire.OpSpiritSkills keeps them current).
+	SpiritSkills []uint32 `json:"spiritSkills,omitempty"`
 	SkillCooldowns            []EntrySkillCooldown     `json:"skillCooldowns"`
 	ItemCooldowns             []EntryItemCooldown      `json:"itemCooldowns,omitempty"`
 	RefItemSnapshot           []RefItemRow             `json:"refItemSnapshot"`
@@ -461,6 +464,9 @@ type bootstrapBlobSuccessView struct {
 	EventGuideStateMask       uint32                   `json:"eventGuideStateMask"`
 	RefObjSnapshot            []RefObjRow              `json:"refObjSnapshot"`
 	RefSkillSnapshot          []SpawnSkillRow          `json:"refSkillSnapshot"`
+	// SpiritSkills are the skills a worn, awake Devil's Spirit grants
+	// (port-only, SRO_NASRUN; wire.OpSpiritSkills keeps them current).
+	SpiritSkills []uint32 `json:"spiritSkills,omitempty"`
 	SkillCooldowns            []EntrySkillCooldown     `json:"skillCooldowns"`
 	ItemCooldowns             []EntryItemCooldown      `json:"itemCooldowns,omitempty"`
 	RefItemSnapshot           []RefItemRow             `json:"refItemSnapshot"`
@@ -597,6 +603,7 @@ func (r *BootstrapResult) blobView() any {
 		EventGuideStateMask:       r.EventGuideStateMask,
 		RefObjSnapshot:            r.RefObjSnapshot,
 		RefSkillSnapshot:          r.RefSkillSnapshot,
+		SpiritSkills:              r.spiritSkills(),
 		SkillCooldowns:            cooldowns,
 		ItemCooldowns:             r.ItemCooldowns,
 		RefItemSnapshot:           r.RefItemSnapshot,
@@ -742,6 +749,7 @@ func (r *BootstrapResult) MarshalJSON() ([]byte, error) {
 		EventGuideStateMask:       r.EventGuideStateMask,
 		RefObjSnapshot:            r.RefObjSnapshot,
 		RefSkillSnapshot:          r.RefSkillSnapshot,
+		SpiritSkills:              r.spiritSkills(),
 		SkillCooldowns:            cooldowns,
 		ItemCooldowns:             r.ItemCooldowns,
 		RefItemSnapshot:           r.RefItemSnapshot,
@@ -811,4 +819,19 @@ func Failure(nativeErrorCode int, reason string) *BootstrapResult {
 		Reason:          reason,
 		Packets:         []Packet{},
 	}
+}
+
+/*
+================
+spiritSkills
+
+The skills the character's worn, awake Devil's Spirit grants at entry
+(AvatarInventory.Spirit, derived before the projection), or none.
+================
+*/
+func (r *BootstrapResult) spiritSkills() []uint32 {
+	if r.Character == nil || r.Character.AvatarInventory == nil || r.Character.AvatarInventory.Spirit == nil {
+		return nil
+	}
+	return append([]uint32(nil), r.Character.AvatarInventory.Spirit.Skills...)
 }
