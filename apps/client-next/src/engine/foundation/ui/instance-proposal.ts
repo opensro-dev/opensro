@@ -18,8 +18,6 @@ frame #2334 had inferred (#4403).
 
 ===========================================================================
 */
-import type { UiRect } from "@/engine/contracts/ui";
-import { messageBoxLines, textMessageBoxLayout } from "./text-message-box";
 
 /*
 ================
@@ -30,52 +28,6 @@ The box's one question line.
 */
 export function instanceQuestion(): readonly string[] {
 	return [ "UIIT_MSG_QUEST_ENTER_INSTANCE" ];
-}
-
-/*
-================
-instanceBoxLayout
-
-The simple message box around the question, wrapped and sized by its
-text as every CGInterface_ShowSimpleMessageBox box is. measure is the
-HUD font's run width; question is the resolved line.
-================
-*/
-export function instanceBoxLayout( view: InstanceBoxView, position: readonly [number, number] | null ): {
-	frame: UiRect;
-	drag: UiRect;
-	title: UiRect;
-	background: UiRect;
-	lines: readonly { text: string; rect: UiRect; }[];
-	accept: UiRect;
-	refuse: UiRect;
-} {
-	const lines = messageBoxLines( [ view.question ], view.measure ),
-		box = textMessageBoxLayout( view.width, view.height, lines.map( view.measure ), position );
-	return {
-		frame: box.frame,
-		drag: box.drag,
-		title: box.title,
-		background: box.background,
-		lines: lines.map( ( text, i ) => ({ text, rect: box.lines[i]! }) ),
-		accept: box.accept,
-		refuse: box.refuse
-	};
-}
-
-/*
-================
-InstanceBoxView
-
-What the layout needs from the screen: its size, the resolved question
-and the HUD font's measure.
-================
-*/
-export interface InstanceBoxView {
-	readonly width: number;
-	readonly height: number;
-	readonly question: string;
-	readonly measure: ( value: string ) => number;
 }
 
 /*

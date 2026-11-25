@@ -1009,7 +1009,7 @@ import {
 	resurrectionNoteColor,
 	resurrectionQuestion
 } from "@/engine/foundation/ui/resurrection-proposal";
-import { createInstancePrompt, instanceBoxLayout, instanceQuestion } from "@/engine/foundation/ui/instance-proposal";
+import { createInstancePrompt, instanceQuestion } from "@/engine/foundation/ui/instance-proposal";
 import {
 	createPartySummonPrompt,
 	partySummonBoxLayout,
@@ -1925,18 +1925,23 @@ export function createUi( ports: UiPorts ) {
 	const instancePrompt = createInstancePrompt();
 	/*
 	================
-	instanceBoxView
+	instanceBoxFrame
 
-	The quest instance prompt's layout inputs: the screen, its resolved
-	question and the HUD font's measure, shared by its draw and its drag.
+	The quest instance prompt's frame: the simple message box around its
+	question (7644E0 -> 6888C0), wrapped and measured as simpleMessageBox
+	draws it, so the drag moves the box the draw shows.
 	================
 	*/
-	const instanceBoxView = ( width: number, height: number ) => ({
-		width,
-		height,
-		question: hudCopy( instanceQuestion()[0]! ),
-		measure: ( value: string ) => text.run( value ).width
-	});
+	const instanceQuestionText = () => hudCopy( instanceQuestion()[0]! );
+	const instanceBoxFrame = ( width: number, height: number, position: readonly [number, number] | null ) =>
+		textMessageBoxLayout(
+			width,
+			height,
+			messageBoxLines( [ instanceQuestionText() ], value => text.run( value ).width ).map( value =>
+				text.run( value ).width
+			),
+			position
+		).frame;
 	// The party summon window and its invitation box (#3918).
 	const partySummonPrompt = createPartySummonPrompt();
 	const partySummonHud = createPartySummonHud();
@@ -9586,10 +9591,9 @@ export function createUi( ports: UiPorts ) {
 				return;
 			}
 			if ( event.kind === "drag" && event.id === "instance-drag" && view ) {
-				const box = instanceBoxView( view.width, view.height ),
-					layout = instanceBoxLayout( box, instancePrompt.position() ),
-					next = instanceBoxLayout( box, [ layout.frame[0] + event.dx, layout.frame[1] + event.dy ] );
-				instancePrompt.place( [ next.frame[0], next.frame[1] ] );
+				const frame = instanceBoxFrame( view.width, view.height, instancePrompt.position() ),
+					next = instanceBoxFrame( view.width, view.height, [ frame[0] + event.dx, frame[1] + event.dy ] );
+				instancePrompt.place( [ next[0], next[1] ] );
 				dirty = true;
 				return;
 			}
@@ -28602,7 +28606,7 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 				// only the body and the drag region are this box's own.
 				const layout = simpleMessageBox( {
 					title: hudCopy( "UIIT_STT_CONFIRM_BOX" ),
-					lines: [ instanceBoxView( w, h ).question ],
+					lines: [ instanceQuestionText() ],
 					yes: "instance-accept",
 					no: "instance-refuse",
 					position: instancePrompt.position()
