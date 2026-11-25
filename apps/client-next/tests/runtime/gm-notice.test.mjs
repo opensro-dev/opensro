@@ -38,9 +38,14 @@ test("/NOTICE sends the rejoined text in any case", () => {
 	] );
 });
 
-test("/NOTICE without text, or past the server's byte bound, sends nothing", () => {
-	assert.equal( gmRequest( "/NOTICE" ), null );
-	assert.equal( gmRequest( "/NOTICE    " ), null );
+test("a bare /NOTICE sends an empty text for the server to refuse", () => {
+	// The server answers "type the notice text", so the GM reads why.
+	for ( const line of [ "/NOTICE", "/notice    " ] ) {
+		assert.deepEqual( [ ...(gmRequest( line )?.payload ?? []) ], [ 0xfb, 0, 0 ], line );
+	}
+});
+
+test("/NOTICE past the server's byte bound sends nothing", () => {
 	assert.equal( gmRequest( "/NOTICE " + "a".repeat( 401 ) ), null );
 	// The bound is bytes: 400 one-byte characters still leave the client,
 	// and the server answers the banner's 100-character limit itself.

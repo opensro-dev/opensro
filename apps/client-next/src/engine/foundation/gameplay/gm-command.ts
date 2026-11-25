@@ -700,10 +700,11 @@ export function gmRequest(
 	const moderation = moderationFrame( tokens );
 	if ( moderation !== undefined ) return moderation;
 	// Any case: the command is port-only. The words are rejoined with one
-	// space, as the moderation reasons are.
+	// space, as the moderation reasons are. A bare /NOTICE still sends its
+	// empty text, so the GM reads the server's "type the notice text".
 	if ( name?.toUpperCase() === "/NOTICE" ) {
 		const text = sizedText( tokens.slice( 1 ).join( " " ) );
-		if ( text.length === 2 || text.length - 2 > MAX_NOTICE_TEXT_BYTES ) return null;
+		if ( text.length - 2 > MAX_NOTICE_TEXT_BYTES ) return null;
 		const payload = new Uint8Array( 1 + text.length );
 		payload[0] = GM_NOTICE;
 		payload.set( text, 1 );

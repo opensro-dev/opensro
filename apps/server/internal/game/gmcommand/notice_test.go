@@ -97,6 +97,7 @@ func TestNoticeRefusesWithoutSendingAnything(t *testing.T) {
 		frame  []byte
 		reason string
 	}{
+		{"empty", gm, noticeFrame(""), "type the notice text"},
 		{"blank", gm, noticeFrame("   "), "type the notice text"},
 		{"control", gm, noticeFrame("line\nbreak"), "control character"},
 		{"too long", gm, noticeFrame(strings.Repeat("a", chat.MaxChatNoticeUnits+1)), "101 characters"},
