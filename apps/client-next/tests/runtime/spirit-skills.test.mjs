@@ -108,7 +108,7 @@ test("a worn Spirit's lent skill casts and binds as learned until the server tak
 
 test("a worn, awake Spirit's socket loops the later clients' sixteen-cell edge", async () => {
 	const { spiritActiveOverlay } = await import( "../../src/engine/foundation/ui/item-slot-effects.ts" );
-	const rect = [ 10, 20, 32, 32 ];
+	const rect = /** @type {import("../../src/engine/contracts/ui.ts").UiRect} */ ([ 10, 20, 32, 32 ]);
 	const first = spiritActiveOverlay( rect, 0, 0 ), next = spiritActiveOverlay( rect, 0, 50 );
 	assert.equal( first.path, "/assets/images/Media_extracted/icon/item/etc/icon_edge_nasrun.png" );
 	assert.deepEqual( first.rect, rect );
@@ -168,8 +168,12 @@ test("a Devil's Spirit's tooltip names its awakening: dormant, the time left, or
 
 test("a lent skill drags from the strip onto the hotbar; an unlent one does not", async () => {
 	const { quickSlotDrag } = await import( "../../src/engine/foundation/gameplay/quickslots.ts" );
-	const lent = quickSlotDrag( "skill:" + SPIRIT_SKILL, 3, { skills: [], spiritSkills: [ SPIRIT_SKILL ] } );
+	const state = ( /** @type {number[]} */ spiritSkills ) =>
+		/** @type {import("../../src/engine/contracts/gameplay.ts").GameplayState} */ (
+			/** @type {unknown} */ ({ skills: [], spiritSkills })
+		);
+	const lent = quickSlotDrag( "skill:" + SPIRIT_SKILL, 3, state( [ SPIRIT_SKILL ] ) );
 	assert.equal( lent?.kind, 0x49 );
 	assert.equal( lent?.payload, SPIRIT_SKILL );
-	assert.equal( quickSlotDrag( "skill:" + SPIRIT_SKILL, 3, { skills: [], spiritSkills: [] } ), null );
+	assert.equal( quickSlotDrag( "skill:" + SPIRIT_SKILL, 3, state( [] ) ), null );
 });
