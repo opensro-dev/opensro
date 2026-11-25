@@ -153,6 +153,13 @@ func TestRefusalsAreSummarisedByDeclaredValue(t *testing.T) {
 	if len(l.counts) != 0 {
 		t.Fatalf("counts %v after the summary, want empty", l.counts)
 	}
+	// Client text that is not a number never becomes a field key.
+	for _, forged := range []string{"19 x=1", "1\nfake", "abc"} {
+		l.note(forged, start.Add(refusalLogInterval+time.Second))
+	}
+	if len(l.counts) != 1 || l.counts["other"] != 3 {
+		t.Fatalf("counts %v, want other:3", l.counts)
+	}
 	for i := 0; i < maxRefusalKinds+3; i++ {
 		l.note(strconv.Itoa(i), start.Add(refusalLogInterval+time.Second))
 	}
