@@ -16,6 +16,7 @@ const { uniqueBannerQuads } = await import( "../../src/engine/foundation/ui/uniq
 const {
 	createNoticeBanner,
 	centreBannerPaths,
+	CENTRE_ROW_Y,
 	NOTICE_ROW_Y,
 	noticeBannerRow,
 	noticeTiming,
@@ -101,7 +102,7 @@ test("the runtime row takes a tier's weight only for a seal drop", () => {
 	assert.deepEqual( row( SUN ).row.color, sealBannerStyle( 2 ).plate );
 });
 
-test("a reinforcement success wears the violet plate on the notice row, never at screen centre (BUG-100)", () => {
+test("a reinforcement success wears the violet plate at the later client's y 190, never at screen centre (BUG-100)", () => {
 	const banner = createNoticeBanner( "notificationBanner" );
 	banner.step( [ notice( SUCCESS ) ], 0, true );
 	assert.equal( banner.centreSuccess(), true );
@@ -110,7 +111,8 @@ test("a reinforcement success wears the violet plate on the notice row, never at
 	assert.deepEqual( row.color, [ 84, 0, 102 ], "the centre art's own violet, 0x540066" );
 	assert.deepEqual( row.textRgb, [ 1, 1, 1 ] );
 	assert.deepEqual( row.frame, {}, "the centre plate hugs the caption like the native one" );
-	assert.equal( row.y, NOTICE_ROW_Y, "it stays on the top notice row with the others" );
+	assert.equal( row.y, CENTRE_ROW_Y, "the v1.696 centre window's own top-area row" );
+	assert.equal( CENTRE_ROW_Y, 190 );
 	const quads = uniqueBannerQuads(
 		SUCCESS,
 		1,
@@ -123,7 +125,7 @@ test("a reinforcement success wears the violet plate on the notice row, never at
 		row.y,
 		row.color
 	);
-	assert.deepEqual( quads[0].rect, [ 412, 100, 200, 16 ], "the caption sits on the notice row" );
+	assert.deepEqual( quads[0].rect, [ 412, 190, 200, 16 ], "the caption sits at y 190, not screen centre" );
 	assert.deepEqual( quads[0].color.slice( 0, 3 ), [ 84 / 255, 0, 102 / 255 ] );
 });
 
@@ -132,6 +134,7 @@ test("a +7 success wears the violet plate too, and every failure keeps the nativ
 	seven.step( [ notice( SUCCESS.replace( "[+9]", "[+7]" ) ) ], 0, true );
 	assert.equal( seven.centreSuccess(), true );
 	assert.deepEqual( noticeBannerRow( seven ).paths, centreBannerPaths );
+	assert.equal( noticeBannerRow( seven ).y, CENTRE_ROW_Y );
 	// A failure on the drop/plus bucket, and one on the break channel:
 	// neither ever wears the violet plate.
 	/** @type {import("../../src/engine/foundation/gameplay/system-notices.ts").SystemNotice[]} */

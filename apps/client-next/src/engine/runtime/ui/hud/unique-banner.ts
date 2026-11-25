@@ -157,9 +157,17 @@ function shownTiming( notice: SystemNotice | null, timing: NoticeTiming ): Notic
 	return { showMs: Math.min( own.showMs, timing.showMs ), fadeMs: Math.min( own.fadeMs, timing.fadeMs ) };
 }
 
-// The notification row's native origin: 100 px from the top, between the
-// unique row (130 is below it) and the quest row (160).
+// The notification row's native origin: 100 px from the top, above the
+// unique row (130) and the quest row (160).
 export const NOTICE_ROW_Y = 100;
+
+// The later client's centre banner origin: its own window (id 270) at
+// 190 px from the top, below the quest row. The v1.696 client sets each
+// banner window's y beside its plate load: notice 100 (0x7e4f57),
+// warning 130 (0x7e4f94), quest 160 (0x7e50b2), centre 190 (0x7e51d0),
+// sro_client.exe sha256 8af7afc2...95277a. "Centre" names the plate, not
+// the screen position (#4095 had inferred screen centre from the name).
+export const CENTRE_ROW_Y = 190;
 
 /*
 ================
@@ -169,9 +177,9 @@ The notification row's plate choice (port-only, #1976): a line that
 announces a seal drop wears its tier's weight. A reinforcement success
 takes the later client's violet centre plate (#3260) - but only while
 its art is published (centreArt); a build without the v1.696 import
-keeps the native plate, as does every failure. The plate stays on the
-notice row (NOTICE_ROW_Y) with every other notice: drawn at screen
-centre it sat on the player's own character (owner, BUG-100,
+keeps the native plate, as does every failure. The violet plate sits
+where the later client puts its window, CENTRE_ROW_Y near the top; drawn
+at screen centre it sat on the player's own character (owner, BUG-100,
 2026-11-25). Every other notice - academy, guild war, friends,
 letters, plain server notices - keeps the native plate exactly:
 crimson, hugging the caption, the shipped alpha.
@@ -193,7 +201,7 @@ export function noticeBannerRow(
 			textRgb: NOTICE_TEXT_RGB,
 			frame: {},
 			paths: centreBannerPaths,
-			y: NOTICE_ROW_Y
+			y: CENTRE_ROW_Y
 		};
 	}
 	const tier = banner.sealTier();
