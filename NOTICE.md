@@ -50,6 +50,12 @@ Thanks to
 [DaxterSoul](https://www.elitepvpers.com/forum/members/1084164-daxtersoul.html)
 for sharing knowledge of the game's packet and file structures.
 
+Thanks to [Edynu](https://github.com/Edynu), author of
+[Silkroad Reimagined](https://github.com/Edynu/SilkroadReimagined), for
+sharing their reverse-engineering notes on the vSRO 1.188 client and server.
+The maintainers' research checks those notes against the original binaries
+before any finding reaches OpenSRO.
+
 ## Game assets
 
 Source licenses cover only work the contributors are entitled to license. They
