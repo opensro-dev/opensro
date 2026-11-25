@@ -1121,6 +1121,21 @@ const MALL_NOTICE_FRAME = ROOT + "interface/mall/mall_communicate.png";
 // A disabled renewal mall button's picture: the later art has no disable
 // face for every button, so the base face is drawn dimmed.
 const RENEWAL_DISABLED = [ 0.5, 0.5, 0.5, 1 ] as const;
+// Port-only (#4133): the classic mall's earned Silk row. No native string
+// names earned silk, so the caption and its hover help are the port's own.
+const EARNED_SILK_CAPTION = "Earned silk";
+// The hourly rate, the cap and tradability are shard settings
+// (action/betasilk.go, SRO_EARNED_SILK_TRADABLE), so the help names none.
+const EARNED_SILK_HELP = "Earned silk: Silk you earn by playing in the world. Purchases spend it first.";
+// Bonus Silk is the wallet's gift balance: minted rewards such as referrals
+// land there (store/referrals.go creditGiftSilkTx); the mall takes it and the
+// consignment market never does.
+const BONUS_SILK_HELP = "Bonus silk: Silk from rewards such as referrals. " +
+	"Spend it in the Item Mall; the consignment market does not take it.";
+// The classic My information rows as [caption, black box, unit] control ids
+// (ifitemmallmyinfo); earned silk rides the Point row's place.
+const MALL_BONUS_SILK_ROW = [ 21, 16, 15 ] as const;
+const MALL_EARNED_SILK_ROW = [ 22, 17, 19 ] as const;
 // How far below its box a card name's second line may draw: the font's
 // descenders (g, p, y) under a 13-pixel pitch. The price row starts 7
 // pixels below the box.
@@ -29765,16 +29780,20 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 						// CIFItemMallMyInfo_OnCreate (6BDA60) always hides the money sign
 						// (5); on an English client (GameConfig +0x138 language 4, the
 						// type.txt Language this port ships) it also hides the Point row
-						// (17 box, 18 value, 19 "P", 22 caption).
+						// (17 box, 18 value, 19 "P", 22 caption). Port-only (#4133): the
+						// earned Silk row takes the Point row's place, so its box (17)
+						// draws natively and only the "P" unit (19) and caption (22) are
+						// redrawn below. The Bonus Silk caption (21) is redrawn too: its
+						// authored 56-pixel rect wraps "Bonus Silk" onto two lines.
 						nativePage( info, ox + infoOrigin[0], oy + infoOrigin[1], [
 							5,
 							10,
 							11,
 							12,
 							14,
-							17,
 							18,
 							19,
+							21,
 							22
 						] );
 						// 6BDA60 disables Buy silk (7) and Coupon (9) only when their link
@@ -29835,23 +29854,70 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 								String( value ?? "" )
 							);
 						}
-						// Port-only (#4133): the earned Silk balance rides the
-						// Point row's place (22 caption, 18 value), which this
-						// client never draws (6BDA60 above); no native string
-						// names earned silk, so the caption is the port's own.
+						// Port-only, not native (#4133): the earned Silk balance rides
+						// the Point row's place (17 box, 18 value, 19 unit, 22
+						// caption), which the English client never draws (6BDA60 above). It
+						// reads exactly like the Silk and Bonus Silk rows above it: a
+						// right-aligned caption, the black box, the value and the
+						// "Silk" unit. No native string names earned silk, so the
+						// caption and the hover help are the port's own.
+						const pointCaption = mallControl( info, 22 );
+						const giftCaption = mallControl( info, 21 );
+						// One line, right edge kept: the Point caption's width.
+						authoredText(
+							{
+								...giftCaption,
+								rect: [
+									pointCaption.rect[0],
+									giftCaption.rect[1],
+									pointCaption.rect[2],
+									giftCaption.rect[3]
+								]
+							},
+							ox + infoOrigin[0],
+							oy + infoOrigin[1],
+							hudCopy( giftCaption.text )
+						);
 						if ( game.itemMall ) {
-							authoredText(
-								mallControl( info, 22 ),
-								ox + infoOrigin[0],
-								oy + infoOrigin[1],
-								"Earned silk"
-							);
+							authoredText( pointCaption, ox + infoOrigin[0], oy + infoOrigin[1], EARNED_SILK_CAPTION );
 							authoredText(
 								mallControl( info, 18 ),
 								ox + infoOrigin[0],
 								oy + infoOrigin[1],
 								String( game.itemMall.earnedSilk )
 							);
+							authoredText(
+								mallControl( info, 19 ),
+								ox + infoOrigin[0],
+								oy + infoOrigin[1],
+								hudCopy( "UIIT_STT_ROLL_OF_CLOTH" )
+							);
+							// Port-only, not native: hovering a wallet row, caption to
+							// unit, says what that balance is, so a player can tell the
+							// three Silk kinds apart.
+							const walletRowHelp = (
+								id: string,
+								row: readonly [number, number, number],
+								help: string
+							) => {
+								const [captionId, boxId, unitId] = row;
+								const at = ( control: number ) =>
+									authoredRect(
+										mallControl( info, control ),
+										ox + infoOrigin[0],
+										oy + infoOrigin[1]
+									);
+								const [cx] = at( captionId ), [bx, by, bw, bh] = at( boxId ), [ux, , uw] = at( unitId );
+								controls.push( {
+									id,
+									kind: "region",
+									label: help,
+									helpText: help,
+									rect: [ cx, by, Math.max( bx + bw, ux + uw ) - cx, bh ]
+								} );
+							};
+							walletRowHelp( "item-mall-bonus-silk", MALL_BONUS_SILK_ROW, BONUS_SILK_HELP );
+							walletRowHelp( "item-mall-earned-silk", MALL_EARNED_SILK_ROW, EARNED_SILK_HELP );
 						}
 						const trunkOrigin = mallControl( root, 102 ).rect;
 						const tx = ox + trunkOrigin[0], ty = oy + trunkOrigin[1];

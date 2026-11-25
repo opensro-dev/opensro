@@ -2000,6 +2000,10 @@
 				"unionPage#anon2": {
 					"reads": 1,
 					"writes": 0
+				},
+				"walletRowHelp": {
+					"reads": 1,
+					"writes": 0
 				}
 			},
 			"name": "controls",
