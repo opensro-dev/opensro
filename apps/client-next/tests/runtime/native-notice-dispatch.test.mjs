@@ -90,6 +90,7 @@ test("learning, matching and guild refusals reach gameplay notices without place
 		let previous = 0;
 		for ( let code = 0; code < 256; code++ ) {
 			if ( opcode === 0xb663 && code === 0x3c ) continue; // dedicated duration payload below
+			if ( opcode === 0xb40f && code === 0x32 ) continue; // the donation's SP text, below
 			assert.equal( g.receive( { opcode, payload: Uint8Array.of( 2, code ) }, 0 ), true );
 			const state = g.take(),
 				expected = resolveNativeNotice( category, code ),
@@ -103,6 +104,24 @@ test("learning, matching and guild refusals reach gameplay notices without place
 		}
 	}
 });
+test("a donation over the player's SP names the SP, not the level-up GP text (#4413)", () => {
+	const g = createGameplay( () => {} );
+	g.bootstrap( { academyMember: false } );
+	g.seed( { gid: 1, regionId: 25000, x: 0, y: 0, z: 0, heading: 0 } );
+	g.take();
+	// v1.188 5C7880 answers 0x4C32; the native category row reads the
+	// level-up line, which says nothing about the SP the player typed.
+	assert.equal( resolveNativeNotice( 16, 0x32 ).notice?.key, "UIIT_MSG_ERROR_GUILD_LEVEL_UP_GP_DEFICIT" );
+	g.receive( { opcode: 0xb40f, payload: Uint8Array.of( 2, 0x32 ) }, 0 );
+	const state = defined( g.take() ), n = defined( defined( state.notices ).at( -1 ) );
+	assert.equal( n.key, "UIIT_MSG_GUILD_ERROR_GP_SUBSCRIPION_SP" );
+	assert.equal( n.nativeType, 0 );
+	assert.equal( state.error, null );
+	// The level-up answer keeps the native row.
+	g.receive( { opcode: 0xb3f0, payload: Uint8Array.of( 2, 0x32 ) }, 0 );
+	assert.equal( defined( defined( g.take() ).notices ).at( -1 )?.key, "UIIT_MSG_ERROR_GUILD_LEVEL_UP_GP_DEFICIT" );
+});
+
 test("guild penalty consumes duration and formats independent numeric arguments", () => {
 	const g = createGameplay( () => {} );
 	g.bootstrap( { academyMember: false } );

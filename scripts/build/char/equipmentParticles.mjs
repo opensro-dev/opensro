@@ -223,29 +223,40 @@ export function avatarWornEffects( records = loadEquipmentRecords( retailTextdat
 			// avatarSlot comes from the same flag), so a marker naming a
 			// worn item that is not one refuses here, whichever dress asks.
 			if ( !record.avatar ) throw Error( "Avatar effect for a non-avatar item " + code );
-			out[record.id] = rows.map( row => {
-				const effectPath = String( row.effectPath ).replaceAll( "\\", "/" ).toLowerCase();
-				const offset = row.offset ?? [ 0, 0, 0 ];
-				if (
-					!effectPath.endsWith( ".efp" ) || effectPath.includes( ".." ) || typeof row.root !== "boolean" ||
-					typeof row.bone !== "string" || (!row.root && !row.bone) || !(row.scale > 0) ||
-					!Array.isArray( offset ) || offset.length !== 3 || !offset.every( Number.isFinite )
-				) throw Error( "Invalid avatar effect " + code + ": " + JSON.stringify( row ) );
-				// An authored scale replaces the wearer's model scale
-				// (modelParticleAttachment); without one the aura follows
-				// the wearer, as the body's own ambient set does. The offset
-				// takes the BSR particle's Z flip (model-particles.ts).
-				return {
-					effectPath,
-					bone: row.bone,
-					root: row.root,
-					...(row.scale !== 1 ? { scale: Math.fround( row.scale ) } : {}),
-					offset: [ Math.fround( offset[0] ), Math.fround( offset[1] ), Math.fround( -offset[2] ) || 0 ]
-				};
-			} );
+			out[record.id] = wornEffectRows( code, rows );
 		}
 	}
 	return out;
+}
+
+/*
+================
+wornEffectRows
+
+One marker's aura rows (avatar_effects.py loop_effect) as published worn
+particles. An authored scale replaces the wearer's model scale
+(modelParticleAttachment); without one the aura follows the wearer, as
+the body's own ambient set does. The offset takes the BSR particle's Z
+flip (model-particles.ts).
+================
+*/
+export function wornEffectRows( code, rows ) {
+	return rows.map( row => {
+		const effectPath = String( row.effectPath ).replaceAll( "\\", "/" ).toLowerCase();
+		const offset = row.offset ?? [ 0, 0, 0 ];
+		if (
+			!effectPath.endsWith( ".efp" ) || effectPath.includes( ".." ) || typeof row.root !== "boolean" ||
+			typeof row.bone !== "string" || (!row.root && !row.bone) || !(row.scale > 0) ||
+			!Array.isArray( offset ) || offset.length !== 3 || !offset.every( Number.isFinite )
+		) throw Error( "Invalid avatar effect " + code + ": " + JSON.stringify( row ) );
+		return {
+			effectPath,
+			bone: row.bone,
+			root: row.root,
+			...(row.scale !== 1 ? { scale: Math.fround( row.scale ) } : {}),
+			offset: [ Math.fround( offset[0] ), Math.fround( offset[1] ), Math.fround( -offset[2] ) || 0 ]
+		};
+	} );
 }
 
 /*

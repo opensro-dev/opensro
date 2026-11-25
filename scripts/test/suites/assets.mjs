@@ -26,6 +26,7 @@ export default {
 		"scripts/test/assets/sceneryBones.test.mjs",
 		"scripts/test/assets/missionPresentationOverlay.test.mjs",
 		"scripts/test/assets/avatarAmbientParticles.test.mjs",
+		"scripts/test/assets/laterAnimationSets.test.mjs",
 		"scripts/test/assets/entityCompoundParticles.test.mjs",
 		"scripts/test/assets/monsterPortraitError.test.mjs",
 		"scripts/test/assets/monsterPortraitNames.test.mjs",

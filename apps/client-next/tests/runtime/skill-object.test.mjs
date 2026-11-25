@@ -60,7 +60,7 @@ test("skill object rows distinguish catalog sentinel, skill identity and world i
 test("single spawn, despawn and object-list reentry use one skill-object journal owner", () => {
 	const entities = createEntities();
 	entities.bootstrap( {
-		protocolVersion: 2,
+		protocolVersion: 3,
 		nativeResult: 1,
 		refObjSnapshot: [],
 		refItemSnapshot: [],

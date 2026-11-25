@@ -34,24 +34,30 @@ entrySkillCooldowns
 Read the detached character used for the rest of the entry projection.
 No cooldown is cleared or extended by reconnecting. The browser receives
 only current learned references, so an upgrade restores its family's timer.
+lent names the worn Devil's Spirit's skills (port-only, SRO_NASRUN, #4384):
+they are not learned, but their timer is the character's all the same.
 ================
 */
-func entrySkillCooldowns(deps *Deps, character *Character) []EntrySkillCooldown {
-	return RemainingSkillCooldowns(deps.Skills, character, deps.clock().UnixMilli())
+func entrySkillCooldowns(deps *Deps, character *Character, lent []uint32) []EntrySkillCooldown {
+	return RemainingSkillCooldowns(deps.Skills, character, deps.clock().UnixMilli(), lent...)
 }
 
 /*
 ================
 RemainingSkillCooldowns - shared entry and checkpoint reuse projection.
+
+The running timers of the learned skills and of lent, the skills a worn
+Spirit lends, which keep theirs in the same per-group maps.
 ================
 */
-func RemainingSkillCooldowns(skills SkillDataSource, character *Character, now int64) []EntrySkillCooldown {
+func RemainingSkillCooldowns(skills SkillDataSource, character *Character, now int64, lent ...uint32) []EntrySkillCooldown {
 	rows := []EntrySkillCooldown{}
 	if skills == nil {
 		return rows
 	}
 	seen := map[uint32]bool{}
-	for _, id := range character.Skills {
+	ids := append(append([]uint32{}, character.Skills...), lent...)
+	for _, id := range ids {
 		skill, found := skills.SkillByID(id)
 		if !found || !skillHasUI(skill) || skill.CoolTimeMs == 0 || seen[id] {
 			continue

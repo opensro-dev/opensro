@@ -510,9 +510,18 @@ test("assets.json shares the store's counters as numbers and nothing else", asyn
 		budget: 4096,
 		rangeBytes: 900,
 		demandedBytes: 600,
+		resets: 1,
+		failures: { open: 0, has: 2, read: "PRIVATE_COUNT", write: 5, remove: 0, PRIVATE_KEY: 9 },
+		lastFailure: { operation: "write", reason: "too-large", atMs: 1234, message: "PRIVATE_MESSAGE" },
 		extra: "PRIVATE_EXTRA"
 	};
-	input["assets.json"] = JSON.stringify( { samples: [ sample, assetSample( 2, [] ) ] } );
+	// A failure reason outside the enumerated words is dropped whole.
+	const freeText = assetSample( 3, [] );
+	freeText.queue.store = {
+		...sample.queue.store,
+		lastFailure: { operation: "write", reason: "PRIVATE_why", atMs: 1 }
+	};
+	input["assets.json"] = JSON.stringify( { samples: [ sample, assetSample( 2, [] ), freeText ] } );
 	const { documents } = await readZip( await createDiagnosticUpload( input, OPTIONS ) );
 	const samples = documents["assets.json"].samples;
 	assert.doesNotMatch( JSON.stringify( samples ), /PRIVATE_/ );
@@ -526,7 +535,11 @@ test("assets.json shares the store's counters as numbers and nothing else", asyn
 		budget: 4096,
 		rangeBytes: 900,
 		demandedBytes: 600,
+		resets: 1,
+		failures: { open: 0, has: 2, read: null, write: 5, remove: 0 },
+		lastFailure: { operation: "write", reason: "too-large", atMs: 1234 },
 		writesStopped: true
 	} );
 	assert.equal( samples[1].queue.store, null );
+	assert.equal( samples[2].queue.store.lastFailure, null );
 });

@@ -9,6 +9,7 @@ and the durability maximum a repair restores (itemMaxDurability).
 ===========================================================================
 */
 import type { InventoryItem } from "@/engine/contracts/gameplay";
+import type { ItemWireField } from "@/engine/contracts/item-wire-fields";
 import type { TooltipRow } from "./tooltip-rows";
 // 78C5B0 -> 78BD00 -> 555720. Variance is packed per equipment family,
 // not one common sequence of stats. The callee consumes only the low byte
@@ -59,7 +60,7 @@ export function itemMaxDurability( item: InventoryItem ): number {
 export function itemTooltipStats( item: InventoryItem, text: ( symbol: string ) => string ): TooltipRow[] {
 	const fields = item.tooltip?.fields;
 	if ( !fields ) return [];
-	const read = ( key: string ) => {
+	const read = ( key: ItemWireField ) => {
 		const n = fields[key];
 		if ( n === undefined ) throw Error( "Missing item tooltip stat " + key );
 		return n;
@@ -70,12 +71,12 @@ export function itemTooltipStats( item: InventoryItem, text: ( symbol: string ) 
 		hi === lo ? 100 : Math.trunc( (value - lo) / (hi - lo) * 100 );
 	const add = ( key: string, value: string, color = 0xffffffff ) =>
 		rows.push( { value: text( key ) + " " + value, color } );
-	const int = ( lo: string, hi: string, index: number, perPlus?: string ) =>
+	const int = ( lo: ItemWireField, hi: ItemWireField, index: number, perPlus?: ItemWireField ) =>
 		Math.trunc(
 			(read( hi ) - read( lo )) * v( index ) / 31 + read( lo ) +
 				(perPlus ? Math.trunc( read( perPlus ) * plus ) : 0) + .5
 		);
-	const float = ( lo: string, hi: string, index: number, perPlus?: string, special = false ) =>
+	const float = ( lo: ItemWireField, hi: ItemWireField, index: number, perPlus?: ItemWireField, special = false ) =>
 		Math.fround(
 			(read( hi ) - read( lo )) * (special ? Math.fround( v( index ) / 31 ) : v( index ) / 31) + read( lo ) +
 				(perPlus ? read( perPlus ) * plus : 0)
@@ -84,10 +85,10 @@ export function itemTooltipStats( item: InventoryItem, text: ( symbol: string ) 
 		magicPercentModifier( item, base, positive, negative );
 	const integerRow = (
 		key: string,
-		lo: string,
-		hi: string,
+		lo: ItemWireField,
+		hi: ItemWireField,
 		index: number,
-		perPlus?: string,
+		perPlus?: ItemWireField,
 		magic?: readonly [string, string]
 	) => {
 		const n = int( lo, hi, index, perPlus );
@@ -95,7 +96,7 @@ export function itemTooltipStats( item: InventoryItem, text: ( symbol: string ) 
 	};
 	// 555720 prints the enhanced stat; only its (+%) grade takes the plus
 	// back off, so the grade measures the variance alone.
-	const floatRow = ( key: string, lo: string, hi: string, index: number, perPlus: string ) => {
+	const floatRow = ( key: string, lo: ItemWireField, hi: ItemWireField, index: number, perPlus: ItemWireField ) => {
 		const n = float( lo, hi, index, perPlus );
 		if ( n ) {
 			const graded = Math.fround( n - plus * read( perPlus ) );
@@ -104,12 +105,12 @@ export function itemTooltipStats( item: InventoryItem, text: ( symbol: string ) 
 	};
 	const attack = (
 		key: string,
-		minLo: string,
-		minHi: string,
-		maxLo: string,
-		maxHi: string,
+		minLo: ItemWireField,
+		minHi: ItemWireField,
+		maxLo: ItemWireField,
+		maxHi: ItemWireField,
 		index: number,
-		perPlus: string
+		perPlus: ItemWireField
 	) => {
 		const high = int( maxLo, maxHi, index, perPlus );
 		if ( high ) {
@@ -119,7 +120,7 @@ export function itemTooltipStats( item: InventoryItem, text: ( symbol: string ) 
 				p = Math.trunc( plus * read( perPlus ) ),
 				a = low - p,
 				b = high - p,
-				frac = ( n: number, lo: string, hi: string ) =>
+				frac = ( n: number, lo: ItemWireField, hi: ItemWireField ) =>
 					read( lo ) === read( hi ) ? 1 : (Math.fround( n >>> 0 ) - read( lo )) / (read( hi ) - read( lo ));
 			add(
 				key,
@@ -137,7 +138,14 @@ export function itemTooltipStats( item: InventoryItem, text: ( symbol: string ) 
 			);
 		}
 	};
-	const specialize = ( key: string, minLo: string, minHi: string, maxLo: string, maxHi: string, index: number ) => {
+	const specialize = (
+		key: string,
+		minLo: ItemWireField,
+		minHi: ItemWireField,
+		maxLo: ItemWireField,
+		maxHi: ItemWireField,
+		index: number
+	) => {
 		const a = float( minLo, minHi, index, undefined, true ), b = float( maxLo, maxHi, index, undefined, true );
 		if ( a || b ) {
 			add(
@@ -153,7 +161,7 @@ export function itemTooltipStats( item: InventoryItem, text: ( symbol: string ) 
 			);
 		}
 	};
-	const single = ( key: string, lo: string, hi: string, index: number ) => {
+	const single = ( key: string, lo: ItemWireField, hi: ItemWireField, index: number ) => {
 		const n = float( lo, hi, index );
 		if ( n ) add( key, `${(n * 100).toFixed( 1 )} % (+${percent( n, read( lo ), read( hi ) )}%)` );
 	};

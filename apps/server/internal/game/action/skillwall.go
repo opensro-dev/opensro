@@ -59,7 +59,7 @@ func (rt *Runtime) acceptWall(division string, c, snapshot *enterworld.Character
 	if !skill.Wall.Pinned || cast.HasTarget || cast.HasGroundTarget {
 		return OpResult{DiagnosticRefusal: "wall-admission-refused"}
 	}
-	if !enterworld.CharacterAlive(snapshot) || !enterworld.SkillLearned(snapshot, skill.ID) {
+	if !enterworld.CharacterAlive(snapshot) || !enterworld.SkillUsable(snapshot, skill) {
 		return OpResult{DiagnosticRefusal: "wall-admission-refused"}
 	}
 	if rt.hasOpenSkillCast(division, snapshot.Name) {
@@ -73,7 +73,7 @@ func (rt *Runtime) acceptWall(division string, c, snapshot *enterworld.Character
 	var frames []wire.Frame
 	var refusal uint16
 	committed := rt.deps.Update(c, "wall", func() bool {
-		if !enterworld.CharacterAlive(c) || !enterworld.SkillLearned(c, skill.ID) {
+		if !enterworld.CharacterAlive(c) || !enterworld.SkillUsable(c, skill) {
 			return false
 		}
 		cost, code := rt.offensivePhaseCost(division, c, skill, now, nil)

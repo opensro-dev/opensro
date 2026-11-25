@@ -88,6 +88,10 @@ type UnionRuntime struct {
 	mu      sync.Mutex
 	pending map[string]pendingUnion
 
+	// refreshGuildFaces re-sends a guild's nameplates to their watchers
+	// after a union commit (peerface.go); nil until Register wires it.
+	refreshGuildFaces func(divisionID string, guildID int64)
+
 	// PeerPending reports another lane's unanswered proposal for a player
 	// (one at a time, as the native transaction manager keys them).
 	PeerPending func(divisionID, name string) bool
@@ -373,6 +377,12 @@ func (r *UnionRuntime) ApplyConsent(_ *transport.Session, divisionID string, act
 		return
 	}
 	r.publishJoined(divisionID, record, joiner.ID, founded)
+	// The joiner's alliance fields changed; a new union changes the
+	// leader's too.
+	r.refreshFaces(divisionID, joiner.ID)
+	if founded {
+		r.refreshFaces(divisionID, leader.ID)
+	}
 	log.Debugf("guild: guild %d joined union %d led by %d", joiner.ID, record.AllianceID, leader.ID)
 }
 
@@ -475,6 +485,25 @@ func (r *UnionRuntime) removeGuild(divisionID string, guildID int64, mode uint8)
 		if member != 0 {
 			r.sendToGuild(divisionID, member, OpGuildUpdatePush, payload)
 		}
+	}
+	// The removed guild lost its alliance; a dissolved union took it from
+	// every guild. A broken guild has no roster left, so it refreshes
+	// nothing.
+	for _, member := range before.Guilds {
+		if member != 0 && (dissolved || member == guildID) {
+			r.refreshFaces(divisionID, member)
+		}
+	}
+}
+
+/*
+================
+refreshFaces
+================
+*/
+func (r *UnionRuntime) refreshFaces(divisionID string, guildID int64) {
+	if r.refreshGuildFaces != nil {
+		r.refreshGuildFaces(divisionID, guildID)
 	}
 }
 

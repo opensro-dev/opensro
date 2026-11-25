@@ -95,7 +95,7 @@ test("invite is open outside a party, to the leader, or to anyone when the party
 test("the world core sends nothing for a named player who is not in view", () => {
 	const sent = [], core = createWorldCore( frame => sent.push( frame ) );
 	core.bootstrap( {
-		protocolVersion: 2,
+		protocolVersion: 3,
 		nativeResult: 1,
 		refObjSnapshot: [],
 		refItemSnapshot: [],

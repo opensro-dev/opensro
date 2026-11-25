@@ -5,6 +5,7 @@ import (
 	"encoding/binary"
 	"errors"
 	"io"
+	"strings"
 	"testing"
 )
 
@@ -307,6 +308,36 @@ func TestEnterWorldGolden(t *testing.T) {
 	}
 	if back.Division != "DIV01" || back.CharName != "CG" || !bytes.Equal(back.AuthToken, []byte{0xAA, 0xBB}) {
 		t.Fatalf("round-trip = %+v", back)
+	}
+}
+
+/*
+================
+TestEnterWorldSessionConstantsRoundTrip
+
+The session-constants digest (#4421) rides as one optional tail after
+the token: a stated digest round-trips, an unstated entry ends at the
+token, and a digest tail past the length cap is refused.
+================
+*/
+func TestEnterWorldSessionConstantsRoundTrip(t *testing.T) {
+	got, err := DecodeEnterWorld(EncodeEnterWorld(EnterWorld{Division: "d1", CharName: "asd2", AuthToken: []byte{0xAA}, SessionConstants: "54c6f4af"}))
+	if err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if got.SessionConstants != "54c6f4af" {
+		t.Fatalf("SessionConstants = %q, want the stated digest", got.SessionConstants)
+	}
+	plain, err := DecodeEnterWorld(EncodeEnterWorld(EnterWorld{Division: "d1", CharName: "asd2", AuthToken: []byte{0xAA}}))
+	if err != nil {
+		t.Fatalf("decode without digest: %v", err)
+	}
+	if plain.SessionConstants != "" {
+		t.Fatalf("SessionConstants = %q, want empty", plain.SessionConstants)
+	}
+	oversized := EncodeEnterWorld(EnterWorld{Division: "d1", CharName: "asd2", AuthToken: []byte{0xAA}, SessionConstants: strings.Repeat("a", MaxSessionConstantsLen+1)})
+	if _, err := DecodeEnterWorld(oversized); err == nil {
+		t.Fatal("an over-length digest tail decoded")
 	}
 }
 

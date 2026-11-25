@@ -260,7 +260,7 @@ test("movement projections retain static metadata and social state without repea
 		return batch.events.filter( e => e.kind === "gameplay" ).at( -1 )?.state;
 	};
 	core.bootstrap( {
-		protocolVersion: 2,
+		protocolVersion: 3,
 		nativeResult: 1,
 		refObjSnapshot: [],
 		localPlayerEntry: { modelRef: 1933, startProfile: { regionId: 257, x: 1, y: 2, z: 3, angle: 0 } },

@@ -35,6 +35,8 @@ func TestWorldBoundWaitsForGameReady(t *testing.T) {
 		SceneReferenceFrames: func() []wire.Frame {
 			return []wire.Frame{{Opcode: 14, Payload: []byte(`{"version":1,"items":[]}`)}}
 		},
+		// The seed travels under its digest (#4421): once per session.
+		SeedDigest: "test-seed-digest",
 		// The region weather rides every finished scene too (action/weather.go).
 		SceneWeatherFrames: func(_ string, c *enterworld.Character) []wire.Frame {
 			if c == nil || c.Name != character.Name {
@@ -130,20 +132,28 @@ func TestWorldBoundWaitsForGameReady(t *testing.T) {
 	}
 	conn.inbound <- transport.Frame{Opcode: enterworld.OpcodeGameReady}
 	waitFor(t, "reentry ready", func() bool { _, active := session.SceneRevision(); return active })
-	waitFor(t, "reentry scene references", func() bool { return seedCount() == 2 })
+	// The commerce seed is a session constant (#4421): a reentry does
+	// not republish it; the weather snapshot still travels per entry.
+	if n := seedCount(); n != 1 {
+		t.Fatalf("reentry republished the commerce seed: %d publishes, want 1", n)
+	}
 	waitFor(t, "reentry scene weather", func() bool { return weatherCount() == 2 })
 	select {
 	case <-bound:
 		t.Fatal("scene reentry repeated session lifetime hooks")
 	default:
 	}
-	// A second travel rebuild needs its own dictionary too; session hooks
-	// remain one-shot and duplicate readiness cannot duplicate publication.
+	// A second travel rebuild keeps the same session dictionary (#4421);
+	// session hooks remain one-shot and duplicate readiness cannot
+	// duplicate publication.
 	if err := session.SendSceneReset([]transport.Frame{{Opcode: enterworld.OpcodeResetClient, Payload: []byte{1, 2}}}); err != nil {
 		t.Fatal(err)
 	}
 	conn.inbound <- transport.Frame{Opcode: enterworld.OpcodeGameReady}
-	waitFor(t, "second reentry references", func() bool { return seedCount() == 3 })
+	waitFor(t, "second reentry weather", func() bool { return weatherCount() == 3 })
+	if n := seedCount(); n != 1 {
+		t.Fatalf("second reentry republished the commerce seed: %d publishes, want 1", n)
+	}
 	conn.inbound <- transport.Frame{Opcode: enterworld.OpcodeGameReady}
 	conn.inbound <- transport.Frame{Opcode: 0x7fff}
 	select {
@@ -151,7 +161,7 @@ func TestWorldBoundWaitsForGameReady(t *testing.T) {
 	case <-time.After(time.Second):
 		t.Fatal("duplicate-ready barrier")
 	}
-	if seedCount() != 3 || weatherCount() != 3 {
+	if seedCount() != 1 || weatherCount() != 3 {
 		t.Fatal("duplicate readiness replayed scene references or weather")
 	}
 	select {
@@ -166,13 +176,26 @@ func TestWorldBoundWaitsForGameReady(t *testing.T) {
 	if err := session.SendSceneReset([]transport.Frame{{Opcode: enterworld.OpcodeResetClient, Payload: []byte{1, 2}}}); err != nil {
 		t.Fatal(err)
 	}
+	// The replacement entry states no constants digest, so its answer is
+	// full and the commerce seed publishes again at game-ready (#4421).
+	conn.inbound <- transport.Frame{Opcode: transport.OpEnterWorld, Payload: transport.EncodeEnterWorld(
+		authenticatedSession.Entry("0", character.Name),
+	)}
+	waitFor(t, "replacement enter-world finalize", func() bool {
+		for _, frame := range conn.frames() {
+			if frame.Opcode == enterworld.OpcodeObjectListFinalize {
+				return true
+			}
+		}
+		return false
+	})
 	conn.inbound <- transport.Frame{Opcode: enterworld.OpcodeGameReady}
 	select {
 	case <-bound:
 	case <-time.After(time.Second):
 		t.Fatal("replacement admission did not reinstall world provider")
 	}
-	waitFor(t, "replacement scene references", func() bool { return seedCount() == 4 })
+	waitFor(t, "replacement scene references", func() bool { return seedCount() == 2 })
 	waitFor(t, "replacement scene weather", func() bool { return weatherCount() == 4 })
 
 }

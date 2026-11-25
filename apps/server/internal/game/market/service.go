@@ -286,7 +286,7 @@ func (s *Service) Account(account string) (publicstats.OwnMarketResponse, error)
 	if err != nil {
 		return out, err
 	}
-	out.Silk = wallet.Silk
+	out.Silk, out.EarnedSilk = wallet.Silk, wallet.EarnedSilk
 	incoming, outgoing, err := s.Store.MarketOffers(account, historyLimit)
 	if err != nil {
 		return out, err

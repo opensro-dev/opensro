@@ -31,6 +31,7 @@ import {
 	TC_GRADUATE_REQUEST_OPCODE,
 	TC_HONOR_RANK_ANSWER_OPCODE,
 	TC_HONOR_RANK_REQUEST_OPCODE,
+	TC_INVITE_REQUEST_OPCODE,
 	TC_KICK_REQUEST_OPCODE,
 	TC_LEAVE_REQUEST_OPCODE,
 	TC_NOTICE_EDIT_REQUEST_OPCODE,
@@ -169,6 +170,7 @@ export type AcademyCommand =
 		readonly kind: "academy-open";
 	}
 	| { readonly kind: "academy-honor-rank"; readonly gid: number; }
+	| { readonly kind: "academy-invite"; readonly gid: number; }
 	| { readonly kind: "academy-disband"; }
 	| { readonly kind: "academy-leave"; }
 	| { readonly kind: "academy-graduate"; readonly satisfaction: number; }
@@ -712,6 +714,22 @@ export function academyHonorRankRequest( gid: number ): WireFrame {
 	const payload = new Uint8Array( 4 );
 	new DataView( payload.buffer ).setUint32( 0, gid >>> 0, true );
 	return { opcode: TC_HONOR_RANK_REQUEST_OPCODE, payload };
+}
+
+/*
+================
+academyInviteRequest
+
+702C90's 0x76B1: [u32 gid], the selected player (or the rider of a
+selected mounted pet), sent by the academy window's Invite button
+(CIFApprenticeShip_OnInviteBtn 5C4FD0) when the local player leads the
+academy.
+================
+*/
+export function academyInviteRequest( gid: number ): WireFrame {
+	const payload = new Uint8Array( 4 );
+	new DataView( payload.buffer ).setUint32( 0, gid >>> 0, true );
+	return { opcode: TC_INVITE_REQUEST_OPCODE, payload };
 }
 
 /*

@@ -327,7 +327,7 @@ Valid world bootstrap payload for createWorldCore covering initial login,
 */
 function worldBootstrapFixture( { gm = true, regionId = 32769 } = {} ) {
 	return {
-		protocolVersion: 2,
+		protocolVersion: 3,
 		nativeResult: 1,
 		character: {
 			name: gm ? "[GM]Test2" : "asd2",

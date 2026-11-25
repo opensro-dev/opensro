@@ -50,7 +50,10 @@ before they can be translated into that version's execution vocabulary.
 import fs from "node:fs";
 import path from "node:path";
 import { animationSetKeyForName } from "./native/animationSetNames.ts";
-import { SKILL_EFFECT_ANIMATION_ID_BY_NAME } from "./native/skillEffectAnimationRegistry.ts";
+import {
+	LATER_SKILL_EFFECT_ANIMATION_ID_BY_NAME,
+	SKILL_EFFECT_ANIMATION_ID_BY_NAME
+} from "./native/skillEffectAnimationRegistry.ts";
 import {
 	SKILL_EFFECT_ACTION_TYPE_ID_BY_NAME,
 	SKILL_EFFECT_MOVE_TYPE_ID_BY_NAME,
@@ -216,7 +219,9 @@ must describe those admitted tokens, including repeated animation entries.
 */
 function animationNames( value ) {
 	if ( !value || value === "none" ) return [];
-	return value.split( "," ).filter( name => name && SKILL_EFFECT_ANIMATION_ID_BY_NAME.has( name ) );
+	return value.split( "," ).filter( name =>
+		name && (SKILL_EFFECT_ANIMATION_ID_BY_NAME.has( name ) || LATER_SKILL_EFFECT_ANIMATION_ID_BY_NAME.has( name ))
+	);
 }
 
 /*

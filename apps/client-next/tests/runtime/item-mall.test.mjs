@@ -260,12 +260,22 @@ test("completion and session reset clear confirmation without retrying it", () =
 	assert.equal( mall.read().visible, false );
 });
 
-test("native currency rows retain zero-priced currencies and their distinct window growth", () => {
+test("native currency rows retain zero-priced currencies, their distinct window growth, and the notice row", () => {
 	const offer = catalogue().offers[0];
 	const layout = mallCurrencyRows( offer, 2, 7 );
-	assert.equal( layout.height, 219 );
+	assert.equal( layout.height, 241 );
 	assert.deepEqual( layout.rows.map( row => [ row.y, row.amount ] ), [ [ 102, 33 ], [ 124, 0 ], [ 146, 7 ] ] );
-	assert.equal( mallCurrencyRows( { ...offer, currencyMask: 2 }, 1, 0 ).height, 177 );
+	assert.equal( mallCurrencyRows( { ...offer, currencyMask: 2 }, 1, 0 ).height, 199 );
+	// The port-only outcome line (#4133) takes the row under the last
+	// currency row, inside the window the layout grew for it, clear of
+	// the buttons the native build sets at height - 40 (#4424).
+	assert.equal( layout.noticeY, 168 );
+	for ( const mask of [ 2, 4, 6, 16, 18, 20, 22 ] ) {
+		const grown = mallCurrencyRows( { ...offer, currencyMask: mask }, 1, 0 );
+		const last = grown.rows.at( -1 );
+		assert.ok( grown.noticeY > (last?.y ?? 80), `mask ${mask}: the notice sits under the last row` );
+		assert.ok( grown.noticeY + 14 < grown.height - 40, `mask ${mask}: the notice clears the buttons` );
+	}
 });
 
 test("point editor cancels without applying and bounds applied contribution", () => {
@@ -568,6 +578,21 @@ test("the lump-buy boxes caption their total row with the total-price line", () 
 	// The reservation and removal boxes draw no total row.
 	assert.equal( mallQuestionLayout( "reserve", 1 ).totalCaption, undefined );
 	assert.equal( mallQuestionLayout( "remove", 1 ).totalCaption, undefined );
+});
+
+test("the lump-buy boxes grow one band for the outcome line, the other boxes do not (#4424)", () => {
+	for ( const kind of /** @type {const} */ ([ "basket", "worn" ]) ) {
+		const layout = mallQuestionLayout( kind, 3 );
+		assert.equal( layout.noticeY, layout.pointY + 22, `${kind}: the notice takes the row under the points row` );
+		assert.ok( layout.noticeY + 14 < layout.buttonY, `${kind}: the notice clears the buttons` );
+		assert.ok( layout.buttonY + 22 <= layout.height, `${kind}: the buttons stay inside the window` );
+	}
+	// No outcome line prints on the reservation and removal boxes; their
+	// native heights stand.
+	assert.equal( mallQuestionLayout( "reserve", 1 ).height, 203 );
+	assert.equal( mallQuestionLayout( "remove", 1 ).height, 183 );
+	assert.equal( mallQuestionLayout( "reserve", 1 ).noticeY, 0 );
+	assert.equal( mallQuestionLayout( "remove", 1 ).noticeY, 0 );
 });
 
 test("the purchase outcome follows what pays (#4133)", () => {

@@ -12,6 +12,7 @@ appends the seal after the requirement rows; the under-heading place
 import { isSpiritItem } from "@/engine/foundation/gameplay/avatar-socket";
 import { spiritGaugePercent } from "@/engine/foundation/gameplay/spirit-skills";
 import type { InventoryItem } from "@/engine/contracts/gameplay";
+import { ITEM_REQUIREMENT_SLOTS } from "@/engine/contracts/item-wire-fields";
 import type { Progression } from "../gameplay/progression";
 import { itemRarityIsSealed, sealTextSymbol } from "../gameplay/item-seal";
 import { isPetGearRef } from "../gameplay/inventory-item";
@@ -241,8 +242,8 @@ export function itemTooltip(
 		517: "UIIT_STT_BARD",
 		518: "UIIT_STT_CLERIC"
 	};
-	for ( let i = 1; i <= 4; i++ ) {
-		const type = f["reqLevelType" + i], level = f["requiredLevel" + (i === 1 ? "" : i)] ?? 0;
+	for ( const [typeKey, levelKey] of ITEM_REQUIREMENT_SLOTS ) {
+		const type = f[typeKey], level = f[levelKey] ?? 0;
 		if ( type === 1 ) requirement( `${text( "PARAM_REQ_LV" )} ${level}`, (progression.level ?? 0) >= level );
 		else if ( type && masterySymbols[type] ) {
 			requirement(

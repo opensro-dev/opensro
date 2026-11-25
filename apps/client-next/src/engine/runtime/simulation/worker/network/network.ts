@@ -999,9 +999,9 @@ export function createNetwork(
 			}
 			return now - pingReceivedAt < PING_STALE_MS ? measuredPing : null;
 		},
-		enterWorld( division, character, token ) {
+		enterWorld( division, character, token, sessionConstants ) {
 			if ( !welcomed ) throw new Error( "Transport handshake incomplete" );
-			send( codec.enterWorld( division, character, token ) );
+			send( codec.enterWorld( division, character, token, sessionConstants ) );
 			entryPresented = true;
 		},
 		webTransport( enabled: boolean ) {

@@ -176,6 +176,8 @@ export function createResLayoutWindow( layout: ResLayout ): ResLayoutWindow {
 		if (
 			control.parent === null || control.type === RES_LAYOUT_TYPE_WINDOW || control.type === RES_LAYOUT_TYPE_FRAME
 		) {
+			// resLayoutFramePrefix drops the closing ".png"; with it kept, the
+			// ring's quads named "mframe_wnd_.pngleft_up.png" (#4417).
 			const prefix = resLayoutFramePrefix( control.frame );
 			if ( prefix ) {
 				paths.push( ...resLayoutFrameParts( control.frame ) );
@@ -226,12 +228,13 @@ export function createResLayoutWindow( layout: ResLayout ): ResLayoutWindow {
 				);
 			}
 		} else if ( control.type === RES_LAYOUT_TYPE_TILE ) {
-			// A tile with no texture draws nothing. Naming "" for loading
-			// would hold the whole window unadmitted: an empty path never
-			// becomes resident (frameDraw.unloadedImages). The importer
-			// files a tile's art under its frame word (questlist's body
-			// tile 3 names com_bg_tile_a.ddj there), so either names it.
-			const path = resLayoutImagePath( control.texture || control.frame );
+			// A tile's art is authored in the record's frame slot (the
+			// importer reads the two slots apart, scripts/res_ui_layout.py);
+			// the texture slot is the fallback. A tile with no art in
+			// either draws nothing. Naming "" for loading would hold
+			// the whole window unadmitted: an empty path never becomes
+			// resident (frameDraw.unloadedImages).
+			const path = resLayoutImagePath( control.frame || control.texture );
 			if ( path ) {
 				paths.push( path );
 				frame.quads.push( ...normalTile( r, path, resources.size( path ), full ) );

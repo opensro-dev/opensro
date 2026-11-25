@@ -381,8 +381,13 @@ export function mallPageNumberPresentation( page: number, current: number ): {
 mallCurrencyRows
 
 6BF320 starts y at 80, advances 22 before each mall row and grows the
-window by 22 for Silk/points, but by 20 for Gift Silk (6BF625).
-Zero-cost rows are still present when their authored currency bit is set.
+window by 22 for Silk/points, but by 20 for Gift Silk (6BF625). The
+window takes its final height from the accumulated growth (6BF8DA) and
+the buttons sit at height - 40 (6BF92A/6BF956). Zero-cost rows are
+still present when their authored currency bit is set. The port-only
+outcome line (#4133) takes one more such step under the last currency
+row and the window grows for it too, so the notice never lands on a
+currency row and the buttons stay below it (#4424).
 ================
 */
 export function mallCurrencyRows(
@@ -412,7 +417,9 @@ export function mallCurrencyRows(
 			points: currency === 16
 		} );
 	}
-	return { rows, height, growth: height - BASE_HEIGHT };
+	y += ROW_STEP;
+	height += ROW_STEP;
+	return { rows, height, growth: height - BASE_HEIGHT, noticeY: y };
 }
 
 /*
@@ -471,16 +478,24 @@ mallQuestionLayout
 name/cost pairs at y=100 with a 16-pixel pitch; the sentinel row anchors the
 native total, points, buttons and final height. On the two boxes that draw
 a total row (worn 529846, basket 529BE7) the total control (+0x89C) is
-captioned UIIT_MSG_QUESTION_SILKMALL_ZZIM_LUMP_BUY_TOTAL.
+captioned UIIT_MSG_QUESTION_SILKMALL_ZZIM_LUMP_BUY_TOTAL. The worn and
+basket boxes grow one more band (NOTICE_GROWTH over the native height and
+button row) for the port-only outcome line (#4133) on noticeY, between the
+points row and the buttons (#4424); the reservation and removal boxes print
+no outcome line and keep their native heights.
 ================
 */
 export function mallQuestionLayout( kind: "reserve" | "remove" | "worn" | "basket", count: number ) {
-	const WIDTH = 300, ROW_START = 100, ROW_PITCH = 16;
+	const WIDTH = 300, ROW_START = 100, ROW_PITCH = 16, NOTICE_GROWTH = 20;
 	const totalY = ROW_START + count * ROW_PITCH;
 	return {
 		width: WIDTH,
-		height: kind === "reserve" ? 203 : kind === "remove" ? 183 : kind === "basket" ? 150 : totalY + 100,
-		buttonY: kind === "reserve" ? 167 : kind === "remove" ? 147 : kind === "basket" ? 116 : totalY + 50,
+		height: kind === "reserve" ? 203 : kind === "remove" ? 183 : kind === "basket" ?
+			150 + NOTICE_GROWTH :
+			totalY + 100 + NOTICE_GROWTH,
+		buttonY: kind === "reserve" ? 167 : kind === "remove" ? 147 : kind === "basket" ?
+			116 + NOTICE_GROWTH :
+			totalY + 50 + NOTICE_GROWTH,
 		buttonX: kind === "reserve" || kind === "remove" ? 72 : 70,
 		caption: kind === "reserve" ? "UIIT_STT_SILKMALL_DO_ZZIM" : kind === "remove" ?
 			"UIIT_STT_CONFIRM_BOX" :
@@ -504,6 +519,9 @@ export function mallQuestionLayout( kind: "reserve" | "remove" | "worn" | "baske
 		rowPitch: ROW_PITCH,
 		totalY: kind === "basket" ? 74 : totalY + 4,
 		pointY: kind === "basket" ? 92 : totalY + 22,
+		// The port-only outcome line's own row (#4133), one step under the
+		// points row; 0 where no outcome line prints (reserve/remove).
+		noticeY: kind === "basket" ? 114 : kind === "worn" ? totalY + 44 : 0,
 		totalCaption: kind === "worn" || kind === "basket" ?
 			"UIIT_MSG_QUESTION_SILKMALL_ZZIM_LUMP_BUY_TOTAL" :
 			undefined

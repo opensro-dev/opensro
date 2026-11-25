@@ -6,6 +6,7 @@ binding fallback. BAN bytes remain unchanged for the browser native loader.
 ===========================================================================
 */
 import { loadAvatarVisualOverrides, avatarAnimationRequirements } from "./avatarVisualOverrides.mjs";
+import { loadLaterAnimationSources, withLaterAnimationSets } from "./laterAnimationSets.mjs";
 import { writeIntoPublicTreeSync } from "../shared/publicWrite.mjs";
 import { loadEquipmentRecords } from "./equipmentVisualRecords.mjs";
 import { attachedMotionMetadata, pickAttachedMotionClips } from "./attachedMotionClips.mjs";
@@ -43,14 +44,23 @@ import {
 } from "./animationUtils.mjs";
 import { parseBan, parseCharacterBsr } from "./formats.mjs";
 import { parseSkillAniSet } from "./parseSkillEffect.mjs";
-import { SKILL_EFFECT_ANIMATION_NAME_ID_ROWS } from "./native/skillEffectAnimationRegistry.ts";
+import {
+	LATER_SKILL_EFFECT_ANIMATION_ID_BY_NAME,
+	SKILL_EFFECT_ANIMATION_NAME_ID_ROWS
+} from "./native/skillEffectAnimationRegistry.ts";
 import { refreshPrecompressedSidecars } from "../generatedManifestSidecars.mjs";
 import { resolveRoster } from "./resolveCharRoster.mjs";
 import { dataAssetPath, loadDataAsset } from "../shared/jmxAssetIO.mjs";
 import { writeJsonIfChangedSync } from "../shared/jsonOut.mjs";
 import { isMainScript } from "../shared/fsUtils.mjs";
 import { splitTextDataRow } from "../shared/textDataIo.mjs";
-import { normalizeAssetPath, publicRoot, retailTextdataRoot, clientV150ResinfoRoot } from "../world/paths.mjs";
+import {
+	clientV150ResinfoRoot,
+	extractedRoot,
+	normalizeAssetPath,
+	publicRoot,
+	retailTextdataRoot
+} from "../world/paths.mjs";
 
 const animPublicRoot = path.join( publicRoot, "assets", "anim" );
 const textdataDir = retailTextdataRoot;
@@ -62,7 +72,12 @@ collectRequiredSkillMotionIdsBySetName
 ================
 */
 function collectRequiredSkillMotionIdsBySetName() {
-	const animationIdByName = new Map( SKILL_EFFECT_ANIMATION_NAME_ID_ROWS );
+	// Port-only (SRO_NASRUN, #4407): the later Spirit rows' ANI_SHOT, which
+	// parseSkillAniSet admits for them alone.
+	const animationIdByName = new Map( [
+		...SKILL_EFFECT_ANIMATION_NAME_ID_ROWS,
+		...LATER_SKILL_EFFECT_ANIMATION_ID_BY_NAME
+	] );
 	const requiredSkillMotionIdsBySetName = new Map();
 	for ( const row of parseSkillAniSet( skillEffectPath ).values() ) {
 		const setName = row.aniGroup.toLowerCase();
@@ -172,11 +187,17 @@ export async function buildLocomotionBanAssets() {
 	const publishedByPath = new Map();
 	const models = {};
 	let clipCount = 0;
+	// Port-only (SRO_NASRUN, #4407): the later bodies' transformation sets.
+	const laterSets = loadLaterAnimationSources( extractedRoot );
 
 	for ( const model of resolved ) {
 		let bsr;
 		try {
-			bsr = parseCharacterBsr( await loadDataAsset( model.bsrPath ), model.bsrPath );
+			bsr = withLaterAnimationSets(
+				parseCharacterBsr( await loadDataAsset( model.bsrPath ), model.bsrPath ),
+				model.bsrPath,
+				laterSets
+			);
 		} catch ( error ) {
 			throw new Error( `[anim] ${model.codename}: cannot read ${model.bsrPath}: ${error?.message ?? error}`, {
 				cause: error
