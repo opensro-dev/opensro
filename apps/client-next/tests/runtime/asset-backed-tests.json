@@ -2,6 +2,7 @@
 	"generatedBy": "apps/client-next/tools/list-asset-backed-tests.mjs",
 	"tests": [
 		"academy-honor.test.mjs",
+		"academy-invite.test.mjs",
 		"academy-open.test.mjs",
 		"alchemy-ctrl-click.test.mjs",
 		"alchemy-fuse-busy.test.mjs",
