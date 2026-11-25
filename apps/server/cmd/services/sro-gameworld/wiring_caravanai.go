@@ -18,6 +18,7 @@ import (
 	"context"
 
 	log "github.com/sirupsen/logrus"
+	"opensro.online/server/internal/game/action"
 	"opensro.online/server/internal/game/caravanai"
 	"opensro.online/server/internal/game/enterworld"
 	"opensro.online/server/internal/game/item/wire"
@@ -61,6 +62,10 @@ func (game *gameplayPlane) wireCaravanAgents() {
 	})
 	rt.EnsureDivisionRoster(game.divisionID)
 	game.caravanAgents = rt
+	// Slice 3c (#3704): players can fight the agents. The action
+	// runtime resolves agent gids and lands real damage through this
+	// directory; with the flag off it is never installed.
+	game.items.Agents = caravanAgentDirectory{game: game}
 	// Slice 3a (#3704): the agents appear in the world as peers. The
 	// reference catalog is wired later than this constructor runs, so
 	// the closure reads it at tick time.
@@ -638,4 +643,71 @@ func caravanEquipItem(ref *enterworld.ItemRef) wire.PlayerEquipItem {
 			uint8(ref.TypeIDs[0]), uint8(ref.TypeIDs[1]),
 			uint8(ref.TypeIDs[2]), uint8(ref.TypeIDs[3])),
 	}
+}
+
+//============================================================================
+
+/*
+================
+caravanAgentDirectory
+
+The caravan runtime as the action package's combat directory (slice
+3c): an object gid in the player band that names no stored character
+resolves to the agent wearing that synthetic identity, and damage
+lands through RecordPlayerAttack, the runtime's one damage door.
+================
+*/
+type caravanAgentDirectory struct {
+	game *gameplayPlane
+}
+
+/*
+================
+caravanAgentDirectory.AgentByGID
+
+The living agent whose synthetic character id maps to gid, with its
+model's body radius from the shipped roster. The dead are absent from
+the entity snapshot, so a corpse resolves to nothing.
+================
+*/
+func (dir caravanAgentDirectory) AgentByGID(division string, gid uint32) (action.AgentTarget, bool) {
+	if dir.game.caravanAgents == nil {
+		return action.AgentTarget{}, false
+	}
+	for _, entity := range dir.game.caravanAgents.AgentEntities(division) {
+		if simulation.PlayerObjectID(entity.CharacterID) != gid {
+			continue
+		}
+		target := action.AgentTarget{
+			Name:         entity.Name,
+			JobType:      entity.JobType,
+			Pose: simulation.Spawn{RegionID: entity.Pose.RegionID,
+				X: float64(entity.Pose.X), Y: float64(entity.Pose.Y), Z: float64(entity.Pose.Z)},
+			Level:        entity.Level,
+			HP:           entity.HP,
+			MaxHP:        entity.MaxHP,
+			LastAttacker: entity.LastAttacker,
+		}
+		if model := dir.game.deps.Roster.ModelByCodename(entity.ModelCode); model != nil {
+			target.BodyRadius = model.BodyRadius
+		}
+		return target, true
+	}
+	return action.AgentTarget{}, false
+}
+
+/*
+================
+caravanAgentDirectory.ApplyAgentDamage
+
+Real damage from a player's strike, through the runtime's damage
+door: parley betrayal, robbery and death bookkeeping stay there.
+================
+*/
+func (dir caravanAgentDirectory) ApplyAgentDamage(division, agentName, attackerName string, damage int, nowMs int64) (defeated bool) {
+	if dir.game.caravanAgents == nil {
+		return false
+	}
+	_, defeated, _ = dir.game.caravanAgents.RecordPlayerAttack(division, agentName, attackerName, damage, nowMs)
+	return defeated
 }

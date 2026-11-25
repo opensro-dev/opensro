@@ -312,6 +312,11 @@ func (rt *Runtime) acceptPlayerTargetStage(st offensiveStage) (OpResult, skillCa
 		// A COS is judged through its owner and struck on its own body.
 		return rt.acceptCOSTargetStage(st, target)
 	}
+	if ok && target.agent != nil {
+		// A caravan agent is struck through its own damage door
+		// (agentstrike.go, port-only).
+		return rt.strikeAgentTarget(st, target)
+	}
 	if !ok || target.player == nil {
 		return OpResult{}, skillCastRefused
 	}
