@@ -95,7 +95,7 @@ bootstrap
 */
 function bootstrap( name = STRUCTURE_NAME, kind = "structure" ) {
 	return {
-		protocolVersion: 2,
+		protocolVersion: 3,
 		nativeResult: 1,
 		refObjSnapshot: [ {
 			refObjId: STRUCTURE,

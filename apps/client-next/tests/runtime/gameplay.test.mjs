@@ -186,7 +186,7 @@ test("376F updates local entity channels and live movement through the productio
 		return b?.events ?? [];
 	};
 	core.bootstrap( {
-		protocolVersion: 2,
+		protocolVersion: 3,
 		nativeResult: 1,
 		refObjSnapshot: [],
 		character: { name: "fixture" },

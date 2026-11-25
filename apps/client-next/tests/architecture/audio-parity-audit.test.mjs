@@ -142,7 +142,7 @@ test("accepted equipment emits world ITEM audio and detects an injected silent c
 	body.writeUInt32LE( 1 );
 	body.writeUInt32LE( 50, 13 );
 	const entry = {
-		protocolVersion: 2,
+		protocolVersion: 3,
 		nativeResult: 1,
 		refObjSnapshot: [],
 		character: { name: "fixture" },

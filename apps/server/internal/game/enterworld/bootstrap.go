@@ -241,7 +241,7 @@ func buildBootstrap(deps *Deps, request BootstrapRequest) *BootstrapResult {
 	if deps.InventoryPages {
 		presented = character.RaiseInventoryFloor(domain.InventoryPagesBase) || presented
 	}
-	result := buildCharacterProjection(deps, divisionID, character, request.hold)
+	result := buildCharacterProjection(deps, divisionID, character, request.hold, request.SessionConstants)
 	if result.NativeResult == nativeResultSuccess {
 		result.liveOwner = liveCharacter
 		if presented {
@@ -262,7 +262,7 @@ never seeds or mutates the live character, so re-entry can be prepared before
 an authoritative relocation/revival commits.
 ================
 */
-func buildCharacterProjection(deps *Deps, divisionID string, character *Character, hold *simulation.HoldBreakdown) *BootstrapResult {
+func buildCharacterProjection(deps *Deps, divisionID string, character *Character, hold *simulation.HoldBreakdown, statedConstants string) *BootstrapResult {
 	// Both callers pass a snapshot, so the running events' groups join the
 	// entry without touching the stored record; a fresh slice keeps the
 	// snapshot from sharing the record's backing array.
@@ -339,6 +339,12 @@ func buildCharacterProjection(deps *Deps, divisionID string, character *Characte
 	}
 
 	refObjSnapshot := filteredRefObjSnapshot(deps)
+	magicOptionSnapshot := buildMagicOptionSnapshot(deps, character)
+	// The session constants go once per session (#4421): a re-entry
+	// stating the digest it holds omits both snapshots here and the
+	// commerce seed at game-ready; the answer always names the digest.
+	constantsDigest := sessionConstantsDigest(deps, refObjSnapshot, magicOptionSnapshot)
+	omitConstants := constantsDigest != "" && statedConstants == constantsDigest
 
 	var systemMessages interface{} = []string{}
 	if deps.SystemMessages != nil {
@@ -371,7 +377,9 @@ func buildCharacterProjection(deps *Deps, divisionID string, character *Characte
 		SkillCooldowns:          entrySkillCooldowns(deps, character, spiritSkills),
 		ItemCooldowns:           entryItemCooldowns(deps, character),
 		RefItemSnapshot:         buildRefItemSnapshot(deps, divisionID, character),
-		MagicOptionSnapshot:     buildMagicOptionSnapshot(deps, character),
+		MagicOptionSnapshot:     magicOptionSnapshot,
+		SessionConstants:        constantsDigest,
+		OmitSessionConstants:    omitConstants,
 		AvatarMagicOptions:      buildAvatarMagicOptions(deps),
 		SiegeItemForgeGroups:    DefaultSiegeItemForgeGroups(),
 		SiegeFortressData:       siegeFortressRows(deps),
@@ -432,6 +440,7 @@ func filteredRefObjSnapshot(deps *Deps) []RefObjRow {
 	rows := computeFilteredRefObjSnapshot(deps)
 	cache.refs = deps.BrowserReferences
 	cache.rows = append([]RefObjRow{}, rows...)
+	cache.digest = snapshotRowsDigest(rows)
 	cache.cached = true
 	return append([]RefObjRow{}, cache.rows...)
 }

@@ -943,7 +943,12 @@ bootstrap
 			market.reset();
 			mallDelivery = null;
 			tooltipRefs.clear();
-			magicRefs = itemMagicReferences( (value as { magicOptionSnapshot?: unknown; }).magicOptionSnapshot );
+			// A digest-held answer omits the magic-option snapshot
+			// (#4421); the installed references then stand as they are.
+			const magicSnapshot = (value as { magicOptionSnapshot?: unknown; }).magicOptionSnapshot;
+			if ( magicSnapshot !== undefined && magicSnapshot !== null ) {
+				magicRefs = itemMagicReferences( magicSnapshot );
+			}
 			magicOption.bootstrap( (value as { avatarMagicOptions?: unknown; }).avatarMagicOptions, magicRefs );
 			const b = value as {
 				inventorySlotCount?: number;

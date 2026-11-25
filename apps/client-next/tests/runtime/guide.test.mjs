@@ -82,7 +82,7 @@ test("gameplay retains guide state only after successful native enqueue and rese
 test("local spawn retains server visual flags instead of synthesizing a beginner mark", () => {
 	const owner = createEntities();
 	owner.bootstrap( {
-		protocolVersion: 2,
+		protocolVersion: 3,
 		nativeResult: 1,
 		refObjSnapshot: [],
 		character: { name: "Fixture" },

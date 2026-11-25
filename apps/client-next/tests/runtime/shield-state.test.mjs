@@ -16,7 +16,7 @@ const { createWorldCore } = await import( "../../src/engine/runtime/simulation/w
 test("Bond feedback reaches the entity animation through the world dispatcher", () => {
 	const core = createWorldCore( () => {} );
 	core.bootstrap( {
-		protocolVersion: 2,
+		protocolVersion: 3,
 		nativeResult: 1,
 		refObjSnapshot: [],
 		character: { name: "fixture", skills: [] },
@@ -57,7 +57,7 @@ function shieldPacket( amount = 300, duration = 5000, flags = 0 ) {
 test("shield packets retain separate absorption and retire the segment at exact expiry", () => {
 	const entities = createEntities();
 	entities.bootstrap( {
-		protocolVersion: 2,
+		protocolVersion: 3,
 		nativeResult: 1,
 		refObjSnapshot: [],
 		localPlayerEntry: { modelRef: 1933, startProfile: { regionId: 257, x: 1, y: 2, z: 3, angle: 0 } }
@@ -118,7 +118,7 @@ test("shield segments use a light-gray HP-style highlight without changing their
 test("retaliation pulse validates its recipient and leaves emotes independent", () => {
 	const entities = createEntities();
 	entities.bootstrap( {
-		protocolVersion: 2,
+		protocolVersion: 3,
 		nativeResult: 1,
 		refObjSnapshot: [],
 		localPlayerEntry: { modelRef: 1933, startProfile: { regionId: 257, x: 1, y: 2, z: 3, angle: 0 } }
@@ -145,7 +145,7 @@ Guardian's Bond wire boundaries
 test("Guardian pulses admit only exact recipient/bear/kind packets", () => {
 	const entities = createEntities();
 	entities.bootstrap( {
-		protocolVersion: 2,
+		protocolVersion: 3,
 		nativeResult: 1,
 		refObjSnapshot: [],
 		localPlayerEntry: { modelRef: 1933, startProfile: { regionId: 257, x: 1, y: 2, z: 3, angle: 0 } }
@@ -178,7 +178,7 @@ Unbroken Spirit protocol
 test("Resolve validates stacks, tiers and lifetime without touching emotes", () => {
 	const entities = createEntities();
 	entities.bootstrap( {
-		protocolVersion: 2,
+		protocolVersion: 3,
 		nativeResult: 1,
 		refObjSnapshot: [],
 		localPlayerEntry: { modelRef: 1933, startProfile: { regionId: 257, x: 1, y: 2, z: 3, angle: 0 } }

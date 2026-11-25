@@ -39,7 +39,7 @@ for ( const opcode of [ 0xb2f5, 0x30e3 ] ) {
 	test(`arena correction ${opcode.toString( 16 )} cannot inherit the local entity's stale terrain`, () => {
 		const core = createWorldCore( () => {} );
 		core.bootstrap( {
-			protocolVersion: 2,
+			protocolVersion: 3,
 			nativeResult: 1,
 			refObjSnapshot: [],
 			refItemSnapshot: [],

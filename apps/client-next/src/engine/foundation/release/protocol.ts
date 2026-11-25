@@ -67,7 +67,10 @@ checks) reads the same numbers the client ships.
 // Protocol 17 also adds survival checkpoint rewards (#3189).
 // Protocol 21 reads the rent deadline leg on every row of a rental kind, 0
 // on a permanent one (inventory-item.ts, #4240); 19 and 20 are refused.
-export const RELEASE_PROTOCOL = 21;
+// Protocol 22 states the session-constants digest in EnterWorld (#4421):
+// a held answer omits the entry's reference snapshot, magic options and
+// commerce seed, which 21 would wait on forever, so 21 is refused.
+export const RELEASE_PROTOCOL = 22;
 // The public reference file's contract (releaseprotocol.ReferencesContract).
 export const REFERENCES_CONTRACT = 3;
 export const RELEASE_PROTOCOL_HEADER = "X-OpenSRO-Protocol";
