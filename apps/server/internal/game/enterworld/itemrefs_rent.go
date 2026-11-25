@@ -16,6 +16,8 @@ package enterworld
 import (
 	"path/filepath"
 	"strconv"
+
+	"opensro.online/server/internal/game/item/wire"
 )
 
 // rentTermItemID is a refrentitem row's rented-item cell: the term
@@ -34,6 +36,10 @@ deletion time (#4240). No table (the native tree): nothing is.
 ================
 */
 func (t *TextdataItems) markRentItems() {
+	var rented []uint32
+	// The wire measures every row of these references with the rent
+	// leg, so it learns the same set the client's references teach it.
+	defer func() { wire.SetRentRefs(rented) }()
 	for _, fields := range readTextdataFile(filepath.Join(t.dir, "refrentitem.txt")) {
 		if len(fields) <= rentTermItemID || fields[0] != "1" {
 			continue
@@ -44,6 +50,7 @@ func (t *TextdataItems) markRentItems() {
 		}
 		if ref, ok := t.byID[uint32(id)]; ok && ref != nil {
 			ref.Rent = true
+			rented = append(rented, uint32(id))
 		}
 	}
 }

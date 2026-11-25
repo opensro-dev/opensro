@@ -106,7 +106,10 @@ options
 		durability = u32();
 		options();
 		if ( rentRefs.has( refObjId ) ) {
-			rentExpiresUnixMs = Number( v.getBigUint64( take( 8 ), true ) );
+			// Every row of a rental kind carries the leg; 0 is a
+			// permanent row (server wire rentrefs.go), not an expired one.
+			const deadline = Number( v.getBigUint64( take( 8 ), true ) );
+			if ( deadline > 0 ) rentExpiresUnixMs = deadline;
 		}
 	} else if ( band === 0x60 ) {
 		if ( group === 0x280 ) quantity = u32();
