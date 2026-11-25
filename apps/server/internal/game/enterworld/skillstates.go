@@ -5,7 +5,7 @@ skillstates.go - the later retail casting states of the 20% damage buffs
 
 Skilldata column 19 packs up to three casting-state bytes. The native buff
 admission refuses a buff whose states an active effect already holds
-(CSkillManager_CheckCastingStateConflict), so the column decides which buffs
+(its casting-state conflict check), so the column decides which buffs
 stack. The v1.150 client's data gives the 20% damage scroll states 5 and 4,
 the same as the Chinese lightning (5) and fire (4) attack-up buffs, so the
 scroll and those buffs refuse each other.
