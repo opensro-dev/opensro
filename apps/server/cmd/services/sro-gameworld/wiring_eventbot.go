@@ -31,6 +31,7 @@ import (
 	"opensro.online/server/internal/game/social/chat"
 	"opensro.online/server/internal/game/social/eventbot"
 	"opensro.online/server/internal/game/world/instance"
+	"opensro.online/server/internal/game/world/monster"
 	"opensro.online/server/internal/game/world/simulation"
 )
 
@@ -70,8 +71,16 @@ func buildEventBot(division string, deps *enterworld.Deps, presence *livepresenc
 					}
 				}
 				for _, codename := range event.Uniques {
-					if _, known := items.Monsters.ReferenceByCodename(codename); !known {
+					ref, known := items.Monsters.ReferenceByCodename(codename)
+					if !known {
 						log.Errorf("eventbot: %q unique %q is not a monster codename; its rounds will run without it", event.Title, codename)
+						continue
+					}
+					// Only a unique's death records a kill owner
+					// (RecordUniqueKiller), so any other monster's
+					// round always ends with no winner.
+					if !monster.RarityIsUnique(ref.MonsterType) {
+						log.Errorf("eventbot: %q unique %q is not a unique; its kills name no owner and its rounds can never be won", event.Title, codename)
 					}
 				}
 			}

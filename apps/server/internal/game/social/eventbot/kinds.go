@@ -121,8 +121,8 @@ type MonsterPicker interface {
 KillKind
 
 A world kind won by slaying its monster (Random Unique, #3537),
-not by reaching it: the composition root reports the killer to the
-host (ReportSlain) and reaching the monster wins nothing.
+not by reaching it: the composition root reports the kill owner to
+the host (ReportSlain) and reaching the monster wins nothing.
 ================
 */
 type KillKind interface {

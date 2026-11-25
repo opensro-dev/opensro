@@ -338,9 +338,10 @@ func (h *Host) LiveRoundWonByKill() bool {
 ================
 ReportSlain
 
-A kill round's monster fell to killerName (the world recorded the
-killing blow): the round ends however it ends, because the monster
-is gone. An entered killer under the daily cap takes the prize
+A kill round's monster fell, owned by killerName (the world's kill
+owner: the top-damage reward group's representative, the name the
+unique-death notice announces): the round ends however it ends,
+because the monster is gone. An entered killer under the daily cap takes the prize
 through the grant door; a capped account's kill counts for nothing
 and an outsider's kill pays nobody, both announced as no winner.
 True means the round ended; false means no kill round is live.

@@ -5,13 +5,21 @@ kind_randomunique.go - Random Unique: the killer takes the prize (#3537)
 
 Port-only, not native (on the EventBot host, #3533): one of the data
 file's unique monsters appears at one of its spots for the round's
-window; entered players hunt it, and the one who lands the killing
-blow takes the file's reward through the grant door (host.ReportSlain).
-A unique that outlives its window leaves with no winner, and a kill
-by a player who never entered - or by an account at its daily win
-cap - pays nobody: the monster is gone either way, so the round ends
-with the kill. Reaching or targeting the unique wins nothing; only
-the killing blow counts, so a script gains nothing by standing close.
+window; entered players hunt it, and its kill owner takes the file's
+reward through the grant door (host.ReportSlain). The kill owner is
+the world's, not this kind's: the representative of the reward group
+(a party, or a player alone) that dealt the most damage
+(reward_group.go), the name the unique-death notice announces. It is
+not the fatal hit, so a last hit cannot steal a hunt another group
+carried. A unique that outlives its window leaves with no winner, and
+a kill owned by a player who never entered - or by an account at its
+daily win cap - pays nobody: the monster is gone either way, so the
+round ends with the kill. Reaching or targeting the unique wins
+nothing, so a script gains nothing by standing close.
+
+A unique= codename must name a unique: only a unique's death records
+an owner (simulation.RecordUniqueKiller), and the schedule load warns
+about any other.
 
 The file row names the unique codenames and the spots:
 
