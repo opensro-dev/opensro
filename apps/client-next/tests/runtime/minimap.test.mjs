@@ -630,3 +630,19 @@ test("quest marker targets are the tracked quest's own until the tracker row wid
 	assert.deepEqual( questMarkerTargets( quests, 22, true ), [ 101, 102, 201 ] );
 	assert.deepEqual( questMarkerTargets( undefined, 0, true ), [] );
 });
+
+test("a riding party member is marked where its transport carries it, not where it mounted", async () => {
+	const { rosterPositions } = await import( "../../src/engine/foundation/ui/minimap-markers.ts" );
+	const local = { regionId: 25000, x: 100, y: 0, z: 100, angle: 0 };
+	const social = {
+		self: 1,
+		members: [ { id: 2, name: "[AI]Trader_Jin", war: 0x10001, region: 25000, x: 10, y: 0, z: 10 } ]
+	};
+	const entities = [
+		{ gid: 2, kind: "player", name: "[AI]Trader_Jin", regionId: 25000, x: 10, y: 0, z: 10, mountedOn: 77 },
+		{ gid: 77, kind: "cos", name: "", regionId: 25000, x: 900, y: 0, z: 800 }
+	];
+	const [row] = rosterPositions( local, { fortress: { worldId: 0x10001 }, social }, entities );
+	assert.equal( row?.x, 900 );
+	assert.equal( row?.z, 800 );
+});

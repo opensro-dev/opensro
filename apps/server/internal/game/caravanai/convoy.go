@@ -113,10 +113,13 @@ type HireOffer struct {
 type outboxItem struct {
 	player, agent, text string
 	gold                int64
-	end                 HireEnd
-	chat                bool
-	contract            bool
-	regionID            uint16
+	// saleTown prices a finished hire's goods at that town's shop
+	// (WorldHooks.CargoSale) when the flush pays; gold is the fallback.
+	saleTown TownID
+	end      HireEnd
+	chat     bool
+	contract bool
+	regionID uint16
 }
 
 type grandCaravan struct {

@@ -121,7 +121,8 @@ func (r *Runtime) HireAgentStars(division, player string, playerJob uint8, agent
 		return fmt.Sprintf("You already lead %d hired companions.", MaxHiresPerPlayer)
 	}
 	goods := int64(0)
-	if unit.Role == RoleTrader {
+	trader := unit.Role == RoleTrader
+	if trader {
 		if town := r.nearestTownLocked(position(unit)); town != place {
 			r.mu.Unlock()
 			return fmt.Sprintf("%s waits in %s; Traders are hired in the town they wait in.", short, townTitle(town))
@@ -130,9 +131,12 @@ func (r *Runtime) HireAgentStars(division, player string, playerJob uint8, agent
 			stars = unit.CargoStars
 		}
 		stars = min(max(stars, 1), MaxHireStars)
-		goods = GoodsForStars(stars)
 	}
 	r.mu.Unlock()
+	if trader {
+		// Priced outside the lock: the world values the transport's load.
+		goods = r.StarGoods(division, name, stars)
+	}
 
 	price := HireFeeGold + goods
 	if r.hooks.OnHireFee == nil || !r.hooks.OnHireFee(division, player, price) {
@@ -443,6 +447,7 @@ func (r *Runtime) superviseHireLocked(unit *AgentUnit, nowMs int64) bool {
 		return true
 	}
 	player := unit.HiredBy
+	unit.sellAt = place
 	r.endHireLocked([]*AgentUnit{unit}, HireCompleted, nowMs)
 	if len(r.hiredTradersLocked(unit.Division, player)) == 0 {
 		for _, u := range r.hiresOfLocked(unit.Division, player) {
@@ -624,15 +629,18 @@ func (r *Runtime) endHireLocked(units []*AgentUnit, end HireEnd, nowMs int64) {
 		}
 		player := u.HiredBy
 		gold := int64(0)
+		var saleTown TownID
 		if u.Role == RoleTrader && u.CargoStacks > 0 {
 			gold = int64(u.CargoStacks) * u.StackValueGold
 			if end == HireCompleted {
 				gold = gold * int64(100+HiredGoodsMarginPerStarPct*int(u.CargoStars)) / 100
+				saleTown = u.sellAt
 			}
 		}
+		u.sellAt = ""
 		r.outbox = append(r.outbox, outboxItem{chat: true, agent: u.Name, regionID: u.RegionID, text: hireFarewell(u, player, end)})
 		r.releaseLocked(u, nowMs, true)
-		r.outbox = append(r.outbox, outboxItem{player: player, agent: u.Name, gold: gold, end: end})
+		r.outbox = append(r.outbox, outboxItem{player: player, agent: u.Name, gold: gold, end: end, saleTown: saleTown})
 		if len(r.hiresOfLocked(u.Division, player)) == 0 {
 			delete(r.leadBy, agentKey(u.Division, player))
 			delete(r.partyOrder, agentKey(u.Division, player))
@@ -681,6 +689,12 @@ func (r *Runtime) flushOutbox(division string) {
 			}
 			continue
 		}
+		if item.saleTown != "" && r.hooks.CargoSale != nil {
+			// The goods sell as a player's would at that shop.
+			if sale, ok := r.hooks.CargoSale(division, item.agent, item.saleTown); ok {
+				item.gold = sale
+			}
+		}
 		if item.gold > 0 && r.hooks.OnHirePayout != nil {
 			r.hooks.OnHirePayout(division, item.player, item.gold)
 		}
@@ -688,4 +702,22 @@ func (r *Runtime) flushOutbox(division string) {
 			r.hooks.OnHireEnded(division, item.player, item.agent, item.end, item.gold)
 		}
 	}
+}
+
+/*
+================
+StarGoods
+
+What goods rated stars cost on the agent's transport: the world's own
+pricing (WorldHooks.StarGoods, as a player's load is rated), else the
+flat GoodsForStars. Called outside the lock.
+================
+*/
+func (r *Runtime) StarGoods(division, agentName string, stars uint8) int64 {
+	if r.hooks.StarGoods != nil {
+		if gold := r.hooks.StarGoods(division, agentName, stars); gold > 0 {
+			return gold
+		}
+	}
+	return GoodsForStars(stars)
 }

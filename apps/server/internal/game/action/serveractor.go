@@ -105,8 +105,9 @@ func (rt *Runtime) SyncServerActorCargo(division string, c *enterworld.Character
 		}
 	}
 	rt.deps.MutateDeferred(c, "caravan actor tick", func() {
-		// The transient operating float pays ferry fares; it is never player-owned or lootable.
-		if c.Gold == nil || *c.Gold < 5000 {
+		// The transient operating float pays ferry fares; it is never
+		// player-owned or lootable, and it is topped up long before it runs dry.
+		if c.Gold == nil || *c.Gold < 100_000 {
 			gold := int64(1_000_000)
 			c.Gold = &gold
 		}

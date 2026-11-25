@@ -121,6 +121,15 @@ func (game *gameplayPlane) wireCaravanAgents() {
 		OnHireFee: game.caravanHireFee, OnHirePayout: game.caravanHirePayout,
 		UseItem: game.caravanUseItem,
 		PickUp:  game.caravanPickUp,
+		// Hired goods are priced and sold like a player's own load.
+		StarGoods: game.items.ServerActorStarGoods,
+		CargoSale: func(division, agentName string, town caravanai.TownID) (int64, bool) {
+			shop, ok := caravanShopCodename[town]
+			if !ok {
+				return 0, false
+			}
+			return game.items.ServerActorCargoSale(division, agentName, shop)
+		},
 		OnContractFormed: func(division, playerName, agentName string) {
 			if game.parties != nil {
 				game.parties.InvitePlayerFromRuntimeActor(division, agentName, playerName)
@@ -645,6 +654,13 @@ func (game *gameplayPlane) showCaravanLoot(c *enterworld.Character, unit *carava
 
 const caravanLootRefusedMs int64 = 60_000
 
+// caravanShopCodename is each city's specialty shop, where hired goods sell.
+var caravanShopCodename = map[caravanai.TownID]string{
+	caravanai.TownJangan:   "NPC_CH_SPECIAL",
+	caravanai.TownDonwhang: "NPC_WC_SPECIAL",
+	caravanai.TownHotan:    "NPC_KT_SPECIAL",
+}
+
 func (game *gameplayPlane) caravanPickUp(division, name string, itemGID uint32) bool {
 	c := game.deps.CharacterByName(division, name)
 	if c == nil {
@@ -768,16 +784,26 @@ func (game *gameplayPlane) caravanHireWindow(character *enterworld.Character, me
 			out.Message = "Caravan help is hired at a specialty shop or in the Thief Den."
 		}
 	} else {
+		roster := game.caravanAgents.HireRoster(game.divisionID, name, job, place)
 		if place == caravanai.TownThiefDen {
 			out.Title = "Thieves for Hire"
 		} else {
 			out.Title = "Hunters and Traders for Hire - " + formatCaravanTownName(place)
+			// Goods are priced like a player's own load: by a Trader of this
+			// town, whose transport and goods its hire would carry.
+			trader := ""
+			for _, row := range roster {
+				if row.Role == caravanai.RoleTrader && row.Town == place {
+					trader = row.Name
+					break
+				}
+			}
 			for s := uint8(1); s <= caravanai.MaxHireStars; s++ {
-				goods := caravanai.GoodsForStars(s)
+				goods := game.caravanAgents.StarGoods(game.divisionID, trader, s)
 				out.Stars = append(out.Stars, caravanHireStarsJSON{Stars: s, Goods: caravanai.GoldText(goods), Total: caravanai.GoldText(caravanai.HireFeeGold + goods)})
 			}
 		}
-		for _, row := range game.caravanAgents.HireRoster(game.divisionID, name, job, place) {
+		for _, row := range roster {
 			out.Rows = append(out.Rows, caravanHireRowJSON{
 				Name: row.Name, Display: caravanai.DisplayName(row.Name), Role: row.Role.Title(),
 				Town: formatCaravanTownName(row.Town), Available: row.Available, Status: row.Status,

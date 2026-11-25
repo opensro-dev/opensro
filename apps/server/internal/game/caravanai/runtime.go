@@ -121,7 +121,10 @@ type AgentUnit struct {
 	escortMoving      bool
 	// moveDueAtMs is when a follower whose spot drifted past its slack
 	// sets off (its reaction time, followerTemper); 0 while none is due.
-	moveDueAtMs      int64
+	moveDueAtMs int64
+	// sellAt is the town whose shop a hired Trader's sale is priced at
+	// (set as it sells, read by endHireLocked).
+	sellAt           TownID
 	roamDX, roamDZ   float64
 	lastLeaderAt     Waypoint
 	roamAtMs         int64
@@ -161,6 +164,11 @@ type WorldHooks struct {
 	OnContractFormed  func(division, playerName, agentName string)
 	OnContractReward  func(division, hunterPlayerName string, rewardGold int64, traderAgentName string)
 	OnHireFee         func(division, playerName string, fee int64) bool
+	// StarGoods prices goods that rate stars on the agent's transport, as a
+	// player's own load is rated (0 keeps GoodsForStars). CargoSale is what
+	// the agent's goods sell for at town's shop. Both run outside the lock.
+	StarGoods func(division, agentName string, stars uint8) int64
+	CargoSale func(division, agentName string, town TownID) (int64, bool)
 	// OnHirePayout credits a hirer: a hired Trader's sale or returned goods
 	// cost, or a refused hire's fee.
 	OnHirePayout func(division, playerName string, gold int64) bool
@@ -698,6 +706,13 @@ func (r *Runtime) applyDecisionLocked(unit *AgentUnit, d Decision, worldThreatAc
 		unit.pendingTeleport = nil
 		unit.place(*tp, nowMs)
 		unit.catchingUp, unit.roamAtMs = false, 0
+	}
+	if unit.PotionCharges < defaultPotionCharges(unit.Role) && unit.HP > 0 {
+		// Every agent restocks in town or the Den, so it leaves on every
+		// run (own, hired or patrol) with a full supply.
+		if _, inTown := r.placeAtLocked(position(unit)); inTown {
+			unit.PotionCharges = defaultPotionCharges(unit.Role)
+		}
 	}
 	if unit.HiredBy != "" {
 		r.refreshHireLeaderLocked(unit)

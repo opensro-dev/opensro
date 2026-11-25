@@ -345,6 +345,18 @@ func TestCaravanShippedActors(t *testing.T) {
 	if revived.ActiveCOS == nil || revived.ActiveCOS.GID != oldGID || len(revived.ActiveCOS.Container.Rows) != 10 || !enterworld.CharacterAlive(revived) {
 		t.Fatal("defeated caravan did not recover its actor and loaded transport")
 	}
+	// Hired goods are priced like a player's own load: the star thresholds
+	// are shares of a full load of these goods in this transport, and the
+	// goods sell at another town's shop as a player's sale would.
+	three, five := game.items.ServerActorStarGoods(game.divisionID, trader.Name, 3), game.items.ServerActorStarGoods(game.divisionID, trader.Name, 5)
+	if five <= 0 || three != five*400/1000 || game.items.ServerActorStarGoods(game.divisionID, trader.Name, 1) != five/10 {
+		t.Fatalf("star goods 3=%d 5=%d are not the full-load shares", three, five)
+	}
+	if sale, ok := game.items.ServerActorCargoSale(game.divisionID, trader.Name, "NPC_WC_SPECIAL"); game.items.Commerce != nil && (!ok || sale <= 0) {
+		t.Fatalf("the cargo did not value at Donwhang's shop: %d %v", sale, ok)
+	} else if game.items.Commerce == nil && ok {
+		t.Fatal("a sale valued without a shop catalog")
+	}
 
 	// A patrol thief clears all nearby cargo before it starts the native scroll.
 	robber := deps.CharacterByName(game.divisionID, "[AI]Thief_Crow")

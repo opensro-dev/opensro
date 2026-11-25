@@ -790,3 +790,31 @@ func TestTakenLeadHeadsForTheNearestTownFromHere(t *testing.T) {
 		t.Fatal("the lead waits for a Trader 40m away")
 	}
 }
+
+/*
+================
+TestAgentsRestockPotionsInTown
+
+An agent that spent its potions on the road leaves its next run with a
+full supply: it restocks as soon as it stands in a town (or the Den).
+================
+*/
+func TestAgentsRestockPotionsInTown(t *testing.T) {
+	players := map[string]*hirePlayer{"Boss": {at: TownWaypoint(TownJangan), job: domain.JobTrader, online: true}}
+	paid := map[string]int64{}
+	rt := hireRuntime(t, players, &paid)
+	rt.mu.Lock()
+	kwan := rt.findAgentLocked("division", "[AI]Hunter_Kwan")
+	kwan.place(Waypoint{RegionID: 25239, X: 900, Z: 900}, 0)
+	kwan.PotionCharges = 3
+	rt.mu.Unlock()
+	if _, unit, _ := rt.StepAgent(context.Background(), "division", kwan.Name, nil, 1000); unit.PotionCharges > 3 {
+		t.Fatal("an agent restocked out on the road")
+	}
+	rt.mu.Lock()
+	kwan.place(TownWaypoint(TownJangan), 1000)
+	rt.mu.Unlock()
+	if _, unit, _ := rt.StepAgent(context.Background(), "division", kwan.Name, nil, 2000); unit.PotionCharges != defaultPotionCharges(RoleHunter) {
+		t.Fatalf("an agent in town kept %d potions", unit.PotionCharges)
+	}
+}
