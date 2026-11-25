@@ -11,6 +11,8 @@ many rounds of how long, and exactly what a win pays:
 	19:30 raffle rounds=3 round=2m reward=ITEM_ETC_SILK_SCROLLx10 title=Evening Raffle
 	# hide & seek: a hider codename and its spots (Name|Region|X|Z)
 	20:30 hideandseek rounds=5 round=10m reward=ITEM_ETC_SILK_SCROLLx10 hider=MOB_EVENT_HIDER spot=West_Gate|2499|100|200 title=Hide & Seek
+	# random unique: unique codenames and spots, one of each per round
+	21:00 randomunique rounds=1 round=30m reward=ITEM_ETC_SILK_SCROLLx10 unique=MOB_RM_TAHOMET spot=Hotan|2500|100|200 title=Random Unique
 
 Fields after the kind are key=value; title= takes the rest of the
 line. The parse is strict like the house's other operator files: one
@@ -36,9 +38,11 @@ import (
 // The bounds a schedule row must stay inside: a row outside them is a
 // typo, not a plan, and refuses the file.
 const (
-	maxRounds     = 20
-	minRound      = 10 * time.Second
-	maxRound      = 10 * time.Minute
+	maxRounds = 20
+	minRound  = 10 * time.Second
+	// The longest window an event may hold: Random Unique's
+	// reference hunt runs thirty minutes (#3537).
+	maxRound      = 30 * time.Minute
 	maxRewardN    = 1000
 	scheduleClock = "15:04"
 )
@@ -66,6 +70,10 @@ type Event struct {
 	// Hider is the monster/NPC codename a world kind hides (the
 	// file's hider=); empty for kinds that act nowhere.
 	Hider string
+	// Uniques are the monster codenames a kill kind may spawn (the
+	// file's unique= rows, one picked per round); empty for kinds
+	// that spawn nothing.
+	Uniques []string
 	// Spots are the hiding places a world kind rotates through (the
 	// file's spot= rows); empty for kinds that act nowhere.
 	Spots []Spot
@@ -206,13 +214,18 @@ func parseScheduleLine(line string) (Event, error) {
 	seen := map[string]bool{}
 	for _, field := range fields[2:] {
 		key, value, found := strings.Cut(field, "=")
-		// spot= repeats (a world kind's hiding places); every other
-		// field is single.
-		if !found || (key != "spot" && seen[key]) {
+		// spot= and unique= repeat (a world kind's places and
+		// monsters); every other field is single.
+		if !found || (key != "spot" && key != "unique" && seen[key]) {
 			return Event{}, fmt.Errorf("bad field %q", field)
 		}
 		seen[key] = true
 		switch key {
+		case "unique":
+			if value == "" {
+				return Event{}, fmt.Errorf("unique %q is empty", field)
+			}
+			event.Uniques = append(event.Uniques, value)
 		case "hider":
 			if value == "" {
 				return Event{}, fmt.Errorf("hider %q is empty", field)

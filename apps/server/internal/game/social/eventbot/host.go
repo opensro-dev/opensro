@@ -110,12 +110,27 @@ func (h *Host) openRound(now time.Time) {
 		byAccount: map[string]int{},
 	}
 	// A world kind hides before it announces: the hider stands in
-	// the world when the first hint names its area.
+	// the world when the first hint names its area. A kind that
+	// draws its place or its monster (kinds.go's pickers) draws
+	// through the host's pick; the monster pick is recorded on
+	// the live event, so the spawn door and the hints name the
+	// monster that actually stands.
 	if wk, ok := kind.(WorldKind); ok {
-		if spot, ok := wk.SpotFor(event, h.occ.round); ok {
+		spot, picked := wk.SpotFor(event, h.occ.round)
+		if picker, ok := kind.(SpotPicker); ok {
+			spot, picked = picker.PickSpot(event, h.pick)
+		}
+		if picked {
 			h.live.spot = spot
+			spawnEvent := event
+			if picker, ok := kind.(MonsterPicker); ok {
+				if codename, ok := picker.PickMonster(event, h.pick); ok {
+					spawnEvent.Hider = codename
+					h.live.event.Hider = codename
+				}
+			}
 			if h.deps.SpawnHider != nil {
-				if hider, spawned := h.deps.SpawnHider(event, spot, now); spawned {
+				if hider, spawned := h.deps.SpawnHider(spawnEvent, spot, now); spawned {
 					h.live.hider = &hider
 					h.live.nextHint = now.Add(wk.HintEvery())
 				}
@@ -223,6 +238,10 @@ func (h *Host) ReportFound(character *enterworld.Character) bool {
 	if _, world := kind.(WorldKind); !world {
 		return false
 	}
+	// A kill round is never won by reaching the monster.
+	if kill, ok := kind.(KillKind); ok && kill.WonByKill() {
+		return false
+	}
 	at, entered := live.byName[strings.ToLower(character.Name)]
 	if !entered {
 		return false
@@ -287,6 +306,89 @@ func (h *Host) HiderLost() bool {
 	h.live = nil
 	despawnHider(live)
 	h.announce(fmt.Sprintf("The hider was slain! %s round %d ends with no winner.", live.event.DisplayTitle(), live.round))
+	return true
+}
+
+/*
+================
+LiveRoundWonByKill
+
+The live round, if any, is a kill round (kinds.go's KillKind):
+the composition root judges kills for it, never finds.
+================
+*/
+func (h *Host) LiveRoundWonByKill() bool {
+	if !h.Enabled() {
+		return false
+	}
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	if h.live == nil {
+		return false
+	}
+	kind, ok := kindByName(h.live.event.Kind)
+	if !ok {
+		return false
+	}
+	kill, ok := kind.(KillKind)
+	return ok && kill.WonByKill()
+}
+
+/*
+================
+ReportSlain
+
+A kill round's monster fell to killerName (the world recorded the
+killing blow): the round ends however it ends, because the monster
+is gone. An entered killer under the daily cap takes the prize
+through the grant door; a capped account's kill counts for nothing
+and an outsider's kill pays nobody, both announced as no winner.
+True means the round ended; false means no kill round is live.
+================
+*/
+func (h *Host) ReportSlain(killerName string) bool {
+	if !h.Enabled() || killerName == "" {
+		return false
+	}
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	live := h.live
+	if live == nil || live.hider == nil {
+		return false
+	}
+	kind, ok := kindByName(live.event.Kind)
+	if !ok {
+		return false
+	}
+	kill, ok := kind.(KillKind)
+	if !ok || !kill.WonByKill() {
+		return false
+	}
+	h.live = nil
+	despawnHider(live)
+	at, entered := live.byName[strings.ToLower(killerName)]
+	if !entered {
+		h.announce(fmt.Sprintf("The unique was slain by %s, who had not entered %s round %d - no winner.",
+			killerName, live.event.DisplayTitle(), live.round))
+		return true
+	}
+	winner := live.entries[at]
+	now := h.now()
+	if h.deps.WinsToday != nil && h.deps.WinsToday(winner.accountID, now) >= MaxWinsPerAccountPerDay {
+		h.whisperTo(winner, "You slew the unique! But your account has already won enough today, so this win does not count.")
+		h.announce(fmt.Sprintf("%s slew the unique in %s round %d, but their account has already won enough today - no winner.",
+			winner.name, live.event.DisplayTitle(), live.round))
+		return true
+	}
+	paid := h.deps.Grant != nil && h.deps.Grant(winner.division, winner.character, live.event.RewardCodename, live.event.RewardCount)
+	h.whisperTo(winner, winLine(live, paid))
+	if paid {
+		h.announce(fmt.Sprintf("%s slew the unique and won %s round %d, taking %dx %s!",
+			winner.name, live.event.DisplayTitle(), live.round, live.event.RewardCount, live.event.RewardCodename))
+	} else {
+		h.announce(fmt.Sprintf("%s slew the unique in %s round %d - but the prize could not be delivered, so this win is not counted.",
+			winner.name, live.event.DisplayTitle(), live.round))
+	}
 	return true
 }
 

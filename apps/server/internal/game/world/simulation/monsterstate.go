@@ -71,6 +71,10 @@ type divisionMonsterState struct {
 	byRegionGeneration uint64
 	uniqueNotices      []Frame
 	uniqueDeaths       map[uint32]bool
+	// uniqueKillers retains each slain unique's killer name for
+	// owners that judge a kill after the fact (the EventBot's
+	// Random Unique, #3537); cleared with the death record.
+	uniqueKillers map[uint32]string
 	// uniqueTimes is the public tracker's spawn and death record
 	// (unique_states.go, port-only).
 	uniqueTimes map[uint32]*uniqueTimeline

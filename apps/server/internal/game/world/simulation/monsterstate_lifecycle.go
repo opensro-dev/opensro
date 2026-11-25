@@ -853,6 +853,7 @@ func (s *MonsterState) Defeat(divisionID string, gid uint32, at time.Time) bool 
 		state.markUniqueDeath(instance.Ref.RefObjID)
 	}
 	delete(state.uniqueDeaths, gid)
+	delete(state.uniqueKillers, gid)
 	delete(state.lifetimes, gid)
 	state.instances.remove(gid)
 	state.forgetDormant(gid)
