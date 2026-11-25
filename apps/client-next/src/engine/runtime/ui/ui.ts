@@ -472,8 +472,6 @@ import {
 	STALL_COMBO_LARGE,
 	STALL_COMBO_ROWS,
 	STALL_COMBO_MEDIUM,
-	STALL_NET_HOVER,
-	STALL_NET_PRESSED,
 	STALL_CHAT_LIMIT,
 	STALL_PROMPT_SIZE,
 	STALL_TEXT_LIMIT,
@@ -828,7 +826,13 @@ import { feedbackLevels } from "@/engine/foundation/gameplay/feedback-levels";
 import { systemMessageLayout } from "@/engine/foundation/ui/system-message-layout";
 import { verticalSpinChrome } from "@/engine/foundation/ui/vertical-spin";
 import { stretchRing } from "@/engine/foundation/ui/stretch-ring";
-import { comboListLayout } from "@/engine/foundation/ui/combo-box";
+import {
+	comboListLayout,
+	POPUP_LIST_HOVER_BAR,
+	POPUP_LIST_HOVER_TEXT,
+	POPUP_LIST_PRESSED_TEXT,
+	popupListRowBar
+} from "@/engine/foundation/ui/combo-box";
 import { chatLayout, sunDropChatColor } from "@/engine/foundation/ui/chat-layout";
 import { expandedWorldMapOn, worldMapFrame, worldMapImagePaths, worldMapQuads } from "@/engine/foundation/ui/world-map";
 import {
@@ -22203,12 +22207,23 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 						blocks.push( list.popup );
 						for ( const { index, rect: entry } of list.rows ) {
 							const id = "stall-net-choice:" + index;
-							// Native row states (stall-hud.ts STALL_NET_*): pressed
-							// blue, hovered pale yellow, else white.
+							// The popup list's row look (combo-box.ts POPUP_LIST_*): a bar
+							// behind the hovered row, pressed text blue, hovered pale
+							// yellow, else white.
+							if ( hover === id || pressed === id ) {
+								quads.push( {
+									rect: popupListRowBar( entry, text.height() ),
+									uv: [ 0, 0, 1, 1 ],
+									color: POPUP_LIST_HOVER_BAR,
+									rightColor: POPUP_LIST_HOVER_BAR,
+									texture: "",
+									clip: full
+								} );
+							}
 							const color: UiQuad["color"] = pressed === id ?
-								STALL_NET_PRESSED :
+								POPUP_LIST_PRESSED_TEXT :
 								hover === id ?
-								STALL_NET_HOVER :
+								POPUP_LIST_HOVER_TEXT :
 								white;
 							quads.push( ...text.quads( open.entries[index]!, entry, entry, color ) );
 							controls.push( { id, label: open.entries[index]!, rect: entry, kind: "button" } );

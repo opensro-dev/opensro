@@ -13,6 +13,32 @@ which combo is open and its scroll position.
 import type { UiQuad, UiRect } from "@/engine/contracts/ui";
 import { stretchRing } from "./stretch-ring";
 
+// The open list's rows (CIFPopupListCtrl_OnCreate 536E20 over CIFListCtrl).
+// Text by row state (CIFListCtrl_SetRowStateColors 523CD0): white at rest,
+// state 1 0xFFFFFF80 under the cursor (a 0x200 move, 525695), state 2
+// 0xFF8080FF under a held button (a 0x201 down, 5256C2). The hover bar
+// (CIFListCtrl_SetHoverBar 523D40 on, CIFListCtrl_SetHoverBarColor 523D30
+// 0xFF8080FF) is drawn behind the hovered row by CIFListCtrl_DrawRows
+// (5248A0, 524C3D..524CB4) as one flat quad (CIFListCtrl_DrawRowBar 5259E0).
+export const POPUP_LIST_HOVER_TEXT = [ 1, 1, 128 / 255, 1 ] as const;
+export const POPUP_LIST_PRESSED_TEXT = [ 128 / 255, 128 / 255, 1, 1 ] as const;
+export const POPUP_LIST_HOVER_BAR = [ 128 / 255, 128 / 255, 1, 1 ] as const;
+
+/*
+================
+popupListRowBar
+
+The hover bar behind one open-list row. The popup list leaves both bar
+flags at the constructor's 0 (CIFListCtrl_Construct 524260):
+CIFListCtrl_SetBarRowHeight off, so the bar is the text height, and
+CIFListCtrl_SetBarTextWidth off, so it spans the list's client width. The
+text sits centred in the row pitch (524A91..524AA1), and so does the bar.
+================
+*/
+export function popupListRowBar( row: UiRect, fontHeight: number ): UiRect {
+	return [ row[0], row[1] + ((row[3] - fontHeight) >> 1), row[2], fontHeight ];
+}
+
 /*
 ================
 comboBoxChrome
