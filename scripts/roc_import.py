@@ -91,7 +91,6 @@ the later client, the switch is the port's until the chain is whole.
 """
 import json
 import os
-import re
 from pathlib import Path
 
 import alexandria_npcs as characters
@@ -388,43 +387,22 @@ def add_quests(read, text_root, prior):
 	return [row[2] for row in added]
 
 
-# A textuisystem record starts on a "<digits>\t" line and a "//" line
-# ends it without joining any record; every other line, blank ones
-# included, continues the record above it (a multi-line message). Lines
-# end at LF only. The asset build splits the table by this rule
-# (textResources.mjs splitTextDataRecords), so a record dropped here is
-# exactly a record the build would have read.
-UI_RECORD_START = re.compile(r"\d+\t")
-UI_LINE = re.compile(r"[^\n]*\n|[^\n]+")
-
-
 # ================
 # without_ui_texts
 #
 # The variant's textuisystem.txt bytes without the records of the given
 # symbols, or None when the variant has not written that table (it is
 # the native one). Every other byte stays as it was: the rows are not
-# re-encoded. Read row by row and written back with CRLF, the table lost
-# the blank lines inside its multi-line messages, and r204's English
-# coverage gate found 12 of them stale.
+# re-encoded (characters.without_rows, the asset build's record rule).
+# Read row by row and written back with CRLF, the table lost the blank
+# lines inside its multi-line messages, and r204's English coverage gate
+# found 12 of them stale.
 # ================
 def without_ui_texts(text_root, symbols):
 	path = text_root / UI_TABLE
 	if not path.exists():
 		return None
-	raw = path.read_bytes()
-	if not symbols:
-		return raw
-	kept, dropping = [], False
-	for line in UI_LINE.findall(tables.decode_table(raw).lstrip("\ufeff")):
-		if UI_RECORD_START.match(line):
-			columns = line.split("\t")
-			dropping = len(columns) > 1 and columns[1].strip() in symbols
-		elif line.strip().startswith("//"):
-			dropping = False
-		if not dropping:
-			kept.append(line)
-	return b"\xff\xfe" + "".join(kept).encode("utf-16-le")
+	return characters.without_rows(path.read_bytes(), symbols)
 
 
 # ================
