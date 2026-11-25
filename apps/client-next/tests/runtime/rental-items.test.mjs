@@ -105,7 +105,7 @@ function cosRecordWith( rows ) {
 	head[16] = 28;
 	head[17] = rows.length;
 	const parts = [ head ];
-	for ( const [ slot, body ] of rows ) parts.push( Uint8Array.of( slot ), body );
+	for ( const [slot, body] of rows ) parts.push( Uint8Array.of( slot ), body );
 	parts.push( new Uint8Array( 4 ) );
 	const out = new Uint8Array( parts.reduce( ( n, part ) => n + part.length, 0 ) );
 	let o = 0;
