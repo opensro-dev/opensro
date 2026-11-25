@@ -6,8 +6,10 @@ caravan-hire.ts - the AI caravan hire window (port-only 0x3FC3 / 0x7FC3, not nat
 The server opens and refreshes the window with a JSON body (the agents
 hired where the player stands, available ones first, and a Trader's goods
 choices by star); the window's request is u8 operation (0 refresh,
-1 hire), u8 stars, then the agent's name. A client that predates the
-frame drops the unknown opcode.
+1 hire, 2 lead), u8 stars, then the agent's name. 0x3FC4 tells a hirer
+who leads its hired Traders and who may (itself and them); the party
+board's lead badges send operation 2 with the chosen name. A client
+that predates the frames drops the unknown opcodes.
 
 ===========================================================================
 */
@@ -15,6 +17,7 @@ import type { WireFrame } from "@/engine/contracts/network";
 
 export const CARAVAN_HIRE_OPCODE = 0x3fc3;
 export const CARAVAN_HIRE_REQUEST_OPCODE = 0x7fc3;
+export const CARAVAN_LEAD_OPCODE = 0x3fc4;
 
 export interface CaravanHireRow {
 	readonly name: string;
@@ -40,6 +43,11 @@ export interface CaravanHire {
 	readonly stars: readonly CaravanHireStars[];
 }
 
+export interface CaravanLead {
+	readonly leader: string;
+	readonly candidates: readonly { readonly name: string; readonly display: string; }[];
+}
+
 const text = ( v: unknown, max: number ): string => {
 	if ( typeof v !== "string" || v.length > max ) throw new Error( "Invalid caravan hire" );
 	return v;
@@ -52,6 +60,7 @@ createCaravanHire
 */
 export function createCaravanHire() {
 	let hire: CaravanHire | null = null;
+	let lead: CaravanLead | null = null;
 	let sequence = 0;
 	return {
 		/*
@@ -63,9 +72,30 @@ body is a protocol error, never a partial window.
 ================
 		*/
 		receive( frame: WireFrame ): boolean {
+			if ( frame.opcode === CARAVAN_LEAD_OPCODE ) {
+				const raw = JSON.parse( new TextDecoder( "utf-8", { fatal: true } ).decode( frame.payload ) ) as Record<
+					string,
+					unknown
+				>;
+				if ( raw.version !== 1 || !Array.isArray( raw.candidates ) || raw.candidates.length > 16 ) {
+					throw new Error( "Invalid caravan lead" );
+				}
+				const candidates = raw.candidates.map( ( c: Record<string, unknown> ) => ({
+					name: text( c.name, 64 ),
+					display: text( c.display, 64 )
+				}) );
+				lead = candidates.length ? { leader: text( raw.leader, 64 ), candidates } : null;
+				return true;
+			}
 			if ( frame.opcode !== CARAVAN_HIRE_OPCODE ) return false;
-			const raw = JSON.parse( new TextDecoder( "utf-8", { fatal: true } ).decode( frame.payload ) ) as Record<string, unknown>;
-			if ( raw.version !== 1 || !Array.isArray( raw.rows ) || !Array.isArray( raw.stars ) || raw.rows.length > 256 || raw.stars.length > 5 ) {
+			const raw = JSON.parse( new TextDecoder( "utf-8", { fatal: true } ).decode( frame.payload ) ) as Record<
+				string,
+				unknown
+			>;
+			if (
+				raw.version !== 1 || !Array.isArray( raw.rows ) || !Array.isArray( raw.stars ) ||
+				raw.rows.length > 256 || raw.stars.length > 5
+			) {
 				throw new Error( "Invalid caravan hire" );
 			}
 			hire = {
@@ -82,27 +112,37 @@ body is a protocol error, never a partial window.
 					status: text( r.status, 64 )
 				}) ),
 				stars: raw.stars.map( ( s: Record<string, unknown> ) => {
-					if ( typeof s.stars !== "number" || s.stars < 1 || s.stars > 5 ) throw new Error( "Invalid caravan hire" );
+					if ( typeof s.stars !== "number" || s.stars < 1 || s.stars > 5 ) {
+						throw new Error( "Invalid caravan hire" );
+					}
 					return { stars: s.stars, goods: text( s.goods, 32 ), total: text( s.total, 32 ) };
 				} )
 			};
 			return true;
 		},
 		state: () => hire,
+		lead: () => lead,
 		/*
 ================
 request
 
-The window's request frame: refresh (0) or hire (1).
+The window's request frame: refresh (0), hire (1) or lead (2).
 ================
 		*/
-		request( operation: 0 | 1, stars: number, name: string ): WireFrame {
+		request( operation: 0 | 1 | 2, stars: number, name: string ): WireFrame {
 			const bytes = new TextEncoder().encode( name );
-			if ( bytes.length > 64 || !Number.isInteger( stars ) || stars < 0 || stars > 5 ) throw new Error( "Invalid caravan hire request" );
+			if ( bytes.length > 64 || !Number.isInteger( stars ) || stars < 0 || stars > 5 ) {
+				throw new Error( "Invalid caravan hire request" );
+			}
 			return { opcode: CARAVAN_HIRE_REQUEST_OPCODE, payload: Uint8Array.of( operation, stars, ...bytes ) };
 		},
 		clear() {
 			hire = null;
+		},
+		// A new session: the window and the lead state both go.
+		reset() {
+			hire = null;
+			lead = null;
 		}
 	};
 }

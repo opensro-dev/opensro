@@ -1745,7 +1745,7 @@ clears it when another character enters.
 		gmReplies = [];
 		tradeStars = 0;
 		tradeProgress.clear();
-		caravanHire.clear();
+		caravanHire.reset();
 		notices = [];
 		crestUploadInFlight = false;
 		guide = undefined;
@@ -1985,7 +1985,7 @@ next 0x3AC5 status-5 row throw "Unknown academy member status" (#2876).
 			gmReplies = [];
 			tradeStars = 0;
 			tradeProgress.clear();
-			caravanHire.clear();
+			caravanHire.reset();
 			notices = entryEvents.notices.map( key => ({ key, value: 0, sequence: ++noticeSequence }) );
 			feedback.bootstrap( value );
 			const b = value as {
@@ -2397,7 +2397,9 @@ state here before a command can claim a native wire conversation.
 				return null;
 			}
 			if ( command.kind === "caravan-hire" ) {
-				if ( !localGid || (command.operation !== 0 && command.operation !== 1) ) throw Error( "Invalid caravan hire" );
+				if ( !localGid || (command.operation !== 0 && command.operation !== 1 && command.operation !== 2) ) {
+					throw Error( "Invalid caravan hire" );
+				}
 				return sendFrame( caravanHire.request( command.operation, command.stars, command.name ) );
 			}
 			if ( command.kind === "caravan-hire-close" ) {
@@ -6367,6 +6369,7 @@ The published plane when something changed since the last take, else null.
 				...(tradeProgress.state() ? { tradeProgress: tradeProgress.state()! } : {}),
 				// Port-only caravan hire window (caravan-hire.ts).
 				...(caravanHire.state() ? { caravanHire: caravanHire.state()! } : {}),
+				...(caravanHire.lead() ? { caravanLead: caravanHire.lead()! } : {}),
 				eligibility,
 				...(gmCatalogPending && gmCatalog ? { gmCatalog } : {}),
 				autoPotion,

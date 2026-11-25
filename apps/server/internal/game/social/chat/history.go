@@ -103,23 +103,13 @@ type Runtime struct {
 
 /*
 ================
-PublishAgentChat
+AgentChatPayload
 
-Publishes a named public chat line from a server-owned AI caravan agent
-into the division's chat channel and transcript.
+Builds a normal, local chat line for observers that know the agent's GID.
 ================
 */
-func (rt *Runtime) PublishAgentChat(division, agentName, text string) {
-	if rt == nil || division == "" || agentName == "" || text == "" {
-		return
-	}
-	// The client refuses a line over MaxChatNoticeUnits as a protocol error
-	// (chat.ts CHAT_TEXT_LIMIT) and the line would replay at every login:
-	// an agent's line is cut to fit. A player's line is bounded by its own
-	// client before it is sent.
-	text = ClampChatUnits(text, MaxChatNoticeUnits)
-	payload := EncodeChatBroadcastNamed(ChatTypeGlobal, agentName, text)
-	rt.publish(division, agentName, text, publicLine{payload: payload})
+func AgentChatPayload(gid uint32, text string) []byte {
+	return EncodeChatBroadcastGid(ChatTypeAll, gid, ClampChatUnits(text, MaxChatNoticeUnits))
 }
 
 /*

@@ -3628,10 +3628,18 @@ export function createUi( ports: UiPorts ) {
 			}
 		} else if ( id === "caravan-hire-star-less" || id === "caravan-hire-star-more" ) {
 			if ( caravanStarPick ) {
-				caravanStarPick.stars = Math.max( 1, Math.min( hire.stars.length, caravanStarPick.stars + (id === "caravan-hire-star-less" ? -1 : 1) ) );
+				caravanStarPick.stars = Math.max(
+					1,
+					Math.min( hire.stars.length, caravanStarPick.stars + (id === "caravan-hire-star-less" ? -1 : 1) )
+				);
 			}
 		} else if ( id === "caravan-hire-star-ok" && caravanStarPick ) {
-			sendGameplay( { kind: "caravan-hire", operation: 1, stars: caravanStarPick.stars, name: caravanStarPick.name } );
+			sendGameplay( {
+				kind: "caravan-hire",
+				operation: 1,
+				stars: caravanStarPick.stars,
+				name: caravanStarPick.name
+			} );
 			caravanStarPick = null;
 		} else if ( id === "caravan-hire-star-cancel" ) {
 			caravanStarPick = null;
@@ -6246,6 +6254,8 @@ export function createUi( ports: UiPorts ) {
 			sendGameplay( { kind: "attack", gid: view.gameplay.target } );
 		} else if ( id.startsWith( "party-target:" ) ) {
 			sendGameplay( { kind: "select", gid: Number( id.slice( 13 ) ) } );
+		} else if ( id.startsWith( "caravan-lead:" ) ) {
+			sendGameplay( { kind: "caravan-hire", operation: 2, stars: 0, name: id.slice( 13 ) } );
 		} else if ( id === "self-target" && view.gameplay?.localGid ) {
 			sendGameplay( { kind: "select", gid: view.gameplay.localGid } );
 			requestRebirthPrompt( view.gameplay.localGid );
@@ -12653,6 +12663,43 @@ export function createUi( ports: UiPorts ) {
 						);
 					}
 				}
+				/*
+				================
+				caravanLeadBadge
+
+				Port-only, not native: a hirer's party board marks who leads its
+				hired Traders ("Leads") and gives the others who may a "Lead"
+				badge that hands them the lead (caravan-hire.ts, operation 2).
+				================
+				*/
+				const caravanLead = game?.caravanLead;
+				const caravanLeadBadge = ( r: UiRect, name: string, display: string, self = false ) => {
+					const leads = caravanLead?.leader.toLowerCase() === name.toLowerCase();
+					rect( r, leads ? [ 0.5, 0.34, 0.06, 0.92 ] : [ 0.08, 0.07, 0.05, 0.85 ] );
+					quads.push(
+						...text.quads(
+							leads ? "Leads" : "Lead",
+							r,
+							full,
+							leads ? [ 1, 0.86, 0.45, 1 ] : [ 0.85, 0.8, 0.68, 1 ],
+							{
+								hAlign: 1,
+								vAlign: 1
+							}
+						)
+					);
+					controls.push( {
+						id: "caravan-lead:" + name,
+						label: leads ? (self ? "You lead the caravan" : display + " leads the caravan") : "Lead",
+						helpText: self ?
+							(leads ? "You lead the caravan" : "Lead the caravan yourself") :
+							(leads ? display + " leads the caravan" : "Make " + display + " lead the caravan"),
+						kind: "button",
+						rect: r,
+						disabled: leads
+					} );
+					blocks.push( r );
+				};
 				if ( hudData && game?.social?.leader ) {
 					const origin = authoredRect( hudData.root.GDR_QUICKPARTYBOARD!, 0, 0 ),
 						slot = hudData.windows.ifquickpartyslot!,
@@ -12766,6 +12813,10 @@ export function createUi( ports: UiPorts ) {
 							} );
 							blocks.push( r );
 						}
+						const leadRow = caravanLead?.candidates.find( c =>
+							c.name.toLowerCase() === row.member.name.toLowerCase()
+						);
+						if ( leadRow ) caravanLeadBadge( [ x + 84, y + 1, 36, 13 ], leadRow.name, leadRow.display );
 						// The member's two main masteries: roster data, so they show for a member
 						// out of view and without the buff preference.
 						for ( const entry of row.masteries ) {
@@ -12818,6 +12869,13 @@ export function createUi( ports: UiPorts ) {
 							}
 							targetBottom = Math.max( targetBottom, boardBottom );
 						}
+					}
+					// The hirer itself is not on the board: its badge sits under its
+					// own panel.
+					const self = caravanLead?.candidates[0], mini = hudData.root.GDR_PLAYER_MINI_INFO;
+					if ( self && mini ) {
+						const r = authoredRect( mini, 0, 0 );
+						caravanLeadBadge( [ r[0] + r[2] - 40, r[1] + r[3] + 1, 38, 13 ], self.name, "You", true );
 					}
 				}
 				// The chat is part of the native HUD a fine pointer keeps, so it
@@ -28308,10 +28366,24 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 				windowBox( hire.title, px, py, width, height );
 				closeButton( px + width - 26, py + 6, "caravan-hire-close" );
 				paths.push( MESSAGE_TILE, ...PARTS.map( part => FRAME + part + ".png" ) );
-				quads.push( ...normalTile( [ px + 16, py + 40, width - 32, height - 56 ], MESSAGE_TILE, resources.size( MESSAGE_TILE ), full ) );
+				quads.push(
+					...normalTile(
+						[ px + 16, py + 40, width - 32, height - 56 ],
+						MESSAGE_TILE,
+						resources.size( MESSAGE_TILE ),
+						full
+					)
+				);
 				const available = hire.rows.filter( r => r.available ).length;
-				label( `${available} of ${hire.rows.length} available - hire fee ${hire.fee} gold`, px + 28, py + 50, gold );
-				if ( hire.stars.length > 0 ) label( "Traders also carry goods you buy for them.", px + 28, py + 68, muted );
+				label(
+					`${available} of ${hire.rows.length} available - hire fee ${hire.fee} gold`,
+					px + 28,
+					py + 50,
+					gold
+				);
+				if ( hire.stars.length > 0 ) {
+					label( "Traders also carry goods you buy for them.", px + 28, py + 68, muted );
+				}
 				image(
 					[ px + width - 196, py + 50, 16, 16 ],
 					ROOT + "interface/ifcommon/com_checkbutton_" + (caravanOnlyAvailable ? "on" : "off") + ".png"
@@ -28332,9 +28404,13 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 				rows.slice( caravanPage * perPage, (caravanPage + 1) * perPage ).forEach( ( row, i ) => {
 					const y = top + 24 + i * rowH, color = row.available ? green : red;
 					if ( i % 2 === 0 ) rect( [ px + 28, y - 2, width - 56, rowH ], [ 1, 1, 1, 0.04 ] );
-					const who = row.role === "Thief" ? `${row.display} (Thief)` : `${row.display} (${row.role}, ${row.town})`;
+					const who = row.role === "Thief" ?
+						`${row.display} (Thief)` :
+						`${row.display} (${row.role}, ${row.town})`;
 					quads.push( ...text.quads( who, [ px + 34, y, 290, rowH - 4 ], full, color, { vAlign: 1 } ) );
-					quads.push( ...text.quads( row.status, [ px + 330, y, width - 366, rowH - 4 ], full, color, { vAlign: 1 } ) );
+					quads.push(
+						...text.quads( row.status, [ px + 330, y, width - 366, rowH - 4 ], full, color, { vAlign: 1 } )
+					);
 					if ( row.available ) {
 						controls.push( {
 							id: "caravan-hire-row:" + row.name,
@@ -28345,11 +28421,27 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 					}
 				} );
 				if ( rows.length === 0 ) {
-					quads.push( ...text.quads( caravanOnlyAvailable ? "Nobody is free right now." : "Nobody works here.", [ px + 28, top + 40, width - 56, 20 ], full, muted, { hAlign: 1 } ) );
+					quads.push(
+						...text.quads(
+							caravanOnlyAvailable ? "Nobody is free right now." : "Nobody works here.",
+							[ px + 28, top + 40, width - 56, 20 ],
+							full,
+							muted,
+							{ hAlign: 1 }
+						)
+					);
 				}
 				const bottom = py + height - 92;
 				button( "caravan-hire-prev", "Previous", px + 40, bottom, 100, caravanPage === 0 );
-				quads.push( ...text.quads( `Page ${caravanPage + 1} / ${pages}`, [ px + 150, bottom + 5, 120, 20 ], full, white, { hAlign: 1 } ) );
+				quads.push(
+					...text.quads(
+						`Page ${caravanPage + 1} / ${pages}`,
+						[ px + 150, bottom + 5, 120, 20 ],
+						full,
+						white,
+						{ hAlign: 1 }
+					)
+				);
 				button( "caravan-hire-next", "Next page", px + 280, bottom, 100, caravanPage >= pages - 1 );
 				button( "caravan-hire-refresh", "Refresh", px + 400, bottom, 100 );
 				quads.push(
@@ -28367,14 +28459,53 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 					const sw = 340, sh = 210, sx = px + Math.floor( (width - sw) / 2 ), sy = py + 120;
 					rect( [ px, py, width, height ], [ 0, 0, 0, 0.45 ] );
 					windowBox( `Hire ${pick.display}`, sx, sy, sw, sh );
-					quads.push( ...normalTile( [ sx + 14, sy + 38, sw - 28, sh - 52 ], MESSAGE_TILE, resources.size( MESSAGE_TILE ), full ) );
-					quads.push( ...text.quads( "How many stars of goods will this Trader carry?", [ sx + 20, sy + 46, sw - 40, 18 ], full, muted, { hAlign: 1 } ) );
+					quads.push(
+						...normalTile(
+							[ sx + 14, sy + 38, sw - 28, sh - 52 ],
+							MESSAGE_TILE,
+							resources.size( MESSAGE_TILE ),
+							full
+						)
+					);
+					quads.push(
+						...text.quads(
+							"How many stars of goods will this Trader carry?",
+							[ sx + 20, sy + 46, sw - 40, 18 ],
+							full,
+							muted,
+							{ hAlign: 1 }
+						)
+					);
 					button( "caravan-hire-star-less", "-", sx + 70, sy + 74, 40, pick.stars <= 1 );
-					quads.push( ...text.quads( `${pick.stars} ${pick.stars === 1 ? "star" : "stars"}`, [ sx + 115, sy + 78, 110, 20 ], full, gold, { hAlign: 1 } ) );
+					quads.push(
+						...text.quads(
+							`${pick.stars} ${pick.stars === 1 ? "star" : "stars"}`,
+							[ sx + 115, sy + 78, 110, 20 ],
+							full,
+							gold,
+							{ hAlign: 1 }
+						)
+					);
 					button( "caravan-hire-star-more", "+", sx + 230, sy + 74, 40, pick.stars >= hire.stars.length );
 					if ( choice ) {
-						quads.push( ...text.quads( `Goods: ${choice.goods} gold`, [ sx + 20, sy + 112, sw - 40, 18 ], full, white, { hAlign: 1 } ) );
-						quads.push( ...text.quads( `Total with the fee: ${choice.total} gold`, [ sx + 20, sy + 132, sw - 40, 18 ], full, gold, { hAlign: 1 } ) );
+						quads.push(
+							...text.quads(
+								`Goods: ${choice.goods} gold`,
+								[ sx + 20, sy + 112, sw - 40, 18 ],
+								full,
+								white,
+								{ hAlign: 1 }
+							)
+						);
+						quads.push(
+							...text.quads(
+								`Total with the fee: ${choice.total} gold`,
+								[ sx + 20, sy + 132, sw - 40, 18 ],
+								full,
+								gold,
+								{ hAlign: 1 }
+							)
+						);
 					}
 					button( "caravan-hire-star-ok", "Hire", sx + 40, sy + 166, 110 );
 					button( "caravan-hire-star-cancel", "Cancel", sx + sw - 150, sy + 166, 110 );

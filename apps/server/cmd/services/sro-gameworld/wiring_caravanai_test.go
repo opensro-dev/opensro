@@ -11,6 +11,7 @@ import (
 	"context"
 	"encoding/binary"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -29,6 +30,7 @@ import (
 	"opensro.online/server/internal/game/world/movement"
 	"opensro.online/server/internal/game/world/simulation"
 	"opensro.online/server/internal/testsupport/gamedatatest"
+	"opensro.online/server/internal/testsupport/wait"
 	"opensro.online/server/internal/transport"
 )
 
@@ -68,7 +70,7 @@ func TestCaravanShippedActors(t *testing.T) {
 	deps.MutateCharacters = authority.MutateCharacters
 	deps.UpdateCharacters = authority.UpdateCharacters
 	deps.ReadCharacter = func(_ string, read func()) { authority.ReadState(read) }
-	game := &gameplayPlane{divisionID: "caravan-test", deps: deps, items: action.NewRuntime(deps, nil)}
+	game := &gameplayPlane{divisionID: "caravan-test", deps: deps, items: action.NewRuntime(deps, nil), hub: &transport.Hub{}}
 	game.water = movement.NewAuthorityValidator(paths.WorldAuthorityDir)
 	game.movement = movement.NewRuntime(deps, game.items.Worlds)
 	game.movement.Nav = game.water
@@ -82,7 +84,7 @@ func TestCaravanShippedActors(t *testing.T) {
 	if err := game.configureCaravanHighway(&cfg); err != nil {
 		t.Fatal(err)
 	}
-	game.caravanAgents = caravanai.NewRuntime(cfg, nil, caravanai.WorldHooks{Move: game.caravanMove, Ferry: game.caravanFerry})
+	game.caravanAgents = caravanai.NewRuntime(cfg, nil, caravanai.WorldHooks{Move: game.caravanMove, Ferry: game.caravanFerry, PickUp: game.caravanPickUp})
 	t.Cleanup(func() {
 		if err := game.caravanAgents.Close(); err != nil {
 			t.Error(err)
@@ -101,8 +103,8 @@ func TestCaravanShippedActors(t *testing.T) {
 		if enterworld.ObjectIDForCharacter(c) >= domain.NPCGIDBase {
 			t.Fatal("actor occupied a foreign object identity range")
 		}
-		if c.ActiveCOS != nil && (c.ActiveCOS.GID < domain.COSGIDBase || c.ActiveCOS.GID > domain.COSGIDLimit || c.ActiveCOS.Codename != "COS_T_DHORSE1") {
-			t.Fatal("transport identity or shipped reference invalid")
+		if c.ActiveCOS != nil && (c.ActiveCOS.GID < domain.COSGIDBase || c.ActiveCOS.GID > domain.COSGIDLimit || c.ActiveCOS.Codename != "COS_T_DHORSE3") {
+			t.Fatalf("transport identity or shipped reference invalid: %+v", c.ActiveCOS)
 		}
 		if !c.RuntimeOnly || c.AccountID != "" || enterworld.DressedJob(c) == 0 || deps.CharacterByID(game.divisionID, c.ID) != c {
 			t.Fatalf("invalid combat actor %s", c.Name)
@@ -198,9 +200,10 @@ func TestCaravanShippedActors(t *testing.T) {
 	}
 
 	game.items.Monsters = simulation.NewMonsterState(monster.TemplateFromParts(nil, nil))
-	thief, trader := game.caravanActors[8], game.caravanActors[1]
+	thief := game.deps.CharacterByName(game.divisionID, "[AI]Thief_Viper")
+	trader := game.deps.CharacterByName(game.divisionID, "[AI]Trader_Mei")
 	at := simulation.Spawn{RegionID: 0x62aa, X: 500, Y: 0, Z: 500}
-	game.items.SyncServerActor(game.divisionID, trader, at, false, 12, true)
+	game.items.SyncServerActorCargo(game.divisionID, trader, at, false, 10, 3, true)
 	at.X += 2
 	game.items.SyncServerActor(game.divisionID, thief, at, false, 0, false)
 	if _, _, err := combat.PlayerStats(thief, combat.Catalogs{Items: deps.Items, Skills: deps.Skills, MagicOptions: deps.MagicOptions}); err != nil {
@@ -254,6 +257,9 @@ func TestCaravanShippedActors(t *testing.T) {
 	if took := game.items.ServerActorPickup(game.divisionID, thief.Name, goods[1].Gid); len(took.Broadcast) == 0 {
 		t.Fatal("the Thief did not take the goods")
 	}
+	if thief.ActiveCOS == nil || thief.ActiveCOS.Container == nil || len(thief.ActiveCOS.Container.Rows) != 1 {
+		t.Fatalf("expected the Thief to summon a transport and load stolen goods into it, cos=%+v", thief.ActiveCOS)
+	}
 	potion, _ := deps.Items.ItemRefByCodename("ITEM_ETC_HP_POTION_05")
 	dropped := game.items.Ground.Add(game.divisionID, grounditem.Item{RefObjID: potion.RefObjID, Codename: potion.Codename, TypeFlags: potion.TypeFlags(), StackCount: 5,
 		Position: grounditem.Point{RegionID: at.RegionID, X: float32(at.X), Z: float32(at.Z)}})
@@ -265,11 +271,14 @@ func TestCaravanShippedActors(t *testing.T) {
 	}
 
 	template := monster.LoadTemplate(paths.TextdataDir)
-	var bandit monster.MonsterRef
+	var bandit, nativeHunter monster.MonsterRef
 	for _, ref := range template.Refs {
-		if ref.TypeID4 == 2 && ref.Level == 90 && strings.HasPrefix(ref.Codename, "MOB_THIEF_") {
+		if ref.TypeID4 == 2 && ref.Level == 90 && strings.HasPrefix(ref.Codename, "MOB_THIEF_") && (bandit.RefObjID == 0 || ref.RefObjID < bandit.RefObjID) {
 			bandit = ref
-			break
+		}
+		if ref.TypeID4 == 3 && strings.HasPrefix(ref.Codename, "MOB_HUNTER_") &&
+			(nativeHunter.RefObjID == 0 || ref.Level > nativeHunter.Level || ref.Level == nativeHunter.Level && ref.RefObjID < nativeHunter.RefObjID) {
+			nativeHunter = ref
 		}
 	}
 	if bandit.RefObjID == 0 {
@@ -278,12 +287,13 @@ func TestCaravanShippedActors(t *testing.T) {
 	game.items.Monsters = simulation.NewMonsterState(monster.TemplateFromParts(map[uint32]monster.MonsterRef{bandit.RefObjID: bandit}, []monster.NestRow{{SpawnPoint: monster.SpawnPoint{RefObjID: bandit.RefObjID, RegionID: at.RegionID, X: at.X + 3, Y: at.Y, Z: at.Z}, MaxCount: 1, RetailEvidence: true}}))
 	game.items.Monsters.StartDivision(game.divisionID)
 	game.items.Monsters.AdvancePopulation(game.items.Monsters.CurrentTimeMillis())
-	guard := game.caravanActors[4]
+	guard := game.deps.CharacterByName(game.divisionID, "[AI]Hunter_Wei")
 	game.items.SyncServerActor(game.divisionID, guard, at, false, 0, false)
 	if err := game.items.AdmitServerActor(game.divisionID, guard.Name); err != nil {
 		t.Fatal(err)
 	}
-	unit := game.caravanAgents.EnsureDivisionRoster(game.divisionID)[4]
+	units := game.caravanAgents.EnsureDivisionRoster(game.divisionID)
+	unit := units[slices.IndexFunc(units, func(unit *caravanai.AgentUnit) bool { return unit.Name == guard.Name })]
 	unit.RegionID, unit.X, unit.Y, unit.Z = at.RegionID, float32(at.X), float32(at.Y), float32(at.Z)
 	enemy, _ := game.caravanNPCThreat(unit, now.UnixMilli())
 	if enemy == 0 {
@@ -310,12 +320,105 @@ func TestCaravanShippedActors(t *testing.T) {
 	if !advanced {
 		t.Fatal("hunter used only base attacks")
 	}
+
+	if nativeHunter.RefObjID == 0 {
+		t.Fatal("shipped max-level hunter reference unavailable")
+	}
+	for _, name := range []string{"[AI]Thief_Viper", "[AI]Thief_Kael"} {
+		actor := game.deps.CharacterByName(game.divisionID, name)
+		game.items.Monsters = simulation.NewMonsterState(monster.TemplateFromParts(
+			map[uint32]monster.MonsterRef{nativeHunter.RefObjID: nativeHunter},
+			[]monster.NestRow{{SpawnPoint: monster.SpawnPoint{RefObjID: nativeHunter.RefObjID, RegionID: at.RegionID, X: at.X + 3, Y: at.Y, Z: at.Z}, MaxCount: 1, RetailEvidence: true}},
+		))
+		game.items.Monsters.StartDivision(game.divisionID)
+		game.items.Monsters.AdvancePopulation(now.UnixMilli())
+		game.items.SyncServerActor(game.divisionID, actor, at, false, 0, false)
+		if err := game.items.AdmitServerActor(game.divisionID, name); err != nil {
+			t.Fatal(err)
+		}
+		unit := units[slices.IndexFunc(units, func(unit *caravanai.AgentUnit) bool { return unit.Name == name })]
+		unit.RegionID, unit.X, unit.Y, unit.Z = at.RegionID, float32(at.X), float32(at.Y), float32(at.Z)
+		target, _ := game.caravanNPCThreat(unit, now.UnixMilli())
+		initial, ok := game.items.Monsters.Get(game.divisionID, target)
+		if !ok || !initial.HunterMonster() {
+			t.Fatalf("%s did not acquire a native hunter", name)
+		}
+		for range 80 {
+			now = now.Add(100 * time.Millisecond)
+			game.caravanCast(actor, target, now.UnixMilli())
+			tick(now.UnixMilli())
+		}
+		if injured, ok := game.items.Monsters.Get(game.divisionID, target); ok && injured.CurrentHP >= initial.CurrentHP {
+			t.Fatalf("%s did not damage a native hunter", name)
+		}
+	}
 	oldGID := trader.RuntimeTransportGID
 	trader.ActiveCOS = nil
 	trader.CurrentHP = new(int64)
 	revived := game.items.SyncServerActor(game.divisionID, trader, at, true, 10, false)
 	if revived.ActiveCOS == nil || revived.ActiveCOS.GID != oldGID || len(revived.ActiveCOS.Container.Rows) != 10 || !enterworld.CharacterAlive(revived) {
 		t.Fatal("defeated caravan did not recover its actor and loaded transport")
+	}
+
+	// A patrol thief clears all nearby cargo before it starts the native scroll.
+	robber := deps.CharacterByName(game.divisionID, "[AI]Thief_Crow")
+	units = game.caravanAgents.EnsureDivisionRoster(game.divisionID)
+	robberUnit := units[slices.IndexFunc(units, func(u *caravanai.AgentUnit) bool { return u.Name == robber.Name })]
+	robbery := simulation.Spawn{RegionID: robberUnit.RegionID, X: float64(robberUnit.X), Y: float64(robberUnit.Y), Z: float64(robberUnit.Z)}
+	game.items.SyncServerActor(game.divisionID, robber, robbery, false, 0, false)
+	// Even a thief hit in the fight resumes looking for goods once combat has stopped.
+	game.caravanAgents.RecordPlayerAttack(game.divisionID, robber.Name, trader.Name, 1, now.UnixMilli())
+	var haul []uint32
+	ref, _ := deps.Items.ItemRefByCodename("ITEM_ETC_TRADE_CH_01")
+	for range 3 {
+		item := game.items.Ground.Add(game.divisionID, grounditem.Item{
+			Position:   grounditem.Point{RegionID: robbery.RegionID, X: float32(robbery.X), Z: float32(robbery.Z)},
+			TradeOwner: trader.Job.Alias, RefObjID: ref.RefObjID, Codename: ref.Codename, TypeFlags: ref.TypeFlags(), StackCount: 4,
+		})
+		haul = append(haul, item.Gid)
+	}
+	for i := range haul {
+		game.showCaravanLoot(robber, robberUnit, nil, now.UnixMilli())
+		if game.items.ServerActorReturnPending(game.divisionID, robber.Name) {
+			t.Fatalf("the Den scroll started with %d stacks still on the ground", len(haul)-i)
+		}
+		_, robberUnit, _ = game.caravanAgents.StepAgent(context.Background(), game.divisionID, robber.Name, nil, now.UnixMilli())
+		picked := 0
+		for _, candidate := range haul {
+			if _, left := game.items.Ground.Get(game.divisionID, candidate); !left {
+				picked++
+			}
+		}
+		if picked != i+1 {
+			t.Fatalf("scan %d left %d of %d stacks on the ground", i+1, len(haul)-picked, len(haul))
+		}
+		if i == 0 {
+			deps.Mutate(robber, "one-slot robber test transport", func() {
+				robber.ActiveCOS.Container.Capacity = 1
+			})
+		}
+		now = now.Add(time.Second)
+	}
+	// A different trader's goods cannot merge into the occupied slot.
+	excess := game.items.Ground.Add(game.divisionID, grounditem.Item{
+		Position:   grounditem.Point{RegionID: robbery.RegionID, X: float32(robbery.X), Z: float32(robbery.Z)},
+		TradeOwner: "OtherTrader", RefObjID: ref.RefObjID, Codename: ref.Codename, TypeFlags: ref.TypeFlags(), StackCount: 4,
+	})
+	game.showCaravanLoot(robber, robberUnit, nil, now.UnixMilli())
+	if _, left := game.items.Ground.Get(game.divisionID, excess.Gid); !left {
+		t.Fatal("unmergeable cargo disappeared from the ground")
+	}
+	if !game.items.ServerActorReturnPending(game.divisionID, robber.Name) {
+		t.Fatal("the Den scroll did not start after collecting the whole haul")
+	}
+	if ride := game.items.ServerActorRide(game.divisionID, robber.Name, true); !robber.ActiveCOS.Mounted {
+		t.Fatalf("loaded thief could not mount during the scroll: %+v", ride)
+	}
+	game.keepCaravanSpeed(robber, robberUnit, now.UnixMilli())
+	units = game.caravanAgents.EnsureDivisionRoster(game.divisionID)
+	robberUnit = units[slices.IndexFunc(units, func(u *caravanai.AgentUnit) bool { return u.Name == robber.Name })]
+	if want := game.caravanRunSpeed(trader); robberUnit.RunSpeed != want {
+		t.Fatalf("loaded thief speed %v, want trader speed %v", robberUnit.RunSpeed, want)
 	}
 
 	// Regression: HealServerActor heals active transport HP alongside actor vitals, and
@@ -341,6 +444,52 @@ func TestCaravanShippedActors(t *testing.T) {
 			t.Fatalf("expected overlapping caravanCast to suppress mid-cast restart, got frames=%d broadcast=%d", len(suppressed.Frames), len(suppressed.Broadcast))
 		}
 	}
+
+	// Finish through the same arrival lane the live GameWorld uses.
+	now = now.Add(5*time.Minute + time.Second)
+	game.items.TickHook()(now.UnixMilli())
+	ctx, cancel := context.WithCancel(context.Background())
+	arrivalsDone := make(chan struct{})
+	go func() {
+		defer close(arrivalsDone)
+		game.items.RunReturnArrivals(ctx)
+	}()
+	defer func() { cancel(); <-arrivalsDone }()
+	den := caravanai.TownWaypoint(caravanai.TownThiefDen).RegionID
+	wait.Eventually(t, 3*time.Second, "thief arrives in the Bandit Den", func() bool {
+		return game.items.LiveSpawnFor(game.divisionID, robber).RegionID == den
+	})
+	cancel()
+	<-arrivalsDone
+
+	grand := caravanai.NewRuntime(cfg, nil, caravanai.WorldHooks{})
+	defer grand.Close()
+	if !grand.StartGrandCaravan(game.divisionID, now.UnixMilli()) {
+		t.Fatal("could not muster the shipped grand caravan")
+	}
+	departure := now.UnixMilli() + caravanai.GrandCaravanMusterMs
+	grand.StepAgent(context.Background(), game.divisionID, robber.Name, nil, departure)
+	game.items.TradeTiers = true
+	var grandActors []*enterworld.Character
+	var transports []uint32
+	for _, u := range grand.EnsureDivisionRoster(game.divisionID) {
+		if u.RunKind != caravanai.RunGrand || u.Role != caravanai.RoleTrader {
+			continue
+		}
+		c := deps.CharacterByName(game.divisionID, u.Name)
+		spawn := simulation.Spawn{RegionID: u.RegionID, X: float64(u.X), Y: float64(u.Y), Z: float64(u.Z)}
+		loaded := game.items.SyncServerActorCargo(game.divisionID, c, spawn, false, u.CargoStacks, u.CargoStars, u.OriginTown == caravanai.TownDonwhang)
+		if loaded.ActiveCOS == nil {
+			t.Fatalf("grand trader %s left without a transport", u.Name)
+		}
+		transports = append(transports, loaded.ActiveCOS.GID)
+		grandActors = append(grandActors, c)
+	}
+	stars := game.items.CaravanStarFrames(game.divisionID, nil, grandActors, departure)
+	if len(transports) != 2 || len(stars) != 1 || !slices.Equal(stars[0].Payload, wire.EncodeCaravanStars(transports)) {
+		t.Fatalf("expected two five-star transports for the departing convoy, transports=%v stars=%+v", transports, stars)
+	}
+
 }
 
 /*
@@ -569,7 +718,7 @@ func TestCaravanPartyAndMovementPolish(t *testing.T) {
 
 	// !hire auto-invites the hiring player (0x3393 prompt) and accepting forms the party.
 	reply, handled := rt.HandlePlayerCommand(wiringPublicationDivision, hirer.Name, domain.JobTrader, "!hire [AI]Hunter_Kwan", 1000)
-	if !handled || !strings.Contains(reply, "guard your caravan") {
+	if !handled || !strings.Contains(reply, "joins you for one trade run") {
 		t.Fatalf("!hire unexpected reply=%q handled=%v", reply, handled)
 	}
 	_ = waitForOpcode(hirerConn, party.OpInvitationProposal)
@@ -596,5 +745,111 @@ func TestCaravanPartyAndMovementPolish(t *testing.T) {
 	_ = waitForOpcode(hirerConn, party.OpPartyInfo)
 	if _, ok := parties.Registry().PartyOf(wiringPublicationDivision, "[AI]Hunter_Kwan"); !ok {
 		t.Fatal("expected party formed after hirer direct 0x70D5 invite")
+	}
+}
+
+/*
+================
+TestCaravanThiefDenOpenPlazaAndMovement
+
+Verifies against the shipped v1.150 navmesh that:
+  - TownThiefDen terminal is on open walkable ground (not inside NPC_TD_THIEF_BUY's stairs),
+  - Idle Thieves in Thief Den actually move around instead of stacking stuck on one pixel,
+  - Highway patrol Thieves remain out on the roads (outside Thief Den),
+  - Traders stay mounted on their Lv.90 COS_T_DHORSE3 transport horses.
+
+================
+*/
+func TestCaravanThiefDenOpenPlazaAndMovement(t *testing.T) {
+	paths := gamedatatest.Paths(t)
+	authority, err := store.Open(t.TempDir(), store.Options{DefaultSkills: enterworld.DefaultSkillSeeder(enterworld.NewTextdataSkills(paths.TextdataDir))})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(authority.Close)
+	roster, err := enterworld.LoadRoster(filepath.Join(paths.CharacterAuthorityDir, "catalog.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	deps := &enterworld.Deps{Roster: roster, Characters: authority.Characters(), Items: enterworld.NewTextdataItems(paths.TextdataDir), Levels: enterworld.NewTextdataLevels(paths.TextdataDir), Skills: enterworld.NewTextdataSkills(paths.TextdataDir), MagicOptions: enterworld.NewTextdataMagicOptions(paths.TextdataDir), EquipItemsEnabled: true}
+	deps.MutateCharacter = authority.MutateCharacter
+	deps.UpdateCharacter = authority.UpdateCharacter
+	deps.MutateCharacters = authority.MutateCharacters
+	deps.UpdateCharacters = authority.UpdateCharacters
+	deps.ReadCharacter = func(_ string, read func()) { authority.ReadState(read) }
+	game := &gameplayPlane{divisionID: "caravan-thiefden", deps: deps, items: action.NewRuntime(deps, nil)}
+	game.water = movement.NewAuthorityValidator(paths.WorldAuthorityDir)
+	game.movement = movement.NewRuntime(deps, game.items.Worlds)
+	game.movement.Nav = game.water
+	game.movement.PathGuard = movement.NewPathGuardFromEnv(game.water)
+	game.movement.ClientClip = movement.NewClientClipFromEnv(game.water)
+	game.items.NpcRoster = simulation.LoadNpcWorldRoster(paths.TextdataDir)
+	if err := game.items.ConfigurePortals(paths.TextdataDir); err != nil {
+		t.Fatal(err)
+	}
+	cfg := caravanai.Config{Enabled: true}
+	if err := game.configureCaravanHighway(&cfg); err != nil {
+		t.Fatal(err)
+	}
+	denTerm := cfg.Terminals[caravanai.TownThiefDen]
+	t.Logf("ThiefDen terminal: region=%d x=%.2f y=%.2f z=%.2f", denTerm.RegionID, denTerm.X, denTerm.Y, denTerm.Z)
+	game.caravanAgents = caravanai.NewRuntime(cfg, nil, caravanai.WorldHooks{Move: game.caravanMove, Ferry: game.caravanFerry})
+	t.Cleanup(func() { _ = game.caravanAgents.Close() })
+	if err := game.initCaravanActors(); err != nil {
+		t.Fatal(err)
+	}
+
+	// Step all agents 80 ticks (8 seconds) and verify idle Thieves move freely
+	// in Thief Den, 4 highway Thieves stay outside Thief Den, and every Trader
+	// mounts its Lv.90 COS_T_DHORSE3 transport horse.
+	initial := map[string]caravanai.Waypoint{}
+	for _, u := range game.caravanAgents.EnsureDivisionRoster(game.divisionID) {
+		initial[u.Name] = caravanai.Waypoint{RegionID: u.RegionID, X: u.X, Y: u.Y, Z: u.Z}
+	}
+	now := int64(1_000_000)
+	for tick := 0; tick < 80; tick++ {
+		now += 100
+		for i, u := range game.caravanAgents.EnsureDivisionRoster(game.divisionID) {
+			_, updated, _ := game.caravanAgents.StepAgentWithWorldThreat(context.Background(), game.divisionID, u.Name, nil, false, now)
+			if updated != nil && i < len(game.caravanActors) {
+				c := game.caravanActors[i]
+				if updated.Role == caravanai.RoleTrader {
+					game.items.ServerActorRide(game.divisionID, c.Name, true)
+				}
+			}
+		}
+	}
+	movedInDen := 0
+	patrollingOutsideDen := 0
+	for i, u := range game.caravanAgents.EnsureDivisionRoster(game.divisionID) {
+		if u.Role == caravanai.RoleThief {
+			moved := caravanai.WaypointDistance(initial[u.Name], caravanai.Waypoint{RegionID: u.RegionID, X: u.X, Z: u.Z})
+			t.Logf("Thief %-18s state=%-12s region=%d (%.1f,%.1f) avail=%v moved=%.1f", u.Name, u.State, u.RegionID, u.X, u.Z, u.AvailableForHire, moved)
+			if u.RegionID == denTerm.RegionID {
+				if moved > 5 {
+					movedInDen++
+				}
+				if !u.AvailableForHire {
+					t.Fatalf("idle Thief %s in Thief Den is not hireable (state=%s)", u.Name, u.State)
+				}
+			} else {
+				patrollingOutsideDen++
+				if moved <= 5 {
+					t.Fatalf("highway Thief %s did not move (region=%d moved=%.1f)", u.Name, u.RegionID, moved)
+				}
+			}
+		}
+		if u.Role == caravanai.RoleTrader {
+			c := game.caravanActors[i]
+			if c.ActiveCOS == nil || !c.ActiveCOS.Mounted || c.ActiveCOS.Codename != "COS_T_DHORSE3" {
+				t.Fatalf("Trader %s lost mounted COS_T_DHORSE3: %+v", c.Name, c.ActiveCOS)
+			}
+		}
+	}
+	if movedInDen < 4 {
+		t.Fatalf("expected idle Thieves in Thief Den to move freely, only %d moved", movedInDen)
+	}
+	if patrollingOutsideDen != 4 {
+		t.Fatalf("expected 4 highway Thieves outside Thief Den, got %d", patrollingOutsideDen)
 	}
 }

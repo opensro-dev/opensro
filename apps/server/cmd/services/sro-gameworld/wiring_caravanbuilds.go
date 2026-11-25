@@ -93,14 +93,29 @@ func (game *gameplayPlane) trainCaravanActor(c *enterworld.Character) error {
 	}
 	c.Masteries = domain.DefaultMasteries(enterworld.RaceKeyChina)
 	for i := range c.Masteries {
-		if c.Masteries[i].ID == mastery {
+		if c.Masteries[i].ID == mastery || (c.Job.Type == domain.JobHunter && c.Masteries[i].ID == 276) {
 			c.Masteries[i].Level = *c.Level
 		}
 	}
 	groups := map[uint32]enterworld.SkillRow{}
+	var bestRess enterworld.SkillRow
 	for _, row := range source.SpawnSkillRows() {
 		skill, found := game.deps.Skills.SkillByID(row.ID)
-		if !found || !strings.HasPrefix(skill.Codename, "SKILL_CH_"+family+"_") || strings.Contains(skill.Codename, "_BASE_") || skill.ChainSub || skill.SPCost <= 0 || !skill.CombatPinned || !skill.Attack.Present || skill.OffenseRefusal != "" || skill.Reqc.KnockedDown || skill.PositionEffect.Pinned || !action.SkillPressHandled(game.deps.Skills, skill) {
+		if !found {
+			continue
+		}
+		if c.Job.Type == domain.JobHunter && strings.HasPrefix(skill.Codename, "SKILL_CH_WATER_RESURRECTION_") && skill.Abnormal.ResuMaxLevel > 0 && action.SkillPressHandled(game.deps.Skills, skill) {
+			ressAllowed := true
+			for _, req := range skill.Masteries {
+				if req.Level > *c.Level || (req.Level > 0 && req.ID != 276) {
+					ressAllowed = false
+				}
+			}
+			if ressAllowed && (bestRess.ID == 0 || skill.Abnormal.ResuMaxLevel > bestRess.Abnormal.ResuMaxLevel || (skill.Abnormal.ResuMaxLevel == bestRess.Abnormal.ResuMaxLevel && skill.Level > bestRess.Level)) {
+				bestRess = skill
+			}
+		}
+		if !strings.HasPrefix(skill.Codename, "SKILL_CH_"+family+"_") || strings.Contains(skill.Codename, "_BASE_") || skill.ChainSub || skill.SPCost <= 0 || !skill.CombatPinned || !skill.Attack.Present || skill.OffenseRefusal != "" || skill.Reqc.KnockedDown || skill.PositionEffect.Pinned || !action.SkillPressHandled(game.deps.Skills, skill) {
 			continue
 		}
 		allowed := true
@@ -137,6 +152,13 @@ func (game *gameplayPlane) trainCaravanActor(c *enterworld.Character) error {
 	for _, skill := range skills[:min(3, len(skills))] {
 		c.Skills = append(c.Skills, skill.ID)
 		game.caravanSkills[c.Name] = append(game.caravanSkills[c.Name], skill.ID)
+	}
+	if bestRess.ID != 0 {
+		if game.caravanRessSkill == nil {
+			game.caravanRessSkill = map[string]uint32{}
+		}
+		c.Skills = append(c.Skills, bestRess.ID)
+		game.caravanRessSkill[c.Name] = bestRess.ID
 	}
 	return nil
 }

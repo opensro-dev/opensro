@@ -29,6 +29,15 @@ import (
 	"opensro.online/server/internal/game/world/simulation"
 )
 
+type caravanMovePublish struct {
+	atMs      int64
+	dirX      float64
+	dirZ      float64
+	mode      uint8
+	goal      worldgeom.RegionXZ
+	stopTicks int
+}
+
 const caravanActorIDBase int64 = 90_000
 
 // caravanHunterRunSpeed is an AI Hunter's run speed (port-only).
@@ -129,15 +138,17 @@ func (game *gameplayPlane) initCaravanActors() error {
 		}
 		region, x, y, z := int64(unit.RegionID), float64(unit.X), float64(unit.Y), float64(unit.Z)
 		c.World = &domain.CharacterWorld{Spawn: &domain.WorldSpawn{RegionID: &region, X: &x, Y: &y, Z: &z}, SpawnSet: true}
-		if unit.Role == caravanai.RoleTrader {
+		if unit.Role == caravanai.RoleTrader || unit.Role == caravanai.RoleThief {
 			var valid bool
 			c.RuntimeTransportGID, valid = enterworld.CosObjectIDForCharacter(c)
 			if !valid {
 				return fmt.Errorf("caravan owner cannot own a transport: %s", c.Name)
 			}
-			c.ActiveCOS, err = game.items.NewServerActorTransport(c.RuntimeTransportGID)
-			if err != nil {
-				return err
+			if unit.Role == caravanai.RoleTrader {
+				c.ActiveCOS, err = game.items.NewServerActorTransport(c.RuntimeTransportGID)
+				if err != nil {
+					return err
+				}
 			}
 		}
 		game.caravanActors = append(game.caravanActors, c)
@@ -148,6 +159,7 @@ func (game *gameplayPlane) initCaravanActors() error {
 	for _, c := range game.caravanActors {
 		_, hp, _, mp := game.items.GameplayVitals(game.divisionID, c)
 		game.caravanAgents.ConfigureVitals(game.divisionID, c.Name, hp, mp, game.caravanAttackSkill(c), game.caravanRunSpeed(c))
+		game.caravanAgents.SetCanResurrect(game.divisionID, c.Name, game.caravanRessSkill[c.Name] != 0)
 		game.deps.Mutate(c, "caravan actor init", func() { c.CurrentHP, c.CurrentMP = &hp, &mp })
 		game.items.BindPetSession(game.divisionID, c, uint64(c.ID))
 		if game.items.Monsters != nil {
@@ -315,7 +327,7 @@ publishCaravanActor
 */
 func (game *gameplayPlane) publishCaravanActor(ticker *simulation.Ticker, views []simulation.SessionView, previous, unit *caravanai.AgentUnit, c *enterworld.Character, nowMs int64) {
 	at := simulation.Spawn{RegionID: unit.RegionID, X: float64(unit.X), Y: float64(unit.Y), Z: float64(unit.Z)}
-	c = game.items.SyncServerActor(game.divisionID, c, at, unit.RespawnPending, unit.CargoStacks, unit.OriginTown == caravanai.TownDonwhang)
+	c = game.items.SyncServerActorCargo(game.divisionID, c, at, unit.RespawnPending, unit.CargoStacks, unit.CargoStars, unit.OriginTown == caravanai.TownDonwhang)
 	if unit.RespawnPending {
 		game.caravanAgents.ActorSynchronized(game.divisionID, c.Name)
 	}
@@ -372,47 +384,76 @@ func (game *gameplayPlane) publishCaravanActor(ticker *simulation.Ticker, views 
 		if game.caravanMoving == nil {
 			game.caravanMoving = make(map[string]bool)
 			game.caravanMode = make(map[string]uint8)
+			game.caravanMovePub = make(map[string]caravanMovePublish)
 		}
 		moveKey := view.SessionID + "|" + c.Name
 		if visible && !shown {
 			delete(game.caravanMoving, moveKey)
+			delete(game.caravanMovePub, moveKey)
 			frames = append(frames, game.items.PeerItemReferences(appearance.ItemIDs())...)
 			frames = append(frames, simulation.Frame{Opcode: wire.OpSingleObjectSpawn, Payload: simulation.BuildPeerSpawnRow(appearance, gid, at), ScopeGID: gid, ScopeVisible: true})
+			if !enterworld.CharacterAlive(c) {
+				frames = append(frames, simulation.Frame{Opcode: wire.OpObjectStateRefresh, Payload: (wire.ObjectStateRefresh{Gid: gid, StateType: wire.StateChannelLife, Value: wire.LifeStateDead}).Encode()})
+			}
 		} else if !visible && shown {
 			delete(game.caravanMoving, moveKey)
+			delete(game.caravanMovePub, moveKey)
 			frames = append(frames, simulation.Frame{Opcode: wire.OpObjectDespawn, Payload: (wire.ObjectDespawn{Gid: gid}).Encode(), ScopeGID: gid})
 		}
 		moved := previous.RegionID != unit.RegionID || previous.X != unit.X || previous.Z != unit.Z
 		canMove := visible && shown && (moveGID == gid || slices.Contains(view.PublishedObjects, moveGID))
 		wasMoving := game.caravanMoving[moveKey]
+		snapped := false
 		if canMove && moved {
 			prevXZ := worldgeom.RegionXZ{RegionID: previous.RegionID, X: float64(previous.X), Z: float64(previous.Z)}
 			curXZ := worldgeom.RegionXZ{RegionID: unit.RegionID, X: float64(unit.X), Z: float64(unit.Z)}
 			dx, dz := worldgeom.Delta(prevXZ, curXZ)
-			if math.Hypot(dx, dz) > 32 {
+			stepLen := math.Hypot(dx, dz)
+			if stepLen > 32 {
 				frames = append(frames,
 					simulation.Frame{Opcode: wire.OpObjectDespawn, Payload: (wire.ObjectDespawn{Gid: gid}).Encode(), ScopeGID: gid},
 					simulation.Frame{Opcode: wire.OpSingleObjectSpawn, Payload: simulation.BuildPeerSpawnRow(appearance, gid, at), ScopeGID: gid, ScopeVisible: true},
 				)
 				game.caravanMoving[moveKey] = false
-			} else {
-				proj := worldgeom.NormalizeOutdoor(worldgeom.RegionXZ{RegionID: curXZ.RegionID, X: curXZ.X + 2*dx, Z: curXZ.Z + 2*dz})
-				goal := simulation.Spawn{RegionID: proj.RegionID, X: proj.X, Y: float64(unit.Y), Z: proj.Z}
-				from := simulation.MovementSourceFromSpawn(simulation.Spawn{RegionID: previous.RegionID, X: float64(previous.X), Y: float64(previous.Y), Z: float64(previous.Z)})
+				delete(game.caravanMovePub, moveKey)
+				snapped = true
+			} else if stepLen > 0.01 {
+				dirX, dirZ := dx/stepLen, dz/stepLen
+				pub := game.caravanMovePub[moveKey]
+				pub.stopTicks = 0
+				dot := dirX*pub.dirX + dirZ*pub.dirZ
+				remX, remZ := worldgeom.Delta(curXZ, pub.goal)
+				needSend := !wasMoving || pub.mode != moveMode || dot < 0.96 || nowMs-pub.atMs >= 350 || math.Hypot(remX, remZ) <= 12
 				if !wasMoving || game.caravanMode[moveKey] != moveMode {
 					frames = append(frames, simulation.Frame{Opcode: wire.OpObjectStateRefresh, Payload: (wire.ObjectStateRefresh{Gid: moveGID, StateType: wire.StateChannelMove, Value: moveMode}).Encode()})
 					game.caravanMode[moveKey] = moveMode
 				}
-				frames = append(frames, simulation.Frame{Opcode: simulation.OpMovementAck, Payload: simulation.BuildMovementAckPayload(moveGID, simulation.MovementRequest{Mode: simulation.MovementAckDestinationMode, RegionID: goal.RegionID, X: goal.X, Y: goal.Y, Z: goal.Z}, &from)})
+				if needSend {
+					// Project ~500ms ahead from the actor's live position (not previous) so
+					// the client glides smoothly without 10Hz rubber-banding.
+					proj := worldgeom.NormalizeOutdoor(worldgeom.RegionXZ{RegionID: curXZ.RegionID, X: curXZ.X + 5*dx, Z: curXZ.Z + 5*dz})
+					goal := simulation.Spawn{RegionID: proj.RegionID, X: proj.X, Y: float64(unit.Y), Z: proj.Z}
+					from := simulation.MovementSourceFromSpawn(at)
+					frames = append(frames, simulation.Frame{Opcode: simulation.OpMovementAck, Payload: simulation.BuildMovementAckPayload(moveGID, simulation.MovementRequest{Mode: simulation.MovementAckDestinationMode, RegionID: goal.RegionID, X: goal.X, Y: goal.Y, Z: goal.Z}, &from)})
+					pub = caravanMovePublish{atMs: nowMs, dirX: dirX, dirZ: dirZ, mode: moveMode, goal: proj}
+				}
+				game.caravanMovePub[moveKey] = pub
 				game.caravanMoving[moveKey] = true
 			}
 		} else if canMove && wasMoving {
-			from := simulation.MovementSourceFromSpawn(at)
-			frames = append(frames,
-				simulation.Frame{Opcode: wire.OpObjectStateRefresh, Payload: (wire.ObjectStateRefresh{Gid: moveGID, StateType: wire.StateChannelMove, Value: wire.MoveStateStand}).Encode()},
-				simulation.Frame{Opcode: simulation.OpMovementAck, Payload: simulation.BuildMovementAckPayload(moveGID, simulation.MovementRequest{Mode: simulation.MovementAckDestinationMode, RegionID: at.RegionID, X: at.X, Y: at.Y, Z: at.Z}, &from)},
-			)
-			game.caravanMoving[moveKey] = false
+			pub := game.caravanMovePub[moveKey]
+			pub.stopTicks++
+			if pub.stopTicks >= 2 {
+				from := simulation.MovementSourceFromSpawn(at)
+				frames = append(frames,
+					simulation.Frame{Opcode: wire.OpObjectStateRefresh, Payload: (wire.ObjectStateRefresh{Gid: moveGID, StateType: wire.StateChannelMove, Value: wire.MoveStateStand}).Encode()},
+					simulation.Frame{Opcode: simulation.OpMovementAck, Payload: simulation.BuildMovementAckPayload(moveGID, simulation.MovementRequest{Mode: simulation.MovementAckDestinationMode, RegionID: at.RegionID, X: at.X, Y: at.Y, Z: at.Z}, &from)},
+				)
+				game.caravanMoving[moveKey] = false
+				delete(game.caravanMovePub, moveKey)
+			} else {
+				game.caravanMovePub[moveKey] = pub
+			}
 		}
 		if c.ActiveCOS != nil {
 			pet := c.ActiveCOS
@@ -423,7 +464,7 @@ func (game *gameplayPlane) publishCaravanActor(ticker *simulation.Ticker, views 
 					break
 				}
 			}
-			if unit.RespawnPending && petShown {
+			if (unit.RespawnPending || snapped) && petShown {
 				frames = append(frames, simulation.Frame{Opcode: wire.OpObjectDespawn, Payload: (wire.ObjectDespawn{Gid: pet.GID}).Encode(), ScopeGID: pet.GID})
 				petShown = false
 			}
@@ -435,9 +476,11 @@ func (game *gameplayPlane) publishCaravanActor(ticker *simulation.Ticker, views 
 			} else if visible && petShown && !pet.Mounted {
 				frames = append(frames, simulation.Frame{Opcode: wire.OpObjectSourceCorrection, Payload: (wire.ObjectSourceCorrection{Gid: pet.GID, Position: wire.Position{RegionID: at.RegionID, X: unit.X, Y: unit.Y, Z: unit.Z}}).Encode()})
 			}
-			if visible && pet.Mounted && (!petShown || !shown) {
+			if visible && pet.Mounted && (!petShown || !shown || snapped) {
 				frames = append(frames, simulation.Frame{Opcode: wire.OpCosRideState, Payload: wire.EncodeCosRideState(gid, true, pet.GID)})
 			}
+		} else if c.RuntimeTransportGID != 0 && slices.Contains(view.PublishedObjects, c.RuntimeTransportGID) {
+			frames = append(frames, simulation.Frame{Opcode: wire.OpObjectDespawn, Payload: (wire.ObjectDespawn{Gid: c.RuntimeTransportGID}).Encode(), ScopeGID: c.RuntimeTransportGID})
 		}
 		if len(frames) > 0 {
 			ticker.Push.PushToSession(view.SessionID, frames)
@@ -451,7 +494,29 @@ publishCaravanAction
 ================
 */
 func (game *gameplayPlane) publishCaravanAction(c *enterworld.Character, result action.OpResult) {
-	action.BroadcastObservedFrames(game.hub, game.divisionID, 0, enterworld.ObjectIDForCharacter(c), result.Broadcast)
+	gid := enterworld.ObjectIDForCharacter(c)
+	cast := slices.ContainsFunc(result.Broadcast, func(frame wire.Frame) bool {
+		return frame.Opcode == wire.OpSkillCastResult && len(frame.Payload) > 2 && frame.Payload[0] == 1
+	})
+	if cast {
+		stopped := false
+		for key := range game.caravanMoving {
+			if strings.HasSuffix(key, "|"+c.Name) && game.caravanMoving[key] {
+				delete(game.caravanMoving, key)
+				delete(game.caravanMovePub, key)
+				stopped = true
+			}
+		}
+		if stopped {
+			// The caravan's projected peer path lives outside the native movement segment.
+			at := game.items.LiveSpawnFor(game.divisionID, c)
+			stop := wire.ObjectSourceCorrection{Gid: gid, Position: wire.Position{
+				RegionID: at.RegionID, X: float32(at.X), Y: float32(at.Y), Z: float32(at.Z), Heading: at.Angle,
+			}}
+			action.BroadcastObservedFrames(game.hub, game.divisionID, 0, gid, []wire.Frame{{Opcode: wire.OpObjectSourceCorrection, Payload: stop.Encode()}})
+		}
+	}
+	action.BroadcastObservedFrames(game.hub, game.divisionID, 0, gid, result.Broadcast)
 	for _, around := range result.Around {
 		action.BroadcastObservedFrames(game.hub, game.divisionID, 0, around.SourceGID, around.Frames)
 	}

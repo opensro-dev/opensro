@@ -619,9 +619,12 @@ export function createWorldMapHud( options: MapHudOptions ) {
 					if ( player.gid === game?.localGid || partyGids.has( player.gid ) ) continue;
 					const isAI = player.name.startsWith( "[AI]" );
 					const isTrader = isAI && player.name.includes( "Trader" );
+					const isThief = isAI && player.name.includes( "Thief" );
 					const size = isAI ? 12 : 8;
 					const path = isTrader ?
 						ROOT + "interface/minimap/mm_sign_npc.png" :
+						isThief ?
+						ROOT + "interface/minimap/mm_sign_monster.png" :
 						ROOT + "interface/minimap/mm_sign_otherplayer.png";
 					betaRoster.push( {
 						kind: "beta",

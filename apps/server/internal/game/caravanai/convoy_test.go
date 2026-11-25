@@ -73,10 +73,10 @@ func hireRuntimeWith(t *testing.T, store MemoryStore, players map[string]*hirePl
 
 /*
 ================
-TestFollowerRoamsWithin50mRunsPast120mTeleportsPast200m
+TestFollowerRoamsNearbyAndRejoinsInAStraightLine
 ================
 */
-func TestFollowerRoamsWithin50mRunsPast120mTeleportsPast200m(t *testing.T) {
+func TestFollowerRoamsNearbyAndRejoinsInAStraightLine(t *testing.T) {
 	field := Waypoint{RegionID: 25239, X: 1000, Z: 1000}
 	players := map[string]*hirePlayer{"Hirer": {at: TownWaypoint(TownJangan), job: domain.JobTrader, online: true}}
 	paid := map[string]int64{}
@@ -105,8 +105,12 @@ func TestFollowerRoamsWithin50mRunsPast120mTeleportsPast200m(t *testing.T) {
 		rt.mu.Unlock()
 	}
 
-	// Within 50m it roams around the hirer, never straight onto it.
 	set(300)
+	if rt.EscortMustRejoin("division", "[AI]Hunter_Kwan") || !step(1900).catchingUp || lastTarget != field {
+		t.Fatalf("escort 30m away should run straight to the hirer, got %+v", lastTarget)
+	}
+	// A nearby escort roams around the stationary hirer.
+	set(170)
 	for now := int64(2000); now < 12_000; now += 100 {
 		unit := step(now)
 		if d := WaypointDistance(position(unit), field); d > EscortRoamRadius+1 {
@@ -117,17 +121,30 @@ func TestFollowerRoamsWithin50mRunsPast120mTeleportsPast200m(t *testing.T) {
 		t.Fatalf("roam target %.0f units from the hirer: it should circle, not stand on it", WaypointDistance(lastTarget, field))
 	}
 
-	// 150m behind: it runs straight after the hirer.
-	set(-1500)
+	// 120m behind (between 90m follow and 150m teleport): it runs straight after the hirer.
+	set(-1200)
 	unit := step(20_000)
 	if !unit.catchingUp || lastTarget != field {
-		t.Fatalf("escort 150m behind did not run after the hirer (target %+v)", lastTarget)
+		t.Fatalf("escort 120m behind did not run after the hirer (target %+v)", lastTarget)
 	}
 	if !rt.EscortMustRejoin("division", "[AI]Hunter_Kwan") {
-		t.Fatal("escort 150m behind must stop fighting to rejoin")
+		t.Fatal("escort 120m behind must stop fighting to rejoin")
 	}
 
-	// 250m behind: teleported beside the hirer.
+	set(-600)
+	if !rt.EscortMustRejoin("division", "[AI]Hunter_Kwan") {
+		t.Fatal("a returning escort should ignore combat at 60m")
+	}
+	set(-300)
+	if rt.EscortMustRejoin("division", "[AI]Hunter_Kwan") {
+		t.Fatal("a returning escort should be able to fight again at 30m")
+	}
+	set(-1000)
+	if rt.EscortMustRejoin("division", "[AI]Hunter_Kwan") {
+		t.Fatal("a rejoined escort should be able to fight at 100m")
+	}
+
+	// Beyond the teleport range: return beside the hirer.
 	set(-1900)
 	players["Hirer"].at = Waypoint{RegionID: 25240, X: 400, Z: 1000}
 	unit = step(20_100)
@@ -234,7 +251,7 @@ func TestFirstTraderInPartyLeadsUntilTheHirerTypesLeed(t *testing.T) {
 			t.Fatalf("hire of %s refused: %s", name, reply)
 		}
 	}
-	rt.SetPartyOrder("division", "Boss", []string{"Boss", "[AI]Hunter_Kwan", "[AI]Trader_Bao", "[AI]Trader_Jin"})
+	rt.SetPartyOrder("division", "Boss", []string{"Boss", "[AI]Hunter_Kwan", "[AI]Trader_Bao", "[AI]Trader_Jin"}, 1000)
 	leaders := func() map[string]string {
 		out := map[string]string{}
 		for _, name := range []string{"[AI]Trader_Jin", "[AI]Trader_Bao", "[AI]Hunter_Kwan"} {
@@ -258,10 +275,15 @@ func TestFirstTraderInPartyLeadsUntilTheHirerTypesLeed(t *testing.T) {
 
 /*
 ================
-TestHireEndsWithTheRunTheHourOrTheHirer
+TestHandsOffHireEndsWhenTheTradersSellOrThePartyGoes
+
+A hired Trader that left town rides to the next town's shop, sells there
+and stays (no teleport home); the hired Hunter is released at the next
+town once the Traders all sold. The hirer disbanding the party ends a
+hire (goods' cost back), and a long logout ends it too. No hour limit.
 ================
 */
-func TestHireEndsWithTheRunTheHourOrTheHirer(t *testing.T) {
+func TestHandsOffHireEndsWhenTheTradersSellOrThePartyGoes(t *testing.T) {
 	players := map[string]*hirePlayer{"Boss": {at: TownWaypoint(TownJangan), job: domain.JobHunter, online: true}}
 	paid := map[string]int64{}
 	var ended []string
@@ -271,77 +293,178 @@ func TestHireEndsWithTheRunTheHourOrTheHirer(t *testing.T) {
 		_, unit, _ := rt.StepAgent(context.Background(), "division", name, nil, now)
 		return unit
 	}
+	place := func(name string, at Waypoint, now int64) {
+		rt.mu.Lock()
+		u := rt.findAgentLocked("division", name)
+		u.place(at, now)
+		u.pendingTeleport = nil
+		rt.mu.Unlock()
+	}
+	field := Waypoint{RegionID: 25239, X: 500, Z: 500}
+	donwhang := TownWaypoint(TownDonwhang)
+	// 40m from the shop, still in the town region.
+	street := Waypoint{RegionID: donwhang.RegionID, X: donwhang.X + 400, Y: donwhang.Y, Z: donwhang.Z}
+	if street.X > 1900 {
+		street.X = donwhang.X - 400
+	}
 
-	// A finished run: out of Jangan, into Donwhang. The Trader sells the goods.
 	rt.HireAgent("division", "Boss", domain.JobHunter, "[AI]Trader_Jin", 1000)
+	rt.HireAgent("division", "Boss", domain.JobHunter, "[AI]Hunter_Kwan", 1000)
+	rt.SetPartyOrder("division", "Boss", []string{"Boss", "[AI]Trader_Jin", "[AI]Hunter_Kwan"}, 1000)
 	rt.mu.Lock()
 	jin := rt.findAgentLocked("division", "[AI]Trader_Jin")
 	cost, stars := hiredGoodsCost(jin), jin.CargoStars
 	rt.mu.Unlock()
-	players["Boss"].at = Waypoint{RegionID: 25239, X: 500, Z: 500}
+
+	// Out of Jangan. The hirer coming back into a town ends nothing.
+	players["Boss"].at = field
+	place("[AI]Trader_Jin", field, 2000)
+	place("[AI]Hunter_Kwan", field, 2000)
 	step("[AI]Trader_Jin", 2000)
-	players["Boss"].at = TownWaypoint(TownDonwhang)
-	if unit := step("[AI]Trader_Jin", 3000); unit.HiredBy != "" || !unit.AvailableForHire {
-		t.Fatal("the hire outlived the finished run")
+	step("[AI]Hunter_Kwan", 2000)
+	players["Boss"].at = donwhang
+	if unit := step("[AI]Hunter_Kwan", 3000); unit.HiredBy != "Boss" {
+		t.Fatal("the hirer entering a town ended the hire")
 	}
-	sale := cost * int64(100+HiredGoodsMarginPerStarPct*int(stars)) / 100
-	if paid["Boss"] != -(HireFeeGold+cost)+sale {
-		t.Fatalf("finished run paid %d, want the sale %d after fee and goods", paid["Boss"], sale)
+	if unit := step("[AI]Trader_Jin", 3000); unit.HiredBy != "Boss" {
+		t.Fatal("the hire ended before the Trader reached a town")
 	}
 
-	// The hour runs out: the goods' cost comes back.
+	// Into Donwhang: Jin rides to the shop before it sells.
+	place("[AI]Trader_Jin", street, 4000)
+	unit := step("[AI]Trader_Jin", 4000)
+	if unit.HiredBy != "Boss" || WaypointDistance(position(unit), donwhang) >= WaypointDistance(street, donwhang) {
+		t.Fatalf("the Trader sold away from the shop or stood still: hired by %q at %+v", unit.HiredBy, position(unit))
+	}
+	for now := int64(4100); now < 30_000 && unit.HiredBy != ""; now += 100 {
+		unit = step("[AI]Trader_Jin", now)
+	}
+	// Released, it may already take its first stroll step in town.
+	if unit.HiredBy != "" || WaypointDistance(position(unit), donwhang) > 2*hireSellReach {
+		t.Fatalf("the Trader did not sell at the shop: hired by %q at %+v (shop %+v) ends %v", unit.HiredBy, position(unit), donwhang, ended)
+	}
+	if at, _ := rt.placeAtLocked(position(unit)); at != TownDonwhang {
+		t.Fatalf("the Trader left the town it sold in: %v", at)
+	}
+	sale := cost * int64(100+HiredGoodsMarginPerStarPct*int(stars)) / 100
+	if paid["Boss"] != -(2*HireFeeGold+cost)+sale {
+		t.Fatalf("finished run paid %d, want the sale %d after fees and goods", paid["Boss"], sale)
+	}
+
+	// The Hunter, done, goes when it reaches a town.
+	place("[AI]Hunter_Kwan", field, 31_000)
+	players["Boss"].at = field
+	if unit := step("[AI]Hunter_Kwan", 31_000); unit.HiredBy != "Boss" {
+		t.Fatal("the Hunter was released outside a town")
+	}
+	place("[AI]Hunter_Kwan", street, 32_000)
+	if unit := step("[AI]Hunter_Kwan", 32_000); unit.HiredBy != "" || unit.RegionID != donwhang.RegionID {
+		t.Fatalf("the Hunter was not released where it stands in town: %+v", unit)
+	}
+
+	// The party disbands: the hire ends, the goods' cost comes back.
 	paid["Boss"] = 0
-	// Mei waits in Donwhang, where Boss is now.
-	rt.HireAgent("division", "Boss", domain.JobHunter, "[AI]Trader_Mei", 10_000)
+	players["Boss"].at = donwhang
+	rt.HireAgent("division", "Boss", domain.JobHunter, "[AI]Trader_Mei", 40_000)
 	rt.mu.Lock()
 	cost = hiredGoodsCost(rt.findAgentLocked("division", "[AI]Trader_Mei"))
 	rt.mu.Unlock()
-	players["Boss"].at = Waypoint{RegionID: 25239, X: 500, Z: 500}
-	step("[AI]Trader_Mei", 20_000)
-	if unit := step("[AI]Trader_Mei", 10_000+HireMaxDurationMs); unit.HiredBy != "" {
-		t.Fatal("the hire outlived its hour")
+	rt.SetPartyOrder("division", "Boss", nil, 41_000)
+	if unit := step("[AI]Trader_Mei", 41_000); unit.HiredBy != "Boss" {
+		t.Fatal("a hire ended before its agent joined the party")
+	}
+	rt.SetPartyOrder("division", "Boss", []string{"Boss", "[AI]Trader_Mei"}, 42_000)
+	rt.SetPartyOrder("division", "Boss", nil, 43_000)
+	if unit := step("[AI]Trader_Mei", 43_000); unit.HiredBy != "" {
+		t.Fatal("the hire outlived the disbanded party")
 	}
 	if paid["Boss"] != -HireFeeGold {
-		t.Fatalf("a timed-out hire returned %d, want only the fee kept", paid["Boss"]+HireFeeGold)
+		t.Fatalf("a disbanded hire returned %d, want only the fee kept", paid["Boss"]+HireFeeGold)
 	}
 
 	// The hirer logs off: the agent waits, then goes home after two minutes.
-	players["Boss"].at = TownWaypoint(TownDonwhang)
 	rt.HireAgent("division", "Boss", domain.JobHunter, "[AI]Hunter_Kwan", 100_000)
 	players["Boss"].online = false
+	rt.SetPartyOrder("division", "Boss", nil, 105_000)
 	if unit := step("[AI]Hunter_Kwan", 110_000); unit.HiredBy != "Boss" {
 		t.Fatal("a short disconnect ended the hire")
 	}
 	if unit := step("[AI]Hunter_Kwan", 110_000+HireLeaderMissingMs); unit.HiredBy != "" {
 		t.Fatal("the hire outlived a long disconnect")
 	}
-	if len(ended) != 3 || ended[0] != "[AI]Trader_Jin:completed" || ended[1] != "[AI]Trader_Mei:timed out" || ended[2] != "[AI]Hunter_Kwan:ended" {
-		t.Fatalf("hire ends reported %v", ended)
+	want := []string{"[AI]Trader_Jin:completed", "[AI]Hunter_Kwan:completed", "[AI]Trader_Mei:ended", "[AI]Hunter_Kwan:ended"}
+	if strings.Join(ended, ",") != strings.Join(want, ",") {
+		t.Fatalf("hire ends reported %v, want %v", ended, want)
 	}
 }
 
 /*
 ================
-TestGrandCaravanMustersEveryIdleTraderAndHunter
+TestHirerPicksWhoLeadsTheTraders
+
+The party board's lead button: the hirer or any hired Trader leads; the
+rest of the Traders follow it, Hunters keep following the hirer.
 ================
 */
-func TestGrandCaravanMustersEveryIdleTraderAndHunter(t *testing.T) {
+func TestHirerPicksWhoLeadsTheTraders(t *testing.T) {
+	players := map[string]*hirePlayer{"Boss": {at: TownWaypoint(TownJangan), job: domain.JobTrader, online: true}}
+	paid := map[string]int64{}
+	rt := hireRuntime(t, players, &paid)
+	rt.mu.Lock()
+	rt.findAgentLocked("division", "[AI]Trader_Bao").place(TownWaypoint(TownJangan), 0)
+	rt.mu.Unlock()
+	if leader, who := rt.LeadState("division", "Boss"); leader != "" || who != nil {
+		t.Fatalf("lead state without hires: %q %v", leader, who)
+	}
+	for _, name := range []string{"[AI]Trader_Jin", "[AI]Trader_Bao", "[AI]Hunter_Kwan"} {
+		rt.HireAgent("division", "Boss", domain.JobTrader, name, 1000)
+	}
+	if leader, who := rt.LeadState("division", "Boss"); leader != "[AI]Trader_Jin" || strings.Join(who, ",") != "Boss,[AI]Trader_Jin,[AI]Trader_Bao" {
+		t.Fatalf("default lead state %q %v", leader, who)
+	}
+	if reply := rt.SetLead("division", "Boss", "[AI]Hunter_Kwan"); !strings.Contains(reply, "Only you") {
+		t.Fatalf("a Hunter was made lead: %s", reply)
+	}
+	escort := func(name string) string {
+		_, unit, _ := rt.StepAgent(context.Background(), "division", name, nil, 2000)
+		return unit.EscortingTrader
+	}
+	rt.SetLead("division", "Boss", "[AI]Trader_Bao")
+	if leader, _ := rt.LeadState("division", "Boss"); leader != "[AI]Trader_Bao" || escort("[AI]Trader_Bao") != "" || escort("[AI]Trader_Jin") != "[AI]Trader_Bao" || escort("[AI]Hunter_Kwan") != "Boss" {
+		t.Fatal("the chosen Trader does not lead")
+	}
+	rt.SetLead("division", "Boss", "boss")
+	if leader, _ := rt.LeadState("division", "Boss"); leader != "Boss" || escort("[AI]Trader_Bao") != "Boss" || escort("[AI]Trader_Jin") != "Boss" {
+		t.Fatal("the hirer does not lead")
+	}
+}
+
+/*
+================
+TestGrandCaravanRunsHourlyWithTwoFiveStarTradersAndSixHunters
+================
+*/
+func TestGrandCaravanRunsHourlyWithTwoFiveStarTradersAndSixHunters(t *testing.T) {
 	var chat []string
 	rt := NewRuntime(Config{Enabled: true}, nil, WorldHooks{OnAgentChat: func(_, _ string, _ uint16, msg string) { chat = append(chat, msg) }})
 	t.Cleanup(func() { _ = rt.Close() })
-	rt.EnsureDivisionRoster("division")
-	rt.StepAgent(context.Background(), "division", "[AI]Thief_Wisp", nil, 1000) // the standing runs leave first
-	if !rt.StartGrandCaravan("division", 2000) {
-		t.Fatal("grand caravan did not muster")
+	step := func(now int64) {
+		rt.StepAgent(context.Background(), "division", "[AI]Thief_Wisp", nil, now)
 	}
-	rt.StepAgent(context.Background(), "division", "[AI]Thief_Wisp", nil, 2100)
-	if len(chat) != 1 || !strings.Contains(chat[0], "Grand caravan") {
-		t.Fatalf("muster was not announced: %v", chat)
+	const boot = 1000
+	step(boot)
+	step(boot + GrandCaravanFirstMs - 1)
+	if len(chat) != 0 {
+		t.Fatalf("grand caravan mustered before its first hour: %v", chat)
 	}
-	rt.mu.Lock()
-	var traders, hunters int
+	muster := boot + GrandCaravanFirstMs
+	step(muster)
+	if len(chat) != 1 || !strings.Contains(chat[0], "2 Traders and 6 Hunters") {
+		t.Fatalf("the complete muster was not announced: %v", chat)
+	}
+	traders, hunters := 0, 0
 	var town TownID
-	for _, u := range rt.agents["division"] {
+	for _, u := range rt.EnsureDivisionRoster("division") {
 		if u.RunKind != RunGrand {
 			continue
 		}
@@ -358,30 +481,55 @@ func TestGrandCaravanMustersEveryIdleTraderAndHunter(t *testing.T) {
 			hunters++
 		}
 	}
-	rt.mu.Unlock()
-	if traders != RosterTraders-StandingSoloRuns-StandingEscortedRuns || hunters != RosterHunters-StandingEscortedRuns*EscortsPerRun {
+	if traders != 2 || hunters != 6 {
 		t.Fatalf("grand caravan mustered %d Traders and %d Hunters", traders, hunters)
 	}
 
-	rt.StepAgent(context.Background(), "division", "[AI]Thief_Wisp", nil, 2000+GrandCaravanMusterMs)
-	rt.mu.Lock()
-	defer rt.mu.Unlock()
-	leads := 0
-	for _, u := range rt.agents["division"] {
+	departure := boot + GrandCaravanIntervalMs
+	step(departure - 1)
+	if rt.grand["division"].departAtMs != departure {
+		t.Fatal("grand caravan departed early")
+	}
+	step(departure)
+	guards := map[string]int{}
+	var leader string
+	for _, u := range rt.EnsureDivisionRoster("division") {
 		if u.RunKind != RunGrand {
 			continue
 		}
 		if u.State != StateTraveling {
 			t.Fatalf("%s did not leave with the grand caravan", u.Name)
 		}
-		if u.EscortingTrader == "" {
-			leads++
-		} else if leader := rt.findAgentLocked("division", u.EscortingTrader); leader == nil || leader.RunKind != RunGrand || leader.Role != RoleTrader {
-			t.Fatalf("%s follows %q outside the caravan", u.Name, u.EscortingTrader)
+		if u.Role == RoleTrader {
+			if u.CargoStars != 5 || u.CargoStacks != 10 {
+				t.Fatalf("%s departed without a full five-star load", u.Name)
+			}
+			if u.EscortingTrader == "" {
+				if leader != "" {
+					t.Fatal("grand caravan has two leaders")
+				}
+				leader = u.Name
+			}
+		} else {
+			guards[u.EscortingTrader]++
 		}
 	}
-	if leads != 1 {
-		t.Fatalf("grand caravan has %d leaders", leads)
+	if leader == "" || len(guards) != 2 || guards[leader] != 3 {
+		t.Fatalf("grand caravan did not split the six guards between its two traders: %v", guards)
+	}
+	if rt.StartGrandCaravan("division", departure+1) {
+		t.Fatal("a second grand caravan overlapped the active one")
+	}
+	rt.mu.Lock()
+	rt.finishRunLocked(rt.findAgentLocked("division", leader), departure+1000)
+	rt.mu.Unlock()
+	step(muster + GrandCaravanIntervalMs - 1)
+	if len(chat) != 1 {
+		t.Fatal("the second grand caravan mustered before its hour")
+	}
+	step(muster + GrandCaravanIntervalMs)
+	if len(chat) != 2 || !strings.Contains(chat[1], "2 Traders and 6 Hunters") {
+		t.Fatalf("the grand caravan did not muster again on schedule: %v", chat)
 	}
 }
 
@@ -423,5 +571,73 @@ func TestSoloScenicBendIsSkippedWhenUnreachable(t *testing.T) {
 	defer rt.mu.Unlock()
 	if jin = rt.findAgentLocked("division", jin.Name); jin.RegionID != b.RegionID || jin.X != b.X {
 		t.Fatalf("a run stuck for a minute was not set onto its waypoint: %+v", position(jin))
+	}
+}
+
+/*
+================
+TestTraderRecruitsAfterRobberyAndTravelsSoloAfterDelivery
+================
+*/
+func TestTraderRecruitsAfterRobberyAndTravelsSoloAfterDelivery(t *testing.T) {
+	rt := hireRuntime(t, nil, nil)
+	trader := rt.findAgentLocked("division", "[AI]Trader_Jin")
+	trader.standingCargoStars = 5
+	rt.dispatchTraderLocked(trader, RunSolo, nil, 1000)
+	if trader.CargoStars != 2 {
+		t.Fatalf("solo dispatch loaded %d stars", trader.CargoStars)
+	}
+	trader.RegionID, trader.X, trader.Z = 25239, 1000, 1000
+	if _, defeated, _ := rt.RecordPlayerAttack("division", trader.Name, "[AI]Thief_Kael", 50000, 2000); !defeated {
+		t.Fatal("test thief did not defeat the trader")
+	}
+	rt.ActorSynchronized("division", trader.Name)
+	now := trader.CooldownUntilMs + TownRestDurationMs
+	if trader.escortPreference != 1 || rt.eligibleTraderLocked("division", now, RunSolo) == trader {
+		t.Fatal("robbed solo trader remained eligible to dispatch alone")
+	}
+	rt.manualRuns = false
+	rt.scheduleRunsLocked("division", now)
+	if trader.RunKind != RunEscorted || rt.assignedEscortCountLocked(trader) != 1 || trader.CargoStars != 5 {
+		t.Fatalf("trader did not leave with one hunter and the usual cargo: run=%s escorts=%d stars=%d",
+			trader.RunKind, rt.assignedEscortCountLocked(trader), trader.CargoStars)
+	}
+	rt.finishRunLocked(trader, now+1000)
+	if trader.escortPreference != -1 || rt.assignedEscortCountLocked(trader) != 0 {
+		t.Fatal("successful delivery should release the hunter and allow a solo next run")
+	}
+}
+
+/*
+================
+TestRevivedTraderKeepsOnlyGoodsAPlayerDidNotScatter
+
+A hired Trader waits dead for resurrection. A player's killing strike
+scatters its transport's goods on the ground, so it carries none after;
+a monster kill drops nothing, so it keeps them.
+================
+*/
+func TestRevivedTraderKeepsOnlyGoodsAPlayerDidNotScatter(t *testing.T) {
+	players := map[string]*hirePlayer{"Boss": {at: TownWaypoint(TownJangan), job: domain.JobTrader, online: true}}
+	paid := map[string]int64{}
+	rt := hireRuntime(t, players, &paid)
+	rt.mu.Lock()
+	rt.findAgentLocked("division", "[AI]Trader_Bao").place(TownWaypoint(TownJangan), 0)
+	rt.mu.Unlock()
+	rt.HireAgent("division", "Boss", domain.JobTrader, "[AI]Trader_Jin", 1000)
+	rt.HireAgent("division", "Boss", domain.JobTrader, "[AI]Trader_Bao", 1000)
+	cargo := func(name string) (int, bool) {
+		rt.mu.Lock()
+		defer rt.mu.Unlock()
+		u := rt.findAgentLocked("division", name)
+		return u.CargoStacks, u.DeadUntilMs > 0
+	}
+	rt.RecordPlayerAttack("division", "[AI]Trader_Jin", "AIThief_Kael", 1<<30, 2000)
+	if stacks, waiting := cargo("[AI]Trader_Jin"); !waiting || stacks != 0 {
+		t.Fatalf("player-killed Trader: waiting %v, still carries %d stacks", waiting, stacks)
+	}
+	rt.RecordPlayerAttack("division", "[AI]Trader_Bao", "", 1<<30, 2000)
+	if stacks, waiting := cargo("[AI]Trader_Bao"); !waiting || stacks == 0 {
+		t.Fatalf("monster-killed Trader: waiting %v, lost its goods (%d stacks)", waiting, stacks)
 	}
 }

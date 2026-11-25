@@ -178,7 +178,21 @@ func (r *Runtime) stepVengeanceLocked(unit *AgentUnit, nowMs int64) {
 		return
 	}
 	unit.vengeanceAt = target
+	// Thief Den is a closed enclave with no road to the highway: a Thief gang
+	// leaving the Den teleports onto the nearest outdoor highway waypoint first.
+	if unit.Role == RoleThief {
+		if place, ok := r.placeAtLocked(position(unit)); ok && place == TownThiefDen {
+			exit := r.nearestHighwayEntryLocked(target)
+			unit.place(exit, nowMs)
+			for _, g := range r.agents[unit.Division] {
+				if g.RunKind == RunVengeance && strings.EqualFold(g.EscortingTrader, unit.Name) {
+					g.place(exit, nowMs)
+				}
+			}
+		}
+	}
 	if WaypointDistance(position(unit), target) <= vengeanceArrive {
+		unit.progressAtMs = 0
 		if !alive {
 			r.endVengeanceLocked(unit, nowMs, "Nothing here but tracks. Back home.")
 		}
@@ -186,6 +200,9 @@ func (r *Runtime) stepVengeanceLocked(unit *AgentUnit, nowMs int64) {
 		return
 	}
 	r.moveLocked(unit, target, stepDistanceFor(unit))
+	if unit.noteProgress(nowMs) >= stuckTeleportMs {
+		r.endVengeanceLocked(unit, nowMs, "The road's blocked. Back home.")
+	}
 }
 
 /*
@@ -206,4 +223,26 @@ func (r *Runtime) endVengeanceLocked(leader *AgentUnit, nowMs int64, line string
 	if line != "" {
 		r.outbox = append(r.outbox, outboxItem{chat: true, agent: leader.Name, regionID: leader.RegionID, text: line})
 	}
+}
+
+func (r *Runtime) nearestHighwayEntryLocked(target Waypoint) Waypoint {
+	best := waypointJanganWestGate
+	bestDist := WaypointDistance(best, target)
+	consider := func(wp Waypoint) {
+		if wp.RegionID == 0 || wp.FerryTargetID != 0 || isTownRegion(wp.RegionID) {
+			return
+		}
+		if d := WaypointDistance(wp, target); d < bestDist {
+			best, bestDist = wp, d
+		}
+	}
+	for _, wp := range []Waypoint{waypointJanganWestGate, waypointDonwhangEastRoad, waypointDonwhangWestGate, waypointKarakoramPass, waypointTaklamakanOasis} {
+		consider(wp)
+	}
+	for _, route := range r.cfg.Highway {
+		for _, wp := range route {
+			consider(wp)
+		}
+	}
+	return best
 }

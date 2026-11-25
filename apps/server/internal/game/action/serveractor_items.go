@@ -114,12 +114,11 @@ type ServerActorLoot struct {
 ServerActorLootNear
 
 The ground items the actor may pick up, by the native rules: a Trader
-only its own trade goods, into its transport; a Thief anyone else's goods
-(an AI Thief has no cart: serverActorTakeGoods), gold and items. A drop
+only its own trade goods; a Thief anyone else's goods, gold and items.
+A thief with a full transport can still merge compatible stacks. A drop
 reserved for someone else, a forged drop or an arena power-up is not loot.
-goodsOnly leaves out everything but trade goods. items is the division's
-ground (GroundItems, read once for every actor), near the caller's reach
-test, asked before anything else.
+goodsOnly leaves out everything but trade goods. The caller supplies the
+division's ground snapshot and its reach test.
 ================
 */
 func (rt *Runtime) ServerActorLootNear(division, name string, goodsOnly bool, items []grounditem.Item, near func(grounditem.Point) bool) []ServerActorLoot {
@@ -139,6 +138,10 @@ func (rt *Runtime) ServerActorLootNear(division, name string, goodsOnly bool, it
 	}
 	gid := enterworld.ObjectIDForCharacter(snapshot)
 	thief := enterworld.DressedJob(snapshot) == domain.JobThief
+	var fullCargo *inventory.Inventory
+	if cart := snapshot.ActiveCOS; thief && cart != nil && cart.Container != nil && len(cart.Container.Rows) >= int(cart.Container.Capacity) {
+		fullCargo, _ = inventory.NewContainer(invItemsFromRowsWithin(cart.Container.Rows, int64(cart.Container.Capacity)), cart.Container.Capacity)
+	}
 	var out []ServerActorLoot
 	for _, item := range candidates {
 		if item.OwnerJID != 0 && item.OwnerJID != gid {
@@ -147,6 +150,10 @@ func (rt *Runtime) ServerActorLootNear(division, name string, goodsOnly bool, it
 		goods := isPickupTradeGoods(item.TypeFlags)
 		switch {
 		case goods && tradePickupRefusal(snapshot, item.TradeOwner) != 0:
+			continue
+		case goods && fullCargo != nil && !fullCargo.CanMergeStack(inventory.Item{
+			RefObjID: item.RefObjID, TradeOwner: item.TradeOwner, TypeFlags: item.TypeFlags, Plus: item.Plus,
+		}, rt.maxStackFor(item.TypeFlags, item.Codename)):
 			continue
 		case !goods && (goodsOnly || !thief):
 			continue
@@ -170,8 +177,8 @@ ServerActorPickup
 
 The actor, standing at the item, picks it up through the native grant:
 gold to its purse, an item to its bag (or the party's share), its own
-goods back into its transport. An AI Thief without a cart carries other
-caravans' goods off by hand (serverActorTakeGoods).
+goods back into its transport. An AI Thief summons a transport on the
+first goods pickup if it has none.
 ================
 */
 func (rt *Runtime) ServerActorPickup(division, name string, itemGid uint32) OpResult {
@@ -187,28 +194,12 @@ func (rt *Runtime) ServerActorPickup(division, name string, itemGid uint32) OpRe
 		return OpResult{}
 	}
 	if isPickupTradeGoods(item.TypeFlags) && enterworld.DressedJob(snapshot) == domain.JobThief && snapshot.ActiveCOS == nil {
-		return rt.serverActorTakeGoods(division, snapshot, item)
+		if !rt.summonServerActorTransportLocked(division, c) {
+			return OpResult{}
+		}
+		snapshot = rt.characterSnapshot(division, c)
 	}
 	return rt.grantPickup(division, simulation.WorldKey(division, c.Name), c, snapshot, item, rt.tickDoors())
-}
-
-/*
-================
-serverActorTakeGoods
-
-Port-only: an AI Thief has no transport, so the goods it robs leave the
-ground into its own hands; observers see the native scoop and despawn.
-================
-*/
-func (rt *Runtime) serverActorTakeGoods(division string, thief *enterworld.Character, item grounditem.Item) OpResult {
-	if tradePickupRefusal(thief, item.TradeOwner) != 0 {
-		return OpResult{}
-	}
-	if _, removed := rt.Ground.Remove(division, item.Gid); !removed {
-		return OpResult{}
-	}
-	anim := wire.PickupAnim{Gid: enterworld.ObjectIDForCharacter(thief)}
-	return OpResult{Broadcast: wire.PickupBroadcastFrames(anim, item.Gid, 0)}
 }
 
 /*

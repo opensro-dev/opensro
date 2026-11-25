@@ -858,6 +858,12 @@ func (inv *Inventory) MergeTargetSlot(refObjID uint32, stackCap uint16) (uint8, 
 	return inv.mergeTargetSlot(Item{RefObjID: refObjID}, stackCap)
 }
 
+// CanMergeStack reports whether a pickup can add to a stack without a free slot.
+func (inv *Inventory) CanMergeStack(item Item, stackCap uint16) bool {
+	_, ok := inv.mergeTargetSlot(item, stackCap)
+	return stackCap > 1 && ok
+}
+
 /*
 ================
 mergeTargetSlot

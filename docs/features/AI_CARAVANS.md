@@ -4,9 +4,12 @@ Port-only, not native. The switch below is off by default, and off leaves the sh
 and thief agents travel the Jangan - Donwhang - Hotan trade highway, remember the players they meet and decide
 what to do next.
 
-The nine agents are transient server-owned characters with shipped job suits, weapons and trader
-transport COS. They share normal player targeting, skill damage, region protection and transport
-cargo scattering. They never become account-owned or persisted player characters.
+The roster contains 10 traders, 20 hunters, and 10 thieves. Four thieves begin road patrols and
+six start in the Den for hire. These transient server-owned characters use shipped job suits,
+weapons, and trader transports. They share normal targeting, skill damage, region protection,
+and cargo scattering.
+
+See [November 19 handoff verification](#november-19-handoff-verification) for the current local test status.
 
 Agents use the configured level cap (native 90, or 110 with the matching expansion data), full
 level-appropriate armour/accessories, and alternating ordinary and Seal of Sun sets. Three supported
@@ -18,10 +21,10 @@ Loaded AI transports register with the normal caravan ambush timer. Native thiev
 battlefield regions, after the ordinary randomized timer; they can kill a transport and scatter cargo.
 AI characters enter the population and monster target census without becoming socket viewers.
 
-Routes load specialty traders, gate guards and ferry links from shipped data. Each walking leg uses
-the authoritative navigation geometry; bounded incremental road searches find detours around blocked
-terrain. Ferries require source proximity, admission and the native fare. Convoy hunters follow their
-trader, including admitted ferry crossings. Route heat selects alternate crossings.
+Routes load specialty shops, town gates, and ferry links from shipped data. Walking legs use the
+authoritative navigation geometry and bounded road searches for detours. Ferries require source
+proximity, admission, and the native fare. Escorts board their trader's link and resume formation
+on the far bank. Route variants include the Dead Ravine, Central-Tarim, Highland Oasis, and Tiger Mountain.
 
 Escort commands require the correct worn job suit, a living nearby player and an available recruiter
 in town. `!hire <hunter>` charges 15,000 gold once. `!accept <trader>` requires a Hunter to remain within
@@ -378,27 +381,32 @@ Distances use 10 world units per in-game metre (skill ranges: 180 units = 18m); 
   town. Flat fee 15000 gold plus a Trader's goods. At most 7 hires at once. Hunters and Thieves appear
   at the hirer; a Trader is hired only in the town it waits in and walks over. Everyone hired is invited
   to the party. `!hire <name>` still works from chat (a Trader then carries goods of its own rating).
-- **Leading:** hired Hunters/Thieves follow the hirer. Hired Traders follow the first hired Trader in
-  party order (hire order when not in the party), which drives the run itself and waits while the hirer
-  is more than 120m away. `!leed` (or `!lead`) toggles the hirer leading all of them.
-- **Hire end:** one trade run, at most 1 hour. The run is done when the hirer, after leaving town,
-  enters another town (or the same town after 10 minutes out), or when the leading hired Trader reaches
-  its destination shop. Then hired Traders pay the goods' sale (cost + 15% per cargo star); after the
-  hour, a lost job, `!dismiss`, or the hirer being offline/out of the main world for 2 minutes they pay
-  the goods' cost back; robbed goods pay nothing. A hired Hunter or Thief that dies comes back to its
-  hirer; a hired Trader that dies is robbed, its hire ends and it rests 30 minutes.
-  Released agents leave the party and go home (teleport if outside town).
+- **Leading:** hired Hunters/Thieves follow the hirer. Hired Traders follow one leader: the hirer or one
+  of the hired Traders, which drives the run itself and waits while the hirer is more than 120m away.
+  The hirer picks the leader on the party board (port-only, not native): each hired Trader's row and the
+  hirer's own panel carry a "Lead" badge, the current leader shows "Leads" (0x7FC3 operation 2; the
+  server pushes the state as 0x3FC4). With no pick the first hired Trader in party order leads.
+  `!leed` (or `!lead`) still toggles the hirer leading.
+- **Hire end (hands off):** no time limit and no command needed. A hired Trader that left town rides to
+  the shop of the next town it reaches (its hire town again only after 10 minutes out), sells there and
+  stays in that town: the hirer gets the sale (cost + 15% per cargo star). When all of a hirer's Traders
+  sold, its other hired agents are released as each reaches a town, where they stay. The hirer
+  disbanding the party, or putting an agent out of it, ends that agent's hire (a Trader pays the goods'
+  cost back); so do a lost job, `!dismiss`, or the hirer being offline/out of the main world for
+  2 minutes. Robbed goods pay nothing. Released agents leave the party; only one released outside a
+  town is teleported home.
 - **Restarts:** hires in flight are mirrored to the `caravan_hires` table every 5 seconds (and at
   shutdown). At boot each one resumes: the agent waits at the hire town's shop for up to 10 minutes,
-  then teleports to the hirer and rejoins their party when they log in; the hour still counts from the
-  original hire. A stored hire whose agent is busy or gone pays the goods' cost back.
+  then teleports to the hirer and rejoins their party when they log in. A stored hire whose agent is busy or gone pays the goods' cost back.
 - **Standing runs:** 2 solo Traders and 2 Traders with 3 Hunters each are kept on the road. Escorts are
   released in the arrival town. Solo Traders pick either ferry crossing at random and bend every open leg
   of 150m+ through a point 60-150m off the road.
-- **Grand caravan:** 30 minutes after boot and then every 3 hours, every idle Trader and Hunter musters
-  at the shop of the town most of them are in (announced in chat) and leaves 2 minutes later: the first
-  Trader leads, other Traders follow it, Hunters are shared out between the Traders. Arrival releases
-  everyone; a robbed leader disbands the caravan home.
+- **Grand caravan:** First departure about one hour after boot, then hourly.
+  Two traders each haul five stars of cargo and travel together with six hunters,
+  three per trader. They muster at a specialty shop for two minutes first.
+  The scheduler checks again in one minute if the roster is short or the previous
+  grand caravan is still active. The GM command starts the same muster immediately
+  when the full group is available.
 - **Robbed Trader:** 30-minute cooldown before its next own run (still hireable); its escorts give up
   the run and return to town.
 - **Stuck recovery:** an off-road bend that makes no progress for 20s is skipped; any route waypoint
@@ -488,3 +496,176 @@ Settings deviation for local runs: this workstation's server game data has no va
 Known gaps: a hire made in the last 5 seconds before a crash is lost (the flush interval); a payout
 to a hirer who is not loaded on the server is lost (logged); idle agents gather on a 30m ring, so a
 busy shop still looks crowded.
+
+## November 19 handoff verification
+
+- Preserved Gemini's uncommitted patch and separate respawn source under the ignored local state directory before editing. Reviewed the November 19 prompts in the handoff.
+- Started an isolated local world with the shipped assets and the normal scheduler. All four highway thieves left their initial regions. Viper and Kael each crossed several regions. Six other thieves were available in the Den. The authority reported mounted level-90 transport ref 3914 and loads of 41, 71, or 101 stacks.
+- Baseline GameWorld tests still assumed the old roster positions and hire dialogue. The corrected fixtures and the caravan, action, GameWorld, and architecture suites passed. Client TypeScript and 145 targeted client tests passed.
+
+The first scratch run exposed two ferry and convoy failures. Hunters boarded other crossings while their trader was still approaching the river. A late escort held the entire convoy on the road, even with other hunters fighting beside the transport. After the ferry fix, Bao, Wei, Ming, and Feng all used source 3827 and destination 19 to reach region 23183. Bao boarded on the level-90 transport at 87,829 HP. The run later failed in South-Tarim after the wait rule held the horse under repeated native thief attacks.
+
+- Escorts now use the leader's precise ferry link. They catch up directly on the road, take the leader's gate route when leaving town, and move the convoy while nearby cover remains.
+- Active thieves start on four distinct directed routes. Native combat uses one movement decision per tick. A cast holds route movement, and a verified cast start clears the projected peer path before the skill animation.
+- Grouped traders retain their cargo while the living horse waits for resurrection. A failed run clears the cargo and releases surviving escorts. Entering sight of a corpse receives its native life state.
+- Full AI loads use native trade tiers. A genuinely one-star caravan keeps the native PvP protection. The shipped data tests use named actors and check actual damage against a loaded trader and an NPC thief.
+- In the browser, Fen was seated on the armored horse at the Jangan specialty shop. The client uses the shipped DHORSE1 visual for missing DHORSE3 geometry. The authority retains DHORSE3 level, HP, capacity, and cargo.
+- Warlock signed in to the existing world at level 90 and opened the seeded equipment inventory. The saved inventory initially held 13 ninth-degree Sun pieces at +12. Replaced its seeded options with 117 legal maximum values calculated by the native forge, verified the one-character transaction, and kept a local backup. The main merge is `275b3f3e` and includes both the caravan hire and market UI handlers.
+- The next uninterrupted run (`.state/handoff-run-soak.log`) confirmed all three escorts used Bao's ferry and cast over 130 skills at native thieves. It exposed another post-ferry bug: escorts still tried to board for the entire outbound leg after they had crossed, so none could catch up once separated. The ferry retry now ends as soon as the leader leaves the landing area. A regression test covers regular following after the landing.
+
+A published [phBot caravan route runner](https://github.com/Vette1123/phbot-plugins#xcaravan) also treats boarding as a distinct step. OpenSRO's implementation uses the server's native ferry admission and arrival.
+
+The final uninterrupted run used an ignored Go overlay for observation only. The regular live
+scheduler dispatched Lin from Jangan. Lin and Kwan, Lei, and Gang crossed ferry source 2119 to
+destination 10 and reached Elder Leegak's specialty shop in Donwhang at **23:35:28**, after
+**18m 38s**. All four survived. Lin carried the 41-stack, three-star load and was mounted
+through every travel sample. The trader's only position jump was the native ferry. The
+escorts used their configured catch-up placement inside Donwhang. The trace contains **540
+accepted casts against 17 distinct native thieves** by those three hunters before delivery.
+The observer was disconnected throughout the run. Evidence is in `.state/handoff-run-final.log`.
+
+The trace also shows Viper using a skill against an AI hunter and Kael summoning a transport,
+loading one stolen stack, and damaging a native hunter. Kael arrived back in the Thief Den
+and became idle after the native five-minute scroll countdown. The shipped-data test
+independently covers both named thieves damaging a native hunter. The November 20 browser check below
+covers both thieves' animation playback. Bao's separate five-star convoy lost its transport after
+its escorts fell, which confirmed that native ambushes and cargo loss still apply.
+
+One thief revenge gang remained at a blocked highway entry after combat. The final shared build
+returns a gang home after 60 seconds without movement. Its regression passed independently,
+and the shared world on port 15180 was restarted with the fix. The Go caravan, action,
+GameWorld, and architecture suites passed on that build. The main merge and feature changes
+remain local.
+
+## November 20 browser animation verification
+
+- Used the current branch in a disposable local GameWorld. A Go build overlay placed the two
+  named thieves in South-Tarim and spawned a native NPC hunter for repeatable casts.
+  The browser received the normal combat and movement packets. The observer sent no attacks.
+- Viper showed spear wind-up, swing and thrust poses, visible hit effects, and recovery.
+  Kael drew and released the bow from range, with visible projectile travel and impact.
+  Repeated samples showed both returning to grounded combat poses. The browser console
+  showed zero errors and no cast or animation warnings.
+- The server log recorded 40 accepted Viper casts (base 40 and trained skills 19095, 19134,
+  19297) and 31 accepted Kael casts (base 70 and trained skills 19330, 19391, 19430).
+  The cast log is `.state/thief-animation-browser.log`. The visual check sampled repeated
+  combat sequences. The skill ID coverage comes from the server trace.
+- The reported animation problem did not reproduce on the current branch. This verification
+  changed the implementation notes only. The scratch overlay was excluded from production
+  source, and the shared caravan world remained in service.
+
+## November 20 caravan balance and controls
+
+- Solo dispatch caps the trader's cargo at two stars. The transport loader checks
+  the actual native or gold-based cargo rating and trims any heavier load left
+  over from a previous run. Escorted and grand runs restore the trader's roster
+  cargo profile.
+- A trader that loses its own run asks for one more hunter, up to four. A
+  successful delivery asks for one fewer. A robbed solo trader waits for a
+  hunter before dispatching again. The scheduler prioritizes these traders
+  for escorted slots. Escort preferences are held in the running shard.
+- Escorts near a stationary player change their position more often. At 30 m
+  they start catching up when out of combat. Hired followers and automated
+  convoy escorts can fight within 100 m of their leader. Past 100 m they
+  rejoin and ignore targets until they are within 30 m again. Existing ferry
+  boarding rules apply on ferry legs.
+- AI dialogue uses normal white chat, scoped to players who can see the
+  speaking character. Dialogue is delivered after actor appearances and stays
+  out of the global chat history. System replies to caravan commands keep
+  their existing channel.
+- With AI caravans enabled, dismounting a moving trade transport stops and
+  parks it in one request. The native stop-first rule still applies with the
+  feature off and to ordinary riding horses.
+- AI thieves load stolen goods into a trade transport through normal pickup,
+  ride at the same transport pace as traders, and use the native Bandit Den
+  Return Scroll. The return uses the shard's configured countdown.
+
+The regression suite covers loaded cargo shrinking from five stars to two,
+an actual thief defeat followed by an escorted dispatch, a successful delivery
+reducing that escort to zero, straight-line catch-up at 30 m, the combat tether,
+the normal chat packet, and trade-transport dismount with the feature off and on.
+
+Shipped-data tests also verify that a thief can collect real cargo, start the
+native scroll, mount during the countdown, and match a trader's transport speed.
+The action, caravan AI, chat, GameWorld, and architecture suites passed. The
+shared local shard on port 15180 returned ready after rebuilding from the worktree.
+
+Browser checks used the isolated Jangan shard on port 25180. Before the fix,
+Dismount was refused during a ride and worked after stopping. On the updated
+build, one click during a ride stopped the horse, put the character on foot,
+and restored the Board control. Hired Hunter Tian moved around the stationary
+trader, and Tian's farewell appeared in white in the All tab and as a speech
+bubble. The later chat ordering change for greetings was covered by the server
+suite. A second full town-to-town ferry run was not part of this balance check.
+
+## November 20 thief cargo pickup before return
+
+The Bandit Den scroll blocks native trade-goods pickup while its countdown is
+active. Thieves now resume looting after combat, prioritize trade goods within
+30 m, and check the current ground again before starting the scroll. A full
+transport can still take goods that fit an existing stack. Once the scroll is
+active the thief stops looking for cargo.
+
+The shipped-data GameWorld regression drives the actual loot scan and pickup
+hooks, clears three cargo drops, and checks that the scroll stays off until the
+last pickup. It then advances the native countdown and verifies arrival in the
+Bandit Den. The GameWorld, caravan AI, inventory, action, and architecture suites
+passed.
+
+## November 20 escort combat distance
+
+Regression checks cover both a player-hired hunter and an autonomous convoy
+hunter. The autonomous escort fights at 100 m, runs toward the trader at
+110 m, keeps following at 65 m, and can fight again at 30 m and on a later
+chase. The hired hunter keeps its normal straight-line catch-up behavior at
+30 m and uses the same combat limits around its hirer.
+
+The combined loot and escort build reported ready on ports 15180 and 25180.
+
+## November 20 hourly grand caravan verification
+
+The simulated clock test verified the first departure and the next hourly
+muster, two traders, three hunters per trader, and overlap prevention.
+The shipped-data GameWorld test verified five-star markers for both loaded
+transports. The caravan AI, action, GameWorld, and architecture suites passed.
+The isolated local shard on port 25180 reported ready.
+
+## November 22 grand caravan fixes
+
+Both escort groups stage at the lead trader’s ferry. A trader that crosses
+as a follower passes the exact native ferry link to its own hunters while
+it is near the landing. Hunters already on the landing side resume following.
+
+The cargo loader trims the actual retained cargo when the requested rating
+falls and preserves the solo two-star limit. The five-star marker publisher
+reads server-controlled transports alongside connected players’ transports.
+
+The caravan AI, action, GameWorld, and architecture suites passed. Regressions
+cover the second escort group at the ferry, the five-to-three-to-two cargo
+transition, and five-star marker packets for AI actors without player sessions.
+
+### Live Donwhang to Hotan run
+
+The isolated browser shard ran the normal two-minute muster and then the
+full Donwhang–Hotan route. The observer only moved their own character and
+stayed invisible and out of combat. No route, combat, or ferry behavior was
+changed for the test. The server overlay recorded route and ferry events.
+
+- Hua rode with Shan, Hao, and Lan. Zhou rode with Rui, Bo, and Tian. Both
+  mounted traders left Donwhang at about 17:57 with five-star cargo. The
+  browser showed hunters fighting thieves in Earth Ghost Canyon. Shan was
+  knocked out in the ravine and rejoined Hua before the crossing.
+- At about 18:26, both traders and all six hunters crossed Tarim Ferry
+  through native link `3825 → 17`, landing in region `23180`. The browser
+  showed both mounted traders at the approach and all eight still on the
+  grand route after the crossing.
+- Both traders reached Specialty Trader Samok in Hotan at about 18:31,
+  roughly 34 minutes after departure. The last active route sample showed
+  both carrying five-star cargo beside the shop. The browser map then showed
+  both back at their usual four-star rating in Hotan and all six hunters
+  hireable there.
+
+The five-star overhead icons were not independently resolved in the browser.
+The GameWorld regression verified the marker packet for both loaded AI
+transports. See `.state/grand-browser-live.log` for the live ferry trace and
+`.state/grand-browser-tests.log` for the regression results.

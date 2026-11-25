@@ -1,9 +1,9 @@
 package chat
 
 import (
+	"bytes"
 	"strings"
 	"testing"
-	"time"
 	"unicode/utf16"
 )
 
@@ -12,9 +12,8 @@ import (
 TestAgentChatFitsTheClientLimit
 
 An AI agent's line longer than the client's 100-unit chat limit is cut to
-fit (the client drops the session over a longer one, and the transcript
-replays it at every login); a short line is kept whole and a surrogate
-pair is never split.
+fit because the client drops the session over a longer one. A short line
+is kept whole and a surrogate pair is never split.
 ================
 */
 func TestAgentChatFitsTheClientLimit(t *testing.T) {
@@ -32,11 +31,7 @@ func TestAgentChatFitsTheClientLimit(t *testing.T) {
 		t.Fatalf("a surrogate pair was split: %q", cut)
 	}
 
-	rt := &Runtime{history: map[string][]publicLine{}, members: map[uint64]publicMember{}, now: time.Now}
-	rt.PublishAgentChat("d", "[AI]Hunter_Ming", long)
-	if rows := rt.history["d"]; len(rows) != 1 {
-		t.Fatalf("history rows %d", len(rows))
-	} else if _, _, text, ok := DecodeChatBroadcastNamed(rows[0].payload); !ok || len(utf16.Encode([]rune(text))) > MaxChatNoticeUnits {
-		t.Fatalf("published agent line over the limit: %q", text)
+	if got, want := AgentChatPayload(99, long), EncodeChatBroadcastGid(ChatTypeAll, 99, ClampChatUnits(long, MaxChatNoticeUnits)); !bytes.Equal(got, want) {
+		t.Fatal("agent line did not use normal, GID-scoped chat")
 	}
 }

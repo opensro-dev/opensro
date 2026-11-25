@@ -358,6 +358,10 @@ type Runtime struct {
 	// storageAuthority owns the account warehouse (storage.go).
 	storageAuthority domain.StorageAuthority
 	petMu            sync.Mutex
+	// caravanStacks caches serverActorDesiredStacks per AI Trader (by
+	// lowercase name): the probe walks up to 140 rows through caravanTier.
+	caravanStacksMu sync.Mutex
+	caravanStacks   map[string]caravanStacksMemo
 	// petDiag throttles the attack pet fight log (petdiagnostics.go).
 	petDiag petDiagnostics
 	// placements counts non-walk placements inside a closed object
@@ -615,6 +619,8 @@ type Runtime struct {
 	// TradeTiers rates caravans by cargo gold and raises Jangan route profit
 	// (tradetiers.go; port-only, not native). False is native.
 	TradeTiers bool
+	// CaravanTransportStepDown stops a moving trade transport on dismount (port-only, not native).
+	CaravanTransportStepDown bool
 	// AlexandriaHideD11Goods keeps degree-11 goods out of Alexandria's
 	// own shops (commerce/alexandriashops.go; port-only, not native).
 	// False is native: the original game sold them there (#2842).

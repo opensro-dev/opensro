@@ -6,15 +6,14 @@ convoy.go - escort roaming, hiring, standing runs and the grand caravan
 Port-only. Distances are world units: 10 units are one in-game metre (skill
 ranges read 180 units as 18m).
 
-  - Followers roam within 50m of whoever they follow, run after them past
-    120m and are teleported to them past 200m.
+  - Escorts roam within 30m of their leader, catch up outside that radius,
+    and teleport if more than 150m behind.
   - Any idle agent can be hired at a specialty shop for one trade run, at
     most an hour. Hunters and Traders hire Hunters and Traders; Thieves
     hire Thieves. Hired Traders carry goods the hirer pays for and pay the
     sale back on delivery.
-  - Two solo runs and two runs with three Hunters each are kept on the road;
-    every few hours every idle Trader and Hunter musters in one town and
-    leaves as one grand caravan.
+  - The scheduler keeps up to two solo and two escorted runs on the road.
+    An hourly grand caravan adds two five-star Traders and six Hunters.
   - A robbed Trader waits 30 minutes before its next own run.
 
 ===========================================================================
@@ -25,6 +24,7 @@ import (
 	"fmt"
 	"math"
 	"math/rand/v2"
+	"slices"
 	"sort"
 	"strings"
 
@@ -35,18 +35,21 @@ import (
 const (
 	UnitsPerMeter = 10
 
-	EscortRoamRadius       float64 = 50 * UnitsPerMeter
-	EscortFollowDistance   float64 = 120 * UnitsPerMeter
-	EscortTeleportDistance float64 = 200 * UnitsPerMeter
+	EscortRoamRadius        float64 = 30 * UnitsPerMeter
+	EscortFollowDistance    float64 = 90 * UnitsPerMeter
+	escortCombatDistance    float64 = 100 * UnitsPerMeter
+	EscortTeleportDistance  float64 = 150 * UnitsPerMeter
+	escortFerryWaitDistance         = 20 * UnitsPerMeter
 
-	HireFeeGold       int64 = BaseHunterHireFeeGold
-	HireMaxDurationMs int64 = 60 * 60_000
+	HireFeeGold int64 = BaseHunterHireFeeGold
 	// HireLeaderMissingMs ends a hire whose hirer stays offline or out of
 	// the main world this long.
 	HireLeaderMissingMs int64 = 2 * 60_000
-	// HireRunMinOutMs: back in the town the hirer left counts as a finished
-	// run only after this long outside (a quick step out is not a run).
+	// HireRunMinOutMs: a hired Trader back in the town it was hired in sells
+	// only after this long outside (a quick step out is not a run).
 	HireRunMinOutMs int64 = 10 * 60_000
+	// hireSellReach is how near the town's trade shop a hired Trader sells.
+	hireSellReach float64 = 8 * UnitsPerMeter
 	// HiredGoodsMarginPerStarPct is the sale margin a hired Trader earns its
 	// hirer per cargo star on delivery.
 	HiredGoodsMarginPerStarPct = 15
@@ -58,9 +61,13 @@ const (
 	StandingEscortedRuns = 2
 	EscortsPerRun        = 3
 
-	GrandCaravanFirstMs    int64 = 30 * 60_000
-	GrandCaravanIntervalMs int64 = 3 * 60 * 60_000
+	GrandCaravanIntervalMs int64 = 60 * 60_000
 	GrandCaravanMusterMs   int64 = 2 * 60_000
+	GrandCaravanFirstMs          = GrandCaravanIntervalMs - GrandCaravanMusterMs
+	grandCaravanRetryMs    int64 = 60_000
+	grandCaravanTraders          = 2
+	grandCaravanHunters          = 6
+	grandCaravanCargoStars       = 5
 
 	townWanderRadius float64 = 30 * UnitsPerMeter
 	townWanderInner  float64 = 8 * UnitsPerMeter
@@ -155,7 +162,7 @@ func CanHire(playerJob uint8, role AgentRole) bool {
 
 func hireable(u *AgentUnit) bool {
 	return u.HiredBy == "" && u.RunKind == RunNone && u.DedicatedEscortFor == "" && u.EscortingTrader == "" &&
-		(u.State == StateIdleInTown || u.State == StateRecruiting) && !u.RespawnPending && u.HP > 0
+		(u.State == StateIdleInTown || u.State == StateRecruiting) && !u.RespawnPending && u.DeadUntilMs == 0 && u.HP > 0
 }
 
 // HiredGoodsPerStarGold is what a hired Trader's goods cost per star;
@@ -282,7 +289,8 @@ func (r *Runtime) homeLocked(u *AgentUnit) TownID {
 }
 
 func (r *Runtime) placeAtLocked(at Waypoint) (TownID, bool) {
-	if WaypointDistance(at, r.terminalLocked(TownThiefDen)) <= denRadius {
+	den := r.terminalLocked(TownThiefDen)
+	if (den.RegionID != 0 && at.RegionID == den.RegionID) || WaypointDistance(at, den) <= denRadius {
 		return TownThiefDen, true
 	}
 	if isTownRegion(at.RegionID) {
@@ -340,10 +348,13 @@ Where the unit's leader (an agent or a player) stands.
 */
 func (r *Runtime) leaderPositionLocked(unit *AgentUnit) (Waypoint, *AgentUnit, bool) {
 	if leader := r.findAgentLocked(unit.Division, unit.EscortingTrader); leader != nil {
+		if leader.RespawnPending || leader.HP <= 0 {
+			return Waypoint{}, nil, false
+		}
 		return position(leader), leader, true
 	}
 	if r.hooks.Player != nil {
-		if p, ok := r.hooks.Player(unit.Division, unit.EscortingTrader); ok {
+		if p, ok := r.hooks.Player(unit.Division, unit.EscortingTrader); ok && p.HPPercent > 0 {
 			return p.At, nil, true
 		}
 	}
@@ -354,40 +365,79 @@ func (r *Runtime) leaderPositionLocked(unit *AgentUnit) (Waypoint, *AgentUnit, b
 ================
 stepFollowLocked
 
-Roam within 50m of the leader, run after it past 120m, teleport past 200m
-or when a catch-up stalls.
+Roam within 30m of the leader, run after it at 30m, teleport past 150m
+or when a catch-up stalls. If an escorted AI Trader is dead on the ground
+and a living Hunter in the convoy can resurrect them, Hunters stay to revive
+and guard the Trader instead of disbanding to town.
 ================
 */
 func (r *Runtime) stepFollowLocked(unit *AgentUnit, nowMs int64) *Waypoint {
 	leader, leaderUnit, ok := r.leaderPositionLocked(unit)
 	if !ok {
+		if unit.Role == RoleHunter && unit.EscortingTrader != "" {
+			if fallen := r.findAgentLocked(unit.Division, unit.EscortingTrader); fallen != nil && fallen.DeadUntilMs > 0 && nowMs < fallen.DeadUntilMs && r.hasLivingResurrectingEscortLocked(fallen, nowMs) {
+				target := position(fallen)
+				if unit.CanResurrect {
+					if WaypointDistance(position(unit), target) > ResurrectCastRange*0.75 {
+						r.moveLocked(unit, target, stepDistanceFor(unit))
+					}
+				} else if WaypointDistance(position(unit), target) > EscortRoamRadius {
+					r.moveLocked(unit, target, stepDistanceFor(unit))
+				}
+				return nil
+			}
+		}
 		if unit.HiredBy == "" {
 			r.releaseLocked(unit, nowMs, true)
 		}
 		return nil
 	}
+	dist := WaypointDistance(position(unit), leader)
+	if leaderUnit != nil {
+		index, route := leaderUnit.WaypointIndex, leaderUnit.Route
+		guide := r.ferryGuideLocked(leaderUnit)
+		if guide.WaypointIndex < len(guide.Route) && guide.Route[guide.WaypointIndex].FerryTargetID != 0 {
+			board := position(guide)
+			if WaypointDistance(position(unit), board) > 120 {
+				r.moveLocked(unit, board, stepDistanceFor(unit))
+			}
+			return nil
+		}
+		if dist > 320 {
+			landing := leaderUnit.lastFerry
+			if index > 0 && index <= len(route) && route[index-1].FerryTargetID != 0 {
+				landing = route[index-1]
+			}
+			if landing.FerryTargetID != 0 && WaypointDistance(leader, landing) <= 320 &&
+				WaypointDistance(position(unit), landing) > 320 {
+				return &landing
+			}
+		}
+	}
 	if unit.Role == RoleTrader {
 		return r.stepTraderFollowLocked(unit, leader, leaderUnit, nowMs)
 	}
-	dist := WaypointDistance(position(unit), leader)
 	if dist > EscortTeleportDistance || (unit.catchingUp && unit.noteProgress(nowMs) >= followStuckMs) {
-		angle := rand.Float64() * 2 * math.Pi
-		unit.place(offsetPoint(leader, 30*math.Cos(angle), 30*math.Sin(angle)), nowMs)
-		unit.catchingUp, unit.roamAtMs = false, 0
+		angle := escortFormationAngle(unit.Name)
+		unit.place(offsetPoint(leader, 28*math.Cos(angle), 28*math.Sin(angle)), nowMs)
+		unit.catchingUp, unit.escortMoving, unit.roamAtMs = false, false, 0
 		return nil
 	}
-	if dist > EscortFollowDistance {
+	// Whenever a follower falls outside the 30m escort radius, immediately catch up
+	// toward the leader instead of wandering randomly behind.
+	if dist >= EscortRoamRadius {
 		unit.catchingUp = true
 	}
-	if unit.catchingUp && dist <= EscortRoamRadius*0.6 {
+	if unit.catchingUp && dist <= EscortRoamRadius*0.65 {
 		unit.catchingUp = false
 	}
 	if unit.catchingUp {
+		unit.escortMoving = true
 		var follow *Waypoint
-		if leaderUnit != nil {
-			follow = r.stepEscortFollowLocked(unit, leaderUnit)
+		if leaderUnit != nil && dist > EscortFollowDistance {
+			r.stepEscortFollowLocked(unit, leaderUnit)
 		} else {
-			if dist > 320 {
+			if leaderUnit == nil && dist > 320 {
 				follow = &leader
 			}
 			r.moveLocked(unit, leader, stepDistanceFor(unit))
@@ -395,18 +445,57 @@ func (r *Runtime) stepFollowLocked(unit *AgentUnit, nowMs int64) *Waypoint {
 		unit.noteProgress(nowMs)
 		return follow
 	}
-	unit.progressAtMs = 0
 	if nowMs >= unit.roamAtMs {
-		angle := rand.Float64() * 2 * math.Pi
-		radius := 150 + rand.Float64()*(EscortRoamRadius-150)
+		angle := escortFormationAngle(unit.Name)
+		swing, interval := 0.45, int64(15_000)
+		if leaderUnit == nil && WaypointDistance(unit.lastLeaderAt, leader) < 20 {
+			swing, interval = 1.5, 7_000
+		}
+		angle += (rand.Float64() - 0.5) * swing
+		radius := 150 + rand.Float64()*90
 		unit.roamDX, unit.roamDZ = radius*math.Cos(angle), radius*math.Sin(angle)
-		unit.roamAtMs = nowMs + 3000 + rand.Int64N(4000)
+		unit.roamAtMs = nowMs + interval + rand.Int64N(interval/2)
+		unit.lastLeaderAt = leader
 	}
 	target := offsetPoint(leader, unit.roamDX, unit.roamDZ)
-	if WaypointDistance(position(unit), target) > 8 {
-		r.moveLocked(unit, target, stepDistanceFor(unit))
+	distToSlot := WaypointDistance(position(unit), target)
+	if distToSlot > 24 {
+		unit.escortMoving = true
+	} else if distToSlot <= 8 {
+		unit.escortMoving = false
+		unit.progressAtMs = 0
+	}
+	if unit.escortMoving {
+		step := stepDistanceFor(unit)
+		// Match a slower moving leader's pace when already near our flank slot so
+		// fast escorts glide alongside the caravan instead of sprint-stop stuttering.
+		if leaderUnit != nil && distToSlot <= 80 {
+			pace := stepDistanceFor(leaderUnit) * 1.15
+			if pace < 3.5 {
+				pace = 3.5
+			}
+			if step > pace {
+				step = pace
+			}
+		}
+		r.moveLocked(unit, target, step)
+		if unit.noteProgress(nowMs) >= followStuckMs {
+			angle := escortFormationAngle(unit.Name)
+			unit.place(offsetPoint(leader, 28*math.Cos(angle), 28*math.Sin(angle)), nowMs)
+			unit.escortMoving, unit.roamAtMs = false, 0
+		}
 	}
 	return nil
+}
+
+func escortFormationAngle(name string) float64 {
+	var h uint32 = 2166136261
+	for i := 0; i < len(name); i++ {
+		h ^= uint32(name[i])
+		h *= 16777619
+	}
+	// Spread escorts across 8 clean slots around the leader.
+	return float64(h%8) * (2 * math.Pi / 8)
 }
 
 // traderSlotRadius is how far a following Trader keeps from its leader.
@@ -460,9 +549,9 @@ func (r *Runtime) stepTraderFollowLocked(unit *AgentUnit, leader Waypoint, leade
 	unit.catchingUp = true
 	if leaderUnit != nil && WaypointDistance(position(unit), leader) > 320 {
 		// Far behind another agent: its route (and ferries) brings it back.
-		follow := r.stepEscortFollowLocked(unit, leaderUnit)
+		r.stepEscortFollowLocked(unit, leaderUnit)
 		unit.noteProgress(nowMs)
-		return follow
+		return nil
 	}
 	var follow *Waypoint
 	if WaypointDistance(position(unit), leader) > 320 {
@@ -488,6 +577,12 @@ town walks back to it.
 func (r *Runtime) wanderInTownLocked(unit *AgentUnit, nowMs int64) {
 	home := r.terminalLocked(unit.OriginTown)
 	if _, inTown := r.placeAtLocked(position(unit)); !inTown {
+		if unit.Role != RoleTrader && unit.State == StateIdleInTown {
+			unit.place(offsetPoint(home, 20, 20), nowMs)
+			unit.pendingTeleport = nil
+			unit.roamAtMs = 0
+			return
+		}
 		r.moveLocked(unit, home, stepDistanceFor(unit))
 		if unit.noteProgress(nowMs) >= stuckTeleportMs {
 			unit.place(home, nowMs)
@@ -529,22 +624,34 @@ nearest town (teleported there when asked and outside town).
 ================
 */
 func (r *Runtime) releaseLocked(u *AgentUnit, nowMs int64, teleportHome bool) {
+	if u.RunKind == RunGrand && u.Role == RoleTrader {
+		u.CargoStars = u.standingCargoStars
+	}
+	u.lastFerry = Waypoint{}
 	u.DedicatedEscortFor, u.EscortingTrader, u.ReinforcingTrader = "", "", ""
 	u.HiredBy, u.hireLeftTown, u.leftTownAtMs, u.leaderMissingAtMs, u.GoodsCostGold = "", false, 0, 0, 0
+	u.seenInParty, u.hireDone = false, false
 	u.RunKind, u.State = RunNone, StateIdleInTown
-	u.UnderAttack, u.catchingUp, u.roamAtMs, u.progressAtMs = false, false, 0, 0
+	u.UnderAttack, u.catchingUp, u.combatRejoining, u.roamAtMs, u.progressAtMs = false, false, false, 0, 0
 	town := r.homeLocked(u)
 	u.OriginTown, u.DestTown = town, nextTown(town)
 	u.Route, u.WaypointIndex = nil, 0
+	if u.DeadUntilMs > 0 || u.HP <= 0 {
+		u.pendingTeleport = nil
+		u.AvailableForHire = false
+		return
+	}
 	if at, inTown := r.placeAtLocked(position(u)); teleportHome && (!inTown || at != town) {
-		tp := offsetPoint(r.terminalLocked(town), 20, 20)
-		u.pendingTeleport = &tp
+		angle := escortFormationAngle(u.Name)
+		tp := offsetPoint(r.terminalLocked(town), 25*math.Cos(angle), 25*math.Sin(angle))
+		u.place(tp, nowMs)
+		u.pendingTeleport = nil
 	}
 	if u.Role == RoleTrader {
 		u.CargoStacks = 10
 		u.TownDepartAtMs = nowMs + TownRestDurationMs
 	}
-	u.AvailableForHire = true
+	u.AvailableForHire = hireable(u)
 }
 
 /*
@@ -557,6 +664,15 @@ caravan, are released in the arrival town.
 */
 func (r *Runtime) finishRunLocked(trader *AgentUnit, nowMs int64) {
 	kind := trader.RunKind
+	if kind == RunGrand {
+		trader.CargoStars = trader.standingCargoStars
+	}
+	if kind == RunSolo || kind == RunEscorted {
+		trader.escortPreference = r.assignedEscortCountLocked(trader) - 1
+		if trader.escortPreference == 0 {
+			trader.escortPreference = -1
+		}
+	}
 	for _, u := range r.agents[trader.Division] {
 		if u == trader || u.HiredBy != "" {
 			continue
@@ -578,10 +694,16 @@ back to the nearest town.
 ================
 */
 func (r *Runtime) disbandRunLocked(trader *AgentUnit, nowMs int64) {
+	if trader.RunKind == RunSolo || trader.RunKind == RunEscorted {
+		trader.escortPreference = min(EscortsPerRun+1, r.assignedEscortCountLocked(trader)+1)
+	}
+	if trader.RunKind == RunGrand {
+		trader.CargoStars = trader.standingCargoStars
+	}
 	if trader.RunKind == RunGrand && trader.EscortingTrader != "" {
 		// A follower Trader of the grand caravan: only its own guards leave.
 		for _, u := range r.agents[trader.Division] {
-			if u != trader && u.HiredBy == "" && strings.EqualFold(u.EscortingTrader, trader.Name) {
+			if u != trader && u.HiredBy == "" && (strings.EqualFold(u.EscortingTrader, trader.Name) || strings.EqualFold(u.ReinforcingTrader, trader.Name)) {
 				r.releaseLocked(u, nowMs, true)
 			}
 		}
@@ -590,7 +712,7 @@ func (r *Runtime) disbandRunLocked(trader *AgentUnit, nowMs int64) {
 			if u == trader || u.HiredBy != "" {
 				continue
 			}
-			if (trader.RunKind == RunGrand && u.RunKind == RunGrand) || strings.EqualFold(u.DedicatedEscortFor, trader.Name) || strings.EqualFold(u.EscortingTrader, trader.Name) {
+			if (trader.RunKind == RunGrand && u.RunKind == RunGrand) || strings.EqualFold(u.DedicatedEscortFor, trader.Name) || strings.EqualFold(u.EscortingTrader, trader.Name) || strings.EqualFold(u.ReinforcingTrader, trader.Name) {
 				r.releaseLocked(u, nowMs, true)
 			}
 		}
@@ -610,14 +732,29 @@ func eligibleTrader(u *AgentUnit, nowMs int64) bool {
 	return u.Role == RoleTrader && hireable(u) && nowMs >= u.TownDepartAtMs && nowMs >= u.CooldownUntilMs
 }
 
-func (r *Runtime) eligibleTraderLocked(division string, nowMs int64) *AgentUnit {
+func (r *Runtime) eligibleTraderLocked(division string, nowMs int64, kind RunKind) *AgentUnit {
 	var best *AgentUnit
 	for _, u := range r.agents[division] {
-		if eligibleTrader(u, nowMs) && (best == nil || u.TownDepartAtMs < best.TownDepartAtMs) {
+		if !eligibleTrader(u, nowMs) || (kind == RunSolo && u.escortPreference > 0) ||
+			(kind == RunEscorted && u.escortPreference < 0) {
+			continue
+		}
+		if best == nil || (kind == RunEscorted && u.escortPreference > 0 && best.escortPreference == 0) ||
+			((kind == RunSolo || (u.escortPreference > 0) == (best.escortPreference > 0)) && u.TownDepartAtMs < best.TownDepartAtMs) {
 			best = u
 		}
 	}
 	return best
+}
+
+func (r *Runtime) assignedEscortCountLocked(trader *AgentUnit) int {
+	n := 0
+	for _, u := range r.agents[trader.Division] {
+		if u.Role == RoleHunter && u.DedicatedEscortFor == trader.Name {
+			n++
+		}
+	}
+	return n
 }
 
 /*
@@ -655,7 +792,8 @@ func (r *Runtime) assignEscortLocked(guard, leader *AgentUnit, kind RunKind) {
 	guard.RunKind, guard.State, guard.TownDepartAtMs = kind, StateTraveling, 0
 	guard.OriginTown, guard.DestTown = leader.OriginTown, leader.DestTown
 	guard.Route, guard.WaypointIndex = nil, 0
-	guard.catchingUp, guard.roamAtMs = false, 0
+	guard.catchingUp, guard.combatRejoining, guard.roamAtMs = false, false, 0
+	guard.lastFerry = Waypoint{}
 	if WaypointDistance(position(guard), position(leader)) > 300 {
 		tp := offsetPoint(position(leader), 12, 12)
 		guard.pendingTeleport = &tp
@@ -690,24 +828,41 @@ func (r *Runtime) scheduleRunsLocked(division string, nowMs int64) {
 		}
 	}
 	for ; solo < StandingSoloRuns; solo++ {
-		trader := r.eligibleTraderLocked(division, nowMs)
+		trader := r.eligibleTraderLocked(division, nowMs, RunSolo)
 		if trader == nil {
 			break
 		}
 		r.dispatchTraderLocked(trader, RunSolo, nil, nowMs)
 	}
 	// Killed highway Thieves are replaced by rested town Thieves.
+	// Also recover any un-hired Thief stranded in Thief Den with a stale travel/vengeance state.
 	patrols := 0
 	var spare []*AgentUnit
 	for _, u := range r.agents[division] {
 		if u.Role != RoleThief || u.HiredBy != "" {
 			continue
 		}
+		if place, inPlace := r.placeAtLocked(position(u)); inPlace && place == TownThiefDen && !u.IsDead(nowMs) && !u.RespawnPending {
+			if u.RunKind == RunVengeance && u.EscortingTrader != "" {
+				leader := r.findAgentLocked(division, u.EscortingTrader)
+				if leader == nil || leader.RunKind != RunVengeance || leader.IsDead(nowMs) {
+					r.releaseLocked(u, nowMs, false)
+				}
+			} else if u.State != StateIdleInTown && u.RunKind == RunNone {
+				if len(u.Route) > 2 && u.OriginTown != TownThiefDen {
+					u.WaypointIndex = 2
+					u.place(u.Route[2], nowMs)
+					u.pendingTeleport = nil
+				} else {
+					r.releaseLocked(u, nowMs, false)
+				}
+			}
+		}
 		if hireable(u) {
 			if nowMs >= u.TownDepartAtMs {
 				spare = append(spare, u)
 			}
-		} else if u.State != StateIdleInTown {
+		} else if u.State != StateIdleInTown && !u.IsDead(nowMs) {
 			patrols++
 		}
 	}
@@ -717,19 +872,24 @@ func (r *Runtime) scheduleRunsLocked(division string, nowMs int64) {
 		spare = spare[1:]
 		from := rosterTowns[rand.IntN(2)]
 		thief.OriginTown, thief.DestTown = from, nextTown(from)
-		thief.State, thief.Route, thief.WaypointIndex = StateTraveling, r.route(thief), 0
+		thief.State, thief.AvailableForHire = StateTraveling, false
+		thief.Route, thief.WaypointIndex = r.route(thief), 0
 		if len(thief.Route) > 2 {
 			thief.WaypointIndex = 2
-			tp := thief.Route[2]
-			thief.pendingTeleport = &tp
+			thief.place(thief.Route[2], nowMs)
+			thief.pendingTeleport = nil
 		}
 	}
 	for ; escorted < StandingEscortedRuns; escorted++ {
-		trader := r.eligibleTraderLocked(division, nowMs)
+		trader := r.eligibleTraderLocked(division, nowMs, RunEscorted)
 		if trader == nil {
 			break
 		}
-		guards := r.pickEscortsLocked(trader, EscortsPerRun)
+		wanted := trader.escortPreference
+		if wanted == 0 {
+			wanted = EscortsPerRun
+		}
+		guards := r.pickEscortsLocked(trader, wanted)
 		if len(guards) == 0 {
 			break
 		}
@@ -741,10 +901,8 @@ func (r *Runtime) scheduleRunsLocked(division string, nowMs int64) {
 ================
 grandCaravanLocked
 
-Every GrandCaravanIntervalMs all idle Traders and Hunters muster at the
-specialty shop of the town most of them are in, and leave together after
-GrandCaravanMusterMs: the first Trader leads, the other Traders follow it
-and the Hunters are shared out between the Traders.
+Every hour two Traders and six Hunters muster and leave together.
+The muster starts two minutes before the first scheduled departure.
 ================
 */
 func (r *Runtime) grandCaravanLocked(division string, nowMs int64) {
@@ -763,8 +921,11 @@ func (r *Runtime) grandCaravanLocked(division string, nowMs int64) {
 	if nowMs < g.nextAtMs {
 		return
 	}
-	g.nextAtMs = nowMs + GrandCaravanIntervalMs
-	r.musterGrandLocked(division, g, nowMs)
+	if r.musterGrandLocked(division, g, nowMs) {
+		g.nextAtMs = nowMs + GrandCaravanIntervalMs
+	} else {
+		g.nextAtMs = nowMs + grandCaravanRetryMs
+	}
 }
 
 /*
@@ -780,30 +941,37 @@ func (r *Runtime) StartGrandCaravan(division string, nowMs int64) bool {
 	defer r.mu.Unlock()
 	g := r.grand[division]
 	if g == nil {
-		g = &grandCaravan{}
+		g = &grandCaravan{nextAtMs: nowMs + GrandCaravanFirstMs}
 		r.grand[division] = g
 	}
-	if g.departAtMs != 0 {
+	if g.departAtMs != 0 || !r.musterGrandLocked(division, g, nowMs) {
 		return false
 	}
 	g.nextAtMs = nowMs + GrandCaravanIntervalMs
-	return r.musterGrandLocked(division, g, nowMs)
+	return true
 }
 
 func (r *Runtime) musterGrandLocked(division string, g *grandCaravan, nowMs int64) bool {
-	var members []*AgentUnit
+	var traders, hunters []*AgentUnit
 	towns := map[TownID]int{}
-	traders := 0
 	for _, u := range r.agents[division] {
-		if (u.Role == RoleTrader && hireable(u) && nowMs >= u.CooldownUntilMs) || (u.Role == RoleHunter && hireable(u)) {
-			members = append(members, u)
-			towns[u.OriginTown]++
-			if u.Role == RoleTrader {
-				traders++
-			}
+		if u.RunKind == RunGrand {
+			return false
 		}
+		if !hireable(u) {
+			continue
+		}
+		switch {
+		case u.Role == RoleTrader && nowMs >= u.CooldownUntilMs:
+			traders = append(traders, u)
+		case u.Role == RoleHunter:
+			hunters = append(hunters, u)
+		default:
+			continue
+		}
+		towns[u.OriginTown]++
 	}
-	if traders == 0 {
+	if len(traders) < grandCaravanTraders || len(hunters) < grandCaravanHunters {
 		return false
 	}
 	g.town = TownJangan
@@ -814,6 +982,12 @@ func (r *Runtime) musterGrandLocked(division string, g *grandCaravan, nowMs int6
 	}
 	g.departAtMs = nowMs + GrandCaravanMusterMs
 	shop := r.terminalLocked(g.town)
+	for _, group := range [][]*AgentUnit{traders, hunters} {
+		sort.SliceStable(group, func(i, j int) bool {
+			return WaypointDistance(position(group[i]), shop) < WaypointDistance(position(group[j]), shop)
+		})
+	}
+	members := append(traders[:grandCaravanTraders], hunters[:grandCaravanHunters]...)
 	for i, u := range members {
 		u.RunKind, u.State, u.AvailableForHire = RunGrand, StateRecruiting, false
 		u.OriginTown, u.DestTown = g.town, nextTown(g.town)
@@ -826,7 +1000,7 @@ func (r *Runtime) musterGrandLocked(division string, g *grandCaravan, nowMs int6
 	}
 	r.outbox = append(r.outbox, outboxItem{chat: true, agent: members[0].Name, regionID: shop.RegionID,
 		text: fmt.Sprintf("Grand caravan! %d Traders and %d Hunters muster in %s and leave for %s in %d minutes.",
-			traders, len(members)-traders, townTitle(g.town), townTitle(nextTown(g.town)), GrandCaravanMusterMs/60_000)})
+			grandCaravanTraders, grandCaravanHunters, townTitle(g.town), townTitle(nextTown(g.town)), GrandCaravanMusterMs/60_000)})
 	return true
 }
 
@@ -836,16 +1010,21 @@ func (r *Runtime) departGrandLocked(division string, town TownID, nowMs int64) {
 		if u.RunKind != RunGrand || u.HiredBy != "" || u.State != StateRecruiting {
 			continue
 		}
+		if u.IsDead(nowMs) || u.RespawnPending {
+			r.releaseLocked(u, nowMs, false)
+			continue
+		}
 		if u.Role == RoleTrader {
 			traders = append(traders, u)
 		} else {
 			guards = append(guards, u)
 		}
 	}
-	if len(traders) == 0 {
-		for _, u := range guards {
+	if len(traders) != grandCaravanTraders || len(guards) != grandCaravanHunters {
+		for _, u := range append(traders, guards...) {
 			r.releaseLocked(u, nowMs, false)
 		}
+		r.grand[division].nextAtMs = nowMs + grandCaravanRetryMs
 		return
 	}
 	lead := traders[0]
@@ -853,7 +1032,7 @@ func (r *Runtime) departGrandLocked(division string, town TownID, nowMs int64) {
 	r.dispatchTraderLocked(lead, RunGrand, nil, nowMs)
 	for _, u := range traders[1:] {
 		r.assignEscortLocked(u, lead, RunGrand)
-		u.CargoStacks = 10
+		u.CargoStacks, u.CargoStars = 10, grandCaravanCargoStars
 	}
 	for i, u := range guards {
 		r.assignEscortLocked(u, traders[i%len(traders)], RunGrand)
@@ -1055,11 +1234,12 @@ func (r *Runtime) HireAgentStars(division, player string, playerJob uint8, agent
 func bindHire(unit *AgentUnit, player string, town TownID, goods, hiredAtMs int64) {
 	unit.HiredBy, unit.HiredAtMs, unit.HireTown = player, hiredAtMs, town
 	unit.hireLeftTown, unit.leftTownAtMs, unit.leaderMissingAtMs = false, 0, 0
+	unit.seenInParty, unit.hireDone = false, false
 	unit.RunKind, unit.State, unit.AvailableForHire = RunHired, StateTraveling, false
 	unit.EscortingTrader, unit.GoodsCostGold, unit.TownDepartAtMs = player, goods, 0
 	unit.OriginTown, unit.DestTown = town, nextTown(town)
 	unit.Route, unit.WaypointIndex = nil, 0
-	unit.catchingUp, unit.roamAtMs = false, 0
+	unit.catchingUp, unit.combatRejoining, unit.roamAtMs = false, false, 0
 }
 
 /*
@@ -1093,10 +1273,13 @@ func hireFarewell(u *AgentUnit, player string, end HireEnd) string {
 
 /*
 ================
-ToggleLead
+toggleLeadLocked / setLeadLocked / LeadState
 
-!leed: the hirer leads its hired Traders instead of the first one in the
-party.
+Who leads a hirer's hired Traders: the hirer itself (the Traders follow
+it) or one of them (the rest follow that Trader, which drives the run).
+!leed toggles the hirer; the party board's lead button (0x7FC3
+operation 2) names any of them. With no choice the first hired Trader in
+party order leads.
 ================
 */
 func (r *Runtime) toggleLeadLocked(division, player string) string {
@@ -1104,11 +1287,58 @@ func (r *Runtime) toggleLeadLocked(division, player string) string {
 		return "You have no hired caravan agents to lead."
 	}
 	key := agentKey(division, player)
-	r.leads[key] = !r.leads[key]
-	if r.leads[key] {
+	if strings.EqualFold(r.leadBy[key], player) {
+		delete(r.leadBy, key)
+		return "The first hired Trader in your party leads the caravan again."
+	}
+	r.leadBy[key] = player
+	return "You lead the caravan: your hired Traders follow you."
+}
+
+func (r *Runtime) setLeadLocked(division, player, who string) string {
+	key := agentKey(division, player)
+	if strings.EqualFold(who, player) {
+		if len(r.hiresOfLocked(division, player)) == 0 {
+			return "You have no hired caravan agents to lead."
+		}
+		r.leadBy[key] = player
 		return "You lead the caravan: your hired Traders follow you."
 	}
-	return "The first hired Trader in your party leads the caravan again."
+	for _, t := range r.hiredTradersLocked(division, player) {
+		if strings.EqualFold(t.Name, who) {
+			r.leadBy[key] = t.Name
+			return fmt.Sprintf("%s leads the caravan now.", DisplayName(t.Name))
+		}
+	}
+	return "Only you or one of your hired Traders can lead the caravan."
+}
+
+// SetLead names who leads player's hired Traders (the party board's button).
+func (r *Runtime) SetLead(division, player, who string) string {
+	division = strings.TrimSpace(division)
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return r.setLeadLocked(division, player, who)
+}
+
+// LeadState is who leads player's hired Traders and who may: the hirer
+// and its hired Traders, in lead order. Empty with no hired Trader.
+func (r *Runtime) LeadState(division, player string) (leader string, candidates []string) {
+	division = strings.TrimSpace(division)
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	traders := r.hiredTradersLocked(division, player)
+	if len(traders) == 0 {
+		return "", nil
+	}
+	candidates = []string{player}
+	for _, t := range traders {
+		candidates = append(candidates, t.Name)
+	}
+	if strings.EqualFold(r.leadBy[agentKey(division, player)], player) {
+		return player, candidates
+	}
+	return traders[0].Name, candidates
 }
 
 /*
@@ -1119,10 +1349,13 @@ The party's member order, set by the world each tick outside the lock (the
 party runtime calls back into this one).
 ================
 */
-func (r *Runtime) SetPartyOrder(division, player string, members []string) {
+func (r *Runtime) SetPartyOrder(division, player string, members []string, nowMs int64) {
+	division = strings.TrimSpace(division)
 	r.mu.Lock()
-	defer r.mu.Unlock()
 	r.partyOrder[agentKey(division, player)] = members
+	r.partyLeftLocked(division, player, members, nowMs)
+	r.mu.Unlock()
+	r.flushOutbox(division)
 }
 
 func (r *Runtime) Hirers(division string) []string {
@@ -1152,18 +1385,39 @@ func (r *Runtime) refreshHireLeaderLocked(unit *AgentUnit) {
 	if unit.HiredBy == "" {
 		return
 	}
-	if unit.Role != RoleTrader || r.leads[agentKey(unit.Division, unit.HiredBy)] {
+	if unit.Role != RoleTrader || strings.EqualFold(r.leadBy[agentKey(unit.Division, unit.HiredBy)], unit.HiredBy) {
 		unit.EscortingTrader = unit.HiredBy
 		return
 	}
+	traders := r.hiredTradersLocked(unit.Division, unit.HiredBy)
+	if len(traders) == 0 || traders[0] == unit {
+		unit.EscortingTrader = ""
+		return
+	}
+	unit.EscortingTrader = traders[0].Name
+}
+
+/*
+================
+hiredTradersLocked
+
+A hirer's hired Traders in lead order: the chosen one first, then party
+order, then hire order.
+================
+*/
+func (r *Runtime) hiredTradersLocked(division, player string) []*AgentUnit {
 	var traders []*AgentUnit
-	for _, u := range r.hiresOfLocked(unit.Division, unit.HiredBy) {
+	for _, u := range r.hiresOfLocked(division, player) {
 		if u.Role == RoleTrader {
 			traders = append(traders, u)
 		}
 	}
-	order := r.partyOrder[agentKey(unit.Division, unit.HiredBy)]
+	key := agentKey(division, player)
+	chosen, order := r.leadBy[key], r.partyOrder[key]
 	rank := func(u *AgentUnit) int {
+		if strings.EqualFold(u.Name, chosen) {
+			return -1
+		}
 		for i, name := range order {
 			if strings.EqualFold(name, u.Name) {
 				return i
@@ -1177,20 +1431,20 @@ func (r *Runtime) refreshHireLeaderLocked(unit *AgentUnit) {
 		}
 		return traders[i].HiredAtMs < traders[j].HiredAtMs
 	})
-	if traders[0] == unit {
-		unit.EscortingTrader = ""
-		return
-	}
-	unit.EscortingTrader = traders[0].Name
+	return traders
 }
 
 /*
 ================
 superviseHireLocked
 
-Ends a hire at the end of the run (back in a town), after an hour, when the
-hirer drops the job or stays away; reports true when the unit must not move
-this step.
+Hands-off hires: a hired Trader that left town sells its goods at the
+shop of the next town it reaches (the hire town again only after
+HireRunMinOutMs) and stays there; once all of a hirer's Traders sold, the
+other hired agents are released as each reaches a town. The hirer
+disbanding the party, or putting an agent out of it (partyLeftLocked),
+ends it too, as do a job change and the hirer staying away. Reports true
+when the unit must not move otherwise this step.
 ================
 */
 func (r *Runtime) superviseHireLocked(unit *AgentUnit, nowMs int64) bool {
@@ -1217,22 +1471,64 @@ func (r *Runtime) superviseHireLocked(unit *AgentUnit, nowMs int64) bool {
 		r.endHireLocked([]*AgentUnit{unit}, HireAborted, nowMs)
 		return true
 	}
-	if nowMs-unit.HiredAtMs >= HireMaxDurationMs {
-		r.endHireLocked([]*AgentUnit{unit}, HireTimedOut, nowMs)
-		return true
+	if unit.IsDead(nowMs) {
+		return false
 	}
-	place, inTown := r.placeAtLocked(p.At)
+	place, inTown := r.placeAtLocked(position(unit))
 	if !inTown {
 		if !unit.hireLeftTown {
 			unit.hireLeftTown, unit.leftTownAtMs = true, nowMs
 		}
 		return false
 	}
-	if unit.hireLeftTown && (place != unit.HireTown || nowMs-unit.leftTownAtMs >= HireRunMinOutMs) {
-		r.endHireLocked(r.hiresOfLocked(unit.Division, unit.HiredBy), HireCompleted, nowMs)
+	if unit.hireDone {
+		r.endHireLocked([]*AgentUnit{unit}, HireCompleted, nowMs)
 		return true
 	}
-	return false
+	if unit.Role != RoleTrader || !unit.hireLeftTown || (place == unit.HireTown && nowMs-unit.leftTownAtMs < HireRunMinOutMs) {
+		return false
+	}
+	// Arrived: the Trader rides to the town's shop and sells there.
+	if shop := r.terminalLocked(place); unit.CargoStacks > 0 && WaypointDistance(position(unit), shop) > hireSellReach {
+		unit.State = StateTraveling
+		r.moveLocked(unit, shop, stepDistanceFor(unit))
+		return true
+	}
+	player := unit.HiredBy
+	r.endHireLocked([]*AgentUnit{unit}, HireCompleted, nowMs)
+	if len(r.hiredTradersLocked(unit.Division, player)) == 0 {
+		for _, u := range r.hiresOfLocked(unit.Division, player) {
+			u.hireDone = true
+		}
+	}
+	return true
+}
+
+/*
+================
+partyLeftLocked
+
+SetPartyOrder's check: a hired agent the hirer's party held and no longer
+does (disbanded, or put out) ends its hire. Only while the hirer is
+online, so a logout is left to HireLeaderMissingMs.
+================
+*/
+func (r *Runtime) partyLeftLocked(division, player string, members []string, nowMs int64) {
+	if r.hooks.Player == nil {
+		return
+	}
+	if _, online := r.hooks.Player(division, player); !online {
+		return
+	}
+	var gone []*AgentUnit
+	for _, u := range r.hiresOfLocked(division, player) {
+		if slices.ContainsFunc(members, func(m string) bool { return strings.EqualFold(m, u.Name) }) {
+			u.seenInParty = true
+		} else if u.seenInParty {
+			gone = append(gone, u)
+		}
+	}
+	r.endHireLocked(gone, HireAborted, nowMs)
 }
 
 /*
@@ -1284,7 +1580,7 @@ func (r *Runtime) endHireLocked(units []*AgentUnit, end HireEnd, nowMs int64) {
 		r.releaseLocked(u, nowMs, true)
 		r.outbox = append(r.outbox, outboxItem{player: player, agent: u.Name, gold: gold, end: end})
 		if len(r.hiresOfLocked(u.Division, player)) == 0 {
-			delete(r.leads, agentKey(u.Division, player))
+			delete(r.leadBy, agentKey(u.Division, player))
 			delete(r.partyOrder, agentKey(u.Division, player))
 		}
 	}

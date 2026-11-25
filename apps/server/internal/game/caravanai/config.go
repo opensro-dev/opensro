@@ -75,6 +75,7 @@ type Config struct {
 	Terminals  map[TownID]Waypoint
 	Highway    map[[2]TownID][]Waypoint
 	Detours    map[[2]TownID][]Waypoint
+	Routes     map[[2]TownID][][]Waypoint
 	Enabled    bool
 	BrainMode  BrainMode
 	LLMURL     string

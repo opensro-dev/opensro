@@ -256,7 +256,7 @@ func findVendettaTarget(role AgentRole, players []ObservedPlayer) *ObservedPlaye
 	var best *ObservedPlayer
 	for i := range players {
 		p := &players[i]
-		if p.TrustScore > domain.CaravanVendettaScore {
+		if p.HPPercent <= 0 || p.TrustScore > domain.CaravanVendettaScore {
 			continue
 		}
 		if role == RoleTrader && p.JobType == domain.JobHunter {
@@ -273,7 +273,7 @@ func findPrimaryHostile(role AgentRole, players []ObservedPlayer) *ObservedPlaye
 	var best *ObservedPlayer
 	for i := range players {
 		p := &players[i]
-		if !isNaturalHostile(role, p.JobType) {
+		if p.HPPercent <= 0 || !isNaturalHostile(role, p.JobType) {
 			continue
 		}
 		if best == nil || p.TrustScore < best.TrustScore || p.Distance < best.Distance {
@@ -285,7 +285,7 @@ func findPrimaryHostile(role AgentRole, players []ObservedPlayer) *ObservedPlaye
 
 func findTrustedAlly(players []ObservedPlayer) *ObservedPlayer {
 	for i := range players {
-		if players[i].TrustScore >= domain.CaravanAllyScore {
+		if players[i].HPPercent > 0 && players[i].TrustScore >= domain.CaravanAllyScore {
 			return &players[i]
 		}
 	}

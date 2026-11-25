@@ -139,7 +139,7 @@ func (game *gameplayPlane) newMissionTicker(peerReferences *action.PeerReference
 	// and gates the push itself.
 	if game.items.TradeTiers {
 		hooks = append(hooks, simulation.NamedTickHook{Name: "caravan-stars", Hook: func(nowMs int64) []simulation.DivisionFrames {
-			frames := game.items.CaravanStarFrames(game.divisionID, sessionViews(ticker.Source), nowMs)
+			frames := game.items.CaravanStarFrames(game.divisionID, sessionViews(ticker.Source), game.caravanActors, nowMs)
 			if len(frames) != 0 {
 				ticker.Push.PushToDivision(game.divisionID, frames, "")
 			}

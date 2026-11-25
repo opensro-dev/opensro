@@ -37,12 +37,12 @@ func (r *Runtime) LootSought(division, name string, nowMs int64) bool {
 	defer r.mu.Unlock()
 	u := r.findAgentLocked(division, name)
 	if u == nil || u.RespawnPending || u.HP <= 0 || u.State == StateIdleInTown || u.State == StateRecruiting ||
-		u.State == StateInCombat || u.State == StateParleying || u.UnderAttack {
+		u.State == StateInCombat || u.State == StateParleying {
 		return false
 	}
 	switch u.Role {
 	case RoleTrader:
-		return !r.parleys.TruceActive(division, u.Name, nowMs)
+		return !u.UnderAttack && !r.parleys.TruceActive(division, u.Name, nowMs)
 	case RoleThief:
 		return true
 	}

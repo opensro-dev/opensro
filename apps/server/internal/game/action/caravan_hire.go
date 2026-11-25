@@ -6,10 +6,15 @@ caravan_hire.go - the port-only caravan hire window's opcodes
 0x3FC3 (S->C) opens or refreshes the hire window: a JSON body the
 gameworld's caravan wiring builds. 0x7FC3 (C->S) is the window's request:
 
-	u8 operation (0 refresh, 1 hire), u8 stars (a Trader's goods rating,
-	0 for the others), then the agent's name bytes (at most 64)
+	u8 operation (0 refresh, 1 hire, 2 lead), u8 stars (a Trader's goods
+	rating, 0 for the others), then the agent's name bytes (at most 64);
+	lead names who leads the sender's hired Traders (itself or one of them)
 
-Both were the next free pair after the arena's 0x3FCA/0x7FCA block start;
+0x3FC4 (S->C) is that lead state, pushed when it changes: JSON
+{version, leader, candidates: [{name, display}]}, the list empty once
+the hirer has no hired Trader.
+
+0x3FC3/0x7FC3 were the next free pair after the arena's 0x3FCA/0x7FCA block start;
 server and client were searched for them. A client that predates them
 never sends 0x7FC3 and drops 0x3FC3.
 
@@ -22,6 +27,9 @@ import "opensro.online/server/internal/game/enterworld"
 const (
 	OpCaravanHire        uint16 = 0x3fc3
 	OpCaravanHireRequest uint16 = 0x7fc3
+	OpCaravanLead        uint16 = 0x3fc4
+
+	CaravanHireOpLead = 2
 )
 
 /*
@@ -30,7 +38,7 @@ HandleCaravanHire
 ================
 */
 func (rt *Runtime) HandleCaravanHire(division string, c *enterworld.Character, payload []byte) OpResult {
-	if rt.CaravanHire == nil || len(payload) < 2 || payload[0] > 1 || len(payload) > 2+64 {
+	if rt.CaravanHire == nil || len(payload) < 2 || payload[0] > CaravanHireOpLead || len(payload) > 2+64 {
 		return OpResult{DiagnosticRefusal: "caravan hire request refused"}
 	}
 	return OpResult{Frames: rt.CaravanHire(division, c, payload)}

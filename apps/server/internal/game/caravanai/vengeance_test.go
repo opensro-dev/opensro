@@ -177,3 +177,28 @@ func TestKilledThiefLeadsItsGangBackAfterTheTrader(t *testing.T) {
 		}
 	}
 }
+
+func TestBlockedVengeanceReturnsTheGangToDen(t *testing.T) {
+	rt := NewRuntime(Config{Enabled: true}, nil, WorldHooks{
+		Move: func(_ string, from, _ Waypoint, _ float32) (Waypoint, bool) { return from, false },
+	})
+	t.Cleanup(func() { _ = rt.Close() })
+	rt.EnsureDivisionRoster("division")
+	rt.manualRuns = true
+	leader := rt.findAgentLocked("division", "[AI]Thief_Wisp")
+	trader := rt.findAgentLocked("division", "[AI]Trader_Jin")
+	field := Waypoint{RegionID: 25239, X: 1000, Z: 1000}
+	trader.place(field, 1000)
+	leader.place(offsetPoint(field, 500, 0), 1000)
+	rt.startVengeanceLocked(leader, trader.Name, position(leader), 1000)
+	rt.stepVengeanceLocked(leader, 1000)
+	rt.stepVengeanceLocked(leader, 1000+stuckTeleportMs)
+	if leader.RunKind != RunNone || !leader.AvailableForHire || leader.RegionID != TownWaypoint(TownThiefDen).RegionID {
+		t.Fatal("a blocked thief leader stayed on the road")
+	}
+	for _, member := range rt.agents["division"] {
+		if member.RunKind == RunVengeance || member.EscortingTrader == leader.Name {
+			t.Fatalf("thief gang member %s stayed on the road", member.Name)
+		}
+	}
+}

@@ -12,6 +12,7 @@ package caravanai
 
 import (
 	"math/rand/v2"
+	"slices"
 	"strings"
 	"unicode"
 
@@ -85,28 +86,53 @@ route
 ================
 */
 func (r *Runtime) route(unit *AgentUnit) []Waypoint {
-	points := SelectRoute(unit.OriginTown, unit.DestTown, unit.CargoStars, unit.Personality, r.memories.HeatSnapshot(unit.Division))
+	heat := r.memories.HeatSnapshot(unit.Division)
+	points := SelectRoute(unit.OriginTown, unit.DestTown, unit.CargoStars, unit.Personality, heat)
 	key := [2]TownID{unit.OriginTown, unit.DestTown}
-	if route, ok := r.cfg.Highway[key]; ok {
-		points = append([]Waypoint(nil), route...)
-	}
-	detour := shouldTakeNorthernDetour(unit.CargoStars, unit.Personality, r.memories.HeatSnapshot(unit.Division))
-	if route, ok := r.cfg.Highway[key]; ok {
-		detour = false
-		for _, point := range route {
-			if point.Chokepoint && r.memories.HeatSnapshot(unit.Division)[point.RegionID] >= DetourHeatThreshold && (unit.Personality == PersonalityCautious || unit.CargoStars >= 4) {
-				detour = true
-				break
+	if variants := r.cfg.Routes[key]; len(variants) > 0 {
+		avoidHot := unit.Personality == PersonalityCautious || unit.CargoStars >= 4
+		var pool [][]Waypoint
+		for _, cand := range variants {
+			hot := false
+			if avoidHot {
+				for _, pt := range cand {
+					if pt.Chokepoint && heat[pt.RegionID] >= DetourHeatThreshold {
+						hot = true
+						break
+					}
+				}
+			}
+			if !hot {
+				pool = append(pool, cand)
 			}
 		}
-	}
-	if unit.RunKind == RunSolo {
-		// Solo Traders pick either crossing at random and bend off the road.
-		detour = rand.IntN(2) == 0
-	}
-	if detour {
-		if route, ok := r.cfg.Detours[key]; ok {
+		if len(pool) == 0 {
+			pool = variants
+		}
+		chosen := pool[rand.IntN(len(pool))]
+		points = append([]Waypoint(nil), chosen...)
+	} else {
+		if route, ok := r.cfg.Highway[key]; ok {
 			points = append([]Waypoint(nil), route...)
+		}
+		detour := shouldTakeNorthernDetour(unit.CargoStars, unit.Personality, heat)
+		if route, ok := r.cfg.Highway[key]; ok {
+			detour = false
+			for _, point := range route {
+				if point.Chokepoint && heat[point.RegionID] >= DetourHeatThreshold && (unit.Personality == PersonalityCautious || unit.CargoStars >= 4) {
+					detour = true
+					break
+				}
+			}
+		}
+		if unit.RunKind == RunSolo {
+			// Solo Traders pick either crossing at random and bend off the road.
+			detour = rand.IntN(2) == 0
+		}
+		if detour {
+			if route, ok := r.cfg.Detours[key]; ok {
+				points = append([]Waypoint(nil), route...)
+			}
 		}
 	}
 	for i, point := range points {
@@ -226,7 +252,34 @@ func (r *Runtime) ObserveVitals(division, name string, hp, mp int64, transportLo
 		r.mu.Unlock()
 		return
 	}
-	dead := hp <= 0 || transportLost
+	if unit.DeadUntilMs > 0 {
+		if hp > 0 {
+			r.reviveInPlaceLocked(unit, hp, mp)
+			// If a resurrected Trader also lost its transport horse, end the
+			// run cleanly back to town so it never walks the road on foot.
+			if unit.Role == RoleTrader && transportLost {
+				r.completeRespawnLocked(unit, nowMs)
+			}
+		} else if nowMs >= unit.DeadUntilMs {
+			r.completeRespawnLocked(unit, nowMs)
+		}
+		r.mu.Unlock()
+		return
+	}
+	// Transport loss while the Trader itself is alive destroys the caravan:
+	// a dead horse cannot be resurrected, so complete the run back to town
+	// immediately instead of entering the character-resurrection wait window.
+	if transportLost && hp > 0 && unit.Role == RoleTrader {
+		stolenGold := int64(unit.CargoStacks) * unit.StackValueGold
+		regionID := unit.RegionID
+		unit.CargoStacks = 0
+		r.contracts.Cancel(unit.Division, unit.Name)
+		r.completeRespawnLocked(unit, nowMs)
+		r.mu.Unlock()
+		r.memories.RecordRobberyOrKill(division, name, "", stolenGold, regionID, "", nowMs)
+		return
+	}
+	dead := hp <= 0
 	if !dead {
 		unit.HP, unit.MP = int(hp), int(mp)
 	}
@@ -334,17 +387,25 @@ func (r *Runtime) ApproachWorldThreatAt(division, name string, target Waypoint, 
 ================
 waitForEscortLocked
 
-A convoy holds while a follower within 120m fights, or while one between 120m
-and 200m catches up (past 200m it is teleported instead).
+On the road the trader waits for cover when all nearby escorts are lagging.
+At the ferry it waits for the escorts to come within boarding range.
 ================
 */
 func (r *Runtime) waitForEscortLocked(trader *AgentUnit) bool {
 	if trader.Role != RoleTrader {
 		return false
 	}
+	boarding := trader.WaypointIndex < len(trader.Route) && trader.Route[trader.WaypointIndex].FerryTargetID != 0
+	lagging := false
 	for _, guard := range r.agents[trader.Division] {
-		if guard == trader || guard.Role == RoleThief || !strings.EqualFold(guard.EscortingTrader, trader.Name) || guard.RespawnPending || guard.HP <= 0 {
+		if guard == trader || guard.Role == RoleThief || guard.RespawnPending || guard.HP <= 0 {
 			continue
+		}
+		if !strings.EqualFold(guard.EscortingTrader, trader.Name) {
+			second := r.findAgentLocked(trader.Division, guard.EscortingTrader)
+			if !boarding || guard.RunKind != RunGrand || second == nil || r.ferryGuideLocked(second) != trader {
+				continue
+			}
 		}
 		if guard.State == StateIdleInTown || isTownRegion(guard.RegionID) {
 			continue
@@ -353,11 +414,18 @@ func (r *Runtime) waitForEscortLocked(trader *AgentUnit) bool {
 		if dist > EscortTeleportDistance {
 			continue
 		}
-		if (guard.State == StateInCombat && dist <= EscortFollowDistance) || dist > EscortFollowDistance {
-			return true
+		if boarding {
+			if dist > escortFerryWaitDistance {
+				return true
+			}
+			continue
 		}
+		if dist <= EscortFollowDistance {
+			return false
+		}
+		lagging = true
 	}
-	return false
+	return lagging
 }
 
 /*
@@ -383,17 +451,12 @@ Advances an AI Hunter escort along its Trader's highway gates while exiting
 town or catching up from far behind before closing directly onto the Trader.
 ================
 */
-func (r *Runtime) stepEscortFollowLocked(unit, leader *AgentUnit) *Waypoint {
+func (r *Runtime) stepEscortFollowLocked(unit, leader *AgentUnit) {
 	target := Waypoint{RegionID: leader.RegionID, X: leader.X, Y: leader.Y, Z: leader.Z}
-	dist := WaypointDistance(Waypoint{RegionID: unit.RegionID, X: unit.X, Z: unit.Z}, target)
-	var follow *Waypoint
-	if dist > 320 {
-		follow = &target
-	}
-	if (isTownRegion(unit.RegionID) && !isTownRegion(leader.RegionID)) || (dist > 120 && unit.WaypointIndex < leader.WaypointIndex) {
-		if unit.OriginTown != leader.OriginTown || unit.DestTown != leader.DestTown || len(unit.Route) == 0 {
+	if isTownRegion(unit.RegionID) && leader.WaypointIndex > 0 {
+		if unit.OriginTown != leader.OriginTown || unit.DestTown != leader.DestTown || !slices.Equal(unit.Route, leader.Route) {
 			unit.OriginTown, unit.DestTown = leader.OriginTown, leader.DestTown
-			unit.Route = r.route(unit)
+			unit.Route = leader.Route
 			unit.WaypointIndex = 0
 		}
 		before := Waypoint{RegionID: unit.RegionID, X: unit.X, Z: unit.Z}
@@ -406,11 +469,10 @@ func (r *Runtime) stepEscortFollowLocked(unit, leader *AgentUnit) *Waypoint {
 			if r.moveLocked(unit, wp, stepDistanceFor(unit)) {
 				unit.WaypointIndex++
 			}
-			return follow
+			return
 		}
 	}
 	r.moveLocked(unit, target, stepDistanceFor(unit))
-	return follow
 }
 
 func isTownRegion(regionID uint16) bool {
@@ -452,17 +514,14 @@ func HPPercent(current, maximum int64) int {
 func countFriendlyHunters(players []ObservedPlayer) int {
 	n := 0
 	for _, p := range players {
-		if p.JobType == domain.JobHunter && p.TrustScore > domain.CaravanVendettaScore {
+		if p.HPPercent > 0 && p.JobType == domain.JobHunter && p.TrustScore > domain.CaravanVendettaScore {
 			n++
 		}
 	}
 	return n
 }
 
-func defaultPotionCharges(role AgentRole) int {
-	if role == RoleThief {
-		return 3
-	}
+func defaultPotionCharges(_ AgentRole) int {
 	return 300
 }
 
@@ -515,12 +574,12 @@ func (r *Runtime) hasLiveEscortLocked(unit *AgentUnit) bool {
 ================
 escortMustRejoinLocked
 
-A follower more than 120m from its leader (or left outside while the
-leader is in town) stops fighting and runs after it.
+An escort can fight within 100m of its leader. Once it breaks that tether,
+it must come back to normal follow range before re-engaging.
 ================
 */
 func (r *Runtime) escortMustRejoinLocked(unit *AgentUnit) bool {
-	if unit == nil || unit.EscortingTrader == "" {
+	if unit == nil || unit.EscortingTrader == "" || unit.DeadUntilMs > 0 || unit.HP <= 0 {
 		return false
 	}
 	at, leader, ok := r.leaderPositionLocked(unit)
@@ -530,7 +589,31 @@ func (r *Runtime) escortMustRejoinLocked(unit *AgentUnit) bool {
 	if isTownRegion(at.RegionID) && !isTownRegion(unit.RegionID) {
 		return true
 	}
-	return WaypointDistance(position(unit), at) > EscortFollowDistance
+	if leader != nil {
+		guide := r.ferryGuideLocked(leader)
+		if guide.WaypointIndex < len(guide.Route) && guide.Route[guide.WaypointIndex].FerryTargetID != 0 {
+			return WaypointDistance(position(unit), position(guide)) > escortFerryWaitDistance
+		}
+	}
+	dist := WaypointDistance(position(unit), at)
+	unit.combatRejoining = dist > escortCombatDistance || (unit.combatRejoining && dist > EscortRoamRadius)
+	return unit.combatRejoining
+}
+
+/*
+==================
+ferryGuideLocked
+
+Both groups of a grand caravan stage at the lead trader's ferry.
+==================
+*/
+func (r *Runtime) ferryGuideLocked(leader *AgentUnit) *AgentUnit {
+	if leader.RunKind == RunGrand && leader.Role == RoleTrader && leader.EscortingTrader != "" {
+		if head := r.findAgentLocked(leader.Division, leader.EscortingTrader); head != nil {
+			return head
+		}
+	}
+	return leader
 }
 
 /*
@@ -563,8 +646,7 @@ func (r *Runtime) IsContractPartner(division, playerName, agentName string) bool
 ==================
 EscortMustRejoin
 
-Reports whether a Hunter escort has drifted out of convoy tether range or
-out of town behind its Trader and must disengage combat to rejoin.
+Reports whether a follower must disengage combat to return to its leader.
 ==================
 */
 func (r *Runtime) EscortMustRejoin(division, name string) bool {

@@ -328,6 +328,34 @@ func (c *ResurrectionConsent) ApplyConsent(_ *transport.Session, divisionID stri
 
 /*
 ==================
+ServerActorAcceptResurrection
+
+Accepts any pending resurrection proposal for a dead RuntimeOnly actor,
+reviving them in place and publishing the native revival frames to nearby
+observers.
+==================
+*/
+func (rt *Runtime) ServerActorAcceptResurrection(division, name string, nowMs int64) bool {
+	c := rt.findCharacter(division, name)
+	if c == nil || !c.RuntimeOnly {
+		return false
+	}
+	offer, ok := rt.resurrections.take(division, c.Name, nowMs)
+	if !ok {
+		return false
+	}
+	actorFrames, peerFrames := rt.acceptResurrection(division, c.Name, offer, nowMs)
+	if len(actorFrames) == 0 {
+		return false
+	}
+	if rt.PushDivisionPeerFrames != nil && len(peerFrames) > 0 {
+		rt.PushDivisionPeerFrames(division, c.Name, peerFrames)
+	}
+	return true
+}
+
+/*
+==================
 acceptResurrection
 
 The native transaction for a yes. The player must still be dead; the revival itself is

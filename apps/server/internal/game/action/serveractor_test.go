@@ -74,5 +74,83 @@ func TestServerActorCargoRegistersNativeAmbushesAndCanMount(t *testing.T) {
 	if enterworld.CurrentMP(c) <= 0 {
 		t.Fatal("AI potion left the caster without mana")
 	}
+}
 
+/*
+================
+TestServerActorAcceptResurrectionRevivesInPlace
+================
+*/
+func TestServerActorAcceptResurrectionRevivesInPlace(t *testing.T) {
+	rt, _, caster, actor := newPvpPair(t)
+	actor.RuntimeOnly = true
+	actor.CurrentHP = testInt64(0)
+	var peerFrames []wire.Frame
+	rt.PushDivisionPeerFrames = func(_, name string, frames []wire.Frame) {
+		if name == actor.Name {
+			peerFrames = append(peerFrames, frames...)
+		}
+	}
+	skill := enterworld.SkillRow{
+		ID: 7777,
+		Heal: enterworld.SkillHeal{
+			Present:   true,
+			HPPercent: 50,
+			MPPercent: 50,
+		},
+	}
+	nowMs := rt.Now().UnixMilli()
+	prompt := rt.proposeResurrection(testDivision, caster, actor, skill, nowMs)
+	if len(prompt) == 0 {
+		t.Fatal("expected resurrection proposal for dead RuntimeOnly actor")
+	}
+	if !rt.ServerActorAcceptResurrection(testDivision, actor.Name, nowMs+100) {
+		t.Fatal("expected ServerActorAcceptResurrection to accept pending proposal")
+	}
+	if !enterworld.CharacterAlive(actor) || enterworld.CurrentHP(actor) <= 1 {
+		t.Fatalf("expected actor revived with healed HP, got alive=%v hp=%d", enterworld.CharacterAlive(actor), enterworld.CurrentHP(actor))
+	}
+	if len(peerFrames) == 0 {
+		t.Fatal("expected native revival peer frames broadcast")
+	}
+}
+
+/*
+================
+TestServerActorRetainsOneStarProtection
+================
+*/
+func TestServerActorRetainsOneStarProtection(t *testing.T) {
+	rt, _, trader := caravanFixture(t)
+	trader.RuntimeOnly = true
+	at := simulation.Spawn{RegionID: caravanBattlefield, X: 960, Y: 20, Z: 960}
+	rt.SyncServerActor(testDivision, trader, at, false, 10, false)
+	if !rt.levelOneCaravan(trader) || !rt.levelOneCaravan(trader.SnapshotCompanion()) {
+		t.Fatal("an AI trader hauling a one-star load lost native protection")
+	}
+}
+
+/*
+================
+TestSoloServerActorCargoDropsFromFiveStarsToTwo
+================
+*/
+func TestSoloServerActorCargoDropsFromFiveStarsToTwo(t *testing.T) {
+	rt, trader := traderFixture(t, false)
+	trader.ActiveCOS.Container.Capacity = 40
+	rt.TradeTiers = true
+	trader.RuntimeOnly = true
+	at := simulation.Spawn{RegionID: caravanBattlefield, X: 960, Y: 20, Z: 960}
+	rt.SyncServerActorCargo(testDivision, trader, at, false, 10, 5, true)
+	if tier, stars := rt.caravanTier(trader); tier != 5 || stars != 5 {
+		t.Fatalf("fixture should carry five stars, got tier=%d stars=%d", tier, stars)
+	}
+	rt.SyncServerActorCargo(testDivision, trader, at, false, 10, 3, true)
+	if tier, stars := rt.caravanTier(trader); tier != 3 || stars != 3 {
+		t.Fatalf("regular transport should be sized down to three stars, got tier=%d stars=%d", tier, stars)
+	}
+	rt.SyncServerActorCargo(testDivision, trader, at, false, 10, 2, true)
+	if tier, stars := rt.caravanTier(trader); tier != 2 || stars != 2 {
+		t.Fatalf("solo transport should be sized down to two stars, got tier=%d stars=%d", tier, stars)
+	}
 }

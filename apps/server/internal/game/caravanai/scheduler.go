@@ -203,10 +203,20 @@ Caller holds r.mu.
 ==================
 */
 func (r *Runtime) dispatchTraderLocked(unit *AgentUnit, kind RunKind, guards []*AgentUnit, nowMs int64) {
-	if unit.CargoStacks <= 0 {
+	if unit.CargoStacks <= 0 || kind == RunGrand {
 		unit.CargoStacks = 10
 	}
 	unit.RunKind = kind
+	unit.lastFerry = Waypoint{}
+	if unit.standingCargoStars != 0 {
+		unit.CargoStars = unit.standingCargoStars
+	}
+	switch kind {
+	case RunSolo:
+		unit.CargoStars = min(unit.CargoStars, 2)
+	case RunGrand:
+		unit.CargoStars = grandCaravanCargoStars
+	}
 	unit.AvailableForHire = false
 	unit.HP = unit.MaxHP
 	unit.MP = unit.MaxMP
@@ -287,7 +297,7 @@ caravan agents:
   - "!caravans"                 (Lists active trade runs, town-staged traders, and hireable/reinforcing hunters)
   - "!accept [TraderAgentName]" (Hunter player accepts an AI Trader escort run)
   - "!hire [AgentName]"         (Hires an idle agent for one trade run; without a name lists them)
-  - "!leed"                     (The hirer leads its hired Traders instead of the first one in the party)
+  - "!leed"                     (Toggles the hirer leading its hired Traders; the party board's Lead badges pick anyone)
   - "!dismiss"                  (Ends every hire of the player now)
   - "!attack <AgentName> [dmg]" (Simulates an ambush strike, triggering distress aid or parley)
   - "!memory [AgentName]"       (Inspects how an AI agent remembers the player)

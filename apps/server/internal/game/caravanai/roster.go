@@ -89,6 +89,7 @@ func defaultDivisionRoster(division string, heat map[uint16]int) []*AgentUnit {
 	for i := 0; i < RosterTraders; i++ {
 		unit := add(RoleTrader, traderNames[i], "TRADER", i)
 		unit.CargoStars = uint8(3 + i%3)
+		unit.standingCargoStars = unit.CargoStars
 		unit.CargoStacks = 10
 		unit.StackValueGold = int64(20_000 + 5_000*(i%3))
 	}
@@ -103,7 +104,16 @@ func defaultDivisionRoster(division string, heat map[uint16]int) []*AgentUnit {
 		unit.RegionID, unit.X, unit.Y, unit.Z = den.RegionID, den.X+float32(i%5)*8-16, den.Y, den.Z+float32(i/5%2)*8-4
 		if i < rosterHighwayThieves {
 			unit.State = StateTraveling
-			unit.OriginTown, unit.DestTown = rosterTowns[i%2], rosterTowns[i%2+1]
+			switch i {
+			case 0:
+				unit.OriginTown, unit.DestTown = TownJangan, TownDonwhang
+			case 1:
+				unit.OriginTown, unit.DestTown = TownDonwhang, TownHotan
+			case 2:
+				unit.OriginTown, unit.DestTown = TownDonwhang, TownJangan
+			case 3:
+				unit.OriginTown, unit.DestTown = TownHotan, TownDonwhang
+			}
 			unit.Route = SelectRoute(unit.OriginTown, unit.DestTown, 3, unit.Personality, heat)
 			if len(unit.Route) > 2 {
 				unit.WaypointIndex = 2

@@ -72,9 +72,6 @@ func (rt *Runtime) HandleCosRide(division string, c *enterworld.Character, paylo
 	// CMSERR_CANT_GETOFF_FROM_RUNNING_HORSE ("Can step down while the
 	// transport is moving", 777F60 -> category 14), so the v1.150 server
 	// refused a step-down while the mount moved: stop first, then dismount.
-	if payload[0] == 0 && rt.riderMoving(division, c) {
-		return cosRideFailure(cosRideRunning)
-	}
 	if payload[0] == 1 {
 		if rider := rt.characterSnapshot(division, c); rider != nil {
 			now := rt.Now().UnixMilli()
@@ -89,6 +86,9 @@ func (rt *Runtime) HandleCosRide(division string, c *enterworld.Character, paylo
 	snapshot, ref := rt.commandCOSSnapshot(division, c, binary.LittleEndian.Uint32(payload[1:]))
 	if snapshot == nil || (ref.TidWord>>11 != 1 && ref.TidWord>>11 != 2) {
 		return cosRideFailure(cosRideUnknownActor)
+	}
+	if payload[0] == 0 && (!rt.CaravanTransportStepDown || ref.TidWord>>11 == 1) && rt.riderMoving(division, c) {
+		return cosRideFailure(cosRideRunning)
 	}
 	return rt.changeCosRide(division, c, snapshot, payload[0] == 1)
 }

@@ -647,23 +647,27 @@ a lost fifth star clears. Nil off the pace, and nil with the flag off,
 when no client ever hears of the mark.
 ================
 */
-func (rt *Runtime) CaravanStarFrames(division string, views []simulation.SessionView, nowMs int64) []simulation.Frame {
+func (rt *Runtime) CaravanStarFrames(division string, views []simulation.SessionView, actors []*enterworld.Character, nowMs int64) []simulation.Frame {
 	if !rt.TradeTiers || nowMs < rt.caravanStarDueMs {
 		return nil
 	}
 	rt.caravanStarDueMs = nowMs + caravanStarPushIntervalMs
 	gids := []uint32{}
-	for _, view := range views {
-		if view.DivisionID != division {
-			continue
-		}
-		c := rt.findCharacterByID(division, view.CharacterID)
+	mark := func(c *enterworld.Character) {
 		if c == nil || c.ActiveCOS == nil {
-			continue
+			return
 		}
 		if tier, _ := rt.caravanTier(c); tier == 5 {
 			gids = append(gids, c.ActiveCOS.GID)
 		}
+	}
+	for _, view := range views {
+		if view.DivisionID == division {
+			mark(rt.findCharacterByID(division, view.CharacterID))
+		}
+	}
+	for _, c := range actors {
+		mark(rt.characterSnapshot(division, c))
 	}
 	return []simulation.Frame{{Opcode: wire.OpCaravanStars, Payload: wire.EncodeCaravanStars(gids)}}
 }

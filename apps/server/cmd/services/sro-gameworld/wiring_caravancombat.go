@@ -64,6 +64,28 @@ func (game *gameplayPlane) caravanCast(c *enterworld.Character, target uint32, n
 
 /*
 ================
+caravanCastSkill
+
+Casts a specific trained skill (such as Force Resurrection) at a target GID
+through the native HandleTargetInteract path.
+================
+*/
+func (game *gameplayPlane) caravanCastSkill(c *enterworld.Character, skillID, target uint32, nowMs int64) action.OpResult {
+	if skillID == 0 || game.items.ServerActorCasting(game.divisionID, c.Name) {
+		return action.OpResult{}
+	}
+	if game.caravanAttackAt == nil {
+		game.caravanAttackAt = map[string]int64{}
+	}
+	if nowMs < game.caravanAttackAt[c.Name] {
+		return action.OpResult{}
+	}
+	game.caravanAttackAt[c.Name] = nowMs + 1000
+	return game.items.HandleTargetInteract(game.divisionID, c, (wire.SkillAction{ActionId: skillID, HasTarget: true, TargetGid: target}).Encode())
+}
+
+/*
+================
 caravanNPCThreat
 ================
 */
@@ -79,8 +101,14 @@ func (game *gameplayPlane) caravanNPCThreat(unit *caravanai.AgentUnit, nowMs int
 	var leaderGID, leaderCOSGID uint32
 	leaderFrom := from
 	hasLeader := false
+	leaderName := ""
 	if unit.Role == caravanai.RoleHunter && unit.EscortingTrader != "" {
-		if leader := game.deps.CharacterByName(game.divisionID, unit.EscortingTrader); leader != nil {
+		leaderName = unit.EscortingTrader
+	} else if unit.HiredBy != "" {
+		leaderName = unit.HiredBy
+	}
+	if leaderName != "" {
+		if leader := game.deps.CharacterByName(game.divisionID, leaderName); leader != nil {
 			hasLeader = true
 			leaderGID = enterworld.ObjectIDForCharacter(leader)
 			game.deps.Read(game.divisionID, func() {
@@ -95,10 +123,10 @@ func (game *gameplayPlane) caravanNPCThreat(unit *caravanai.AgentUnit, nowMs int
 
 	var bestGID uint32
 	var bestAt caravanai.Waypoint
-	bestDist := float64(160)
+	bestDist := float64(260)
 	var priorityGID uint32
 	var priorityAt caravanai.Waypoint
-	priorityDist := float64(200)
+	priorityDist := float64(300)
 
 	scan := func(center caravanai.Waypoint) {
 		for _, npc := range game.items.Monsters.PopulationInterestInstances(game.divisionID, lease, worldgeom.RegionXZ{RegionID: center.RegionID, X: float64(center.X), Z: float64(center.Z)}, nowMs) {

@@ -34,8 +34,12 @@ func (rt *Runtime) NewServerActorTransport(gid uint32) (*enterworld.CharacterCOS
 	if !ok {
 		return nil, fmt.Errorf("caravan transport references unavailable")
 	}
-	// Higher armored tiers name BSRs absent from the v1.150 client extraction.
-	summon, ok := items.ItemRefByCodename("ITEM_COS_T_DHORSE1")
+	// Prefer the max-level Lv.90 armored transport horse (COS_T_DHORSE3: 101 slots, 87,829 HP);
+	// fall back to ITEM_COS_T_DHORSE1 only in minimal test fixtures lacking DHORSE3.
+	summon, ok := items.ItemRefByCodename("ITEM_COS_T_DHORSE3")
+	if !ok {
+		summon, ok = items.ItemRefByCodename("ITEM_COS_T_DHORSE1")
+	}
 	if !ok {
 		return nil, fmt.Errorf("caravan transport summoner unavailable")
 	}
@@ -43,7 +47,11 @@ func (rt *Runtime) NewServerActorTransport(gid uint32) (*enterworld.CharacterCOS
 	if !ok {
 		return nil, fmt.Errorf("caravan transport %s unavailable", summon.AssociatedCharacterCodename)
 	}
-	return &enterworld.CharacterCOS{GID: gid, RefObjID: ref.RefObjID, Codename: ref.Codename, Summoned: true, CurrentHP: ref.MaxHP, CurrentMP: ref.MaxMP, Name: "Caravan horse", Container: &domain.COSContainer{Capacity: uint8(ref.InventoryCapacity)}}, nil
+	capacity := rt.PetInventoryPages.TransportCapacity(ref.InventoryCapacity)
+	if capacity == 0 {
+		capacity = uint8(ref.InventoryCapacity)
+	}
+	return &enterworld.CharacterCOS{GID: gid, RefObjID: ref.RefObjID, Codename: ref.Codename, Summoned: true, CurrentHP: ref.MaxHP, CurrentMP: ref.MaxMP, Name: "Caravan horse", Container: &domain.COSContainer{Capacity: capacity}}, nil
 }
 
 /*
@@ -52,13 +60,30 @@ SyncServerActor
 ================
 */
 func (rt *Runtime) SyncServerActor(division string, c *enterworld.Character, at simulation.Spawn, respawn bool, stacks int, westernGoods bool) *enterworld.Character {
+	return rt.SyncServerActorCargo(division, c, at, respawn, stacks, 0, westernGoods)
+}
+
+/*
+================
+SyncServerActorCargo
+
+Synchronizes a RuntimeOnly caravan actor's position, vitals, and (for Traders)
+transport cargo. When targetStars > 0, Traders load enough trade stacks on
+their max-level transport horse to genuinely reach that star rating under the
+shard's active caravanTier rules (scaled by stacks/10 after partial drops).
+Thieves manage their own loot transports and are never trimmed here.
+================
+*/
+func (rt *Runtime) SyncServerActorCargo(division string, c *enterworld.Character, at simulation.Spawn, respawn bool, stacks int, targetStars uint8, westernGoods bool) *enterworld.Character {
 	if c == nil || !c.RuntimeOnly {
 		return nil
 	}
 	unlock := rt.lockDivision(division)
 	defer unlock()
 	var restored *enterworld.CharacterCOS
-	if respawn && c.RuntimeTransportGID != 0 {
+	needTraderTransport := c.Job.Type == domain.JobTrader && c.RuntimeTransportGID != 0 &&
+		(respawn || (c.ActiveCOS == nil && enterworld.CharacterAlive(c) && stacks > 0))
+	if needTraderTransport {
 		var err error
 		restored, err = rt.NewServerActorTransport(c.RuntimeTransportGID)
 		if err != nil {
@@ -71,26 +96,41 @@ func (rt *Runtime) SyncServerActor(division string, c *enterworld.Character, at 
 			gold := int64(1_000_000)
 			c.Gold = &gold
 		}
-		if respawn && !enterworld.CharacterAlive(c) {
-			hp, mp := enterworld.DerivedMaxHP(c), enterworld.DerivedMaxMP(c)
-			c.CurrentHP, c.CurrentMP = &hp, &mp
+		if respawn {
+			c.BattleUntilMs = 0
+			if !enterworld.CharacterAlive(c) {
+				hp, mp := enterworld.DerivedMaxHP(c), enterworld.DerivedMaxMP(c)
+				c.CurrentHP, c.CurrentMP = &hp, &mp
+			}
 		}
 		if restored != nil {
 			c.ActiveCOS = restored
 		}
-		if c.ActiveCOS != nil {
+		if c.Job.Type == domain.JobTrader && c.ActiveCOS != nil && c.ActiveCOS.Container != nil {
 			pet := c.ActiveCOS
-			if pet.Container != nil && len(pet.Container.Rows) > max(stacks, 0) {
-				pet.Container.Rows = pet.Container.Rows[:max(stacks, 0)]
+			desired := stacks
+			if targetStars > 0 && stacks > 0 {
+				desired = rt.serverActorDesiredStacks(c, stacks, targetStars, westernGoods)
 			}
-			if pet.Container != nil && len(pet.Container.Rows) < stacks {
+			if desired < 0 {
+				desired = 0
+			}
+			capSlots := int(pet.Container.Capacity)
+			if capSlots > 0 && desired > capSlots {
+				desired = capSlots
+			}
+			if len(pet.Container.Rows) > desired {
+				pet.Container.Rows = pet.Container.Rows[:desired]
+			}
+			if len(pet.Container.Rows) < desired {
 				code := "ITEM_ETC_TRADE_CH_01"
 				if westernGoods {
 					code = "ITEM_ETC_TRADE_WC_01"
 				}
 				if ref, found := rt.deps.ItemReferences().ItemRefByCodename(code); found {
-					for len(pet.Container.Rows) < min(stacks, 30) {
-						pet.Container.Rows = append(pet.Container.Rows, enterworld.InventoryRow{Slot: int64(len(pet.Container.Rows)), RefObjID: ref.RefObjID, Codename: code, TypeFlags: ref.TypeFlags(), StackCount: int64(rt.maxStackFor(ref.TypeFlags(), code)), TradeOwner: c.Job.Alias})
+					maxStack := int64(rt.maxStackFor(ref.TypeFlags(), code))
+					for len(pet.Container.Rows) < desired {
+						pet.Container.Rows = append(pet.Container.Rows, enterworld.InventoryRow{Slot: int64(len(pet.Container.Rows)), RefObjID: ref.RefObjID, Codename: code, TypeFlags: ref.TypeFlags(), StackCount: maxStack, TradeOwner: c.Job.Alias})
 					}
 				}
 			}
@@ -118,6 +158,181 @@ func (rt *Runtime) SyncServerActor(division string, c *enterworld.Character, at 
 	rt.petMu.Unlock()
 	rt.registerCaravan(division, c)
 	return rt.characterSnapshot(division, c)
+}
+
+type caravanStacksMemo struct {
+	stacks, capacity int
+	stars            uint8
+	western          bool
+	desired          int
+}
+
+func (rt *Runtime) serverActorDesiredStacks(c *enterworld.Character, logicalStacks int, targetStars uint8, westernGoods bool) int {
+	pet := c.ActiveCOS
+	if pet == nil || pet.Container == nil || pet.Container.Capacity == 0 {
+		return logicalStacks
+	}
+	// The answer depends only on these inputs (the rows are always this
+	// Trader's own trade goods): probe once per change, not every tick.
+	key := strings.ToLower(c.Name)
+	in := caravanStacksMemo{stacks: logicalStacks, capacity: int(pet.Container.Capacity), stars: targetStars, western: westernGoods}
+	rt.caravanStacksMu.Lock()
+	memo, ok := rt.caravanStacks[key]
+	rt.caravanStacksMu.Unlock()
+	if ok && memo.stacks == in.stacks && memo.capacity == in.capacity && memo.stars == in.stars && memo.western == in.western {
+		return memo.desired
+	}
+	in.desired = rt.probeServerActorStacks(c, logicalStacks, targetStars, westernGoods)
+	rt.caravanStacksMu.Lock()
+	if rt.caravanStacks == nil {
+		rt.caravanStacks = make(map[string]caravanStacksMemo)
+	}
+	rt.caravanStacks[key] = in
+	rt.caravanStacksMu.Unlock()
+	return in.desired
+}
+
+func (rt *Runtime) probeServerActorStacks(c *enterworld.Character, logicalStacks int, targetStars uint8, westernGoods bool) int {
+	pet := c.ActiveCOS
+	capSlots := int(pet.Container.Capacity)
+	if targetStars > 5 {
+		targetStars = 5
+	}
+	// Fast path: if the transport already holds rows and logicalStacks >= 10,
+	// check whether it already matches the target star rating.
+	if logicalStacks >= 10 && len(pet.Container.Rows) > 0 {
+		tier, stars := rt.caravanTier(c)
+		if tier == targetStars && (targetStars != 2 || stars <= 2) {
+			return len(pet.Container.Rows)
+		}
+	}
+	// Probe the minimum stack count on a scratch copy so caravanTier reaches targetStars.
+	code := "ITEM_ETC_TRADE_CH_01"
+	if westernGoods {
+		code = "ITEM_ETC_TRADE_WC_01"
+	}
+	ref, found := rt.deps.ItemReferences().ItemRefByCodename(code)
+	if !found {
+		return logicalStacks
+	}
+	maxStack := int64(rt.maxStackFor(ref.TypeFlags(), code))
+	probe := *c
+	probeCOS := *pet
+	probeCont := domain.COSContainer{Capacity: pet.Container.Capacity, Rows: make([]enterworld.InventoryRow, 0, capSlots)}
+	probeCOS.Container = &probeCont
+	probe.ActiveCOS = &probeCOS
+	fullForStars := capSlots
+	for n := 1; n <= capSlots; n++ {
+		row := enterworld.InventoryRow{Slot: int64(n - 1), RefObjID: ref.RefObjID, Codename: code, TypeFlags: ref.TypeFlags(), StackCount: maxStack, TradeOwner: c.Job.Alias}
+		if n <= len(pet.Container.Rows) {
+			row = pet.Container.Rows[n-1]
+		}
+		probeCont.Rows = append(probeCont.Rows, row)
+		tier, stars := rt.caravanTier(&probe)
+		if targetStars == 2 && (tier > 2 || stars > 2) {
+			fullForStars = n - 1
+			break
+		}
+		if tier >= targetStars {
+			fullForStars = n
+			break
+		}
+	}
+	if logicalStacks >= 10 {
+		return fullForStars
+	}
+	return min(fullForStars, max(1, fullForStars*logicalStacks/10))
+}
+
+/*
+================
+summonServerActorTransportLocked
+
+Summons a transport horse for a RuntimeOnly actor (e.g. an AI Thief looting
+dropped trade goods) under the caller's division lock.
+================
+*/
+func (rt *Runtime) summonServerActorTransportLocked(division string, c *enterworld.Character) bool {
+	if c == nil || !c.RuntimeOnly || c.RuntimeTransportGID == 0 {
+		return false
+	}
+	if c.ActiveCOS != nil {
+		return true
+	}
+	pet, err := rt.NewServerActorTransport(c.RuntimeTransportGID)
+	if err != nil {
+		return false
+	}
+	rt.deps.Mutate(c, "caravan thief transport summon", func() {
+		if c.ActiveCOS == nil {
+			c.ActiveCOS = pet
+		}
+	})
+	at := rt.liveSpawn(simulation.WorldKey(division, c.Name), c, rt.Now().UnixMilli())
+	rt.petMu.Lock()
+	parent := rt.petSessions[petOwnerKey{division: division, name: strings.ToLower(c.Name)}]
+	rt.petMu.Unlock()
+	if parent != nil {
+		rt.bindCompanionSession(division, parent, pet)
+		parent.mover.Park(pet.GID, at)
+	}
+	return true
+}
+
+/*
+================
+ServerActorDismissTransport
+
+Dismisses a RuntimeOnly actor's active transport (e.g. after a Thief returns
+to Bandit Den with stolen goods).
+================
+*/
+func (rt *Runtime) ServerActorDismissTransport(division, name string) {
+	unlock := rt.lockDivision(division)
+	defer unlock()
+	c := rt.findCharacter(division, name)
+	if c == nil || !c.RuntimeOnly {
+		return
+	}
+	rt.deps.Mutate(c, "caravan transport dismiss", func() {
+		c.ActiveCOS = nil
+	})
+}
+
+/*
+================
+ServerActorHasTransportGoods
+
+Reports whether a RuntimeOnly actor currently has trade goods loaded in its
+active transport.
+================
+*/
+func (rt *Runtime) ServerActorHasTransportGoods(division, name string) bool {
+	c := rt.findCharacter(division, name)
+	if c == nil || !c.RuntimeOnly {
+		return false
+	}
+	var has bool
+	rt.deps.Read(division, func() {
+		has = c.ActiveCOS != nil && c.ActiveCOS.Container != nil && len(c.ActiveCOS.Container.Rows) > 0
+	})
+	return has
+}
+
+/*
+================
+ServerActorReturnPending
+
+Reports whether a RuntimeOnly actor has an active return-scroll countdown.
+================
+*/
+func (rt *Runtime) ServerActorReturnPending(division, name string) bool {
+	c := rt.findCharacter(division, name)
+	if c == nil || !c.RuntimeOnly {
+		return false
+	}
+	_, exists := rt.returnCasts.Load(simulation.WorldKey(division, c.Name))
+	return exists
 }
 
 /*
