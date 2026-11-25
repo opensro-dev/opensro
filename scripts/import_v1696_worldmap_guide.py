@@ -366,8 +366,28 @@ def write_mask(raw, colours, target):
 	# copyExternalImageToTexture (WebKit bug 296208).
 	image = Image.new("RGBA", (width, height), (255, 255, 255, 255))
 	image.putalpha(Image.frombytes("L", (width, height), alpha))
+	publish_if_changed(target, lambda staged: image.save(staged, "PNG"))
+
+
+# ================
+# publish_if_changed
+#
+# Writes one public file through write(staged path) and keeps the old file,
+# mtime and all, when the bytes are the same. The interface lane publishes
+# the native gd_contents_lamp and gd_index_button_open before this importer
+# replaces them, and its memo replays only while their size and mtime hold:
+# a rewrite of the same bytes reran that lane on every other build (r204m2,
+# "output .../gd_contents_lamp.png changed").
+# ================
+def publish_if_changed(target, write):
 	target.parent.mkdir(parents=True, exist_ok=True)
-	image.save(target)
+	staged = target.with_name(target.stem + ".staged" + target.suffix)
+	write(staged)
+	if target.is_file() and target.read_bytes() == staged.read_bytes():
+		staged.unlink()
+		return False
+	os.replace(staged, target)
+	return True
 
 
 # ================
@@ -397,8 +417,8 @@ def publish_masks(archive, monsters):
 def publish_art(archive):
 	for name in ART:
 		target = IMAGES / f"{name}.png"
-		target.parent.mkdir(parents=True, exist_ok=True)
-		save_image_payload(ddj_payload(archive.read(f"interface/{name}.ddj")), target, target)
+		payload = ddj_payload(archive.read(f"interface/{name}.ddj"))
+		publish_if_changed(target, lambda staged: save_image_payload(payload, staged, staged))
 
 
 #============================================================================
