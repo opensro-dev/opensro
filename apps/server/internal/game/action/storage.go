@@ -41,6 +41,7 @@ import (
 	"opensro.online/server/internal/game/enterworld"
 	"opensro.online/server/internal/game/item/inventory"
 	"opensro.online/server/internal/game/item/wire"
+	"opensro.online/server/internal/game/nasrun"
 	"opensro.online/server/internal/game/world/simulation"
 	"opensro.online/server/internal/transport"
 )
@@ -367,6 +368,12 @@ func (rt *Runtime) storableItem(item inventory.Item) bool {
 	// enters either warehouse, however storable its row is.
 	if rt.HalloweenHelmetSeal.Sealed(item.Codename) {
 		return false
+	}
+	// Port-only, not native (#4459): a mall copy of the Devil's Spirit
+	// keeps the later row's warehouse bit, which the imported row clears
+	// for the bound token and drop copies (nasrun.StorableMallCopy).
+	if nasrun.StorableMallCopy(item.TypeFlags, item.ForgeBound, item.EarnedBought) {
+		return true
 	}
 	ref, ok := rt.deps.ItemReferences().ItemRefByCodename(item.Codename)
 	if !ok || ref == nil {
