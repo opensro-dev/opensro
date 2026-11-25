@@ -11,6 +11,7 @@ package action
 
 import (
 	"encoding/json"
+	"fmt"
 	"testing"
 	"time"
 
@@ -595,7 +596,7 @@ func TestMarketSearchMineAndAdmission(t *testing.T) {
 	for name, payload := range map[string]string{
 		"unknown category":  `{"op":"search","category":"wands"}`,
 		"page past the end": `{"op":"search","page":101}`,
-		"degree too high":   `{"op":"search","degree":12}`,
+		"degree too high":   fmt.Sprintf(`{"op":"search","degree":%d}`, publicstats.MarketMaxDegree+1),
 		"unknown currency":  `{"op":"search","currency":"points"}`,
 		"unknown sort":      `{"op":"search","sort":"cheapest"}`,
 		"unknown field":     `{"op":"search","account":"victim"}`,
