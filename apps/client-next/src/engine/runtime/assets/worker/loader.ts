@@ -300,8 +300,11 @@ export function createLoader( send: ( result: AssetWorkerMessage, transfer: Tran
 						writes: stats.writes,
 						skipped: stats.skipped,
 						errors: stats.errors,
+						failures: stats.failures,
+						lastFailure: stats.lastFailure,
 						evictions: stats.evictions,
 						writesStopped: stats.writesStopped,
+						resets: stats.resets,
 						budget: stats.budget,
 						rangeBytes: stats.rangeBytes,
 						demandedBytes: stats.demandedBytes

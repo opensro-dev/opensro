@@ -84,6 +84,7 @@ test("a published own cast displacement is adopted only while the row is on and 
 	owners.renderer.phase = () => "running";
 	owners.renderer.error = () => null;
 	owners.renderer.gpuTiming = () => null;
+	owners.renderer.gpuWork = () => ({ submits: 0, uploadWrites: 0, uploadBytes: 0 });
 	owners.renderer.frame = () => undefined;
 	owners.renderer.audioListener = () => null;
 	owners.renderer.setDamageText = () => {};

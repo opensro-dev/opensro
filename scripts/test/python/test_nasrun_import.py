@@ -409,3 +409,47 @@ class NasrunSkillImportTest(unittest.TestCase):
 
 if __name__ == "__main__":
 	unittest.main()
+
+
+# ================
+# SkillEffectMergeTest
+#
+# The lent skills' effect rows join the tree's skilleffect.txt in their own
+# sections, the transformation keeps its own animation group,
+# and a rerun swaps the previous pass's rows for the new ones (#4407).
+# ================
+class SkillEffectMergeTest(unittest.TestCase):
+	TREE = (
+		"#section\tskillaniset2\r\n"
+		"1\tnative\tSKILL_NATIVE\t0\tFALSE\t0\tDEFAULT\tnone\r\n"
+		"#section\tskilleffectset\r\n"
+		"-\tSKILL_NATIVE\tSHOT\tnative.efp\r\n"
+	)
+	LATER = (
+		"#section\tskillaniset2\r\n"
+		"1\tlent\tSKILL_LENT\t0\tFALSE\t0\tAVATAR_NASRUN1\tANI_READY01\r\n"
+		"1\tother\tSKILL_OTHER\t0\tFALSE\t0\tDEFAULT\tnone\r\n"
+		"#section\tskilleffectset\r\n"
+		"lent\tSKILL_LENT\tREADY\tsystem\tavatar_nasrun01_skill01_ready01.efp\r\n"
+		"-\tAVATAR_LENT\tACT_L\tsystem\tavatar_nasrun01_skill01_body01.efp\r\n"
+		"-\tSKILL_OTHER\tSHOT\tother.efp\r\n"
+	)
+
+	# ================
+	# test_rows_join_their_sections
+	# ================
+	def test_rows_join_their_sections(self):
+		keys = {"SKILL_LENT", "AVATAR_LENT"}
+		merged, efps = nasrun.merge_skill_effects(self.TREE, self.LATER, keys, set())
+		lines = merged.split("\r\n")
+		aniset, effectset = lines.index("#section\tskillaniset2"), lines.index("#section\tskilleffectset")
+		self.assertIn("1\tlent\tSKILL_LENT\t0\tFALSE\t0\tAVATAR_NASRUN1\tANI_READY01", lines[aniset:effectset])
+		self.assertIn("-\tAVATAR_LENT\tACT_L\tsystem\tavatar_nasrun01_skill01_body01.efp", lines[effectset:])
+		self.assertNotIn("SKILL_OTHER", merged)
+		self.assertEqual(efps, ["avatar_nasrun01_skill01_body01.efp", "avatar_nasrun01_skill01_ready01.efp"])
+		# A rerun takes the previous rows out before adding them again.
+		again, _ = nasrun.merge_skill_effects(merged, self.LATER, keys, keys)
+		self.assertEqual(again, merged)
+		# Off: the previous rows leave, the native ones stay.
+		off, _ = nasrun.merge_skill_effects(merged, "", set(), keys)
+		self.assertEqual(off, self.TREE)

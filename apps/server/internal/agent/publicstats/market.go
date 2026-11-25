@@ -46,11 +46,15 @@ import (
 // maxMarketBody bounds a market request body.
 const maxMarketBody = 512
 
-// The search's bounds (the site's parser keeps to them too).
+// The search's bounds (the site's parser keeps to them too). The degree
+// ceiling is the catalog's highest equipment degree (enterworld
+// EquipmentDegree over the v1.150 itemdata): the fortress weapons
+// ITEM_FORT_FORTRESS_HAMMER_12 / _AXE_12 are ItemClass 34, degree 12;
+// nothing reaches 13.
 const (
 	MarketPageSize  = 15
 	MarketMaxPage   = 100
-	MarketMaxDegree = 11
+	MarketMaxDegree = 12
 	maxMarketQuery  = 64
 )
 
@@ -287,7 +291,11 @@ type OwnMarketResponse struct {
 	WarehouseGold int64                 `json:"warehouseGold"`
 	Characters    []MarketCharacter     `json:"characters"`
 	Silk          uint32                `json:"silk"`
-	Rules         MarketRulesView       `json:"rules"`
+	// EarnedSilk is the earned balance a Silk purchase draws first
+	// (store debitSilkTx, #4133); Silk alone under-reports what the
+	// account can spend.
+	EarnedSilk uint32          `json:"earnedSilk"`
+	Rules      MarketRulesView `json:"rules"`
 	// OffersIn are the open offers on the account's listings, OffersOut
 	// the account's own.
 	OffersIn  []MarketOfferView `json:"offersIn"`

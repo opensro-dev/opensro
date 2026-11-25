@@ -47,7 +47,7 @@ func TestMallPurchaseDrawsEarnedFirst(t *testing.T) {
 	if _, err := s.syncDBLocked().Exec("INSERT INTO mall_accounts VALUES (?, ?, ?, ?)", "earned-account", 100, 20, 10); err != nil {
 		t.Fatal(err)
 	}
-	if _, credited, err := s.CreditBetaSilk("earned-account", 50, 1500); err != nil || !credited {
+	if _, credited, err := s.CreditBetaSilk("earned-account", 50, 1500, 0); err != nil || !credited {
 		t.Fatalf("earned credit: %v %v", credited, err)
 	}
 	buy := func(cost domain.MallBalance) (domain.MallBalance, bool, error) {
@@ -102,11 +102,11 @@ func TestBetaSilkCreditLandsInEarnedAndCapCountsBoth(t *testing.T) {
 	if _, err := s.syncDBLocked().Exec("INSERT INTO mall_accounts VALUES (?, ?, ?, ?)", "earned-account", 1480, 0, 0); err != nil {
 		t.Fatal(err)
 	}
-	balance, credited, err := s.CreditBetaSilk("earned-account", 50, 1500)
+	balance, credited, err := s.CreditBetaSilk("earned-account", 50, 1500, 0)
 	if err != nil || !credited || balance.Silk != 1480 || balance.EarnedSilk != 20 {
 		t.Fatalf("trimmed credit: %+v %v %v", balance, credited, err)
 	}
-	if _, credited, err = s.CreditBetaSilk("earned-account", 50, 1500); err != nil || credited {
+	if _, credited, err = s.CreditBetaSilk("earned-account", 50, 1500, 0); err != nil || credited {
 		t.Fatalf("credit past the whole-wallet cap: %v %v", credited, err)
 	}
 }
@@ -151,7 +151,7 @@ func TestSilkHistoryKeepsTheSplit(t *testing.T) {
 	if _, err := s.syncDBLocked().Exec("INSERT INTO mall_accounts VALUES (?, ?, ?, ?)", "earned-account", 100, 0, 0); err != nil {
 		t.Fatal(err)
 	}
-	if _, _, err := s.CreditBetaSilk("earned-account", 50, 1500); err != nil {
+	if _, _, err := s.CreditBetaSilk("earned-account", 50, 1500, 0); err != nil {
 		t.Fatal(err)
 	}
 	grant := func(rows []domain.InventoryRow, _ bool) ([]domain.InventoryRow, error) { return rows, nil }

@@ -88,10 +88,13 @@ func TestPartyReplacedTabKeepsWinnerMembership(t *testing.T) {
 ================
 TestPartyResumeKeepsMembership
 
-A resumed transport re-enters the same character on the same session. The
-client keeps its party across that entry, so the server keeps the member:
-the partner hears no LOGOUT, the registry still holds the pair, and the
-resumed session is still the member the party lane routes to.
+A resumed transport re-enters the same character on the same session, so
+the server keeps the member: the partner hears no LOGOUT, the registry
+still holds the pair, and the resumed session is still the member the
+party lane routes to. The resumed session is also re-seeded with its own
+party (#4419): a client that resumes holding no world (a reload inside
+the resume grace) starts with an empty roster, and without the seed it
+painted every member as a stranger while the server kept them partied.
 ================
 */
 func TestPartyResumeKeepsMembership(t *testing.T) {
@@ -125,7 +128,9 @@ func TestPartyResumeKeepsMembership(t *testing.T) {
 	if !resumed.Resumed || resumed.SessionID != welcomeB.SessionID {
 		t.Fatalf("second socket did not resume B's session: %+v", resumed)
 	}
-	enterWorld(t, connB2, e2eNameB)
+	enterWorldFrames(t, connB2, e2eNameB)
+	expectPartySeed(t, connB2, gidB, gidA, 0x00, pair, "B's re-seed after the resume")
+	gameReadyBarrier(t, connB2, "B after its re-seed")
 
 	gameReadyBarrier(t, connA, "A after B's resume: no LOGOUT, no BROKEN")
 	if got := server.runtime.Registry().Count(); got != 1 {

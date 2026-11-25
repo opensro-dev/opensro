@@ -62,7 +62,7 @@ func (rt *Runtime) acceptMonsterCapture(division string, c, snapshot *enterworld
 	if !cast.HasTarget || cast.HasGroundTarget || cast.TargetGid == 0 {
 		return offensiveRefusal(0x3011)
 	}
-	if !enterworld.CharacterAlive(snapshot) || !enterworld.SkillLearned(snapshot, skill.ID) || rt.Monsters == nil {
+	if !enterworld.CharacterAlive(snapshot) || !enterworld.SkillUsable(snapshot, skill) || rt.Monsters == nil {
 		return OpResult{DiagnosticRefusal: "capture-admission-refused"}
 	}
 	intent := basicAttackIntent{CaptureCast: true, DivisionID: division, CharacterName: c.Name, TargetGid: cast.TargetGid, SkillID: skill.ID}
@@ -158,7 +158,7 @@ func (rt *Runtime) executeMonsterCapture(division string, c *enterworld.Characte
 	var refusal uint16
 	var essence grounditem.Item
 	if !rt.deps.Update(c, "monster-capture", func() bool {
-		if !enterworld.CharacterAlive(c) || !enterworld.SkillLearned(c, skill.ID) {
+		if !enterworld.CharacterAlive(c) || !enterworld.SkillUsable(c, skill) {
 			return false
 		}
 		cost, code := rt.offensivePhaseCost(division, c, skill, now, nil)

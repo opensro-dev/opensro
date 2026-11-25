@@ -20,6 +20,7 @@ Pet: 00691c70 / 00691e20 / 00691a20 / 006921a0 / 00691b60.
 ===========================================================================
 */
 import type { AutoPotionFacts } from "./auto-potion";
+import type { ItemFieldValues } from "@/engine/contracts/item-wire-fields";
 import {
 	MACRO_POTION_SLOTS,
 	MACRO_ROW_BUFF_ITEM,
@@ -434,7 +435,7 @@ export function macroPotionBuffSkillId(
 	inventory: readonly {
 		readonly slot: number;
 		readonly refObjId: number;
-		readonly nativeFields?: Readonly<Record<string, number>>;
+		readonly nativeFields?: ItemFieldValues;
 	}[]
 ): number {
 	const ref = potionSlot( potion, MACRO_ROW_BUFF_ITEM ).item;

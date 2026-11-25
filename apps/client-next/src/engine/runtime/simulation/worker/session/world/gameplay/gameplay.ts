@@ -237,6 +237,7 @@ import {
 	academyDisbandRequest,
 	academyGraduateRequest,
 	academyHonorRankRequest,
+	academyInviteRequest,
 	academyKickRequest,
 	academyLeaveRequest,
 	academyRequest,
@@ -503,7 +504,6 @@ import {
 	MOVEMENT_ACK_OPCODE,
 	NPC_INTERACTION_ACK_OPCODE,
 	OBJECT_DESPAWN_OPCODE,
-	OBJECT_POSITION_UPDATE_OPCODE,
 	OBJECT_SELECT_RESULT_OPCODE,
 	OBJECT_SOURCE_CORRECTION_OPCODE,
 	OBJECT_SOURCE_MOVE_OPCODE,
@@ -2605,14 +2605,11 @@ Bind the admitted local actor and initialize its authoritative movement.
 		/*
 ================
 correct
-
-keepTravel is the 0x3028 position resync, which reseeds a walk in
-flight instead of ending it (movement.correct).
 ================
 		*/
-		correct( entity: EntityState, now?: number, keepTravel = false ) {
+		correct( entity: EntityState, now?: number ) {
 			if ( entity.gid !== localGid ) throw Error( "Correction references non-local entity" );
-			movement.correct( { ...entity, angle: entity.heading }, now, keepTravel );
+			movement.correct( { ...entity, angle: entity.heading }, now );
 			dirty = true;
 		},
 		/*
@@ -3434,6 +3431,12 @@ state here before a command can claim a native wire conversation.
 				}
 				return sendFrame( academyHonorRankRequest( command.gid ) );
 			}
+			if ( command.kind === "academy-invite" ) {
+				// 5C4FD0 -> 702C90: another player, never the sender.
+				if ( !academy || !localGid ) throw Error( "Academy session is not initialized" );
+				if ( !command.gid || command.gid === localGid ) return null;
+				return sendFrame( academyInviteRequest( command.gid ) );
+			}
 			if ( command.kind === "academy-disband" ) {
 				if ( !academy || !localGid ) throw Error( "Academy session is not initialized" );
 				return sendFrame( academyDisbandRequest() );
@@ -4094,6 +4097,11 @@ state here before a command can claim a native wire conversation.
 			}
 			if ( command.kind === "letter-delete" ) {
 				letters.remove( command.index );
+				return null;
+			}
+			if ( command.kind === "letter-view" ) {
+				letters.view();
+				dirty = true;
 				return null;
 			}
 			if ( command.kind === "chat" ) {
@@ -6538,9 +6546,7 @@ Packet handling must not depend on which HUD panel is currently open.
 						)
 					);
 				}
-				if ( frame.opcode === OBJECT_SOURCE_MOVE_OPCODE || frame.opcode === OBJECT_POSITION_UPDATE_OPCODE ) {
-					dirty = true;
-				}
+				if ( frame.opcode === OBJECT_SOURCE_MOVE_OPCODE ) dirty = true;
 				if (
 					item || target || fight || frame.opcode === PORTAL_RESULT_OPCODE ||
 					frame.opcode === REBIRTH_POINT_APPOINT_RESULT_OPCODE

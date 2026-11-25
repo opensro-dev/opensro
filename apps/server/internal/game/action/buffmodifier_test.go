@@ -42,6 +42,29 @@ func TestOdarWritesFollowBitPairs(t *testing.T) {
 	}
 }
 
+/*
+================
+TestDruWritesBothDamageRatePairs
+
+The v1.188 server's buff installer puts dru word 0 on
+parameters 0x80 and 0x81 and word 1 on 0x82 and 0x83, mode 0 (flat):
+the physical damage-rate pair first, then the magical pair. Distinct
+words keep the mapping honest (#4407).
+================
+*/
+func TestDruWritesBothDamageRatePairs(t *testing.T) {
+	want := []paramkeeper.Write{
+		{Parameter: 0x80, Channel: paramkeeper.Flat, Value: 7},
+		{Parameter: 0x81, Channel: paramkeeper.Flat, Value: 7},
+		{Parameter: 0x82, Channel: paramkeeper.Flat, Value: 9},
+		{Parameter: 0x83, Channel: paramkeeper.Flat, Value: 9},
+	}
+	got := buffModifierWrites(enterworld.SkillBuffModifiers{Dru: true, DruWords: [2]uint32{7, 9}}, false)
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("dru writes %+v, want %+v", got, want)
+	}
+}
+
 // Both blocks read their words unsigned (fild + 2^32).
 func TestBuffModifierWordsAreUnsigned(t *testing.T) {
 	writes := buffModifierWrites(enterworld.SkillBuffModifiers{

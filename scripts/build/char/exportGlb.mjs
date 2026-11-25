@@ -29,61 +29,9 @@ import path from "node:path";
 import { assembleAvatar } from "./buildAvatar.mjs";
 import { compileBanTimeline } from "./compileBanTimeline.mjs";
 import { isMainScript } from "../shared/fsUtils.mjs";
+import { mulMat4, quatToMat4 } from "./mat4.mjs";
 
-// ---- small math (column-major mat4 as Float64Array(16)) ----
-
-/*
-================
-quatToMat4
-
-Convert an authored quaternion and translation into a column-major bind matrix.
-================
-*/
-function quatToMat4( q, t ) {
-	const [x, y, z, w] = q;
-	const [tx, ty, tz] = t;
-	const x2 = x + x, y2 = y + y, z2 = z + z;
-	const xx = x * x2, xy = x * y2, xz = x * z2;
-	const yy = y * y2, yz = y * z2, zz = z * z2;
-	const wx = w * x2, wy = w * y2, wz = w * z2;
-	// column-major
-	return new Float64Array( [
-		1 - (yy + zz),
-		xy + wz,
-		xz - wy,
-		0,
-		xy - wz,
-		1 - (xx + zz),
-		yz + wx,
-		0,
-		xz + wy,
-		yz - wx,
-		1 - (xx + yy),
-		0,
-		tx,
-		ty,
-		tz,
-		1
-	] );
-}
-
-/*
-================
-mul
-
-Compose parent and child bind transforms in column-major order.
-================
-*/
-function mul( a, b ) {
-	const o = new Float64Array( 16 );
-	for ( let c = 0; c < 4; c += 1 ) {
-		for ( let r = 0; r < 4; r += 1 ) {
-			o[c * 4 + r] = a[r] * b[c * 4] + a[4 + r] * b[c * 4 + 1] + a[8 + r] * b[c * 4 + 2] +
-				a[12 + r] * b[c * 4 + 3];
-		}
-	}
-	return o;
-}
+// quatToMat4/mulMat4 live in mat4.mjs, shared with clipGrounding.mjs.
 // general 4x4 inverse (good enough; rigid transforms here)
 
 /*
@@ -404,7 +352,7 @@ export function avatarToGlb( avatar ) {
 	for ( let i = 0; i < N; i += 1 ) {
 		const local = quatToMat4( convQuat( bones[i].local.q ), convPos( bones[i].local.t ) );
 		const pi = bones[i].parentIndex;
-		worldMats[i] = pi >= 0 ? mul( worldMats[pi], local ) : local;
+		worldMats[i] = pi >= 0 ? mulMat4( worldMats[pi], local ) : local;
 	}
 	const ibm = new Float32Array( N * 16 );
 	for ( let i = 0; i < N; i += 1 ) {

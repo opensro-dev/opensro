@@ -108,6 +108,7 @@ const market = ( extra = {} ) => ({
 		offersOut: [],
 		purchases: [],
 		silk: 40,
+		earnedSilk: 25,
 		warehouseGold: 0,
 		rules
 	},
@@ -470,14 +471,15 @@ test("the chips, the dropdowns and a pick from the bag", () => {
 	// closes it too, and a choice the window never drew does nothing.
 	hud.activate( "market-menu:degree", context );
 	assert.equal( hud.state().menu, "degree" );
-	assert.equal( search( hud, "market-choose:degree:11", context ).degree, 11 );
+	// Degree 12 is a drawn choice: the fortress weapons carry it (#4412).
+	assert.equal( search( hud, "market-choose:degree:12", context ).degree, 12 );
 	assert.equal( hud.state().menu, "" );
 	hud.activate( "market-menu:race", context );
 	hud.activate( "market-pick:7", context );
 	assert.equal( hud.state().menu, "", "a click elsewhere closes the list" );
 	const raced = search( hud, "market-choose:race:eu", context );
 	assert.equal( raced.race, "eu" );
-	assert.equal( raced.degree, 11, "the other filters stay" );
+	assert.equal( raced.degree, 12, "the other filters stay" );
 	assert.equal( search( hud, "market-choose:rarity:sealed", context ).rarity, "sealed" );
 	// One seal tier and one body armour type each narrow the search.
 	assert.equal( search( hud, "market-choose:rarity:moon", context ).rarity, "moon" );
@@ -490,7 +492,7 @@ test("the chips, the dropdowns and a pick from the bag", () => {
 			"market-choose:armor:plate",
 			"market-choose:rarity:unique",
 			"market-choose:race:kr",
-			"market-choose:degree:12",
+			"market-choose:degree:13",
 			"market-choose:degree:",
 			"market-choose:nope:1"
 		]

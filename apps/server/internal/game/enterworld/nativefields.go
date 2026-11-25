@@ -151,6 +151,137 @@ func (f NativeFields) Without(key string) NativeFields {
 
 /*
 ================
+wireItemFieldNames
+
+Step 2B of #4421: the fields a browser build reads, and the only ones
+ItemWireFields passes to a wire row. The packed value keeps the full
+projection: server lookups (price, canSell, twoHanded and the rest)
+read it through Lookup/Get, and the record cache round-trips it
+through this same JSON expecting every field back. A field no client
+code reads is bytes on every item row of every entry answer and
+commerce seed for nothing.
+
+The census behind this list, at the head it was taken: every
+`fields.<name>`, `fields["<name>"]` and `nativeFields?.<name>` read in
+apps/client-next/src, plus the key literals item-tooltip-stats passes
+its throwing read(). A field joins this list only with a named client
+reader; a field leaves it only when that reader goes. Every read of an
+absent field in the client is guarded (`??`, `=== undefined`) except
+itemTooltipStats' read(), whose whole key set is in the first group -
+so a tab built before this change reads a slimmed row exactly as it
+read a full one (Old-tab: safe, no protocol bump).
+
+Groups: the equipment stat families and the durability range
+(item-tooltip-stats.ts, itemMaxDurability); the tooltip and price rows
+(item-tooltip, stall, storage, cos-trade, repair); the use, cooldown
+and macro readers (item-cooldowns, return-scroll, sro-macro-potion);
+the stone masks (item-tooltip-stone, alchemy-selection). The census
+covers every path a row's fields travel: the wire `nativeFields`, the
+`item.tooltip.fields` copy itemTooltipReference makes of it (read
+directly and through its aliases - `f`, `fields`, `targetFields`,
+`stoneFields`), and the direct `nativeFields` reads that bypass the
+tooltip (mall-use, cos-timer, the macro rows); the output is pasted
+in PR #4447. The client owns the list as the typed ITEM_WIRE_FIELDS
+contract (#4448): itemwirefields.json beside this file is generated
+from it, and a test here plus one in the client keep both copies
+equal, so a new client read means a new tuple entry first.
+================
+*/
+var wireItemFieldNames = []string{
+	// Equipment stat families (item-tooltip-stats.ts).
+	"varianceIntMin1c0", "varianceIntMax1c4",
+	"varianceFloatMin1c8", "varianceFloatMax1cc", "varianceFloatPerPlus1d0",
+	"varianceIntMin1d4", "varianceIntMax1d8", "varianceFloatPerPlus1dc",
+	"varianceFloatMin1e0", "varianceFloatMax1e4", "varianceFloatPerPlus1e8",
+	"varianceIntMin1ec", "varianceIntMax1f0",
+	"varianceFloatMin1f4", "varianceFloatMax1f8", "varianceFloatPerPlus1fc",
+	"varianceFloatMin200", "varianceFloatMax204", "varianceFloatPerPlus208",
+	"varianceFloatMin20c", "varianceFloatMax210",
+	"varianceFloatMin214", "varianceFloatMax218",
+	"actionRange23c",
+	"varianceIntMin240", "varianceIntMax244", "varianceIntMin248", "varianceIntMax24c", "varianceFloatPerPlus250",
+	"varianceIntMin254", "varianceIntMax258", "varianceIntMin25c", "varianceIntMax260", "varianceFloatPerPlus264",
+	"varianceFloatMin268", "varianceFloatMax26c", "varianceFloatMin270", "varianceFloatMax274",
+	"varianceFloatMin278", "varianceFloatMax27c", "varianceFloatMin280", "varianceFloatMax284",
+	"varianceIntMin288", "varianceIntMax28c", "varianceFloatPerPlus290",
+	"varianceIntMin294", "varianceIntMax298",
+	// Tooltip rows, prices and gates.
+	"cashItem", "rarity", "canRepair", "price", "repairCostB4", "reviveCostB8",
+	"country", "reqStr", "reqInt",
+	"reqLevelType1", "requiredLevel",
+	"reqLevelType2", "requiredLevel2",
+	"reqLevelType3", "requiredLevel3",
+	"reqLevelType4", "requiredLevel4",
+	"maxStack", "reqGender", "itemClass", "setId",
+	"maxDurability", "itemParam2_2a0", "itemParam6_2b0",
+	"maxMagicOptions51c", "avatarAttachment51d",
+	// Use, cooldown, macro and stone readers.
+	"useCooldownGroup524", "useCooldownDuration528",
+	"associatedSkillId", "useSkillId", "useSkillDurationMs",
+	"canUse", "itemParam1_29c", "itemParam3_2a4", "itemParam4_2a8", "itemParam5_2ac",
+	"stoneFamilyMask", "stoneTooltipMask",
+}
+
+var wireItemFieldMask = buildWireItemFieldMask()
+
+/*
+================
+buildWireItemFieldMask
+
+A name outside the schema is a census typo: panic at package init
+rather than silently never publishing the field.
+================
+*/
+func buildWireItemFieldMask() []byte {
+	mask := make([]byte, nativeFieldHeader())
+	for _, name := range wireItemFieldNames {
+		i, ok := nativeFieldIDs[name]
+		if !ok {
+			panic("wire item field outside the schema: " + name)
+		}
+		mask[i/8] |= 1 << uint(i%8)
+	}
+	return mask
+}
+
+/*
+================
+ItemWireFields
+
+The wire projection of a row: a copy holding only the fields in
+wireItemFieldNames. Every construction that puts NativeFields on the
+wire (entry-blob rows, starter and equip WireItems, the commerce
+reference seed and its deltas) passes through here; the source value
+is not mutated. A row with no read field left publishes as "" and its
+nativeFields key is omitted.
+================
+*/
+func ItemWireFields(f NativeFields) NativeFields {
+	if len(f) == 0 {
+		return f
+	}
+	data := make([]byte, len(f))
+	copy(data, f)
+	kept := false
+	for i := range nativeFieldNames {
+		bit := byte(1 << uint(i%8))
+		if wireItemFieldMask[i/8]&bit == 0 {
+			data[i/8] &^= bit
+			clear(data[nativeFieldHeader()+i*8 : nativeFieldHeader()+(i+1)*8])
+			continue
+		}
+		if data[i/8]&bit != 0 {
+			kept = true
+		}
+	}
+	if !kept {
+		return ""
+	}
+	return NativeFields(data)
+}
+
+/*
+================
 MarshalJSON
 
 Writes the present fields as one JSON object, byte for byte what

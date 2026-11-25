@@ -52,7 +52,7 @@ gid in deadGids, the set characters.ts builds from vitals with hp 0.
 function harness() {
 	const owner = createEntities();
 	owner.bootstrap( {
-		protocolVersion: 2,
+		protocolVersion: 3,
 		nativeResult: 1,
 		refObjSnapshot: [],
 		localPlayerEntry: { modelRef: MODEL, startProfile: { regionId: 257, x: 1, y: 2, z: 3, angle: 0 } }

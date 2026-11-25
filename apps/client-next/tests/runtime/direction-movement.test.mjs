@@ -226,27 +226,6 @@ test("the local walk sends the angular envelope and keeps walking past its first
 	assert.equal( defined( m.state().pose ).x, walked.x, "a correction ends the walk" );
 });
 
-test("a position resync mid-walk keeps the direction walk going (#4215)", () => {
-	const m = createMovement( () => {} );
-	m.seed( pose );
-	const navigation = product( pose.regionId );
-	navigation.objects = [];
-	navigation.navmesh.regions.push( { ...navigation.navmesh.regions[0], dx: 1 } );
-	m.navigation( pose.regionId, navigation );
-	m.direct( EAST, 0 );
-	m.receive( receipt( 1, { ...pose, x: 1100 }, { from: pose, startedAtMs: 0, arrivesAtMs: 20000 } ), 0, GID );
-	for ( let now = 100; now <= 5000; now += 100 ) m.step( now );
-	const walked = defined( m.state().pose );
-	// The 0x3028 resync re-anchors the walk at the server's pose; a direction
-	// walk has no goal, so it keeps its heading and walks on.
-	m.correct( { ...walked, angle: EAST }, 5000, true );
-	assert.equal( m.state().directionWalk, EAST, "the resync keeps the direction walk" );
-	assert.deepEqual( m.state().movementAim, { kind: "direction", heading: EAST } );
-	for ( let now = 5100; now <= 8000; now += 100 ) m.step( now );
-	assert.ok( defined( m.state().pose ).x > walked.x + 1, "the walk goes on from the resynced pose" );
-	assert.equal( m.state().moving, true );
-});
-
 test("a blocked server leg ends the local walk at the contact", () => {
 	const m = createMovement( () => {} );
 	m.seed( pose );

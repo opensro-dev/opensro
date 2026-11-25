@@ -1,4 +1,5 @@
 import type { InventoryItem } from "@/engine/contracts/gameplay";
+import { ITEM_REQUIREMENT_SLOTS } from "@/engine/contracts/item-wire-fields";
 import type { Progression } from "../gameplay/progression";
 
 export interface EquipmentIdentity {
@@ -27,8 +28,8 @@ export function itemEquipmentOverlay(
 	if ( !f ) return null;
 	const quadPass = ( mastery: boolean ) => {
 		let pass = true;
-		for ( let i = 1; i <= 4; i++ ) {
-			const type = f["reqLevelType" + i] ?? 0, required = f["requiredLevel" + (i === 1 ? "" : i)] ?? 0;
+		for ( const [typeKey, levelKey] of ITEM_REQUIREMENT_SLOTS ) {
+			const type = f[typeKey] ?? 0, required = f[levelKey] ?? 0;
 			if ( mastery ? type <= 10 : type !== 1 ) continue;
 			const level = mastery ? progression.masteries.find( m => m.id === type )?.level : progression.level;
 			// Native missing mastery records do not participate; country is separate.

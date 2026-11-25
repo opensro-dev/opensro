@@ -23,7 +23,6 @@ foundation/gameplay/arena-chest.ts.
 
 // 0x3xxx: one-way notices (mostly server pushes; 0x3012 rides client to server)
 export const GAME_READY_OPCODE = 0x3012;
-export const OBJECT_POSITION_UPDATE_OPCODE = 0x3028;
 export const EVENT_NOTICE_OPCODE = 0x3058;
 export const FLAG_WAR_EVENT_OPCODE = 0x30a9;
 export const POINTS_UPDATE_OPCODE = 0x30b3;
@@ -66,6 +65,7 @@ export const COS_INFO_UPDATE_OPCODE = 0x3508;
 export const JOB_DRESS_CANCEL_OPCODE = 0x3514;
 export const PICKUP_ANIM_OPCODE = 0x35c7;
 export const PARTY_INFO_OPCODE = 0x35d6;
+export const PEER_GUILD_APPEARANCE_OPCODE = 0x365f;
 export const CHAT_BROADCAST_OPCODE = 0x3667;
 export const RESET_REGION_OPCODE = 0x366a;
 export const COS_STATE_REFRESH_OPCODE = 0x3691;
@@ -78,6 +78,7 @@ export const RESET_CLIENT_ACK_OPCODE = 0x36dd;
 export const GM_RESTRICTION_NOTICE_OPCODE = 0x36ea;
 export const MOVEMENT_SPEED_OPCODE = 0x376f;
 export const UNEQUIP_VISUAL_OPCODE = 0x377c;
+export const PEER_GUILD_CLEARED_OPCODE = 0x37e6;
 export const FORTRESS_WAR_STATE_OPCODE = 0x3887;
 export const TC_STATUS_OPCODE = 0x3ac5;
 export const GUILD_UPDATE_PUSH_OPCODE = 0x3b29;
@@ -122,6 +123,7 @@ export const COS_TERMINATE_REQUEST_OPCODE = 0x7618;
 export const WHISPER_BLOCK_REQUEST_OPCODE = 0x766f;
 export const VISUAL_FLAGS_REQUEST_OPCODE = 0x7683;
 export const COS_COMMAND_REQUEST_OPCODE = 0x769e;
+export const TC_INVITE_REQUEST_OPCODE = 0x76b1;
 export const GUILD_WAR_DECLARE_OPCODE = 0x771b;
 export const FLAG_WAR_REGISTER_REQUEST_OPCODE = 0x7753;
 export const QUEST_GATHER_CANCEL_OPCODE = 0x775d;

@@ -192,6 +192,25 @@ test("the mailbox seeds at world entry, takes arrivals and erases what the serve
 	assert.equal( lettersOf( state ).rows.length, 2, "an error answer keeps the mailbox" );
 });
 
+test("an arrival lights the LetterAlarmGuide and viewing the mailbox puts it out", () => {
+	const { g } = lane();
+	g.receive( { opcode: 0xb3cd, payload: MAILBOX }, 0 );
+	assert.equal( lettersOf( g.take() ).alarm, false, "the entry seed never lights the guide" );
+	g.receive( { opcode: 0x3f9a, payload: bytes( 8, "Dora", u32( 1909 ), u32( 5 ) ) }, 0 );
+	assert.equal( lettersOf( g.take() ).alarm, true, "an arrival lights it (69D400)" );
+	// Reading a letter is not the mailbox view: the light stays.
+	g.command( { kind: "letter-read", index: 0 }, 0, undefined );
+	g.receive( { opcode: 0xb3f2, payload: bytes( 1, 0, "Hi" ) }, 0 );
+	assert.equal( lettersOf( g.take() ).alarm, true, "the read window does not put it out" );
+	g.command( { kind: "letter-view" }, 0, undefined );
+	assert.equal( lettersOf( g.take() ).alarm, false, "the mailbox view puts it out" );
+	g.receive( { opcode: 0x3f9a, payload: bytes( 8, "Edda", u32( 1910 ), u32( 6 ) ) }, 0 );
+	assert.equal( lettersOf( g.take() ).alarm, true, "the next arrival lights it again" );
+	g.command( { kind: "letter-delete", index: 0 }, 0, undefined );
+	g.receive( { opcode: 0xb0cc, payload: bytes( 1, 0 ) }, 0 );
+	assert.equal( lettersOf( g.take() ).alarm, true, "a delete does not put it out" );
+});
+
 test("a read fetches a body once, opens the read window, and marks the letter read", () => {
 	const { sent, g } = lane();
 	g.receive( { opcode: 0xb3cd, payload: MAILBOX }, 0 );

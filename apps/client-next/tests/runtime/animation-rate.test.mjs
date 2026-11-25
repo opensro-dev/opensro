@@ -64,7 +64,7 @@ test("action-speed wire converts the denominator once at float32 precision", () 
 test("local bootstrap, mounted updates and replacement spawns retain the correct actor rate", () => {
 	const owner = createEntities();
 	owner.bootstrap( {
-		protocolVersion: 2,
+		protocolVersion: 3,
 		nativeResult: 1,
 		refObjSnapshot: [ { refObjId: 3914, tidWord: 0x11c6, kind: "cos" } ],
 		localPlayerEntry: {

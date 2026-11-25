@@ -72,7 +72,7 @@ function mountSpawn() {
 test("a correction naming the mount hands the local mover the wire deck height", () => {
 	const core = createWorldCore( () => {} );
 	core.bootstrap( {
-		protocolVersion: 2,
+		protocolVersion: 3,
 		nativeResult: 1,
 		refObjSnapshot: [ { refObjId: 2183, kind: "cos", tidWord: 0x11c6 } ],
 		refItemSnapshot: [],

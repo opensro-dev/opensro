@@ -12,6 +12,8 @@ identity rather than resolving characters while another owner holds a lock.
 package main
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"os"
@@ -354,6 +356,16 @@ func newGameplayPlane(
 		return nil, err
 	}
 	deps.SceneReferenceFrames = items.CommerceReferenceSeed
+	// The commerce seed's digest folds into the entry constants digest
+	// (#4421): shop data changing under a held session invalidates its
+	// mark, so a stale seed can never be kept by the digest gate.
+	{
+		hash := sha256.New()
+		for _, frame := range items.CommerceReferenceSeed() {
+			_, _ = hash.Write(frame.Payload)
+		}
+		deps.SeedDigest = hex.EncodeToString(hash.Sum(nil))
+	}
 	// #1689 (port-only): the name-change scroll's queue door. The store's
 	// refusal vocabulary is translated at this boundary so the gameplay
 	// packages never import the store.

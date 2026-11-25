@@ -464,6 +464,28 @@ func sendPartySeed(s *transport.Session, myMemberID uint32, snapshot Snapshot, r
 
 /*
 ==================
+reseedMember
+
+Sends a member's own party to one session again: the seed pair a join
+sends, built from the registry's current party. A character in no party
+gets nothing.
+==================
+*/
+func (r *Runtime) reseedMember(s *transport.Session, divisionID, name string) {
+	snapshot, partied := r.registry.PartyOf(divisionID, name)
+	if !partied {
+		return
+	}
+	for _, member := range snapshot.Members {
+		if member.Name == name {
+			sendPartySeed(s, member.MemberID, snapshot, r.rosterRows(divisionID, snapshot))
+			return
+		}
+	}
+}
+
+/*
+==================
 handleInvite
 
 handleInvite applies one 0x70D5 create proposal: resolve the target by
@@ -827,10 +849,16 @@ so the honest posture is the same departure a disconnect takes
 party state does not survive the player's transport).
 
 A resumed transport is not a session boundary: it re-enters the same
-character on the same session (s.Rebound), the client keeps its party
-across that entry as it does across a teleport, and the member stays.
+character on the same session (s.Rebound), and the member stays.
 Dropping here left the resumed client holding a party the server had
-dissolved. A nil session (detached callers) is a new admission.
+dissolved. The resumed session is re-seeded with its party (#4419): the
+client keeps its roster only when it still held a world at the resume
+(world.ts resumedTransport), so a reload inside the resume grace starts
+from an empty roster and painted every member as a stranger. This hook
+runs from game-ready, after the bootstrap frames, so the seed cannot
+race their order, and the client applies it idempotently (0x35D6
+replaces the roster). A nil session (detached callers) is a new
+admission.
 ==================
 */
 func (r *Runtime) WorldBound(s *transport.Session, divisionID string, character *enterworld.Character) {
@@ -844,6 +872,7 @@ func (r *Runtime) WorldBound(s *transport.Session, divisionID string, character 
 		log.Debugf("party: %s re-entered the world; stale pending invitation dropped", character.Name)
 	}
 	if s != nil && s.Rebound() {
+		r.reseedMember(s, divisionID, character.Name)
 		return
 	}
 	if r.dropMember(divisionID, character.Name, PartyLeaveReasonLogout, nil) {

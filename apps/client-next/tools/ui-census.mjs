@@ -7,17 +7,24 @@ Wave 0 of the ui.ts split (#2513, decision record #2534) lands this census
 before any window moves:
 
 - ROUTES: every control-id guard in `activate()` and `event()` - the exact
- literals and the `startsWith` prefixes the ladders test, each with its
- anchor (function and line). A move that renames, drops or reorders a
- guard changes this list, so the diff is the routing review.
-- STATE: every mutable closure field `createUi` declares, with the buckets
- that read and write it. A bucket is the control family of the nearest
- enclosing id guard (`stall`, `letter`, ...), or the closure function
- that touches the field unguarded. A field with more than one bucket is
- SHARED: two future window owners would both reach it. The rule for the
- epic is that a move PR may only shrink the shared set - a field leaves
- it when one owner takes the field with it, and no field may gain a
- bucket it did not have.
+ literals and the `startsWith` prefixes the ladders test, keyed by the
+ pattern they test. A move that renames or drops a guard changes this
+ list, so the diff is the routing review.
+- STATE: every mutable closure field `createUi` declares, keyed by name,
+ with the buckets that read and write it. A bucket is the control family
+ of the nearest enclosing id guard (`stall`, `letter`, ...), or the
+ closure function that touches the field unguarded. A field with more
+ than one bucket is SHARED: two future window owners would both reach
+ it. The rule for the epic is that a move PR may only shrink the shared
+ set - a field leaves it when one owner takes the field with it, and no
+ field may gain a bucket it did not have.
+
+Keys are stable identity, never source position (#4456): fields sort by
+name, routes by the pattern they test, and an anonymous function is
+named for its enclosing named function plus an ordinal inside it. A
+pure move or insertion in ui.ts therefore leaves the table unchanged.
+Source lines exist only as check-time diagnostics, computed on failure
+and never committed.
 
 The census is regenerated, never edited: `--write` rewrites the checked-in
 table, `--check` (the default) fails when the table is stale. Nothing in
@@ -38,7 +45,9 @@ const CENSUS_PATH = path.join( root, "tests/runtime/ui-census.json" );
 ================
 lineOf
 
-The 1-based line of a node's start in its source file.
+The 1-based line of a node's start in its source file. Check-time
+diagnostics only: a line may be printed when the gate fails, it is
+never written into the census (#4456).
 ================
 */
 function lineOf( file, node ) {
@@ -130,13 +139,15 @@ function guardFamily( condition ) {
 
 /*
 ================
-functionName
+directName
 
-The census name of the function a node sits in: its declaration name, the
-variable or property it is assigned to, or its anchor line.
+The name a function carries by itself: its declaration name, or the
+variable, property or method it is assigned to. An anonymous function
+has none and returns null; census() names it for its enclosing named
+function instead (#4456).
 ================
 */
-function functionName( file, node ) {
+function directName( file, node ) {
 	if ( ts.isFunctionDeclaration( node ) && node.name ) return node.name.text;
 	if ( (ts.isFunctionExpression( node ) || ts.isArrowFunction( node )) && node.parent ) {
 		if ( ts.isVariableDeclaration( node.parent ) && ts.isIdentifier( node.parent.name ) ) {
@@ -146,7 +157,7 @@ function functionName( file, node ) {
 		if ( ts.isMethodDeclaration( node.parent ) ) return node.parent.name.getText( file );
 	}
 	if ( ts.isMethodDeclaration( node ) && node.name ) return node.name.getText( file );
-	return "anonymous@" + lineOf( file, node );
+	return null;
 }
 
 /*
@@ -164,10 +175,12 @@ function isFunctionNode( node ) {
 ================
 routePatterns
 
-Every id pattern one condition tests, as census route rows.
+Every id pattern one condition tests, as census route rows. The guard's
+line rides in the parallel `lines` list for check-time diagnostics; it
+is not part of the row (#4456).
 ================
 */
-function routePatterns( file, fnName, condition, out ) {
+function routePatterns( file, fnName, condition, out, lines ) {
 	function visit( node ) {
 		if ( !node ) return;
 		if (
@@ -177,7 +190,8 @@ function routePatterns( file, fnName, condition, out ) {
 		) {
 			for ( const [side, other] of [ [ node.left, node.right ], [ node.right, node.left ] ] ) {
 				if ( isIdish( side ) && ts.isStringLiteral( other ) ) {
-					out.push( { fn: fnName, kind: "exact", pattern: other.text, line: lineOf( file, node ) } );
+					out.push( { fn: fnName, kind: "exact", pattern: other.text } );
+					lines.push( lineOf( file, node ) );
 				}
 			}
 		}
@@ -186,7 +200,8 @@ function routePatterns( file, fnName, condition, out ) {
 			node.expression.name.text === "startsWith" && isIdish( node.expression.expression ) &&
 			node.arguments.length === 1 && ts.isStringLiteral( node.arguments[0] )
 		) {
-			out.push( { fn: fnName, kind: "prefix", pattern: node.arguments[0].text, line: lineOf( file, node ) } );
+			out.push( { fn: fnName, kind: "prefix", pattern: node.arguments[0].text } );
+			lines.push( lineOf( file, node ) );
 		}
 		ts.forEachChild( node, visit );
 	}
@@ -195,13 +210,15 @@ function routePatterns( file, fnName, condition, out ) {
 
 /*
 ================
-census
+censusWithLines
 
-Build the census from ui.ts source text. Pure: the same text always
-builds the same table, which is what makes `--check` a gate.
+Build the census from ui.ts source text, with the source lines of every
+field and route kept beside it for check-time diagnostics. Pure: the
+same text always builds the same table, which is what makes `--check`
+a gate. The lines never enter the table itself (#4456).
 ================
 */
-export function census( text ) {
+export function censusWithLines( text ) {
 	const file = ts.createSourceFile( "ui.ts", text, ts.ScriptTarget.Latest, true );
 	let createUi = null;
 	for ( const statement of file.statements ) {
@@ -210,7 +227,9 @@ export function census( text ) {
 	if ( !createUi || !createUi.body ) throw new Error( "createUi not found in ui.ts" );
 
 	// The mutable fields: `let` declarators declared directly in createUi.
+	// The declaration line is diagnostics only; the key is the name.
 	const fields = new Map();
+	const fieldLines = new Map();
 	for ( const statement of createUi.body.statements ) {
 		if ( !ts.isVariableStatement( statement ) ) continue;
 		if ( !(statement.declarationList.flags & ts.NodeFlags.Let) ) continue;
@@ -218,14 +237,14 @@ export function census( text ) {
 			if ( ts.isIdentifier( declaration.name ) ) {
 				fields.set( declaration.name.text, {
 					name: declaration.name.text,
-					line: lineOf( file, declaration ),
 					buckets: {}
 				} );
+				fieldLines.set( declaration.name.text, lineOf( file, declaration ) );
 			}
 		}
 	}
 
-	const routes = [];
+	const routes = [], routeLines = [];
 	const parents = new Map();
 	(function link( node ) {
 		ts.forEachChild( node, child => {
@@ -233,6 +252,40 @@ export function census( text ) {
 			link( child );
 		} );
 	})( createUi );
+
+	// Every function in the closure, in source order, with the census
+	// name it answers to (#4456): its own name, or - anonymous - its
+	// enclosing named function's name plus an ordinal among that
+	// function's anonymous functions. A move keeps the anchor and the
+	// order, so it keeps the name; only gaining or losing an anonymous
+	// function renumbers the later ones, which is a real change.
+	const functionNodes = [];
+	(function collect( node ) {
+		if ( isFunctionNode( node ) ) functionNodes.push( node );
+		ts.forEachChild( node, collect );
+	})( createUi );
+	const functionNames = new Map();
+	{
+		const ordinals = new Map();
+		for ( const node of functionNodes ) {
+			const own = directName( file, node );
+			if ( own !== null ) {
+				functionNames.set( node, own );
+				continue;
+			}
+			let anchor = parents.get( node );
+			while ( anchor && !(isFunctionNode( anchor ) && directName( file, anchor ) !== null) ) {
+				anchor = parents.get( anchor );
+			}
+			// createUi encloses the whole walk and is named, so the climb
+			// always lands; naming the root is the unreachable fallback.
+			const base = anchor ? directName( file, anchor ) : "createUi";
+			const ordinal = (ordinals.get( anchor ) ?? 0) + 1;
+			ordinals.set( anchor, ordinal );
+			functionNames.set( node, base + "#anon" + ordinal );
+		}
+	}
+	const functionName = node => functionNames.get( node ) ?? "createUi";
 
 	/*
 	================
@@ -252,7 +305,7 @@ export function census( text ) {
 				const family = guardFamily( conditionOf( current ) );
 				if ( family !== null ) return family;
 			}
-			if ( isFunctionNode( current ) && fn === null ) fn = functionName( file, current );
+			if ( isFunctionNode( current ) && fn === null ) fn = functionName( current );
 			current = parents.get( current );
 		}
 		return fn ?? "createUi";
@@ -324,31 +377,52 @@ export function census( text ) {
 			let current = node, fnName = null;
 			while ( current && current !== createUi ) {
 				if ( isFunctionNode( current ) ) {
-					fnName = functionName( file, current );
+					fnName = functionName( current );
 					break;
 				}
 				current = parents.get( current );
 			}
 			if ( fnName === "activate" || fnName === "event" ) {
-				routePatterns( file, fnName, conditionOf( node ), routes );
+				routePatterns( file, fnName, conditionOf( node ), routes, routeLines );
 			}
 		}
 		ts.forEachChild( node, child => walk( child, shadow ) );
 	})( createUi, new Set() );
 
+	const byText = ( a, b ) => a < b ? -1 : a > b ? 1 : 0;
 	const fieldRows = [ ...fields.values() ]
-		.sort( ( a, b ) => a.line - b.line )
+		.sort( ( a, b ) => byText( a.name, b.name ) )
 		.map( field => {
 			const buckets = {};
 			for ( const name of Object.keys( field.buckets ).sort() ) buckets[name] = field.buckets[name];
 			return { ...field, buckets, shared: Object.keys( buckets ).length > 1 };
 		} );
-	routes.sort( ( a, b ) => a.line - b.line );
+	// Every guard stays a row, duplicates included: guards that test the
+	// same pattern are told apart by an ordinal among themselves, and
+	// the committed order is the key order (function, kind, pattern,
+	// ordinal), so moving a guard cannot rewrite the table (#4456).
+	const routeLinesByKey = new Map();
+	{
+		const counts = new Map();
+		routes.forEach( ( route, index ) => {
+			const key = route.fn + "\0" + route.kind + "\0" + route.pattern;
+			const ordinal = (counts.get( key ) ?? 0) + 1;
+			counts.set( key, ordinal );
+			route.ordinal = ordinal;
+			routeLinesByKey.set( key + "\0" + ordinal, routeLines[index] );
+		} );
+	}
+	routes.sort( ( a, b ) =>
+		byText( a.fn, b.fn ) || byText( a.kind, b.kind ) || byText( a.pattern, b.pattern ) ||
+		a.ordinal - b.ordinal
+	);
 
-	return {
+	const table = {
 		about: "Generated by tools/ui-census.mjs from src/engine/runtime/ui/ui.ts. " +
-			"Do not edit: regenerate with --write. A field with more than one bucket is shared; " +
-			"a move PR may only shrink the shared set (docs: #2515).",
+			"Do not edit: regenerate with --write. Entries are keyed by stable identity " +
+			"(field name; route function, kind and pattern), never by source position, so " +
+			"moving code in ui.ts does not rewrite this file (#4456). A field with more " +
+			"than one bucket is shared; a move PR may only shrink the shared set (docs: #2515).",
 		source: "src/engine/runtime/ui/ui.ts",
 		summary: {
 			fields: fieldRows.length,
@@ -358,6 +432,18 @@ export function census( text ) {
 		fields: fieldRows,
 		routes
 	};
+	return { table, fieldLines, routeLines: routeLinesByKey };
+}
+
+/*
+================
+census
+
+The census table alone: what the gate compares and the tests read.
+================
+*/
+export function census( text ) {
+	return censusWithLines( text ).table;
 }
 
 /*
@@ -385,7 +471,8 @@ main
 */
 function main() {
 	const write = process.argv.includes( "--write" );
-	const table = canonical( census( fs.readFileSync( UI_PATH, "utf8" ) ) );
+	const built = censusWithLines( fs.readFileSync( UI_PATH, "utf8" ) );
+	const table = canonical( built.table );
 	const text = JSON.stringify( table, null, "\t" ) + "\n";
 	if ( write ) {
 		fs.writeFileSync( CENSUS_PATH, text );
@@ -410,6 +497,28 @@ function main() {
 			console.error(
 				`first difference at line ${i + 1}:\n  census: ${a[i] ?? "(missing)"}\n  built:  ${b[i] ?? "(missing)"}`
 			);
+			// Point at the code, computed now and never committed (#4456):
+			// the field or pattern the differing line names, at its line
+			// in this build of ui.ts.
+			for ( const line of [ b[i] ?? "", a[i] ?? "" ] ) {
+				const named = line.match( /"(name|pattern)": "(.*)"/ );
+				if ( !named ) continue;
+				if ( named[1] === "name" && built.fieldLines.has( named[2] ) ) {
+					console.error(
+						`ui.ts:${built.fieldLines.get( named[2] )} declares field "${named[2]}" in this build`
+					);
+					break;
+				}
+				if ( named[1] === "pattern" ) {
+					for ( const [key, routeLine] of built.routeLines ) {
+						if ( key.split( "\0" )[2] === named[2] ) {
+							console.error( `ui.ts:${routeLine} tests route "${named[2]}" in this build` );
+							break;
+						}
+					}
+					break;
+				}
+			}
 			break;
 		}
 	}

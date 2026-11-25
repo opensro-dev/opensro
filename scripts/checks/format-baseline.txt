@@ -37,7 +37,6 @@ apps/client-next/src/engine/foundation/animation/presentation-ids.ts
 apps/client-next/src/engine/foundation/animation/preview-idle.ts
 apps/client-next/src/engine/foundation/animation/projectile-curve.ts
 apps/client-next/src/engine/foundation/animation/random-idle.ts
-apps/client-next/src/engine/foundation/animation/skill-motion.ts
 apps/client-next/src/engine/foundation/animation/status-presentation.ts
 apps/client-next/src/engine/foundation/assets/image-budget.ts
 apps/client-next/src/engine/foundation/audio/environment.ts
@@ -53,7 +52,6 @@ apps/client-next/src/engine/foundation/gameplay/cos-behavior.ts
 apps/client-next/src/engine/foundation/gameplay/equipment-drop.ts
 apps/client-next/src/engine/foundation/gameplay/guide.ts
 apps/client-next/src/engine/foundation/gameplay/item-activation.ts
-apps/client-next/src/engine/foundation/gameplay/item-tooltip-reference.ts
 apps/client-next/src/engine/foundation/gameplay/merchant-branches.ts
 apps/client-next/src/engine/foundation/gameplay/party-notices.ts
 apps/client-next/src/engine/foundation/gameplay/player-stats.ts
@@ -90,7 +88,6 @@ apps/client-next/src/engine/foundation/ui/disconnect-dialog.ts
 apps/client-next/src/engine/foundation/ui/extended-quickslot.ts
 apps/client-next/src/engine/foundation/ui/frame-ring.ts
 apps/client-next/src/engine/foundation/ui/input-options.ts
-apps/client-next/src/engine/foundation/ui/item-tooltip-recovery.ts
 apps/client-next/src/engine/foundation/ui/loading-presentation.ts
 apps/client-next/src/engine/foundation/ui/main-popup.ts
 apps/client-next/src/engine/foundation/ui/mastery-tooltip.ts
@@ -275,9 +272,7 @@ scripts/build/char/buildSkillEffectRecords.mjs
 scripts/build/char/compileBanTimeline.mjs
 scripts/build/char/defaultWearPolicy.mjs
 scripts/build/char/materialVariants.mjs
-scripts/build/char/native/animationSetNames.ts
 scripts/build/char/native/scriptObjAnimationRegistry.ts
-scripts/build/char/native/skillEffectAnimationRegistry.ts
 scripts/build/char/weatherEvents.mjs
 scripts/build/data/buildActionWndDataAsset.mjs
 scripts/build/data/buildCharacterDataCountryAsset.mjs

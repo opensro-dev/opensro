@@ -144,7 +144,7 @@ func (rt *Runtime) acceptPartyBuff(division string, c, snapshot *enterworld.Char
 	if !skill.Aura.Present || !payload || cast.HasGroundTarget {
 		return OpResult{DiagnosticRefusal: "party-buff-admission-refused"}
 	}
-	if !enterworld.CharacterAlive(snapshot) || !enterworld.SkillLearned(snapshot, skill.ID) {
+	if !enterworld.CharacterAlive(snapshot) || !enterworld.SkillUsable(snapshot, skill) {
 		return OpResult{DiagnosticRefusal: "party-buff-admission-refused"}
 	}
 	if rt.hasOpenSkillCast(division, snapshot.Name) {
@@ -169,7 +169,7 @@ func (rt *Runtime) acceptPartyBuff(division string, c, snapshot *enterworld.Char
 	var frames []wire.Frame
 	var refusal uint16
 	committed := rt.deps.Update(c, "party-buff", func() bool {
-		if !enterworld.CharacterAlive(c) || !enterworld.SkillLearned(c, skill.ID) {
+		if !enterworld.CharacterAlive(c) || !enterworld.SkillUsable(c, skill) {
 			return false
 		}
 		cost, code := rt.offensivePhaseCost(division, c, skill, now, nil)

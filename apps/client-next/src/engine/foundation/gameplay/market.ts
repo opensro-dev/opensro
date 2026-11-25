@@ -47,10 +47,15 @@ const MARKET_ANSWER_VERSION = 2;
 // An answer never exceeds this many bytes: 150 rows of previews at most.
 const MARKET_ANSWER_LIMIT = 1048576;
 // The server's bounds (publicstats market.go): a page of 15, at most 100
-// pages, a degree up to 11, a 64-character search.
+// pages, a degree up to 12, a 64-character search. The 12 ceiling is the
+// catalog's real maximum: enterworld derives degree from the equipment
+// item class ((class-1)/3 + 1) and the v1.150 item catalog's highest
+// tradeable equipment is ItemClass 34 - the fortress weapons
+// ITEM_FORT_FORTRESS_HAMMER_12 and ITEM_FORT_FORTRESS_AXE_12 - which is
+// degree 12; nothing reaches 13, so 13 still refuses (#4412).
 export const MARKET_PAGE_SIZE = 15;
 export const MARKET_MAX_PAGE = 100;
-export const MARKET_MAX_DEGREE = 11;
+export const MARKET_MAX_DEGREE = 12;
 export const MARKET_QUERY_LIMIT = 64;
 // A price the window accepts: twelve digits stays a safe integer and far
 // above any gold a character carries; the server judges the real bound.
@@ -635,6 +640,7 @@ export function createMarket( preview: ( row: CommercePreview ) => InventoryItem
 					offersOut: decodeList( m.offersOut, decodeOffer ),
 					purchases: decodeList( m.purchases, decodePurchase ),
 					silk: commerceInteger( m.silk ),
+					earnedSilk: commerceInteger( m.earnedSilk ),
 					warehouseGold: commerceInteger( m.warehouseGold, Number.MAX_SAFE_INTEGER ),
 					rules: {
 						feePercent: commerceInteger( rules.feePercent, 100 ),

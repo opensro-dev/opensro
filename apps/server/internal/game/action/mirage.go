@@ -53,7 +53,7 @@ func (rt *Runtime) acceptMirage(division string, c, snapshot *enterworld.Charact
 	victims := rt.tauntVictims(tauntCast{division: division, character: c, snapshot: snapshot, skill: skill, now: now})
 	var refusal uint16
 	if !doors.update(c, "release-mirage", func() bool {
-		if !enterworld.CharacterAlive(c) || !enterworld.SkillLearned(c, skill.ID) {
+		if !enterworld.CharacterAlive(c) || !enterworld.SkillUsable(c, skill) {
 			return false
 		}
 		cost, code := rt.offensivePhaseCost(division, c, skill, now, pending)

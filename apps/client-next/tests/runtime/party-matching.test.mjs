@@ -616,7 +616,7 @@ function autoMatchWorld( t, ids ) {
 	const sent = [], core = createWorldCore( frame => sent.push( frame ) );
 	t.after( () => core.dispose() );
 	core.bootstrap( {
-		protocolVersion: 2,
+		protocolVersion: 3,
 		nativeResult: 1,
 		refObjSnapshot: [],
 		refItemSnapshot: [],

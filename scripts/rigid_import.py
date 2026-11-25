@@ -106,6 +106,16 @@ SCROLLS = {
 	"ITEM_RIGID_BLACKSNAKE_L2_SUMMON_SCROLL": ("MOB_TQ_BLACKSNAKE_L2", "Selket"),
 }
 ITEM_NAME_TEXT = "Unique Summon Scroll (L2)"
+# The English for the three staged kinds whose names v1.696 ships in
+# Korean only, translated from that Korean (#4287). They ride the rows
+# this layer stages (stage_kinds english), not the retail completion
+# catalog: a catalog key the tree lacks fails every build without the
+# v1.696 client (#4466). The other five scrolls' kinds are v1.150 rows.
+KIND_NAMES = {
+	"SN_MOB_TQ_BLACKSNAKE_L2": "Cheonha-class Black Snake Soso",
+	"SN_MOB_EU_KERBEROS_L2": "Taebaek-class Cerberus",
+	"SN_MOB_AM_IVY_L2": "Geumgang-class Captain Ivy",
+}
 
 SPEC = later_world_import.WorldImport(
 	label="rigid scrolls",
@@ -247,7 +257,7 @@ def add_rigid(native, out, env=os.environ):
 				raise ValueError(f"the v1.696 client carries no character row {code}")
 			refs[code] = characters.convert_character(row)
 		kinds = later_world_import.stage_kinds(SPEC.label, read, has, refs, text_root, prior, CHARACTER_SHARD, SKILL_SHARD,
-			lambda code: code in refs)
+			lambda code: code in refs, english=KIND_NAMES)
 		presentation = add_presentation(output, read, refs, kinds, prior)
 		staged = add_items(native, output, archives, prior)
 	summary = {"enabled": True, **kinds, **presentation, **staged}

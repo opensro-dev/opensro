@@ -1028,6 +1028,12 @@ export function startRuntime(
 		let workerDebtMs = 0;
 		const frameHistory: number[] = [], cpuHistory: number[] = [];
 		let lastFrameAt = 0, lastTelemetry = 0;
+		// The last telemetry window's queue-work totals (#4392): the next
+		// window's per-frame rates are the difference over the frames between.
+		let lastGpuWork: {
+			frameId: number;
+			totals: import("@/engine/foundation/rendering/gpu-work").GpuWorkTotals;
+		} | undefined;
 		const stageTotals: Record<string, number> = {};
 		let stageAt = 0, stageFrames = 0;
 		/*
@@ -1581,6 +1587,26 @@ export function startRuntime(
 				if ( frameHistory.length && now - lastTelemetry >= TELEMETRY_INTERVAL_MS ) {
 					lastTelemetry = now;
 					const frameMs = average( frameHistory ), drawn = renderer.characterStats();
+					const gpuWorkTotals = renderer.gpuWork();
+					let workSample: {
+						submitsPerFrame: number;
+						uploadsPerFrame: number;
+						uploadKiBPerFrame: number;
+					} | undefined;
+					if ( lastGpuWork && frameId > lastGpuWork.frameId ) {
+						const frames = frameId - lastGpuWork.frameId,
+							submits = gpuWorkTotals.submits - lastGpuWork.totals.submits,
+							uploads = gpuWorkTotals.uploadWrites - lastGpuWork.totals.uploadWrites,
+							bytes = gpuWorkTotals.uploadBytes - lastGpuWork.totals.uploadBytes;
+						if ( submits >= 0 && uploads >= 0 && bytes >= 0 ) {
+							workSample = {
+								submitsPerFrame: submits / frames,
+								uploadsPerFrame: uploads / frames,
+								uploadKiBPerFrame: bytes / frames / 1024
+							};
+						}
+					}
+					lastGpuWork = { frameId, totals: gpuWorkTotals };
 					platform.presentTelemetry( {
 						overload: frameWork.stats(),
 						frameId,
@@ -1590,6 +1616,7 @@ export function startRuntime(
 							) :
 							undefined,
 						gpu: renderer.gpuTiming(),
+						work: workSample,
 						fps: frameMs > 0 ? 1000 / frameMs : 0,
 						frameMs,
 						p95FrameMs: percentile( frameHistory, 0.95 ),
@@ -1691,6 +1718,7 @@ World admission: ${renderer.worldStats().sceneId ?? "none"}; ${renderer.worldSta
 			dispose,
 			audioSnapshot: () => audio.snapshot(),
 			gpuTiming: () => renderer.gpuTiming(),
+			gpuWork: () => renderer.gpuWork(),
 			retryWorld: () => {
 				world.retry();
 				navigation.retry();

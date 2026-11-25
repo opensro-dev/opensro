@@ -19,6 +19,7 @@ import {
 import { fortressActive } from "@/engine/foundation/gameplay/fortress";
 import { OP_STAFF_ROSTER } from "@/engine/foundation/gameplay/staff-roster";
 import type { EntityState, WorldEvent } from "@/engine/contracts/world";
+import type { ItemFieldValues } from "@/engine/contracts/item-wire-fields";
 import { travelMode, resetTravelRegion, gateRequest, isReturnScroll } from "@/engine/foundation/gameplay/travel";
 import { commerceReferences } from "@/engine/foundation/gameplay/commerce";
 import { SKILL_RECALL_CONTROL } from "@/engine/foundation/gameplay/commerce-controls";
@@ -47,7 +48,6 @@ import {
 	GUILD_WAR_SEED_OPCODE,
 	ITEM_USE_RESPONSE_OPCODE,
 	MOVEMENT_SPEED_OPCODE,
-	OBJECT_POSITION_UPDATE_OPCODE,
 	OBJECT_SOURCE_CORRECTION_OPCODE,
 	OBJECT_SOURCE_MOVE_OPCODE,
 	OBJECT_STATE_REFRESH_OPCODE,
@@ -505,10 +505,7 @@ cross-owner follow-ups (name colours, displacements, cancellations).
 		}
 		const selectedMode = travelMode( frame, localGid, itemCooldown );
 		if ( selectedMode !== null ) loadingMode = selectedMode;
-		if (
-			frame.opcode === OBJECT_SOURCE_MOVE_OPCODE || frame.opcode === OBJECT_SOURCE_CORRECTION_OPCODE ||
-			frame.opcode === OBJECT_POSITION_UPDATE_OPCODE
-		) {
+		if ( frame.opcode === OBJECT_SOURCE_MOVE_OPCODE || frame.opcode === OBJECT_SOURCE_CORRECTION_OPCODE ) {
 			const v = viewOf( frame.payload );
 			const gid = v.getUint32( frame.opcode === OBJECT_SOURCE_CORRECTION_OPCODE ? 0 : 16, true ),
 				e = entities.read( gid );
@@ -536,10 +533,7 @@ cross-owner follow-ups (name colours, displacements, cancellations).
 							heading: mover.heading
 						} :
 						rider,
-					now,
-					// The 0x3028 resync reseeds a walk in flight; a source move or a
-					// B2F5 correction ends it.
-					frame.opcode === OBJECT_POSITION_UPDATE_OPCODE
+					now
 				);
 			}
 		}
@@ -576,7 +570,7 @@ the entry continues it like the one after a world transfer.
 					refItemSnapshot?: {
 						refObjId: number;
 						typeFlags: number;
-						nativeFields?: Record<string, number>;
+						nativeFields?: ItemFieldValues;
 					}[];
 				}).refItemSnapshot ?? []
 			) admitCape( row.refObjId, row.typeFlags, row.nativeFields?.itemParam2_2a0 );

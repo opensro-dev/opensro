@@ -61,6 +61,14 @@ type Contracts struct {
 // Current is the release protocol this build speaks, and the contract
 // versions it fixes. Encoders version their payloads from these.
 const (
+	// Protocol 22 (BootstrapContract 3) sends the EnterWorld session
+	// constants - the bootstrap's refObjSnapshot and magicOptionSnapshot
+	// and the game-ready commerce seed - once per session (#4421): a
+	// re-entry whose request states the constants digest it holds omits
+	// them and keeps its tables. A protocol-21 tab refuses the
+	// contract-3 bootstrap outright (its bootstrap requires
+	// protocolVersion 2), so it cannot re-enter at all; Oldest moves
+	// with Current and the 426 reloads every open tab.
 	// Protocol 21 writes the rent deadline leg on every row of a rental
 	// reference, as 0 on a permanent one (item/wire rentrefs.go, #4240). A
 	// tab without the leg decode (protocol 19, or a 20 built before
@@ -76,7 +84,7 @@ const (
 	// rewards and tags the seasonal decoration's placements with their
 	// world layer (see WorldContract 1). Protocol 16 grows a pet chat
 	// link to name its pet (see ChatContract 2).
-	Current = 21
+	Current = 22
 	// Oldest is the oldest protocol this server still serves. A bump
 	// whose change an older client cannot survive in ordinary play moves
 	// Oldest with Current; a bump whose change only a new, opt-in action
@@ -87,7 +95,9 @@ const (
 	// only in the skill reset reply).
 	// 21 serves only 21: the rent leg is ordinary play (any character
 	// holding a permanent rental-kind avatar), which no older tab reads.
-	Oldest = 21
+	// 22 serves only 22: the contract-3 bootstrap refusal is ordinary
+	// play too (every re-entry after a teleport).
+	Oldest = 22
 	// The market contract: 1 carries the port-only consignment market
 	// (SRO_CONSIGNMENT) on control opcode 20 both ways, and the server
 	// pushes it unasked: a sale's proceeds and notice to an online
@@ -168,8 +178,11 @@ const (
 	// decode; 1 added populated summoners and concurrent COS lifetimes and
 	// refused a bag over 140.
 	CompanionsContract = 3
-	BootstrapContract  = 2 // the EnterWorld DTO
-	RosterContract     = 2 // the character list: worn items as (RefItemID, plus)
+	// The EnterWorld DTO: 3 lets a re-entry omit the session constants
+	// (refObjSnapshot, magicOptionSnapshot) when its request states the
+	// digest the bootstrap named (#4421); 2 was the first browser DTO.
+	BootstrapContract = 3
+	RosterContract    = 2 // the character list: worn items as (RefItemID, plus)
 	// The reference file: 3 adds every creatable monster's row
 	// (refObjSnapshot, #369); 2 published the static item rows a login used
 	// to repeat (refItemSnapshot); 1 held skills and item commands only.
@@ -195,6 +208,7 @@ var history = map[int]Contracts{
 	15: {Bootstrap: 2, Roster: 2, References: 3, Companions: 3, Effects: 1, Friends: 1, Notices: 1, Movement: 1, Wanted: 2, Chat: 1},
 	16: {Bootstrap: 2, Roster: 2, References: 3, Companions: 3, Effects: 1, Friends: 1, Notices: 1, Movement: 1, Wanted: 2, Chat: 2},
 	17: {Bootstrap: 2, Roster: 2, References: 3, Companions: 3, Effects: 1, Friends: 1, Notices: 1, Movement: 1, Wanted: 2, Chat: 2, World: 1},
+	21: {Bootstrap: 2, Roster: 2, References: 3, Companions: 3, Effects: 1, Friends: 1, Notices: 1, Movement: 1, Wanted: 2, Chat: 2, World: 1, Market: 1},
 	Current: {Bootstrap: BootstrapContract, Roster: RosterContract, References: ReferencesContract, Companions: CompanionsContract,
 		Effects: EffectsContract, Friends: FriendsContract, Notices: NoticesContract, Movement: MovementContract, Wanted: WantedContract,
 		Chat: ChatContract, World: WorldContract, Market: MarketContract},

@@ -145,6 +145,25 @@ const SPIRIT_EDGE_STEP_MS = 50;
 
 /*
 ================
+slotGlowOverlay
+
+The looping pt_edge_effect glow (9x1 cells, 50 ms) that
+CIFSlotWithHelp_SetRentGlow (54FAA0) arms on a slot: a summoned
+companion's summoner item, and the Magic Pang prize the player chose
+(642550 arms it on the clicked prize slot, 641DD0 clears the others).
+================
+*/
+export function slotGlowOverlay( rect: UiRect, seed: number, nowMs: number ): ItemSlotOverlay {
+	const frame = loopFrame( nowMs, GLOW_STEP_MS, GLOW_FRAMES, seed % GLOW_FRAMES );
+	return {
+		path: SHEET + "interface/pet/pt_edge_effect.png",
+		uv: [ frame / GLOW_FRAMES, 0, 1 / GLOW_FRAMES, 1 ],
+		rect
+	};
+}
+
+/*
+================
 spiritActiveOverlay
 
 The looping edge over a Devil's Spirit's icon for its whole awakening,
@@ -214,14 +233,7 @@ export function itemSlotOverlays(
 ): readonly ItemSlotOverlay[] {
 	if ( !item ) return [];
 	const out: ItemSlotOverlay[] = [];
-	if ( summonerSlotState( item ) === RENT_SUMMONED ) {
-		const frame = loopFrame( nowMs, GLOW_STEP_MS, GLOW_FRAMES, seed % GLOW_FRAMES );
-		out.push( {
-			path: SHEET + "interface/pet/pt_edge_effect.png",
-			uv: [ frame / GLOW_FRAMES, 0, 1 / GLOW_FRAMES, 1 ],
-			rect
-		} );
-	}
+	if ( summonerSlotState( item ) === RENT_SUMMONED ) out.push( slotGlowOverlay( rect, seed, nowMs ) );
 	if ( itemIsRare( item, expansion ) ) {
 		const frame = loopFrame( nowMs, RARE_STEP_MS, RARE_FRAMES, seed & (RARE_FRAMES - 1) );
 		out.push( {

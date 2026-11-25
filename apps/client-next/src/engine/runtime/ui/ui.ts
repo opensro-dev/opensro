@@ -272,7 +272,7 @@ import {
 } from "./hud/unique-banner";
 import { createQuestBanner, questBannerPaths } from "./hud/quest-banner";
 import { createQuestTimers } from "./hud/quest-timers";
-import { createQuestList } from "./hud/quest-list";
+import { createQuestList, QUEST_LIST_SLOTS } from "./hud/quest-list";
 import { createResLayoutResources } from "./res-layout/res-layout-resources";
 import { createCompanionPotions } from "./hud/companion-potions";
 import { createAutoPotionInput } from "./hud/auto-potion-input";
@@ -599,7 +599,9 @@ import {
 	itemIsMallItem,
 	itemIsRare,
 	itemSlotBlockedOverlay,
-	itemSlotExchangeOverlay
+	itemSlotExchangeOverlay,
+	slotGlowOverlay,
+	slotSeed
 } from "@/engine/foundation/ui/item-slot-effects";
 import {
 	COS_CLASS_ATTACK,
@@ -1582,6 +1584,9 @@ export function createUi( ports: UiPorts ) {
 	// delete box asks about (-1 when none).
 	let letterSelected = -1, letterOffset = 0, letterSortByTime = false, letterSortDescending = false;
 	let letterDraft: { receiver: string; body: string; } | null = null, letterDeleting = -1;
+	// The LetterAlarmGuide's view report goes out once per lighting, when
+	// the mailbox window comes on screen (69D400 with 0).
+	let letterAlarmAcked = false;
 	/*
 	================
 	letterActivate
@@ -2967,6 +2972,7 @@ export function createUi( ports: UiPorts ) {
 		letterOffset = 0;
 		letterDraft = null;
 		letterDeleting = -1;
+		letterAlarmAcked = false;
 		petNameDialog = null;
 		petNameInput = "";
 		blockOffset = 0;
@@ -5430,8 +5436,15 @@ export function createUi( ports: UiPorts ) {
 			if ( socialSubject.split( "\0", 1 )[0] && socialContents.split( "\0", 1 )[0] ) guildDialog = "";
 		} else if ( id === "guild-notice" ) {
 			sendGameplay( { kind: id, subject: socialSubject, contents: socialContents } );
-		} else if ( id === "guild-donate" ) sendGameplay( { kind: id, amount: Number( socialAmount ) } );
-		else if ( id === "guild-title" ) {
+		} else if ( id === "guild-donate" ) {
+			// CIFGuildPointUp_OnConfirm 5F49F0 sends the typed amount and closes
+			// the window (5E3730 with 0): one press is one donation, and the
+			// server's 0xB40F answer is the feedback. OK stays greyed for a
+			// blank or zero box (native would send 0, refused silently).
+			const amount = Number( socialAmount );
+			if ( Number.isInteger( amount ) && amount > 0 ) sendGameplay( { kind: id, amount } );
+			guildDialog = "";
+		} else if ( id === "guild-title" ) {
 			// 5E35E0: the nickname under the guild-name filter, then box 0x17's
 			// question; the input box closes unless the name is too long.
 			const rules = hud.data()?.guildNameRules;
@@ -5632,7 +5645,7 @@ export function createUi( ports: UiPorts ) {
 		} else if ( id.startsWith( "quest-tracker-fold:" ) ) {
 			questList?.toggleFolded( Number( id.slice( 19 ) ) );
 		} else if ( id === "quest-scroll-up" || id === "quest-scroll-down" ) {
-			questPage = Math.max( 0, questPage + (id.endsWith( "up" ) ? -1 : 1) );
+			questList?.scrollBy( id.endsWith( "up" ) ? -1 : 1 );
 		} else if ( id.startsWith( "skill-learn:" ) ) practice = { mode: PRACTICE_SKILL, id: Number( id.slice( 12 ) ) };
 		else if ( id === "skill-confirm-cancel" ) practice = null;
 		else if ( id === "skill-confirm-ok" && practice ) {
@@ -6782,6 +6795,13 @@ export function createUi( ports: UiPorts ) {
 				guildDialog = "academy-notice";
 				socialSubject = "";
 				socialContents = "";
+			}
+		} else if ( id === "academy-invite" ) {
+			// 5C4FD0: the leader invites the selected player (702C90: a
+			// mounted pet stands for its rider, oneself sends nothing).
+			if ( academyIsLeader( view.gameplay?.academy ) ) {
+				const player = targetPlayer( view.gameplay?.target, view.entities ?? [], view.gameplay?.localGid );
+				if ( player ) sendGameplay( { kind: "academy-invite", gid: player.gid } );
 			}
 		} else if ( id === "academy-dismiss" ) {
 			// 5C51A0 -> 5C53C0 case 1: leader confirms dissolution before 0x77C5.
@@ -8797,8 +8817,8 @@ export function createUi( ports: UiPorts ) {
 				const hit = () => {
 					const rect = windowPlacement.read( "quest-list" );
 					return panel === "Quests" && rect &&
-						event.x >= rect[0] + 236 && event.x < rect[0] + 800 &&
-						event.y >= rect[1] + 60 && event.y < rect[1] + 350;
+						event.x >= rect[0] && event.x < rect[0] + rect[2] &&
+						event.y >= rect[1] && event.y < rect[1] + rect[3];
 				};
 				if ( hit() ) {
 					questList?.scrollBy( Math.sign( event.delta ) );
@@ -9799,23 +9819,14 @@ export function createUi( ports: UiPorts ) {
 					up = controls.find( c => c.id === prefix + "-up" ),
 					down = controls.find( c => c.id === prefix + "-down" );
 				if ( up && down ) {
-					const travel = Math.max( 1, down.rect[1] - up.rect[1] - 32 ),
-						range = panel === "Skills" ?
-							Math.max(
-								0,
-								(hud.data()?.skillUi.groups.filter( g => g.mastery === selectedMastery ).length ?? 0) -
-									4
-							) :
-							Math.max(
-								0,
-								(view?.gameplay?.quests ?? []).reduce(
-									( n, q ) => n + 1 + (expandedQuests.has( q.refId ) ? q.contents.length : 0),
-									0
-								) - 12
-							);
+					const travel = Math.max( 1, down.rect[1] - up.rect[1] - 32 );
 					if ( panel === "Skills" ) {
+						const range = Math.max(
+							0,
+							(hud.data()?.skillUi.groups.filter( g => g.mastery === selectedMastery ).length ?? 0) - 4
+						);
 						skillScroll = Math.max( 0, Math.min( range, skillScroll + event.dy * range / travel ) );
-					} else questPage = Math.max( 0, Math.min( range, questPage + event.dy * range / travel ) );
+					} else questList?.dragScroll( event.dy * (questList.maxScroll()) / travel );
 				}
 				dirty = true;
 				return;
@@ -9829,7 +9840,7 @@ export function createUi( ports: UiPorts ) {
 					event.y <= down.rect[1] + 16
 				) {
 					if ( panel === "Skills" ) skillScroll = Math.max( 0, skillScroll + Math.sign( event.delta ) );
-					else questPage = Math.max( 0, questPage + Math.sign( event.delta ) );
+					else questList?.scrollBy( Math.sign( event.delta ) );
 					dirty = true;
 				}
 				return;
@@ -14515,6 +14526,22 @@ export function createUi( ports: UiPorts ) {
 						}
 					} );
 				}
+				// The LetterAlarmGuide (ginterface child 55, 69D400): an
+				// arrival the player has not seen lights the authored 40x40
+				// letteralarm icon at the frame's bottom right, clear of the
+				// underbar; the mailbox view itself puts the light out, so
+				// an arrival that lands while it is viewed never lights.
+				const letterAlarm = game?.letters?.alarm ?? false,
+					mailboxViewed = panel === "Guild" && guildTab === 5;
+				if ( letterAlarm && mailboxViewed && !letterAlarmAcked ) {
+					letterAlarmAcked = true;
+					sendGameplay( { kind: "letter-view" } );
+				} else if ( !letterAlarm ) {
+					letterAlarmAcked = false;
+				}
+				if ( letterAlarm && !mailboxViewed && hudData?.root.GDR_LETTER_ALARM_GUIDE ) {
+					authoredImage( hudData.root.GDR_LETTER_ALARM_GUIDE, w - 46, h - 40 );
+				}
 				if (
 					hudData && game?.cosRecords?.length &&
 					(!compact || compact.overlay === "pets" && compact.top > targetBottom)
@@ -16905,8 +16932,10 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 									"academy-dismiss" :
 									"academy-notice",
 								copy = node.id === 48 ? hudCopy( "UIIT_STT_PARTY_DISSOLVE" ) : hudCopy( node.text ),
+								// 5C5EF0 enables Invite (20), Dismiss (48) and the
+								// notice button for the academy's leader only.
 								disabled = node.id !== 22 &&
-									((id !== "academy-notice" && id !== "academy-dismiss") ||
+									((id !== "academy-notice" && id !== "academy-dismiss" && id !== "academy-invite") ||
 										!academyIsLeader( camp ));
 							authoredButton( node, ox, oy, id, copy, disabled );
 							if ( copy ) {
@@ -17996,6 +18025,23 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 						rect: placed
 					} );
 					questList.drawList( drawFrame, placed[0], placed[1], hudCopy, questTimers );
+					// The layout's scrollbar (id 6) carries no art; the shared
+					// scrollbar draws over its rect, its arrows inside it.
+					const bar = questList.scrollRect( placed[0], placed[1] ),
+						scroll = chatScrollbar(
+							"quest-scroll",
+							[ bar[0], bar[1] + 16, bar[2], Math.max( 0, bar[3] - 48 ) ],
+							questList.maxScroll() + QUEST_LIST_SLOTS,
+							QUEST_LIST_SLOTS,
+							questList.maxScroll() - questList.scroll(),
+							resources.size,
+							full,
+							hover,
+							pressed
+						);
+					paths.push( ...scroll.paths );
+					quads.push( ...scroll.quads );
+					controls.push( ...scroll.controls );
 					endWindow( admission );
 				}
 				if ( questDetails && hudData ) {
@@ -21832,15 +21878,16 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 							const icon = iconPath( prize.icon );
 							if ( icon ) image( r, icon );
 							itemCount( { quantity: prize.quantity }, r );
-							// INFERENCE: 642550 sets the chosen slot's selected byte (+0x4FE) and 641DD0 clears the
-							// others, which the native slot draws as a highlight (565850). The effect's art is not
-							// recovered, so the port outlines the chosen slot in gold.
+							// 642550 arms the chosen prize slot's glow (CIFSlotWithHelp_SetRentGlow
+							// 54FAA0, selected byte +0x4FE) and 641DD0 clears the others; 565850
+							// draws it as the summoned companion's pt_edge_effect loop.
 							if ( frame.entry === entry ) {
-								const gold: UiQuad["color"] = [ 1, 0.82, 0.25, 1 ];
-								rect( [ r[0] - 1, r[1] - 1, r[2] + 2, 2 ], gold );
-								rect( [ r[0] - 1, r[1] + r[3] - 1, r[2] + 2, 2 ], gold );
-								rect( [ r[0] - 1, r[1] - 1, 2, r[3] + 2 ], gold );
-								rect( [ r[0] + r[2] - 1, r[1] - 1, 2, r[3] + 2 ], gold );
+								const glow = slotGlowOverlay(
+									r,
+									slotSeed( "gacha-prize:" + entry ),
+									view?.simulationTimeMs ?? uiNow
+								);
+								image( glow.rect, glow.path, white, glow.uv );
 							}
 							controls.push( {
 								id: "gacha-prize:" + entry,
@@ -26504,9 +26551,11 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 								my,
 								id,
 								hudCopy( node.text ),
+								// No SP comparison: native 5F4B00/5F49F0 have none, and an
+								// OK greyed by it gave no reason (#4413); the server's
+								// 0xB40F refusal names the SP shortage.
 								!cancel && (donate ?
-									!/^\d+$/.test( socialAmount ) || Number( socialAmount ) < 1 ||
-									Number( socialAmount ) > (game.progression?.skillPoints ?? 0) :
+									!/^\d+$/.test( socialAmount ) || Number( socialAmount ) < 1 :
 									notice ?
 									false :
 									!socialMember)
@@ -30345,8 +30394,10 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 						}
 						// Port-only (#4133): the confirm states the outcome
 						// before the player buys; no native string names it.
+						// It takes the notice row the layout grew for it
+						// (#4424), under the currency rows.
 						authoredText(
-							{ ...mallControl( page, 40 ), rect: [ 20, height - 62, dialogWidth - 40, 14 ] },
+							{ ...mallControl( page, 40 ), rect: [ 20, currencyLayout.noticeY, dialogWidth - 40, 14 ] },
 							mx,
 							my,
 							mallPurchaseOutcomeText(
@@ -30539,9 +30590,10 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 							}
 						}
 						if ( question.kind === "basket" || question.kind === "worn" ) {
-							// Port-only (#4133): as the single purchase above.
+							// Port-only (#4133): as the single purchase above,
+							// on the notice row the layout grew for it (#4424).
 							authoredText(
-								{ ...template, rect: [ 16, layout.buttonY - 20, layout.width - 32, 14 ] },
+								{ ...template, rect: [ 16, layout.noticeY, layout.width - 32, 14 ] },
 								mx,
 								my,
 								mallPurchaseOutcomeText(

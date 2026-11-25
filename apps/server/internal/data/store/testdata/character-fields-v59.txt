@@ -158,8 +158,6 @@ bodyShapeByte
 breakNotice
 buybackNext
 campDisbandedAtMs
-caravanRewardCount
-caravanRewardDay
 completedQuestIds
 compositeJobs
 compositeJobs[].endUnixMs

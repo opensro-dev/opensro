@@ -12,6 +12,7 @@ undefined shop closes it; other fields belong to the newest snapshot.
 ===========================================================================
 */
 import type { MoverPublication } from "./mover-publication";
+import type { ItemFieldValues } from "./item-wire-fields";
 import type { ArenaChest } from "@/engine/foundation/gameplay/arena-chest";
 import type { CaravanHire, CaravanHireNpc, CaravanLead } from "@/engine/foundation/gameplay/caravan-hire";
 export type { MovementAim } from "./mover-publication";
@@ -254,6 +255,7 @@ export type GameplayCommand =
 	| { readonly kind: "letter-read"; readonly index: number; }
 	| { readonly kind: "letter-close"; }
 	| { readonly kind: "letter-delete"; readonly index: number; }
+	| { readonly kind: "letter-view"; }
 	| { readonly kind: "stat-increase"; readonly stat: "str" | "int"; }
 	| { readonly kind: "beginner-mark"; readonly enabled: boolean; }
 	| { readonly kind: "helper-mark"; }
@@ -601,7 +603,7 @@ export interface InventoryItem {
 	// The reference row's authored itemdata fields (the same record
 	// the tooltip reference carries), so activation rules can read
 	// them - the mall-use gate reads canUse (token 24).
-	readonly nativeFields?: Readonly<Record<string, number>>;
+	readonly nativeFields?: ItemFieldValues;
 	readonly slot: number;
 	readonly refObjId: number;
 	readonly typeFlags: number;

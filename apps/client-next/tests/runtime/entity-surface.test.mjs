@@ -37,7 +37,7 @@ function flush( e ) {
 function owner( nav, kind = "npc" ) {
 	const e = createEntities( ( p, r, c ) => nav.surface( p, r, undefined, c ), undefined, undefined, nav.clip );
 	e.bootstrap( {
-		protocolVersion: 2,
+		protocolVersion: 3,
 		nativeResult: 1,
 		refObjSnapshot: [ { refObjId: 2029, kind, tidWord: kind === "cos" ? 0x11c6 : 0 } ],
 		localPlayerEntry: { modelRef: 1933, startProfile: { regionId: 25000, x: 1, y: 2, z: 3, angle: 0 } }
@@ -169,7 +169,7 @@ test("spawn initialization selects a raised nav floor and excludes teleport prop
 	nav.install( 25000, p );
 	const e = createEntities( ( p, r, c ) => nav.surface( p, r, undefined, c ), undefined, undefined, nav.clip );
 	e.bootstrap( {
-		protocolVersion: 2,
+		protocolVersion: 3,
 		nativeResult: 1,
 		refObjSnapshot: [ { refObjId: 2029, kind: "teleport", teleport: { radius: 10, height: 20 } } ],
 		localPlayerEntry: { modelRef: 1933, startProfile: { regionId: 25000, x: 1, y: 2, z: 3, angle: 0 } }
@@ -223,7 +223,7 @@ test("a duplicate spawn tells gameplay only spawns, so its target and dialog sur
 		nav.clip
 	);
 	e.bootstrap( {
-		protocolVersion: 2,
+		protocolVersion: 3,
 		nativeResult: 1,
 		refObjSnapshot: [ { refObjId: 2029, kind: "npc", tidWord: 0 } ],
 		localPlayerEntry: { modelRef: 1933, startProfile: { regionId: 25000, x: 1, y: 2, z: 3, angle: 0 } }

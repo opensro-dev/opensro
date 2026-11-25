@@ -37,6 +37,7 @@ import {
 import { CLOTH_NO_SLOT, CLOTH_STREAM_WORDS, validClothStreamSlots } from "@/engine/foundation/animation/cloth-stream";
 import { createWaterReflection } from "./water-reflection";
 import { packTextureStage } from "@/engine/foundation/rendering/texture-stage";
+import type { GpuWork } from "@/engine/foundation/rendering/gpu-work";
 import { packMultiTexture } from "@/engine/foundation/rendering/multi-texture";
 import { dungeonHeightFog } from "@/engine/foundation/rendering/dungeon-fog";
 import { createCharacterShadows } from "./character-shadows";
@@ -151,7 +152,10 @@ export function createGeometryResources(
 	retire: Retire = destroyNow,
 	// The clamped sampler for the anisotropy stage; without it the lightmap
 	// sampler stays the one given.
-	lightmapSampling?: ( anisotropic: boolean ) => GPUSampler
+	lightmapSampling?: ( anisotropic: boolean ) => GPUSampler,
+	// The device owner's queue-work counters (#4392): the upload arena
+	// counts its submits and writes into them.
+	work?: GpuWork
 ) {
 	let filtered = true, detail = 2, anisotropic = false, mixedCpuUploadBytes = 0;
 	// The HDR stage's scene intermediate flips the colour format every
@@ -281,7 +285,7 @@ export function createGeometryResources(
 	// through refreshAmbientOcclusion when the view changes).
 	const aoDummyView = white.createView();
 	let aoBoundView = aoDummyView;
-	const uploads = createGeometryUploads( created, retire );
+	const uploads = createGeometryUploads( created, retire, work );
 	const packInstances = createInstancePacking();
 	// Per-draw uniforms and instance tables are slab ranges (buffer-slabs.ts):
 	// thousands of small buffers each cost the GPU process an allocation.

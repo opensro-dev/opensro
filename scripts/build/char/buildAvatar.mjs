@@ -11,6 +11,7 @@ skinned JMXVBMS 0110.
 ===========================================================================
 */
 import { pickAttachedMotionClips } from "./attachedMotionClips.mjs";
+import { groundClipFeet, groundedBanBasename } from "./clipGrounding.mjs";
 
 import fs from "node:fs";
 import { fileURLToPath } from "node:url";
@@ -470,6 +471,19 @@ export async function assembleAvatar( bsrAssetPath, options = {} ) {
 					clip: parseBan( await loadDataAsset( stateClip.path ), stateClip.path )
 				} );
 			}
+		}
+	}
+
+	// Retail BANs registered in clipGrounding.mjs author their feet
+	// through the ground plane; with no native ground snap to hide it,
+	// the import lifts the root track onto the plane (#4416).
+	for ( const entry of clips ) {
+		if ( !groundedBanBasename( entry.path ) ) continue;
+		const lifts = groundClipFeet( skeleton, parts, entry.clip );
+		if ( lifts ) {
+			console.warn(
+				`[avatar] ${entry.path}: feet grounded at import (#4416), max lift ${Math.max( ...lifts ).toFixed( 2 )}`
+			);
 		}
 	}
 

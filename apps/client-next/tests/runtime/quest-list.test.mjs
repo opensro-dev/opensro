@@ -19,6 +19,7 @@ import { root } from "../../tools/project.mjs";
 const load = relative => import( sourceFileUrl( path.join( root, relative ) ).href );
 const model = await load( "src/engine/foundation/ui/quest-list.ts" );
 const { decodeResLayout } = await load( "src/engine/foundation/ui/res-layout.ts" );
+const { createResLayoutWindow } = await load( "src/engine/runtime/ui/res-layout/res-layout.ts" );
 
 const entries = {
 	"UIIT_STT_LEVEL_LV": "Lv",
@@ -180,4 +181,113 @@ test("layout decode: keyed path records refused when structurally damaged", () =
 	assert.throws( () => decodeResLayout( { ...good, version: 2 } ) );
 	assert.throws( () => decodeResLayout( "nope" ) );
 	assert.throws( () => decodeResLayout( { ...good, root: "5" } ), /root/ );
+});
+
+test("window draw: the frame rings and the background tile name their authored art (#4417)", () => {
+	const authored = ( key, id, parent, type, rect, frame, texture ) => ({
+		key,
+		id,
+		parent,
+		children: /** @type {string[]} */ ([]),
+		type,
+		className: "",
+		rect,
+		frame,
+		texture,
+		text: "",
+		color: 4294967295,
+		flags: 0,
+		rootWord: 0
+	});
+	const root = authored( "76", 76, null, 0, [ 198, 193, 624, 369 ], "interface/frame/mframe_wnd_", "" );
+	root.children = [ "2", "3", "5" ];
+	root.text = "x";
+	const layout = decodeResLayout( {
+		format: "res-ui-layout",
+		version: 1,
+		name: "questlist",
+		root: "76",
+		controls: [
+			root,
+			authored( "2", 2, "76", 1, [ 209, 231, 603, 322 ], "interface/equipment/equip_window_", "" ),
+			authored(
+				"3",
+				3,
+				"76",
+				2,
+				[ 236, 261, 547, 284 ],
+				"interface/ifcommon/bg_tile/com_bg_tile_a.ddj",
+				""
+			),
+			authored( "5", 5, "76", 8, [ 214, 236, 576, 32 ], "", "interface/quest/qst_sub_window.ddj" )
+		],
+		order: [ "76", "2", "3", "5" ]
+	} );
+	/** @type {import("../../src/engine/runtime/ui/frame/frame-contract.ts").UiFrame} */
+	const frame = {
+		quads: [],
+		controls: [],
+		blocks: [],
+		paths: [],
+		w: 1280,
+		h: 720,
+		full: [ 0, 0, 1280, 720 ],
+		hud: null,
+		text: { quads: () => [] },
+		resources: { has: () => true, size: () => [ 24, 24 ] },
+		windowPlacement: { frame: ( id, initial ) => initial },
+		compact: null,
+		chrome: {
+			frame: "",
+			parts: [],
+			button: "",
+			buttonFocus: "",
+			buttonPress: "",
+			buttonDisable: "",
+			close: "",
+			closePress: "",
+			closeFocus: ""
+		},
+		compactPolicy: { windowDrag: () => false, closeControl: control => control },
+		white: [ 1, 1, 1, 1 ],
+		commonWindowPaths: [],
+		admittedWindows: new Map(),
+		windowMissing: [],
+		contentImages: new Set(),
+		phase: "world",
+		fontPath: null,
+		pressed: null,
+		hover: null,
+		focus: null
+	};
+	createResLayoutWindow( layout ).draw( frame, 198, 193 );
+	const textures = frame.quads.map( quad => quad.texture );
+	// The rings draw the very part paths the draw names for loading
+	// (BR-261125-0955-5148: the window opened with only its rows showing).
+	for (
+		const part of [
+			"left_up",
+			"right_up",
+			"right_down",
+			"left_down",
+			"left_side",
+			"mid_up",
+			"right_side",
+			"mid_down"
+		]
+	) {
+		const partPath = `/assets/images/Media_extracted/interface/frame/mframe_wnd_${part}.png`;
+		assert.ok( textures.includes( partPath ), `the frame ring draws ${partPath}` );
+		assert.ok( frame.paths.includes( partPath ), `the frame ring loads ${partPath}` );
+	}
+	assert.ok( textures.some( texture => texture.includes( "equip_window_" ) ), "the inner plate ring draws" );
+	assert.ok(
+		textures.includes( "/assets/images/Media_extracted/interface/ifcommon/bg_tile/com_bg_tile_a.png" ),
+		"the background tile draws its authored art"
+	);
+	assert.ok(
+		textures.includes( "/assets/images/Media_extracted/interface/quest/qst_sub_window.png" ),
+		"the slot rows still draw"
+	);
+	assert.ok( textures.every( texture => !/\.png.+/.test( texture ) ), "no quad names a path past its .png" );
 });

@@ -48,6 +48,7 @@ release, so they are the first evicted.
 ===========================================================================
 */
 
+import type { AssetStoreFailure, AssetStoreFailureReason, AssetStoreOperation } from "@/engine/contracts/assets";
 import { isResponseByteLimitError, readBytes } from "@/engine/foundation/assets/read-bytes";
 
 // The store's caches: STORE_SHARDS of them, named STORE_PREFIX plus the hex
@@ -62,6 +63,18 @@ const LEGACY_STORES = [ "sro-next-verified-v1" ];
 // The deadline storage() gives an operation; its rejection is a slow backend,
 // not a store that cannot be listed.
 const CACHE_TIMEOUT_MESSAGE = "Cache operation timed out";
+// The refusals storage() and drain() raise themselves, classified by
+// failureReason.
+const CACHE_SUSPENDED_MESSAGE = "Cache suspended";
+const CACHE_QUEUE_FULL_MESSAGE = "Cache queue full";
+const INCOMPLETE_ASSET_MESSAGE = "Incomplete persistent asset";
+// Chrome's refusal of keys() on a cache past its query limit
+// (kErrorQueryTooLarge, #4370).
+const TOO_LARGE_MESSAGE = "Operation too large";
+// DOMException names the browser raises when Cache Storage itself is not
+// available to this origin (a private window, blocked storage, a broken
+// backend).
+const UNAVAILABLE_ERRORS = new Set( [ "SecurityError", "InvalidStateError", "UnknownError", "NotAllowedError" ] );
 const MIN_BUDGET_BYTES = 512 * 1024 * 1024;
 const MAX_BUDGET_BYTES = 4 * 1024 * 1024 * 1024;
 // Share of the origin quota this store may fill; the rest stays for the
@@ -96,6 +109,28 @@ export function budgetFromQuota( quota: number | undefined ) {
 
 /*
 ================
+failureReason
+
+The enumerated word for a failed store operation's error. Bug reports
+carry no free-form text, so the browser's message is read here and
+dropped (AssetStoreFailureReason).
+================
+*/
+export function failureReason( error: unknown ): AssetStoreFailureReason {
+	const name = error instanceof Error ? error.name : "";
+	const message = error instanceof Error ? error.message : "";
+	if ( message === CACHE_TIMEOUT_MESSAGE ) return "timeout";
+	if ( message === CACHE_SUSPENDED_MESSAGE ) return "suspended";
+	if ( message === CACHE_QUEUE_FULL_MESSAGE ) return "queue-full";
+	if ( name === "QuotaExceededError" ) return "quota";
+	if ( message.includes( TOO_LARGE_MESSAGE ) ) return "too-large";
+	if ( message === INCOMPLETE_ASSET_MESSAGE || isResponseByteLimitError( error ) ) return "corrupt";
+	if ( UNAVAILABLE_ERRORS.has( name ) ) return "unavailable";
+	return "other";
+}
+
+/*
+================
 createPersistentAssets
 
 budgetOf turns the origin quota into this store's byte budget
@@ -114,7 +149,10 @@ export function createPersistentAssets( budgetOf: ( quota: number | undefined ) 
 	let startup = new Set<string>();
 	// Stored size of every key an admitted manifest names (addSizes).
 	const sizes = new Map<string, number>();
-	let hits = 0, misses = 0, writes = 0, errors = 0, evictions = 0, queuedBytes = 0, skipped = 0;
+	let hits = 0, misses = 0, writes = 0, evictions = 0, queuedBytes = 0, skipped = 0;
+	// Failed operations by kind and the latest one (noteFailure).
+	const failures: Record<AssetStoreOperation, number> = { open: 0, has: 0, read: 0, write: 0, remove: 0 };
+	let lastFailure: AssetStoreFailure | null = null;
 	// Set once the origin's quota cannot hold a pack (the header above).
 	let writesStopped = false;
 	// Queued writes by key, each settling when its write has (enqueue).
@@ -129,6 +167,18 @@ export function createPersistentAssets( budgetOf: ( quota: number | undefined ) 
 	const removals = new Map<string, Promise<void>>();
 	/*
 	================
+	noteFailure
+
+	The one place a failed store operation is counted. Callers skip it for
+	their own cancellation, which is not a store failure.
+	================
+	*/
+	function noteFailure( operation: AssetStoreOperation, error: unknown ) {
+		failures[operation]++;
+		lastFailure = { operation, reason: failureReason( error ), atMs: performance.now() };
+	}
+	/*
+	================
 	drain
 
 	FIFO admission counts native work, including abandoned response cleanup.
@@ -137,7 +187,7 @@ export function createPersistentAssets( budgetOf: ( quota: number | undefined ) 
 	*/
 	function drain() {
 		if ( stalled > 0 ) {
-			for ( const entry of queue.splice( 0 ) ) entry.fail( Error( "Cache suspended" ) );
+			for ( const entry of queue.splice( 0 ) ) entry.fail( Error( CACHE_SUSPENDED_MESSAGE ) );
 			return;
 		}
 		while ( queue.length && outstanding + cleanups < MAX_CACHE_OPERATIONS ) queue.shift()!.start();
@@ -166,8 +216,8 @@ export function createPersistentAssets( budgetOf: ( quota: number | undefined ) 
 		deadlineMs = CACHE_OPERATION_MS
 	): Promise<T> {
 		signal?.throwIfAborted();
-		if ( stalled > 0 ) return Promise.reject( Error( "Cache suspended" ) );
-		if ( queue.length >= MAX_CACHE_WAITERS ) return Promise.reject( Error( "Cache queue full" ) );
+		if ( stalled > 0 ) return Promise.reject( Error( CACHE_SUSPENDED_MESSAGE ) );
+		if ( queue.length >= MAX_CACHE_WAITERS ) return Promise.reject( Error( CACHE_QUEUE_FULL_MESSAGE ) );
 		return new Promise<T>( ( resolve, reject ) => {
 			let waiting = true, overdue = false, started = false;
 			const deadline = new AbortController();
@@ -312,8 +362,8 @@ export function createPersistentAssets( budgetOf: ( quota: number | undefined ) 
 				}
 			}
 			return shards;
-		} ).catch( () => {
-			errors++;
+		} ).catch( error => {
+			noteFailure( "open", error );
 			opened = null;
 			return null;
 		} );
@@ -413,8 +463,8 @@ export function createPersistentAssets( budgetOf: ( quota: number | undefined ) 
 				await storage( () => cacheFor( shards, url ).delete( url ) );
 				forget( url );
 				touched.delete( url );
-			} catch {
-				errors++;
+			} catch ( error ) {
+				noteFailure( "remove", error );
 				// A timed-out delete may still commit before admission resumes.
 				inventory = null;
 			}
@@ -599,8 +649,8 @@ export function createPersistentAssets( budgetOf: ( quota: number | undefined ) 
 			total += bytes.length;
 			shardEntries[shard]!++;
 			writes++;
-		} catch {
-			errors++;
+		} catch ( error ) {
+			noteFailure( "write", error );
 			inventory = null;
 		}
 	}
@@ -611,8 +661,8 @@ export function createPersistentAssets( budgetOf: ( quota: number | undefined ) 
 	*/
 	function write( origin: string, digest: string, bytes: Uint8Array<ArrayBuffer> ) {
 		const operation = tail.then( () => publish( origin, digest, bytes ) );
-		tail = operation.catch( () => {
-			errors++;
+		tail = operation.catch( error => {
+			noteFailure( "write", error );
 		} );
 		return tail;
 	}
@@ -642,8 +692,8 @@ export function createPersistentAssets( budgetOf: ( quota: number | undefined ) 
 				if ( !response ) return false;
 				touch( url );
 				return true;
-			} catch {
-				errors++;
+			} catch ( error ) {
+				if ( !signal?.aborted ) noteFailure( "has", error );
 				signal?.throwIfAborted();
 				return null;
 			}
@@ -699,13 +749,13 @@ export function createPersistentAssets( budgetOf: ( quota: number | undefined ) 
 				signal?.throwIfAborted();
 				if ( bytes.length !== length ) {
 					void remove( origin, digest );
-					throw Error( "Incomplete persistent asset" );
+					throw Error( INCOMPLETE_ASSET_MESSAGE );
 				}
 				hits++;
 				touch( url );
 				return bytes;
-			} catch {
-				errors++;
+			} catch ( error ) {
+				if ( !signal?.aborted ) noteFailure( "read", error );
 				signal?.throwIfAborted();
 				return null;
 			} finally {
@@ -774,7 +824,9 @@ export function createPersistentAssets( budgetOf: ( quota: number | undefined ) 
 			hits,
 			misses,
 			writes,
-			errors,
+			errors: failures.open + failures.has + failures.read + failures.write + failures.remove,
+			failures: { ...failures },
+			lastFailure,
 			evictions,
 			queuedBytes,
 			skipped,

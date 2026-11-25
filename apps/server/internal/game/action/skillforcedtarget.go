@@ -102,7 +102,7 @@ func (rt *Runtime) acceptForcedTarget(c tauntPlayerCast) OpResult {
 	var refusal uint16
 	var battleFrames []wire.Frame
 	if !rt.deps.Update(c.caster, "forced-target-cost", func() bool {
-		if !enterworld.CharacterAlive(c.caster) || !enterworld.SkillLearned(c.caster, c.skill.ID) {
+		if !enterworld.CharacterAlive(c.caster) || !enterworld.SkillUsable(c.caster, c.skill) {
 			return false
 		}
 		cost, code := rt.offensivePhaseCost(c.division, c.caster, c.skill, c.now, nil)

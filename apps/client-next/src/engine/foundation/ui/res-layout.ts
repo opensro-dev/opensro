@@ -162,3 +162,18 @@ export function resLayoutFrameParts( frame: string ): readonly string[] {
 	return [ "left_up", "right_up", "right_down", "left_down", "left_side", "mid_up", "right_side", "mid_down" ]
 		.map( part => resLayoutImagePath( frame + part ) );
 }
+
+/*
+================
+resLayoutFramePrefix
+
+The public path prefix frame-ring appends "<part>.png" to, or "" for
+no frame. A frame stem ends in "_" (interface/frame/mframe_wnd_), so
+the prefix is the stem's public path without an extension; passing
+resLayoutImagePath's ".png" path there names parts that do not exist.
+================
+*/
+export function resLayoutFramePrefix( frame: string ): string {
+	if ( !frame ) return "";
+	return resLayoutImagePath( frame ).replace( /\.png$/, "" );
+}

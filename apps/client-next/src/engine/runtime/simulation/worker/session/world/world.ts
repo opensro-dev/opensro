@@ -265,6 +265,10 @@ onNetworkFailure
 		code?: string;
 	} | null = null;
 	let boundThisTransport = false, resumedTransport = false, entryAttempt = false;
+	// The session-constants digest the current world build holds (#4421):
+	// stated on the next EnterWorld so the answer can omit the constant
+	// sections. Cleared when a fresh character entry begins.
+	let heldConstants = "";
 	let references: { kind: "idle"; } | { kind: "loading"; } | {
 		kind: "ready";
 		bootstrap: unknown;
@@ -575,11 +579,42 @@ receive
 			if ( typeof sessionKey === "string" && /^[a-f0-9]{32}:[0-9]{1,20}$/.test( sessionKey ) ) {
 				diagnosticSession = sessionKey;
 			}
+			// The answer names the constants digest it travels under
+			// (#4421); held answers keep this worker's tables as-is.
+			// What this worker held before the answer decides whether
+			// a references load can be skipped.
+			const previousHeldConstants = heldConstants;
+			const constantsDigest = (wrapper.bootstrap as { sessionConstants?: unknown; } | undefined)
+				?.sessionConstants;
+			if ( typeof constantsDigest === "string" ) {
+				heldConstants = constantsDigest;
+			}
 			if ( wrapper.v === 2 ) {
 				if (
 					!wrapper.bootstrap || typeof wrapper.bootstrap !== "object" || Array.isArray( wrapper.bootstrap ) ||
 					"refSkillSnapshot" in wrapper.bootstrap
 				) throw Error( "Invalid reference bootstrap" );
+				// A digest-held answer needs no references load (#4421):
+				// it names the digest this worker already holds and
+				// nulls the constant snapshot, so the installed tables
+				// stand and the answer applies like a v1 one.
+				const answerBootstrap = wrapper.bootstrap as {
+					refObjSnapshot?: unknown;
+					sessionConstants?: unknown;
+				};
+				if (
+					typeof answerBootstrap.sessionConstants === "string" && answerBootstrap.sessionConstants !== "" &&
+					answerBootstrap.sessionConstants === previousHeldConstants &&
+					(answerBootstrap.refObjSnapshot === null || answerBootstrap.refObjSnapshot === undefined)
+				) {
+					huntingGuide = undefined;
+					core.bootstrap( wrapper.bootstrap, resumedTransport, now );
+					boundThisTransport = true;
+					hasWorld = true;
+					ready = false;
+					armDeadline( ADMISSION_TIMEOUT_MS );
+					return;
+				}
 				const bootstrap = wrapper.bootstrap, current = epoch, receivedAtMs = now;
 				controller = new AbortController();
 				references = { kind: "loading" };
@@ -691,6 +726,9 @@ enter
 			// log it was away from (#3435). character and division still name
 			// the previous entry here; they are replaced below.
 			core.clear( reentryKeepsChat( { character, division }, name, shard ) );
+			// A fresh entry takes its constants from the answer (#4421);
+			// only re-entries inside this world build state the digest.
+			heldConstants = "";
 			hasWorld = false;
 			resume = undefined;
 			entryAttempt = true;
@@ -850,7 +888,7 @@ step
 								network.connect( endpoint, result.token!, resume, edgeRoute );
 								armDeadline( ADMISSION_TIMEOUT_MS );
 							} else {
-								network.enterWorld( division, character, result.token! );
+								network.enterWorld( division, character, result.token!, heldConstants );
 								// The answer's flight is invisible on the
 								// socket (ENTER_WORLD_ANSWER_TIMEOUT_MS):
 								// it gets the server's idle bound, not

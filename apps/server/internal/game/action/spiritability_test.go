@@ -211,9 +211,9 @@ func spiritSkillTable(t *testing.T) *enterworld.TextdataSkills {
 TestWornSpiritsSkillsCastAndApply
 
 End to end: without the Spirit, Devil's Confusion is not the character's;
-with the +3 Spirit worn it casts and speeds the character up, and the
-Ignore skill raises the ignore-defence chance (0xBC) by its msid. Taking
-the Spirit off ends both.
+with the +3 Spirit worn it casts and speeds the character up, its dru
+raises both damage-rate pairs, and the Ignore skill raises the
+ignore-defence chance (0xBC) by its msid. Taking the Spirit off ends both.
 ================
 */
 func TestWornSpiritsSkillsCastAndApply(t *testing.T) {
@@ -226,10 +226,33 @@ func TestWornSpiritsSkillsCastAndApply(t *testing.T) {
 	}
 	rt.HandleItemMove(testDivision, c, []byte{0x24, 20, nasrun.SpiritSlot})
 	_, run := worldSpeeds(rt, c)
+	// The caster's damage rates (0x80..0x83: the physical pair, then the
+	// magical pair) before the buff, for the dru assertions below.
+	rates := func() [4]float32 {
+		stats, _, err := rt.playerCombatStats(testDivision, c)
+		if err != nil {
+			t.Fatal(err)
+		}
+		var out [4]float32
+		for i, param := range []uint16{0x80, 0x81, 0x82, 0x83} {
+			v, _ := stats.Param(param)
+			out[i] = v
+		}
+		return out
+	}
+	baseRates := rates()
 	if result := castSelf(rt, c, spiritTestConfusion); !openedCast(result) {
 		t.Fatalf("Devil's Confusion refused: %q %+v", result.DiagnosticRefusal, result.Frames)
 	}
 	landCast(rt, clock, skills, spiritTestConfusion)
+	// The buff's dru {20, 20} raises both damage-rate pairs by 20 while
+	// it holds (#4407: the v1.188 buff installer; word 0 on the physical
+	// pair 0x80/0x81, word 1 on the magical pair 0x82/0x83).
+	for i, got := range rates() {
+		if want := baseRates[i] + 20; got != want {
+			t.Fatalf("damage rate 0x%02x = %v under Devil's Confusion, want %v (base %v + dru 20)", 0x80+i, got, want, baseRates[i])
+		}
+	}
 	if _, faster := worldSpeeds(rt, c); faster <= run {
 		t.Fatalf("run speed %v after Devil's Confusion, was %v: hst3 never landed", faster, run)
 	}
@@ -251,6 +274,9 @@ func TestWornSpiritsSkillsCastAndApply(t *testing.T) {
 	}
 	if _, after := worldSpeeds(rt, c); after != run {
 		t.Fatalf("run speed %v after the Spirit came off, want %v", after, run)
+	}
+	if got := rates(); got != baseRates {
+		t.Fatalf("damage rates %v after the Spirit came off, want the base %v: the dru outlived its buff", got, baseRates)
 	}
 }
 

@@ -17,6 +17,7 @@ import (
 	"opensro.online/server/internal/game/enterworld"
 	"opensro.online/server/internal/game/item/commerce"
 	"opensro.online/server/internal/game/item/inventory"
+	"opensro.online/server/internal/game/nasrun"
 	"opensro.online/server/internal/game/tunables"
 	"opensro.online/server/internal/game/world/simulation"
 )
@@ -68,7 +69,7 @@ func (rt *Runtime) shopSaleQuotes(division string, c *enterworld.Character, npc 
 				continue
 			}
 			ref, found := rt.deps.ItemReferences().ItemRefByCodename(item.Codename)
-			if !found || ref == nil || ref.RefObjID != item.RefObjID || ref.TypeFlags() != item.TypeFlags || !commerceSaleAdmitted(ref) {
+			if !found || ref == nil || ref.RefObjID != item.RefObjID || ref.TypeFlags() != item.TypeFlags || !commerceItemSaleAdmitted(ref, item) {
 				continue
 			}
 			if rt.tradeAdmission(division, c, npc, item) != 0 {
@@ -126,6 +127,25 @@ func commerceSaleAdmitted(ref *enterworld.ItemRef) bool {
 	}
 	value, present := ref.NativeFields.Lookup("canSell")
 	return present && value >= 1 && value <= 255 && value == float64(uint8(value))
+}
+
+/*
+================
+commerceItemSaleAdmitted
+
+The sale permission for one carried item, shared by the quote and the
+commit. Port-only, not native (SRO_NASRUN, #3456 3b, #4459): a Devil's
+Spirit ignores its imported row. A token or drop copy is never bought,
+since tokens never become gold. A mall copy carrying the earned-Silk
+mark is bought, as the later client's row allows (nasrun.SellableMallCopy).
+v1.150 has no Spirit, so no native sale changes.
+================
+*/
+func commerceItemSaleAdmitted(ref *enterworld.ItemRef, item inventory.Item) bool {
+	if nasrun.IsSpirit(item.TypeFlags) {
+		return nasrun.SellableMallCopy(item.TypeFlags, item.ForgeBound, item.EarnedBought)
+	}
+	return commerceSaleAdmitted(ref)
 }
 
 // v1.150 80B500 fills the reference registry checked by 563F40 on sales.

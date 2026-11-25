@@ -75,6 +75,13 @@ test("every write names where its item goes, and an offer is checked before it l
 		rarity: "sealed",
 		page: 1
 	} );
+	// Degree 12 is a real filter: the fortress weapons are ItemClass 34
+	// (degree 12), and a listed one must be findable (#4412).
+	assert.deepEqual( decode( marketRequestPayload( { op: "search", degree: 12 } ) ), {
+		op: "search",
+		degree: 12,
+		page: 1
+	} );
 	assert.deepEqual(
 		decode( marketRequestPayload( { op: "list", slot: 20, currency: "silk", price: 5, anonymous: true } ) ),
 		{ op: "list", slot: 20, currency: "silk", price: 5, anonymous: true }
@@ -94,7 +101,7 @@ test("every write names where its item goes, and an offer is checked before it l
 			{ op: "list", slot: 6, currency: "gold", price: 5, anonymous: false },
 			{ op: "search", race: "kr" },
 			{ op: "search", rarity: "unique" },
-			{ op: "search", degree: 12 }
+			{ op: "search", degree: 13 }
 		]
 	) {
 		// Each is malformed on purpose, so it has no MarketRequest type.
@@ -124,6 +131,7 @@ test("the account page reads sellers, both offer lists and the offer cap", () =>
 				item: "Bow"
 			} ],
 			silk: 9,
+			earnedSilk: 50,
 			warehouseGold: 0,
 			rules
 		}
@@ -135,6 +143,9 @@ test("the account page reads sellers, both offer lists and the offer cap", () =>
 	assert.equal( mine.offersOut[0].to, "warehouse" );
 	assert.equal( mine.purchases[0].item, "Bow" );
 	assert.equal( mine.rules.offerCap, 20 );
+	// Silk and the earned balance a Silk purchase draws first (#4133).
+	assert.equal( mine.silk, 9 );
+	assert.equal( mine.earnedSilk, 50 );
 	assert.equal( market.state().pending, null );
 	assert.equal( market.state().notice, null );
 });
@@ -172,6 +183,7 @@ test("a malformed answer costs the window its request, never the session", () =>
 			offersOut: [],
 			purchases: [],
 			silk: 0,
+			earnedSilk: 0,
 			warehouseGold: 0,
 			rules
 		}
@@ -198,7 +210,16 @@ test("a malformed answer costs the window its request, never the session", () =>
 		version: 2,
 		op: "mine",
 		ok: true,
-		mine: { listings: [ row( 1 ) ], offersIn: [], offersOut: [], purchases: [], silk: 3, warehouseGold: 0, rules }
+		mine: {
+			listings: [ row( 1 ) ],
+			offersIn: [],
+			offersOut: [],
+			purchases: [],
+			silk: 3,
+			earnedSilk: 0,
+			warehouseGold: 0,
+			rules
+		}
 	} ) );
 	assert.equal( defined( market.state().mine ).listings.length, 1 );
 });
@@ -225,6 +246,33 @@ test("an anonymous listing has no seller, and a malformed answer changes nothing
 		assert.throws( () => market.receive( encode( bad ) ) );
 		assert.equal( defined( market.state().browse ).rows.length, 2 );
 	}
+});
+
+test("a degree-12 listing opens the market (#4412)", () => {
+	const market = createMarket( preview );
+	market.request( { op: "search", page: 1 }, 0 );
+	// A listed fortress weapon (ItemClass 34, degree 12). Under the old
+	// ceiling of 11 this whole answer threw, so the opening window was
+	// told the market is closed - for every player, not only the seller.
+	market.receive( encode( {
+		version: 2,
+		op: "search",
+		ok: true,
+		categories: [],
+		search: { rows: [ row( 1, { degree: 12 } ) ], page: 1, pages: 1, total: 1 }
+	} ) );
+	assert.equal( defined( market.state().browse ).rows[0].degree, 12 );
+	// Past the catalog's highest degree the answer still refuses.
+	market.request( { op: "search", page: 1 }, 1 );
+	assert.throws( () =>
+		market.receive( encode( {
+			version: 2,
+			op: "search",
+			ok: true,
+			categories: [],
+			search: { rows: [ row( 1, { degree: 13 } ) ], page: 1, pages: 1, total: 1 }
+		} ) )
+	);
 });
 
 test("a pushed event never answers the request in flight", () => {

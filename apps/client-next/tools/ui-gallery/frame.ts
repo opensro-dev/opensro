@@ -697,8 +697,11 @@ async function draw( time: number ) {
 						writes: 3,
 						skipped: 0,
 						errors: 0,
+						failures: { open: 0, has: 0, read: 0, write: 0, remove: 0 },
+						lastFailure: null,
 						evictions: 0,
 						writesStopped: false,
+						resets: 0,
 						budget: 512 << 20,
 						rangeBytes: 0,
 						demandedBytes: 0

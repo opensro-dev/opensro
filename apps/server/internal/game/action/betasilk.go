@@ -17,9 +17,13 @@ launch runs on a separate shard, so beta silk never reaches it (owner,
 2026-10-10).
 
 The hour clock counts world-ready time only (sessions in the world tick, not
-the title screen or character select) and lives in this process, so a
-restart loses uncredited progress, including a failed credit awaiting retry;
-it never credits the same completed payment twice. A credit pushes the new
+the title screen or character select). Its uncredited time is persisted per
+account (store beta_silk_progress, #4429): every GameWorld restart used to
+drop each player's unfinished hour, and on a day of several deploys nobody
+completed one. The time is saved every betaSilkSaveStepMs of accrual, so a
+restart loses at most that, and a payment writes the hour's remainder in the
+credit's own transaction, so it never credits the same completed payment
+twice. A credit pushes the new
 balance to the player's session (MALL_BALANCE_CONTROL), so an open mall
 shows it at once. That control is a browser frame the client's world gate
 must know, so it ships only in matching server and client releases (#529).
@@ -99,6 +103,10 @@ const betaSilkForgetMs = 24 * 60 * 60 * 1000
 // betaSilkMaxStepMs bounds the time one tick can add, so a stalled tick or a
 // clock jump never credits idle time at once.
 const betaSilkMaxStepMs = 60 * 1000
+
+// betaSilkSaveStepMs is the accrued time between progress saves: the most
+// a restart can lose, against one store write per account per step.
+const betaSilkSaveStepMs = 60 * 1000
 
 // betaSilkActivityWindowMs is how long one player action keeps an account's
 // silk clock accruing under EnvBetaSilkActiveOnly.
@@ -249,7 +257,9 @@ The persisted wallet the credits land in (store/betasilk.go).
 type BetaSilkWallet interface {
 	domain.MallAuthority
 	GrantBetaSilkStarter(accountID string, starter uint32) (bool, error)
-	CreditBetaSilk(accountID string, amount, bankCap uint32) (domain.MallBalance, bool, error)
+	CreditBetaSilk(accountID string, amount, bankCap uint32, progressMs int64) (domain.MallBalance, bool, error)
+	BetaSilkProgress(accountID string) (int64, error)
+	SaveBetaSilkProgress(accountID string, earnedMs int64) error
 }
 
 /*
@@ -271,6 +281,10 @@ type betaSilkClock struct {
 	// acted says activeMs is set, since 0 is a valid clock reading.
 	activeMs int64
 	acted    bool
+	// loaded says earnedMs resumed the persisted progress; savedMs is
+	// what the store holds now.
+	loaded  bool
+	savedMs int64
 }
 
 /*
@@ -286,7 +300,8 @@ type BetaSilk struct {
 	wallet BetaSilkWallet
 	rate   uint32
 	// ActiveOnly accrues the hour only for recently active accounts. Memory
-	// only: a restart forgets activity as it forgets uncredited time.
+	// only: a restart forgets activity (the next action resumes it), while
+	// the uncredited time itself is persisted.
 	ActiveOnly bool
 	mu         sync.Mutex
 	generation uint64
@@ -461,6 +476,22 @@ func (b *BetaSilk) Tick(nowMs int64, sessions []simulation.SessionView, lookup f
 			}
 			clock = b.observeBalance(character.AccountID, balance)
 		}
+		if !clock.loaded {
+			if nowMs < clock.retryAtMs {
+				continue
+			}
+			progress, err := b.wallet.BetaSilkProgress(character.AccountID)
+			if err != nil {
+				clock.retryAtMs = nowMs + betaSilkMaxStepMs
+				log.WithError(err).Warn("beta silk: progress read failed")
+				continue
+			}
+			clock.loaded, clock.savedMs = true, progress
+			// Capped time never banks; the save below then clears it.
+			if !clock.capped {
+				clock.earnedMs = max(clock.earnedMs, progress)
+			}
+		}
 		if clock.generation == b.generation {
 			continue // a second session of one account counts once
 		}
@@ -476,9 +507,10 @@ func (b *BetaSilk) Tick(nowMs int64, sessions []simulation.SessionView, lookup f
 		}
 		clock.lastMs, clock.generation = nowMs, b.generation
 		if clock.capped || clock.earnedMs < betaSilkHourMs || nowMs < clock.retryAtMs {
+			b.saveProgress(character.AccountID, clock)
 			continue
 		}
-		balance, credited, err := b.wallet.CreditBetaSilk(character.AccountID, b.rate, betaSilkBankCap)
+		balance, credited, err := b.wallet.CreditBetaSilk(character.AccountID, b.rate, betaSilkBankCap, clock.earnedMs-betaSilkHourMs)
 		if err != nil {
 			clock.retryAtMs = nowMs + betaSilkMaxStepMs
 			log.WithError(err).WithField("character", character.Name).Warn("beta silk: credit failed")
@@ -486,7 +518,11 @@ func (b *BetaSilk) Tick(nowMs int64, sessions []simulation.SessionView, lookup f
 		}
 		clock.retryAtMs = 0
 		clock.earnedMs -= betaSilkHourMs
+		if credited {
+			clock.savedMs = clock.earnedMs
+		}
 		b.observeBalance(character.AccountID, balance)
+		b.saveProgress(character.AccountID, clock)
 		if !credited {
 			continue
 		}
@@ -498,8 +534,8 @@ func (b *BetaSilk) Tick(nowMs int64, sessions []simulation.SessionView, lookup f
 	}
 	// Absence pauses an account's hour without losing it, but an account
 	// gone for betaSilkForgetMs is dropped rather than kept for every account
-	// the process has ever seen (#529). It starts over on return, with a
-	// fresh starter check and balance read.
+	// the process has ever seen (#529). On return it resumes the persisted
+	// progress, with a fresh starter check and balance read.
 	for account, clock := range b.clocks {
 		if clock.generation != b.generation && nowMs-clock.lastMs > betaSilkForgetMs {
 			delete(b.clocks, account)
@@ -516,6 +552,29 @@ func (b *BetaSilk) Tick(nowMs int64, sessions []simulation.SessionView, lookup f
 		}
 	}
 	return out
+}
+
+/*
+================
+saveProgress
+
+Persist the clock's uncredited time once it has grown a save step past
+what the store holds, or at once when it fell (a cap cleared it). A
+failed save is logged and retried a step later, never every tick. The
+caller holds mu.
+================
+*/
+func (b *BetaSilk) saveProgress(account string, clock *betaSilkClock) {
+	if !clock.loaded || clock.earnedMs == clock.savedMs {
+		return
+	}
+	if clock.earnedMs > clock.savedMs && clock.earnedMs-clock.savedMs < betaSilkSaveStepMs {
+		return
+	}
+	if err := b.wallet.SaveBetaSilkProgress(account, clock.earnedMs); err != nil {
+		log.WithError(err).Warn("beta silk: progress save failed")
+	}
+	clock.savedMs = clock.earnedMs
 }
 
 /*
