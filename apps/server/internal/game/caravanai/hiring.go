@@ -536,15 +536,20 @@ func (r *Runtime) hiredTraderBehindLocked(lead *AgentUnit) bool {
 planHiredRunLocked
 
 A hired Trader that takes the lead heads for the nearest town it may sell
-in, from where it stands: every known road between two towns is measured
-from its nearest point to the Trader to its end, and the shortest wins.
-The town it was hired in counts only after HireRunMinOutMs out; until
-then it is never the goal (a quick step out is no run).
+in, from where it stands. In a town it leaves by that town's own roads,
+from their start, and the shortest wins. Out on the road it joins the
+road that brings it soonest to a town, the walk to the road weighing four
+times the road itself (off-road ground is slow and may not be passable),
+and never at a road's last point from afar (that would be a straight line
+across the map). The town it was hired in counts only after
+HireRunMinOutMs out; until then it is never the goal.
 ================
 */
 func (r *Runtime) planHiredRunLocked(unit *AgentUnit, nowMs int64) {
 	at := position(unit)
 	homeAllowed := unit.hireLeftTown && nowMs-unit.leftTownAtMs >= HireRunMinOutMs
+	town, inTown := r.placeAtLocked(at)
+	inTown = inTown && town != TownThiefDen
 	type plan struct {
 		origin, dest TownID
 		points       []Waypoint
@@ -553,7 +558,10 @@ func (r *Runtime) planHiredRunLocked(unit *AgentUnit, nowMs int64) {
 	}
 	var best *plan
 	consider := func(key [2]TownID, points []Waypoint) {
-		if len(points) == 0 || key[1] == TownThiefDen || (key[1] == unit.HireTown && !homeAllowed) {
+		if len(points) < 2 || key[1] == TownThiefDen || key[1] == key[0] || (key[1] == unit.HireTown && !homeAllowed) {
+			return
+		}
+		if inTown && key[0] != town {
 			return
 		}
 		points = append([]Waypoint(nil), points...)
@@ -562,7 +570,15 @@ func (r *Runtime) planHiredRunLocked(unit *AgentUnit, nowMs int64) {
 				points[i] = terminal
 			}
 		}
-		index, cost := routeCostFrom(at, points)
+		index, cost := 0, roadLength(points, 0)
+		if !inTown {
+			var offRoad float64
+			index, offRoad = routeJoin(at, points)
+			if index == len(points)-1 && offRoad > HiredJoinReach {
+				return
+			}
+			cost = 4*offRoad + roadLength(points, index)
+		}
 		if best == nil || cost < best.cost {
 			best = &plan{origin: key[0], dest: key[1], points: points, index: index, cost: cost}
 		}
@@ -586,31 +602,50 @@ func (r *Runtime) planHiredRunLocked(unit *AgentUnit, nowMs int64) {
 	unit.Route, unit.WaypointIndex = best.points, best.index
 }
 
+// HiredJoinReach is how near a road's last point a Trader must stand to
+// join the road there (anything farther is no road left to follow).
+const HiredJoinReach float64 = 30 * UnitsPerMeter
+
 /*
 ================
-routeCostFrom
+routeJoin / roadLength
 
-Where on a road a traveller at `at` joins it and how far it then is to
-the end: the nearest waypoint, or the one after it when the traveller is
-already between the two, plus the road from there on.
+Where a traveller at `at` joins a road and how far off the road it is:
+the road segment nearest to it (by the distance to the segment, not to
+its ends), joined at the segment's far end. roadLength is the road from
+a waypoint to its end.
 ================
 */
-func routeCostFrom(at Waypoint, points []Waypoint) (int, float64) {
-	nearest, nearestDist := 0, math.Inf(1)
-	for i, point := range points {
-		if d := WaypointDistance(at, point); d < nearestDist {
-			nearest, nearestDist = i, d
+func routeJoin(at Waypoint, points []Waypoint) (int, float64) {
+	join, off := 0, WaypointDistance(at, points[0])
+	for i := 0; i+1 < len(points); i++ {
+		if d := segmentDistance(at, points[i], points[i+1]); d < off {
+			join, off = i+1, d
 		}
 	}
-	join := nearest
-	if nearest+1 < len(points) && WaypointDistance(at, points[nearest+1]) < WaypointDistance(points[nearest], points[nearest+1]) {
-		join = nearest + 1
+	return join, off
+}
+
+// segmentDistance is how far p is from the segment a-b, from the three
+// distances alone (they may cross regions).
+func segmentDistance(p, a, b Waypoint) float64 {
+	pa, pb, ab := WaypointDistance(p, a), WaypointDistance(p, b), WaypointDistance(a, b)
+	switch {
+	case ab < 1e-6 || pa*pa >= pb*pb+ab*ab:
+		return pb
+	case pb*pb >= pa*pa+ab*ab:
+		return pa
 	}
-	cost := WaypointDistance(at, points[join])
-	for i := join; i+1 < len(points); i++ {
-		cost += WaypointDistance(points[i], points[i+1])
+	along := (pa*pa - pb*pb + ab*ab) / (2 * ab)
+	return math.Sqrt(max(pa*pa-along*along, 0))
+}
+
+func roadLength(points []Waypoint, from int) float64 {
+	length := 0.0
+	for i := from; i+1 < len(points); i++ {
+		length += WaypointDistance(points[i], points[i+1])
 	}
-	return join, cost
+	return length
 }
 
 /*

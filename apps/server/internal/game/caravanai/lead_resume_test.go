@@ -96,3 +96,39 @@ func TestHiredLeadStopsAndResumes(t *testing.T) {
 		t.Fatal("the lead did not set off again once its hirer was back")
 	}
 }
+
+/*
+================
+TestLeadInTownLeavesByItsOwnRoad
+
+A hired Trader handed the lead in Jangan leaves by a road that starts in
+Jangan, from its start - never by joining another town's road at its far
+end, a straight line across the map that it cannot walk (seen live: the
+lead stood still at the Jangan fountain).
+================
+*/
+func TestLeadInTownLeavesByItsOwnRoad(t *testing.T) {
+	players := map[string]*hirePlayer{"Boss": {at: TownWaypoint(TownJangan), job: domain.JobTrader, online: true}}
+	paid := map[string]int64{}
+	rt := hireRuntime(t, players, &paid)
+	jangan, donwhang, hotan := TownWaypoint(TownJangan), TownWaypoint(TownDonwhang), TownWaypoint(TownHotan)
+	jangan.Town, donwhang.Town, hotan.Town = TownJangan, TownDonwhang, TownHotan
+	mid := func(a, b Waypoint) Waypoint {
+		return Waypoint{RegionID: a.RegionID, X: (a.X + b.X) / 2, Z: (a.Z + b.Z) / 2}
+	}
+	rt.cfg.Terminals = map[TownID]Waypoint{}
+	rt.cfg.Highway = map[[2]TownID][]Waypoint{
+		{TownJangan, TownDonwhang}: {jangan, mid(jangan, donwhang), donwhang},
+		{TownHotan, TownDonwhang}:  {hotan, mid(hotan, donwhang), donwhang},
+		{TownDonwhang, TownHotan}:  {donwhang, mid(donwhang, hotan), hotan},
+	}
+	rt.HireAgent("division", "Boss", domain.JobTrader, "[AI]Trader_Jin", 1000)
+	rt.mu.Lock()
+	defer rt.mu.Unlock()
+	jin := rt.findAgentLocked("division", "[AI]Trader_Jin")
+	jin.place(jangan, 1000)
+	rt.planHiredRunLocked(jin, 2000)
+	if jin.OriginTown != TownJangan || jin.DestTown != TownDonwhang || jin.WaypointIndex != 0 {
+		t.Fatalf("the lead in Jangan plans %s->%s from waypoint %d, want Jangan->Donwhang from 0", jin.OriginTown, jin.DestTown, jin.WaypointIndex)
+	}
+}
