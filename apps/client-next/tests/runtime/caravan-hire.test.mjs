@@ -119,3 +119,27 @@ test("an NPC select can carry the hire row its menu lists first", async () => {
 	hire.reset();
 	assert.equal( hire.hireNpc(), null );
 });
+
+test("the lead mark toggles: a member takes the lead, the leader's mark hands it back", async () => {
+	const { caravanLeadToggle } = await import(
+		sourceFileUrl( "src/engine/foundation/gameplay/caravan-hire.ts" ).href
+	);
+	const candidates = [ { name: "Boss", display: "Boss" }, { name: "[AI]Trader_Jin", display: "Jin" }, {
+		name: "[AI]Trader_Bao",
+		display: "Bao"
+	} ];
+	const traderLeads = { leader: "[AI]Trader_Jin", candidates };
+	assert.equal( caravanLeadToggle( traderLeads, "[AI]Trader_Bao" ), "[AI]Trader_Bao" );
+	assert.equal( caravanLeadToggle( traderLeads, "Boss" ), "Boss" );
+	assert.equal(
+		caravanLeadToggle( traderLeads, "[AI]Trader_Jin" ),
+		"Boss",
+		"a Trader's lit mark hands the lead to the hirer"
+	);
+	assert.equal(
+		caravanLeadToggle( { leader: "Boss", candidates }, "boss" ),
+		"[AI]Trader_Jin",
+		"the hirer's lit mark hands it to the first Trader"
+	);
+	assert.equal( caravanLeadToggle( traderLeads, "Stranger" ), "" );
+});

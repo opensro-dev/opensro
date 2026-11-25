@@ -99,6 +99,7 @@ import {
 	SPIRIT_SKILL_STRIP_RECT,
 	SPIRIT_SOCKET_RECT
 } from "@/engine/foundation/gameplay/spirit-skills";
+import { caravanLeadToggle } from "@/engine/foundation/gameplay/caravan-hire";
 import { ACTION_FORTRESS_RETURN } from "@/engine/foundation/gameplay/fortress-return";
 import {
 	FRIEND_LIST_LIMIT,
@@ -6867,7 +6868,11 @@ export function createUi( ports: UiPorts ) {
 			// The NPC menu's hire row (npc-talk.ts) opens the hire window.
 			sendGameplay( { kind: "caravan-hire", operation: 0, stars: 0, name: "" } );
 		} else if ( id.startsWith( "caravan-lead:" ) ) {
-			sendGameplay( { kind: "caravan-hire", operation: 2, stars: 0, name: id.slice( 13 ) } );
+			// A toggle: the lit mark hands the lead back (a Trader's to the
+			// hirer, the hirer's to its first hired Trader).
+			const lead = view.gameplay?.caravanLead, name = id.slice( 13 );
+			const target = lead ? caravanLeadToggle( lead, name ) : name;
+			if ( target ) sendGameplay( { kind: "caravan-hire", operation: 2, stars: 0, name: target } );
 		} else if ( id === "self-target" && view.gameplay?.localGid ) {
 			sendGameplay( { kind: "select", gid: view.gameplay.localGid } );
 			requestRebirthPrompt( view.gameplay.localGid );
@@ -13794,36 +13799,45 @@ export function createUi( ports: UiPorts ) {
 				================
 				caravanLeadBadge
 
-				Port-only, not native: a hirer's party board marks who leads its
-				hired Traders ("Leads") and gives the others who may a "Lead"
-				badge that hands them the lead (caravan-hire.ts, operation 2).
+				Port-only, not native: who leads a hirer's hired Traders is a toggle
+				on the party board (caravan-hire.ts, operation 2). Each hired
+				Trader's row and the hirer's own panel carry the native trader job
+				mark (com_job_merchant): lit on the one who leads, dimmed on the
+				others, brightening under the pointer; the tooltip says what a
+				click does. Clicking a dimmed mark hands that member the lead;
+				clicking the lit one toggles it back (to the hirer, or from the
+				hirer to the first hired Trader).
 				================
 				*/
 				const caravanLead = game?.caravanLead;
-				const caravanLeadBadge = ( r: UiRect, name: string, display: string, self = false ) => {
-					const leads = caravanLead?.leader.toLowerCase() === name.toLowerCase();
-					rect( r, leads ? [ 0.5, 0.34, 0.06, 0.92 ] : [ 0.08, 0.07, 0.05, 0.85 ] );
-					quads.push(
-						...text.quads(
-							leads ? "Leads" : "Lead",
-							r,
-							full,
-							leads ? [ 1, 0.86, 0.45, 1 ] : [ 0.85, 0.8, 0.68, 1 ],
-							{
-								hAlign: 1,
-								vAlign: 1
-							}
-						)
+				const caravanLeadIcon = ROOT + "interface/ifcommon/com_job_merchant.png";
+				const caravanLeadBadge = ( x: number, y: number, name: string, display: string, self = false ) => {
+					const leads = caravanLead?.leader.toLowerCase() === name.toLowerCase(),
+						id = "caravan-lead:" + name,
+						r: UiRect = [ x, y, 16, 16 ];
+					paths.push( caravanLeadIcon );
+					if ( leads ) rect( [ x - 1, y - 1, 18, 18 ], [ 1, 0.84, 0.4, 0.35 ] );
+					image(
+						r,
+						caravanLeadIcon,
+						leads ? white : hover === id ? [ 1, 1, 1, 0.85 ] : [ 0.75, 0.75, 0.75, 0.4 ]
 					);
+					const who = self ? "You" : display;
 					controls.push( {
-						id: "caravan-lead:" + name,
-						label: leads ? (self ? "You lead the caravan" : display + " leads the caravan") : "Lead",
-						helpText: self ?
-							(leads ? "You lead the caravan" : "Lead the caravan yourself") :
-							(leads ? display + " leads the caravan" : "Make " + display + " lead the caravan"),
+						id,
+						label: leads ?
+							`${who} ${self ? "lead" : "leads"} the caravan` :
+							`Let ${display} lead the caravan`,
+						helpText: leads ?
+							`${who} ${self ? "lead" : "leads"} the caravan. Click to ${
+								self ? "let your first Trader lead" : "lead it yourself"
+							}.` :
+							self ?
+							"Lead the caravan yourself: your hired Traders follow you." :
+							`Let ${display} lead the caravan: your other Traders follow ${display}.`,
 						kind: "button",
 						rect: r,
-						disabled: leads
+						selected: leads
 					} );
 					blocks.push( r );
 				};
@@ -13943,7 +13957,7 @@ export function createUi( ports: UiPorts ) {
 						const leadRow = caravanLead?.candidates.find( c =>
 							c.name.toLowerCase() === row.member.name.toLowerCase()
 						);
-						if ( leadRow ) caravanLeadBadge( [ x + 84, y + 1, 36, 13 ], leadRow.name, leadRow.display );
+						if ( leadRow ) caravanLeadBadge( x + 104, y + 3, leadRow.name, leadRow.display );
 						// The member's two main masteries: roster data, so they show for a member
 						// out of view and without the buff preference.
 						for ( const entry of row.masteries ) {
@@ -14002,7 +14016,7 @@ export function createUi( ports: UiPorts ) {
 					const self = caravanLead?.candidates[0], mini = hudData.root.GDR_PLAYER_MINI_INFO;
 					if ( self && mini ) {
 						const r = authoredRect( mini, 0, 0 );
-						caravanLeadBadge( [ r[0] + r[2] - 40, r[1] + r[3] + 1, 38, 13 ], self.name, "You", true );
+						caravanLeadBadge( r[0] + r[2] - 20, r[1] + r[3] + 2, self.name, "You", true );
 					}
 				}
 				// The chat is part of the native HUD a fine pointer keeps, so it

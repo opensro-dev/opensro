@@ -458,18 +458,37 @@ func (r *Runtime) stepFollowLocked(unit *AgentUnit, nowMs int64) *Waypoint {
 	}
 	target := offsetPoint(leader, unit.roamDX, unit.roamDZ)
 	distToSlot := WaypointDistance(position(unit), target)
-	if distToSlot > 24 {
-		unit.escortMoving = true
-	} else if distToSlot <= 8 {
-		unit.escortMoving = false
+	// Each follower has its own slack, reaction and pace (followerTemper),
+	// so a party does not set off together in one direction the moment its
+	// leader moves: one lets the leader get further ahead, one reacts late,
+	// and each one that sets off may pick a fresh spot around the leader.
+	slack, reactMs, paceFactor := followerTemper(unit.Name)
+	switch {
+	case unit.escortMoving && distToSlot <= 8:
+		unit.escortMoving, unit.moveDueAtMs = false, 0
 		unit.progressAtMs = 0
+	case !unit.escortMoving && distToSlot > slack:
+		if unit.moveDueAtMs == 0 {
+			unit.moveDueAtMs = nowMs + reactMs
+		} else if nowMs >= unit.moveDueAtMs {
+			unit.escortMoving, unit.moveDueAtMs = true, 0
+			if rand.IntN(2) == 0 {
+				angle := escortFormationAngle(unit.Name) + (rand.Float64()-0.5)*1.4
+				radius := 120 + rand.Float64()*140
+				unit.roamDX, unit.roamDZ = radius*math.Cos(angle), radius*math.Sin(angle)
+				target = offsetPoint(leader, unit.roamDX, unit.roamDZ)
+				distToSlot = WaypointDistance(position(unit), target)
+			}
+		}
+	case !unit.escortMoving:
+		unit.moveDueAtMs = 0
 	}
 	if unit.escortMoving {
 		step := stepDistanceFor(unit)
-		// Match a slower moving leader's pace when already near our flank slot so
-		// fast escorts glide alongside the caravan instead of sprint-stop stuttering.
+		// Near its spot a follower keeps to the leader's pace, scaled by its
+		// own temper, instead of sprint-stop stuttering.
 		if leaderUnit != nil && distToSlot <= 80 {
-			pace := stepDistanceFor(leaderUnit) * 1.15
+			pace := stepDistanceFor(leaderUnit) * float32(paceFactor)
 			if pace < 3.5 {
 				pace = 3.5
 			}
@@ -485,6 +504,27 @@ func (r *Runtime) stepFollowLocked(unit *AgentUnit, nowMs int64) *Waypoint {
 		}
 	}
 	return nil
+}
+
+/*
+================
+followerTemper
+
+A follower's own way of keeping up, fixed per name: how far its spot may
+drift before it moves (slack, 4-9m), how long it takes to react (0.3-1.5s)
+and how much faster than the leader it closes in (1.0-1.3x).
+================
+*/
+func followerTemper(name string) (slack float64, reactMs int64, paceFactor float64) {
+	var h uint32 = 2166136261
+	for i := len(name) - 1; i >= 0; i-- {
+		h ^= uint32(name[i])
+		h *= 16777619
+	}
+	slack = 40 + float64(h%51)
+	reactMs = 300 + int64((h>>8)%1201)
+	paceFactor = 1 + float64((h>>20)%31)/100
+	return slack, reactMs, paceFactor
 }
 
 func escortFormationAngle(name string) float64 {

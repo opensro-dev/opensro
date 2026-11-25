@@ -119,16 +119,19 @@ type AgentUnit struct {
 	combatRejoining   bool
 	lastFerry         Waypoint
 	escortMoving      bool
-	roamDX, roamDZ    float64
-	lastLeaderAt      Waypoint
-	roamAtMs          int64
-	progressFrom      Waypoint
-	progressAtMs      int64
-	pendingTeleport   *Waypoint
-	rejoinParty       bool
-	vengeanceAt       Waypoint
-	vengeanceUntilMs  int64
-	walkFactor        float32
+	// moveDueAtMs is when a follower whose spot drifted past its slack
+	// sets off (its reaction time, followerTemper); 0 while none is due.
+	moveDueAtMs      int64
+	roamDX, roamDZ   float64
+	lastLeaderAt     Waypoint
+	roamAtMs         int64
+	progressFrom     Waypoint
+	progressAtMs     int64
+	pendingTeleport  *Waypoint
+	rejoinParty      bool
+	vengeanceAt      Waypoint
+	vengeanceUntilMs int64
+	walkFactor       float32
 	// trail is the leader's footsteps a following Trader walks (convoy.go).
 	trail []Waypoint
 	// loot is the ground item the agent goes to pick up (loot.go).

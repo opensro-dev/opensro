@@ -169,3 +169,21 @@ The window's request frame: refresh (0), hire (1) or lead (2).
 		}
 	};
 }
+
+/*
+================
+caravanLeadToggle
+
+Whom a click on a member's lead mark (the party board's toggle, ui.ts)
+asks to lead: a member who does not lead takes it; the leader's own mark
+toggles it back - a Trader's to the hirer (candidates[0]), the hirer's to
+its first hired Trader. "" when nothing changes.
+================
+*/
+export function caravanLeadToggle( lead: CaravanLead, name: string ): string {
+	const key = name.toLowerCase(), hirer = lead.candidates[0]?.name ?? "";
+	if ( !lead.candidates.some( c => c.name.toLowerCase() === key ) ) return "";
+	if ( lead.leader.toLowerCase() !== key ) return name;
+	if ( key !== hirer.toLowerCase() ) return hirer;
+	return lead.candidates[1]?.name ?? "";
+}

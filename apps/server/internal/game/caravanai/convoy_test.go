@@ -663,3 +663,69 @@ func TestOnlyAFatalStrikeKillsAnAgent(t *testing.T) {
 		t.Fatal("a fatal strike did not kill the agent")
 	}
 }
+
+/*
+================
+TestFollowersSetOffOnTheirOwnTime
+
+Two Hunters hired by one player settle near their spots; when the player
+walks off, they do not set off on the same tick: each has its own slack
+and reaction (followerTemper).
+================
+*/
+func TestFollowersSetOffOnTheirOwnTime(t *testing.T) {
+	field := Waypoint{RegionID: 25239, X: 900, Z: 900}
+	players := map[string]*hirePlayer{"Boss": {at: TownWaypoint(TownJangan), job: domain.JobTrader, online: true}}
+	paid := map[string]int64{}
+	rt := hireRuntime(t, players, &paid)
+	rt.hooks.Move = func(_ string, from, to Waypoint, distance float32) (Waypoint, bool) {
+		region, x, z, arrived := StepWaypoint(from.RegionID, from.X, from.Z, to, distance)
+		return Waypoint{RegionID: region, X: x, Z: z}, arrived
+	}
+	names := []string{"[AI]Hunter_Kwan", "[AI]Hunter_Lei"}
+	if a, b := names[0], names[1]; func() bool {
+		sa, ra, _ := followerTemper(a)
+		sb, rb, _ := followerTemper(b)
+		return sa == sb && ra == rb
+	}() {
+		t.Fatal("two names share one temper")
+	}
+	for _, name := range names {
+		rt.HireAgent("division", "Boss", domain.JobTrader, name, 1000)
+	}
+	players["Boss"].at = field
+	now := int64(2000)
+	step := func(name string) *AgentUnit {
+		_, unit, _ := rt.StepAgent(context.Background(), "division", name, nil, now)
+		return unit
+	}
+	// Settle beside the stationary player: both standing on their spots.
+	for still := 0; still < 10 && now < 120_000; now += 100 {
+		resting := true
+		for _, name := range names {
+			if u := step(name); u.escortMoving || u.catchingUp {
+				resting = false
+			}
+		}
+		if resting {
+			still++
+		} else {
+			still = 0
+		}
+	}
+	players["Boss"].at = Waypoint{RegionID: field.RegionID, X: field.X + 150, Z: field.Z}
+	started := map[string]int64{}
+	for deadline := now + 20_000; now < deadline && len(started) < len(names); now += 100 {
+		for _, name := range names {
+			if u := step(name); started[name] == 0 && (u.escortMoving || u.catchingUp) {
+				started[name] = now
+			}
+		}
+	}
+	if len(started) != len(names) {
+		t.Fatalf("not every follower set off after its leader: %v", started)
+	}
+	if started[names[0]] == started[names[1]] {
+		t.Fatalf("both followers set off on the same tick %d", started[names[0]])
+	}
+}
