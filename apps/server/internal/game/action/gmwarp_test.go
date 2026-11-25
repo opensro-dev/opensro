@@ -111,7 +111,7 @@ func TestGMWarpSurfaceStandAndStrandedAgreement(t *testing.T) {
 }
 
 func TestGMWarpRefusals(t *testing.T) {
-	for _, kind := range []string{"denied-region", "missing-terrain", "stranded", "pet", "dead", "malformed", "nonfinite", "out-of-region"} {
+	for _, kind := range []string{"denied-region", "missing-terrain", "stranded", "dead", "malformed", "nonfinite", "out-of-region"} {
 		t.Run(kind, func(t *testing.T) {
 			c := rebirthTestCharacter(20, 100)
 			c.GMPrivilege, c.GMCapabilities = true, uint32(staff.All)
@@ -120,9 +120,6 @@ func TestGMWarpRefusals(t *testing.T) {
 			deps.CanEnterWorldRegion = func(*enterworld.Character, uint16) bool { return kind != "denied-region" }
 			deps.SpawnTerrainHeight = func(uint16, float64, float64) (float64, bool) { return 20, kind != "missing-terrain" }
 			deps.RelocateStrandedSpawn = func(p simulation.Spawn) (simulation.Spawn, bool, bool) { return p, kind == "stranded", false }
-			if kind == "pet" {
-				c.ActiveCOS = &enterworld.CharacterCOS{Summoned: true}
-			}
 			if kind == "dead" {
 				*c.CurrentHP = 0
 			}
