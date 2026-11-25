@@ -451,10 +451,28 @@ export async function buildBeta(
 	console.log( "[beta] verified", destination, manifest.releaseId );
 	return { destination, packageRoot, privateRoot, manifest };
 }
+/*
+================
+betaArguments
+
+The command line: [destination] [--source <snapshot>] [--no-archive].
+--no-archive skips client-beta.tar: the release build reads only
+<destination>/package (ops release_data.py), and the 4.18 GB archive took
+about two minutes of every release build for no reader (#4337).
+================
+*/
+export function betaArguments( argv ) {
+	const options = {}, rest = [ ...argv ];
+	if ( rest.length && !rest[0].startsWith( "--" ) ) options.destination = path.resolve( rest.shift() );
+	while ( rest.length ) {
+		const flag = rest.shift();
+		if ( flag === "--source" && rest.length ) options.sourceSnapshot = path.resolve( rest.shift() );
+		else if ( flag === "--no-archive" ) options.makeArchive = false;
+		else throw Error( `build.mjs: unknown argument ${flag}` );
+	}
+	return options;
+}
 if ( process.argv[1] && path.resolve( process.argv[1] ) === fileURLToPath( import.meta.url ) ) {
 	await mkdir( path.join( root, "temp/artifacts/beta" ), { recursive: true } );
-	await buildBeta( {
-		...(process.argv[2] ? { destination: path.resolve( process.argv[2] ) } : {}),
-		...(process.argv[3] === "--source" ? { sourceSnapshot: path.resolve( process.argv[4] ) } : {})
-	} );
+	await buildBeta( betaArguments( process.argv.slice( 2 ) ) );
 }
