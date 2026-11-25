@@ -49,6 +49,7 @@ import os
 from pathlib import Path
 
 import alexandria_npcs as text_tables
+import avatar_effects as avatar_fx
 import cap110_item_import as shared
 import cap110_items as items
 import cap110_monsters as cap110
@@ -446,6 +447,37 @@ def merge_skill_effects(tree_text, later_text, keys, previous):
 
 
 # ================
+# costume_effects
+#
+# The costume effect sets' steady loops (ACT_L / AT_LOOP) as worn-avatar
+# auras, by effect set key (avatar_effects.loop_effect), for the build to
+# hang on each costume's body piece. A row's character scale token
+# (SCT_CHAR_SCALE, the transformation's growth) is not a particle scale:
+# the particle keeps its own size. Returns ({key: [effect]}, refused).
+# ================
+def costume_effects(later_text, keys, has_particle):
+	_, sections = effect_sections(later_text)
+	effects, refused = {}, []
+	for name, lines in sections:
+		if name != "skilleffectset":
+			continue
+		for line in lines[1:]:
+			key = effect_key(name, line)
+			if key not in keys:
+				continue
+			# The VSRO row in the v1.150 layout, shifted to the later one
+			# avatar_effects reads (service and id columns first).
+			row = [avatar_fx.SERVICE_ON, "0"] + line.rstrip("\r\n").split("\t")
+			row += [avatar_fx.NO_VALUE] * max(0, avatar_fx.EFFECT_COLUMNS - len(row))
+			if row[avatar_fx.EFFECT_SCALE].startswith(CHAR_SCALE_TOKEN):
+				row[avatar_fx.EFFECT_SCALE] = avatar_fx.NO_VALUE
+			if row[avatar_fx.EFFECT_PHASE] != avatar_fx.LOOP_PHASE:
+				continue
+			avatar_fx.loop_effect_row(row, key, has_particle, effects, refused)
+	return effects, refused
+
+
+# ================
 # add_nasrun_skills
 #
 # The skill pass the Alexandria builder runs after the skill tier
@@ -479,6 +511,8 @@ EFFECT_SECTIONS = {"skillaniset2": 2, "skilleffectset": 1}
 # (animationSetNames.ts); until the transformation animations land the
 # casts take the default set, whose ANI_READY01 the native skills share.
 ANI_GROUP_COLUMN = 6
+# A skilleffectset scale cell that grows the character, not the particle.
+CHAR_SCALE_TOKEN = "SCT_CHAR_SCALE"
 LATER_ANI_GROUP = "AVATAR_NASRUN1"
 
 
@@ -564,6 +598,11 @@ def add_nasrun_skills(vsro_root, native, output):
 		for efp in efps:
 			icons.add(("Particles", "system/" + shared.normalized_path(efp)))
 		assets = shared.copy_resource_closure(icons, native, output, archives)
+		# The costume's steady auras, its effect files now in the tree.
+		particles = (output / "Particles_extracted", native / "Particles_extracted")
+		worn, worn_refused = costume_effects(tables.decode_table(read_later(SKILL_EFFECT_TABLE)),
+			{row[VC_AVATAR_EFFECT].strip() for row in visual_rows},
+			lambda path: any((root / path).is_file() for root in particles)) if merged_effects is not None else ({}, [])
 	write_atomically(shard, cap110.encode_rows(staged))
 	if merged_effects is not None:
 		write_atomically(effect_path, b"\xff\xfe" + merged_effects.lstrip("\ufeff").encode("utf-16-le"))
@@ -584,6 +623,7 @@ def add_nasrun_skills(vsro_root, native, output):
 		"texts": sorted(after - known), "absentDescriptions": absent, "assets": assets,
 		"visualChanges": len(visual_rows),
 		"effectKeys": sorted(effect_keys),
+		"costumeEffects": worn, "costumeEffectsRefused": worn_refused,
 		"limits": [
 			"Lent by a worn, awake Devil's Spirit alone (nasrun/ability.go); no learn row or mastery names them.",
 			"The event Spirit's skill (31141 in the VSRO client) is not imported, as the event copies are not.",

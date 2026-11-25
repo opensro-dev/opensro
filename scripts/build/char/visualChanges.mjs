@@ -26,10 +26,15 @@ import { existsSync } from "node:fs";
 import { listTextDataShardNamesSync, readTextDataRowsSync } from "../shared/textDataIo.mjs";
 
 export const VISUAL_CHANGE_TABLE = "charactervisualchange.txt";
+// The Nasrun skill import's marker: its costumeEffects list each effect
+// set's steady auras (nasrun_import.py costume_effects).
+export const NASRUN_SKILL_MARKER = ".opensro-nasrun-skills.json";
 // charactervisualchange.txt columns (the later client's header).
 const VC_SERVICE = 0;
 const VC_CONDITION = 3;
 const VC_SKILL = 9;
+// StrPram2: the costume's effect set (its auras), on the body piece.
+const VC_EFFECT_SET = 10;
 const VC_SLOT_MASK = 13;
 const VC_PRIORITY = 16;
 const VC_ANIMATION = 18;
@@ -79,8 +84,9 @@ function pieceAvatarSlot( mask ) {
 ================
 loadVisualChanges
 
-The tree's skill-buff costume pieces: [{ id, skillId, skill, record,
-models: { M, W } }], record the avatar catalog fields but its bodies.
+The tree's skill-buff costume pieces: [{ id, skillId, skill, animation,
+effectSet, record, models: { M, W } }], record the avatar catalog fields
+but its bodies; effectSet names the costume's auras on its body piece.
 Empty without the table.
 ================
 */
@@ -107,6 +113,7 @@ export function loadVisualChanges( root ) {
 			skillId,
 			skill,
 			animation: c[VC_ANIMATION].trim(),
+			effectSet: c[VC_EFFECT_SET].trim().toLowerCase() === "xxx" ? "" : c[VC_EFFECT_SET].trim(),
 			record: {
 				code: `VISUAL_CHANGE_${skill}_${index}`,
 				slot: null,
