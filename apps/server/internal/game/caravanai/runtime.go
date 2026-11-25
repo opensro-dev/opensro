@@ -124,7 +124,10 @@ type AgentUnit struct {
 	moveDueAtMs int64
 	// sellAt is the town whose shop a hired Trader's sale is priced at
 	// (set as it sells, read by endHireLocked).
-	sellAt           TownID
+	sellAt TownID
+	// gatherSinceMs is when a leading hired Trader began waiting for the
+	// hire's other Traders; -1 once that wait timed out.
+	gatherSinceMs    int64
 	roamDX, roamDZ   float64
 	lastLeaderAt     Waypoint
 	roamAtMs         int64

@@ -13827,6 +13827,8 @@ export function createUi( ports: UiPorts ) {
 						id,
 						label: leads ?
 							`${who} ${self ? "lead" : "leads"} the caravan` :
+							self ?
+							"Lead the caravan yourself" :
 							`Let ${display} lead the caravan`,
 						helpText: leads ?
 							`${who} ${self ? "lead" : "leads"} the caravan. Click to ${

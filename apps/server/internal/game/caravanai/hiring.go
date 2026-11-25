@@ -497,7 +497,7 @@ func (r *Runtime) stepHiredLeadLocked(unit *AgentUnit, nowMs int64) {
 		return
 	}
 	p, ok := r.hooks.Player(unit.Division, unit.HiredBy)
-	if !ok || WaypointDistance(position(unit), p.At) > EscortFollowDistance || r.hiredTraderBehindLocked(unit) {
+	if !ok || WaypointDistance(position(unit), p.At) > EscortFollowDistance || r.hiredTraderBehindLocked(unit, nowMs) {
 		unit.lastMoveAtMs, unit.progressAtMs = nowMs, 0
 		return
 	}
@@ -508,27 +508,49 @@ func (r *Runtime) stepHiredLeadLocked(unit *AgentUnit, nowMs int64) {
 }
 
 // HiredTraderGatherDistance is how far the hire's other Traders may fall
-// behind the leading one before it waits for them.
-const HiredTraderGatherDistance float64 = 50 * UnitsPerMeter
+// behind the leading one before it waits for them; HiredTraderGatherMaxMs
+// is the longest one wait lasts, so a Trader that cannot close in never
+// holds the caravan for good.
+const (
+	HiredTraderGatherDistance float64 = 50 * UnitsPerMeter
+	HiredTraderGatherMaxMs    int64   = 20_000
+)
 
 /*
 ================
 hiredTraderBehindLocked
 
 The leading hired Trader waits while another living Trader of the same
-hire is more than HiredTraderGatherDistance behind.
+hire is more than HiredTraderGatherDistance behind, for at most
+HiredTraderGatherMaxMs a time: then it goes on, and waits afresh once the
+others are back within reach.
 ================
 */
-func (r *Runtime) hiredTraderBehindLocked(lead *AgentUnit) bool {
+func (r *Runtime) hiredTraderBehindLocked(lead *AgentUnit, nowMs int64) bool {
+	behind := false
 	for _, u := range r.hiresOfLocked(lead.Division, lead.HiredBy) {
 		if u == lead || u.Role != RoleTrader || u.HP <= 0 || u.DeadUntilMs > 0 || u.RespawnPending {
 			continue
 		}
 		if WaypointDistance(position(u), position(lead)) > HiredTraderGatherDistance {
-			return true
+			behind = true
+			break
 		}
 	}
-	return false
+	switch {
+	case !behind:
+		lead.gatherSinceMs = 0
+		return false
+	case lead.gatherSinceMs == 0:
+		lead.gatherSinceMs = nowMs
+	case lead.gatherSinceMs < 0:
+		// Waited its time out: it leads on until the others are back.
+		return false
+	case nowMs-lead.gatherSinceMs >= HiredTraderGatherMaxMs:
+		lead.gatherSinceMs = -1
+		return false
+	}
+	return true
 }
 
 /*

@@ -782,12 +782,24 @@ func TestTakenLeadHeadsForTheNearestTownFromHere(t *testing.T) {
 	bao := rt.findAgentLocked("division", "[AI]Trader_Bao")
 	bindHire(bao, "Boss", TownJangan, 0, 1000)
 	bao.place(Waypoint{RegionID: jin.RegionID, X: jin.X + 600, Z: jin.Z}, 1000)
-	if !rt.hiredTraderBehindLocked(jin) {
+	if !rt.hiredTraderBehindLocked(jin, 1000) {
 		t.Fatal("the lead does not wait for a Trader 60m behind")
 	}
+	// A Trader that cannot close in holds the lead for 20s, no longer.
+	if !rt.hiredTraderBehindLocked(jin, 1000+HiredTraderGatherMaxMs-1) {
+		t.Fatal("the lead stopped waiting early")
+	}
+	if rt.hiredTraderBehindLocked(jin, 1000+HiredTraderGatherMaxMs) || rt.hiredTraderBehindLocked(jin, 1000+3*HiredTraderGatherMaxMs) {
+		t.Fatal("the lead waits for good on a Trader that cannot close in")
+	}
 	bao.place(Waypoint{RegionID: jin.RegionID, X: jin.X + 400, Z: jin.Z}, 1000)
-	if rt.hiredTraderBehindLocked(jin) {
+	if rt.hiredTraderBehindLocked(jin, 1000) {
 		t.Fatal("the lead waits for a Trader 40m away")
+	}
+	// Back within reach, a later lag is waited for afresh.
+	bao.place(Waypoint{RegionID: jin.RegionID, X: jin.X + 600, Z: jin.Z}, 1000)
+	if !rt.hiredTraderBehindLocked(jin, 90_000) {
+		t.Fatal("the lead does not wait afresh after the Traders gathered")
 	}
 }
 

@@ -589,8 +589,10 @@ func (r *Runtime) stepTraderFollowLocked(unit *AgentUnit, leader Waypoint, leade
 		return nil
 	}
 	unit.catchingUp = true
-	if leaderUnit != nil && WaypointDistance(position(unit), leader) > 320 {
+	if leaderUnit != nil && unit.HiredBy == "" && WaypointDistance(position(unit), leader) > 320 {
 		// Far behind another agent: its route (and ferries) brings it back.
+		// A hired Trader follows the footsteps instead: its leader's route
+		// may have been planned from anywhere when it took the lead.
 		r.stepEscortFollowLocked(unit, leaderUnit)
 		unit.noteProgress(nowMs)
 		return nil
