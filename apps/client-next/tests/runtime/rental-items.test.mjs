@@ -17,6 +17,8 @@ import assert from "node:assert/strict";
 const { decodeInventoryItem } = await import( "../../src/engine/foundation/gameplay/inventory-item.ts" );
 const { itemTooltip } = await import( "../../src/engine/foundation/ui/item-tooltip.ts" );
 const { decodeStorageList } = await import( "../../src/engine/foundation/gameplay/storage-room.ts" );
+const { decodeCosRecord } = await import( "../../src/engine/foundation/gameplay/cos-record.ts" );
+const { cosGrantResult } = await import( "../../src/engine/foundation/gameplay/cos-container.ts" );
 
 // A dress-kind reference: the equipment band (flags & 0x60 === 0x20).
 const DRESS = 7001, FLAGS = 0x2c;
@@ -84,6 +86,58 @@ test("a warehouse list row carries the rental deadline to the storage room", () 
 	assert.equal( room.items.length, 1 );
 	assert.equal( room.items[0].rentExpiresUnixMs, 1790000000000 );
 	assert.equal( room.items[0].slot, 2 );
+});
+
+/*
+================
+cosRecordWith
+
+An owned COS record (830EC0, the layout packet-variants.test.mjs pins)
+whose bag holds the given slots, each a dress body.
+================
+*/
+function cosRecordWith( rows ) {
+	const head = new Uint8Array( 18 ), v = new DataView( head.buffer );
+	v.setUint32( 0, 7, true );
+	v.setUint32( 4, 102, true );
+	v.setUint32( 8, 100, true );
+	v.setUint32( 12, 50, true );
+	head[16] = 28;
+	head[17] = rows.length;
+	const parts = [ head ];
+	for ( const [slot, body] of rows ) parts.push( Uint8Array.of( slot ), body );
+	parts.push( new Uint8Array( 4 ) );
+	const out = new Uint8Array( parts.reduce( ( n, part ) => n + part.length, 0 ) );
+	let o = 0;
+	for ( const part of parts ) {
+		out.set( part, o );
+		o += part.length;
+	}
+	return out;
+}
+
+test("a pet bag's rental-kind rows read their leg, permanent or rented", () => {
+	// Every row of a rental kind carries the leg (server wire rentrefs.go):
+	// a pet holding permanent avatars was refused at entry with
+	// "Duplicate COS inventory slot" when the bag read them without it.
+	const objRefs = new Map( [ [ 102, 0x11c6 ] ] ), refs = new Map( [ [ DRESS, FLAGS ] ] );
+	const packet = cosRecordWith( [ [ 0, rentalBody( 0 ) ], [ 1, rentalBody( 1790000000000 ) ] ] );
+	const record = decodeCosRecord( packet, objRefs, refs, new Set( [ DRESS ] ) );
+	assert.deepEqual( record?.inventory?.map( row => [ row.slot, row.rentExpiresUnixMs ] ), [
+		[ 0, undefined ],
+		[ 1, 1790000000000 ]
+	] );
+	assert.throws( () => decodeCosRecord( packet, objRefs, refs ) );
+	// A grant into the bag (0xB06D type 0x15) reads the leg too.
+	const grant = new Uint8Array( 7 + 26 ), g = new DataView( grant.buffer );
+	grant[0] = 1;
+	grant[1] = 0x15;
+	g.setUint32( 2, 7, true );
+	grant[6] = 2;
+	grant.set( rentalBody( 0 ), 7 );
+	const granted = cosGrantResult( record, grant, refs, new Set( [ DRESS ] ) );
+	assert.deepEqual( granted.inventory?.map( row => row.slot ), [ 0, 1, 2 ] );
+	assert.throws( () => cosGrantResult( record, grant, refs ) );
 });
 
 test("the tooltip renders time remaining, then the over state", () => {

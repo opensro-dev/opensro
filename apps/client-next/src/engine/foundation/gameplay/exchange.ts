@@ -101,7 +101,9 @@ export function exchangeFrame(
 	frame: WireFrame,
 	refs: ReadonlyMap<number, number>,
 	objRefs: ReadonlyMap<number, number> = new Map(),
-	localGid = 0
+	localGid = 0,
+	// The rental kinds: an offered row of one carries the rent leg.
+	rentRefs: ReadonlySet<number> = new Set()
 ): ExchangeOutcome | null {
 	const p = frame.payload, v = viewOf( p );
 	const result = () => {
@@ -132,7 +134,7 @@ export function exchangeFrame(
 			for ( let i = 0; i < count; i++ ) {
 				const bagSlot = mine ? p[o++] : undefined, slot = p[o++]!;
 				if ( slot >= EXCHANGE_SLOTS ) throw Error( "Invalid exchange slot" );
-				const decoded = decodeInventoryItem( p, o, refs, objRefs );
+				const decoded = decodeInventoryItem( p, o, refs, objRefs, rentRefs );
 				o = decoded.next;
 				if ( decoded.item ) {
 					rows.push( { slot, ...(bagSlot === undefined ? {} : { bagSlot }), item: decoded.item } );

@@ -5694,7 +5694,7 @@ Packet handling must not depend on which HUD panel is currently open.
 					return true;
 				}
 				if ( frame.opcode === COS_RECORD_CREATE_OPCODE ) {
-					const record = decodeCosRecord( frame.payload, cosRefs, cosItemRefs );
+					const record = decodeCosRecord( frame.payload, cosRefs, cosItemRefs, inventory.rentRefs() );
 					if ( !record ) return false;
 					if ( !cosRecords.has( record.gid ) && cosRecords.size >= 64 ) {
 						throw new Error( "COS record capacity exceeded" );
@@ -5907,7 +5907,7 @@ Packet handling must not depend on which HUD panel is currently open.
 							.getUint32( 2, true ),
 						record = cosRecords.get( gid );
 					if ( !record ) throw Error( "Absent COS ground owner" );
-					const next = cosGroundResult( record, frame.payload, cosItemRefs );
+					const next = cosGroundResult( record, frame.payload, cosItemRefs, inventory.rentRefs() );
 					if ( frame.payload[1] !== 0x11 || !cosPickup.receipt( gid ) ) {
 						inventory.cosGrounded( frame.payload );
 					}
@@ -5936,7 +5936,7 @@ Packet handling must not depend on which HUD panel is currently open.
 							.getUint32( 2, true ),
 						record = cosRecords.get( gid );
 					if ( !record ) throw Error( "Absent COS grant owner" );
-					const next = cosGrantResult( record, frame.payload, cosItemRefs );
+					const next = cosGrantResult( record, frame.payload, cosItemRefs, inventory.rentRefs() );
 					// 756CF0's print case (756EEC) is shared by ground (0) and
 					// quest (3) sources and dispatches on the destination: a
 					// grant into the pet bag (0x7A) prints with grant rules -
