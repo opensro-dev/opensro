@@ -122,11 +122,13 @@ var unlistedSettings = map[string]string{
 	// Cosmetic item rows the variant build imports; the GameWorld reads no
 	// such switch, the items simply exist in the built data.
 	"SRO_MALL_AVATARS": "mall avatar build input, consumed when the server data is built",
-	// The Styria Clash arena map (#3272 slice 1): the variant build merges
-	// its ground; nothing links to it and the GameWorld reads no switch
-	// until the Battle Arena engine (#3648) makes it a rule.
+	// The Styria Clash arena (#3272): the variant build merges its
+	// ground and the GameWorld runs the Battle Arena engine (#3648)
+	// behind the same switch - the arena manager takes applications
+	// and matches move to world 107. The registration and score
+	// screens are the epic's last slice, so the setting is stated.
 	"SRO_REFERRALS":    "the website's referral page shows its own numbers from the referral route",
-	"SRO_STYRIA_CLASH": "Styria Clash arena map build input; players cannot reach it until #3648",
+	"SRO_STYRIA_CLASH": "Styria Clash: the arena ground (build) and its match engine; players cannot reach it until #3648",
 	"SRO_AI_CARAVANS":  "the AI caravans are not seen by players or paid yet; they become a rule with the escort and parley rewards (#3704)",
 	"SRO_CONSIGNMENT":  "the market pages state their own fee, duration and listing cap",
 	// Staff telemetry (#1639): name-free kill and EXP rates for the

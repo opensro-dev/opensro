@@ -154,12 +154,15 @@ func (rt *Runtime) HandleNpcAction(divisionID string, character *enterworld.Char
 			// answer (code 3) retires the request.
 			return npcFunctionRefusal(selectObjectNotFound), fmt.Sprintf("NPC %s has no npcchat base-speech symbol", npc.Codename)
 		}
-		if rt.NpcQuests.Options != nil || rt.sookArena != nil {
+		if rt.NpcQuests.Options != nil || rt.sookArena != nil || rt.styria != nil {
 			var options []NpcQuestOption
 			if rt.NpcQuests.Options != nil {
 				options = rt.NpcQuests.Options(divisionID, character, npc.Codename)
 			}
 			options = append(options, rt.sookTalkOptions(npc.Codename)...)
+			// Port-only (#3648): the Styria Clash arena manager's
+			// application rows, while its switch is on.
+			options = append(options, rt.styriaTalkOptions(divisionID, character, npc.Codename)...)
 			if len(options) != 0 {
 				symbols := make([]string, 0, len(options))
 				for _, option := range options {

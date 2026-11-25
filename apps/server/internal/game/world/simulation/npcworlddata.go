@@ -127,7 +127,10 @@ func LoadNpcWorldRoster(textdataDir string) []NpcDef {
 			}
 		}
 	}
-	return appendMagicPopMachines(roster, refs, lookups)
+	roster = appendMagicPopMachines(roster, refs, lookups)
+	// Port-only (#3648): the Styria Clash arena manager joins at its
+	// authored stands while its switch is on (npcstyria.go).
+	return appendArenaManager(roster, lookups)
 }
 
 // loadNpcStoreGroupIndex projects the exact native lookup chain used by
