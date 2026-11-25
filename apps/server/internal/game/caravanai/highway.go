@@ -20,8 +20,6 @@ DetourHeatThreshold) is a port invention kept from slice 1.
 */
 package caravanai
 
-import "math"
-
 /*
 ================================================================================
 Towns, regions, and personalities
@@ -464,32 +462,4 @@ func reverseWaypoints(src []Waypoint) []Waypoint {
 		out[i] = src[len(src)-1-i]
 	}
 	return out
-}
-
-/*
-==================
-StepPosition
-
-StepPosition advances (curX, curZ) toward (targetX, targetZ) by at most
-maxStep world units and reports whether the target was reached. The
-slice-2a runtime still glides on this straight line; the nav-surface
-walker replaces it in slice 2b.
-==================
-*/
-func StepPosition(
-	curX, curZ float32,
-	targetX, targetZ float32,
-	maxStep float32,
-) (nextX, nextZ float32, arrived bool) {
-	if maxStep <= 0 {
-		return curX, curZ, false
-	}
-	dx := float64(targetX - curX)
-	dz := float64(targetZ - curZ)
-	dist := math.Hypot(dx, dz)
-	if dist <= float64(maxStep) {
-		return targetX, targetZ, true
-	}
-	ratio := float64(maxStep) / dist
-	return curX + float32(dx*ratio), curZ + float32(dz*ratio), false
 }

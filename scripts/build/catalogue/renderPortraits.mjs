@@ -16,9 +16,17 @@ monster. Background throttling is off (a hidden page draws no frame).
 Uniques go first: they are the cards the site shows most. The viewer must already be served (the client's dev server, or a
 preview of its build); this stage never starts one.
 
+A still depends only on the viewer's code and the packs it draws from, so
+a pass with a cacheDir keeps its stills under the key of both (portraitKey)
+and the next pass with the same key copies them instead of drawing: the
+release's catalogue step redrew every portrait on every freeze, minutes of
+a release whose client and data had not changed (opensro #4337). A failed
+draw is never kept, so it is tried again.
+
 ===========================================================================
 */
-import { mkdirSync, writeFileSync } from "node:fs";
+import { createHash } from "node:crypto";
+import { copyFileSync, existsSync, mkdirSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { launchProbeBrowser } from "../../lib/probeBrowser.mjs";
 
@@ -51,27 +59,119 @@ export function portraitOrder( monsters ) {
 	);
 }
 
+// KEY_INPUTS are what the served viewer draws a still from: the page
+// (its hashed chunk names stand for the renderer's code) and the pack
+// index (each pack's sha256 stands for the models and textures).
+const KEY_INPUTS = [ "viewer.html", "assets/packs/manifest.json" ];
+
+/*
+================
+fetchServed
+
+The bytes the viewer serves at a path under its base; a failed answer
+refuses, since a key over an error page would match the next error page.
+================
+*/
+async function fetchServed( base, name ) {
+	const response = await fetch( new URL( name, base ) );
+	if ( !response.ok ) throw Error( `portraits: ${name} answered ${response.status}` );
+	return Buffer.from( await response.arrayBuffer() );
+}
+
+/*
+================
+portraitKey
+
+The cache key of a pass: the served viewer page, its pack index and the
+still's size.
+================
+*/
+export async function portraitKey( { viewerBase, size, fetchBytes = fetchServed } ) {
+	const hash = createHash( "sha256" ).update( `size ${size}\0` );
+	for ( const name of KEY_INPUTS ) {
+		const bytes = await fetchBytes( viewerBase, name );
+		hash.update( `${name} ${bytes.length}\0` ).update( bytes );
+	}
+	return hash.digest( "hex" );
+}
+
+/*
+================
+reusePortraits
+
+Copies each monster's kept still under key into workDir. Returns the
+reused ids with their paths and the monsters still to draw.
+================
+*/
+export function reusePortraits( { cacheDir, key, monsters, workDir } ) {
+	const kept = path.join( cacheDir, key ), drawn = new Map(), rest = [];
+	for ( const monster of monsters ) {
+		const source = path.join( kept, monster.id + ".png" );
+		if ( !existsSync( source ) ) {
+			rest.push( monster );
+			continue;
+		}
+		const file = path.join( workDir, monster.id + ".png" );
+		copyFileSync( source, file );
+		drawn.set( monster.id, file );
+	}
+	return { drawn, rest };
+}
+
+/*
+================
+keepPortraits
+
+Keeps the pass's stills under key and drops every other key's folder:
+only the last pass's stills can match the next one.
+================
+*/
+export function keepPortraits( { cacheDir, key, drawn } ) {
+	const kept = path.join( cacheDir, key );
+	mkdirSync( kept, { recursive: true } );
+	for ( const name of readdirSync( cacheDir ) ) {
+		if ( name !== key ) rmSync( path.join( cacheDir, name ), { recursive: true, force: true } );
+	}
+	for ( const [id, file] of drawn ) {
+		const target = path.join( kept, id + ".png" );
+		if ( file !== target ) copyFileSync( file, target );
+	}
+}
+
 /*
 ================
 renderPortraits
 
 Draws each monster and writes <workDir>/<id>.png. Returns the drawn ids
 with their PNG paths and the failures with the viewer's reason; one
-failure never stops the pass.
+failure never stops the pass. With a cacheDir, stills kept under this
+pass's key are copied instead of drawn, and the pass's stills are kept.
 ================
 */
 export async function renderPortraits( {
 	viewerBase,
 	monsters,
 	workDir,
+	cacheDir,
 	size = PORTRAIT_SIZE,
 	pages = PORTRAIT_PAGES,
-	log = console.log
+	log = console.log,
+	fetchBytes = fetchServed,
+	launch = launchProbeBrowser
 } ) {
 	mkdirSync( workDir, { recursive: true } );
-	const drawn = new Map(), failed = [];
-	const { browser, page } = await launchProbeBrowser( { backgroundThrottling: false } );
-	const queue = portraitOrder( monsters );
+	const key = cacheDir ? await portraitKey( { viewerBase, size, fetchBytes } ) : "";
+	const reused = cacheDir ?
+		reusePortraits( { cacheDir, key, monsters, workDir } ) :
+		{ drawn: new Map(), rest: monsters };
+	const drawn = reused.drawn, failed = [];
+	if ( cacheDir ) log( `portraits: ${drawn.size} reused, ${reused.rest.length} to draw` );
+	if ( reused.rest.length === 0 ) {
+		keepPortraits( { cacheDir, key, drawn } );
+		return { drawn, failed };
+	}
+	const { browser, page } = await launch( { backgroundThrottling: false } );
+	const queue = portraitOrder( reused.rest );
 	let next = 0;
 	/*
 	================
@@ -121,6 +221,7 @@ export async function renderPortraits( {
 	} finally {
 		await browser.close();
 	}
+	if ( cacheDir ) keepPortraits( { cacheDir, key, drawn } );
 	return { drawn, failed };
 }
 

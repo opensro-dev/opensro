@@ -20,6 +20,9 @@ import (
 	log "github.com/sirupsen/logrus"
 	"opensro.online/server/internal/game/caravanai"
 	"opensro.online/server/internal/game/enterworld"
+	worldgeom "opensro.online/server/internal/game/world"
+	"opensro.online/server/internal/game/world/monster"
+	"opensro.online/server/internal/game/world/movement"
 	"opensro.online/server/internal/game/world/simulation"
 )
 
@@ -53,6 +56,7 @@ func (game *gameplayPlane) wireCaravanAgents() {
 				"region":   regionID,
 			}).Debugf("caravan-ai chat: %s", message)
 		},
+		Walker: caravanWalker{water: game.water},
 	})
 	rt.EnsureDivisionRoster(game.divisionID)
 	game.caravanAgents = rt
@@ -101,6 +105,86 @@ func (game *gameplayPlane) caravanAgentsTick(ticker *simulation.Ticker, nowMs in
 		_, _, _ = game.caravanAgents.StepAgent(ctx, game.divisionID, unit.Name, byRegion[unit.RegionID], nowMs)
 	}
 	return nil
+}
+
+/*
+================================================================================
+Nav-surface walking (the caravanai.Walker port)
+================================================================================
+*/
+
+// caravanArrivalRadius is how close a step must land to its anchor to
+// count as reaching it: the tolerance the march chord itself is proven
+// to (PlanMonsterPath's Rest lands within a few units of the goal).
+const caravanArrivalRadius = 24.0
+
+// caravanWalker walks caravan agents on the shipped nav surface with
+// the monster march: each step plans the chord to the current anchor
+// and advances along it by the step's distance budget.
+type caravanWalker struct {
+	water *movement.WaterValidator
+}
+
+/*
+================
+caravanWalker.Step
+
+Plans the march chord from -> to and steps toward the chord's Rest by
+at most maxDist. A stalled chord (no progress) holds the pose. The
+returned pose's Y is the march surface height.
+================
+*/
+func (w caravanWalker) Step(from, to caravanai.Pose, maxDist float64) (caravanai.Pose, bool) {
+	if w.water == nil {
+		return from, false
+	}
+	// The start pose carries the march surface height (the last
+	// step's Rest, or the anchor's own Y at spawn); the march plans
+	// from the surface owner under it, so it is passed through as-is.
+	toMonster := monster.Pose{RegionID: to.RegionID, X: float64(to.X), Y: float64(to.Y), Z: float64(to.Z)}
+	path := w.water.PlanMonsterPath(
+		monster.Pose{RegionID: from.RegionID, X: float64(from.X), Y: float64(from.Y), Z: float64(from.Z)},
+		toMonster,
+	)
+	if path == nil {
+		return from, false
+	}
+	next := stepTowardRest(from, path.Rest(), maxDist)
+	arrived := worldgeom.Distance(
+		worldgeom.RegionXZ{RegionID: next.RegionID, X: float64(next.X), Z: float64(next.Z)},
+		worldgeom.RegionXZ{RegionID: to.RegionID, X: float64(to.X), Z: float64(to.Z)},
+	) <= caravanArrivalRadius
+	return next, arrived
+}
+
+/*
+================
+stepTowardRest
+
+Advances from toward the march's Rest pose by at most maxDist world
+units (cross-region safe); Y follows the chord from the start height
+to the Rest's surface height. Zero or negative budget, or a Rest no
+farther than the budget, lands exactly on the Rest.
+================
+*/
+func stepTowardRest(from caravanai.Pose, rest monster.Pose, maxDist float64) caravanai.Pose {
+	fromXZ := worldgeom.RegionXZ{RegionID: from.RegionID, X: float64(from.X), Z: float64(from.Z)}
+	restXZ := worldgeom.RegionXZ{RegionID: rest.RegionID, X: rest.X, Z: rest.Z}
+	dist := worldgeom.Distance(fromXZ, restXZ)
+	if dist <= maxDist {
+		return caravanai.Pose{RegionID: rest.RegionID, X: float32(rest.X), Y: float32(rest.Y), Z: float32(rest.Z)}
+	}
+	fromGrid := worldgeom.ExpandGrid(fromXZ)
+	restGrid := worldgeom.ExpandGrid(restXZ)
+	ratio := maxDist / dist
+	grid := worldgeom.GridXZ{
+		X: fromGrid.X + (restGrid.X-fromGrid.X)*ratio,
+		Z: fromGrid.Z + (restGrid.Z-fromGrid.Z)*ratio,
+	}
+	regionID := uint16(int(grid.X/worldgeom.OutdoorRegionSize) | int(grid.Z/worldgeom.OutdoorRegionSize)<<8)
+	local := worldgeom.LocalFromGrid(regionID, grid)
+	y := float64(from.Y) + (rest.Y-float64(from.Y))*ratio
+	return caravanai.Pose{RegionID: regionID, X: float32(local.X), Y: float32(y), Z: float32(local.Z)}
 }
 
 /*
