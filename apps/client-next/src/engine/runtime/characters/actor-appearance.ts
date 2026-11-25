@@ -10,6 +10,7 @@ the per-actor loop: a loop `continue` is `return null` here.
 
 ===========================================================================
 */
+import { isSpiritItem } from "@/engine/foundation/gameplay/avatar-socket";
 import { fortressAppearance } from "@/engine/foundation/animation/fortress-appearance";
 import { isGoldHeapType, isSurvivalPowerEgg } from "@/engine/foundation/gameplay/ground-item";
 import { defaultWearFrozen } from "@/engine/foundation/animation/default-wear-policy";
@@ -364,7 +365,10 @@ export function createActorAppearance( owner: ActorOwner ) {
 			};
 			try {
 				const disguise = referenceAppearances.get( entity.gid );
-				const skin = activeSkin( entity ), avatars = skin ? [] : entity.avatars ?? [];
+				// Port-only (SRO_NASRUN, #4384): a worn Devil's Spirit has no worn
+				// model to dress; it shows through its lent skills' effects.
+				const skin = activeSkin( entity ),
+					avatars = skin ? [] : (entity.avatars ?? []).filter( item => !isSpiritItem( item.typeFlags ) );
 				if ( skin && !skin.player ) {
 					// 85C060: a monster skin is its own body; the wearer's items are set aside.
 				} else if ( disguise ) {

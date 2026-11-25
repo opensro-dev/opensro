@@ -367,8 +367,12 @@ class NasrunSkillImportTest(unittest.TestCase):
 			self.assertEqual(manifest, ["skilldata_5000.txt", "skilldata_110000.txt", nasrun.SKILL_SHARD])
 			names = (text_root / nasrun.NAME_TABLE).read_bytes().decode("utf-16")
 			self.assertIn("SN_SKILL_MALL_NASRUN_MOBDEFENCEIGNORE	", names)
-			self.assertEqual(len(self.icons), len(nasrun.SKILL_CODES))
-			self.assertTrue(all(archive == "Media" and path.startswith("icon/skill/etc/") for archive, path in self.icons))
+			# The skills' icons, and the worn Spirit's active edge (#4384).
+			edge = ("Media", nasrun.SPIRIT_EDGE_SHEET)
+			self.assertIn(edge, self.icons)
+			skill_icons = self.icons - {edge}
+			self.assertEqual(len(skill_icons), len(nasrun.SKILL_CODES))
+			self.assertTrue(all(archive == "Media" and path.startswith("icon/skill/etc/") for archive, path in skill_icons))
 			again = self.run_import(vsro, native, output)
 			self.assertEqual(again["skills"], summary["skills"])
 			self.assertEqual((text_root / nasrun.NAME_TABLE).read_bytes().decode("utf-16"), names)

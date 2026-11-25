@@ -333,6 +333,7 @@ import {
 } from "@/engine/foundation/gameplay/progression";
 import { skillBindings, quickSlotPacket } from "@/engine/foundation/gameplay/quickslots";
 import { decodeCosRecord } from "@/engine/foundation/gameplay/cos-record";
+import { decodeSpiritSkills, SPIRIT_SKILLS_OPCODE, spiritSkillList } from "@/engine/foundation/gameplay/spirit-skills";
 import { decodeWorldClock } from "@/engine/foundation/gameplay/world-clock";
 import { vitalsUpdate } from "@/engine/foundation/gameplay/vitals";
 import {
@@ -1538,6 +1539,10 @@ attack can arrive in the same batch as the previous close and starve the walk.
 		return localPlayerModels().find( model => model.refObjId === local.refObjId )?.sex;
 	}
 	let bindings = skillBindings( {} );
+	// Port-only (SRO_NASRUN, #4384): the worn Spirit's lent skills, cast
+	// as if learned (spirit-skills.ts).
+	let spiritSkills: number[] = [];
+	const castableSkill = ( id: number ) => bindings.skills.includes( id ) || spiritSkills.includes( id );
 	let catalog: readonly SkillMetadata[] = [];
 	// The local cast's action-state-2 window (CIDecoSkill 8E0A23 / 877240).
 	const castMotion = createCastMotionLock();
@@ -2141,6 +2146,7 @@ clears it when another character enters.
 		fortressPortalUntilMs = 0;
 		musicMode = 0;
 		bindings = skillBindings( {} );
+		spiritSkills = [];
 		catalog = [];
 		castMotion.clear();
 		progression = { masteries: [] };
@@ -2445,6 +2451,7 @@ next 0x3AC5 status-5 row throw "Unknown academy member status" (#2876).
 				withoutResurrection( { ...social, invitation: null } ) :
 				emptySocial( entryName );
 			bindings = skillBindings( value );
+			spiritSkills = spiritSkillList( (value as { spiritSkills?: unknown; }).spiritSkills );
 			catalog = nextCatalog;
 			castMotion.catalog( nextCatalog );
 			worldClock = undefined;
@@ -4000,7 +4007,7 @@ state here before a command can claim a native wire conversation.
 					quickSlot( command.binding ) :
 					{ slot: command.slot, kind: command.skillId === 0 ? 0 : 0x49, payload: command.skillId };
 				const frame = quickSlotPacket( row );
-				if ( row.kind === 0x49 && !bindings.skills.includes( row.payload ) ) {
+				if ( row.kind === 0x49 && !castableSkill( row.payload ) ) {
 					throw Error( "Skill is not learned" );
 				}
 				const itemSlot = quickSlotItemSlot( row );
@@ -4499,7 +4506,7 @@ state here before a command can claim a native wire conversation.
 			}
 			if ( command.kind === "skill" ) {
 				const skillId = command.skillId;
-				if ( !bindings.skills.includes( command.skillId ) ) throw Error( "Skill is not learned" );
+				if ( !castableSkill( command.skillId ) ) throw Error( "Skill is not learned" );
 				const metadata = catalog.find( row => row.id === skillId );
 				// skill-queue.ts: never send a press the server would refuse for
 				// its cooldown; hold one that is nearly ready, deny the rest.
@@ -4839,6 +4846,11 @@ Packet handling must not depend on which HUD panel is currently open.
 					return true;
 				}
 				if ( jobHonor.receive( frame ) ) {
+					dirty = true;
+					return true;
+				}
+				if ( frame.opcode === SPIRIT_SKILLS_OPCODE ) {
+					spiritSkills = decodeSpiritSkills( frame.payload );
 					dirty = true;
 					return true;
 				}
@@ -6990,6 +7002,7 @@ The published plane when something changed since the last take, else null.
 					reference: cosItemRefs2.get( row.itemRefObjId )!
 				}) ),
 				...bindings,
+				spiritSkills,
 				...training.state(),
 				social,
 				fortress,
@@ -7241,7 +7254,7 @@ runs (native 00687520).
 		macroSkillLoop = pick.loop;
 		if ( !("entry" in pick) ) return;
 		const skillId = pick.entry.skill;
-		if ( !bindings.skills.includes( skillId ) ) return;
+		if ( !castableSkill( skillId ) ) return;
 		const metadata = catalog.find( row => row.id === skillId );
 		if ( !metadata || metadata.groundTarget || metadata.basicAttack ) return;
 		if ( skillCooldown( combat.state().skillCooldowns, skillId, metadata.cooldownGroup ?? 0, now ) ) {

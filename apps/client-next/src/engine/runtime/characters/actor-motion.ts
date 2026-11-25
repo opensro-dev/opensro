@@ -809,16 +809,17 @@ export function createActorMotion( owner: ActorOwner ) {
 		if ( !stall && idle?.clip && clips.has( idle.clip ) ) {
 			steady = false;
 			const idleClip = idle.clip, age = Math.max( 0, seconds - idle.started );
+			// 8EADF0 installs the fidget as a one-shot (ADECF0 grows only the
+			// one-shot list) and its exit (8E5CB0 -> 8EA820) fades only that
+			// one-shot: the stand loop under it keeps its installation and
+			// its clock. Add the event layer; never rebind the base (#4147).
 			const idleLayers = bindLayers(
-				oneShotLayers( idleClip, clip, age, resources.duration( resource.glb, idleClip ), .2 ),
+				oneShotLayers( idleClip, clip, age, resources.duration( resource.glb, idleClip ), .2 )
+					.filter( layer => layer.lane === "event" ),
 				"idle",
 				idle.started
-			).map( layer =>
-				layer.lane === "event" ?
-					{ ...layer, weight: Math.max( 0, Math.min( layer.weight, age / .4 ) ) } :
-					layer
-			);
-			layers.splice( 0, layers.length, ...idleLayers );
+			).map( layer => ({ ...layer, weight: Math.max( 0, Math.min( layer.weight, age / .4 ) ) }) );
+			layers.unshift( ...idleLayers );
 		}
 		if (
 			!dead && !entity.mountedOn && state.pickupStarted !== undefined &&

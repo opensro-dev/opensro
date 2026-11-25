@@ -275,11 +275,34 @@ export const slotEffectRuntimeImageReferences = [
 
 /*
 ================
+laterSlotEffectRuntimeImageReferences
+
+Port-only, not native (SRO_NASRUN, #4384): the later clients' active-Spirit
+edge, looped over a worn, awake Devil's Spirit's socket
+(item-slot-effects.ts spiritActiveOverlay). Only a tree the Nasrun skill
+import staged holds it (nasrun_import.py SPIRIT_EDGE_SHEET); a native tree
+lacks it and publishes nothing here (copyImageReference skips an absent
+source).
+================
+*/
+export const laterSlotEffectRuntimeImageReferences = [
+	"icon/item/etc/icon_edge_nasrun.ddj",
+	// The later clients' Spirit socket frame (a bracelet, as the Spirit's
+	// mall guide names it) and its skill strip's slot backgrounds
+	// (ifequipskillslotwnd.txt GDR_AVATAR_SKILL_SLOT_BG_01..04): both ship
+	// in the v1.150 tree, but only the Spirit's avatar view draws them.
+	"interface/equipment/equip_slot_extraneous.ddj",
+	"interface/pet/pt_block02.ddj"
+];
+
+/*
+================
 runtimeCifImageReferences
 ================
 */
 export const runtimeCifImageReferences = [
 	...slotEffectRuntimeImageReferences,
+	...laterSlotEffectRuntimeImageReferences,
 	...itemMallRuntimeImageReferences,
 	// CIFDelayInfo 6B14E0 / 6B1B30 assigns these outside resinfo.
 	...returnScrollRuntimeImageReferences,
