@@ -179,6 +179,49 @@ func TestWarehouseAdditionRefusedAtCommitKeepsTheItem(t *testing.T) {
 
 /*
 ================
+doorReadRefusingStorage
+
+A storage authority that fails the test on any AccountStorage read.
+In the live shard that read takes the store lock, which the item
+use's character door already holds; a read from inside the door
+deadlocked the GameWorld (tick stall 2026-11-25 22:04Z). Test fakes
+take no lock, so the read itself is the observable.
+================
+*/
+type doorReadRefusingStorage struct {
+	memoryStorage
+	t *testing.T
+}
+
+func (s *doorReadRefusingStorage) AccountStorage(*domain.Character) (domain.AccountStorage, error) {
+	s.t.Fatalf("the warehouse addition read storage inside the item use's door")
+	return domain.AccountStorage{}, nil
+}
+
+/*
+================
+TestWarehouseAdditionReadsNoStorageInsideTheDoor
+
+The addition grows the room through the commit alone: no storage read
+happens while the item use's character door is open.
+================
+*/
+func TestWarehouseAdditionReadsNoStorageInsideTheDoor(t *testing.T) {
+	c, rt, item := expansionCharacter(t, "ITEM_MALL_WAREHOUSE_ADDITION", 24406, map[string]float64{
+		"itemParam1_29c": 30, "itemParam2_2a0": 1})
+	authority := &doorReadRefusingStorage{memoryStorage: memoryStorage{room: domain.NewAccountStorage()}, t: t}
+	rt.ConfigureStorage(authority)
+	use := wire.NewWriter(3).U8(25).U16(item.TypeFlags()).Payload()
+	if out := rt.HandleItemUse(testDivision, c, use); out.Frames[0].Payload[0] != wire.ResultSuccess {
+		t.Fatalf("addition = %+v / %q", out.Frames, out.DiagnosticRefusal)
+	}
+	if authority.room.Capacity != domain.StorageDefaultCapacity+30 || authority.room.ExpansionUses != 1 {
+		t.Fatalf("room = %+v", authority.room)
+	}
+}
+
+/*
+================
 TestWarehouseAdditionStoreErrorKeepsTheItem
 
 The growth itself fails to commit: the item stays in the bag and the
