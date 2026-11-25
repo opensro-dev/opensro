@@ -36,4 +36,8 @@ export interface TitleInteraction {
 	// A login request is in flight: the account and password edits are locked.
 	// Other pending work (a server-list refresh) leaves them editable.
 	credentialsLocked?: boolean;
+	// Port-only, not native (#3925): the maintenance notice line for the
+	// login and server-list screens, while the Experimental row is on and
+	// a maintenance runs. Absent is the native title.
+	notice?: string;
 }

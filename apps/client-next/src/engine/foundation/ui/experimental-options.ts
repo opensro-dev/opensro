@@ -295,6 +295,11 @@ export interface ExperimentalOptions {
 	// honor entry and the window never opens. The server sides it with
 	// SRO_JOB_HONOR; with that off nothing is ever sent.
 	readonly jobHonor: boolean;
+	// Port-only, not native (#3925): the login and server-list screens
+	// show the running maintenance from the public schedule feed (#3520)
+	// as one notice line. Off by default; off, the title never reads the
+	// feed and shows the native screens exactly.
+	readonly maintenanceNotice: boolean;
 }
 
 /*
@@ -530,7 +535,8 @@ export function experimentalOptions( value: unknown = null ): ExperimentalOption
 		mallCategories: enabled( "mallCategories" ),
 		sroMacro: record.sroMacro !== false,
 		eventCalendar: enabled( "eventCalendar" ),
-		jobHonor: enabled( "jobHonor" )
+		jobHonor: enabled( "jobHonor" ),
+		maintenanceNotice: enabled( "maintenanceNotice" )
 	};
 }
 

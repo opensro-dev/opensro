@@ -84,6 +84,8 @@ import {
 	AVATAR_STORAGE_SLOTS,
 	avatarSocket,
 	isAvatarItem,
+	isDormantSpirit,
+	isSpiritItem,
 	SPIRIT_SLOT,
 	SPIRIT_SOCKET
 } from "@/engine/foundation/gameplay/avatar-socket";
@@ -279,6 +281,7 @@ import {
 import { fitUiGroup } from "@/engine/foundation/ui/layout";
 import { createExperimentalHud, experimentalRows, experimentalTabs } from "./hud/experimental-hud";
 import { createEventCalendarHud } from "./hud/event-calendar-hud";
+import { createMaintenanceNoticeHud } from "./hud/maintenance-notice-hud";
 import { createJobHonorHud } from "./hud/job-honor-hud";
 import {
 	JOB_HONOR_HEIGHT,
@@ -1495,6 +1498,8 @@ export function createUi( ports: UiPorts ) {
 	const experimental = createExperimentalHud();
 	// Port-only, not native (#3532): the Event Calendar's feed state.
 	const eventCalendar = createEventCalendarHud();
+	// Port-only (#3925): the title screens' maintenance notice feed.
+	const maintenanceHud = createMaintenanceNoticeHud();
 	// Port-only, not native (#3530): the Job Honor Rank window's state.
 	const jobHonor = createJobHonorHud();
 	// Port-only, not native (#3648): the Styria Clash windows' state,
@@ -2993,6 +2998,15 @@ export function createUi( ports: UiPorts ) {
 			avatars = game.avatarInventory ?? [],
 			item = (equip ? bag : avatars).find( i => i.slot === source );
 		if ( !item || !isAvatarItem( item.typeFlags ) ) return;
+		// Port-only (SRO_NASRUN, #4364): a Spirit arrives dormant and the
+		// server wears only an awake one, so an equip gesture on a dormant
+		// Spirit sends the use that wakes it (the v1.188 server's 3/1/14/1
+		// use path); the next gesture wears it. Inference: the later
+		// clients wake it the same way, by using it from the bag.
+		if ( equip && isDormantSpirit( item.typeFlags, item.durability ) ) {
+			useInventorySlot( item.slot );
+			return;
+		}
 		const socket = avatarSocket( item.typeFlags );
 		if ( equip ) {
 			if ( avatars.some( i => avatarSocket( i.typeFlags ) === socket ) ) {
@@ -12951,6 +12965,11 @@ export function createUi( ports: UiPorts ) {
 			const worldVisible = (phase === "world" || retainedWorld) && !loading && next.worldReady &&
 				(!next.frontend || next.frontend.phase === "world");
 			worldShown = worldVisible;
+			// Port-only (#3925): the maintenance notice reads the schedule
+			// only while the title screens are up and its row is on.
+			const noticeOn = experimental.state().saved.maintenanceNotice;
+			maintenanceHud.frame( apiBase, now, noticeOn && !worldVisible );
+			const maintenanceLine = noticeOn ? maintenanceHud.notice() ?? undefined : undefined;
 			if ( !(phase === "world" || retainedWorld) ) windowWarm.reset();
 			// One unseen window build per idle frame; see window-warm.ts.
 			const warming = windowWarm.begin(
@@ -12998,7 +13017,8 @@ export function createUi( ports: UiPorts ) {
 							offset: serverOffset,
 							now,
 							message: error,
-							credentialsLocked: loginReplyPending || phase === "authenticating"
+							credentialsLocked: loginReplyPending || phase === "authenticating",
+							notice: maintenanceLine
 						},
 						roster,
 						selectedCharacter
@@ -13030,7 +13050,8 @@ export function createUi( ports: UiPorts ) {
 						offset: serverOffset,
 						now,
 						message: error,
-						credentialsLocked: loginReplyPending || phase === "authenticating"
+						credentialsLocked: loginReplyPending || phase === "authenticating",
+						notice: maintenanceLine
 					},
 					roster,
 					selectedCharacter
@@ -17232,13 +17253,17 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 						const sockets = Object.values( equipment ).filter( n => n.id >= 113 && n.id <= 116 )
 							.sort( ( a, b ) => a.id - b.id )
 							.map( node => ({ type: node.id - 112, r: authoredRect( node, ex, ey ) }) );
-						// Port-only, not native (SRO_NASRUN, #3456): a worn Devil's Spirit
-						// gets a fifth socket one socket pitch past the flag's. The
-						// v1.150 layout has no node for it; only a server with the
-						// switch on stores a Spirit, so a native shard draws four.
+						// Port-only, not native (SRO_NASRUN, #3456): a Devil's Spirit,
+						// worn or carried, gets a fifth socket one socket pitch past
+						// the flag's, so a player holding one sees where it goes
+						// (#4364). The v1.150 layout has no node for it; only a
+						// server with the switch on grants a Spirit, so a native
+						// shard draws four.
 						if (
-							sockets.length === 4 &&
-							game?.avatarInventory?.some( i => avatarSocket( i.typeFlags ) === SPIRIT_SOCKET )
+							sockets.length === 4 && (
+								game?.avatarInventory?.some( i => isSpiritItem( i.typeFlags ) ) ||
+								game?.inventory.some( i => isSpiritItem( i.typeFlags ) )
+							)
 						) {
 							const third = sockets[2]!, fourth = sockets[3]!;
 							sockets.push( {

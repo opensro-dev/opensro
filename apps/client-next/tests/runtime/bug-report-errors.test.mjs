@@ -502,6 +502,59 @@ test("an error our code builds files its class name, never its text", t => {
 	assert.deepEqual( filed[0]?.frames, [ "    at /src/stall.ts:10:5" ] );
 });
 
+test("an overflow with no page frame files its frames' location classes, never their names or URLs", t => {
+	// 2026-11-25: seven live stack overflows filed with no frame at all.
+	const { page, filed } = incidentPage( t );
+	const deep = Array.from( { length: 6 }, () => "    at secretWalk (chrome-extension://abcdef/inject.js:3:9)" );
+	const error = new RangeError( "Maximum call stack size exceeded" );
+	error.stack = [
+		"RangeError: Maximum call stack size exceeded",
+		...deep,
+		"    at evalPlayerName (<anonymous>:1:168)",
+		"    at Array.map (<anonymous>)",
+		`    at step (blob:${ORIGIN}/0f3c-11aa:9:8)`,
+		"    at lure (https://elsewhere.example/assets/index-abc.js:5:6)"
+	].join( "\n" );
+	throwNow( page, error );
+	assert.deepEqual( filed, [ {
+		message: "RangeError: Maximum call stack size exceeded",
+		frames: [
+			"    at <extension> x6",
+			"    at <anonymous>",
+			"    at <native>",
+			"    at <blob>",
+			"    at <other-origin>"
+		]
+	} ] );
+	const text = JSON.stringify( page.journal.since( 0 ) );
+	for ( const secret of [ "secretWalk", "abcdef", "evalPlayerName", "elsewhere", "0f3c" ] ) {
+		assert.ok( !JSON.stringify( filed ).includes( secret ), `the incident carried ${secret}` );
+	}
+	assert.ok( !text.includes( "<extension>" ), "the journal's own events gained the incident-only classes" );
+});
+
+test("an overflow with a page frame files only the page frames", t => {
+	const { page, filed } = incidentPage( t );
+	const error = new RangeError( "Maximum call stack size exceeded" );
+	error.stack =
+		"RangeError: Maximum call stack size exceeded\n    at secretWalk (chrome-extension://abcdef/inject.js:3:9)\n" +
+		`    at stallBuy (${ORIGIN}/src/stall.ts:10:5)`;
+	throwNow( page, error );
+	assert.deepEqual( filed[0]?.frames, [ "    at /src/stall.ts:10:5" ] );
+});
+
+test("the journal keeps sixty-four frames per error while it listens, and restores the limit after", t => {
+	const before = Error.stackTraceLimit;
+	Error.stackTraceLimit = 10;
+	t.after( () => {
+		Error.stackTraceLimit = before;
+	} );
+	const page = installPage( t, {} );
+	assert.equal( Error.stackTraceLimit, 64 );
+	page.journal.dispose();
+	assert.equal( Error.stackTraceLimit, 10 );
+});
+
 test("a rejected non-error files as a rejection with no frames", t => {
 	const { page, filed } = incidentPage( t );
 	const event = new Event( "unhandledrejection" );

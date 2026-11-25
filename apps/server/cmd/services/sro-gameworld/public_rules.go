@@ -65,6 +65,7 @@ var unlistedSettings = map[string]string{
 	simulation.EnvBetaUniqueRespawn:       "unique monster spawn timing is not published",
 	simulation.EnvJanganCaveRespawn:       "spawn timing is not published",
 	"SRO_MAINTENANCE_MESSAGE":             "the refusal code during a release window, not a rule players meet",
+	"SRO_COMING_SOON_SHARDS":              "coming-soon shards on the title server list, not a rule players meet",
 	contributor.EnvContributorTitles:      "a title over Discord contributors' names, not a rule players meet",
 	companion.EnvPetInventoryPages:        "the older shared value the grab pet and transport bag rules fall back to",
 	// The tunables a rule's own text shows (game/tunables).

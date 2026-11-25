@@ -55,6 +55,7 @@ export function createFrontendFixture(
 						nativeServerId: 1,
 						nativeFarmId: 1,
 						isTest: true,
+						comingSoon: false,
 						operating: true,
 						transportUrl: ""
 					},
@@ -66,6 +67,7 @@ export function createFrontendFixture(
 						nativeServerId: 2,
 						nativeFarmId: 1,
 						isTest: true,
+						comingSoon: false,
 						operating: true,
 						transportUrl: ""
 					},
@@ -77,6 +79,7 @@ export function createFrontendFixture(
 						nativeServerId: 3,
 						nativeFarmId: 1,
 						isTest: true,
+						comingSoon: false,
 						operating: false,
 						transportUrl: ""
 					}

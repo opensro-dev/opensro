@@ -296,6 +296,30 @@ func TestNomadJobsShareOneMaintenanceMessage(t *testing.T) {
 
 /*
 ================
+TestNomadAgentComingSoonShards
+
+Port-only (#3925): the one shard setting fills the Agent job's
+coming_soon_shards variable - the Agent lists announced-but-unopened
+shards as coming soon - at its native default when the deployer names
+nothing. Only the Agent reads it; the GameWorld has no list to mark.
+================
+*/
+func TestNomadAgentComingSoonShards(t *testing.T) {
+	for _, value := range []string{"on", ""} {
+		t.Setenv("SRO_COMING_SOON_SHARDS", value)
+		want := value
+		if want == "" {
+			want = "off"
+		}
+		deployment := &deployment{PortOnly: portOnlySettingsFromEnv()}
+		if got := deployment.agentVariables()["coming_soon_shards"]; got != want {
+			t.Fatalf("SRO_COMING_SOON_SHARDS=%q: Agent coming_soon_shards = %#v, want %q", value, got, want)
+		}
+	}
+}
+
+/*
+================
 TestAgentVariablesAreAllDeclaredInTheJob
 
 sro-nomad hands agentVariables() to Nomad's job-parse API; a key the

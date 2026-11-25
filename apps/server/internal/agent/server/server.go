@@ -125,6 +125,11 @@ type Config struct {
 	// MaintenanceGatePath is the maintenance release gate (agentapi
 	// .EnvMaintenanceGate); empty means no window can be open.
 	MaintenanceGatePath string
+	// ComingSoonShards lists announced-but-unopened (disabled) catalog
+	// shards on the title server list (SRO_COMING_SOON_SHARDS, #3925).
+	// Port-only, not native: off is the native list; see
+	// agentapi.EnvComingSoonShards.
+	ComingSoonShards bool
 	// BugReports is nil when the operator has not configured bug reports.
 	BugReports *bugreport.Service
 	// BcryptCost is the cost of the unknown-account refusal and of the hashes
@@ -175,7 +180,9 @@ type Server struct {
 	// maintenanceMessage and maintenanceGatePath mirror Config.
 	maintenanceMessage  bool
 	maintenanceGatePath string
-	bugReports          *bugreport.Service
+	// comingSoonShards mirrors Config.
+	comingSoonShards bool
+	bugReports       *bugreport.Service
 	// startedAt is when this Agent was built, for /title/build's uptime.
 	startedAt        time.Time
 	revokedMu        sync.Mutex
@@ -270,6 +277,7 @@ func New(config Config) (*Server, error) {
 		readiness:               config.Readiness,
 		maintenanceMessage:      config.MaintenanceMessage,
 		maintenanceGatePath:     config.MaintenanceGatePath,
+		comingSoonShards:        config.ComingSoonShards,
 		bugReports:              config.BugReports,
 		startedAt:               now(),
 		revokedNonces:           make(map[string]time.Time),

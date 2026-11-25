@@ -82,6 +82,15 @@ const (
 	// MAINTENANCE the gate answered before this switch existed; on
 	// answers MAINTENANCE so the client can explain the refusal.
 	EnvMaintenanceMessage = "SRO_MAINTENANCE_MESSAGE"
+
+	// EnvComingSoonShards lists announced-but-unopened shards on the
+	// title server list (internal/agent/server). Port-only, not native
+	// (the original lists only shards that exist to enter): off is the
+	// native list, where a shard the operator has not opened is not a
+	// row at all; on, a disabled catalog shard also lists, marked coming
+	// soon and carrying no transport URL, so it can be shown but never
+	// entered (#3925).
+	EnvComingSoonShards = "SRO_COMING_SOON_SHARDS"
 )
 
 /*
@@ -96,6 +105,21 @@ must keep meaning what it meant.
 */
 func MaintenanceMessageFromEnv() bool {
 	switch strings.ToLower(strings.TrimSpace(os.Getenv(EnvMaintenanceMessage))) {
+	case "on", "1", "true":
+		return true
+	}
+	return false
+}
+
+/*
+================
+ComingSoonShardsFromEnv
+
+The EnvComingSoonShards switch as the Agent reads it.
+================
+*/
+func ComingSoonShardsFromEnv() bool {
+	switch strings.ToLower(strings.TrimSpace(os.Getenv(EnvComingSoonShards))) {
 	case "on", "1", "true":
 		return true
 	}
