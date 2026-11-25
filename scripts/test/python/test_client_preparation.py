@@ -177,9 +177,21 @@ REPO_ROOT = Path(__file__).resolve().parents[3]
 EXTRACTED_FOLDERS = ("Media_extracted", "Data_extracted", "Map_extracted", "Particles_extracted", "Music_mp3")
 
 
-def run_doctor(game_root):
-	env = dict(os.environ, SRO_GAME_ROOT=str(game_root))
+LATER_SOURCES = ("SRO_VSRO_ROOT", "SRO_V1696_ROOT", "SRO_AVATARS_ZIP")
+
+
+def run_doctor(game_root, **later):
+	env = {k: v for k, v in os.environ.items() if k not in LATER_SOURCES}
+	env.update(later, SRO_GAME_ROOT=str(game_root))
 	return subprocess.run(["node", "scripts/assets_doctor.mjs"], cwd=REPO_ROOT, env=env, capture_output=True, text=True)
+
+
+def complete_root(root):
+	for name in ("SRO_Client.exe", "Particles.pk2"):
+		(Path(root) / name).write_bytes(b"x")
+	for folder in EXTRACTED_FOLDERS:
+		(Path(root) / "extracted" / folder).mkdir(parents=True)
+		(Path(root) / "extracted" / folder / "file").write_bytes(b"x")
 
 
 class DoctorTests(unittest.TestCase):
@@ -194,14 +206,29 @@ class DoctorTests(unittest.TestCase):
 
 	def test_a_complete_root_passes_the_build_inputs(self):
 		with tempfile.TemporaryDirectory() as root:
-			for name in ("SRO_Client.exe", "Particles.pk2"):
-				(Path(root) / name).write_bytes(b"x")
-			for folder in EXTRACTED_FOLDERS:
-				(Path(root) / "extracted" / folder).mkdir(parents=True)
-				(Path(root) / "extracted" / folder / "file").write_bytes(b"x")
+			complete_root(root)
 			result = run_doctor(root)
 			self.assertRegex(result.stdout, r"ok\s+build inputs")
 			self.assertNotIn("build input  ", result.stdout.replace("build inputs", ""))
+
+	def test_a_v1150_client_alone_is_ready_and_names_each_later_source(self):
+		# #4466: a contributor with only a v1.150 client was told nothing
+		# about the later sources; each now shows, with what it adds.
+		with tempfile.TemporaryDirectory() as root:
+			complete_root(root)
+			result = run_doctor(root)
+			for name in LATER_SOURCES:
+				self.assertRegex(result.stdout, rf"warn\s+{name}\s+not set: no ")
+			self.assertNotRegex(result.stdout, r"FAIL\s+SRO_")
+
+	def test_a_named_later_source_without_its_archive_fails(self):
+		with tempfile.TemporaryDirectory() as root, tempfile.TemporaryDirectory() as later:
+			complete_root(root)
+			result = run_doctor(root, SRO_V1696_ROOT=later)
+			self.assertEqual(result.returncode, 1)
+			self.assertRegex(result.stdout, r"FAIL\s+SRO_V1696_ROOT\s+.*Media\.pk2 is missing")
+			(Path(later) / "Media.pk2").write_bytes(b"x")
+			self.assertRegex(run_doctor(root, SRO_V1696_ROOT=later).stdout, r"ok\s+SRO_V1696_ROOT")
 
 	def test_an_empty_folder_counts_as_missing(self):
 		with tempfile.TemporaryDirectory() as root:

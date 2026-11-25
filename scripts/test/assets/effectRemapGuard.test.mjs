@@ -12,8 +12,50 @@ another alias, which the client would reject whole.
 import assert from "node:assert/strict";
 import path from "node:path";
 import { test } from "node:test";
-import { aliasBasicOriginals, buildEffectRecordTable, loadSkillDataRows } from "../../build/char/parseSkillEffect.mjs";
+import {
+	aliasBasicOriginals,
+	buildEffectRecordTable,
+	HWAN_EFFECTS_WITHOUT_SERVICE,
+	loadSkillDataRows
+} from "../../build/char/parseSkillEffect.mjs";
 import { clientV150ResinfoRoot, extractedRoot, retailTextdataRoot } from "../../build/world/paths.mjs";
+
+// The Blue Berserk records stand only while the shard runs the cap-110
+// expansion (levelCap.mjs cap110ExpansionEnabled, #4466).
+const EXPANSION = { SRO_LEVEL_CAP: "110", SRO_CAP110_ITEMS: "on" };
+const NATIVE_CAP = { SRO_LEVEL_CAP: "90", SRO_CAP110_ITEMS: "on" };
+
+/*
+================
+withEnv
+================
+*/
+function withEnv( values, run ) {
+	const saved = Object.fromEntries( Object.keys( values ).map( key => [ key, process.env[key] ] ) );
+	Object.assign( process.env, values );
+	try {
+		return run();
+	} finally {
+		for ( const [key, value] of Object.entries( saved ) ) {
+			if ( value === undefined ) delete process.env[key];
+			else process.env[key] = value;
+		}
+	}
+}
+
+/*
+================
+retailRecordTable
+================
+*/
+function retailRecordTable() {
+	return buildEffectRecordTable(
+		retailTextdataRoot,
+		path.join( retailTextdataRoot, "skilleffect.txt" ),
+		path.join( extractedRoot, "Data_extracted", "prim", "snd" ),
+		path.join( clientV150ResinfoRoot, "skilleffect.txt" )
+	);
+}
 
 test("a row whose Basic_Original has a record draws through it", () => {
 	const table = { 1: { stages: [] } };
@@ -53,24 +95,22 @@ test("the shipped table aliases a pet's levelled attack to its original, one ste
 	assert.equal( table[wolf.originalId]?.remapOf, undefined, "the original is a record, not an alias" );
 });
 
-test("the 2nd Hwan body record ships although its Service column is 0", () => {
-	const { namedTable } = buildEffectRecordTable(
-		retailTextdataRoot,
-		path.join( retailTextdataRoot, "skilleffect.txt" ),
-		path.join( extractedRoot, "Data_extracted", "prim", "snd" ),
-		path.join( clientV150ResinfoRoot, "skilleffect.txt" )
-	);
+test("the 2nd Hwan body record ships with the cap-110 expansion although its Service column is 0", () => {
+	const { namedTable } = withEnv( EXPANSION, retailRecordTable );
 	assert.equal( namedTable.SYSTEM_CH_HWAN2MODE?.damageEffectPath, "hiteffect/hit_4_hwan2mode.efp" );
 	assert.ok( namedTable.SYSTEM_CH_HWANMODE, "the first Hwan record is unchanged" );
 });
 
-test("the Niya General spirit trap draws its ground model although its Service column is 0", () => {
-	const { table, namedTable } = buildEffectRecordTable(
-		retailTextdataRoot,
-		path.join( retailTextdataRoot, "skilleffect.txt" ),
-		path.join( extractedRoot, "Data_extracted", "prim", "snd" ),
-		path.join( clientV150ResinfoRoot, "skilleffect.txt" )
-	);
+test("a native-cap shard keeps the Blue Berserk records out, as the native Service gate does", () => {
+	// Their effects (system_hwan2_*.efp) are absent from the v1.150
+	// Particles.pk2: admitted here they failed the build's effect closure.
+	const { namedTable } = withEnv( NATIVE_CAP, retailRecordTable );
+	for ( const name of HWAN_EFFECTS_WITHOUT_SERVICE ) assert.equal( namedTable[name], undefined, name );
+	assert.ok( namedTable.SYSTEM_CH_HWANMODE, "the first Hwan record is unchanged" );
+});
+
+test("the Niya General spirit trap draws its ground model with the expansion although its Service column is 0", () => {
+	const { table, namedTable } = withEnv( EXPANSION, retailRecordTable );
 	for (
 		const name of [ "SKILL_QNO_CH_HWAN_1_4_04_01", "SKILL_QNO_CH_WHAN_2_1_01_01", "SKILL_QNO_EU_WHAN_2_1_01_01" ]
 	) {

@@ -124,6 +124,7 @@ import {
 import { questGuideRecords } from "../shared/questGuideRecords.mjs";
 import { completeGuideTitles } from "../shared/textResources.mjs";
 import { completedEnglish, isPlaceholderText } from "../shared/englishCompletions.mjs";
+import { configuredLevelCap } from "../shared/levelCap.mjs";
 
 import { extractedRoot, gameRoot, publicRoot } from "../world/paths.mjs";
 
@@ -182,16 +183,9 @@ const CONTENTS_COUNTRY_COLUMN = 2;
 const CONTENTS_PROGRESS_CLEAR_COLUMN = 13;
 
 // The guide publishes quests up to the shard's configured cap
-// (SRO_LEVEL_CAP, read with the server's own vocabulary -
-// progression.LevelCapFromEnv): unset keeps the native 90, so the
-// v1.150 build's output is unchanged; 110 admits the expansion's rows
-// when a variant build supplies them (#1749).
-function configuredGuideLevelCap() {
-	const value = (process.env.SRO_LEVEL_CAP ?? "").trim().toLowerCase();
-	if ( value === "" || value === "0" || value === "off" || value === "false" || value === "90" ) return 90;
-	if ( value === "110" ) return 110;
-	throw new Error( `[questdata] SRO_LEVEL_CAP must be off, 90 or 110, not ${JSON.stringify( value )}` );
-}
+// (levelCap.mjs, the server's own vocabulary): the native 90 keeps the
+// v1.150 build's output unchanged; 110 admits the expansion's rows when
+// a variant build supplies them (#1749).
 
 export function buildQuestDataAsset() {
 	for (
@@ -489,7 +483,7 @@ export function buildQuestDataAsset() {
 	// Untranslated region-group titles ship as literal "0"/empty English cells
 	// (verified in raw texthelp.txt); completed from the shared attested map.
 	completeGuideTitles( guideTextEntries );
-	const guideLevelCap = configuredGuideLevelCap();
+	const guideLevelCap = configuredLevelCap();
 	const catalog = {
 		sourcePaths: [
 			questDataPath,

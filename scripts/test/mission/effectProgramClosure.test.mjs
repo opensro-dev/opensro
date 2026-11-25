@@ -12,6 +12,7 @@ import {
 } from "../../build/char/parseSkillEffect.mjs";
 import { gameRoot, retailTextdataRoot } from "../../build/world/paths.mjs";
 import { isQinShiTombSkillEffectName, qinshiTombEnabled } from "../../build/shared/qinshiTomb.mjs";
+import { cap110ExpansionEnabled } from "../../build/shared/levelCap.mjs";
 import { readPublishedAssetJson } from "../../lib/publishedAsset.mjs";
 import { readEffectCatalogSync, readEffectIndexSync } from "../../lib/effectCatalog.mjs";
 
@@ -125,11 +126,12 @@ test("skillaniset2 Service=0 authoring rows never cross into runtime records", a
 	// skillaniset2 rows with Service=0, and parseSkillAniSet admits exactly
 	// that family when SRO_QINSHI_TOMB is on (parseSkillEffect.mjs:268-275).
 	// The Blue Berserk rows (HWAN_EFFECTS_WITHOUT_SERVICE, port-only, #3869)
-	// cross always. Those rows cross on purpose; every other disabled row
-	// stays gated.
+	// cross while the shard runs the cap-110 expansion (#4466). Those rows
+	// cross on purpose; every other disabled row stays gated.
 	const carvedOut = name => HWAN_EFFECTS_WITHOUT_SERVICE.has( name ) || isQinShiTombSkillEffectName( name );
 	const admittedFamily = [ ...disabledNames ].filter( ( name ) =>
-		HWAN_EFFECTS_WITHOUT_SERVICE.has( name ) || qinshiTombEnabled() && isQinShiTombSkillEffectName( name )
+		HWAN_EFFECTS_WITHOUT_SERVICE.has( name ) && cap110ExpansionEnabled() ||
+		qinshiTombEnabled() && isQinShiTombSkillEffectName( name )
 	).sort();
 	for ( const name of disabledNames ) {
 		if ( carvedOut( name ) ) continue;

@@ -151,6 +151,34 @@ class RigidAuthoredTextsTest(unittest.TestCase):
 
 
 # ================
+# RigidKindNamesTest
+#
+# The three kinds v1.696 names in Korean only take their English from
+# this layer's staged rows, never from the retail completion catalog:
+# a catalog key the tree lacks failed every build without the v1.696
+# client (#4466).
+# ================
+class RigidKindNamesTest(unittest.TestCase):
+	def test_a_placeholder_english_cell_takes_the_layer_name(self):
+		texts = [["1", "SN_MOB_AM_IVY_L2", "금강급", "", "", "", "", "", "0", "", ""],
+			["1", "SN_MOB_EU_KERBEROS_L2", "태백급", "", "", "", "", "", "Shipped", "", ""],
+			["1", "SN_OTHER", "x", "", "", "", "", "", "", "", ""]]
+		rigid.later_world_import.fill_layer_english(texts, rigid.KIND_NAMES)
+		english = rigid.later_world_import.NAME_ENGLISH
+		self.assertEqual(texts[0][english], rigid.KIND_NAMES["SN_MOB_AM_IVY_L2"])
+		self.assertEqual(texts[1][english], "Shipped", "a shipped translation stays")
+		self.assertEqual(texts[2][english], "", "a symbol the layer does not name is untouched")
+
+	def test_every_name_is_a_staged_kind_and_none_is_in_the_retail_catalog(self):
+		self.assertEqual(set(rigid.KIND_NAMES), {"SN_" + code for code in rigid.KINDS} - {"SN_MOB_TQ_BLACKSNAKE_L3"})
+		catalog = json.loads((Path(rigid.__file__).parent / "build" / "shared" / "englishCompletions" / "textdataname.json")
+			.read_text(encoding="utf-8"))
+		self.assertEqual(set(rigid.KIND_NAMES) & set(catalog), set())
+		for name in rigid.KIND_NAMES.values():
+			self.assertRegex(name, r"^[A-Za-z][A-Za-z -]+$")
+
+
+# ================
 # RigidItemStagingTest
 # ================
 class RigidItemStagingTest(unittest.TestCase):

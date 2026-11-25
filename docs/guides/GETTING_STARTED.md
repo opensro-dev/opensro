@@ -93,6 +93,29 @@ The results land in the ignored `.generated/` folder: browser assets in
 `.generated/client-public/assets/`, the server projection in
 `.generated/game-data/1.150/`. See [ASSET_PIPELINE.md](../architecture/ASSET_PIPELINE.md).
 
+### Later content (optional)
+
+A v1.150 client alone builds the native game, and every later layer skips
+without its source. The shard's later content comes from three more sources,
+each named by a variable. `assets doctor` lists each one, and says what a build
+without it leaves out:
+
+| Variable | What it names | Pin | Without it |
+| --- | --- | --- | --- |
+| `SRO_VSRO_ROOT` | a VSRO client folder (its five `.pk2` archives) | `scripts/vsro_archive_pins.json` | no Alexandria, later dungeon maps, tomb minimap or world-map buttons |
+| `SRO_V1696_ROOT` | a v1.696 client folder (its five `.pk2` archives) | `scripts/v1696_archive_pins.json` | no v1.696 worlds, Rigid scrolls, later mall goods or map and macro guides |
+| `SRO_AVATARS_ZIP` | the packed later-avatar archive (`scripts/pack_avatars.py`) | `scripts/avatars_archive_pins.json` | no later mall avatars |
+
+Each source is checked against its pin before anything is read, and a
+different file fails the build. The archives are never committed.
+
+The release's second game root, the variant
+([ASSET_PIPELINE.md](../architecture/ASSET_PIPELINE.md#alexandria-port-only-not-native)),
+also reads the later worlds' population exports (`SRO_ARABIA_NESTS`,
+`SRO_<WORLD>_DATABASE`). These are the maintainers' extractions from a pinned
+ISRO-R shard backup. They aren't in the repository, and the plain build above
+doesn't need them.
+
 This prepares data for the browser client and the Go server. The original
 `SRO_Client.exe` does not connect to this server: the server speaks to
 browsers over WebTransport/WebSocket.
