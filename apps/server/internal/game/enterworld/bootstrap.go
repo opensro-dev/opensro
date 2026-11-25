@@ -358,6 +358,7 @@ func buildCharacterProjection(deps *Deps, divisionID string, character *Characte
 	if deps.TrainingCamps != nil {
 		_, academyMember = deps.TrainingCamps.CampOfCharacter(divisionID, character.ID)
 	}
+	spiritSkills := entrySpiritSkills(deps, divisionID, character)
 	return &BootstrapResult{
 		NativeResult:            nativeResultSuccess,
 		DivisionID:              divisionID,
@@ -366,8 +367,8 @@ func buildCharacterProjection(deps *Deps, divisionID string, character *Characte
 		EventGuideStateMask:     eventGuideStateMask,
 		RefObjSnapshot:          refObjSnapshot,
 		RefSkillSnapshot:        skillSnapshot,
-		SpiritSkills:            entrySpiritSkills(deps, divisionID, character),
-		SkillCooldowns:          entrySkillCooldowns(deps, character),
+		SpiritSkills:            spiritSkills,
+		SkillCooldowns:          entrySkillCooldowns(deps, character, spiritSkills),
 		ItemCooldowns:           entryItemCooldowns(deps, character),
 		RefItemSnapshot:         buildRefItemSnapshot(deps, divisionID, character),
 		MagicOptionSnapshot:     buildMagicOptionSnapshot(deps, character),

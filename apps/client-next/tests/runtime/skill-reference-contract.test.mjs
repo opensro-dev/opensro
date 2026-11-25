@@ -273,3 +273,15 @@ test("Reference Skill 7543 (Bash): Cadence, blend, duration override & interrupt
 	layers = locomotionLayers( locomotion, 1.25 );
 	assert.equal( layers.some( l => l.clip === "knockdown" ), true, "Must interrupt and transition to knockdown" );
 });
+
+test("Devil's Spirit transformation (#4407): the later avatar_nasrun sets resolve their own clips", () => {
+	// Port-only keys continue the native stride (animationSetNames.ts LATER_ANIMATION_SET_KEY_BY_NAME).
+	const nasrun1 = SKILL_MOTION_DEFAULT_SET_KEY + 13 * 28;
+	assert.equal( skillMotionRole( nasrun1, "ANI_READY01" ), "native:avatar_nasrun1:40" );
+	assert.equal( skillMotionRole( nasrun1, "ANI_SHOT" ), "native:avatar_nasrun1:191" );
+	assert.equal( skillMotionRole( SKILL_MOTION_DEFAULT_SET_KEY + 15 * 28, "ANI_SHOT" ), "native:avatar_nasrun3:191" );
+	assert.throws(
+		() => skillMotionRole( SKILL_MOTION_DEFAULT_SET_KEY + 16 * 28, "ANI_SHOT" ),
+		/Unknown skill animation set/
+	);
+});

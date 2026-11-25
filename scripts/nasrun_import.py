@@ -46,9 +46,12 @@ resources stay, as the other imports leave theirs: no row names them.
 import json
 from contextlib import ExitStack
 import os
+import re
+import shutil
 from pathlib import Path
 
 import alexandria_npcs as text_tables
+import avatar_effects as avatar_fx
 import cap110_item_import as shared
 import cap110_items as items
 import cap110_monsters as cap110
@@ -178,7 +181,7 @@ def select_rows(later_rows):
 def strip_texts(path, keys):
 	if not keys or not path.exists():
 		return
-	lines = tables.decode_table(path.read_bytes()).lstrip("﻿").splitlines(keepends=True)
+	lines = tables.decode_table(path.read_bytes()).lstrip("\ufeff").splitlines(keepends=True)
 	kept = [line for line in lines if not (len(line.split("\t")) > 1 and line.split("\t")[1] in keys)]
 	if len(kept) != len(lines):
 		write_atomically(path, b"\xff\xfe" + "".join(kept).encode("utf-16-le"))
@@ -363,12 +366,115 @@ def remove_skills(output, prior, marker, shard, manifest):
 	strip_texts(safe_target(output / TEXT_ROOT, NAME_TABLE), set(prior.get("texts", [])))
 	if shard.exists():
 		shard.unlink()
+	safe_target(output / TEXT_ROOT, VISUAL_CHANGE_TABLE).unlink(missing_ok=True)
+	shutil.rmtree(safe_target(output, LATER_BSR_DIR), ignore_errors=True)
+	effect_path = safe_target(output / TEXT_ROOT, SKILL_EFFECT_TABLE)
+	if effect_path.exists() and prior.get("effectKeys"):
+		text, _ = merge_skill_effects(tables.decode_table(effect_path.read_bytes()), "", set(), set(prior["effectKeys"]))
+		write_atomically(effect_path, b"\xff\xfe" + text.lstrip("\ufeff").encode("utf-16-le"))
 	if manifest.exists():
 		names = [row[0] for row in tables.table_rows(manifest.read_bytes()) if row]
 		kept = [name for name in names if sro_pk2.fold_ascii(name) != SKILL_SHARD]
 		if len(kept) != len(names):
 			write_atomically(manifest, cap110.encode_rows([[name] for name in kept]))
 	marker.unlink(missing_ok=True)
+
+
+# ================
+# effect_sections
+#
+# The table's lines grouped as [header, [(section, lines)]] with each
+# line's own ending kept.
+# ================
+def effect_sections(text):
+	header, sections = [], []
+	for line in text.splitlines(keepends=True):
+		if line.startswith("#section"):
+			sections.append((line.split("\t")[1].strip(), [line]))
+		elif sections:
+			sections[-1][1].append(line)
+		else:
+			header.append(line)
+	return header, sections
+
+
+# ================
+# effect_key
+#
+# The key a row of section names, or None for a comment or blank line.
+# ================
+def effect_key(section, line):
+	column = EFFECT_SECTIONS.get(section)
+	cells = line.rstrip("\r\n").split("\t")
+	if column is None or line.startswith("//") or len(cells) <= column:
+		return None
+	return cells[column].strip()
+
+
+# ================
+# merge_skill_effects
+#
+# The tree's skilleffect.txt with the previous pass's rows (by key) taken
+# out and later's rows of keys appended at the end of their sections.
+# ================
+def merge_skill_effects(tree_text, later_text, keys, previous):
+	header, sections = effect_sections(tree_text)
+	ending = "\r\n" if "\r\n" in tree_text else "\n"
+	_, later_sections = effect_sections(later_text)
+	added, efps = {name: [] for name in EFFECT_SECTIONS}, set()
+	for name, lines in later_sections:
+		if name not in EFFECT_SECTIONS:
+			continue
+		for line in lines[1:]:
+			if effect_key(name, line) not in keys:
+				continue
+			cells = line.rstrip("\r\n").split("\t")
+			if name == "skilleffectset":
+				efps.update(cell for cell in cells if cell.lower().endswith(".efp"))
+			added[name].append("\t".join(cells) + ending)
+	out = list(header)
+	for name, lines in sections:
+		kept = [line for line in lines if effect_key(name, line) not in previous]
+		if added.get(name):
+			if kept and not kept[-1].endswith(("\n", "\r")):
+				kept[-1] += ending
+			kept += added[name]
+		out += kept
+	missing = [name for name in EFFECT_SECTIONS if added[name] and name not in {n for n, _ in sections}]
+	if missing:
+		raise ValueError(f"the tree's skilleffect.txt has no {missing} section")
+	return "".join(out), sorted(efps)
+
+
+# ================
+# costume_effects
+#
+# The costume effect sets' steady loops (ACT_L / AT_LOOP) as worn-avatar
+# auras, by effect set key (avatar_effects.loop_effect), for the build to
+# hang on each costume's body piece. A row's character scale token
+# (SCT_CHAR_SCALE, the transformation's growth) is not a particle scale:
+# the particle keeps its own size. Returns ({key: [effect]}, refused).
+# ================
+def costume_effects(later_text, keys, has_particle):
+	_, sections = effect_sections(later_text)
+	effects, refused = {}, []
+	for name, lines in sections:
+		if name != "skilleffectset":
+			continue
+		for line in lines[1:]:
+			key = effect_key(name, line)
+			if key not in keys:
+				continue
+			# The VSRO row in the v1.150 layout, shifted to the later one
+			# avatar_effects reads (service and id columns first).
+			row = [avatar_fx.SERVICE_ON, "0"] + line.rstrip("\r\n").split("\t")
+			row += [avatar_fx.NO_VALUE] * max(0, avatar_fx.EFFECT_COLUMNS - len(row))
+			if row[avatar_fx.EFFECT_SCALE].startswith(CHAR_SCALE_TOKEN):
+				row[avatar_fx.EFFECT_SCALE] = avatar_fx.NO_VALUE
+			if row[avatar_fx.EFFECT_PHASE] != avatar_fx.LOOP_PHASE:
+				continue
+			avatar_fx.loop_effect_row(row, key, has_particle, effects, refused)
+	return effects, refused
 
 
 # ================
@@ -384,6 +490,66 @@ def remove_skills(output, prior, marker, shard, manifest):
 # The later clients' active-Spirit icon edge: a 512x32 sheet of sixteen
 # 32x32 cells (item-slot-effects.ts spiritActiveOverlay).
 SPIRIT_EDGE_SHEET = "icon/item/etc/icon_edge_nasrun.ddj"
+
+# The later clients' character visual change table (#4407): a lent skill's
+# buff (ConditionID 3, the skill codename in StrPram1) dresses its caster in
+# the Spirit's costume, one row per piece: its slot mask, priority,
+# animation set and male/female BSR. The v1.150 tree has no such table;
+# the import stages the lent skills' rows alone, as the client ships them.
+VISUAL_CHANGE_TABLE = "charactervisualchange.txt"
+VC_SERVICE, VC_SKILL, VC_AVATAR_EFFECT, VC_BSR_M, VC_BSR_F = 0, 9, 10, 19, 20
+
+# The lent skills' cast effects and their costume's looping auras (#4407):
+# the VSRO skilleffect.txt rows keyed by a lent skill (its skillaniset2 row
+# and its READY/SHOT effects) or by the costume's effect set
+# (AVATAR_MALL_NASRUN_*: ACT_S, ACT_L loops, DEACT), in the v1.150 layout.
+# They join the tree's table in their own sections.
+SKILL_EFFECT_TABLE = "skilleffect.txt"
+EFFECT_SECTIONS = {"skillaniset2": 2, "skilleffectset": 1}
+# A skilleffectset scale cell that grows the character, not the particle.
+CHAR_SCALE_TOKEN = "SCT_CHAR_SCALE"
+# The skill rows' animation group, AVATAR_NASRUN1, names a set the later
+# character BSRs author and the v1.150 ones lack: the transformation's
+# contraction (state 40) and explosive jump (state 191), then its stand,
+# run and wait. Those BSRs are staged beside the tree (LATER_BSR_DIR) for
+# the locomotion build to take the sets from (laterAnimationSets.mjs), and
+# their clips are copied into it.
+TRANSFORM_SETS = ("avatar_nasrun1", "avatar_nasrun2", "avatar_nasrun3")
+LATER_BODY_ROOT = "res/char/"
+LATER_BSR_DIR = ".opensro-nasrun-bsr"
+TRANSFORM_CLIP_ROOT = "prim/ani/avatar/nasrun"
+BAN_PATH = re.compile(rb"prim[\\/]ani[\\/][ -~]+?\.ban", re.IGNORECASE)
+TRANSFORM_EFFECT_PATH = re.compile(rb"system[\\/]avatar_nasrun[ -~]+?\.efp", re.IGNORECASE)
+
+
+# ================
+# later_bodies
+#
+# The later client's character BSRs that author the transformation sets,
+# for the bodies the tree has: {archive path: bytes}, and the Nasrun clips
+# and state-bound effects they play, as (archive, path) pairs. The builds
+# take only those sets from them (laterAnimationSets.mjs); every other
+# clip they name is the body's own.
+# ================
+def later_bodies(data, index, trees):
+	bodies, clips = {}, set()
+	for key, entry in index.items():
+		if not key.endswith(".bsr") or not key.startswith(LATER_BODY_ROOT):
+			continue
+		body = bytes(sro_pk2.payload(data, entry))
+		if TRANSFORM_SETS[0].encode() not in body:
+			continue
+		if not any((tree / shared.FOLDERS["Data"] / key).is_file() for tree in trees):
+			continue
+		bodies[key] = body
+		for match in BAN_PATH.findall(body):
+			clip = shared.normalized_path(match.decode("ascii"))
+			if clip.startswith(TRANSFORM_CLIP_ROOT):
+				clips.add(("Data", clip))
+		# The state-bound auras of those sets (ModDataParticle), keep03.
+		for match in TRANSFORM_EFFECT_PATH.findall(body):
+			clips.add(("Particles", shared.normalized_path(match.decode("ascii"))))
+	return bodies, clips
 
 
 def add_nasrun_skills(vsro_root, native, output):
@@ -446,8 +612,53 @@ def add_nasrun_skills(vsro_root, native, output):
 		# The worn, awake Spirit's icon edge (#4384): the later clients
 		# animate it over the Spirit's avatar socket (item-slot-effects.ts).
 		icons.add(("Media", SPIRIT_EDGE_SHEET))
+		# The lent skills' costume rows and the BSRs they name (#4407).
+		visual_text = read_later(VISUAL_CHANGE_TABLE) if tables.TEXTDATA + VISUAL_CHANGE_TABLE in index else b""
+		visual_rows = [row for row in tables.table_rows(visual_text)
+			if len(row) > VC_BSR_F and row[VC_SERVICE].strip() == "1" and row[VC_SKILL].strip() in SKILL_CODES]
+		for row in visual_rows:
+			for column in (VC_BSR_M, VC_BSR_F):
+				icons.add(("Data", shared.normalized_path(row[column])))
+		# Their cast effects and costume auras, and the effect files they play.
+		effect_keys = set(SKILL_CODES) | {row[VC_AVATAR_EFFECT].strip() for row in visual_rows} - {"xxx", ""}
+		# A tree or a later client without the table (the unit fixtures)
+		# stages no effect rows.
+		effect_path = safe_target(text_root, SKILL_EFFECT_TABLE)
+		native_effects = native / TEXT_ROOT / SKILL_EFFECT_TABLE
+		tree_effects = effect_path.read_bytes() if effect_path.exists() else (
+			native_effects.read_bytes() if native_effects.exists() else None)
+		merged_effects, efps = None, []
+		if tree_effects is not None and tables.TEXTDATA + SKILL_EFFECT_TABLE in index:
+			merged_effects, efps = merge_skill_effects(tables.decode_table(tree_effects),
+				tables.decode_table(read_later(SKILL_EFFECT_TABLE)), effect_keys, set(prior.get("effectKeys", [])))
+		for efp in efps:
+			icons.add(("Particles", "system/" + shared.normalized_path(efp)))
+		# The transformation's animation sets and clips.
+		bodies, clips = {}, set()
+		if merged_effects is not None and "Data" in archives:
+			data, data_index = archives["Data"]
+			bodies, clips = later_bodies(data, data_index, (output, native))
+		icons.update(clips)
 		assets = shared.copy_resource_closure(icons, native, output, archives)
+		# The costume's steady auras, its effect files now in the tree.
+		particles = (output / "Particles_extracted", native / "Particles_extracted")
+		worn, worn_refused = costume_effects(tables.decode_table(read_later(SKILL_EFFECT_TABLE)),
+			{row[VC_AVATAR_EFFECT].strip() for row in visual_rows},
+			lambda path: any((root / path).is_file() for root in particles)) if merged_effects is not None else ({}, [])
 	write_atomically(shard, cap110.encode_rows(staged))
+	if merged_effects is not None:
+		write_atomically(effect_path, b"\xff\xfe" + merged_effects.lstrip("\ufeff").encode("utf-16-le"))
+	visual_path = safe_target(text_root, VISUAL_CHANGE_TABLE)
+	if visual_rows:
+		write_atomically(visual_path, cap110.encode_rows(visual_rows))
+	else:
+		visual_path.unlink(missing_ok=True)
+	later_root = safe_target(output, LATER_BSR_DIR)
+	shutil.rmtree(later_root, ignore_errors=True)
+	for key, body in bodies.items():
+		target = safe_target(later_root, key)
+		target.parent.mkdir(parents=True, exist_ok=True)
+		write_atomically(target, body)
 	write_atomically(name_path, merged_names)
 	current = manifest.read_bytes() if manifest.exists() else (native / TEXT_ROOT / SKILL_MANIFEST).read_bytes()
 	names = [row[0] for row in tables.table_rows(current) if row]
@@ -458,6 +669,11 @@ def add_nasrun_skills(vsro_root, native, output):
 		"laterArchiveHashes": identities,
 		"skills": {row[SKILL_CODENAME]: int(row[SKILL_ID]) for row in staged},
 		"texts": sorted(after - known), "absentDescriptions": absent, "assets": assets,
+		"visualChanges": len(visual_rows),
+		"effectKeys": sorted(effect_keys),
+		"costumeEffects": worn, "costumeEffectsRefused": worn_refused,
+		"animationSources": {key: f"{LATER_BSR_DIR}/{key}" for key in sorted(bodies)},
+		"animationSets": list(TRANSFORM_SETS) if bodies else [],
 		"limits": [
 			"Lent by a worn, awake Devil's Spirit alone (nasrun/ability.go); no learn row or mastery names them.",
 			"The event Spirit's skill (31141 in the VSRO client) is not imported, as the event copies are not.",
