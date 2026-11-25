@@ -341,7 +341,7 @@ export const extendedRecipes: readonly ExtendedRecipe[] = [
 		source: "index.html / runtime/platform/platform.ts presentUpdate",
 		selector: "#update-notice:not([hidden])",
 		open( context ) {
-			context.platform.presentUpdate( true );
+			context.platform.presentUpdate( "newer" );
 		}
 	},
 	{
