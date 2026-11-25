@@ -1495,7 +1495,8 @@
 			"consumer": "src/engine/foundation/ui/title-status.ts",
 			"provider": "src/engine/runtime/ui/title/title.ts",
 			"functions": [
-				"catalog"
+				"catalog",
+				"callback:serverStateBand:1"
 			]
 		},
 		{

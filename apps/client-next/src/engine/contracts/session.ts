@@ -203,6 +203,10 @@ export interface ServerRecord {
 	readonly nativeFarmId: number;
 	readonly isTest: boolean;
 	readonly operating: boolean;
+	// Port-only, not native (#3925): an announced shard the operator has
+	// not opened (server SRO_COMING_SOON_SHARDS). Its transportUrl is
+	// empty: it can be shown but never entered. Absent is false.
+	readonly comingSoon: boolean;
 	readonly transportUrl: string;
 }
 // One worn or avatar item of a character-list row: native (RefItemID, plus).

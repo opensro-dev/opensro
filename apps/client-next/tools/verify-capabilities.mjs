@@ -233,7 +233,9 @@ export const rules = {
 		// The Agent's one GET /title/build for the FPS chip.
 		buildInfo,
 		// The Agent's public schedule feed for the port-only Event Calendar (#3532).
-		runtime + "ui/hud/event-calendar-hud.ts"
+		runtime + "ui/hud/event-calendar-hud.ts",
+		// The Agent's public schedule feed for the port-only title maintenance notice (#3925).
+		runtime + "ui/hud/maintenance-notice-hud.ts"
 	],
 	WebSocket: [ runtime + "simulation/worker/network/network.ts" ],
 	WebTransport: [ runtime + "simulation/worker/network/network.ts" ],

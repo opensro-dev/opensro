@@ -279,6 +279,7 @@ import {
 import { fitUiGroup } from "@/engine/foundation/ui/layout";
 import { createExperimentalHud, experimentalRows, experimentalTabs } from "./hud/experimental-hud";
 import { createEventCalendarHud } from "./hud/event-calendar-hud";
+import { createMaintenanceNoticeHud } from "./hud/maintenance-notice-hud";
 import { createJobHonorHud } from "./hud/job-honor-hud";
 import {
 	JOB_HONOR_HEIGHT,
@@ -1452,6 +1453,8 @@ export function createUi( ports: UiPorts ) {
 	const experimental = createExperimentalHud();
 	// Port-only, not native (#3532): the Event Calendar's feed state.
 	const eventCalendar = createEventCalendarHud();
+	// Port-only (#3925): the title screens' maintenance notice feed.
+	const maintenanceHud = createMaintenanceNoticeHud();
 	// Port-only, not native (#3530): the Job Honor Rank window's state.
 	const jobHonor = createJobHonorHud();
 	// The System menu's extra rows: one menu id per Experimental row
@@ -12870,6 +12873,11 @@ export function createUi( ports: UiPorts ) {
 			const worldVisible = (phase === "world" || retainedWorld) && !loading && next.worldReady &&
 				(!next.frontend || next.frontend.phase === "world");
 			worldShown = worldVisible;
+			// Port-only (#3925): the maintenance notice reads the schedule
+			// only while the title screens are up and its row is on.
+			const noticeOn = experimental.state().saved.maintenanceNotice;
+			maintenanceHud.frame( apiBase, now, noticeOn && !worldVisible );
+			const maintenanceLine = noticeOn ? maintenanceHud.notice() ?? undefined : undefined;
 			if ( !(phase === "world" || retainedWorld) ) windowWarm.reset();
 			// One unseen window build per idle frame; see window-warm.ts.
 			const warming = windowWarm.begin(
@@ -12917,7 +12925,8 @@ export function createUi( ports: UiPorts ) {
 							offset: serverOffset,
 							now,
 							message: error,
-							credentialsLocked: loginReplyPending || phase === "authenticating"
+							credentialsLocked: loginReplyPending || phase === "authenticating",
+							notice: maintenanceLine
 						},
 						roster,
 						selectedCharacter
@@ -12949,7 +12958,8 @@ export function createUi( ports: UiPorts ) {
 						offset: serverOffset,
 						now,
 						message: error,
-						credentialsLocked: loginReplyPending || phase === "authenticating"
+						credentialsLocked: loginReplyPending || phase === "authenticating",
+						notice: maintenanceLine
 					},
 					roster,
 					selectedCharacter
