@@ -125,7 +125,11 @@ test("a Devil's Spirit's tooltip names its awakening: dormant, the time left, or
 			UIIT_STT_NASRUN_AWAKE_TIMEOVER: "Awaken period is over.",
 			PARAM_DAY: "day(s)",
 			PARAM_HOUR: "hour(s)",
-			PARAM_MINUTE: "min(s)"
+			PARAM_MINUTE: "min(s)",
+			UIIT_STT_NASRUN_BASIC_OPTION: "Basic option",
+			PARAM_HP: "Maximum HP",
+			PARAM_MP: "Maximum MP",
+			PARAM_INCREASE: "Increase"
 		},
 		text = s => english[s] ?? s;
 	// 3/1/14/1: the Spirit; its clock rides the durability field (#4381).
@@ -134,6 +138,7 @@ test("a Devil's Spirit's tooltip names its awakening: dormant, the time left, or
 		slot: 13,
 		refObjId: 51681,
 		name: "Devil's Spirit",
+		codename: "ITEM_MALL_AVATAR_W_NASRUN_BLUE",
 		typeFlags: spiritFlags,
 		quantity: 1,
 		plus: 0,
@@ -144,6 +149,17 @@ test("a Devil's Spirit's tooltip names its awakening: dormant, the time left, or
 	};
 	const lines = durability => itemTooltip( { ...item, durability }, { masteries: [] }, text ).map( r => r.value );
 	assert.ok( lines( 0 ).includes( "This devil's spirit is not awaken." ) );
+	// The basic option: +0 grants 15 %; a +3 one 18 %; the Unique 20 % + plus.
+	assert.ok( lines( 0 ).includes( "Basic option" ) );
+	assert.ok( lines( 0 ).includes( "Maximum HP 15% Increase" ) );
+	assert.ok( lines( 0 ).includes( "Maximum MP 15% Increase" ) );
+	assert.ok(
+		itemTooltip( { ...item, plus: 3 }, { masteries: [] }, text ).some( r => r.value === "Maximum HP 18% Increase" )
+	);
+	assert.ok(
+		itemTooltip( { ...item, codename: "ITEM_MALL_AVATAR_W_NASRUN_UNIQUE", plus: 1 }, { masteries: [] }, text )
+			.some( r => r.value === "Maximum MP 21% Increase" )
+	);
 	const awake = lines( Math.floor( Date.now() / 1000 ) + 27 * 86400 + 5 * 3600 + 30 * 60 );
 	assert.ok( awake.includes( "Awaken period." ) );
 	assert.ok( awake.some( line => /^27 day\(s\) 5 hour\(s\) (29|30) min\(s\)$/.test( line ) ), awake.join( "|" ) );

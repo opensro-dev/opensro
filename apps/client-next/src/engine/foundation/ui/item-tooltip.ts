@@ -10,6 +10,7 @@ appends the seal after the requirement rows; the under-heading place
 ===========================================================================
 */
 import { isSpiritItem } from "@/engine/foundation/gameplay/avatar-socket";
+import { spiritGaugePercent } from "@/engine/foundation/gameplay/spirit-skills";
 import type { InventoryItem } from "@/engine/contracts/gameplay";
 import type { Progression } from "../gameplay/progression";
 import { itemRarityIsSealed, sealTextSymbol } from "../gameplay/item-seal";
@@ -325,6 +326,16 @@ export function itemTooltip(
 	// 28-day period would not fit the rental rows' hours.
 	if ( isSpiritItem( item.typeFlags ) ) {
 		const clock = item.durability ?? 0, remainingMs = clock * 1000 - Date.now();
+		// The basic option the worn Spirit grants: its HP and MP percent
+		// (spirit-skills.ts spiritGaugePercent), in the magic option words.
+		const gauge = spiritGaugePercent( item.codename, item.plus );
+		if ( gauge !== undefined ) {
+			space();
+			add( text( "UIIT_STT_NASRUN_BASIC_OPTION" ), 0xffffffff );
+			for ( const param of [ "PARAM_HP", "PARAM_MP" ] ) {
+				add( `${text( param )} ${gauge}% ${text( "PARAM_INCREASE" )}`, 0xff00eaff );
+			}
+		}
 		space();
 		if ( clock === 0 ) add( text( "UIIT_STT_NASRUN_NOT_AWAKE" ), 0xffffffff );
 		else if ( remainingMs <= 0 ) add( text( "UIIT_STT_NASRUN_AWAKE_TIMEOVER" ), 0xffffffff );

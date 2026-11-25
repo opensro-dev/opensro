@@ -64,3 +64,25 @@ export function decodeSpiritSkills( payload: Uint8Array ): number[] {
 	const view = new DataView( payload.buffer, payload.byteOffset, payload.byteLength );
 	return spiritSkillList( Array.from( { length: count }, ( _, i ) => view.getUint32( 1 + 4 * i, true ) ) );
 }
+
+// The HP and MP percent a Spirit grows its wearer by: the server's rule
+// (game/nasrun/ability.go SpiritAbility, the iSRO-R shard's
+// _RefAbilityByItemOptLevel): 15 % + plus, the Unique's 20 % + plus, for a
+// plus the table authors (0..10). Mirrored for the tooltip only; the
+// server applies its own.
+const SPIRIT_BASE_GAUGE_PERCENT = 15;
+const SPIRIT_UNIQUE_GAUGE_PERCENT = 20;
+const SPIRIT_MAX_ABILITY_PLUS = 10;
+
+/*
+================
+spiritGaugePercent
+
+The Spirit's HP/MP percent at plus, or undefined for a plus no row names.
+================
+*/
+export function spiritGaugePercent( codename: string | undefined, plus: number ): number | undefined {
+	if ( !Number.isInteger( plus ) || plus < 0 || plus > SPIRIT_MAX_ABILITY_PLUS ) return undefined;
+	const unique = codename?.endsWith( "_NASRUN_UNIQUE" ) ?? false;
+	return (unique ? SPIRIT_UNIQUE_GAUGE_PERCENT : SPIRIT_BASE_GAUGE_PERCENT) + plus;
+}

@@ -273,8 +273,8 @@ export function completeRestrictionText( entries ) {
 //   <PARAM_HOUR> / <PARAM_MINUTE>; the completion carries them as %s for
 //   the same tooltipFormat that fills them.
 // - NASRUN awakening (textuisystem rows UIIT_STT_NASRUN_*): the Devil's
-//   Spirit tooltip's dormant line, its awakening header and its lapsed
-//   line (#4384), byte-for-byte, the later client's "awaken" included.
+//   Spirit tooltip's basic option header, dormant line, awakening header
+//   and lapsed line (#4384), byte-for-byte, the later client's "awaken" included.
 // - STORAGE_EXPANSION (textuisystem_4300.txt row ids 4223-4224): the
 //   storage expansion items' use questions (#3904), byte-for-byte,
 //   the later client's "expended" included.
@@ -350,6 +350,7 @@ export const LATER_UI_TEXT_COMPLETIONS = Object.freeze( {
 	UIIT_STT_NASRUN_NOT_AWAKE: "This devil's spirit is not awaken.",
 	UIIT_STT_NASRUN_AWAKE_TIME: "Awaken period.",
 	UIIT_STT_NASRUN_AWAKE_TIMEOVER: "Awaken period is over.",
+	UIIT_STT_NASRUN_BASIC_OPTION: "Basic option",
 	UIIT_STT_STORAGE_EXPANSION_INVENTORY_ADDITION_ITEM_USE:
 		"Inventory will be expended to 32 rooms permanently. Do you want to use it now?",
 	UIIT_STT_STORAGE_EXPANSION_WAREHOUSE_ADDITION_ITEM_USE:
