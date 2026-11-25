@@ -187,7 +187,7 @@ the comparison folds case and separators.
 */
 export function groundedBanBasename( banPath ) {
 	if ( !banPath ) return false;
-	const base = String( banPath ).replaceAll( "\\", "/" ).split( "/" ).pop().toLowerCase();
+	const base = (String( banPath ).replaceAll( "\\", "/" ).split( "/" ).pop() ?? "").toLowerCase();
 	return GROUNDED_BAN_BASENAMES.has( base );
 }
 
