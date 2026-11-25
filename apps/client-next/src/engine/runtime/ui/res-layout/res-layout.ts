@@ -171,7 +171,11 @@ export function createResLayoutWindow( layout: ResLayout ): ResLayoutWindow {
 		if (
 			control.parent === null || control.type === RES_LAYOUT_TYPE_WINDOW || control.type === RES_LAYOUT_TYPE_FRAME
 		) {
-			const prefix = control.frame ? resLayoutImagePath( control.frame ) : "";
+			// frameRing composes each part's path as prefix + part +
+			// ".png", so the prefix drops the closing ".png" the image
+			// path builder appends; with it, the ring's quads named
+			// "mframe_wnd_.pngleft_up.png" and never drew (#4417).
+			const prefix = control.frame ? resLayoutImagePath( control.frame ).replace( /\.png$/, "" ) : "";
 			if ( prefix ) {
 				const partPaths = resLayoutFrameParts( control.frame );
 				paths.push( ...partPaths );
@@ -209,10 +213,13 @@ export function createResLayoutWindow( layout: ResLayout ): ResLayoutWindow {
 				);
 			}
 		} else if ( control.type === RES_LAYOUT_TYPE_TILE ) {
-			// A tile with no texture draws nothing. Naming "" for loading
-			// would hold the whole window unadmitted: an empty path never
-			// becomes resident (frameDraw.unloadedImages).
-			const path = resLayoutImagePath( control.texture );
+			// A tile's art is authored in the record's frame slot (the
+			// importer reads the two slots apart, scripts/res_ui_layout.py);
+			// the texture slot is the fallback. A tile with no art in
+			// either draws nothing. Naming "" for loading would hold
+			// the whole window unadmitted: an empty path never becomes
+			// resident (frameDraw.unloadedImages).
+			const path = resLayoutImagePath( control.frame || control.texture );
 			if ( path ) {
 				paths.push( path );
 				frame.quads.push( ...normalTile( r, path, resources.size( path ), full ) );
