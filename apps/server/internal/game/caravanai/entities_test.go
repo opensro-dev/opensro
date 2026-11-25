@@ -62,6 +62,12 @@ func TestAgentEntitiesCarryIdentityJobAndGear(t *testing.T) {
 		if !strings.Contains(entity.SuitCode, wantSuitFamily[entity.Name]) {
 			t.Errorf("%s SuitCode = %q, want the %s family", entity.Name, entity.SuitCode, wantSuitFamily[entity.Name])
 		}
+		if entity.HP <= 0 || entity.HP != entity.MaxHP {
+			t.Errorf("%s vitals = %d/%d HP, want full at spawn", entity.Name, entity.HP, entity.MaxHP)
+		}
+		if entity.Level == 0 {
+			t.Errorf("%s Level = 0, want the roster combat level", entity.Name)
+		}
 	}
 }
 

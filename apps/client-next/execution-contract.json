@@ -2938,6 +2938,27 @@
 	],
 	"boundaries": [
 		{
+			"file": "src/engine/runtime/ui/hud/styria-view.ts",
+			"expression": "copy",
+			"function": "styriaView",
+			"kind": "callback",
+			"reason": "The renderer (ui.ts) lends its copy lookup (hudCopy) to the Styria view: the view asks for its window strings by key and never reads the text tables itself."
+		},
+		{
+			"file": "src/engine/runtime/ui/hud/styria-view.ts",
+			"expression": "copy",
+			"function": "styriaScoreOps",
+			"kind": "callback",
+			"reason": "The renderer (ui.ts) lends its copy lookup (hudCopy) to the Styria view: the view asks for its window strings by key and never reads the text tables itself."
+		},
+		{
+			"file": "src/engine/runtime/ui/hud/styria-view.ts",
+			"expression": "copy",
+			"function": "styriaResultOps",
+			"kind": "callback",
+			"reason": "The renderer (ui.ts) lends its copy lookup (hudCopy) to the Styria view: the view asks for its window strings by key and never reads the text tables itself."
+		},
+		{
 			"file": "src/engine/runtime/characters/viewer-queries.ts",
 			"expression": "resourceFor",
 			"function": "knows",

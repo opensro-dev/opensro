@@ -277,6 +277,13 @@ type styriaEvent struct {
 	lastTickMs  int64
 	ticked      bool
 	matches     map[string]*styriaMatch
+
+	// matchSeq counts the matches this process has started; a
+	// status snapshot names its match by it, so the client can
+	// hold one result until dismissed. statusSent is the last
+	// snapshot bytes pushed per viewer (styria_status.go).
+	matchSeq   uint32
+	statusSent map[string][]byte
 }
 
 /*
@@ -306,6 +313,7 @@ func (rt *Runtime) ConfigureStyria(value string) {
 	rt.styria = &styriaEvent{
 		registrants: make(map[string]StyriaRegistrant),
 		matches:     make(map[string]*styriaMatch),
+		statusSent:  make(map[string][]byte),
 	}
 }
 
@@ -491,7 +499,11 @@ func (rt *Runtime) advanceStyriaClash(nowMs int64) []simulation.DivisionFrames {
 			rt.styriaStartMatches(start)
 		}
 	}
-	return rt.advanceStyriaMatches(nowMs)
+	frames := rt.advanceStyriaMatches(nowMs)
+	// The client windows' standing (styria_status.go), after the
+	// matches so an ending clock's result rides the same tick.
+	rt.styriaPushStatuses(nowMs)
+	return frames
 }
 
 /*
