@@ -235,6 +235,9 @@ func (rt *Runtime) handleItemUse(
 	// A crest delete the closure admitted: the crest clears after this
 	// door closes, then the item is spent (crestdelete.go).
 	var crestDelete string
+	// A warehouse addition the closure admitted: the room grows after
+	// this door closes, then the item is spent (expansion.go).
+	var warehouseUse *pendingWarehouseUse
 	// A guild recall the closure admitted: the gates judge, the scroll
 	// is spent and the guild is asked after this door closes
 	// (guildrecall.go).
@@ -478,6 +481,16 @@ func (rt *Runtime) handleItemUse(
 			return rt.usePremiumTicket(skillItemUse{
 				division: divisionID, ref: ref, row: rowIndex, request: request, nowMs: nowMs,
 			}, character, tail, family == itemUseSkillTimeTicket, &result)
+		}
+		if family == itemUseExpScroll {
+			return rt.useExpScroll(skillItemUse{
+				division: divisionID, ref: ref, row: rowIndex, request: request, nowMs: nowMs,
+			}, character, tail, &result)
+		}
+		if family == itemUseExpansion {
+			return rt.useExpansion(skillItemUse{
+				division: divisionID, ref: ref, row: rowIndex, request: request, nowMs: nowMs,
+			}, character, tail, &result, &warehouseUse)
 		}
 		if family == itemUseNameChange {
 			// The queue door takes the store's own lock, so it cannot
@@ -925,61 +938,17 @@ func (rt *Runtime) handleItemUse(
 	} else {
 		committed = rt.deps.Update(character, "item-use", update)
 	}
-	if committed && after != nil {
-		after()
-	}
-	if committed && used != nil {
-		rt.publishItemUseVisual(character, used, visualGID, &result)
-	}
-	if queuedName != "" {
-		rt.finishNameChangeUse(divisionID, character, request, used, queuedName, queuedNowMs, &result)
-	}
-	if crestDelete != "" {
-		rt.finishCrestDeleteUse(divisionID, character, request, used, crestDelete, &result)
-	}
-	if recallUse != nil {
-		rt.finishGuildRecallUse(divisionID, character, request, used, recallUse, &result)
-	}
-	if reverseParty != nil {
-		rt.finishReversePartyMove(divisionID, character, request, used, reverseParty, &result)
-	}
+	rt.settleItemUseFinishes(divisionID, character, request, itemUseFinishes{
+		committed:    committed,
+		after:        after,
+		used:         used,
+		visualGID:    visualGID,
+		queuedName:   queuedName,
+		queuedNowMs:  queuedNowMs,
+		crestDelete:  crestDelete,
+		warehouseUse: warehouseUse,
+		recallUse:    recallUse,
+		reverseParty: reverseParty,
+	}, &result)
 	return result
-}
-
-/*
-================
-publishItemUseVisual
-
-The native item use (v1.188) ends every successful use the same
-way: the 0xB04C success, then 0x305C {gid, item reference} to the nearby
-sessions, v1.150's 0x3449 (the client's external item effect, 74F540).
-The gid is the user's, unless the item's handler named another object
-(petItemVisualTarget); target 0 is the user:
-the potion sparkle, the scroll glow, the firework. The native client holds
-every item record; the browser holds only the references it was sent, so
-both audiences, the user and the observers, get the item's reference right
-before the visual names it (peer_references.go). The user's copy matters
-when the used row was the last of its kind the browser knew of: a repeat
-of a known reference is harmless.
-================
-*/
-func (rt *Runtime) publishItemUseVisual(character *enterworld.Character, ref *enterworld.ItemRef, target uint32, result *OpResult) {
-	at := -1
-	for index, frame := range result.Frames {
-		if frame.Opcode == wire.OpItemUseResponse && len(frame.Payload) > 0 && frame.Payload[0] == wire.ResultSuccess {
-			at = index
-			break
-		}
-	}
-	if at < 0 {
-		return
-	}
-	reference := rt.commerceReferences([]inventory.Item{{RefObjID: ref.RefObjID, Codename: ref.Codename, TypeFlags: ref.TypeFlags()}}, nil)
-	if target == 0 {
-		target = enterworld.ObjectIDForCharacter(character)
-	}
-	visual := wire.Frame{Opcode: wire.OpItemUseVisual,
-		Payload: wire.NewWriter(8).U32(target).U32(ref.RefObjID).Payload()}
-	result.Frames = append(result.Frames[:at+1], append([]wire.Frame{reference, visual}, result.Frames[at+1:]...)...)
-	result.Broadcast = append(result.Broadcast, reference, visual)
 }

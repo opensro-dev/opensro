@@ -17,12 +17,13 @@ import (
 	"opensro.online/server/internal/game/item/wire"
 )
 
-// OpStorageCapacity is the capacity announce.
-const OpStorageCapacity uint16 = 0x3092
+// OpStorageCapacity is the capacity announce (wire.OpStorageCapacity);
+// the constant stays here for the reward callers that name it.
+const OpStorageCapacity = wire.OpStorageCapacity
 
 // storageCapacityInventory is 0x3092's kind byte for the bag; 2 is the
 // companion-side storage, which no quest reward grows here.
-const storageCapacityInventory = 1
+const storageCapacityInventory = wire.StorageCapacityInventory
 
 /*
 ================
@@ -33,5 +34,5 @@ same count the 0x32B3 entry block ships.
 ================
 */
 func storageCapacityFrame(capacity uint8) wire.Frame {
-	return wire.Frame{Opcode: OpStorageCapacity, Payload: []byte{storageCapacityInventory, capacity}}
+	return wire.Frame{Opcode: OpStorageCapacity, Payload: wire.EncodeStorageCapacity(storageCapacityInventory, capacity)}
 }

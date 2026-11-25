@@ -261,6 +261,11 @@ export function completeRestrictionText( entries ) {
 //   QUEST_HELPER_FULL (textuisystem_4500.txt row id 4443): the
 //   reward-selection window's prompts, refusals and value labels, and
 //   the quick quest window's full line (#3920).
+// - PARTY_SUMMON (textuisystem_4600.txt row ids 4528-4537, 4552-4563,
+//   4579 and textuisystem_5500.txt row id 5404): the party summon
+//   window's title, headers, eligibility lines, refusals and leader
+//   lines (#3918). The native key spellings (POSSILBE, IMPOSSILBE,
+//   MGS) are kept as the later client ships them.
 // - The rental item strings (#4240): the later client's tooltip renders
 //   the remainder from the instance's millisecond deadline
 //   (ItemTooltip_BuildLines kind 0x15) with the first, and the expired
@@ -307,6 +312,33 @@ export const LATER_UI_TEXT_COMPLETIONS = Object.freeze( {
 	UIIT_STT_QUESTREWARD_ERROR: "The reward was not given due to an unknown error.",
 	UIIT_STT_QUESTREWARD_JOBEXP: "JOB EXP",
 	UIIT_CTL_QUEST_HELPER_FULL: "Max. of three quests can be listed in quick window.",
+	UIIT_PAG_PARTY_SUMMON: "Summon Party member",
+	UIIT_STT_PARTY_SUMMON: "Number of Players Allowed: 1-%d",
+	UIIT_STT_PARTY_SUMMON_PERSONNEL: "Current summoned number : %d",
+	UIIT_STT_PARTY_SUMMON_MEMBER_NAME: "Party Member Name",
+	UIIT_STT_PARTY_SUMMON_ENTRANCE: "Eligibility",
+	UIIT_STT_PARTY_SUMMON_LIMIT_TIME: "Time Limit for Entry",
+	UIIT_CTL_PARTY_SUMMON: "Summon",
+	UIIT_CTL_PARTY_SUMMON_POSSILBE: "Possible",
+	UIIT_CTL_PARTY_SUMMON_IMPOSSILBE: "Impossible",
+	UIIT_STT_PARTY_SUMMON_CONFIRM_BOX: "[%s] invites you to the world unknown. Would you like to comply?",
+	UIIT_STT_PARTY_SUMMON_IMPOSSILBE:
+		"The target character cannot be summoned for entry if the character is outside of a town, the number of the players allowed in the dungeon is full, or if the target character does not meet the level requirements for the dungeon, is wearing the Job outfit, using a private store, trading, in a guild war, or on a transport or a vehicle.",
+	UIIT_STT_PARTY_SUMMON_IMPOSSILBE_1:
+		"The target character cannot be summoned for entry if the character is outside of a town.",
+	UIIT_STT_PARTY_SUMMON_IMPOSSILBE_2: "The number of players allowed is at full.",
+	UIIT_STT_PARTY_SUMMON_IMPOSSILBE_3:
+		"The level of the target character does not meet the level requirement for the dungeon.",
+	UIIT_STT_PARTY_SUMMON_IMPOSSILBE_4: "The target character is currently wearing a Job outfit.",
+	UIIT_STT_PARTY_SUMMON_IMPOSSILBE_5: "The target character is using a private store or trading.",
+	UIIT_STT_PARTY_SUMMON_IMPOSSILBE_6: "The target character is on a transport.",
+	UIIT_STT_PARTY_SUMMON_IMPOSSILBE_7: "The target character is in a guild war.",
+	UIIT_STT_PARTY_SUMMON_IMPOSSILBE_8: "The target character is dead.",
+	UIIT_STT_PARTY_SUMMON_IMPOSSILBE_9: "The target character is in the Free PvP mode.",
+	UIIT_STT_PARTY_SUMMON_WAIT_ERR: "The summoning request is currently pending.",
+	UIIT_STT_PARTY_SUMMON_BUTTON: "You must wait for 5 seconds before summoning again.",
+	UIIT_MGS_ERR_PARTY_SUMMON_NOT: "You must be a party leader to use it.",
+	UIIT_STT_PARTY_SUMMON_LIMIT_COUNT: "Entry Remaining",
 	UIIT_STT_RENT_REMNANTS_TIME: "Time Remains: %d %s %d %s",
 	UIIT_STT_RENT_USED_TIME_OVER: "Time Period is over"
 } );

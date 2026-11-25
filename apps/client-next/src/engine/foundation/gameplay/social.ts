@@ -79,6 +79,22 @@ export function withoutInstance( state: SocialState ): SocialState {
 
 /*
 ================
+withoutSummonPrompt
+
+The state with the party summon invitation closed; the slot is dropped
+rather than nulled, as withoutInstance.
+================
+*/
+export function withoutSummonPrompt( state: SocialState ): SocialState {
+	if ( !state.summonPrompt ) {
+		return state;
+	}
+	const { summonPrompt: _closed, ...rest } = state;
+	return rest;
+}
+
+/*
+================
 socialPacket
 
 Decode a complete frame before publishing any state. Only evidenced
@@ -133,7 +149,10 @@ export function socialPacket(
 			0xb330,
 			0xb332,
 			0xb515,
-			0x3a6c
+			0x3a6c,
+			// The party summon answers (party_summon.go): roster,
+			// refusal, invitation prompt and leader-side notice.
+			0xb4c6
 		].includes( op )
 	) {
 		return null;
@@ -399,6 +418,45 @@ export function socialPacket(
 			}
 		} else {
 			throw Error( "Unsupported party update" );
+		}
+	} else if ( op === 0xb4c6 ) {
+		// The party summon answers (party_summon.go). Kind 0 is the
+		// native-shaped refusal {0, u16 code} through the item-use error
+		// router; kind 1 the roster (the native row shape under a port
+		// header); kinds 2 and 3 are the port's completion: the
+		// invitation prompt and a leader-side UIIT key.
+		const kind = u8();
+		if ( kind === 0 ) {
+			next = { ...next, summonNotice: { code: u16() } };
+		} else if ( kind === 1 ) {
+			const allowed = u16(),
+				summoned = u8(),
+				limitSeconds = u32(),
+				count = u8();
+			if ( count > 8 ) {
+				throw Error( "Party summon roster budget" );
+			}
+			const rows = Array.from( { length: count }, () => {
+				const gid = u32(),
+					eligibility = u8(),
+					entered = u8(),
+					remaining = u16();
+				if ( eligibility !== 2 && eligibility !== 3 ) {
+					throw Error( "Invalid party summon eligibility" );
+				}
+				return { gid, eligibility, entered: entered !== 0, remaining };
+			} );
+			next = { ...next, summon: { allowed, summoned, limitSeconds, rows } };
+		} else if ( kind === 2 ) {
+			const gid = u32();
+			if ( !gid ) {
+				throw Error( "Invalid party summon prompt" );
+			}
+			next = { ...next, summonPrompt: { gid, name: str() } };
+		} else if ( kind === 3 ) {
+			next = { ...next, summonNotice: { key: str() } };
+		} else {
+			throw Error( "Invalid party summon answer" );
 		}
 	}
 	if ( o !== p.length ) {

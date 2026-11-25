@@ -223,6 +223,33 @@ export interface SocialState {
 	// arm); its gid is the party leader. Its own slot for the same reason:
 	// the native prompt lives in its own invite struct beside the others.
 	readonly instance?: { readonly gid: number; };
+	// The party summon window's roster (0xB4C6 kind 1, the later client's
+	// interface 214): the authored allowed count, how many members
+	// already stand inside, the entry limit's remaining seconds, and one
+	// native-shaped row per member {gid, eligibility, entered,
+	// remaining}. Eligibility keeps the native status-cell bytes: 2
+	// Possible, 3 Impossible. The header fields and the 0xB4C6 kinds are
+	// the port's completion (see party_summon.go); the rows are native.
+	readonly summon?: {
+		readonly allowed: number;
+		readonly summoned: number;
+		readonly limitSeconds: number;
+		readonly rows: readonly {
+			readonly gid: number;
+			readonly eligibility: number;
+			readonly entered: boolean;
+			readonly remaining: number;
+		}[];
+	};
+	// The open party summon invitation (0xB4C6 kind 2): the leader's gid
+	// and name for UIIT_STT_PARTY_SUMMON_CONFIRM_BOX. Its own slot, like
+	// the instance invitation beside it.
+	readonly summonPrompt?: { readonly gid: number; readonly name: string; };
+	// A one-shot summon line for the system message board: a refusal
+	// code the item-use error router maps (kind 0) or a leader-side
+	// UIIT key the worker queues verbatim (kind 3). Drained beside
+	// notice and cleared the same way.
+	readonly summonNotice?: { readonly code?: number; readonly key?: string; };
 	// Native war-proposal replies reach the same system-message board as the
 	// fortress announcements. The gameplay owner drains this each frame.
 	readonly notice?: import("./system-notices").SystemNotice;

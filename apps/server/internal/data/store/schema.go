@@ -197,7 +197,16 @@ func isVersionMismatch(err error) bool {
 // field nested in world is one the previous binary refuses on a
 // rewrite (#3090). Characters saved earlier carry none and have no
 // saved location; the offline upgrade rewrites no record.
-const CurrentVersion = 55
+// Version 58 adds the optional per-character inventory addition mark
+// (inventoryAdditionUsed, later-native v1.696, #4240 part 3) and the
+// account warehouse record's optional expansionUses count (two
+// additions per account). The step skips 56-57 and is not additive:
+// the warehouse count nests inside the guild record, whose storage an
+// older binary strictly decodes, so it cannot ride the read window
+// (#3090, as version 54 could not). Records saved earlier carry
+// neither field and have used no addition; the offline upgrade
+// rewrites no record.
+const CurrentVersion = 58
 
 /*
 ================
@@ -271,7 +280,7 @@ var storeSteps = map[int]storeStep{
 	// 44 to 51 are no longer the current schema: each low end is the
 	// layout it ran at, and its high end follows the current layout
 	// (layouts 25 and up always end at the current one). The current
-	// schema (55) takes the wide low end.
+	// schema (58) skips the read window, like 54 before it.
 	44: {true, "optional top-level ravenRefugeReadyAtMs recovery deadline", 12, 15},
 	45: {true, "no record change; layout 13 adds trade_history", 13, 15},
 	46: {true, "optional per-character Nasrun token balance and daily count", 13, 15},
@@ -281,7 +290,8 @@ var storeSteps = map[int]storeStep{
 	50: {true, "optional per-item earnedBought (#4133); layout 15 adds the earned-silk wallet and silk-history split tables", 15, 15},
 	51: {true, "optional per-character plusFailOptOut (failed-reinforcement announcement opt-out, #3682)", 15, 15},
 	54: {false, "optional per-item rentExpiresUnix (native _RentItemInfo, #4240)", 15, 15},
-	55: {true, "optional per-character reverseUserPoint (reverse return scroll saved location, #3903)", 5, 15},
+	55: {true, "optional per-character reverseUserPoint (reverse return scroll saved location, #3903)", 15, 15},
+	58: {false, "optional per-character inventoryAdditionUsed and account expansionUses (later capacity addition items, #4240); the warehouse count nests in the guild record", 5, 15},
 }
 
 // SkillSeedFunc resolves the current racial base-skill set while preserving

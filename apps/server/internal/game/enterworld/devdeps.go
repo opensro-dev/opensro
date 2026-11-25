@@ -19,6 +19,7 @@ import (
 	"opensro.online/server/internal/game/world/instance"
 	"opensro.online/server/internal/game/world/monster"
 	"opensro.online/server/internal/game/world/simulation"
+	"opensro.online/server/internal/game/world/styria"
 	"opensro.online/server/internal/game/world/worldarea"
 )
 
@@ -289,6 +290,14 @@ func NewDevDepsWithRoster(paths DevPaths, textdata *TextdataCatalogs, roster *Ro
 			// catalogue only while their switch is on, before any
 			// division opens.
 			if err := instance.RegisterPortOnly(instance.MuhanDefinitions()); err != nil {
+				return nil, fmt.Errorf("bootstrap: %w", err)
+			}
+		}
+		if styria.Enabled() {
+			// Port-only (#3648): the Styria Clash arena world joins
+			// the catalogue only while its switch is on, before any
+			// division opens.
+			if err := instance.RegisterPortOnly(instance.StyriaDefinitions()); err != nil {
 				return nil, fmt.Errorf("bootstrap: %w", err)
 			}
 		}

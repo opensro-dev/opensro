@@ -305,8 +305,10 @@ import {
 	socialRequest,
 	withoutInstance,
 	withoutResurrection,
+	withoutSummonPrompt,
 	type SocialCommand
 } from "@/engine/foundation/gameplay/social";
+import { partySummonRefusalKey } from "@/engine/foundation/gameplay/party-summon";
 import { partyLootNotice } from "@/engine/foundation/gameplay/party-loot";
 import { COS_DISTANCE_ERROR, cosDistanceNotice } from "@/engine/foundation/gameplay/cos-distance-notice";
 import { pickupNotice } from "@/engine/foundation/gameplay/pickup-notice";
@@ -3919,6 +3921,11 @@ state here before a command can claim a native wire conversation.
 				if ( command.kind === "social-consent" && !social.invitation ) return null;
 				if ( command.kind === "resurrection-consent" && !social.resurrection ) return null;
 				if ( command.kind === "instance-consent" && !social.instance ) return null;
+				if ( command.kind === "party-summon-answer" && !social.summonPrompt ) return null;
+				if (
+					(command.kind === "party-summon-roster" || command.kind === "party-summon") &&
+					(!social.leader || social.self !== social.leader)
+				) return null;
 				// 0x52EDD0: confirming the instance box (simple_msgbox_type 4)
 				// while dead prints UIIT_MSG_QUEST_INS_DEATH on the centre
 				// banner only and swallows the submit - the box stays open
@@ -3959,6 +3966,7 @@ state here before a command can claim a native wire conversation.
 				if ( command.kind === "social-consent" ) social = { ...social, invitation: null };
 				if ( command.kind === "resurrection-consent" ) social = withoutResurrection( social );
 				if ( command.kind === "instance-consent" ) social = withoutInstance( social );
+				if ( command.kind === "party-summon-answer" ) social = withoutSummonPrompt( social );
 				return request;
 			}
 			if ( command.kind === "skill-withdraw" || command.kind === "mastery-withdraw" ) {
@@ -5474,12 +5482,32 @@ Packet handling must not depend on which HUD panel is currently open.
 					for ( const flip of nextSocial.notices ?? [] ) {
 						notices = [ ...notices.slice( -99 ), { ...flip, sequence: ++noticeSequence } ];
 					}
+					// A party summon refusal (0xB4C6 kind 0) prints through
+					// the item-use error router's line for its code; a
+					// leader-side notice (kind 3) carries its UIIT key.
+					if ( nextSocial.summonNotice ) {
+						const key = nextSocial.summonNotice.key ??
+							partySummonRefusalKey( nextSocial.summonNotice.code ?? -1 );
+						if ( key ) {
+							notices = [ ...notices.slice( -99 ), {
+								key,
+								value: 0,
+								sequence: ++noticeSequence
+							} ];
+						}
+					}
 					if ( nextSocial.degradation && socialDegradations.length < MAX_SOCIAL_DEGRADATIONS ) {
 						socialDegradations.push( { ...nextSocial.degradation, frame } );
 					}
 					social = withMemberCountries(
-						nextSocial.notice || nextSocial.notices || nextSocial.degradation ?
-							{ ...nextSocial, notice: undefined, notices: undefined, degradation: undefined } :
+						nextSocial.notice || nextSocial.notices || nextSocial.degradation || nextSocial.summonNotice ?
+							{
+								...nextSocial,
+								notice: undefined,
+								notices: undefined,
+								degradation: undefined,
+								summonNotice: undefined
+							} :
 							nextSocial
 					);
 					// 634D30: a party that fills while the player's

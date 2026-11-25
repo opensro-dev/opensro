@@ -25,6 +25,7 @@ import gears_stone_import
 import god_import
 import hunting2_import
 import jupiter_import
+import later_mall_items
 import muhan_import
 import pharaoh_temple_import
 import reset_scroll_import
@@ -88,6 +89,11 @@ LATER_LAYERS = (
 	# there, like the sources every layer above reads; band 320000,
 	# no placement.
 	("rigidScrolls", rigid_import.add_rigid),
+	# The v1.696 Item Mall items the later goods sell (#4240 part 3):
+	# later-native, no switch, on whenever the v1.696 client root is
+	# named; last of the layers, so the later mall goods step that
+	# follows in the builder sees their rows.
+	("laterMallItems", later_mall_items.add_later_mall_items),
 )
 
 

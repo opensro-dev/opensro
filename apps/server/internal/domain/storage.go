@@ -31,6 +31,11 @@ type AccountStorage struct {
 	Capacity int64          `json:"capacity"`
 	Gold     int64          `json:"gold"`
 	Rows     []InventoryRow `json:"rows,omitempty"`
+	// ExpansionUses counts the account's uses of the later warehouse
+	// addition item (ITEM_MALL_WAREHOUSE_ADDITION, #4240 part 3): its
+	// v1.696 text limits it to two per account. Additive: a record from
+	// before the item existed reads as never used.
+	ExpansionUses int64 `json:"expansionUses,omitempty"`
 }
 
 /*
