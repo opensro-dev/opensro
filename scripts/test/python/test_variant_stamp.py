@@ -102,6 +102,7 @@ class Stamp(unittest.TestCase):
 
 	def test_parallelism_is_not_an_input(self):
 		self.assertEqual(self.stale({**self.env, "SRO_BUILD_JOBS": "4"}), [])
+		self.assertEqual(self.stale({**self.env, "SRO_CENSUS_JOBS": "10"}), [])
 
 	def test_the_variant_is_never_its_own_source(self):
 		sources = self.inputs()["sources"]

@@ -45,7 +45,7 @@ import os from "node:os";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { resolveMainCheckout } from "../../../scripts/lib/generatedRoot.mjs";
-import { pruneRecordFiles, recordsPath, statsPath as statsFilePath } from "./lib/test-cache-files.mjs";
+import { pruneRecordFiles, recordFiles, recordsPath, statsPath as statsFilePath } from "./lib/test-cache-files.mjs";
 import { LOCATION_VARIABLES, cacheRoots, decodeTarget, encodeTarget } from "./lib/test-cache-ids.mjs";
 import { logPathFor } from "./lib/test-input-recorder.mjs";
 
@@ -65,6 +65,12 @@ const recorderUrl = pathToFileURL( path.join( clientRoot, "tools/lib/test-input-
 const watchdogUrl = pathToFileURL( path.join( clientRoot, "tools/lib/test-process-watchdog.mjs" ) ).href;
 // The environment a test can see beyond its files.
 const ENV_KEYS = [ "TZ", "LANG", "NODE_ENV" ];
+// Worker counts set speed, never a result: the one list every cache key
+// shares (scripts/data/speed-variables.json). r204l's rebuild added
+// SRO_CENSUS_JOBS=10 and every one of 910 files reran under a fresh key.
+const SPEED_VARIABLES = new Set(
+	JSON.parse( fs.readFileSync( path.join( repoRoot, "scripts/data/speed-variables.json" ), "utf8" ) ).variables
+);
 // Parallel stats: more pool threads than the default four, and enough
 // requests in flight to keep them busy. Set before the pool first starts.
 const PREFETCH_WORKERS = 64;
@@ -190,7 +196,7 @@ function cacheKey() {
 		// A fresh lock token must not discard every unchanged test pass.
 		Object.keys( process.env ).filter( key =>
 			(key.startsWith( "SRO_" ) && key !== "SRO_CHECK_FORCE" && !key.startsWith( "SRO_TEST_" ) &&
-					!key.startsWith( "SRO_REBUILD_LOCK_" ) ||
+					!key.startsWith( "SRO_REBUILD_LOCK_" ) && !SPEED_VARIABLES.has( key ) ||
 				ENV_KEYS.includes( key )) &&
 			// A blank location variable is unset, and an unset one has no entry.
 			!(LOCATION_VARIABLES.has( key ) && !locationPresence( process.env[key] ))
@@ -228,6 +234,57 @@ function readIndex( key ) {
 	index.records = readKeyed( recordsPath( repoRoot, key ), key, "records" );
 	index.stats = readKeyed( statsPath, key, "stats" );
 	return index;
+}
+
+/*
+================
+keyDifferences
+
+What separates one cache key from another, as "name: was -> now" lines
+over the key's fields and its environment ("unset" for a missing one).
+================
+*/
+function keyDifferences( was, now ) {
+	const lines = [];
+	for ( const field of [ "format", "node", "platform", "arch" ] ) {
+		if ( was[field] !== now[field] ) lines.push( `${field}: ${was[field]} -> ${now[field]}` );
+	}
+	const before = was.env ?? {}, after = now.env ?? {};
+	for ( const name of [ ...new Set( [ ...Object.keys( before ), ...Object.keys( after ) ] ) ].sort() ) {
+		if ( before[name] !== after[name] ) {
+			lines.push( `${name}: ${before[name] ?? "unset"} -> ${after[name] ?? "unset"}` );
+		}
+	}
+	return lines;
+}
+
+/*
+================
+explainNewKey
+
+A run whose key holds no records reruns every file, and said only "0
+reused": r204l's release reran 910 files (637 s) for a worker count in the
+key. Names what separates this key from the nearest recorded one.
+================
+*/
+function explainNewKey( key ) {
+	const now = JSON.parse( key );
+	let nearest = null;
+	for ( const file of recordFiles( repoRoot ) ) {
+		let was;
+		try {
+			was = JSON.parse( JSON.parse( fs.readFileSync( file, "utf8" ) ).key );
+		} catch {
+			continue;
+		}
+		const lines = keyDifferences( was, now );
+		if ( lines.length && (!nearest || lines.length < nearest.length) ) nearest = lines;
+	}
+	process.stdout.write(
+		nearest ?
+			`test cache: no records under this key; the nearest recorded key differs in ${nearest.join( ", " )}\n` :
+			"test cache: no records under this key, and no other key is recorded\n"
+	);
 }
 
 /*
@@ -448,6 +505,7 @@ async function main() {
 	const files = testFiles( process.argv.slice( 2 ) );
 	if ( !files.length ) throw new Error( "Usage: node tools/run-tests.mjs <dir|file>..." );
 	const index = readIndex( cacheKey() );
+	if ( process.env.SRO_CHECK_FORCE !== "1" && Object.keys( index.records ).length === 0 ) explainNewKey( index.key );
 	const fingerprint = createFingerprints( index );
 	const recorded = files.map( file => index.records[path.relative( repoRoot, file )] ).filter( Boolean );
 	await fingerprint.prefetch(

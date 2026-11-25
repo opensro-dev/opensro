@@ -66,13 +66,19 @@ BUILDER = Path(__file__).with_name("build_alexandria_variant.py")
 CODE_STAMP = REPO_ROOT / "scripts" / "build" / "shared" / "codeStamp.mjs"
 # SRO_* variables the variant never reads: they name the asset build's own
 # outputs (sro_paths resolves them, the importers never open them) or set
-# how many workers run, not what they produce.
+# how many workers run, not what they produce. SRO_CENSUS_JOBS is the UI
+# census width the release now passes through (ops #507): r204l's rebuild
+# read it as a variant input ("rebuilding: env:SRO_CENSUS_JOBS").
 # The asset build's content caches (SRO_SHARED_CACHE_ROOT, generatedRoot.mjs)
 # hold results named by their own inputs, never a variant input: r203's
 # release walked the whole cache as a source, and each build's own cache
 # writes made the next one rebuild the variant from scratch.
 SHARED_CACHE_ROOT_ENV = "SRO_SHARED_CACHE_ROOT"
-IGNORED_ENV = frozenset(("SRO_BUILD_JOBS", "SRO_GENERATED_ROOT", "SRO_SERVER_GAME_DATA_ROOT", "SRO_CHECK_FORCE",
+# The worker counts come from the one list every cache key shares
+# (scripts/data/speed-variables.json).
+SPEED_VARIABLES_PATH = REPO_ROOT / "scripts" / "data" / "speed-variables.json"
+SPEED_VARIABLES = frozenset(json.loads(SPEED_VARIABLES_PATH.read_text(encoding="utf-8"))["variables"])
+IGNORED_ENV = SPEED_VARIABLES | frozenset(("SRO_GENERATED_ROOT", "SRO_SERVER_GAME_DATA_ROOT", "SRO_CHECK_FORCE",
 	SHARED_CACHE_ROOT_ENV))
 ENV_PREFIX = "SRO_"
 # The importers' source variables, by their naming convention:

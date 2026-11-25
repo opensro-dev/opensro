@@ -17,7 +17,7 @@ import os from "node:os";
 import path from "node:path";
 import test from "node:test";
 import { openFileHashCache } from "../../build/shared/fileHashCache.mjs";
-import { hashRoots } from "../../build/shared/resourceBuildFingerprint.mjs";
+import { folderHashes, hashRoots } from "../../build/shared/resourceBuildFingerprint.mjs";
 
 /*
 ================
@@ -92,4 +92,28 @@ test("a root with parts counts only those entries", async t => {
 	await writeFile( path.join( intermediate, "images", "x.png" ), "x2" );
 	await touch( path.join( intermediate, "images", "x.png" ), 120 );
 	assert.notEqual( await hash( roots ), withDiscovery, "a converted image moving moves the key" );
+});
+
+/*
+================
+a data root's folder hashes name the folder that moved
+
+#4337: "data extracted changed" hid which of extracted/'s folders a build
+rewrote. Each top folder (or file) keys on its own lines.
+================
+*/
+test("a data root's folder hashes name the folder that moved", () => {
+	const lines = [
+		"extracted/A/x.txt|1|10",
+		"extracted/A/y.txt|1|10",
+		"extracted/B/z.txt|2|10",
+		"extracted/top.json|3|10"
+	];
+	const before = folderHashes( "extracted", lines );
+	assert.deepEqual( Object.keys( before ).sort(), [ "extracted/A", "extracted/B", "extracted/top.json" ] );
+	const after = folderHashes(
+		"extracted",
+		lines.map( line => line === "extracted/B/z.txt|2|10" ? "extracted/B/z.txt|2|11" : line )
+	);
+	assert.deepEqual( Object.keys( before ).filter( name => before[name] !== after[name] ), [ "extracted/B" ] );
 });
