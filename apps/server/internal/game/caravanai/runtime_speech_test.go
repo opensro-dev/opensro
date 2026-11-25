@@ -32,7 +32,7 @@ func TestAgentSpeechReportsEachLineOnce(t *testing.T) {
 	var spoken []string
 	rt := NewRuntime(
 		Config{Enabled: true, BrainMode: BrainHardcoded},
-		nil,
+		nil, nil,
 		WorldHooks{
 			OnAgentChat: func(_, _ string, _ uint16, message string) {
 				spoken = append(spoken, message)
@@ -80,7 +80,7 @@ nor burns the slot.
 ==================
 */
 func TestPlayerCommandsAreRateLimited(t *testing.T) {
-	rt := NewRuntime(Config{Enabled: true, BrainMode: BrainHardcoded}, nil, WorldHooks{})
+	rt := NewRuntime(Config{Enabled: true, BrainMode: BrainHardcoded}, nil, nil, WorldHooks{})
 	const div = "Shard_Silkroad"
 	rt.EnsureDivisionRoster(div)
 
@@ -111,7 +111,7 @@ however the player cased it; unknown names resolve to nothing.
 ==================
 */
 func TestAgentNamedResolvesCanonicalName(t *testing.T) {
-	rt := NewRuntime(Config{Enabled: true, BrainMode: BrainHardcoded}, nil, WorldHooks{})
+	rt := NewRuntime(Config{Enabled: true, BrainMode: BrainHardcoded}, nil, nil, WorldHooks{})
 	const div = "Shard_Silkroad"
 	if name, ok := rt.AgentNamed(div, "[ai]trader_jin"); !ok || name != "[AI]Trader_Jin" {
 		t.Fatalf("expected the canonical name, got %q ok=%v", name, ok)

@@ -60,7 +60,7 @@ completes the run and rotates the route back toward Jangan.
 func TestAgentWalksRouteFerryHopAndDelivery(t *testing.T) {
 	rt := NewRuntime(
 		Config{Enabled: true, BrainMode: BrainHardcoded},
-		nil,
+		nil, nil,
 		WorldHooks{Walker: straightWalker{}},
 	)
 	const div = "div"
@@ -119,7 +119,7 @@ its spawn pose and route index however long it is stepped.
 ==================
 */
 func TestAgentHoldsPositionWithoutWalker(t *testing.T) {
-	rt := NewRuntime(Config{Enabled: true, BrainMode: BrainHardcoded}, nil, WorldHooks{})
+	rt := NewRuntime(Config{Enabled: true, BrainMode: BrainHardcoded}, nil, nil, WorldHooks{})
 	const div = "div"
 	roster := rt.EnsureDivisionRoster(div)
 	var jin *AgentUnit
@@ -200,7 +200,7 @@ walk carried to the near dock.
 ==================
 */
 func TestAgentsStartFromTheProvenAnchorHeights(t *testing.T) {
-	rt := NewRuntime(Config{Enabled: true, BrainMode: BrainHardcoded}, nil, WorldHooks{Walker: heightWalker{}})
+	rt := NewRuntime(Config{Enabled: true, BrainMode: BrainHardcoded}, nil, nil, WorldHooks{Walker: heightWalker{}})
 	const div = "div"
 	for _, unit := range rt.EnsureDivisionRoster(div) {
 		found := false

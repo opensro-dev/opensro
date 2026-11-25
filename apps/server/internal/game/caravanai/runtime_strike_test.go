@@ -38,7 +38,7 @@ func TestAgentStrikePacingAndKillMemory(t *testing.T) {
 	var calls []strikeCall
 	rt := NewRuntime(
 		Config{Enabled: true, BrainMode: BrainHardcoded},
-		nil,
+		nil, nil,
 		WorldHooks{OnAgentStrike: func(_, agentName, targetPlayerName string, _ int64) bool {
 			calls = append(calls, strikeCall{agent: agentName, target: targetPlayerName})
 			return len(calls) >= 2 // the second strike kills
@@ -83,7 +83,7 @@ func TestAgentStrikeOutOfRange(t *testing.T) {
 	struck := false
 	rt := NewRuntime(
 		Config{Enabled: true, BrainMode: BrainHardcoded},
-		nil,
+		nil, nil,
 		WorldHooks{OnAgentStrike: func(_, _, _ string, _ int64) bool {
 			struck = true
 			return false

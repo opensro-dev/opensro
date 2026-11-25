@@ -8,8 +8,9 @@ and !memory are typed in ordinary chat and consumed by the chat lane,
 which asks HandlePlayerCommand here. The replies are the agents' own
 words; the chat lane speaks them as the named agent. Answers are
 rate-limited per player (claimCommandSlot) so a command flood cannot
-make an agent spam. Nothing here moves gold: contracts are recorded,
-and the reward side belongs to the economy slice (slice 5).
+make an agent spam. Slice 5 (#3704) moves the hire fee through the
+consumer's ChargeHireFee hook before a hire binds; the escort reward
+side pays out of deliveries, never here.
 
 ===========================================================================
 */
@@ -79,8 +80,12 @@ func (r *Runtime) HandlePlayerCommand(
 			r.mu.Unlock()
 			return fmt.Sprintf("No AI Trader named %s is recruiting here.", targetAgent), true
 		}
-		contract := r.contracts.BindAITraderEscort(division, unit.Name, playerName, unit.OriginTown, unit.DestTown, unit.CargoStars, nowMs)
+		contract, bound := r.contracts.BindAITraderEscort(division, unit.Name, playerName, unit.OriginTown, unit.DestTown, unit.CargoStars, nowMs)
 		r.mu.Unlock()
+		if !bound {
+			// Slice 5: one Hunter guards one caravan at a time.
+			return "You already hold an escort contract, Hunter. Finish that run before you sign another.", true
+		}
 		return FormatContractReply(contract), true
 
 	case "!hire":
@@ -89,10 +94,19 @@ func (r *Runtime) HandlePlayerCommand(
 		}
 		r.mu.Lock()
 		unit := r.findAgentLocked(division, targetAgent)
+		r.mu.Unlock()
 		if unit == nil || unit.Role != RoleHunter {
-			r.mu.Unlock()
 			return fmt.Sprintf("No AI Hunter named %s is available for hire.", targetAgent), true
 		}
+		// Slice 5: the fee leaves the trader's purse before the hire
+		// binds; a purse that cannot pay hires nobody. A nil hook
+		// leaves hiring free, as before slice 5. The charge runs off
+		// r.mu: the consumer's purse door must never nest inside the
+		// runtime lock (the damage door nests the other way).
+		if r.hooks.ChargeHireFee != nil && !r.hooks.ChargeHireFee(division, playerName, BaseHunterHireFeeGold, unit.Name) {
+			return fmt.Sprintf("My hire costs %d gold, and your purse cannot pay it. No contract, no escort.", BaseHunterHireFeeGold), true
+		}
+		r.mu.Lock()
 		contract := r.contracts.HireAIHunter(division, playerName, unit.Name, unit.OriginTown, unit.DestTown, nowMs)
 		r.mu.Unlock()
 		return FormatContractReply(contract), true

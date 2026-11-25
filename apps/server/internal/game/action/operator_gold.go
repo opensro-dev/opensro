@@ -21,12 +21,19 @@ clamped - and the refusal reports the amount that could have applied.
 package action
 
 import (
+	"errors"
 	"fmt"
 
 	log "github.com/sirupsen/logrus"
 
 	"opensro.online/server/internal/game/item/wire"
 )
+
+// errGoldBelowZero marks the one refusal a caller may legitimately
+// treat as an answer rather than a fault: the debit exceeds the
+// balance. It wraps into the refusal's message, which keeps its
+// operator wording (operator_gold_test.go pins it).
+var errGoldBelowZero = errors.New("gold debit exceeds the balance")
 
 /*
 ================
@@ -57,6 +64,31 @@ that could have applied (the whole balance, down to exactly zero).
 ================
 */
 func (rt *Runtime) OperatorAdjustGold(division, name string, amount int64) (GoldAdjustment, error) {
+	done, err := rt.adjustGoldThroughDoor(division, name, amount, "operator-adjust-gold")
+	if err != nil {
+		return GoldAdjustment{}, err
+	}
+	log.WithFields(log.Fields{"character": done.Character, "amount": done.Applied,
+		"before": done.Before, "after": done.After}).Info("gold: operator adjustment")
+	return done, nil
+}
+
+/*
+================
+adjustGoldThroughDoor
+
+The one signed gold movement every audited correction rides: the
+operator's adjustment (operator-adjust-gold) and the AI caravan
+economy (caravan-escort-reward, caravan-hire-fee; caravan_gold.go).
+The door name is the store ledger's record of who moved the gold. A
+zero amount, an unknown or deletion-pending character, an overflowing
+credit and a debit past zero all refuse and change nothing; the
+below-zero refusal wraps errGoldBelowZero and names the debit that
+could have applied (the whole balance, down to exactly zero). An
+online character is pushed its new balance.
+================
+*/
+func (rt *Runtime) adjustGoldThroughDoor(division, name string, amount int64, door string) (GoldAdjustment, error) {
 	if amount == 0 {
 		return GoldAdjustment{}, fmt.Errorf("gold adjustment must not be zero")
 	}
@@ -68,7 +100,7 @@ func (rt *Runtime) OperatorAdjustGold(division, name string, amount int64) (Gold
 	}
 	var done GoldAdjustment
 	var refused error
-	if !rt.deps.Update(c, "operator-adjust-gold", func() bool {
+	if !rt.deps.Update(c, door, func() bool {
 		if c.DeletePending {
 			refused = fmt.Errorf("character is pending deletion")
 			return false
@@ -83,8 +115,8 @@ func (rt *Runtime) OperatorAdjustGold(division, name string, amount int64) (Gold
 			return false
 		}
 		if after < 0 {
-			refused = fmt.Errorf("gold adjustment of %d would take %s below zero: balance is %d, could apply %d",
-				amount, c.Name, before, -before)
+			refused = fmt.Errorf("%w: gold adjustment of %d would take %s below zero: balance is %d, could apply %d",
+				errGoldBelowZero, amount, c.Name, before, -before)
 			return false
 		}
 		c.Gold = &after
@@ -96,8 +128,6 @@ func (rt *Runtime) OperatorAdjustGold(division, name string, amount int64) (Gold
 		}
 		return GoldAdjustment{}, fmt.Errorf("character gold adjustment refused")
 	}
-	log.WithFields(log.Fields{"character": done.Character, "amount": done.Applied,
-		"before": done.Before, "after": done.After}).Info("gold: operator adjustment")
 	// An online character sees the new balance at once, as any other gold
 	// change shows it; the push hook reaches no session for an offline one.
 	if rt.PushCharacterFrames != nil {

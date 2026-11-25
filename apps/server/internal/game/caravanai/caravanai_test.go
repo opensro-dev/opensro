@@ -272,7 +272,7 @@ func TestRuntimeParleyHonorBetrayalAndContracts(t *testing.T) {
 
 	rt := NewRuntime(
 		Config{Enabled: true, BrainMode: BrainHardcoded},
-		nil,
+		nil, nil,
 		WorldHooks{
 			OnParleyCargoDrop: func(_ string, _ string, _ uint16, _, _, _ float32, stacks int, _ int64) {
 				droppedStacks = stacks
@@ -323,10 +323,36 @@ func TestRuntimeParleyHonorBetrayalAndContracts(t *testing.T) {
 		t.Fatalf("expected !memory reply to show Trust: -100, got %q", memReply)
 	}
 
-	// 6. Complete [AI]Trader_Jin's contract delivery and verify payout + Hunter trust.
-	contract, completed := rt.Contracts().CompleteAITraderRun(div, "[AI]Trader_Jin", RegionDonwhangTown, 20_000, rt.Memories())
+	// 6. Complete [AI]Trader_Jin's contract delivery. IronGuard was
+	// never seen beside the caravan on the road (the only step showed
+	// ViperPlayer), so slice 5's presence rule completes the run
+	// unpaid and records no escort trust.
+	contract, completed, payable := rt.Contracts().CompleteAITraderRun(div, "[AI]Trader_Jin", RegionDonwhangTown, 20_000, rt.Memories())
 	if !completed || contract.RewardGold <= 0 {
 		t.Fatalf("expected escort contract to complete with positive reward, got %+v", contract)
+	}
+	if payable {
+		t.Fatalf("expected the abandoned escort to complete unpaid, contract %+v", contract)
+	}
+	if hunterMem, exists := rt.Memories().Relationship(div, "[AI]Trader_Jin", "IronGuard"); exists && hunterMem.TrustScore == 25 {
+		t.Fatalf("expected no escort trust for an unkept run, got %+v", hunterMem)
+	}
+
+	// 7. A kept run pays: IronGuard signs again (the first contract
+	// closed), rides within escort range for a step, and the delivery
+	// pays out with +25 trust.
+	reply, ok = rt.HandlePlayerCommand(div, "IronGuard", domain.JobHunter, "!accept [AI]Trader_Jin", 30_000)
+	if !ok || !strings.Contains(reply, "IronGuard") {
+		t.Fatalf("expected second contract acceptance for IronGuard, got ok=%v reply=%q", ok, reply)
+	}
+	if _, _, ok := rt.StepAgent(context.Background(), div, "[AI]Trader_Jin", []ObservedPlayer{
+		{Name: "IronGuard", JobType: domain.JobHunter, HPPercent: 100, Distance: 25},
+	}, 31_000); !ok {
+		t.Fatal("expected [AI]Trader_Jin to step beside IronGuard")
+	}
+	contract, completed, payable = rt.Contracts().CompleteAITraderRun(div, "[AI]Trader_Jin", RegionDonwhangTown, 32_000, rt.Memories())
+	if !completed || !payable {
+		t.Fatalf("expected the kept escort to complete payable, got %+v completed=%v payable=%v", contract, completed, payable)
 	}
 	if rt.hooks.OnContractReward != nil {
 		rt.hooks.OnContractReward(div, contract.HunterName, contract.RewardGold, contract.TraderName)

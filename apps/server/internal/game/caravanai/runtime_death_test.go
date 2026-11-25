@@ -46,7 +46,7 @@ Donwhang anchor (height included) at full vitals, back in the world.
 ==================
 */
 func TestAgentDeathAndRespawn(t *testing.T) {
-	rt := NewRuntime(Config{Enabled: true, BrainMode: BrainHardcoded}, nil, WorldHooks{})
+	rt := NewRuntime(Config{Enabled: true, BrainMode: BrainHardcoded}, nil, nil, WorldHooks{})
 	const div = "death-test"
 	rt.EnsureDivisionRoster(div)
 

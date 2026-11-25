@@ -134,10 +134,18 @@ type Walker interface {
 // same line again only after the agent has said something else, so a
 // standing situation (a trusted friend idling beside the caravan) does
 // not repeat itself in chat every step.
+//
+// Slice 5's economy hooks (OnContractReward, OnParleyCargoDrop,
+// ChargeHireFee) fire off the runtime lock, at the end of the step or
+// command that earned them, so a consumer may take its own world doors
+// inside them. ChargeHireFee is asked before a hire binds: false
+// refuses the hire (the trader's purse could not pay), and a nil hook
+// leaves hiring free, as before slice 5.
 type WorldHooks struct {
 	OnAgentChat       func(division, agentName string, regionID uint16, message string)
 	OnParleyCargoDrop func(division, agentName string, regionID uint16, x, y, z float32, stacks int, stackGoldValue int64)
 	OnContractReward  func(division, hunterPlayerName string, rewardGold int64, traderAgentName string)
+	ChargeHireFee     func(division, traderPlayerName string, feeGold int64, hunterAgentName string) bool
 	// OnAgentStrike lands one of the agent's strikes on a player
 	// (slice 3e): the consumer strikes through the player-victim
 	// lanes and reports whether the player fell.
@@ -165,6 +173,12 @@ const (
 	// one agent's strikes. Port-only tuning, not native.
 	agentStrikeRangeUnits = 10.0
 	agentStrikeIntervalMs = 1_500
+
+	// escortRangeUnits is how close an escorting Hunter must stay to
+	// the trader at every step for the run to pay (slice 5). Port-only
+	// tuning, not native; a placeholder for the owner's call alongside
+	// MaxPaidEscortsPerDay.
+	escortRangeUnits = 150.0
 )
 
 // Runtime manages the division roster of AI Caravan & Thief agents.
@@ -186,6 +200,11 @@ type Runtime struct {
 	// lastCommandAt is the slice-4 command rate limit: when each
 	// player last got a caravan command answer, by division+player.
 	lastCommandAt map[string]int64
+	// pendingEconomy holds slice 5's earned money events (a contract
+	// reward, a parley cargo drop) until the step that earned them
+	// lets go of r.mu; StepAgent fires the hooks from drainEconomy so
+	// no consumer door is ever taken under the runtime lock.
+	pendingEconomy []economyEvent
 	// inflight holds each agent's outstanding remote decision.
 	inflight map[string]*remoteDecision
 	// remoteCtx ends every remote request at Close.
@@ -206,11 +225,13 @@ type remoteDecision struct {
 NewRuntime
 
 NewRuntime constructs an AI Caravan & Thief Runtime with the provided Config,
-MemoryStore, and optional WorldHooks. The owner runs Run on its own
-goroutine and calls Close at shutdown, before the store closes.
+MemoryStore, and optional WorldHooks. dayStore backs the slice-5 daily
+escort cap and may be nil (the counts then live in memory only). The
+owner runs Run on its own goroutine and calls Close at shutdown, before
+the store closes.
 ==================
 */
-func NewRuntime(cfg Config, store MemoryStore, hooks WorldHooks) *Runtime {
+func NewRuntime(cfg Config, store MemoryStore, dayStore EscortDayStore, hooks WorldHooks) *Runtime {
 	var remote Brain
 	if brain, isRemote := NewBrain(cfg).(*LLMBrain); isRemote {
 		remote = brain
@@ -222,7 +243,7 @@ func NewRuntime(cfg Config, store MemoryStore, hooks WorldHooks) *Runtime {
 		remote:        remote,
 		memories:      NewMemoryBook(store),
 		parleys:       NewParleyTracker(),
-		contracts:     NewContractBook(),
+		contracts:     NewContractBook(dayStore),
 		hooks:         hooks,
 		agents:        make(map[string][]*AgentUnit),
 		lastCommandAt: make(map[string]int64),
@@ -251,6 +272,9 @@ func (r *Runtime) Run(ctx context.Context) {
 			if err := r.memories.Flush(); err != nil {
 				log.WithError(err).Warn("caravan-ai: memory flush failed; retrying next pass")
 			}
+			if err := r.contracts.Flush(); err != nil {
+				log.WithError(err).Warn("caravan-ai: escort-day flush failed; retrying next pass")
+			}
 		}
 	}
 }
@@ -270,7 +294,10 @@ func (r *Runtime) Close() error {
 	}
 	r.cancelRemote()
 	r.remoteJobs.Wait()
-	return r.memories.Flush()
+	if err := r.memories.Flush(); err != nil {
+		return err
+	}
+	return r.contracts.Flush()
 }
 
 /*
@@ -566,6 +593,23 @@ func (r *Runtime) StepAgent(
 		enriched[i] = p
 	}
 
+	// Slice 5's presence watch: an escorted trader's run pays only
+	// while its Hunter is seen within escort range at every step. The
+	// watch reads the same observed players the brain reads, so it
+	// judges by what the step can see, never by a second truth.
+	if unit.Role == RoleTrader {
+		if contract, ok := r.contracts.ActiveContractFor(division, unit.Name); ok && contract.TraderIsAI && !contract.HunterIsAI {
+			kept := false
+			for _, p := range enriched {
+				if strings.EqualFold(p.Name, contract.HunterName) && p.Distance <= escortRangeUnits {
+					kept = true
+					break
+				}
+			}
+			r.contracts.NoteEscortWatch(division, unit.Name, kept)
+		}
+	}
+
 	sit := Situation{
 		AgentName:    unit.Name,
 		Role:         unit.Role,
@@ -625,6 +669,7 @@ func (r *Runtime) StepAgent(
 	if decision.Dialogue != "" && decision.Dialogue != spokenBefore && r.hooks.OnAgentChat != nil {
 		r.hooks.OnAgentChat(division, snapshot.Name, snapshot.RegionID, decision.Dialogue)
 	}
+	r.drainEconomy(division)
 	return decision, &snapshot, true
 }
 
@@ -735,9 +780,14 @@ func (r *Runtime) applyDecisionLocked(unit *AgentUnit, d Decision, nowMs int64) 
 			unit.UnderAttack = false
 			dropGold := int64(dropStacks) * unit.StackValueGold
 			r.parleys.StartParley(unit.Division, unit.Name, d.TargetName, unit.RegionID, dropStacks, dropGold, nowMs)
-			if r.hooks.OnParleyCargoDrop != nil {
-				r.hooks.OnParleyCargoDrop(unit.Division, unit.Name, unit.RegionID, unit.X, unit.Y, unit.Z, dropStacks, unit.StackValueGold)
-			}
+			// The tribute is the trader's own cargo (the stacks left
+			// the unit above); the ground drop itself fires from
+			// drainEconomy, off the lock (slice 5).
+			r.pendingEconomy = append(r.pendingEconomy, economyEvent{
+				drop: true, division: unit.Division, dropAgent: unit.Name,
+				dropRegionID: unit.RegionID, dropX: unit.X, dropY: unit.Y, dropZ: unit.Z,
+				dropStacks: dropStacks, dropStackGold: unit.StackValueGold,
+			})
 		}
 	case ActionAttackTarget:
 		unit.State = StateInCombat
@@ -835,10 +885,17 @@ contract, restocks a trader, and rotates the route back the other way.
 func (r *Runtime) deliverAgentLocked(unit *AgentUnit, nowMs int64) {
 	unit.State = StateDelivering
 	if unit.Role == RoleTrader {
-		if contract, ok := r.contracts.CompleteAITraderRun(unit.Division, unit.Name, unit.RegionID, nowMs, r.memories); ok {
-			if r.hooks.OnContractReward != nil {
-				r.hooks.OnContractReward(unit.Division, contract.HunterName, contract.RewardGold, unit.Name)
-			}
+		// Slice 5: delivery pays only a kept, survived run, and only
+		// under the Hunter's daily cap; the gold itself moves from
+		// drainEconomy, off the lock.
+		if contract, completed, payable := r.contracts.CompleteAITraderRun(unit.Division, unit.Name, unit.RegionID, nowMs, r.memories); completed && payable &&
+			!contract.HunterIsAI && contract.HunterName != "" && contract.RewardGold > 0 &&
+			r.contracts.PaidEscortsToday(unit.Division, contract.HunterName, nowMs) < MaxPaidEscortsPerDay {
+			r.contracts.RecordPaidEscort(unit.Division, contract.HunterName, nowMs)
+			r.pendingEconomy = append(r.pendingEconomy, economyEvent{
+				division: unit.Division, rewardHunter: contract.HunterName,
+				rewardGold: contract.RewardGold, rewardTrader: unit.Name,
+			})
 		}
 		unit.CargoStacks = 10
 	}

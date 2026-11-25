@@ -61,7 +61,12 @@ func (r *Runtime) RecordPlayerAttack(
 	regionID := unit.RegionID
 	if unit.HP <= 0 {
 		// The agent dies where it stands; respawnAtHomeLocked
-		// brings it home once the delay has passed.
+		// brings it home once the delay has passed. Slice 5: a trader
+		// who died on the road voids its escort - the run was not
+		// survived, so it can never pay (contracts.go).
+		if unit.Role == RoleTrader {
+			r.contracts.VoidTraderEscort(division, agentName)
+		}
 		defeated = true
 		stolenGold = int64(unit.CargoStacks) * unit.StackValueGold
 		unit.CargoStacks = 0

@@ -44,7 +44,7 @@ func (g *gatedBrain) Decide(ctx context.Context, sit Situation) Decision {
 
 func newRemoteRuntime(t *testing.T, mode BrainMode, brain *gatedBrain) *Runtime {
 	t.Helper()
-	rt := NewRuntime(Config{Enabled: true, BrainMode: mode}, nil, WorldHooks{})
+	rt := NewRuntime(Config{Enabled: true, BrainMode: mode}, nil, nil, WorldHooks{})
 	rt.remote = brain
 	t.Cleanup(func() {
 		close(brain.gate)

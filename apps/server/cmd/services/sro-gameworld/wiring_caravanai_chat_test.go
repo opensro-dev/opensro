@@ -63,7 +63,7 @@ TestCaravanCommandsPortAnswersAsTheAgent
 ================
 */
 func TestCaravanCommandsPortAnswersAsTheAgent(t *testing.T) {
-	rt := caravanai.NewRuntime(caravanai.Config{Enabled: true, BrainMode: caravanai.BrainHardcoded}, nil, caravanai.WorldHooks{})
+	rt := caravanai.NewRuntime(caravanai.Config{Enabled: true, BrainMode: caravanai.BrainHardcoded}, nil, nil, caravanai.WorldHooks{})
 	port := caravanCommandsPort(rt)
 	hunter := &enterworld.Character{Name: "Scout", Job: domain.CharacterJob{Type: domain.JobHunter}}
 	other := &enterworld.Character{Name: "Other", Job: domain.CharacterJob{Type: domain.JobHunter}}
