@@ -67,6 +67,10 @@ readers, which overstate a +HP member as full.
 */
 type MemberVitals func(divisionID string, character *enterworld.Character) (currentHP, maxHP, currentMP, maxMP int64)
 
+// MemberGuild names a character's guild for the party window's GUILD NAME
+// column: "" for a member of no guild (or a dangling guild link).
+type MemberGuild func(divisionID string, character *enterworld.Character) string
+
 // LivePose reads a character's live world position (the movement owner's
 // interpolated spawn), which the native invite range gate measures.
 type LivePose func(divisionID string, character *enterworld.Character) simulation.Spawn
@@ -102,6 +106,7 @@ type Runtime struct {
 	registry     *Registry
 	consentArms  []ConsentArm
 	memberVitals MemberVitals
+	memberGuild  MemberGuild
 	livePose     LivePose
 	updates      memberUpdateState
 	// PartyChanged reports a committed membership change (a join
@@ -158,6 +163,20 @@ UseMemberVitals installs the keeper HP/MP read used by roster rows.
 func (r *Runtime) UseMemberVitals(fn MemberVitals) {
 	if r != nil {
 		r.memberVitals = fn
+	}
+}
+
+/*
+==================
+UseMemberGuild
+
+UseMemberGuild installs the guild-name read roster rows carry in mask bit
+0x40. Without it rows carry no guild bit and the window shows <No guild>.
+==================
+*/
+func (r *Runtime) UseMemberGuild(fn MemberGuild) {
+	if r != nil {
+		r.memberGuild = fn
 	}
 }
 
@@ -352,6 +371,10 @@ func (r *Runtime) memberRowFor(divisionID string, character *enterworld.Characte
 	row.Masteries = true
 	row.PrimaryMastery, row.SecondaryMastery = domain.TopMasteries(character.Masteries)
 	row.ModelRefID = r.deps.CharacterModelRef(character)
+	if r.memberGuild != nil {
+		row.Guilded = true
+		row.Guild = r.memberGuild(divisionID, character)
+	}
 	if character.Level != nil && *character.Level >= 1 {
 		level := *character.Level
 		if level > 0xFF {
