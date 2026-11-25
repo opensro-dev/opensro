@@ -181,6 +181,51 @@ export const UI_TEXT_COMPLETIONS = Object.freeze( {
 	SN_STORE_ACCESSORY_EU_GROUP1: "Purchase/sell European goods"
 } );
 
+// The later client's brightness rows (#3908): v1.696 textuisystem_200.txt
+// rows 100-104 and 107 (the five steps of the video page's brightness spin
+// and its section title), plus textuisystem_1000.txt row 923
+// (UIIT_STT_LUMINOSITY, the label the v1.150-authored video layout already
+// names at GDR_OPT_VIDEO_ST_BR). v1.150 ships neither the rows nor the
+// behaviour, so the built catalog has no value for these keys at all.
+// Applied only when the built value has no ASCII letters, so a shipped
+// row wins over the completion. The later client's own English for the
+// section title reads "Set Brigntness"; the typo is fixed, not copied
+// (UIIT_STT_LUMINOSITY's shipped English is already "Set Brightness").
+export const BRIGHTNESS_TEXT_COMPLETIONS = Object.freeze( {
+	UIIT_STT_LUMINOSITY: "Set Brightness",
+	UILM_TEXT_BRIGHT: "Set Brightness",
+	UILM_TEXT_BRIGHT_FIRST: "Very dark",
+	UILM_TEXT_BRIGHT_SECOND: "Dark",
+	UILM_TEXT_BRIGHT_THIRD: "Normal",
+	UILM_TEXT_BRIGHT_FORTH: "Bright",
+	UILM_TEXT_BRIGHT_FIFTH: "Very bright"
+} );
+
+// v1.696 SRO Macro system-chat rows (00dade90 / 68ea80 / 68b330). v1.150
+// textuisystem has none of these keys; the product catalog completes them
+// so api.notice({ key }) resolves. English follows the v1.696 English
+// column where present; town-refuse uses the exe key CANUSEMACRO
+// (00dade90 @ 0x00daded9 / 0x00dadf73) — Media.pk2 misspells that row
+// CANTUSEMACRO with empty English, so product English follows the
+// Korean meaning (same wording the port already shipped).
+export const MACRO_NOTICE_UIIT_COMPLETIONS = Object.freeze( {
+	UIIT_STT_SRO_MACRO_SYSTEM_RETURN_TOWN_CANUSEMACRO: "You cannot start the skill/hunting macro in town.",
+	UIIT_STT_SRO_MACRO_SYSTEM_RETURN_TOWN_MACRO_OFF: "The skill/hunting macro is disabled in towns.",
+	UIIT_STT_SRO_MACRO_AUTO_POTION_ON_FAIL:
+		"There is no registered item in auto potion. Please register items and try again.",
+	UIIT_STT_SRO_MACRO_AUTO_HUNTING_TELEPORT_OFF: "You’ve moved out of the map, Hunting Macro will end.",
+	UIIT_STT_SRO_MACRO_SYSTEM_RETURN_TOWN_HP_POTION_EMPTY: "Insufficient HP Potions.  Using Return Scroll.",
+	UIIT_STT_SRO_MACRO_SYSTEM_RETURN_TOWN_MP_POTION_EMPTY: "Insufficient MP Potions.  Using Return Scroll.",
+	UIIT_STT_SRO_MACRO_SYSTEM_RETURN_TOWN_ITEM_DURA: "Item durability has reached 0.  Using Return Scroll.",
+	UIIT_STT_SRO_MACRO_SYSTEM_RETURN_TOWN_NOT_HAMMER: "No Repair Hammer.  Using Return Scroll.",
+	UIIT_STT_SRO_MACRO_SYSTEM_RETURN_TOWN_TIME_OVER: "Auto-Hunt time expired.  Using Return Scroll.",
+	UIIT_STT_SRO_MACRO_SYSTEM_RETURN_TOWN_NOT_REVIVAL_SCROLL: "No Resurrection Scroll.  Using Return Scroll.",
+	UIIT_STT_SRO_MACRO_SYSTEM_RETURN_TOWN_DIE: "Character is dead.  Resurrecting in town.",
+	UIIT_STT_SRO_MACRO_SYSTEM_RETURN_TOWN_ERORR: "Using Return Scroll.",
+	UIIT_STT_SRO_MACRO_SYSTEM_WHAN_POTION: "Using Energy of Life",
+	UIIT_STT_SRO_MACRO_SYSTEM_USE_HAMMER: "Using Repair Hammer"
+} );
+
 // Product correction for defective shipped English, not a claim of native output
 // for those inputs. 74BFF0 supplies six arguments: year/month/day/period/hour/minute.
 // Preserve already-correct translations and retain the original typo key as data.
@@ -198,12 +243,96 @@ export function completeRestrictionText( entries ) {
 	return entries;
 }
 
+// Rows the v1.150 textuisystem does not ship at all, imported from the
+// v1.696 client's textuisystem (Media textuisystem_4200.txt). Injected
+// only when blank in completeUiText, so a shipped row would win.
+// - NASRUN_WEAR_EXTENSION (row id 4174): the v1.696 client refuses the
+//   Devil's Spirit extension gear aimed at the worn Spirit with this line.
+// - REVERSE_RETRUN_SCROLL (#3903): the v1.696 client adds two reverse
+//   return scroll destinations (a party member, a user-registered
+//   location). In its textuisystem_4300.txt the band ids 4200..4221
+//   ships 20 of these rows, with holes at 4207 and 4214; those 20
+//   English texts below are the later client's own wording,
+//   byte-for-byte. The two keys in the holes
+//   (UIIT_MSG_REVERSE_RETRUN_SCROLL_USER_APPOINT_SELECTION_INTRODUCTION
+//   and ..._SELECTION_RE_CHECK) are port-written: no native row exists
+//   for the settings window's introduction or its overwrite question.
+// - QUESTREWARD (textuisystem_4800.txt row ids 4763-4773) and
+//   QUEST_HELPER_FULL (textuisystem_4500.txt row id 4443): the
+//   reward-selection window's prompts, refusals and value labels, and
+//   the quick quest window's full line (#3920).
+// - The rental item strings (#4240): the later client's tooltip renders
+//   the remainder from the instance's millisecond deadline
+//   (ItemTooltip_BuildLines kind 0x15) with the first, and the expired
+//   state with the second. The native template names its units through
+//   <PARAM_HOUR> / <PARAM_MINUTE>; the completion carries them as %s for
+//   the same tooltipFormat that fills them.
+export const LATER_UI_TEXT_COMPLETIONS = Object.freeze( {
+	UIIT_MSG_NASRUN_WEAR_EXTENSION_ITEM_NOT_USE: "You cannot use this while you are wearing it.",
+	UIIT_CLT_REVERSE_RETRUN_SCROLL_TO_APPOINT_CHANGE: "Move to certain location at the map.",
+	UIIT_CLT_REVERSE_RETRUN_SCROLL_PARTY_MOVE: "Move to party members.",
+	UIIT_CLT_REVERSE_RETRUN_SCROLL_USER_APPOINT: "Move to the user's set location.",
+	UIIT_PAG_REVERSE_RETRUN_SCROLL_PARTY_MOVE: "Movement of Party Members.",
+	UIIT_MSG_REVERSE_RETRUN_SCROLL_PARTY_MOVE: "Cannot move because the user has left the party.",
+	UIIT_MSG_REVERSE_RETRUN_SCROLL_PARTY_MOVE_1: "A party member is in a location you cannot move to.",
+	UIIT_PAG_REVERSE_RETRUN_SCROLL_USER_APPOINT_SELECTION: "User Settings Window",
+	// Port-written (#3903; id 4207 is a hole in the v1.696 band).
+	UIIT_MSG_REVERSE_RETRUN_SCROLL_USER_APPOINT_SELECTION_INTRODUCTION:
+		"Setting Location: Register current location as user location.\nMovement: Move to registered location.",
+	UIIT_CLT_REVERSE_RETRUN_SCROLL_USER_APPOINT_SELECTION: "Setting Location",
+	UIIT_CLT_REVERSE_RETRUN_SCROLL_USER_MOVE: "Movement",
+	UIIT_PAG_REVERSE_RETRUN_SCROLL_USER_APPOINT_ENROLL: "Location Registration Information Window",
+	UIIT_MSG_REVERSE_RETRUN_SCROLL_USER_APPOINT_ENROLL_INTRODUCTION: "Click button to set location.",
+	UIIT_CLT_REVERSE_RETRUN_SCROLL_USER_APPOINT_BUTTON: "Set location",
+	UIIT_MSG_REVERSE_RETRUN_SCROLL_USER_APPOINT_ENROLL_INTRODUCTION_1: "This location cannot be set.",
+	// Port-written (#3903; id 4214 is a hole in the v1.696 band).
+	UIIT_MSG_REVERSE_RETRUN_SCROLL_USER_APPOINT_SELECTION_RE_CHECK:
+		"Do you want to delete the existing location and register a new location?",
+	UIIT_MSG_REVERSE_RETRUN_SCROLL_USER_APPOINT_SELECTION_END: "Location has been set.",
+	UIIT_PAG_REVERSE_RETRUN_SCROLL_USER_APPOINT_MOVE: "Location Movement Information Window.",
+	UIIT_MSG_REVERSE_RETRUN_SCROLL_USER_MOVE_INTRODUCTION: "You may move to the set location on the button.",
+	UIIT_MSG_REVERSE_RETRUN_SCROLL_USER_MOVE_INTRODUCTION_1: "This button does not have a set location.",
+	UIIT_MSG_REVERSE_RETRUN_SCROLL_USER_MOVE_FAIL_1: "Failed to save user location.",
+	UIIT_MSG_REVERSE_RETRUN_SCROLL_USER_MOVE_FAIL_2: "Failed to move to set user location.",
+	UIIT_MSG_REVERSE_RETRUN_SCROLL_USER_MOVE_FAIL_3: "Cannot set location.",
+	UIIT_STT_QUESTREWARD_MSG01: "You must select your reward.",
+	UIIT_STT_QUESTREWARD_MSG02: "Will you take this reward?",
+	UIIT_STT_QUESTREWARD_MSG03: "You cannot select more.",
+	UIIT_STT_QUESTREWARD_MSG04: "You must select all items.",
+	UIIT_STT_QUESTREWARD_GOLD: "Gold",
+	UIIT_STT_QUESTREWARD_EXP: "EXP",
+	UIIT_STT_QUESTREWARD_SP: "SP",
+	UIIT_STT_QUESTREWARD_SPEXP: "SP EXP",
+	UIIT_STT_QUESTREWARD_AP: "AP",
+	UIIT_STT_QUESTREWARD_ERROR: "The reward was not given due to an unknown error.",
+	UIIT_STT_QUESTREWARD_JOBEXP: "JOB EXP",
+	UIIT_CTL_QUEST_HELPER_FULL: "Max. of three quests can be listed in quick window.",
+	UIIT_STT_RENT_REMNANTS_TIME: "Time Remains: %d %s %d %s",
+	UIIT_STT_RENT_USED_TIME_OVER: "Time Period is over"
+} );
+
 export function completeUiText( entries ) {
 	completeRestrictionText( entries );
 	// Client 7508C0 requests this key, but v1.150 omits the entire row.
 	// Product completion uses the shipped Shaitan appearance/kill wording.
 	if ( !entries.UIIT_MSG_DEAD_TAHOMET?.trim() ) {
 		entries.UIIT_MSG_DEAD_TAHOMET = "Main shaitan has disappeared from Mt. Roc.";
+	}
+	// Rows the v1.150 data lacks: the SRO Macro system chat (#3907) and
+	// the later client's lines (#3909). Fill-if-blank, so a shipped row wins.
+	for ( const table of [ MACRO_NOTICE_UIIT_COMPLETIONS, LATER_UI_TEXT_COMPLETIONS ] ) {
+		for ( const [key, english] of Object.entries( table ) ) {
+			if ( !entries[key]?.trim() ) {
+				entries[key] = english;
+			}
+		}
+	}
+	// The brightness rows (#3908) apply only when the built value has no
+	// ASCII letters, so a shipped row wins over the completion.
+	for ( const [key, english] of Object.entries( BRIGHTNESS_TEXT_COMPLETIONS ) ) {
+		if ( !/[A-Za-z]/.test( entries[key] ?? "" ) ) {
+			entries[key] = english;
+		}
 	}
 	for ( const [key, english] of Object.entries( UI_TEXT_COMPLETIONS ) ) {
 		if ( key in entries ) {
@@ -397,7 +526,8 @@ export function assertTextEnglishCoverage( textDataDirectory = textDataDir ) {
 	const layers = new Set( [
 		...Object.keys( ITEM_TEXT_COMPLETIONS ),
 		...Object.keys( GUIDE_TITLE_COMPLETIONS ),
-		...Object.keys( UI_TEXT_COMPLETIONS )
+		...Object.keys( UI_TEXT_COMPLETIONS ),
+		...Object.keys( BRIGHTNESS_TEXT_COMPLETIONS )
 	] );
 	for ( const file of ENGLISH_COMPLETION_FILES ) {
 		const rows = readLocalizedTextDataRowsSync( path.join( textDataDirectory, file ) );

@@ -520,3 +520,26 @@ test("a storm of distinct failures files at most the kept eight", t => {
 	}
 	assert.equal( filed.length, 8 );
 });
+
+test("a failure storming past the kept eight files once it proves a storm", t => {
+	const { page, filed } = incidentPage( t );
+	for ( let i = 0; i < 8; i++ ) {
+		const error = new TypeError( `failure ${i}` );
+		error.stack = `TypeError: failure ${i}
+    at f${i} (${ORIGIN}/src/f.ts:${i + 1}:1)`;
+		throwNow( page, error );
+	}
+	assert.equal( filed.length, 8 );
+	// One-off repeats prove nothing yet.
+	for ( let i = 0; i < 3; i++ ) throwNow( page, failWith( "Maximum call stack size exceeded" ) );
+	assert.equal( filed.length, 8 );
+	// The fourth throw is a storm, not an accident: it files, once.
+	throwNow( page, failWith( "Maximum call stack size exceeded" ) );
+	assert.equal( filed.length, 9 );
+	assert.deepEqual( filed[8], {
+		message: "RangeError: Maximum call stack size exceeded",
+		frames: [ "    at /src/stall.ts:10:5", "    at /src/frame.ts:20:3" ]
+	} );
+	throwNow( page, failWith( "Maximum call stack size exceeded" ) );
+	assert.equal( filed.length, 9 );
+});

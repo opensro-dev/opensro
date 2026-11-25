@@ -410,7 +410,9 @@ export type GameplayCommand =
 	| { readonly kind: "mastery-train"; readonly id: number; }
 	| { readonly kind: "quickslot-bind"; readonly slot: number; readonly skillId: number; }
 	| { readonly kind: "quest-abandon"; readonly refId: number; }
-	| { readonly kind: "quest-reward"; readonly refId: number; }
+	// picks: the reward window's chosen item RefObjIDs (a selection quest's
+	// claim); absent for a plain kind-2 claim.
+	| { readonly kind: "quest-reward"; readonly refId: number; readonly picks?: readonly number[]; }
 	| {
 		readonly kind: "chat";
 		readonly channel: number;
@@ -501,6 +503,8 @@ export type GameplayCommand =
 		readonly reverseChoice?: number;
 		// The port-only map choice's point id (reverse-return-map.ts).
 		readonly reverseMapPoint?: number;
+		// The party member a party move names, by gid (reverse-user-point.ts).
+		readonly reversePartyGid?: number;
 		// The name-change scroll's new name (#1689, port-only): the entry
 		// window's text, carried raw in the use tail.
 		readonly renameName?: string;
@@ -576,6 +580,10 @@ export interface InventoryItem {
 		}[];
 	};
 	readonly transformRefObjId?: number;
+	// A rented row's deletion deadline in unix milliseconds (native
+	// _RentItemInfo PeriodEndTime, #4240); absent on every other row.
+	// The tooltip's Time Remains counts down from it.
+	readonly rentExpiresUnixMs?: number;
 	readonly name?: string;
 	// The reference's codename, as the server's reference rows name it;
 	// the port-only scrolls that are build-staged items (their RefObjID is
@@ -987,6 +995,9 @@ export interface GameplayState extends MoverPublication {
 	readonly homingProjectiles?: boolean;
 	// The server's port-only SRO_REVERSE_RETURN_MAP option is on (reverse-return-map.ts).
 	readonly reverseMapPoints?: readonly import("@/engine/foundation/gameplay/reverse-return-map").ReverseMapPoint[];
+	// The owner's enrolled reverse return location, told on the port-only
+	// 0x3FCE frame (reverse-user-point.ts); absent while none is enrolled.
+	readonly reverseUserPoint?: import("@/engine/foundation/gameplay/reverse-user-point").ReverseUserPoint;
 	// The shard's configured character level cap, published at world entry
 	// (level-cap.ts): the party form and the quest guide bound their level
 	// windows by it. Absent means the native cap (foundation/gameplay/level-cap.ts).
@@ -1054,6 +1065,9 @@ export interface GameplayState extends MoverPublication {
 	readonly quests?: readonly QuestRecord[];
 	readonly questProgress?: readonly QuestProgressEvent[];
 	readonly questPending?: number;
+	// The last refused reward claim (result 2, with the server's reason
+	// byte); the HUD answers it with the reward error line.
+	readonly questRefusal?: { readonly refId: number; readonly reason: number; };
 	readonly questGathering?: QuestGathering;
 	readonly inventorySlotCount?: number;
 	readonly equipmentSlotCount?: number;

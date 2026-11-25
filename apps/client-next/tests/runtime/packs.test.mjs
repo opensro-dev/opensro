@@ -708,14 +708,13 @@ test("a verified range member is hashed once per admission including a warm pers
 	);
 	await packs.read( new URL( "http://localhost/assets/a.bin" ), 100, new AbortController().signal );
 	await packs.flush();
-	// The demanded member and its block's other member, each admitted
-	// once: the block's bytes are stored whole (#4268).
-	const neighbour = f.manifest.assets[1].length;
-	assert.equal( packs.stats().hashCalls, 2 );
-	assert.equal( packs.stats().hashBytes, 3 + neighbour );
+	// A lone window admits only the member it demanded: its block's other
+	// member is stored only for another window queued on the block.
+	assert.equal( packs.stats().hashCalls, 1 );
+	assert.equal( packs.stats().hashBytes, 3 );
 	await packs.read( new URL( "http://localhost/assets/a.bin" ), 100, new AbortController().signal );
-	assert.equal( packs.stats().hashCalls, 3 );
-	assert.equal( packs.stats().hashBytes, 6 + neighbour );
+	assert.equal( packs.stats().hashCalls, 2 );
+	assert.equal( packs.stats().hashBytes, 6 );
 	packs.dispose();
 });
 

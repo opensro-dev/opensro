@@ -208,7 +208,6 @@ test(
 		} catch ( error ) {
 			evidence.failure = String( error );
 			await capture( "failure" ).catch( () => {} );
-			await page.screenshot( { path: directory + "/failure.png" } ).catch( () => {} );
 			throw error;
 		} finally {
 			if ( tracing ) await page.context().tracing.stop( { path: directory + "/trace.zip" } );

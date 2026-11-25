@@ -36,5 +36,5 @@ test('capture character customization materials without changing the roster',{ti
    await page.screenshot({path:`${dir}/customization-${width}x${height}.png`});
   }
   await writeFile(dir+'/capture.json',JSON.stringify({verdict:'CAPTURED',errors,status:await page.locator('output').textContent(),viewport:page.viewportSize()},null,2));assert.deepEqual(errors,[]);
- }catch(error){await page.screenshot({path:dir+'/failure.png'});await writeFile(dir+'/failure.json',JSON.stringify({error:String(error),errors,resources:await page.evaluate(()=>globalThis.__characterResourceProbe),status:await page.locator('output').textContent()},null,2));throw error;}finally{await browser.close();}
+ }catch(error){await writeFile(dir+'/failure.json',JSON.stringify({error:String(error),errors,resources:await page.evaluate(()=>globalThis.__characterResourceProbe),status:await page.locator('output').textContent()},null,2));throw error;}finally{await browser.close();}
 });

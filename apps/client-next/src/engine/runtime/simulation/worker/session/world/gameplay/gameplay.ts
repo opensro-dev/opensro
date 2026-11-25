@@ -425,6 +425,12 @@ import { createJobHonor } from "./job-honor/job-honor";
 import { createJobHonorTiers } from "./job-honor/job-honor-tiers";
 import { createUniqueStatus } from "./unique-status/unique-status";
 import { createHwanLevel } from "./hwan-level/hwan-level";
+import { createReverseUserPoint } from "./reverse-user-point/reverse-user-point";
+import {
+	REVERSE_RETURN_ENROLL,
+	REVERSE_RETURN_PARTY,
+	reverseReturnFailureKey
+} from "@/engine/foundation/gameplay/reverse-user-point";
 import {
 	decodeStaffRoster,
 	decodeStaffState,
@@ -820,6 +826,7 @@ export function createGameplay(
 		uniqueStatus = createUniqueStatus(),
 		mostWanted = createMostWanted(),
 		hwanLevel = createHwanLevel(),
+		reverseUserPoint = createReverseUserPoint(),
 		// The wolf tree's worn gear resolves through the bag's references.
 		petTraining = createPetTraining( ( ref, slot, magic ) => inventory.petGearItem( ref, slot, magic ) );
 	/*
@@ -1443,6 +1450,12 @@ attack can arrive in the same batch as the previous close and starve the walk.
 	// those codes and must stay exact for every other use, so the
 	// translation lives here, keyed on the flight, not in the mapper.
 	let renameUseInFlight = false;
+	// Later-native (#3903): a reverse return party/user/enroll use in
+	// flight, by its choice (reverse-user-point.ts). Its 0xB5BD answer's
+	// refusal bytes read as the later client's own lines, and an enroll's
+	// success as "Location has been set."; keyed on the flight like the
+	// rename's, for the same reason.
+	let reverseFlight = 0;
 	// Port-only, not native (#4136): the required level of the gate link
 	// whose 0x7495 request is still unanswered, noted by the world core
 	// as the request goes out (noteGateTravel). The 0xB495 answer reads
@@ -2080,6 +2093,8 @@ clears it when another character enters.
 		uniqueStatus.clear();
 		mostWanted.clear();
 		hwanLevel.clear();
+		reverseUserPoint.clear();
+		reverseFlight = 0;
 		petTraining.clear();
 		partyMatching = emptyPartyMatching();
 		partyMatchAutoSession = false;
@@ -3469,7 +3484,7 @@ state here before a command can claim a native wire conversation.
 					} ) :
 					undefined;
 				if ( refuse ) {
-					api.notice( { key: "", value: 0, text: refuse, nativeType: 5 } );
+					api.notice( { key: refuse, value: 0, nativeType: 5 } );
 					return null;
 				}
 				const frame = sroMacro.switchFrame( command.macro, command.on );
@@ -3994,7 +4009,11 @@ state here before a command can claim a native wire conversation.
 				return frame;
 			}
 			if ( command.kind === "quest-abandon" || command.kind === "quest-reward" ) {
-				quests.request( command.refId, command.kind === "quest-reward" );
+				quests.request(
+					command.refId,
+					command.kind === "quest-reward",
+					command.kind === "quest-reward" ? command.picks : undefined
+				);
 				return null;
 			}
 			if ( command.kind === "whisper-block" ) {
@@ -4348,6 +4367,7 @@ state here before a command can claim a native wire conversation.
 					targetSlot: command.targetSlot,
 					reverseChoice: command.reverseChoice,
 					reverseMapPoint: command.reverseMapPoint,
+					reversePartyGid: command.reversePartyGid,
 					renameName: command.renameName,
 					weaponKind: command.weaponKind
 				};
@@ -4392,6 +4412,12 @@ state here before a command can claim a native wire conversation.
 				// Port-only (#1689): the scroll's use went out; its answer
 				// is the one 0xB5BD the refusal chain reads as its lines.
 				if ( sent && command.renameName !== undefined ) renameUseInFlight = true;
+				// Later-native (#3903): the party/user/enroll use's answer
+				// reads the same way (reverse-user-point.ts).
+				if (
+					sent && command.reverseChoice !== undefined &&
+					command.reverseChoice >= REVERSE_RETURN_PARTY
+				) reverseFlight = command.reverseChoice;
 				// Port-only: the weapon switch scroll's refusal bytes likewise.
 				if ( sent && command.weaponKind !== undefined ) weaponSwitchUseInFlight = true;
 				// Port-only: the race switch scrolls' refusal bytes likewise.
@@ -4823,6 +4849,10 @@ Packet handling must not depend on which HUD panel is currently open.
 					dirty = true;
 					return true;
 				}
+				if ( reverseUserPoint.receive( frame ) ) {
+					dirty = true;
+					return true;
+				}
 				if ( frame.opcode === OP_STAFF_STATE ) {
 					const state = decodeStaffState( frame.payload );
 					eligibility = { ...eligibility, gm: state.gm };
@@ -4889,7 +4919,7 @@ Packet handling must not depend on which HUD panel is currently open.
 					return true;
 				}
 				if (
-					storage.receive( frame, cosItemRefs, inventory.objectRefs() ) &&
+					storage.receive( frame, cosItemRefs, inventory.objectRefs(), inventory.rentRefs() ) &&
 					frame.opcode !== NPC_INTERACTION_ACK_OPCODE
 				) {
 					dirty = true;
@@ -6009,7 +6039,11 @@ Packet handling must not depend on which HUD panel is currently open.
 							i.slot === frame.payload[1] && i.typeFlags === (frame.payload[4]! | frame.payload[5]! << 8)
 						) :
 						undefined;
-				const cast = used ? returnScrollCast( used, now, fastDenReturn ) : undefined;
+				// Later-native (#3903): an enroll's success starts no cast
+				// (nothing is spent, nobody travels), so it predicts none.
+				const cast = used && reverseFlight !== REVERSE_RETURN_ENROLL ?
+					returnScrollCast( used, now, fastDenReturn ) :
+					undefined;
 				// 755E40's codename chain: a crest delete's success raises
 				// the completion box (confirm variant, UIIT_STT_CONFIRM_BOX
 				// title, the DELETE_COMPLETE body); a crest register's
@@ -6371,10 +6405,19 @@ Packet handling must not depend on which HUD panel is currently open.
 					raceSwitchUseInFlight && portRefusal ?
 					raceSwitchFailureText( raceSwitchUseInFlight, frame.payload[1]! ) :
 					undefined;
+				// Later-native (#3903): a party/user/enroll flight's refusal
+				// byte names its text row; an enroll's success is the set
+				// line. Any 0xB5BD answer retires the flight.
+				const reverseKey = reverseFlight !== 0 && portRefusal ?
+					reverseReturnFailureKey( frame.payload[1]! ) :
+					undefined;
+				const reverseSet = frame.opcode === ITEM_USE_RESPONSE_OPCODE && frame.payload[0] === 1 &&
+					reverseFlight === REVERSE_RETURN_ENROLL;
 				if ( frame.opcode === ITEM_USE_RESPONSE_OPCODE ) {
 					renameUseInFlight = false;
 					weaponSwitchUseInFlight = false;
 					raceSwitchUseInFlight = null;
+					reverseFlight = 0;
 				}
 				// Port-only (#4136): a 0xB495 answer retires the noted
 				// gate level; the level refusal below reads the note.
@@ -6383,6 +6426,14 @@ Packet handling must not depend on which HUD panel is currently open.
 				const refusal = (portLine ?
 					{ key: "", value: 0, text: portLine, nativeType: 5 as const } :
 					undefined) ??
+					(reverseKey ? { key: reverseKey, value: 0, nativeType: 5 as const } : undefined) ??
+					(reverseSet ?
+						{
+							key: "UIIT_MSG_REVERSE_RETRUN_SCROLL_USER_APPOINT_SELECTION_END",
+							value: 0,
+							nativeType: 5 as const
+						} :
+						undefined) ??
 					recallAppointmentNotice( frame.opcode, frame.payload ) ??
 					targetNotice( frame.opcode, frame.payload ) ??
 					portalNotice( frame.opcode, frame.payload, notedGateLevel ) ??
@@ -6889,6 +6940,7 @@ The published plane when something changed since the last take, else null.
 				...(inventorySortRule ? { inventorySort: true } : {}),
 				...(homingProjectiles ? { homingProjectiles } : {}),
 				...(reverseMapPoints.length ? { reverseMapPoints } : {}),
+				...(reverseUserPoint.point() ? { reverseUserPoint: reverseUserPoint.point()! } : {}),
 				storage: presentedStorage(),
 				playerModels: localPlayerModels(),
 				localSex: localPlayerSex(),
@@ -7324,7 +7376,7 @@ the configured range. Notices mirror 00dade90 / return-reason UIIT rows
 		if ( settings && live && sroMacroEnabled ) {
 			for ( const kind of macroTownDisableKinds( settings.skillOn, settings.huntOn, inTown ) ) {
 				requestMacroOff( kind );
-				api.notice( { key: "", value: 0, text: MACRO_NOTICE_TOWN_OFF, nativeType: 5 } );
+				api.notice( { key: MACRO_NOTICE_TOWN_OFF, value: 0, nativeType: 5 } );
 			}
 		}
 		const huntOn = !!(live && sroMacroEnabled && settings?.huntOn);
@@ -7343,7 +7395,7 @@ the configured range. Notices mirror 00dade90 / return-reason UIIT rows
 		// id change alone is a walk across a 192 m cell, not a teleport.
 		if ( teleportMode === 1 ) {
 			if ( !macroHuntRepeats( "teleport-off", now ) ) {
-				api.notice( { key: "", value: 0, text: MACRO_NOTICE_TELEPORT_OFF, nativeType: 5 } );
+				api.notice( { key: MACRO_NOTICE_TELEPORT_OFF, value: 0, nativeType: 5 } );
 				requestMacroOff( MACRO_HUNT );
 				dirty = true;
 			}
@@ -7428,8 +7480,8 @@ the configured range. Notices mirror 00dade90 / return-reason UIIT rows
 		} );
 
 		const announce = () => {
-			const text = macroHuntNoticeText( action );
-			if ( text ) api.notice( { key: "", value: 0, text, nativeType: 5 } );
+			const key = macroHuntNoticeText( action );
+			if ( key ) api.notice( { key, value: 0, nativeType: 5 } );
 		};
 
 		if ( action.kind !== "none" && action.kind !== "wait-resurrect" ) {

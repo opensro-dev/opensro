@@ -13,6 +13,11 @@ Port-only, not native: when the server publishes a map table
 pending scroll to the world map, where a published point is the answer
 (reverse-return-map.ts).
 
+Later-native (#3903): the box's party row hands the scroll to the party
+window (a member is the answer) and its user row to the user settings
+window (its enroll and move buttons are the answers). The three windows
+are one pending scroll in three postures, like the map posture.
+
 ===========================================================================
 */
 import type { GameplayCommand, InventoryItem } from "@/engine/contracts/gameplay";
@@ -20,6 +25,11 @@ import type { UiView } from "@/engine/contracts/ui";
 import { isReverseReturnScroll } from "@/engine/foundation/gameplay/cos-item-use";
 import { REVERSE_RETURN_LAST_DEATH, REVERSE_RETURN_LAST_RECALL } from "@/engine/foundation/gameplay/count-job";
 import { REVERSE_RETURN_MAP } from "@/engine/foundation/gameplay/reverse-return-map";
+import {
+	REVERSE_RETURN_ENROLL,
+	REVERSE_RETURN_PARTY,
+	REVERSE_RETURN_USER
+} from "@/engine/foundation/gameplay/reverse-user-point";
 
 /*
 ================
@@ -30,6 +40,10 @@ export function createReverseReturnHud() {
 	let pending: { slot: number; refObjId: number; gid: number; } | null = null;
 	// mapping: the box handed the pending scroll to the world map.
 	let mapping = false;
+	// window: the box handed the pending scroll to its party or user
+	// window (#3903); enroll asks before it overwrites a saved location.
+	let window: "party" | "user" | null = null;
+	let confirmEnroll = false;
 	/*
 	================
 	reconcile
@@ -53,6 +67,8 @@ export function createReverseReturnHud() {
 		) return false;
 		pending = null;
 		mapping = false;
+		window = null;
+		confirmEnroll = false;
 		return true;
 	}
 	return {
@@ -65,16 +81,18 @@ export function createReverseReturnHud() {
 		open( item: InventoryItem, gid: number ) {
 			pending = { slot: item.slot, refObjId: item.refObjId, gid };
 			mapping = false;
+			window = null;
+			confirmEnroll = false;
 		},
 		/*
 		================
 		active
 
-		The box is up: a scroll waits and the map has not taken it.
+		The box is up: a scroll waits and no other posture has taken it.
 		================
 		*/
 		active() {
-			return pending !== null && !mapping;
+			return pending !== null && !mapping && window === null;
 		},
 		/*
 		================
@@ -118,7 +136,149 @@ export function createReverseReturnHud() {
 			const slot = pending.slot;
 			pending = null;
 			mapping = false;
+			window = null;
+			confirmEnroll = false;
 			return { kind: "item-use", slot, reverseChoice: REVERSE_RETURN_MAP, reverseMapPoint: id };
+		},
+		/*
+		================
+		party
+
+		The party window holds the pending scroll (#3903).
+		================
+		*/
+		party() {
+			return pending !== null && window === "party";
+		},
+		/*
+		================
+		openParty
+
+		The box's party row: the scroll waits for a member.
+		================
+		*/
+		openParty( view: UiView | null ): boolean {
+			reconcile( view );
+			if ( !pending ) return false;
+			window = "party";
+			return true;
+		},
+		/*
+		================
+		chooseParty
+
+		A member answers the pending scroll (choice 4, the member's gid).
+		================
+		*/
+		chooseParty( gid: number, view: UiView | null ): GameplayCommand | null {
+			reconcile( view );
+			if ( !pending || window !== "party" ) return null;
+			// A busy bag holds the answer, as the box's rows do.
+			if ( view?.gameplay?.inventoryPending ) return null;
+			const slot = pending.slot;
+			pending = null;
+			window = null;
+			return { kind: "item-use", slot, reverseChoice: REVERSE_RETURN_PARTY, reversePartyGid: gid };
+		},
+		/*
+		================
+		user
+
+		The user settings window holds the pending scroll (#3903).
+		================
+		*/
+		user() {
+			return pending !== null && window === "user";
+		},
+		/*
+		================
+		openUser
+
+		The box's user row: the scroll waits for the window's buttons.
+		================
+		*/
+		openUser( view: UiView | null ): boolean {
+			reconcile( view );
+			if ( !pending ) return false;
+			window = "user";
+			confirmEnroll = false;
+			return true;
+		},
+		/*
+		================
+		confirmEnroll
+
+		The window asks before its enroll overwrites a saved location
+		(textuisystem id 4214).
+		================
+		*/
+		confirmEnroll() {
+			return confirmEnroll;
+		},
+		/*
+		================
+		askEnroll
+
+		The enroll button with a location already saved: ask first.
+		================
+		*/
+		askEnroll( view: UiView | null ): boolean {
+			reconcile( view );
+			if ( !pending || window !== "user" || !view?.gameplay?.reverseUserPoint ) return false;
+			confirmEnroll = true;
+			return true;
+		},
+		/*
+		================
+		enroll
+
+		The enroll button (choice 6): record where the player stands.
+		Spends nothing on the server; the answer closes the window.
+		================
+		*/
+		enroll( view: UiView | null ): GameplayCommand | null {
+			reconcile( view );
+			if ( !pending || window !== "user" ) return null;
+			if ( view?.gameplay?.inventoryPending ) return null;
+			// With a location saved, the button asks before it overwrites.
+			if ( view?.gameplay?.reverseUserPoint && !confirmEnroll ) {
+				confirmEnroll = true;
+				return null;
+			}
+			const slot = pending.slot;
+			pending = null;
+			window = null;
+			confirmEnroll = false;
+			return { kind: "item-use", slot, reverseChoice: REVERSE_RETURN_ENROLL };
+		},
+		/*
+		================
+		chooseUser
+
+		The move button (choice 5): return to the saved location. With
+		none saved the button is not offered (id 4218 says why).
+		================
+		*/
+		chooseUser( view: UiView | null ): GameplayCommand | null {
+			reconcile( view );
+			if ( !pending || window !== "user" || !view?.gameplay?.reverseUserPoint ) return null;
+			if ( view?.gameplay?.inventoryPending ) return null;
+			const slot = pending.slot;
+			pending = null;
+			window = null;
+			confirmEnroll = false;
+			return { kind: "item-use", slot, reverseChoice: REVERSE_RETURN_USER };
+		},
+		/*
+		================
+		back
+
+		A sub-window's close: the choice box takes the scroll back.
+		================
+		*/
+		back() {
+			window = null;
+			confirmEnroll = false;
 		},
 		/*
 		================
@@ -128,6 +288,8 @@ export function createReverseReturnHud() {
 		close() {
 			pending = null;
 			mapping = false;
+			window = null;
+			confirmEnroll = false;
 		},
 		/*
 		================
@@ -136,7 +298,10 @@ export function createReverseReturnHud() {
 		*/
 		choose( choice: number, view: UiView | null ): GameplayCommand | null {
 			reconcile( view );
-			if ( !pending || choice !== REVERSE_RETURN_LAST_RECALL && choice !== REVERSE_RETURN_LAST_DEATH ) {
+			if (
+				!pending || window !== null ||
+				choice !== REVERSE_RETURN_LAST_RECALL && choice !== REVERSE_RETURN_LAST_DEATH
+			) {
 				return null;
 			}
 			// A busy bag is a round trip in flight (the worker refuses item

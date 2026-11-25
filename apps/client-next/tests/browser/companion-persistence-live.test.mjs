@@ -308,7 +308,6 @@ async function runCompanionLifecycle() {
 		report.verdict = "FAIL";
 		report.failure = error instanceof Error ? error.stack ?? error.message : String( error );
 		report.last = await snapshot( page ).catch( () => null );
-		await page.screenshot( { path: `${directory}/failure.png` } ).catch( () => {} );
 		throw error;
 	} finally {
 		await page.context().tracing.stop( { path: `${directory}/trace.zip` } ).catch( () => {} );

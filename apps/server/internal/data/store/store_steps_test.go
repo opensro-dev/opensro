@@ -345,9 +345,8 @@ func TestHistoricStepsAWindowCouldNotCarry(t *testing.T) {
 TestCurrentStepFitsTheReadWindow
 
 The gate on the live constant: the step this binary adds must fit the
-read window it declares (StoreReadHeadroom, #3091). At headroom 0 the
-window holds no newer step and nothing is checked; part 4 (#3093)
-turns it on.
+read window it declares (StoreReadHeadroom, #3091). Part 4 (#3093)
+turned the window on at 2, so the steps inside it are checked.
 ================
 */
 func TestCurrentStepFitsTheReadWindow(t *testing.T) {

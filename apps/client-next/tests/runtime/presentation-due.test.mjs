@@ -27,7 +27,7 @@ const { SCENARIOS } = await import( "../../tools/perf/presentation/scenarios.mjs
 const { createPresentationHarness } = await import( "../../tools/perf/presentation/harness.mjs" );
 const { PRESENTATION_DUE } = await import( "../../src/engine/runtime/characters/presentation-due.ts" );
 const { createActorSnapshots } = await import( "../../src/engine/runtime/renderer/characters/actor-snapshots.ts" );
-const { encodeCrowdValue } = await import( "../../tools/perf/core/crowd-capture.mjs" );
+const { sameRow } = await import( "../helpers/renderer-row.mjs" );
 // The settle scenario's seed, and the share of presented entities the
 // production rule must skip: its crowd stands still most of the run.
 const SEED = 1;
@@ -36,16 +36,6 @@ const SKIPPED_SHARE = .5;
 // and actors whose opacity is set after publication are not frozen, and
 // are copied in full on every frame.
 const CLOCK_COPY_SHARE = .6;
-// An own key holding undefined reads as an absent one (no renderer reader
-// enumerates a row's keys): the one difference the two owners' attachment
-// paths may leave, an in-place copy writing every optional field.
-const UNDEFINED = JSON.stringify( encodeCrowdValue( undefined ) );
-const rowText = rows =>
-	JSON.stringify(
-		encodeCrowdValue( rows ),
-		( key, value ) => key && JSON.stringify( value ) === UNDEFINED ? undefined : value
-	);
-
 /*
 ================
 freezeDeep
@@ -79,7 +69,7 @@ Every frame's outputs of one run of the session, encoded, and how often
 each rule was asked and answered not due. The published actors also enter
 two of the renderer's snapshot owners, one that copies only the clocks of
 a frozen actor whose other fields did not change and one that copies every
-actor in full: every frame's rows must be the same (rowText).
+actor in full: every frame's rows must be the same (sameRow).
 ================
 */
 async function replay( session, rules ) {
@@ -96,8 +86,7 @@ async function replay( session, rules ) {
 		due: { appearance: counted( "appearance" ), motion: counted( "motion" ), record: counted( "record" ) },
 		actors: actors => {
 			for ( const actor of actors ) freezeDeep( actor );
-			const a = rowText( reused.update( actors ) ), b = rowText( full.update( actors ) );
-			if ( a !== b && rowsDiffer < 0 ) rowsDiffer = frame;
+			if ( !sameRow( reused.update( actors ), full.update( actors ) ) && rowsDiffer < 0 ) rowsDiffer = frame;
 		}
 	} );
 	const frames = [];

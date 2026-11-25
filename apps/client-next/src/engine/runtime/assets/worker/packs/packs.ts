@@ -23,6 +23,7 @@ import { assetFailure } from "@/engine/foundation/assets/asset-recovery";
 import { gunzipBytes } from "@/engine/foundation/assets/read-bytes";
 import { sha256Hex } from "@/engine/foundation/assets/sha256";
 import { createPackBlocks } from "./blocks";
+import { createSharedBlocks, sharedLocks } from "./shared-blocks";
 import {
 	HD_TEXTURE_VARIANT_ROOT,
 	hdTextureVariantPath,
@@ -94,18 +95,6 @@ const RESIDENT_PACK_BYTES = 32 << 20;
 
 /*
 ================
-sharedLocks
-
-The origin's Web Locks, shared by every window and worker of the site,
-or null where the browser has none (tests, old engines).
-================
-*/
-function sharedLocks(): LockManager | null {
-	return typeof navigator !== "undefined" && navigator.locks ? navigator.locks : null;
-}
-
-/*
-================
 storedSizes
 
 The persistent store's size for every digest an index names: a pack is
@@ -141,6 +130,8 @@ export function createPacks(
 	const unpacked = new Set<string>();
 	// Store writes still in flight, by origin and digest (persistedMember).
 	const stores = new Map<string, Promise<void>>();
+	// The cross-window block sharing (shared-blocks.ts), one per window.
+	const shared = createSharedBlocks( lifetime.signal );
 	const loading = new Map<string, Promise<Loaded>>(), cache = new Map<string, Loaded>();
 	let storedBytes = 0, decodedBytes = 0, hashCalls = 0, hashBytes = 0;
 	// The texture variant this device is served, decided once (textureVariant).
@@ -254,30 +245,17 @@ export function createPacks(
 	members before it lets go, so the next finds its member stored.
 
 	The lock is optional: a browser without navigator.locks reads as a
-	lone window did before.
+	lone window did before. shared-blocks.ts owns the lock and the hold;
+	this owner supplies the block's fetch, store read and neighbour writes.
 	================
 	*/
 	function sharedMember( base: string, descriptor: PackDescriptor, start: number, entry: PackEntry ) {
 		const locks = sharedLocks();
 		if ( !locks ) return fetchedMember( base, descriptor, start, entry );
-		return new Promise<Uint8Array<ArrayBuffer>>( ( resolve, reject ) => {
-			locks.request(
-				blocks.blockName( base, descriptor, start, entry ),
-				{ signal: lifetime.signal },
-				async () => {
-					try {
-						// Another window may have stored it while this one waited.
-						const saved = await storedMember( base, entry );
-						if ( saved ) return resolve( saved );
-						resolve( await fetchedMember( base, descriptor, start, entry ) );
-						// Held until the block's members are stored: the window
-						// waiting next reads them instead of downloading again.
-						await storedNeighbours( base, descriptor, start, entry );
-					} catch ( error ) {
-						reject( error );
-					}
-				}
-			).catch( reject );
+		return shared.read( locks, blocks.blockName( base, descriptor, start, entry ), entry, {
+			fetched: member => fetchedMember( base, descriptor, start, member ),
+			stored: member => storedMember( base, member ),
+			neighbours: member => storedNeighbours( base, descriptor, start, member )
 		} );
 	}
 	/*
@@ -319,6 +297,12 @@ export function createPacks(
 		const writes = [ stores.get( base + "/" + entry.sha256 ) ];
 		for ( const neighbour of blocks.neighbours( base, descriptor, start, entry ) ) {
 			if ( disposed ) break;
+			// A member this hold served is already being written: wait on it.
+			const writing = stores.get( base + "/" + neighbour.entry.sha256 );
+			if ( writing ) {
+				writes.push( writing );
+				continue;
+			}
 			if ( await persistent.has( base, neighbour.entry.sha256, lifetime.signal ) !== false ) continue;
 			try {
 				await persistedMember( base, neighbour.entry, neighbour.stored );

@@ -43,6 +43,9 @@ export function etcCarriesPlusByte( typeFlags: number ): boolean {
 
 // CSOItem::Deserialize 78c830; magic list 78b1b0. Returns the next byte so
 // container owners can compose rows without guessing a reference-dependent size.
+// A rented row's equipment body ends with its deletion deadline (u64 unix ms,
+// the port's wire leg for native _RentItemInfo, #4240); rentRefs names the
+// rental kinds, learned with the reference rows, so only such a row reads it.
 /*
 ================
 decodeInventoryItem
@@ -52,7 +55,8 @@ export function decodeInventoryItem(
 	p: Uint8Array,
 	offset: number,
 	refs: ReadonlyMap<number, number>,
-	objRefs: ReadonlyMap<number, number> = new Map()
+	objRefs: ReadonlyMap<number, number> = new Map(),
+	rentRefs: ReadonlySet<number> = new Set()
 ): { item: InventoryItem | null; next: number; } {
 	const v = new DataView( p.buffer, p.byteOffset, p.byteLength );
 	let o = offset;
@@ -82,7 +86,8 @@ take
 		variance = "0",
 		label: string | undefined,
 		summon: InventoryItem["summon"],
-		transformRefObjId: number | undefined;
+		transformRefObjId: number | undefined,
+		rentExpiresUnixMs: number | undefined;
 	const magic: string[] = [];
 	/*
 ================
@@ -100,6 +105,9 @@ options
 		variance = u64();
 		durability = u32();
 		options();
+		if ( rentRefs.has( refObjId ) ) {
+			rentExpiresUnixMs = Number( v.getBigUint64( take( 8 ), true ) );
+		}
 	} else if ( band === 0x60 ) {
 		if ( group === 0x280 ) quantity = u32();
 		else {
@@ -166,6 +174,7 @@ options
 			magic,
 			...(summon ? { summon } : {}),
 			...(transformRefObjId === undefined ? {} : { transformRefObjId }),
+			...(rentExpiresUnixMs === undefined ? {} : { rentExpiresUnixMs }),
 			...(label === undefined ? {} : { label })
 		},
 		next: o

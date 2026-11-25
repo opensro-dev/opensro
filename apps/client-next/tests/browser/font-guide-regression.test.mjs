@@ -44,7 +44,7 @@ test('font atlas and guide remain coherent through authenticated boot and reload
    await page.evaluate(()=>__playableRuntime.session({kind:'logout'}));await page.waitForFunction(()=>__playableRuntime.sessionState()?.phase==='signed-out');
   }
   assert.deepEqual(errors,[]);
- }catch(error){failure=error;await page.screenshot({path:out+'/failure.png'}).catch(()=>{});}
+ }catch(error){failure=error;}
  finally{
   await page.context().tracing.stop({path:out+'/failure-trace.zip'}).catch(()=>{});
   await page.evaluate(()=>__playableRuntime?.session({kind:'logout'})).catch(()=>{});await browser.close();

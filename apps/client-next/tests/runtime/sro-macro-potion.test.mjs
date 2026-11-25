@@ -278,6 +278,13 @@ test("a consumable dropped on a row binds its item; a click on the slot clears i
 		"exact CodeName match, not a prefix"
 	);
 	assert.equal( loop.macroPotionAdmits( MACRO_ROW_BUFF_ITEM, ELIXIR_TYPE, SPEED_CODE ), true );
+	for ( const code of loop.MACRO_BUFF_ITEM_CODENAMES ) {
+		assert.equal(
+			loop.macroPotionAdmits( MACRO_ROW_BUFF_ITEM, ELIXIR_TYPE, code ),
+			true,
+			`${code} must admit on the buff-item row`
+		);
+	}
 	assert.equal(
 		hud.bindItem( "sro-macro:item:3", { refObjId: OTHER_REF, typeFlags: ELIXIR_TYPE, codename: SPEED_CODE } ),
 		true,

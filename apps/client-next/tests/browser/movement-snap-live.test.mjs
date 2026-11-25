@@ -23,6 +23,6 @@ test('capture double-click approach and monster retaliation movement',{timeout:1
   await page.waitForTimeout(7000);await page.screenshot({path:dir+'/approach.png'});
   await page.mouse.click(220,550);await page.waitForTimeout(10000);await page.screenshot({path:dir+'/chase.png'});
   report={...report,verdict:'CAPTURED',errors,...await page.evaluate(()=>__snap)};
- }catch(error){report={...report,verdict:'FAILED',error:String(error),errors,state:await page.evaluate(()=>({session:window.__playableRuntime?.sessionState(),output:document.querySelector('output')?.textContent}))};await page.screenshot({path:dir+'/failure.png'});throw error;}
+ }catch(error){report={...report,verdict:'FAILED',error:String(error),errors,state:await page.evaluate(()=>({session:window.__playableRuntime?.sessionState(),output:document.querySelector('output')?.textContent}))};throw error;}
  finally{await writeFile(dir+'/incident.json',JSON.stringify(report,null,2));try{if(tracing)await page.context().tracing.stop({path:dir+'/trace.zip'});}finally{await browser.close();}}
 });

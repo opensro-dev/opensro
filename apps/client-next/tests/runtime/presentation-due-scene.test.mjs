@@ -41,6 +41,7 @@ const { sceneSession, sceneSources } = await import( "../helpers/presentation-sc
 const { createPresentationHarness } = await import( "../../tools/perf/presentation/harness.mjs" );
 const { PRESENTATION_DUE } = await import( "../../src/engine/runtime/characters/presentation-due.ts" );
 const { createActorSnapshots } = await import( "../../src/engine/runtime/renderer/characters/actor-snapshots.ts" );
+const { sameRow } = await import( "../helpers/renderer-row.mjs" );
 const SEED = 1;
 const RULES = [ "appearance", "motion", "record" ];
 // The share of rule answers the production run must skip: the crowd
@@ -50,70 +51,6 @@ const SKIPPED_SHARE = .5;
 const PARTICLE_HIDDEN_FRACTION = Math.fround( .9 );
 // The share of renderer copies that must copy only clocks.
 const CLOCK_COPY_SHARE = .5;
-// The nesting past which a row is refused, as the crowd capture refuses it.
-const MAX_ROW_DEPTH = 64;
-
-/*
-================
-definedKeys
-
-A plain object's own keys that hold a value. An own key holding undefined
-reads as an absent one (no renderer reader enumerates a row's keys): the
-one difference the two owners' attachment paths may leave, an in-place copy
-writing every optional field.
-================
-*/
-function definedKeys( value ) {
-	return Object.keys( value ).filter( key => value[key] !== undefined );
-}
-
-/*
-================
-sameRow
-
-Whether two renderer rows are the same input, by the crowd capture's
-rules (tools/perf/core/crowd-capture.mjs encodeCrowdValue): -0 is not 0, a
-Float32Array compares by its values, and a non-finite number or an object
-that is not plain data is refused. Compared in place rather than encoded and
-stringified: both owners' rows are compared on every frame of both runs,
-and encoding them was most of this file's time (#3756).
-================
-*/
-function sameRow( a, b, depth = 0 ) {
-	if ( depth > MAX_ROW_DEPTH ) throw Error( "Renderer row nesting limit" );
-	if ( typeof a === "number" || typeof b === "number" ) {
-		if ( typeof a === "number" && !Number.isFinite( a ) || typeof b === "number" && !Number.isFinite( b ) ) {
-			throw Error( "Non-finite renderer row value" );
-		}
-		return Object.is( a, b );
-	}
-	if ( a === null || b === null || typeof a !== "object" || typeof b !== "object" ) return a === b;
-	if ( a instanceof Float32Array || b instanceof Float32Array ) {
-		if ( !(a instanceof Float32Array && b instanceof Float32Array) || a.length !== b.length ) return false;
-		for ( let i = 0; i < a.length; i++ ) {
-			if ( !sameRow( a[i], b[i], depth + 1 ) ) return false;
-		}
-		return true;
-	}
-	if ( Array.isArray( a ) || Array.isArray( b ) ) {
-		if ( !(Array.isArray( a ) && Array.isArray( b )) || a.length !== b.length ) return false;
-		for ( let i = 0; i < a.length; i++ ) {
-			if ( !sameRow( a[i], b[i], depth + 1 ) ) return false;
-		}
-		return true;
-	}
-	for ( const value of [ a, b ] ) {
-		if ( ![ Object.prototype, null ].includes( Object.getPrototypeOf( value ) ) ) {
-			throw Error( "Unsupported renderer row object" );
-		}
-	}
-	const keys = definedKeys( a );
-	if ( keys.length !== definedKeys( b ).length ) return false;
-	for ( const key of keys ) {
-		if ( !Object.hasOwn( b, key ) || !sameRow( a[key], b[key], depth + 1 ) ) return false;
-	}
-	return true;
-}
 
 /*
 ================

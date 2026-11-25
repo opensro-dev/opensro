@@ -25,19 +25,34 @@ const maxPackageContents = 96
 packageContents
 ================
 */
-func packageContents(rows [][]string, refs enterworld.ItemRefSource) ([]Content, error) {
+func packageContents(rows [][]string, refs enterworld.ItemRefSource, rents rentTerms) ([]Content, error) {
 	if refs == nil || len(rows) == 0 || len(rows) > maxPackageContents {
 		return nil, fmt.Errorf("commerce: invalid package contents")
 	}
 	contents := make([]Content, 0, len(rows))
 	for _, row := range rows {
-		content, err := packageContent(row, refs)
+		content, err := packageContent(row, refs, rents)
 		if err != nil {
 			return nil, err
 		}
 		contents = append(contents, content)
 	}
 	return contents, nil
+}
+
+// scrapRentTerm is the rental term a scrap row names (refrentitem's
+// code), or "" for an ordinary scrap (native rows carry "xxx"; the
+// rental term is what later_mall_goods.py lists a good by, #4240).
+/*
+================
+scrapRentTerm
+================
+*/
+func scrapRentTerm(row []string) string {
+	if len(row) > 21 && row[21] != "xxx" {
+		return row[21]
+	}
+	return ""
 }
 
 /*
@@ -48,7 +63,7 @@ Equipment, ordinary expendables and unopened COS summoners carry different
 Data meanings. Reject a template that the shared item body cannot preserve.
 ================
 */
-func packageContent(row []string, refs enterworld.ItemRefSource) (Content, error) {
+func packageContent(row []string, refs enterworld.ItemRefSource, rents rentTerms) (Content, error) {
 	if len(row) < 20 {
 		return Content{}, fmt.Errorf("commerce: truncated item template")
 	}
@@ -96,7 +111,18 @@ func packageContent(row []string, refs enterworld.ItemRefSource) (Content, error
 	default:
 		return Content{}, fmt.Errorf("commerce: unsupported item template %s", row[3])
 	}
-	return Content{Ref: ref, Stack: stack, Plus: uint8(plus), Variance: variance, Data: uint32(data), Magic: magic}, nil
+	content := Content{Ref: ref, Stack: stack, Plus: uint8(plus), Variance: variance, Data: uint32(data), Magic: magic}
+	if term := scrapRentTerm(row); term != "" {
+		minutes, found := rents.periods[term]
+		if !found {
+			if rents.windows[term] {
+				return Content{}, fmt.Errorf("commerce: rent term %s is a fixed window; only periods are sold", term)
+			}
+			return Content{}, fmt.Errorf("commerce: rent term %s has no refrentitem row", term)
+		}
+		content.RentMinutes = minutes
+	}
+	return content, nil
 }
 
 /*
@@ -110,7 +136,7 @@ turn one authored package into a different, partially delivered package.
 func (catalog *MallCatalog) Hydrate(refs enterworld.ItemRefSource) error {
 	for index := range catalog.Offers {
 		offer := &catalog.Offers[index]
-		contents, err := packageContents(offer.Scraps, refs)
+		contents, err := packageContents(offer.Scraps, refs, catalog.rents)
 		if err != nil {
 			return fmt.Errorf("mall: %s: %w", offer.Code, err)
 		}

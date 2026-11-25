@@ -97,6 +97,12 @@ type Runtime struct {
 	// port-only, not native, #3358): the answer line and true when the
 	// line was the command; nil leaves "/contributor" ordinary text.
 	Contributor func(accountID, message string) (answer string, handled bool)
+	// PlusFailNotice commits the speaker's failed-reinforcement
+	// announcement choice (the /plusfail command, plusfail.go,
+	// port-only, not native, #3682): on asks for the announcements on,
+	// and the result reports whether the choice was stored. Nil
+	// leaves "/plusfail" ordinary text.
+	PlusFailNotice func(character *enterworld.Character, on bool) bool
 	// EventBotWhisper is the EventBot host's intake (social/eventbot,
 	// port-only, not native, #3533): the host is asked about every
 	// whisper and claims the ones addressed to it (handled), answering

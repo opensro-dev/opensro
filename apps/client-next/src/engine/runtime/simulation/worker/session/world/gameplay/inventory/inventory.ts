@@ -203,7 +203,7 @@ preview
 			throw Error( "Conflicting commerce preview type" );
 		}
 		types.set( row.refObjId, row.typeFlags );
-		const decoded = decodeInventoryItem( bytes, 0, types, objRefs );
+		const decoded = decodeInventoryItem( bytes, 0, types, objRefs, rentRefs );
 		if ( !decoded.item || decoded.next !== bytes.length ) throw Error( "Invalid commerce preview body" );
 		return { ...decoded.item, name: row.name };
 	}
@@ -273,6 +273,9 @@ as natively; a good with no reference row never marks the page.
 	const objRefs = new Map<number, number>();
 	const useCooldowns = new Map<number, number>();
 	const refs = new Map<number, number>(), names = new Map<number, string>();
+	// The rental kinds (reference rows that carry a rent deadline in
+	// their item bodies, #4240), learned with the other references.
+	const rentRefs = new Set<number>();
 	const icons = new Map<number, string>();
 	const codenames = new Map<number, string>();
 	const tooltipRefs = new Map<number, ItemTooltipReference>();
@@ -453,7 +456,7 @@ body
 ================
 	*/
 	function body( p: Uint8Array, index: number ): InventoryItem | null {
-		const { item, next } = decodeInventoryItem( p, index, refs, objRefs );
+		const { item, next } = decodeInventoryItem( p, index, refs, objRefs, rentRefs );
 		if ( next !== p.length ) throw new Error( "Invalid inventory item body" );
 		return item ? { ...item, name: names.get( item.refObjId ), icon: icons.get( item.refObjId ) } : null;
 	}
@@ -487,7 +490,8 @@ decodeShopItems
 			if ( nextRefs.has( id ) && nextRefs.get( id ) !== flags ) throw Error( "Conflicting shop item reference" );
 			nextRefs.set( id, flags );
 			nextNames.set( id, row.name );
-			const bytes = Uint8Array.from( row.body ), decoded = decodeInventoryItem( bytes, 0, nextRefs, objRefs );
+			const bytes = Uint8Array.from( row.body ),
+				decoded = decodeInventoryItem( bytes, 0, nextRefs, objRefs, rentRefs );
 			if ( !decoded.item || decoded.item.refObjId !== id || decoded.next !== bytes.length ) {
 				throw Error( "Invalid shop item body" );
 			}
@@ -613,7 +617,7 @@ data and never fails the session.
 		*/
 		noticeItem( body: Uint8Array ): InventoryItem | undefined {
 			try {
-				const decoded = decodeInventoryItem( body, 0, refs, objRefs );
+				const decoded = decodeInventoryItem( body, 0, refs, objRefs, rentRefs );
 				return decoded.item && decoded.next === body.length ? present( decoded.item ) : undefined;
 			} catch {
 				return undefined;
@@ -776,6 +780,17 @@ pet record names, for decoders of rows held elsewhere (the storage room).
 		},
 		/*
 ================
+rentRefs
+
+The rental kinds whose bodies carry the rent deadline leg (#4240), for
+the storage-room list decoder the same way objectRefs serves it.
+================
+		*/
+		rentRefs(): ReadonlySet<number> {
+			return rentRefs;
+		},
+		/*
+================
 takeMarketNotices
 
 The consignment market's events not yet printed (port-only, #3529): a
@@ -887,6 +902,7 @@ references
 			}
 			for ( const row of rows ) {
 				refs.set( row.refObjId, row.typeFlags );
+				if ( row.rent ) rentRefs.add( row.refObjId );
 				names.set( row.refObjId, row.name );
 				// An item bought after login (a switch scroll) is known by
 				// the delta's codename, as a bootstrap row is by its own.
@@ -934,6 +950,7 @@ bootstrap
 					codename?: string;
 					nativeFields?: { useCooldownDuration528?: number; };
 					descriptionSymbol?: string;
+					rent?: boolean;
 					refObjId: number;
 					typeFlags: number;
 				}[];
@@ -961,6 +978,7 @@ bootstrap
 					[]
 			) objRefs.set( row.refObjId, row.tidWord );
 			refs.clear();
+			rentRefs.clear();
 			useCooldowns.clear();
 			slots.clear();
 			avatars.clear();
@@ -982,6 +1000,7 @@ bootstrap
 					throw Error( "Invalid item cooldown authority" );
 				}
 				useCooldowns.set( r.refObjId, cooldown );
+				if ( r.rent ) rentRefs.add( r.refObjId );
 				refs.set( r.refObjId, r.typeFlags );
 				if ( typeof r.name === "string" ) names.set( r.refObjId, r.name );
 				if ( typeof r.codename === "string" ) codenames.set( r.refObjId, r.codename );

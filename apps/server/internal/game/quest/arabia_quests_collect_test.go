@@ -23,7 +23,7 @@ import (
 )
 
 // arabiaCollectWanted is the authored set, in table order: 13
-// deliveries and 25 collects.
+// deliveries and 24 collects (QNO_AR_091 is held: its NPC is unplaced).
 var arabiaCollectWanted = []string{
 	"QNO_AR_006", "QNO_AR_007", "QNO_AR_011", "QNO_AR_013", "QNO_AR_015",
 	"QNO_AR_016", "QNO_AR_022", "QNO_AR_023", "QNO_AR_024", "QNO_AR_025",
@@ -31,8 +31,8 @@ var arabiaCollectWanted = []string{
 	"QNO_AR_037", "QNO_AR_038", "QNO_AR_039", "QNO_AR_044", "QNO_AR_046",
 	"QNO_AR_048", "QNO_AR_050", "QNO_AR_051", "QNO_AR_055", "QNO_AR_056",
 	"QNO_AR_057", "QNO_AR_058", "QNO_AR_061", "QNO_AR_062", "QNO_AR_063",
-	"QNO_AR_064", "QNO_AR_065", "QNO_AR_067", "QNO_AR_069", "QNO_AR_091",
-	"QNO_AR_095", "QNO_AR_100", "QNO_AR_101",
+	"QNO_AR_064", "QNO_AR_065", "QNO_AR_067", "QNO_AR_069", "QNO_AR_095",
+	"QNO_AR_100", "QNO_AR_101",
 }
 
 /*
@@ -73,7 +73,7 @@ func TestArabiaCollectTableIsTheEvidenceSet(t *testing.T) {
 	if general.CollectCount != 1 || general.MonsterDrop.MonsterCodenames[0] != "MOB_ARABIA_MAD_GENERAL" {
 		t.Errorf("QNO_AR_069 %+v", general)
 	}
-	for _, code := range []string{"QNO_AR_091", "QNO_AR_095", "QNO_AR_100"} {
+	for _, code := range []string{"QNO_AR_095", "QNO_AR_100"} {
 		five := known[code]
 		if five.MaxCompletions != 5 || five.CollectItemCodename != "ITEM_"+code || five.CollectCount != 300 {
 			t.Errorf("%s %+v, want a 5-completion collect of 300 %s", code, five, "ITEM_"+code)
@@ -87,7 +87,7 @@ func TestArabiaCollectTableIsTheEvidenceSet(t *testing.T) {
 		t.Errorf("QNO_AR_016 %+v", deliver)
 	}
 	opening := known["QNO_AR_006"]
-	if len(opening.RequiredQuests) != 0 || opening.StartNpcCodename != "NPC_AR_SOLDIER_2" || opening.EndNpcCodename != "NPC_AR_FARMER_3" {
+	if len(opening.RequiredQuests) != 0 || opening.StartNpcCodename != "NPC_AR_SOLDIER_2" || opening.EndNpcCodename != "NPC_AR_FARMER3" {
 		t.Errorf("QNO_AR_006 %+v", opening)
 	}
 	last := known["QNO_AR_101"]
@@ -98,7 +98,7 @@ func TestArabiaCollectTableIsTheEvidenceSet(t *testing.T) {
 	// the delivery behind a held collect, the unplaced kinds, the
 	// quest whose target kind no source carries): none may appear.
 	for _, held := range []string{"QNO_AR_012", "QNO_AR_014", "QNO_AR_017", "QNO_AR_018",
-		"QNO_AR_059", "QNO_AR_066", "QNO_AR_068"} {
+		"QNO_AR_059", "QNO_AR_066", "QNO_AR_068", "QNO_AR_091"} {
 		if _, ok := known[held]; ok {
 			t.Errorf("%s is authored ahead of its evidence", held)
 		}

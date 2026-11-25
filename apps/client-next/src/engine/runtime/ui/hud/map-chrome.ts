@@ -207,15 +207,19 @@ function image( paint: MapChromePaint, texture: string, rect: UiRect, clip: UiRe
 ================
 mapPanel
 
-The map's screen rect inside a window of this size.
+The map's screen rect inside a window of this size. A window squeezed
+below its own frame insets (a viewport a few pixels wide, as while
+DevTools docks) gets an empty panel: the page tiles are clipped to it, and
+a negative extent fails the renderer's admission (copyUi) and stops the
+runtime.
 ================
 */
 export function mapPanel( box: UiRect ): UiRect {
 	return [
 		box[0] + PANEL_LEFT,
 		box[1] + PANEL_TOP,
-		box[2] - PANEL_LEFT - PANEL_RIGHT,
-		box[3] - PANEL_TOP - PANEL_BOTTOM
+		Math.max( 0, box[2] - PANEL_LEFT - PANEL_RIGHT ),
+		Math.max( 0, box[3] - PANEL_TOP - PANEL_BOTTOM )
 	];
 }
 

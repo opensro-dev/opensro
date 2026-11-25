@@ -2,13 +2,14 @@
 ===========================================================================
 
 announce_plus_fail_test.go - the high-plus failure notice: flag,
-opt-in, threshold, wording, caps (#2852)
+opt-out, threshold, wording, caps (#2852, opt-out #3682)
 
-Port-only, not native: with the shard flag off, or the character not
-opted in, a failed reinforce is never announced. Failures keep
-#1738's privacy rule: the job alias or "a player", never the
-character name, on the break channel linking the item (#3260) and
-never the player.
+Port-only, not native: with the shard flag off, or the character
+opted out, a failed reinforce is never announced; every other
+character's failure at the threshold is. Failures keep #1738's
+privacy rule: the job alias or "a player", never the character
+name, on the break channel linking the item (#3260) and never the
+player.
 
 ===========================================================================
 */
@@ -43,33 +44,35 @@ func failedAt(plus uint8, destroyed, saved bool, final uint8) alchemy.Outcome {
 
 /*
 ================
-TestPlusFailFollowsTheFlagOptInAndThreshold
+TestPlusFailFollowsTheFlagOptOutAndThreshold
 
-Both gates closed, or either one: silent. Both open: a failure below
-the minimum is silent, at it one notice. A success never notices.
+The flag off, or the character opted out: silent. Otherwise a failure
+below the minimum is silent, at it one notice. A success never
+notices. The default character (no opt-out recorded) is announced:
+the opt-out is the exception, not the admission (#3682).
 ================
 */
-func TestPlusFailFollowsTheFlagOptInAndThreshold(t *testing.T) {
+func TestPlusFailFollowsTheFlagOptOutAndThreshold(t *testing.T) {
 	for _, tc := range []struct {
-		name    string
-		flag    bool
-		optedIn bool
-		outcome alchemy.Outcome
-		want    int
+		name     string
+		flag     bool
+		optedOut bool
+		outcome  alchemy.Outcome
+		want     int
 	}{
-		{"flag off", false, true, failedAt(8, false, false, 0), 0},
-		{"not opted in", true, false, failedAt(8, false, false, 0), 0},
-		{"both closed", false, false, failedAt(8, false, false, 0), 0},
-		{"both open at +9", true, true, failedAt(8, false, false, 0), 1},
-		{"both open at +12", true, true, failedAt(11, true, false, 0), 1},
-		{"a +8 attempt", true, true, failedAt(7, false, false, 0), 0},
-		{"a success", true, true, alchemy.Outcome{Success: true, From: 8, Target: 13}, 0},
+		{"flag off", false, false, failedAt(8, false, false, 0), 0},
+		{"opted out", true, true, failedAt(8, false, false, 0), 0},
+		{"flag off and opted out", false, true, failedAt(8, false, false, 0), 0},
+		{"announced at +9", true, false, failedAt(8, false, false, 0), 1},
+		{"announced at +12", true, false, failedAt(11, true, false, 0), 1},
+		{"a +8 attempt", true, false, failedAt(7, false, false, 0), 0},
+		{"a success", true, false, alchemy.Outcome{Success: true, From: 8, Target: 13}, 0},
 	} {
 		rt, _ := newTestRuntime(testCharacter(), nil)
 		rt.Announce.PlusFail = tc.flag
 		rt.Announce.PlusFailMin = announcePlusFailMinDefault
 		character := testCharacter()
-		character.BreakNotice = tc.optedIn
+		character.PlusFailOptOut = tc.optedOut
 		rt.announcePlusFail(testDivision, character, failTarget(tc.outcome), tc.outcome, 0)
 		if got := drainedNotices(t, rt); len(got) != tc.want {
 			t.Fatalf("%s: %d notices %q, want %d", tc.name, len(got), got, tc.want)
@@ -150,7 +153,7 @@ func TestPlusFailWordingNamesTheOutcomeAndNeverTheCharacter(t *testing.T) {
 ================
 TestPlusFailCaps
 
-Seven opted-in failures in a minute show the kind's shard cap; the
+Seven announced failures in a minute show the kind's shard cap; the
 next minute shows again.
 ================
 */

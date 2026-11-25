@@ -128,7 +128,7 @@ func TestCommitWritesChangedSectionsByteIdentical(t *testing.T) {
 		{"inventory", func(c *domain.Character) { c.MissionInventory[0].StackCount = 5 }},
 		{"skills", func(c *domain.Character) { c.Skills = append(c.Skills, 777) }},
 		{"social", func(c *domain.Character) { c.Friends = append(c.Friends, domain.FriendRecord{ID: 9, Name: "pal"}) }},
-		{"rest", func(c *domain.Character) { c.BreakNotice = true }},
+		{"rest", func(c *domain.Character) { c.BreakNotice = true; c.PlusFailOptOut = true }},
 		{"identity", func(c *domain.Character) { c.AnimationSetName = "other" }},
 	}
 	for _, mutation := range mutations {

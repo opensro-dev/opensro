@@ -229,7 +229,8 @@ storage failed every list and dropped the session).
 export function decodeStorageList(
 	p: Uint8Array,
 	refs: ReadonlyMap<number, number>,
-	objRefs: ReadonlyMap<number, number> = new Map()
+	objRefs: ReadonlyMap<number, number> = new Map(),
+	rentRefs: ReadonlySet<number> = new Set()
 ) {
 	if ( p.length < 2 ) throw Error( "Invalid storage list" );
 	const capacity = p[0]!, count = p[1]!, items: InventoryItem[] = [];
@@ -238,7 +239,7 @@ export function decodeStorageList(
 	for ( let i = 0; i < count; i++ ) {
 		if ( o >= p.length ) throw Error( "Truncated storage list" );
 		const slot = p[o]!;
-		const decoded = decodeInventoryItem( p, o + 1, refs, objRefs );
+		const decoded = decodeInventoryItem( p, o + 1, refs, objRefs, rentRefs );
 		if ( !decoded.item || slot >= capacity || items.some( row => row.slot === slot ) ) {
 			throw Error( "Invalid storage row" );
 		}
@@ -382,7 +383,8 @@ True when the frame belonged to the warehouse.
 		receive(
 			frame: WireFrame,
 			refs: ReadonlyMap<number, number>,
-			objRefs: ReadonlyMap<number, number> = new Map()
+			objRefs: ReadonlyMap<number, number> = new Map(),
+			rentRefs: ReadonlySet<number> = new Set()
 		): boolean {
 			const p = frame.payload;
 			if ( room?.guild ) {
@@ -417,7 +419,7 @@ True when the frame belonged to the warehouse.
 					return true;
 				}
 				if ( frame.opcode === OP_GUILD_STORAGE_LIST ) {
-					room = { ...room, ...decodeStorageList( p, refs, objRefs ) };
+					room = { ...room, ...decodeStorageList( p, refs, objRefs, rentRefs ) };
 					return true;
 				}
 				if ( frame.opcode === OP_GUILD_STORAGE_LISTED ) {
@@ -435,7 +437,7 @@ True when the frame belonged to the warehouse.
 				return true;
 			}
 			if ( frame.opcode === OP_STORAGE_LIST ) {
-				const list = decodeStorageList( frame.payload, refs, objRefs );
+				const list = decodeStorageList( frame.payload, refs, objRefs, rentRefs );
 				if ( room?.phase === "listing" ) {
 					room = { ...room, phase: "opening", ...list, gold };
 					send( storageOpenRequest( room.npc ) );

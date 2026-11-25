@@ -555,6 +555,31 @@ class SkytempleImportTest(unittest.TestCase):
 			self.assertNotIn("SN_MOB_SKYTEMPLE_A_TEST", names)
 
 	# ================
+	# test_earlier_layer_name_row_survives_the_strip
+	#
+	# A name row an earlier layer added already stands in the table
+	# and the temple kind names its symbol: this build appends no
+	# row for it, so it owns nothing of it, and the flag-off strip
+	# leaves the earlier layer's row standing (#3767).
+	# ================
+	def test_earlier_layer_name_row_survives_the_strip(self):
+		with tempfile.TemporaryDirectory() as tmp:
+			native, output, source = build_trees(Path(tmp))
+			text = output / sky.TEXT_ROOT
+			rows = read_rows(text / "textdataname.txt")
+			rows.append(["1", "SN_MOB_SKYTEMPLE_A_TEST", "x", "", "", "Earlier Beast", "", "", "", "", ""])
+			write_table(text, "textdataname.txt", rows)
+			closure = FakeClosure()
+			with mock.patch.dict(os.environ, {sky.FLAG: "1"}):
+				sky.add_skytemple(native, output, source, closure)
+			marker = json.loads((output / sky.MARKER).read_text(encoding="utf-8"))
+			self.assertNotIn("SN_MOB_SKYTEMPLE_A_TEST", marker["nameSymbols"])
+			with mock.patch.dict(os.environ, {sky.FLAG: "off"}):
+				sky.add_skytemple(native, output, source, closure)
+			names = {row[1] for row in read_rows(text / "textdataname.txt") if len(row) > 1}
+			self.assertIn("SN_MOB_SKYTEMPLE_A_TEST", names)
+
+	# ================
 	# test_off_without_marker_is_a_noop
 	# ================
 	def test_off_without_marker_is_a_noop(self):

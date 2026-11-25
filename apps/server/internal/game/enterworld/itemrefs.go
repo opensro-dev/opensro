@@ -199,6 +199,7 @@ func (t *TextdataItems) parse() {
 		for r := range t.itemRows() {
 			t.byID[r.RefObjID] = r
 		}
+		t.markRentItems()
 	}()
 	t.charactersByCodename = map[string]*CharacterRef{}
 	t.characterIDsByCodename = map[string]uint32{}

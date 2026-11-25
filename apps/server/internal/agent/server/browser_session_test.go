@@ -110,8 +110,15 @@ func TestBrowserSessionRefreshExpiryAndLogout(t *testing.T) {
 	if len(restored.Result().Cookies()) != 0 {
 		t.Fatal("reload must not extend expiry")
 	}
-	if call("/title/session", nil, "", "application/json").Code != 401 {
-		t.Fatal("anonymous resume accepted")
+	// No cookie is a visitor with nothing to restore: 200, ok false, and
+	// no session in the answer.
+	anonymous := call("/title/session", nil, "", "application/json")
+	var anonymousBody map[string]any
+	if err := json.Unmarshal(anonymous.Body.Bytes(), &anonymousBody); err != nil {
+		t.Fatal(err)
+	}
+	if anonymous.Code != 200 || anonymousBody["ok"] != false || anonymousBody["sessionToken"] != nil {
+		t.Fatalf("anonymous restore = %d %v, want 200 ok false", anonymous.Code, anonymousBody)
 	}
 	forged := *cookie
 	forged.Value += "x"

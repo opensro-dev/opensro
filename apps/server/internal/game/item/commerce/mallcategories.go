@@ -41,13 +41,14 @@ ITEM_ETC_E050729_SUMMON*_SCROLL rows no native family serves, priced
 they summon strong monsters (#4030), and their use is
 action/summonscroll.go, behind this same setting.
 
-Sabakun's jewel and the extension gear were held back on the same
-evidence (#3331): both serve only the Devil's Spirit, and a listing
-would have sold items that cannot be used. The owner's call
-(2026-11-12) was to port that system first (#3348) and list both
-with it. The system stands now (#3456), so with SRO_NASRUN on both
-list in Premium > Gears (nasrunGoods); off, or without their
-imported rows, the tab is exactly as shipped. The Joon and
+The Devil's Spirit family was held back on the same evidence
+(#3331): its goods serve only the Spirit, and a listing would have
+sold items that cannot be used. The owner's call (2026-11-12) was
+to port that system first (#3348) and list the family with it. The
+system stands now (#3456), so with SRO_NASRUN on the six Spirits,
+the extension gear and Sabakun's jewel list in Premium > Gears
+(nasrunGoods) at the later mall's prices where it has them; off,
+or without their imported rows, the tab is exactly as shipped. The Joon and
 Firespirits summon scrolls of HOT shop > Halloween Exclusive have
 no row in any source this build reads and wait for one; no rows
 are invented.
@@ -180,33 +181,52 @@ func gearsStoneGoods() []mallCategoryGood {
 	return goods
 }
 
-// nasrunMallSilk is the authored price of each Devil's Spirit good
-// in the mall: the Gears tab's own 30-silk tier (gearsStoneSilk). No
-// source this build reads prices either kind in a mall, so the
-// number is authored here with the rest, retunable in this place.
-const nasrunMallSilk = 30
+// The Devil's Spirit prices. The v1.696 mall sells each Spirit at
+// 150 silk on its MALL_PREMIUM_NASRUN tab (packages 51522-51527,
+// one per Spirit) and the extension gear at 50 on
+// MALL_PREMIUM_NASRUN_ETC (package 51528): the later mall's own
+// refpricepolicyofitem silk rows (#4240 part 4). No later package
+// sells Sabakun's jewel - the later mall's remaining Nasrun package
+// sells an upgrade scroll for gold, an item this build does not
+// import - so the jewel keeps the authored 30 of the Gears tab's
+// tier, retunable in this place.
+const (
+	nasrunSpiritSilk = 150
+	nasrunGearSilk   = 50
+	nasrunJewelSilk  = 30
+)
 
 /*
 ================
 nasrunGoods
 
-Sabakun's jewel and the extension gear in Premium > Gears (#3456
-step 5), each its own authored package at the authored price,
-badged new. Both ride SRO_NASRUN twice over: their rows only exist
-when the import staged them (Imported), and the mall lists them
-only while the system stands (Nasrun) - until the Spirit's socket,
-awakening clock and alchemy were ported, a listing would have sold
-items that cannot be used (#3331). Both also sell on the honor
-shops' second tabs for tokens (nasrungoods.go); the mall listing
-is the silk door the later mall's screenshot shows.
+The Devil's Spirit in Premium > Gears (#3456 step 5, #4240
+part 4): the six A grade Spirits at the later mall's 150 silk, the
+extension gear at its 50 and Sabakun's jewel at the authored 30
+(above), each its own package, badged new. All ride SRO_NASRUN
+twice over: their rows only exist when the import staged them
+(Imported), and the mall lists them only while the system stands
+(Nasrun) - until the Spirit's socket, awakening clock and alchemy
+were ported, a listing would have sold items that cannot be used
+(#3331). The same goods also sell on the honor shops' second tabs
+for tokens (nasrungoods.go); the mall listing is the silk door the
+later mall shows. The S grade _UNIQUE pair is not sold, as on the
+token door: the later mall lists it only as a Premium Mall copy,
+and that shop is never ported (owner decision on #4240), so the
+silk mall never carries it.
 ================
 */
 func nasrunGoods() []mallCategoryGood {
-	goods := make([]mallCategoryGood, 0, 2)
-	for _, item := range []string{nasrunJewel, nasrunGear} {
-		goods = append(goods, mallCategoryGood{Tab: "MALL_PREMIUM_GEARS", Package: "PACKAGE_" + item,
-			Item: item, Silk: nasrunMallSilk, Badge: mallBadgeNew, Imported: true, Nasrun: true})
+	goods := make([]mallCategoryGood, 0, len(nasrunSpirits)+2)
+	for _, spirit := range nasrunSpirits {
+		goods = append(goods, mallCategoryGood{Tab: "MALL_PREMIUM_GEARS", Package: "PACKAGE_" + spirit,
+			Item: spirit, Silk: nasrunSpiritSilk, Badge: mallBadgeNew, Imported: true, Nasrun: true})
 	}
+	goods = append(goods,
+		mallCategoryGood{Tab: "MALL_PREMIUM_GEARS", Package: "PACKAGE_" + nasrunGear,
+			Item: nasrunGear, Silk: nasrunGearSilk, Badge: mallBadgeNew, Imported: true, Nasrun: true},
+		mallCategoryGood{Tab: "MALL_PREMIUM_GEARS", Package: "PACKAGE_" + nasrunJewel,
+			Item: nasrunJewel, Silk: nasrunJewelSilk, Badge: mallBadgeNew, Imported: true, Nasrun: true})
 	return goods
 }
 
@@ -338,6 +358,17 @@ Recommended picks) must already be listed; they gain no row. Returns
 each authored package's badge for LoadMall to stamp on its one offer.
 A layout package whose data is missing refuses the boot naming the
 setting, like a bad extra-goods entry.
+
+A good the layout would author (Item set) whose package the data
+already carries is sold as the data has it: the layout writes no second
+package and keeps the data's price, and only lists it in its layout tab
+with its badge. Since #4241 the build imports the v1.696 mall row for
+the winter snowman scroll (MALL_PET_B_SILK, 88 silk, the layout's own
+tab and price), and authoring it again refused the GameWorld boot
+("already has package data"). A later native row wins over the
+layout's stand-in. The data's own mall listing was removed with the
+others above, so the layout's row is its one listing. The layout
+naming one package in two tabbed goods is still refused.
 ================
 */
 func addMallCategoryRows(tables map[string][][]string, refs enterworld.ItemRefSource) (map[string]string, error) {
@@ -417,7 +448,14 @@ func addMallCategoryRows(tables map[string][][]string, refs enterworld.ItemRefSo
 		}
 	}
 	badges := map[string]string{}
+	laidOut := map[string]bool{}
 	for _, good := range mallCategoryGoods {
+		if good.Tab != "" {
+			if laidOut[good.Package] {
+				return nil, fmt.Errorf("%s: the layout lists %s twice", EnvMallCategories, good.Package)
+			}
+			laidOut[good.Package] = true
+		}
 		if good.Imported && !itemRefPresent(refs, good.Item) {
 			continue
 		}
@@ -433,10 +471,7 @@ func addMallCategoryRows(tables map[string][][]string, refs enterworld.ItemRefSo
 			}
 			continue
 		}
-		if good.Item != "" {
-			if authored[good.Package] {
-				return nil, fmt.Errorf("%s: %s already has package data", EnvMallCategories, good.Package)
-			}
+		if good.Item != "" && !authored[good.Package] {
 			entry := MallExtraGood{Tab: good.Tab, Package: good.Package, Item: good.Item, Silk: good.Silk}
 			if err := authorMallPackage(tables, entry, refs, uint32(nextPackageID)); err != nil {
 				return nil, err

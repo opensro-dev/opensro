@@ -77,6 +77,11 @@ type InventoryRow struct {
 	// seal above still refuses first. Absent on every other row, which
 	// is the migration: pre-split mall items read as granted/bound.
 	EarnedBought bool `json:"earnedBought,omitempty"`
+	// RentExpiresUnix is a rental's deletion time in unix seconds
+	// (native _RentItemInfo: a rented item's PeriodEndTime, filled from
+	// its scrap's refrentitem term at delivery, #4240). The world-entry
+	// sweep deletes a row at or past it; absent or zero is not a rental.
+	RentExpiresUnix int64 `json:"rentExpiresUnix,omitempty"`
 }
 
 /*
@@ -403,6 +408,24 @@ type Character struct {
 	// the opensro.online account-page choice, schema 32). Off: their
 	// alchemy breaks are never announced.
 	BreakNotice bool `json:"breakNotice,omitempty"`
+	// PlusFailOptOut is the character's opt-out of the shard's failed
+	// reinforcement announcements (port-only, not native:
+	// SRO_ANNOUNCE_PLUS_FAIL, #3682, the opensro.online account-page
+	// choice or "/plusfail off" in game, schema 51). The #2852 failure
+	// notice rode the breakNotice opt-in; it is announced unless the
+	// character opted out. Set: their failed high-plus attempts are
+	// never announced.
+	PlusFailOptOut bool `json:"plusFailOptOut,omitempty"`
+	// ReverseUserPoint is the saved location of the reverse return
+	// scroll's user window (later-native v1.696, #3903; schema 52): the
+	// point its enroll button records and its move button returns to.
+	// It is the reverse-return twin of the world's LastRecallPoint and
+	// LastDeathPoint, but lives at the top level: a field nested in
+	// world cannot ride an additive schema step (a previous binary
+	// refuses nested additions on a rewrite, #3090), and this one must
+	// stay additive. Absent until the player enrolls one; like the
+	// recall and death points it records only in a type-0 world.
+	ReverseUserPoint *WorldPoint `json:"reverseUserPoint,omitempty"`
 	// MostWanted is the character's job-kill streak (port-only, not native:
 	// SRO_MOST_WANTED, action/mostwanted.go; schema 24). Nil is no streak.
 	MostWanted *MostWanted `json:"mostWanted,omitempty"`

@@ -11,7 +11,6 @@ apps/client-next/src/engine/contracts/navigation.ts
 apps/client-next/src/engine/contracts/presentation-random.ts
 apps/client-next/src/engine/foundation/animation/action-time.ts
 apps/client-next/src/engine/foundation/animation/animation-activation.ts
-apps/client-next/src/engine/foundation/animation/animation-dispatch.ts
 apps/client-next/src/engine/foundation/animation/avatar-override.ts
 apps/client-next/src/engine/foundation/animation/body-shape.ts
 apps/client-next/src/engine/foundation/animation/bsr-particle-transform.ts
@@ -53,12 +52,10 @@ apps/client-next/src/engine/foundation/gameplay/chat-blocks.ts
 apps/client-next/src/engine/foundation/gameplay/chat-feedback.ts
 apps/client-next/src/engine/foundation/gameplay/cos-behavior.ts
 apps/client-next/src/engine/foundation/gameplay/equipment-drop.ts
-apps/client-next/src/engine/foundation/gameplay/feedback-levels.ts
 apps/client-next/src/engine/foundation/gameplay/guide.ts
 apps/client-next/src/engine/foundation/gameplay/item-activation.ts
 apps/client-next/src/engine/foundation/gameplay/item-tooltip-reference.ts
 apps/client-next/src/engine/foundation/gameplay/merchant-branches.ts
-apps/client-next/src/engine/foundation/gameplay/native-notice.ts
 apps/client-next/src/engine/foundation/gameplay/party-notices.ts
 apps/client-next/src/engine/foundation/gameplay/player-stats.ts
 apps/client-next/src/engine/foundation/gameplay/quest.ts
@@ -141,7 +138,6 @@ apps/client-next/tests/browser/audio-loop.test.mjs
 apps/client-next/tests/browser/background-resume.test.mjs
 apps/client-next/tests/browser/baroi-moving-target.test.mjs
 apps/client-next/tests/browser/beta-performance.test.mjs
-apps/client-next/tests/browser/beta-release-live.test.mjs
 apps/client-next/tests/browser/blocking.test.mjs
 apps/client-next/tests/browser/buff-dismiss.test.mjs
 apps/client-next/tests/browser/champion-material.test.mjs
@@ -152,8 +148,6 @@ apps/client-next/tests/browser/character-texture-live.test.mjs
 apps/client-next/tests/browser/cosmetics.test.mjs
 apps/client-next/tests/browser/creation-body-shape.test.mjs
 apps/client-next/tests/browser/crests-war-buffs.test.mjs
-apps/client-next/tests/browser/cursor-focus.test.mjs
-apps/client-next/tests/browser/cursor.test.mjs
 apps/client-next/tests/browser/damage-occlusion.test.mjs
 apps/client-next/tests/browser/death-movement-live.test.mjs
 apps/client-next/tests/browser/deferred-particles.test.mjs
@@ -214,7 +208,6 @@ apps/client-next/tests/browser/quest-progress.test.mjs
 apps/client-next/tests/browser/quickslot-inventory.test.mjs
 apps/client-next/tests/browser/rebirth-self-selection-live.test.mjs
 apps/client-next/tests/browser/region-music-live.test.mjs
-apps/client-next/tests/browser/restart-live.test.mjs
 apps/client-next/tests/browser/return-scroll-live.test.mjs
 apps/client-next/tests/browser/return-scroll-presentation.test.mjs
 apps/client-next/tests/browser/ring-equip-live.test.mjs
@@ -246,7 +239,6 @@ apps/client-next/tests/browser/window-chrome-live.test.mjs
 apps/client-next/tests/browser/world-admission.test.mjs
 apps/client-next/tests/browser/world-character-lighting.test.mjs
 apps/client-next/tests/browser/world-chat.test.mjs
-apps/client-next/tests/browser/world-cursor.test.mjs
 apps/client-next/tests/browser/world-foliage-region.test.mjs
 apps/client-next/tests/browser/world-gestures.test.mjs
 apps/client-next/tests/browser/world-lifecycle.test.mjs
@@ -343,6 +335,5 @@ scripts/test/mission/missionMinimapBuild.test.mjs
 scripts/test/suites/cif.mjs
 scripts/test/suites/index.mjs
 scripts/test/suites/region.mjs
-scripts/test/suites/world.mjs
 scripts/test/world/authoredWorldRegionResources.test.mjs
 scripts/test/world/worldMapImageReferences.test.mjs

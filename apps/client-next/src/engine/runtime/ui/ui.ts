@@ -61,12 +61,13 @@ const CHAT_STRIP_INPUT = 20;
 const PARTY_CHAT_GAP = 4;
 // The quest detail page's default body color (the native quest texts' own 255,44,15,1 as ARGB).
 const QUEST_DETAIL_TEXT: UiQuad["color"] = [ 44 / 255, 15 / 255, 1 / 255, 1 ];
+// The selection reward layout on the contents plate (#3920): the body
+// band, then the value rows, then one row per pickable choice.
+const REWARD_BODY_HEIGHT = 84;
+const REWARD_CHOICE_ROW = 36;
 // A Berserk body that returns within this long of vanishing, with the minute not yet spent, is the same Berserk.
 const BERSERK_RESUME_WINDOW_MS = 30000;
 const BERSERK_RESUME_ELAPSED_MS = 59000;
-// Gap between a Blue Berserk title and the name, and its bold gold.
-const HWAN_TITLE_GAP = 4;
-const HWAN_TITLE_COLOR: UiQuad["color"] = [ 1, 0.84, 0.2, 1 ];
 // The overhead job mark sits 4 px past the name board, which reaches 1.5 px
 // past the text (the beginner mark mirrors it at -21.5 = -20 - 1.5).
 const JOB_MARK_GAP = 5.5;
@@ -106,7 +107,8 @@ import {
 import {
 	companionItemTargetCommand,
 	armsItemTargetCursor,
-	isReverseReturnScroll
+	isReverseReturnScroll,
+	spiritExtensionWornNotice
 } from "@/engine/foundation/gameplay/cos-item-use";
 import {
 	createStoragePanel,
@@ -128,7 +130,7 @@ import {
 } from "@/engine/foundation/gameplay/storage-room";
 import { berserkHud, berserkEntryFlash } from "@/engine/foundation/ui/berserk-hud";
 import { resolveTextOverlaps } from "@/engine/foundation/rendering/ui-glyphs";
-import { hwanSkin, hwanTitleKey } from "@/engine/foundation/gameplay/hwan-skin";
+import { hwanSkin } from "@/engine/foundation/gameplay/hwan-skin";
 import { questLocationTargets } from "@/engine/foundation/ui/quest-locations";
 import { portalMenu } from "@/engine/foundation/gameplay/portal";
 import { restoreSlotEntry } from "@/engine/foundation/gameplay/commerce";
@@ -257,6 +259,8 @@ import {
 } from "./hud/unique-banner";
 import { createQuestBanner, questBannerPaths } from "./hud/quest-banner";
 import { createQuestTimers } from "./hud/quest-timers";
+import { createQuestList } from "./hud/quest-list";
+import { createResLayoutResources } from "./res-layout/res-layout-resources";
 import { createCompanionPotions } from "./hud/companion-potions";
 import { createAutoPotionInput } from "./hud/auto-potion-input";
 import { createCosHud } from "./hud/cos-hud";
@@ -608,6 +612,7 @@ import {
 	HUD_TOOLS_HEIGHT
 } from "@/engine/foundation/ui/cos-command";
 import { questObjectivePresentation } from "@/engine/foundation/ui/quest-presentation";
+import { questTrackerPlacement, questTrackerSize } from "@/engine/foundation/ui/quest-list";
 import { uniqueBannerQuads } from "@/engine/foundation/ui/unique-banner";
 import { nearestGroundItem } from "@/engine/foundation/gameplay/ground-item";
 import {
@@ -695,6 +700,8 @@ import {
 } from "@/engine/foundation/ui/buff-viewer";
 import { matchingSlots } from "@/engine/foundation/ui/matching-slots";
 import {
+	BRIGHTNESS_STEP_DEFAULT,
+	brightnessStepKeys,
 	defaultVideoOptions,
 	DEFAULT_FRAME_LIMIT,
 	frameLimits,
@@ -1059,8 +1066,10 @@ const EXPERIMENTAL_HEAD_TEXT_INSET = 12;
 // The ON / OFF word: gold when on, grey when off.
 const EXPERIMENTAL_ON_COLOR = [ 1, 0.85, 0.54, 1 ] as const;
 const EXPERIMENTAL_OFF_COLOR = [ 0.55, 0.55, 0.5, 1 ] as const;
-// No video option combo is open (slot -1 is the screen-size combo).
+// No video option combo is open (slot -1 is the screen-size combo;
+// slot -2 is the later client's brightness spin, #3908).
 const VIDEO_COMBO_CLOSED = -99;
+const VIDEO_BRIGHTNESS_SLOT = -2;
 const VIDEO_FRAME_LIMIT_SLOT = -3;
 const VIDEO_VISIBLE_ROWS = 6;
 const VIDEO_SCROLL_MAX = videoRows().length + 1 - VIDEO_VISIBLE_ROWS;
@@ -1397,6 +1406,19 @@ function pictureClip( face: string, rect: UiRect ): NonNullable<UiQuad["mask"]> 
 createUi
 ================
 */
+/*
+================
+authoredEditAlign
+
+The editor alignment for an authored horizontal alignment (0 left, 1
+centre, 2 right). The editor is transparent over the canvas drawing, so
+its text layout must start where the drawing does (#4153).
+================
+*/
+function authoredEditAlign( hAlign: number ): "left" | "center" | "right" {
+	return hAlign === 2 ? "right" : hAlign === 1 ? "center" : "left";
+}
+
 export function createUi( ports: UiPorts ) {
 	const defaults = defaultUiPorts();
 	const assets = ports.assets,
@@ -1812,6 +1834,10 @@ export function createUi( ports: UiPorts ) {
 	const regionBanner = createRegionBanner();
 	// The level-up quest notice (hud/quest-info.ts): icon, then window.
 	const questInfo = createQuestInfo();
+	// The quest list window owns its native-layout instances once its
+	// layouts decode; null until then keeps the Quests panel empty
+	// while the layout demand is in flight (#4245).
+	let questList: ReturnType<typeof createQuestList> | null = null;
 	const hudMessages = createHudMessages( chooseTip );
 	const speech = createSpeech();
 	let academyWasVisible = false;
@@ -1821,6 +1847,7 @@ export function createUi( ports: UiPorts ) {
 	const academyHud = createAcademyHud();
 	const hud = createHudResources( assets, base ),
 		guideResources = createGuideResources( assets, base ),
+		resLayoutResources = createResLayoutResources( assets, base ),
 		minimapResources = createMinimapResources( assets, base ),
 		stallCategories = createStallNetworkCategories( assets, base );
 	const npcPanel = createNpcPanel(), windowPlacement = createWindowPlacement();
@@ -2281,6 +2308,9 @@ export function createUi( ports: UiPorts ) {
 	}
 	const expandedQuests = new Set<number>();
 	let selectedQuest = 0, trackedQuest = 0, confirmAbandon = false, questPage = 0, chatPage = 0;
+	// The reward window's pick (chosen item RefObjIDs) and its take-reward
+	// confirm (#3920), plus the refusal line last answered.
+	let rewardPicks: readonly number[] = [], confirmReward = false, rewardRefusalKey = "";
 	let chatText = "", chatTarget = "", chatChannel = 1, chatFeedbackObserved = 0;
 	let caretDue = 0, caretVisible = true;
 	let focusRevision = 0;
@@ -2671,7 +2701,10 @@ export function createUi( ports: UiPorts ) {
 		if ( panel && !next ) sound( "close" );
 		if ( !next ) {
 			for ( const owner of admittedWindows.keys() ) {
-				if ( questDetails && (owner === "quest-details" || owner === "quest-abandon") ) continue;
+				if (
+					questDetails &&
+					(owner === "quest-details" || owner === "quest-abandon" || owner === "quest-reward-confirm")
+				) continue;
 				admittedWindows.delete( owner );
 			}
 		} else if ( !(isMainPopupPage( panel ) && isMainPopupPage( next )) ) {
@@ -4195,6 +4228,7 @@ export function createUi( ports: UiPorts ) {
 		if ( withdrawal.confirming() ) return;
 		if ( practice && !id.startsWith( "skill-confirm-" ) ) return;
 		if ( confirmAbandon && !id.startsWith( "quest-abandon-" ) ) return;
+		if ( confirmReward && !id.startsWith( "quest-reward-" ) ) return;
 		const phase = view.session?.phase ?? "signed-out";
 		if ( npcPanel.event( { kind: "activate", id } ) ) {
 			dirty = true;
@@ -4686,7 +4720,10 @@ export function createUi( ports: UiPorts ) {
 			}
 		} else if ( id.startsWith( "option-video-combo:" ) ) {
 			const n = Number( id.slice( 19 ) );
-			if ( n === -1 || n === VIDEO_FRAME_LIMIT_SLOT || videoRows().some( r => r.slot === n ) ) {
+			if (
+				n === -1 || n === VIDEO_BRIGHTNESS_SLOT || n === VIDEO_FRAME_LIMIT_SLOT ||
+				videoRows().some( r => r.slot === n )
+			) {
 				videoCombo = videoCombo === n ?
 					VIDEO_COMBO_CLOSED :
 					n;
@@ -4696,6 +4733,9 @@ export function createUi( ports: UiPorts ) {
 			if ( Number( slot ) === VIDEO_FRAME_LIMIT_SLOT ) {
 				const frameLimit = frameLimits()[Number( value )];
 				if ( frameLimit !== undefined ) videoDraft = { ...videoDraft, frameLimit };
+			} else if ( Number( slot ) === VIDEO_BRIGHTNESS_SLOT ) {
+				const brightness = Number( value );
+				if ( brightnessStepKeys()[brightness] ) videoDraft = { ...videoDraft, brightness };
 			} else if ( Number( slot ) === -1 ) {
 				const size = displaySizes()[Number( value )];
 				if ( size ) {
@@ -5378,14 +5418,29 @@ export function createUi( ports: UiPorts ) {
 			skillScroll = 0;
 		} else if ( id === "skill-scroll-up" || id === "skill-scroll-down" ) {
 			skillScroll = Math.max( 0, skillScroll + (id.endsWith( "up" ) ? -1 : 1) );
-		} else if ( id.startsWith( "quest-track:" ) ) {
-			const idn = Number( id.slice( 12 ) );
-			if ( view.gameplay?.quests?.some( q => q.refId === idn ) ) trackedQuest = trackedQuest === idn ? 0 : idn;
-		} else if ( id.startsWith( "quest-expand:" ) ) {
-			const idn = Number( id.slice( 13 ) );
-			if ( expandedQuests.has( idn ) ) expandedQuests.delete( idn );
-			else expandedQuests.add( idn );
-			selectedQuest = idn;
+		} else if ( id.startsWith( "quest-list-track:" ) ) {
+			questList?.handleControl( id );
+		} else if ( id.startsWith( "quest-list-content:" ) ) {
+			const refId = Number( id.slice( 19 ) ), quest = view.gameplay?.quests?.find( q => q.refId === refId );
+			if ( quest && [ 1, 2, 7, 8 ].includes( quest.u10 ?? 0 ) ) {
+				selectedQuest = refId;
+				questDetailScroll = 0;
+				questDetails = true;
+				confirmAbandon = false;
+			}
+		} else if ( id.startsWith( "quest-list-locate:" ) ) {
+			const refId = Number( id.slice( 18 ) ),
+				quest = view.gameplay?.quests?.find( q => q.refId === refId ),
+				target = quest?.targetIds[0] !== undefined ?
+					minimapResources.positions()?.get( quest.targetIds[0] ) :
+					undefined;
+			if ( quest && target ) {
+				questList?.locateQuest( refId );
+				mapHud.locate( target );
+				setPanel( "Map" );
+			}
+		} else if ( id.startsWith( "quest-tracker-fold:" ) ) {
+			questList?.toggleFolded( Number( id.slice( 19 ) ) );
 		} else if ( id === "quest-scroll-up" || id === "quest-scroll-down" ) {
 			questPage = Math.max( 0, questPage + (id.endsWith( "up" ) ? -1 : 1) );
 		} else if ( id.startsWith( "skill-learn:" ) ) practice = { mode: PRACTICE_SKILL, id: Number( id.slice( 12 ) ) };
@@ -5647,6 +5702,8 @@ export function createUi( ports: UiPorts ) {
 				questDetailScroll = 0;
 				questDetails = true;
 				confirmAbandon = false;
+				confirmReward = false;
+				rewardPicks = [];
 			}
 		} else if ( id === "quest-abandon" ) confirmAbandon = true;
 		else if ( id === "quest-abandon-yes" ) {
@@ -5654,10 +5711,44 @@ export function createUi( ports: UiPorts ) {
 			confirmAbandon = false;
 			questDetails = false;
 		} else if ( id === "quest-abandon-no" ) confirmAbandon = false;
-		else if ( id === "quest-reward" ) {
-			sendGameplay( { kind: "quest-reward", refId: selectedQuest } );
+		else if ( id.startsWith( "quest-choice:" ) ) {
+			// Toggle one pick. The cap refuses with the window's own line
+			// (the later client's "You cannot select more."); the choice
+			// list itself comes from the quest's reward block.
+			const choiceId = Number( id.slice( 13 ) ),
+				reward = guideResources.data()?.questPresentation.records[selectedQuest]?.reward;
+			if ( reward && reward.choices.some( choice => choice.refId === choiceId ) ) {
+				if ( rewardPicks.includes( choiceId ) ) {
+					rewardPicks = rewardPicks.filter( picked => picked !== choiceId );
+				} else if ( rewardPicks.length >= reward.selectionCount ) {
+					hudMessages.append( hudCopy( "UIIT_STT_QUESTREWARD_MSG03" ), 0xffff7070 );
+				} else {
+					rewardPicks = [ ...rewardPicks, choiceId ];
+				}
+			}
+		} else if ( id === "quest-reward" ) {
+			const reward = guideResources.data()?.questPresentation.records[selectedQuest]?.reward;
+			if ( reward ) {
+				// The window's own prompts: none picked, then not all picked,
+				// then the take-reward confirm.
+				if ( rewardPicks.length === 0 ) {
+					hudMessages.append( hudCopy( "UIIT_STT_QUESTREWARD_MSG01" ), 0xffff7070 );
+				} else if ( rewardPicks.length < reward.selectionCount ) {
+					hudMessages.append( hudCopy( "UIIT_STT_QUESTREWARD_MSG04" ), 0xffff7070 );
+				} else {
+					confirmReward = true;
+				}
+			} else {
+				sendGameplay( { kind: "quest-reward", refId: selectedQuest } );
+				questDetails = false;
+			}
+		} else if ( id === "quest-reward-yes" ) {
+			sendGameplay( { kind: "quest-reward", refId: selectedQuest, picks: rewardPicks } );
+			confirmReward = false;
 			questDetails = false;
-		} else if (
+			rewardPicks = [];
+		} else if ( id === "quest-reward-no" ) confirmReward = false;
+		else if (
 			id === "chat-send" && BUG_COMMAND.test( chatText.slice( chatTabPrefix( chatTab ).length ) )
 		) {
 			// /bug opens the bug reporter (issue #90); it is never sent as chat.
@@ -5726,6 +5817,29 @@ export function createUi( ports: UiPorts ) {
 		} else if ( id === "reverse-scroll-map" ) {
 			// Port-only: the box hands the scroll to the world map.
 			if ( reverseMapOffered() && reverseScrollHud.openMap( view ) ) setPanel( "Map" );
+			dirty = true;
+		} else if ( id === "reverse-scroll-party" ) {
+			// Later-native (#3903): the box hands the scroll to the party window.
+			reverseScrollHud.openParty( view );
+			dirty = true;
+		} else if ( id === "reverse-scroll-user" ) {
+			// Later-native (#3903): the box hands the scroll to the user window.
+			reverseScrollHud.openUser( view );
+			dirty = true;
+		} else if ( id.startsWith( "reverse-party:" ) ) {
+			const command = reverseScrollHud.chooseParty( Number( id.slice( "reverse-party:".length ) ), view );
+			if ( command ) sendGameplay( command );
+			dirty = true;
+		} else if ( id === "reverse-user-enroll" ) {
+			const command = reverseScrollHud.enroll( view );
+			if ( command ) sendGameplay( command );
+			dirty = true;
+		} else if ( id === "reverse-user-move" ) {
+			const command = reverseScrollHud.chooseUser( view );
+			if ( command ) sendGameplay( command );
+			dirty = true;
+		} else if ( id === "reverse-window-close" ) {
+			reverseScrollHud.back();
 			dirty = true;
 		} else if ( id.startsWith( "reverse-map-point:" ) ) {
 			const point = reverseScrollHud.mapping() ?
@@ -6794,6 +6908,17 @@ export function createUi( ports: UiPorts ) {
 					);
 					return;
 				}
+				// Enter in the focused renewal search field reaches this gate as
+				// the platform's submit, not as a key event (the key path above
+				// only fires while the canvas holds the keys): it applies the
+				// draft, as the Search button does (#4153).
+				if (
+					event.kind === "activate" && event.id === "submit" && focus === "item-mall-search" &&
+					itemMall.read().renewal
+				) {
+					activate( "item-mall-search-find" );
+					return;
+				}
 				if ( event.kind === "activate" && event.id.startsWith( "item-mall" ) ) {
 					activate( event.id );
 					return;
@@ -6846,14 +6971,25 @@ export function createUi( ports: UiPorts ) {
 				) return;
 			}
 			if ( reverseScrollHud.reconcile( view ) ) dirty = true;
-			if ( reverseScrollHud.active() ) {
+			if ( reverseScrollHud.active() || reverseScrollHud.party() || reverseScrollHud.user() ) {
+				const inBox = reverseScrollHud.active();
 				const boxControl = ( id: string | null ) =>
 					id !== null &&
-					[ "reverse-scroll:2", "reverse-scroll:3", "reverse-scroll-map", "reverse-scroll-cancel" ].includes(
-						id
-					);
+					(inBox ?
+						[
+							"reverse-scroll:2",
+							"reverse-scroll:3",
+							"reverse-scroll-map",
+							"reverse-scroll-party",
+							"reverse-scroll-user",
+							"reverse-scroll-cancel"
+						].includes( id ) :
+						id === "reverse-window-close" || id === "reverse-user-enroll" ||
+						id === "reverse-user-move" || id.startsWith( "reverse-party:" ));
 				if ( event.kind === "key" && event.code === "Escape" ) {
-					reverseScrollHud.close();
+					// Escape leaves a sub-window for the box, and the box for the world.
+					if ( inBox ) reverseScrollHud.close();
+					else reverseScrollHud.back();
 					dirty = true;
 				} else if ( event.kind === "activate" && boxControl( event.id ) ) {
 					activate( event.id );
@@ -7630,6 +7766,26 @@ export function createUi( ports: UiPorts ) {
 						dirty = true;
 					}
 					return;
+				}
+				if ( event.kind === "activate" && event.id.startsWith( "avatar:" ) ) {
+					// The armed cursor aimed at the avatar window: the
+					// bag-target path never sees it. The extension gear on
+					// the worn Spirit is refused here and the cursor comes
+					// down, as a serviced target use does; any other armed
+					// click on an avatar keeps the fall-through below.
+					const source = cosHud.itemTargetSource(),
+						worn = view?.gameplay?.avatarInventory?.find( row =>
+							avatarSocket( row.typeFlags ) === Number( event.id.slice( 7 ) )
+						);
+					if ( source && worn && spiritExtensionWornNotice( source.typeFlags, worn.typeFlags ) !== null ) {
+						hudMessages.append(
+							hudCopy( "UIIT_MSG_NASRUN_WEAR_EXTENSION_ITEM_NOT_USE" ),
+							0xffff7070
+						);
+						cosHud.takeTargetUse();
+						dirty = true;
+						return;
+					}
 				}
 				if (
 					event.kind === "drag" || event.kind === "drag-end" || event.kind === "double-activate"
@@ -8427,6 +8583,30 @@ export function createUi( ports: UiPorts ) {
 				activateMarket( marketHud.state().dialog ? "market-dialog-cancel" : "market-close" );
 				return;
 			}
+			if ( event.kind === "drag" && event.id === "quest-list-drag" && view ) {
+				// The window's own placement frame keeps the dragged
+				// origin (hud/window-placement), as the other window
+				// drags do; the tracker stays where its rule places it.
+				windowPlacement.drag( "quest-list", event.dx, event.dy );
+				dirty = true;
+				return;
+			}
+			if ( event.kind === "scroll" ) {
+				// Wheel lines over the quest list scroll its rows
+				// (the layout's scrollbar region claims the wheel like
+				// the old page's scrollbar did).
+				const hit = () => {
+					const rect = windowPlacement.read( "quest-list" );
+					return panel === "Quests" && rect &&
+						event.x >= rect[0] + 236 && event.x < rect[0] + 800 &&
+						event.y >= rect[1] + 60 && event.y < rect[1] + 350;
+				};
+				if ( hit() ) {
+					questList?.scrollBy( Math.sign( event.delta ) );
+					dirty = true;
+					return;
+				}
+			}
 			if ( questDetails && event.kind === "drag" && event.id === "quest-detail-drag" && view ) {
 				questPosition = [
 					Math.max( 0, Math.min( Math.max( 0, view.width - 376 ), questPosition[0] + event.dx ) ),
@@ -8980,6 +9160,20 @@ export function createUi( ports: UiPorts ) {
 						return;
 					}
 					if ( target?.id.startsWith( "avatar:" ) ) {
+						// The extension gear dropped on the avatar window
+						// while a Spirit is worn is refused with its line;
+						// the drop equips nothing and sends nothing.
+						if (
+							item && view?.gameplay?.avatarInventory?.some( row =>
+								spiritExtensionWornNotice( item.typeFlags, row.typeFlags ) !== null
+							)
+						) {
+							hudMessages.append(
+								hudCopy( "UIIT_MSG_NASRUN_WEAR_EXTENSION_ITEM_NOT_USE" ),
+								0xffff7070
+							);
+							return;
+						}
 						moveAvatar( true, carried.slot );
 						return;
 					}
@@ -10599,6 +10793,44 @@ export function createUi( ports: UiPorts ) {
 			}
 			const guideNeeded = next.session?.phase === "world";
 			if ( guideResources.step( guideNeeded, next.gameplay?.levelCap ) ) dirty = true;
+			// The native quest list window's layouts (issue #4245):
+			// demand while the world is up (the tracker can show at any
+			// time), build the owner once they decode, feed it the view.
+			if ( next.session?.phase === "world" ) {
+				if ( resLayoutResources.step( true ) ) dirty = true;
+				if ( !questList && resLayoutResources.data() ) {
+					const layouts = resLayoutResources.data()!;
+					questList = createQuestList( layouts.questList, layouts.questMiniList );
+				}
+				if ( questList ) {
+					questList.observe( {
+						quests: next.gameplay?.quests ?? [],
+						presentation: guideResources.data()?.questPresentation,
+						playerLevel: next.gameplay?.progression?.level ?? 0,
+						timers: questTimers
+					} );
+					const lut = questList.tracked();
+					if ( lut.length === 0 ) trackedQuest = 0;
+					else if ( !lut.includes( trackedQuest ) ) trackedQuest = lut[0]!;
+					// The owner's answers the callers must service:
+					// the helper-full refusal posts the helper copy as
+					// a system message; content/locate are serviced at
+					// the control click itself.
+					for ( const action of questList.actions() ) {
+						if ( action.kind === "helper-full" ) {
+							hudMessages.append( hudCopy( "UIIT_CTL_QUEST_HELPER_FULL" ), 0xffff7070 );
+						}
+					}
+					// A refused reward claim answers with the window's error
+					// line, once per refusal.
+					const refusal = next.gameplay?.questRefusal,
+						refusalKey = refusal ? refusal.refId + ":" + refusal.reason : "";
+					if ( refusalKey && refusalKey !== rewardRefusalKey ) {
+						rewardRefusalKey = refusalKey;
+						hudMessages.append( hudCopy( "UIIT_STT_QUESTREWARD_ERROR" ), 0xffff7070 );
+					}
+				}
+			}
 			guildManagerHud.observeSoldiers(
 				next.session?.phase === "world" && next.gameplay?.npcConversation?.phase === "menu" ?
 					next.gameplay.npcConversation.gid :
@@ -12047,7 +12279,7 @@ export function createUi( ports: UiPorts ) {
 					...(native ?
 						{
 							textInsets: node.client,
-							textAlign: hAlign === 2 ? "right" : hAlign === 1 ? "center" : "left"
+							textAlign: authoredEditAlign( hAlign )
 						} :
 						{})
 				} );
@@ -12489,7 +12721,8 @@ export function createUi( ports: UiPorts ) {
 			const x = Math.max( 0, Math.round( (w - 380) / 2 ) ), y = Math.max( 0, Math.round( (h - 520) / 2 ) );
 			const operationStatus = next.frontend?.creation?.status ?? next.frontend?.status;
 			diagnosticError = next.worldError ?? next.resourceError ?? next.session?.error ?? game?.error ??
-				game?.chat?.error ?? next.frontend?.error ?? guideResources.error() ?? minimapResources.error() ??
+				game?.chat?.error ?? next.frontend?.error ?? guideResources.error() ?? resLayoutResources.error() ??
+				minimapResources.error() ??
 				hud.error() ?? text.error() ?? resources.error() ?? null;
 			// CPSTitle 73E7B0 replaces timer 1000 with a 15000 ms deadline. A camera
 			// phase never renews it; 7425E0 retires the title process after its fade.
@@ -14448,6 +14681,7 @@ export function createUi( ports: UiPorts ) {
 					hover,
 					hudData,
 					trackedQuest,
+					locatedQuest: questList?.lastLocated() ?? undefined,
 					minimapResources,
 					caveMaps: minimapResources.caveMaps(),
 					mapTeleport,
@@ -15741,12 +15975,15 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 							label: hudCopy( page.GDR_OPT_VIDEO_ST_SS!.text ),
 							disabled: false
 						}, {
-							slot: -2,
+							// The later client's brightness spin (GDR_OPT_VIDEO_SP_BR,
+							// #3908): five steps, the video draft's choice among
+							// them presented by the device's gamma stage.
+							slot: VIDEO_BRIGHTNESS_SLOT,
 							r: authoredRect( page.GDR_OPT_VIDEO_SP_BR!, ox, oy ),
-							entries: [ "UIIT_STT_NORMAL" ],
-							selected: 0,
+							entries: brightnessStepKeys(),
+							selected: videoDraft.brightness ?? BRIGHTNESS_STEP_DEFAULT,
 							label: hudCopy( page.GDR_OPT_VIDEO_ST_BR!.text ),
-							disabled: true
+							disabled: false
 						} );
 						for (
 							const [i, row] of rows.slice( Math.round( videoScroll ), Math.round( videoScroll ) + 6 )
@@ -15810,7 +16047,8 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 							);
 						}
 						const open = combos.find( c =>
-							c.slot === videoCombo && (c.slot >= -1 || c.slot === VIDEO_FRAME_LIMIT_SLOT)
+							c.slot === videoCombo &&
+							(c.slot >= -1 || c.slot === VIDEO_FRAME_LIMIT_SLOT || c.slot === VIDEO_BRIGHTNESS_SLOT)
 						);
 						if ( open ) {
 							const r = open.r, list: UiRect = [ r[0], r[1] + 20, r[2], open.entries.length * 18 ];
@@ -17284,102 +17522,24 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 					// never replay the primary popup's controls into this second window.
 					endWindow( admission, restoring ? "withdrawal" : "primary" );
 				}
-				if ( panel === "Quests" && hudData ) {
+				if ( panel === "Quests" && questList ) {
+					// The native quest list window (issue #4245): the
+					// later client's CNIFQuest layout, drawn standalone
+					// at its own placement frame. The old authored-page
+					// content stays absent once the layout stream runs:
+					// its rows are this window's CNIFQuestSlot rows.
 					const admission = beginWindow(),
-						popup = mainPopupGeometry( "Quests", hudData.windows.ifmainpopup!, w, h, popupPosition ),
-						[px, py] = popup.frame,
-						[ox, oy] = popup.pane,
-						page = hudData.windows.ifquest!,
-						main = hudData.windows.ifquestslotmain!,
-						sub = hudData.windows.ifquestslotsub!,
-						blank = hudData.windows.ifquestslot!;
-					mainPopup( "Quests", popup );
-					for ( const node of authoredPaintOrder( page ) ) {
-						authoredChrome(
-							node,
-							ox,
-							oy
-						);
-					}
-					const rows: (readonly [NonNullable<NonNullable<typeof game>["quests"]>[number], number])[] = [];
-					for ( const q of game?.quests ?? [] ) {
-						rows.push( [ q, -1 ] );
-						if ( expandedQuests.has( q.refId ) ) q.contents.forEach( ( _, i ) => rows.push( [ q, i ] ) );
-					}
-					questPage = Math.min( questPage, Math.max( 0, rows.length - 12 ) );
-					const bounds = authoredRect( page.GDR_QUEST_SCROLLMGR!, ox, oy );
-					for ( let i = 0; i < 12; i++ ) {
-						const sx = bounds[0], sy = bounds[1] + i * 27, row = rows[Math.floor( questPage ) + i];
-						if ( !row ) {
-							authoredImage( blank.GDR_QUESTSLOT_EMPTY_WND!, sx, sy );
-							continue;
-						}
-						const [q, content] = row;
-						if ( content >= 0 ) {
-							const objective = questObjectivePresentation(
-								q.contents[content]!,
-								guideResources.data()?.questPresentation.text ?? {}
-							);
-							authoredImage( sub.GDR_QUESTSLOT_SUB_WND!, sx, sy );
-							authoredText(
-								{ ...sub.GDR_QUESTSLOT_SUB_CONTENTS!, color: objective.color },
-								sx,
-								sy,
-								objective.description
-							);
-							authoredText(
-								{ ...sub.GDR_QUESTSLOT_SUB_STATUS!, color: objective.color },
-								sx,
-								sy,
-								hudCopy( objective.statusKey )
-							);
-							continue;
-						}
-						authoredImage( main.GDR_QUESTSLOT_MAIN_WND!, sx, sy );
-						const bar = main.GDR_QUESTLOST_MAIN_TITLE_BAR!,
-							path = ROOT + "interface/quest/qst_colorbar_" +
-								([ "blue", "green", "red", "lightgreen" ][q.u09] ?? "blue") + ".png";
-						paths.push( path );
-						if ( resources.has( path ) ) rect( authoredRect( bar, sx, sy ), white, path );
-						if ( trackedQuest === q.refId ) authoredImage( main.GDR_QUESTLOST_MAIN_SELECTED_BAR!, sx, sy );
-						const meta = guideResources.data()?.questPresentation.records[q.refId],
-							title = meta?.title ?? "";
-						authoredText(
-							main.GDR_QUESTSLOT_TITLE!,
-							sx,
-							sy,
-							title + " (" + (q.u08 & 15) + "/" + (q.u08 >>> 4) + ")"
-						);
-						controls.push( {
-							id: "quest-track:" + q.refId,
-							label: title,
-							kind: "button",
-							rect: authoredRect( bar, sx, sy ),
-							selected: trackedQuest === q.refId
-						} );
-						authoredText( main.GDR_QUESTSLOT_REMAIN_TIME!, sx, sy, questTimers.text( q, hudCopy ) );
-						const arrow = {
-							...main.GDR_QUESTSLOT_MAIN_DROPDOWN_BTN!,
-							texture: ROOT + "interface/ifcommon/com_qst_" +
-								(expandedQuests.has( q.refId ) ? "down" : "right") + "arrow_button.png"
-						};
-						authoredButton( arrow, sx, sy, "quest-expand:" + q.refId, title );
-						authoredButton( main.GDR_QUESTSLOT_MAIN_CONTENT_BTN!, sx, sy, "quest:" + q.refId, title );
-					}
-					const scroll = chatScrollbar(
-						"quest-scroll",
-						optionListTrack( bounds, 0, 0 ),
-						Math.max( 12, rows.length ),
-						12,
-						Math.max( 0, rows.length - 12 ) - questPage,
-						resources.size,
-						full,
-						hover,
-						pressed
-					);
-					paths.push( ...scroll.paths );
-					quads.push( ...scroll.quads );
-					controls.push( ...scroll.controls );
+						placed = windowPlacement.frame( "quest-list", [ 198, 193, 624, 369 ], [ w, h ] );
+					blocks.push( [ placed[0], placed[1], placed[2], placed[3] ] );
+					closeButton( placed[0] + placed[2] - 19, placed[1] + 2, panelCloseId( "Quests" ) );
+					controls.push( {
+						id: "quest-list-drag",
+						label: "Move quest list",
+						kind: "button",
+						draggable: true,
+						rect: placed
+					} );
+					questList.drawList( drawFrame, placed[0], placed[1], hudCopy, questTimers );
 					endWindow( admission );
 				}
 				if ( questDetails && hudData ) {
@@ -17405,20 +17565,106 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 					authoredText( page.GDR_QUESTREWARD_TITLE!, px, py, meta?.rewardTitle ?? "" );
 					if ( q ) {
 						const r = authoredRect( page.GDR_QUESTREWARD_CONTENTS!, px, py );
-						// The default color of a body without its own font tag. Every v1.150 quest text sets
-						// 255,44,15,1 itself; the later client's strings (the cap-110 chains) leave the
-						// section bodies to the default, which must read on the parchment.
-						const result = text.guide(
-							guideTokens( meta?.rewardBody ?? "" ),
-							[ r[0], r[1] - questDetailScroll, r[2], r[3] ],
-							r,
-							QUEST_DETAIL_TEXT,
-							resources.size
-						);
-						questDetailMax = Math.max( 0, result.height - r[3] );
-						questDetailScroll = Math.min( questDetailScroll, questDetailMax );
-						quads.push( ...result.quads );
-						paths.push( ...result.paths );
+						if ( meta?.reward ) {
+							// A selection quest (#3920): the body keeps the top
+							// of the contents plate, then the six value rows,
+							// then the pickable choices (icon, name, count);
+							// the scroll track walks the choice list. The
+							// layout is the later client's CIFQuestReward
+							// drawn on the v1.150 plate.
+							const reward = meta.reward;
+							const body = text.guide(
+								guideTokens( meta.rewardBody ),
+								[ r[0], r[1], r[2], REWARD_BODY_HEIGHT ],
+								[ r[0], r[1], r[2], REWARD_BODY_HEIGHT ],
+								QUEST_DETAIL_TEXT,
+								resources.size
+							);
+							quads.push( ...body.quads );
+							paths.push( ...body.paths );
+							const values: readonly (readonly [string, number])[] = [
+								[ "UIIT_STT_QUESTREWARD_GOLD", reward.gold ],
+								[ "UIIT_STT_QUESTREWARD_EXP", reward.exp ],
+								[ "UIIT_STT_QUESTREWARD_SP", reward.skillPoints ],
+								[ "UIIT_STT_QUESTREWARD_SPEXP", reward.skillExp ],
+								[ "UIIT_STT_QUESTREWARD_AP", reward.ap ],
+								[ "UIIT_STT_QUESTREWARD_JOBEXP", reward.jobExp ]
+							];
+							values.forEach( ( [key, amount], i ) => {
+								const column = i % 2 ? 150 : 0,
+									row = Math.floor( i / 2 ),
+									y = r[1] + REWARD_BODY_HEIGHT + 8 + row * 15;
+								quads.push( ...text.quads(
+									hudCopy( key ),
+									[ r[0] + column, y, 64, 13 ],
+									full,
+									QUEST_DETAIL_TEXT,
+									{ hAlign: 0, vAlign: 0 }
+								) );
+								quads.push( ...text.quads(
+									String( amount ),
+									[ r[0] + column + 66, y, 74, 13 ],
+									full,
+									QUEST_DETAIL_TEXT,
+									{ hAlign: 2, vAlign: 0 }
+								) );
+							} );
+							const listTop = r[1] + REWARD_BODY_HEIGHT + 58,
+								listHeight = r[1] + r[3] - listTop;
+							questDetailMax = Math.max(
+								0,
+								reward.choices.length * REWARD_CHOICE_ROW - listHeight
+							);
+							questDetailScroll = Math.min( questDetailScroll, questDetailMax );
+							reward.choices.forEach( ( choice, i ) => {
+								const row: UiRect = [
+									r[0],
+									listTop + i * REWARD_CHOICE_ROW - questDetailScroll,
+									r[2],
+									REWARD_CHOICE_ROW - 4
+								];
+								if ( row[1] + row[3] < listTop || row[1] > r[1] + r[3] ) return;
+								const picked = rewardPicks.includes( choice.refId );
+								if ( picked ) {
+									rect( row, [ 1, 156 / 255, 104 / 255, 0.45 ] );
+								}
+								const icon = choice.icon ? iconPath( choice.icon ) : undefined;
+								if ( icon ) {
+									paths.push( icon );
+									if ( resources.has( icon ) ) {
+										rect( [ row[0] + 2, row[1] + 2, 28, 28 ], white, icon );
+									}
+								}
+								quads.push( ...text.quads(
+									choice.count > 1 ? `${choice.name} x${choice.count}` : choice.name,
+									[ row[0] + 38, row[1], row[2] - 38, row[3] ],
+									full,
+									QUEST_DETAIL_TEXT,
+									{ hAlign: 0, vAlign: 1 }
+								) );
+								controls.push( {
+									id: "quest-choice:" + choice.refId,
+									label: choice.name,
+									rect: row,
+									kind: "button"
+								} );
+							} );
+						} else {
+							// The default color of a body without its own font tag. Every v1.150 quest text sets
+							// 255,44,15,1 itself; the later client's strings (the cap-110 chains) leave the
+							// section bodies to the default, which must read on the parchment.
+							const result = text.guide(
+								guideTokens( meta?.rewardBody ?? "" ),
+								[ r[0], r[1] - questDetailScroll, r[2], r[3] ],
+								r,
+								QUEST_DETAIL_TEXT,
+								resources.size
+							);
+							questDetailMax = Math.max( 0, result.height - r[3] );
+							questDetailScroll = Math.min( questDetailScroll, questDetailMax );
+							quads.push( ...result.quads );
+							paths.push( ...result.paths );
+						}
 					}
 					const give = page.GDR_QUESTREWARD_GIVEUP!,
 						caption = hudCopy( q?.u10 === 2 ? "UIIT_STT_QUEST_REWARD" : "UIIT_STT_QUEST_GIVEUP" );
@@ -17542,6 +17788,24 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 						);
 					}
 					endWindow( infoAdmission, "quest-info" );
+				}
+				if ( questList?.trackedCount() ) {
+					// The HUD mini tracker (issue #4245): tracked
+					// quests at the right edge from y=267, stepping
+					// around the windows already occupying the screen.
+					const entries = questList.trackerEntries( hudCopy ), [, height] = questTrackerSize( entries, 30 );
+					const obstacles = [ ...admittedWindows.values() ].flatMap( win => win.blocks );
+					const beside = obstacles.filter( r => r[0] + r[2] >= w - 324 ),
+						above = obstacles.filter( r => !(r[0] + r[2] >= w - 324) );
+					const [tx, ty] = questTrackerPlacement( {
+						screenWidth: w,
+						screenHeight: h,
+						width: 324,
+						height,
+						beside,
+						above
+					} );
+					questList.drawTracker( drawFrame, tx, ty, hudCopy );
 				}
 				if ( practice && panel === "Skills" && hudData ) {
 					const mastery = practice.mode === PRACTICE_MASTERY,
@@ -17694,6 +17958,20 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 						no: "quest-abandon-no"
 					} );
 					endWindow( admission, "quest-abandon" );
+				}
+				if ( confirmReward && questDetails ) {
+					controls = drawFrame.controls = [];
+					const admission = beginWindow();
+					blocks.push( full );
+					// The take-reward confirm asks the window's own line
+					// (the later client's "Will you take this reward?").
+					simpleMessageBox( {
+						title: hudCopy( "UIIT_STT_AGREEMENT_BOX" ),
+						lines: [ hudCopy( "UIIT_STT_QUESTREWARD_MSG02" ) ],
+						yes: "quest-reward-yes",
+						no: "quest-reward-no"
+					} );
+					endWindow( admission, "quest-reward-confirm" );
 				}
 				const compositePackage = compositeItemHud.packageId(),
 					compositeRoot = hudData?.root.GDR_COMPOSITE_ITEM,
@@ -17959,7 +18237,11 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 					controls = drawFrame.controls = [];
 					// Port-only: the scroll's box grows a map row when it is offered.
 					const mapRow = reverseScrollHud.active() && reverseMapOffered();
-					const admission = beginWindow(), box = reverseReturnLayout( w, h, mapRow ? 3 : 2 );
+					// Later-native (#3903): the scroll's box always grows the
+					// party and user rows (the premium box keeps its two).
+					const laterRows = reverseScrollHud.active() ? 2 : 0;
+					const admission = beginWindow(),
+						box = reverseReturnLayout( w, h, 2 + (mapRow ? 1 : 0) + laterRows );
 					blocks.push( full );
 					paths.push( ...partyProposalAssets() );
 					quads.push(
@@ -17988,15 +18270,16 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 							{ hAlign: 1, vAlign: 0 }
 						)
 					);
+					let pointRow = 0;
 					authoredLabeledButton(
-						reverseReturnButton( box.points[0]! ),
+						reverseReturnButton( box.points[pointRow++]! ),
 						0,
 						0,
 						reverseBox.prefix + REVERSE_RETURN_LAST_RECALL,
 						hudCopy( "UIIT_MSG_ITEM_USE_REVERSE_PORTAL_RETRUN_TO_LAST_RETURN" )
 					);
 					authoredLabeledButton(
-						reverseReturnButton( box.points[1]! ),
+						reverseReturnButton( box.points[pointRow++]! ),
 						0,
 						0,
 						reverseBox.prefix + REVERSE_RETURN_LAST_DEATH,
@@ -18004,11 +18287,27 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 					);
 					if ( mapRow ) {
 						authoredLabeledButton(
-							reverseReturnButton( box.points[2]! ),
+							reverseReturnButton( box.points[pointRow++]! ),
 							0,
 							0,
 							"reverse-scroll-map",
-							"Move to a location on the map."
+							hudCopy( "UIIT_CLT_REVERSE_RETRUN_SCROLL_TO_APPOINT_CHANGE" )
+						);
+					}
+					if ( laterRows ) {
+						authoredLabeledButton(
+							reverseReturnButton( box.points[pointRow++]! ),
+							0,
+							0,
+							"reverse-scroll-party",
+							hudCopy( "UIIT_CLT_REVERSE_RETRUN_SCROLL_PARTY_MOVE" )
+						);
+						authoredLabeledButton(
+							reverseReturnButton( box.points[pointRow++]! ),
+							0,
+							0,
+							"reverse-scroll-user",
+							hudCopy( "UIIT_CLT_REVERSE_RETRUN_SCROLL_USER_APPOINT" )
 						);
 					}
 					// 5327AE captions id 201 UIO_COMMON_CTL_CANCEL; the port's text
@@ -18021,6 +18320,139 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 						hudCopy( "UIIT_CTL_CANCEL" )
 					);
 					endWindow( admission, "premium-reverse-return" );
+				}
+				// Later-native (#3903): the party window the box's party row
+				// opens (v1.696 CNIFReversePortalParty, 0x2ca): one button
+				// per member but the player; the member is the answer.
+				if ( reverseScrollHud.party() ) {
+					controls = drawFrame.controls = [];
+					const members = (game?.social?.members ?? []).filter( member => member.id !== game?.localGid );
+					const admission = beginWindow(),
+						box = reverseReturnLayout( w, h, Math.max( 1, members.length ) );
+					blocks.push( full );
+					paths.push( ...partyProposalAssets() );
+					quads.push(
+						...frameRing(
+							box.frame,
+							MESSAGE_FRAME,
+							PARTS.map( p => resources.size( MESSAGE_FRAME + p + ".png" ) ),
+							full
+						)
+					);
+					quads.push( ...normalTile( box.background, MESSAGE_TILE, resources.size( MESSAGE_TILE ), full ) );
+					quads.push(
+						...text.quads( hudCopy( "UIIT_PAG_REVERSE_RETRUN_SCROLL_PARTY_MOVE" ), box.title, full, white, {
+							hAlign: 1,
+							vAlign: 0
+						} )
+					);
+					members.forEach( ( member, index ) => {
+						authoredLabeledButton(
+							reverseReturnButton( box.points[index]! ),
+							0,
+							0,
+							"reverse-party:" + member.id,
+							member.name
+						);
+					} );
+					authoredLabeledButton(
+						reverseReturnButton( box.refuse ),
+						0,
+						0,
+						"reverse-window-close",
+						hudCopy( "UIIT_CTL_CANCEL" )
+					);
+					endWindow( admission, "reverse-party" );
+				}
+				// Later-native (#3903): the user settings window the box's
+				// user row opens (v1.696 CNIFReversePortalUserSave, 0x2cb).
+				// The later client splits enroll and move into their own
+				// windows; this one panel carries both buttons, the
+				// overwrite question and the no-location line.
+				if ( reverseScrollHud.user() ) {
+					controls = drawFrame.controls = [];
+					const saved = game?.reverseUserPoint;
+					const admission = beginWindow(), box = reverseReturnLayout( w, h, 2 );
+					blocks.push( full );
+					paths.push( ...partyProposalAssets() );
+					quads.push(
+						...frameRing(
+							box.frame,
+							MESSAGE_FRAME,
+							PARTS.map( p => resources.size( MESSAGE_FRAME + p + ".png" ) ),
+							full
+						)
+					);
+					quads.push( ...normalTile( box.background, MESSAGE_TILE, resources.size( MESSAGE_TILE ), full ) );
+					quads.push(
+						...text.quads(
+							hudCopy( "UIIT_PAG_REVERSE_RETRUN_SCROLL_USER_APPOINT_SELECTION" ),
+							box.title,
+							full,
+							white,
+							{ hAlign: 1, vAlign: 0 }
+						)
+					);
+					if ( reverseScrollHud.confirmEnroll() ) {
+						quads.push(
+							...text.quads(
+								hudCopy( "UIIT_MSG_REVERSE_RETRUN_SCROLL_USER_APPOINT_SELECTION_RE_CHECK" ),
+								box.question,
+								full,
+								white,
+								{ hAlign: 1, vAlign: 0 }
+							)
+						);
+					} else {
+						const intro = hudCopy(
+							"UIIT_MSG_REVERSE_RETRUN_SCROLL_USER_APPOINT_SELECTION_INTRODUCTION"
+						).split( "\n" );
+						intro.forEach( ( line, index ) => {
+							quads.push(
+								...text.quads(
+									line,
+									[ box.question[0], box.question[1] - 6 + index * 16, box.question[2], 16 ],
+									full,
+									white,
+									{ hAlign: 1, vAlign: 0 }
+								)
+							);
+						} );
+					}
+					authoredLabeledButton(
+						reverseReturnButton( box.points[0]! ),
+						0,
+						0,
+						"reverse-user-enroll",
+						hudCopy( "UIIT_CLT_REVERSE_RETRUN_SCROLL_USER_APPOINT_BUTTON" )
+					);
+					if ( saved ) {
+						authoredLabeledButton(
+							reverseReturnButton( box.points[1]! ),
+							0,
+							0,
+							"reverse-user-move",
+							hudCopy( "UIIT_CLT_REVERSE_RETRUN_SCROLL_USER_MOVE" )
+						);
+					} else {
+						quads.push(
+							...text.quads(
+								hudCopy( "UIIT_MSG_REVERSE_RETRUN_SCROLL_USER_MOVE_INTRODUCTION_1" ),
+								box.points[1]!,
+								full,
+								white,
+								{ hAlign: 1, vAlign: 0 }
+							)
+						);
+					}
+					authoredLabeledButton(
+						reverseReturnButton( box.refuse ),
+						0,
+						0,
+						"reverse-window-close",
+						hudCopy( "UIIT_CTL_CANCEL" )
+					);
+					endWindow( admission, "reverse-user" );
 				}
 				if ( panel === "Blocking" && hudData ) {
 					const admission = beginWindow(),
@@ -23467,7 +23899,16 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 						*/
 						function editBox( id: string, name: string, value: string, yy: number, maxLength: number ) {
 							const r: UiRect = [ px + 22, yy, 336, 26 ];
-							controls.push( { id, label: name, kind: "text", value, rect: r, maxLength } );
+							// The value is drawn 6 px into the box (the text quad below).
+							controls.push( {
+								id,
+								label: name,
+								kind: "text",
+								value,
+								rect: r,
+								maxLength,
+								textInsets: [ 6, 0, 0, 0 ]
+							} );
 							rect( r, [ .02, .03, .02, 1 ] );
 							quads.push(
 								...text.quads(
@@ -23805,8 +24246,17 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 					// same board, between the Contributor title and the name;
 					// one combined lead keeps the whole line centred.
 					const tierTitle = overheads.get( entity.gid )?.tierText ?? "",
-						tierTitleWidth = tierTitle ? text.run( tierTitle, 2 ).width : 0,
-						tierLead = tierTitleWidth ? (title ? TITLE_NAME_GAP : 0) + tierTitleWidth : 0;
+						tierTitleWidth = tierTitle ? text.run( tierTitle, 2 ).width : 0;
+					// The Hwan title (native in the later client, #3919) rides
+					// the same board closest to the name, after the tier title.
+					// Every title's width is in the one lead, so the centred
+					// board stands behind the whole line and no two titles
+					// ever share a slot.
+					const hwanTitle = overheads.get( entity.gid )?.hwanText ?? "",
+						hwanTitleWidth = hwanTitle ? text.run( hwanTitle, 2 ).width : 0,
+						titleWidths = [ titleWidth, tierTitleWidth, hwanTitleWidth ].filter( w => w > 0 ),
+						leadWidth = titleWidths.reduce( ( sum, w ) => sum + w, 0 ) +
+							TITLE_NAME_GAP * Math.max( 0, titleWidths.length - 1 );
 					if ( named && beginnerMarkShown( entity, options ) ) {
 						const name = staffBoardName(
 								entity,
@@ -23828,7 +24278,7 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 								characterAnchor: entity.gid,
 								alphaCutoff: 128 / 255,
 								rect: [
-									titledNameRow( titleWidth + tierLead, width ).left - 21.5,
+									titledNameRow( leadWidth, width ).left - 21.5,
 									-(height >> 1) - 1.5,
 									16,
 									16
@@ -23855,7 +24305,7 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 						),
 						width = text.run( name, selected ? 2 : 0 ).width,
 						height = text.boardHeight();
-					const row = titledNameRow( name ? titleWidth + tierLead : 0, width ),
+					const row = titledNameRow( name ? leadWidth : 0, width ),
 						left = row.nameLeft,
 						top = -(height >> 1);
 					if ( name && height ) {
@@ -23886,19 +24336,19 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 							} );
 						}
 					}
-					// Port-only Blue Berserk title (not native): bold gold, just before the
-					// character's name, for every player the server's level roster named (0x3FCB).
-					const titleText = entity.kind === "local-player" || entity.kind === "player" ?
-						hudCopy( hwanTitleKey( game?.hwanLevels?.[entity.gid], entity.countryByte9c ) ) :
-						"";
-					if ( titleText && name && height ) {
-						const titleWidth = text.run( titleText, 2 ).width;
+					// The board's titles stand left of the name in board
+					// order: Contributor, tier, then the Hwan title closest
+					// to the name (its lead is in the row, like the rest).
+					const tierLeft = row.left + (title ? titleWidth + TITLE_NAME_GAP : 0),
+						hwanLeft = tierLeft + (tierTitle ? tierTitleWidth + TITLE_NAME_GAP : 0);
+					// Port-only (#3530): the tier title, bold in its tier's colour.
+					if ( tierTitle && name && height ) {
 						quads.push(
 							...text.quads(
-								titleText,
-								[ left - titleWidth - HWAN_TITLE_GAP, top, titleWidth, height ],
+								tierTitle,
+								[ tierLeft, top, tierTitleWidth, height ],
 								full,
-								HWAN_TITLE_COLOR,
+								overheads.get( entity.gid )?.tierColor ?? [ 1, 1, 1, 1 ],
 								{
 									vAlign: 0,
 									fontStyle: 2
@@ -23906,15 +24356,16 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 							).map( q => ({ ...q, characterAnchor: entity.gid }) )
 						);
 					}
-					// Port-only (#3530): the tier title, bold in its tier's
-					// colour, just before the name (its lead is in the row).
-					if ( tierTitle && name && height ) {
+					// The Hwan title (native in the later client, #3919):
+					// bold, in its gold, just before the name, for every
+					// player the server's level roster named.
+					if ( hwanTitle && name && height ) {
 						quads.push(
 							...text.quads(
-								tierTitle,
-								[ left - tierTitleWidth - TITLE_NAME_GAP, top, tierTitleWidth, height ],
+								hwanTitle,
+								[ hwanLeft, top, hwanTitleWidth, height ],
 								full,
-								overheads.get( entity.gid )?.tierColor ?? [ 1, 1, 1, 1 ],
+								overheads.get( entity.gid )?.hwanColor ?? [ 1, 1, 1, 1 ],
 								{
 									vAlign: 0,
 									fontStyle: 2
@@ -25391,7 +25842,7 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 							value: shopQuantity,
 							maxLength: 5,
 							disabled: locked,
-							textAlign: amount.hAlign === 2 ? "right" : amount.hAlign === 1 ? "center" : "left",
+							textAlign: authoredEditAlign( amount.hAlign ),
 							textInsets: amount.client
 						} );
 					}
@@ -27435,7 +27886,9 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 					kind: "text",
 					value: promptAmount,
 					rect: edit,
-					maxLength: 5
+					maxLength: 5,
+					// The count is drawn centred in its box (hAlign 1 below).
+					textAlign: "center"
 				} );
 				quads.push(
 					...text.quads( promptAmount, edit, edit, white, { hAlign: 1, vAlign: 1, overflow: "clip" } )
@@ -27521,7 +27974,9 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 					kind: "text",
 					value: amount,
 					rect: edit,
-					maxLength: 20
+					maxLength: 20,
+					// The amount is drawn right-aligned in its box (hAlign 2 below).
+					textAlign: "right"
 				} );
 				quads.push(
 					...text.quads( amount, [ edit[0], edit[1], edit[2] - 2, edit[3] ], edit, white, {
@@ -28191,7 +28646,9 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 							rect: r,
 							value: String( value ),
 							maxLength,
-							disabled: busy
+							disabled: busy,
+							// The value is drawn 4 px into the box (mallText above).
+							textInsets: [ 4, 0, 0, 0 ]
 						} );
 					}
 					authoredChrome( { ...mallControl( root, 21 ), rect: [ 12, 40, w - 24, h - 52 ], text: "" }, 0, 0 );
@@ -28497,7 +28954,9 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 									kind: "text",
 									rect: [ margin, 124, contentWidth, 32 ],
 									value: state.search,
-									maxLength: 32
+									maxLength: 32,
+									// The prompt is drawn 4 px into the box (mallText above).
+									textInsets: [ 4, 0, 0, 0 ]
 								} );
 							}
 							const tabWidth = (contentWidth - gap * (tabColumns - 1)) / tabColumns;
@@ -28701,7 +29160,15 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 									rect: op.rect,
 									kind: "text",
 									value: op.value,
-									maxLength: op.maxLength
+									maxLength: op.maxLength,
+									// The value is drawn at the op's textRect, inside
+									// its hit rect: the editor's text starts there.
+									textInsets: [
+										op.textRect[0] - op.rect[0],
+										op.textRect[1] - op.rect[1],
+										0,
+										0
+									]
 								} );
 								// The focused field's blinking caret, after its text and
 								// centred on its line, as every single-line edit draws it.
@@ -29102,7 +29569,10 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 									kind: "text",
 									rect: [ sx + 26, sy + 39, 363, 32 ],
 									value: state.search,
-									maxLength: 32
+									maxLength: 32,
+									// The prompt is drawn 4 px into the box (the text
+									// quad above, at sx + 30).
+									textInsets: [ 4, 0, 0, 0 ]
 								} );
 							} else {
 								authoredChrome( { ...mallControl( shop, 41 ), text: description }, sx, sy );
@@ -29288,7 +29758,10 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 							kind: "text",
 							value: String( state.quantity ),
 							maxLength: 5,
-							disabled: game.inventoryPending
+							disabled: game.inventoryPending,
+							// GDR_ITEMMALL_CONFIRM_EDIT_COUNT draws by its authored
+							// alignment (right, authoredText above).
+							textAlign: authoredEditAlign( mallControl( page, 42 ).hAlign )
 						} );
 						if ( state.selected.allowsPoints ) {
 							authoredLabeledButton(
@@ -29515,7 +29988,10 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 							kind: "text",
 							value: String( state.pointDraft ),
 							maxLength: 10,
-							disabled: game.inventoryPending
+							disabled: game.inventoryPending,
+							// GDR_ITEMMALL_USE_POINT_EDIT_USE_POINT draws by its
+							// authored alignment (right, authoredText above).
+							textAlign: authoredEditAlign( mallControl( pointPage, 41 ).hAlign )
 						} );
 						authoredLabeledButton(
 							mallControl( pointPage, 50 ),
@@ -30329,6 +30805,11 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 						`Health ${local?.hp ?? "unknown"}; mana ${local?.mp ?? "unknown"}; target ${
 							target?.name ?? "none"
 						}. ${next.entities.length} nearby entities.` :
+						// A failed session names its reason (Session HTTP request
+						// rejected, ...): the bare phase told a screen reader only
+						// "failed" while the cause reached the diagnostics alone.
+						phase === "failed" && next.session?.error ?
+						title.message( next.session.error ) :
 						phase),
 				controls
 			};

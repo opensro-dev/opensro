@@ -120,6 +120,23 @@ def translation_rows(raw):
 
 
 # ================
+# owned_name_symbols
+#
+# The name symbols a staged import owns for its off reap: the rows
+# this build added plus the ones a previous build's marker owned,
+# narrowed to the symbols the staged kinds still name - never a row
+# the table already held. A later kind may reuse a symbol the native
+# table or an earlier layer owns (MOB_RM_TAHOMET_ROC names itself
+# SN_MOB_RM_TAHOMET), and the reap drops every owned symbol, so
+# claiming that row would strip a name this build never added
+# (#3762, #3767).
+# ================
+def owned_name_symbols(added_rows, prior_symbols, named_symbols):
+	added = {row[1] for row in added_rows if len(row) > 1}
+	return sorted((added | set(prior_symbols)) & set(named_symbols))
+
+
+# ================
 # restore_missing_positions
 #
 # Port-only, not native: ISRO-R nests 37159 (Viviana) and 37158 (Sharon)

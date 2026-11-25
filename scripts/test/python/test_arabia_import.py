@@ -798,6 +798,33 @@ class ArabiaImportTest(unittest.TestCase):
 			self.assertFalse(any(row[2].startswith("RN_ARABIA") for row in regions))
 
 	# ================
+	# test_earlier_layer_name_row_survives_the_strip
+	#
+	# A name row an earlier layer added already stands in the table
+	# and an Arabia kind names its symbol: this build appends no row
+	# for it, so it owns nothing of it, and the flag-off strip leaves
+	# the earlier layer's row standing (#3767).
+	# ================
+	def test_earlier_layer_name_row_survives_the_strip(self):
+		with tempfile.TemporaryDirectory() as tmp:
+			native, output, source, nests = build_trees(Path(tmp))
+			text = output / arabia.TEXT_ROOT
+			rows = read_rows(text / "textdataname.txt")
+			rows.append(["1", "SN_MOB_AR_TEST", "x", "", "", "Earlier Beast", "", "", "", "", ""])
+			write_table(text, "textdataname.txt", rows)
+			closure = FakeClosure()
+			with mock.patch.dict(os.environ, {arabia.FLAG: "1"}), \
+					mock.patch.object(cap110_item_import, "resource_dependencies",
+						side_effect=lambda requests: [[] for _ in requests]):
+				arabia.add_arabia(native, output, source, nests, closure)
+			marker = json.loads((output / arabia.MARKER).read_text(encoding="utf-8"))
+			self.assertNotIn("SN_MOB_AR_TEST", marker["nameSymbols"])
+			with mock.patch.dict(os.environ, {arabia.FLAG: "off"}):
+				arabia.add_arabia(native, output, source, nests, closure)
+			names = {row[1] for row in read_rows(text / "textdataname.txt") if len(row) > 1}
+			self.assertIn("SN_MOB_AR_TEST", names)
+
+	# ================
 	# test_hideout_ground_follows_its_nests
 	#
 	# The Kalia hideout (#4134): an extraction carrying world-113

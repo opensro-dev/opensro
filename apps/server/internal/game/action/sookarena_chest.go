@@ -51,6 +51,7 @@ func (rt *Runtime) EntryEventFrames(division string, c *enterworld.Character) []
 	packets := rt.HalloweenEntryFrames(division, c)
 	packets = append(packets, rt.ChristmasEntryFrames(division, c)...)
 	packets = append(packets, rt.macroEntryFrames(c)...)
+	packets = append(packets, rt.reverseUserPointEntryFrames(c)...)
 	if c == nil || rt.sookArena == nil {
 		return packets
 	}

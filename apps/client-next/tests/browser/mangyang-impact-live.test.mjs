@@ -319,7 +319,6 @@ test( "Mangyang impacts reach renderer and retain authoritative critical flags",
 		report.verdict = "PASS";
 	} catch ( error ) {
 		report.failure = String( error );
-		await page.screenshot( { path: out + "/failure.png" } ).catch( () => {} );
 		throw error;
 	} finally {
 		await page.context().tracing.stop( { path: out + "/trace.zip" } ).catch( () => {} );

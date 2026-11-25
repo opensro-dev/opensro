@@ -18,6 +18,10 @@ checks) reads the same numbers the client ships.
 ===========================================================================
 */
 
+// The port-only 0x3FCE saved reverse-return location (reverse-user-point.ts,
+// #3903) rides protocol 20 unbumped: a tab that predates it meets an
+// unmatched opcode, which the receive chain drops silently, so the tab
+// simply never learns a saved location until it reloads.
 // Protocol 20 admits the port-only skill reset control (opcode 21,
 // commerce-controls.ts SKILL_RECALL_CONTROL; SRO_SKILL_RESET_SCROLL), which
 // 19's world gate ended the session on.
