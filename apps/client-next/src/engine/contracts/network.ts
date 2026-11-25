@@ -66,7 +66,7 @@ export interface NetworkOwner {
 	// False retains this frame and its successors while admission awaits data.
 	drain( consume: ( frame: WireFrame ) => boolean | void ): void;
 	disconnect(): void;
-	enterWorld( division: string, character: string, token: string ): void;
+	enterWorld( division: string, character: string, token: string, sessionConstants: string ): void;
 	// Frames journaled since the last take (epoch ms, direction, opcode,
 	// bytes per frame), or null; the bug report's network.json.
 	takeJournal(): Float64Array | null;

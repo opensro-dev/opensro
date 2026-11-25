@@ -55,8 +55,8 @@ func TestHandleEnterWorldSuccess(t *testing.T) {
 	if string(blob.Bootstrap["nativeResult"]) != "1" {
 		t.Errorf("blob nativeResult = %s", blob.Bootstrap["nativeResult"])
 	}
-	if string(blob.Bootstrap["protocolVersion"]) != "2" {
-		t.Errorf("blob protocolVersion = %s, want 2", blob.Bootstrap["protocolVersion"])
+	if string(blob.Bootstrap["protocolVersion"]) != "3" {
+		t.Errorf("blob protocolVersion = %s, want 3", blob.Bootstrap["protocolVersion"])
 	}
 	if _, ok := blob.Bootstrap["localPlayerEntry"]; !ok {
 		t.Error("blob lacks localPlayerEntry")
@@ -424,4 +424,68 @@ func BenchmarkEnterWorldBlob(b *testing.B) {
 			}
 		}
 	})
+}
+
+/*
+================
+TestEnterWorldSessionConstantsDigestGate
+
+The session-constant sections (refObjSnapshot, magicOptionSnapshot)
+ship once per session (#4421): a re-entry stating the digest the first
+answer named omits both, and a wrong digest gets the full answer again.
+================
+*/
+func TestEnterWorldSessionConstantsDigestGate(t *testing.T) {
+	answer := func(stated string) map[string]json.RawMessage {
+		character := chinaSpearman()
+		character.ID = 7
+		deps := testDeps(character)
+		deps.ResolveDivisionID = DevResolveDivisionIDFromCatalog(deps.Characters)
+		// The fixture configures no references file; a seed digest stands
+		// in so the constants digest exists at all.
+		deps.SeedDigest = "fixture-seed"
+		entry := entryauth.NewAuthenticatedEntryFixture(t, "0", "asd2")
+		entry.SessionConstants = stated
+		outcome := HandleEnterWorld(deps, transport.EncodeEnterWorld(entry))
+		if !outcome.OK {
+			t.Fatalf("HandleEnterWorld failed: %+v", outcome.Result)
+		}
+		decoded, err := transport.DecodeEnterWorldResult(outcome.ResultPayload)
+		if err != nil {
+			t.Fatalf("result payload does not decode: %v", err)
+		}
+		var blob struct {
+			Bootstrap map[string]json.RawMessage `json:"bootstrap"`
+		}
+		if err := json.Unmarshal(decoded.Blob, &blob); err != nil {
+			t.Fatalf("blob does not parse: %v", err)
+		}
+		t.Logf("answer blob bytes: %d (stated digest %.8q)", len(decoded.Blob), stated)
+		return blob.Bootstrap
+	}
+
+	first := answer("")
+	var digest string
+	if err := json.Unmarshal(first["sessionConstants"], &digest); err != nil || digest == "" {
+		t.Fatalf("first answer sessionConstants = %s (err %v), want a digest", first["sessionConstants"], err)
+	}
+	if string(first["refObjSnapshot"]) == "null" {
+		t.Fatal("first answer omitted refObjSnapshot")
+	}
+
+	second := answer(digest)
+	if string(second["refObjSnapshot"]) != "null" {
+		t.Errorf("digest-held answer refObjSnapshot = %s, want null", second["refObjSnapshot"])
+	}
+	if raw, ok := second["magicOptionSnapshot"]; ok && string(raw) != "null" {
+		t.Errorf("digest-held answer magicOptionSnapshot = %s, want omitted", raw)
+	}
+	if string(second["sessionConstants"]) != string(first["sessionConstants"]) {
+		t.Errorf("digest-held answer renamed the digest: %s", second["sessionConstants"])
+	}
+
+	third := answer("0000000000000000000000000000000000000000000000000000000000000000")
+	if string(third["refObjSnapshot"]) == "null" {
+		t.Error("wrong-digest answer omitted refObjSnapshot")
+	}
 }

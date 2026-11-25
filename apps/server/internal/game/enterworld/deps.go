@@ -60,14 +60,23 @@ as fixtures always have.
 ================
 */
 type refObjSnapshotCache struct {
-	mu     sync.Mutex
-	refs   *BrowserReferences
-	rows   []RefObjRow
+	mu   sync.Mutex
+	refs *BrowserReferences
+	rows []RefObjRow
+	// digest is the session-constants digest of rows (sessionConstantsDigest
+	// in bootstrap.go), computed once beside them.
+	digest string
 	cached bool
 }
 
 type Deps struct {
 	BrowserReferences *BrowserReferences
+	// SeedDigest folds the commerce seed (SceneReferenceFrames) into the
+	// session-constants digest (bootstrap.go sessionConstantsDigest). The
+	// composition root sets it once the commerce catalogue is built
+	// (sha256 hex over the seed frames' bytes); empty in fixtures, where
+	// the digest then covers the two bootstrap snapshots alone.
+	SeedDigest string
 	// SiegeStructUpgrades is the resolved siege structure upgrade
 	// table the bootstrap publishes (fortress_upgrades.go); the
 	// composition root resolves it once from the boot textdata, and
@@ -338,8 +347,10 @@ type Deps struct {
 		character *Character,
 		send func() error,
 	) error
-	// Immutable references consumed by scene-local client owners must be
-	// republished after every bootstrap, including same-session travel.
+	// Immutable references consumed by scene-local client owners are
+	// republished after a bootstrap until the session proves it holds
+	// the current session-constants digest (#4421: the first entry sends
+	// them; a digest-holding re-entry keeps its tables).
 	SceneReferenceFrames func() []wire.Frame
 	// SceneWeatherFrames is the weather a finished loading scene starts
 	// with (action/weather.go): the client drops it at every world reset.

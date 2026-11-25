@@ -348,7 +348,7 @@ test("the world core publishes whole behind a reset and deltas between", async (
 	const { createWorldCore } = await import( "../../src/engine/runtime/simulation/worker/session/world/core.ts" );
 	const core = createWorldCore( () => {} );
 	const base = {
-		protocolVersion: 2,
+		protocolVersion: 3,
 		nativeResult: 1,
 		refObjSnapshot: [],
 		character: { name: "fixture", skills: [] },

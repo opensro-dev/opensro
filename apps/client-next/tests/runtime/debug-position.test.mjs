@@ -74,7 +74,7 @@ localOwner
 function localOwner() {
 	const owner = createEntities();
 	owner.bootstrap( {
-		protocolVersion: 2,
+		protocolVersion: 3,
 		nativeResult: 1,
 		refObjSnapshot: [ { refObjId: 3914, tidWord: 0x11c6, kind: "cos" } ],
 		localPlayerEntry: {
@@ -183,7 +183,7 @@ test("the worker core routes the body-visual command to the entity owner", () =>
 	const core = createWorldCore( () => {} );
 	try {
 		core.bootstrap( {
-			protocolVersion: 2,
+			protocolVersion: 3,
 			nativeResult: 1,
 			refObjSnapshot: [],
 			refItemSnapshot: [],
@@ -219,7 +219,7 @@ test("the worker core routes the local-visible command to the entity owner", () 
 	const core = createWorldCore( () => {} );
 	try {
 		core.bootstrap( {
-			protocolVersion: 2,
+			protocolVersion: 3,
 			nativeResult: 1,
 			refObjSnapshot: [],
 			refItemSnapshot: [],

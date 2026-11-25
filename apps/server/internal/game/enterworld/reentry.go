@@ -102,7 +102,7 @@ func (d *Deps) PrepareReentry(divisionID string, character *Character) (Prepared
 		snapshot.RaiseInventoryFloor(domain.InventoryPagesBase)
 		inventoryBase = domain.InventoryPagesBase
 	}
-	result := buildCharacterProjection(&projection, divisionID, snapshot, nil)
+	result := buildCharacterProjection(&projection, divisionID, snapshot, nil, "")
 	packets, ok := d.encodeReentry(result)
 	if !ok {
 		return PreparedReentry{}, false

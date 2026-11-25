@@ -187,7 +187,7 @@ test("disposing an admitted session with a full journal does not enqueue a reset
 	await settle();
 	session.step( 4 );
 	const bootstrap = {
-		protocolVersion: 2,
+		protocolVersion: 3,
 		nativeResult: 1,
 		refObjSnapshot: [],
 		localPlayerEntry: { modelRef: 1933, startProfile: { regionId: 25256, x: 1, y: 2, z: 3, angle: 0 } }

@@ -9,6 +9,9 @@ bootstrap.go - Package enterworld.
 package enterworld
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
+	"encoding/json"
 	"fmt"
 	"slices"
 	"strings"
@@ -241,7 +244,7 @@ func buildBootstrap(deps *Deps, request BootstrapRequest) *BootstrapResult {
 	if deps.InventoryPages {
 		presented = character.RaiseInventoryFloor(domain.InventoryPagesBase) || presented
 	}
-	result := buildCharacterProjection(deps, divisionID, character, request.hold)
+	result := buildCharacterProjection(deps, divisionID, character, request.hold, request.SessionConstants)
 	if result.NativeResult == nativeResultSuccess {
 		result.liveOwner = liveCharacter
 		if presented {
@@ -262,7 +265,7 @@ never seeds or mutates the live character, so re-entry can be prepared before
 an authoritative relocation/revival commits.
 ================
 */
-func buildCharacterProjection(deps *Deps, divisionID string, character *Character, hold *simulation.HoldBreakdown) *BootstrapResult {
+func buildCharacterProjection(deps *Deps, divisionID string, character *Character, hold *simulation.HoldBreakdown, statedConstants string) *BootstrapResult {
 	// Both callers pass a snapshot, so the running events' groups join the
 	// entry without touching the stored record; a fresh slice keeps the
 	// snapshot from sharing the record's backing array.
@@ -339,6 +342,12 @@ func buildCharacterProjection(deps *Deps, divisionID string, character *Characte
 	}
 
 	refObjSnapshot := filteredRefObjSnapshot(deps)
+	magicOptionSnapshot := buildMagicOptionSnapshot(deps, character)
+	// The session constants go once per session (#4421): a re-entry
+	// stating the digest it holds omits both snapshots here and the
+	// commerce seed at game-ready; the answer always names the digest.
+	constantsDigest := sessionConstantsDigest(deps, refObjSnapshot, magicOptionSnapshot)
+	omitConstants := constantsDigest != "" && statedConstants == constantsDigest
 
 	var systemMessages interface{} = []string{}
 	if deps.SystemMessages != nil {
@@ -370,7 +379,9 @@ func buildCharacterProjection(deps *Deps, divisionID string, character *Characte
 		SkillCooldowns:          entrySkillCooldowns(deps, character),
 		ItemCooldowns:           entryItemCooldowns(deps, character),
 		RefItemSnapshot:         buildRefItemSnapshot(deps, divisionID, character),
-		MagicOptionSnapshot:     buildMagicOptionSnapshot(deps, character),
+		MagicOptionSnapshot:     magicOptionSnapshot,
+		SessionConstants:        constantsDigest,
+		OmitSessionConstants:    omitConstants,
 		AvatarMagicOptions:      buildAvatarMagicOptions(deps),
 		SiegeItemForgeGroups:    DefaultSiegeItemForgeGroups(),
 		SiegeFortressData:       siegeFortressRows(deps),
@@ -431,8 +442,63 @@ func filteredRefObjSnapshot(deps *Deps) []RefObjRow {
 	rows := computeFilteredRefObjSnapshot(deps)
 	cache.refs = deps.BrowserReferences
 	cache.rows = append([]RefObjRow{}, rows...)
+	cache.digest = snapshotRowsDigest(rows)
 	cache.cached = true
 	return append([]RefObjRow{}, cache.rows...)
+}
+
+/*
+================
+snapshotRowsDigest
+
+The sha256 hex of one snapshot section's wire JSON. The sections are
+static per catalogue generation, so the snapshot's digest rides its
+cache (above) instead of re-marshaling 700 KB per entry; the magic
+section is small and hashed per entry.
+================
+*/
+func snapshotRowsDigest(rows any) string {
+	raw, err := json.Marshal(rows)
+	if err != nil {
+		return ""
+	}
+	sum := sha256.Sum256(raw)
+	return hex.EncodeToString(sum[:])
+}
+
+/*
+================
+sessionConstantsDigest
+
+The one digest a session's constants travel under (#4421): the
+reference file's digest, the filtered RefObj snapshot, the magic
+option snapshot and the commerce seed, hashed together. The
+bootstrap names it in every answer; a client that holds it states
+it on re-entry, and a match omits the constant sections (Build) and
+the game-ready seed (RegisterGameReady). A data change anywhere in
+the four inputs changes the digest, so a stale statement simply
+earns a full answer. Empty means the inputs could not be hashed;
+nothing is ever omitted for it.
+================
+*/
+func sessionConstantsDigest(deps *Deps, refObjRows []RefObjRow, magicRows []MagicOptionRow) string {
+	snapshotDigest := ""
+	if cache := deps.refObjCache; cache != nil {
+		cache.mu.Lock()
+		snapshotDigest = cache.digest
+		cache.mu.Unlock()
+	}
+	if snapshotDigest == "" {
+		// No cache holder (fixtures): hash the rows this call built.
+		snapshotDigest = snapshotRowsDigest(refObjRows)
+	}
+	fileDigest := ""
+	if deps.BrowserReferences != nil {
+		fileDigest = deps.BrowserReferences.SHA256
+	}
+	sum := sha256.Sum256([]byte(fileDigest + "|" + snapshotDigest + "|" +
+		snapshotRowsDigest(magicRows) + "|" + deps.SeedDigest))
+	return hex.EncodeToString(sum[:])
 }
 
 /*

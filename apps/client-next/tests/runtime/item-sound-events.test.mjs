@@ -260,7 +260,7 @@ test("B06D crosses world journal and presentation into real audio owner playback
 		}
 	};
 	core.bootstrap( {
-		protocolVersion: 2,
+		protocolVersion: 3,
 		nativeResult: 1,
 		refObjSnapshot: [],
 		character: { name: "fixture" },

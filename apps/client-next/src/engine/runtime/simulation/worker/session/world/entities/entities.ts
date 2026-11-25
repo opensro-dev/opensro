@@ -944,8 +944,13 @@ export function createEntities(
 				throw new Error( "Missing world bootstrap" );
 			}
 			const b = value as Record<string, unknown>;
+			// Contract 3 lets a digest-held answer omit the constant
+			// snapshot (#4421): the server nulls refObjSnapshot exactly
+			// when the entry stated the digest this worker already holds.
+			const heldConstants = b.refObjSnapshot === undefined || b.refObjSnapshot === null;
 			if (
-				b.protocolVersion !== 2 || b.nativeResult !== 1 || !Array.isArray( b.refObjSnapshot ) ||
+				b.protocolVersion !== 3 || b.nativeResult !== 1 ||
+				(!heldConstants && !Array.isArray( b.refObjSnapshot )) ||
 				!b.localPlayerEntry
 			) {
 				throw new Error( "Invalid world bootstrap" );
@@ -953,79 +958,88 @@ export function createEntities(
 			skillRefs = spawnSkillReferences(
 				(b.refSkillSnapshot ?? []) as { id: number; token: boolean; status: boolean; }[]
 			);
-			refs.clear();
-			itemRefs.clear();
-			itemNames.clear();
-			monsterCodenames.clear();
-			monsterCodenameByRef.clear();
-			for ( const row of b.refObjSnapshot ) {
-				if (
-					!row || typeof row.refObjId !== "number" || !Number.isInteger( row.refObjId ) ||
-					row.refObjId <= 0 || row.refObjId > 0xffffffff || typeof row.kind !== "string" ||
-					refs.has( row.refObjId )
-				) {
-					throw new Error( "Invalid world reference catalog" );
-				}
-				if (
-					row.kind === "cos" && (!Number.isInteger( row.tidWord ) || row.tidWord < 0 || row.tidWord > 65535)
-				) throw new Error( "Missing COS type authority" );
-				for (
-					const [field, max] of [
-						[ "level", 255 ],
-						[ "maxHp", 0xffffffff ],
-						[
-							"countryByte9c",
-							255
-						],
-						[ "sexSelector1ac", 255 ],
-						[ "fortressUpgradeRef", 0xffffffff ]
-					] as const
-				) {
+			// On a held answer the installed catalogues stay: the
+			// reference tables and monster codenames keep their owners,
+			// and the commerce-seed rows in itemRefs survive (#4421).
+			if ( !heldConstants ) {
+				refs.clear();
+				itemRefs.clear();
+				itemNames.clear();
+				monsterCodenames.clear();
+				monsterCodenameByRef.clear();
+				for ( const row of b.refObjSnapshot ) {
 					if (
-						row[field] !== undefined &&
-						(!Number.isInteger( row[field] ) || row[field] < 0 || row[field] > max)
-					) throw Error( "Invalid entity reference " + field );
+						!row || typeof row.refObjId !== "number" || !Number.isInteger( row.refObjId ) ||
+						row.refObjId <= 0 || row.refObjId > 0xffffffff || typeof row.kind !== "string" ||
+						refs.has( row.refObjId )
+					) {
+						throw new Error( "Invalid world reference catalog" );
+					}
+					if (
+						row.kind === "cos" &&
+						(!Number.isInteger( row.tidWord ) || row.tidWord < 0 || row.tidWord > 65535)
+					) throw new Error( "Missing COS type authority" );
+					for (
+						const [field, max] of [
+							[ "level", 255 ],
+							[ "maxHp", 0xffffffff ],
+							[
+								"countryByte9c",
+								255
+							],
+							[ "sexSelector1ac", 255 ],
+							[ "fortressUpgradeRef", 0xffffffff ]
+						] as const
+					) {
+						if (
+							row[field] !== undefined &&
+							(!Number.isInteger( row[field] ) || row[field] < 0 || row[field] > max)
+						) throw Error( "Invalid entity reference " + field );
+					}
+					if ( row.name !== undefined && typeof row.name !== "string" ) {
+						throw Error( "Invalid entity reference name" );
+					}
+					if (
+						row.monsterType !== undefined &&
+						(!Number.isInteger( row.monsterType ) || row.monsterType < 0 || row.monsterType > 255)
+					) throw Error( "Invalid entity reference monsterType" );
+					if ( row.kind === "monster" && typeof row.codename === "string" && row.codename ) {
+						monsterCodenames.set( row.codename, {
+							refObjId: row.refObjId,
+							monsterType: row.monsterType ?? 0
+						} );
+						monsterCodenameByRef.set( row.refObjId, row.codename );
+					}
+					if (
+						row.kind === "teleport" &&
+						(!row.teleport || !Number.isFinite( row.teleport.radius ) ||
+							!Number.isFinite( row.teleport.height ) || row.teleport.radius <= 0 ||
+							row.teleport.height <= 0 ||
+							(row.teleport.fortressId !== undefined &&
+								(!Number.isInteger( row.teleport.fortressId ) || row.teleport.fortressId < 0 ||
+									row.teleport.fortressId > 0xffffffff)))
+					) throw Error( "Missing teleport gate bounds" );
+					refs.set( row.refObjId, {
+						...(row.kind === "teleport" ?
+							{
+								teleport: {
+									radius: row.teleport.radius,
+									height: row.teleport.height,
+									fortressId: row.teleport.fortressId
+								}
+							} :
+							{}),
+						kind: row.kind,
+						tidWord: row.tidWord ?? 0,
+						name: row.name,
+						level: row.level,
+						fortressUpgradeRef: row.fortressUpgradeRef,
+						maxHp: row.maxHp,
+						countryByte9c: row.countryByte9c,
+						sexSelector1ac: row.sexSelector1ac,
+						...(row.kind === "npc" ? { merchantBranches: merchantBranches( row.npcTalkStoreGroups ) } : {})
+					} );
 				}
-				if ( row.name !== undefined && typeof row.name !== "string" ) {
-					throw Error( "Invalid entity reference name" );
-				}
-				if (
-					row.monsterType !== undefined &&
-					(!Number.isInteger( row.monsterType ) || row.monsterType < 0 || row.monsterType > 255)
-				) throw Error( "Invalid entity reference monsterType" );
-				if ( row.kind === "monster" && typeof row.codename === "string" && row.codename ) {
-					monsterCodenames.set( row.codename, { refObjId: row.refObjId, monsterType: row.monsterType ?? 0 } );
-					monsterCodenameByRef.set( row.refObjId, row.codename );
-				}
-				if (
-					row.kind === "teleport" &&
-					(!row.teleport || !Number.isFinite( row.teleport.radius ) ||
-						!Number.isFinite( row.teleport.height ) || row.teleport.radius <= 0 ||
-						row.teleport.height <= 0 ||
-						(row.teleport.fortressId !== undefined &&
-							(!Number.isInteger( row.teleport.fortressId ) || row.teleport.fortressId < 0 ||
-								row.teleport.fortressId > 0xffffffff)))
-				) throw Error( "Missing teleport gate bounds" );
-				refs.set( row.refObjId, {
-					...(row.kind === "teleport" ?
-						{
-							teleport: {
-								radius: row.teleport.radius,
-								height: row.teleport.height,
-								fortressId: row.teleport.fortressId
-							}
-						} :
-						{}),
-					kind: row.kind,
-					tidWord: row.tidWord ?? 0,
-					name: row.name,
-					level: row.level,
-					fortressUpgradeRef: row.fortressUpgradeRef,
-					maxHp: row.maxHp,
-					countryByte9c: row.countryByte9c,
-					sexSelector1ac: row.sexSelector1ac,
-					...(row.kind === "npc" ? { merchantBranches: merchantBranches( row.npcTalkStoreGroups ) } : {})
-				} );
 			}
 			for (
 				const row of (b.refItemSnapshot ?? []) as {
@@ -1037,8 +1051,15 @@ export function createEntities(
 			) {
 				if (
 					!Number.isInteger( row.refObjId ) || row.refObjId <= 0 || !Number.isInteger( row.typeFlags ) ||
-					row.typeFlags < 0 || row.typeFlags > 65535 || itemRefs.has( row.refObjId )
+					row.typeFlags < 0 || row.typeFlags > 65535
 				) throw new Error( "Invalid peer item catalog" );
+				// A fresh table was cleared above, so only a held one can
+				// name a ref twice (#4421); there the rule is the one
+				// references() keeps: same type may repeat, a different
+				// type for a held ref is a conflict.
+				if (
+					itemRefs.has( row.refObjId ) && itemRefs.get( row.refObjId ) !== row.typeFlags
+				) throw new Error( "Conflicting public item reference" );
 				itemRefs.set( row.refObjId, row.typeFlags );
 				itemNames.set( row.refObjId, row.name ?? row.codename ?? String( row.refObjId ) );
 				if ( row.codename ) itemCodenames.set( row.refObjId, row.codename );

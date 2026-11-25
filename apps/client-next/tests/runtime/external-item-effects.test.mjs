@@ -154,7 +154,7 @@ test("native emitter advances at most once after a stall and reset removes delay
 test("3449 snapshots the existing character and ignores missing targets", () => {
 	const e = createEntities();
 	e.bootstrap( {
-		protocolVersion: 2,
+		protocolVersion: 3,
 		nativeResult: 1,
 		refObjSnapshot: [],
 		refItemSnapshot: [ { refObjId: 69, typeFlags: 0x36c } ],
@@ -190,7 +190,7 @@ test("3449 snapshots the existing character and ignores missing targets", () => 
 test("3449 with an item the client does not know skips the sparkle and reports it, never ending the session", () => {
 	const e = createEntities();
 	e.bootstrap( {
-		protocolVersion: 2,
+		protocolVersion: 3,
 		nativeResult: 1,
 		refObjSnapshot: [],
 		refItemSnapshot: [],

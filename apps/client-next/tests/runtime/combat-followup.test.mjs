@@ -313,7 +313,7 @@ test("local entry effects cross the entity lifecycle once and preserve remaining
 	const { effectRemainingMs } = await load( "foundation/gameplay/attached-effects.ts" );
 	const core = createWorldCore( () => {} ),
 		base = {
-			protocolVersion: 2,
+			protocolVersion: 3,
 			nativeResult: 1,
 			refObjSnapshot: [],
 			character: { name: "fixture", skills: [] },

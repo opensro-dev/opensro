@@ -415,8 +415,8 @@ func TestBuildSuccessEnvelopeShape(t *testing.T) {
 	if string(fields["bootstrapMode"]) != `"`+BootstrapMode+`"` {
 		t.Errorf("bootstrapMode = %s", fields["bootstrapMode"])
 	}
-	if string(fields["protocolVersion"]) != "2" {
-		t.Errorf("protocolVersion = %s, want 2", fields["protocolVersion"])
+	if string(fields["protocolVersion"]) != "3" {
+		t.Errorf("protocolVersion = %s, want 3", fields["protocolVersion"])
 	}
 	if string(fields["refObjSnapshot"]) != "[]" {
 		t.Errorf("refObjSnapshot = %s, want []", fields["refObjSnapshot"])

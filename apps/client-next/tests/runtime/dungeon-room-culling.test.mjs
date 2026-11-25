@@ -47,7 +47,7 @@ function world( calls ) {
 		}
 	);
 	e.bootstrap( {
-		protocolVersion: 2,
+		protocolVersion: 3,
 		nativeResult: 1,
 		refObjSnapshot: [ { refObjId: 2029, kind: "monster", tidWord: 0 } ],
 		localPlayerEntry: { modelRef: 1933, startProfile: { regionId: OUTDOOR, x: 1, y: 2, z: 3, angle: 0 } }
