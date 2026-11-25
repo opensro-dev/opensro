@@ -25,14 +25,16 @@ Before tagging a release:
    explains the ledger.
 4. `git status --ignored` must list `.generated/`, `temp/` and `.state/` as
    ignored, and nothing generated as tracked.
-5. `pnpm --filter @sro/client-next build:beta` packages the browser release;
-   keep its `private/` source maps outside the deployable package. A data
-   release is staged from this package (`data_release.py`, see
+5. `pnpm --filter @sro/client-next build:release` packages the browser
+   release: the client check's asset lane (the source lanes already ran in
+   the freeze's green CI), then the beta build (#4386). Keep its `private/`
+   source maps outside the deployable package. A data release is staged
+   from this package (`data_release.py`, see
    [docs/architecture/ASSET_DELIVERY.md](../architecture/ASSET_DELIVERY.md)) before step 6.
 6. Only after packaging and staging: `pnpm assets compact` and
    `pnpm assets check compact`. Compact replaces the loose public files, the
    outdoor world and the loose server projection with their release copies,
-   and the client check inside `build:beta` reads all three, so compacting
+   and the asset lane inside `build:release` reads all three, so compacting
    first fails the packager. `pnpm assets build full` followed by
    `pnpm task build server-game-data` restores a compacted tree; a plain
    `pnpm assets build` does not restore the outdoor world. The compact check
