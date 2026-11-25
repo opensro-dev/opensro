@@ -179,6 +179,9 @@ func NewDevDepsWithRoster(paths DevPaths, textdata *TextdataCatalogs, roster *Ro
 		if err != nil {
 			return nil, fmt.Errorf("bootstrap: %w", err)
 		}
+		// Port-only (#3648): the Styria Clash treasure boxes stand in
+		// the arena world while SRO_STYRIA_CLASH is on.
+		npcSpawns.WorldNpcs = append(npcSpawns.WorldNpcs, simulation.StyriaArenaBoxes()...)
 	}
 	if npcSpawns.Enabled {
 		if err := simulation.ValidateNpcRoster(npcSpawns.Roster); err != nil {

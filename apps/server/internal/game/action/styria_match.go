@@ -41,6 +41,16 @@ const (
 	styriaDeadlineSlackMs int64 = 5 * 60 * 1000
 )
 
+// The match outcome, decided on the score when the clock ends and
+// read by the reward slice (#3648 slice 4). While the match runs
+// it is styriaOutcomeOpen.
+const (
+	styriaOutcomeOpen = iota
+	styriaOutcomeHunters
+	styriaOutcomeThieves
+	styriaOutcomeDraw
+)
+
 /*
 ================
 styriaParticipant
@@ -75,6 +85,13 @@ type styriaMatch struct {
 	closeMs      int64 // 0 until the match clock ends
 	participants map[int64]*styriaParticipant
 	order        []int64 // participant ids in entry order (deterministic fan-out)
+
+	// The score (styria_score.go): points per side in styriaSide*
+	// order, the clock's verdict once decided, and each treasure
+	// box's next-open instant (0 = full). All under mu, like the rest.
+	score   [2]int
+	outcome int
+	boxes   []int64
 }
 
 /*
@@ -150,6 +167,7 @@ func (rt *Runtime) styriaStartMatch(division string, entrants []StyriaRegistrant
 		startMs:      nowMs,
 		endsMs:       nowMs + styriaMatchDurationMs,
 		participants: make(map[int64]*styriaParticipant),
+		boxes:        make([]int64, len(styria.BoxSpots)),
 	}
 	for _, registrant := range entrants {
 		participant := &styriaParticipant{registrant: registrant}
@@ -193,7 +211,7 @@ The match tick step: reconciliation, the ending, the close. Runs
 after the scheduler half of advanceStyriaClash.
 ================
 */
-func (rt *Runtime) advanceStyriaMatches(nowMs int64) {
+func (rt *Runtime) advanceStyriaMatches(nowMs int64) []simulation.DivisionFrames {
 	rt.styria.mu.Lock()
 	divisions := make([]string, 0, len(rt.styria.matches))
 	for division := range rt.styria.matches {
@@ -208,8 +226,9 @@ func (rt *Runtime) advanceStyriaMatches(nowMs int64) {
 	}
 	rt.styria.mu.Unlock()
 
+	var frames []simulation.DivisionFrames
 	for _, match := range matches {
-		rt.styriaTickMatch(match, nowMs)
+		frames = append(frames, rt.styriaTickMatch(match, nowMs)...)
 
 		match.mu.Lock()
 		closeNow := match.closeMs != 0 && nowMs >= match.closeMs
@@ -230,26 +249,53 @@ func (rt *Runtime) advanceStyriaMatches(nowMs int64) {
 		}
 		rt.styria.mu.Unlock()
 	}
+	return frames
 }
 
 /*
 ================
 styriaTickMatch
 
-One match, one tick: reconciliation first, then the clock. The
-ending only schedules the close (the world closes styriaCloseAfterEndMs
-later, the window the end notices of a later slice ride); the close
-itself evacuates everyone onto their entry anchors.
+One match, one tick: reconciliation first, then the clock. When the
+clock ends the match the outcome is decided on the score and told
+to every entered participant (styriaEndFrames); the close itself
+(the world closes styriaCloseAfterEndMs later) evacuates everyone
+onto their entry anchors.
 ================
 */
-func (rt *Runtime) styriaTickMatch(match *styriaMatch, nowMs int64) {
+func (rt *Runtime) styriaTickMatch(match *styriaMatch, nowMs int64) []simulation.DivisionFrames {
 	rt.styriaReconcile(match)
 
 	match.mu.Lock()
+	ended := false
 	if match.closeMs == 0 && nowMs >= match.endsMs {
 		match.closeMs = nowMs + styriaCloseAfterEndMs
+		match.outcome = styriaVerdict(match.score)
+		ended = true
 	}
 	match.mu.Unlock()
+	if !ended {
+		return nil
+	}
+	return styriaEndFrames(match)
+}
+
+/*
+================
+styriaVerdict
+
+The clock's verdict on a score: the side holding more wins, an
+equal score draws - the arena manager's own rule.
+================
+*/
+func styriaVerdict(score [2]int) int {
+	switch {
+	case score[styriaSideHunters] > score[styriaSideThieves]:
+		return styriaOutcomeHunters
+	case score[styriaSideThieves] > score[styriaSideHunters]:
+		return styriaOutcomeThieves
+	}
+	return styriaOutcomeDraw
 }
 
 /*

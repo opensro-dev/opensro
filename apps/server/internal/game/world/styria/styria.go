@@ -12,9 +12,10 @@ match rules are the Battle Arena engine, epic #3648, whose rules come
 from the later server where it shows them.
 
 This leaf owns only the identity table: the switch, the world, the
-entry gates and the arena officers. The registration book and the
-match owner live in internal/game/action (styria.go, styria_match.go).
-It imports nothing, so every layer may read it.
+entry gates, the arena officers and the treasure boxes. The
+registration book and the match owner live in internal/game/action
+(styria.go, styria_match.go, styria_score.go). It imports nothing,
+so every layer may read it.
 
 ===========================================================================
 */
@@ -72,6 +73,31 @@ const (
 	ServiceApply  = "STYRIA_CLASH:apply"
 	ServiceCancel = "STYRIA_CLASH:cancel"
 )
+
+// The treasure box (the later client's characterdata 40460,
+// NPC_BATTLE_ARENA_BOX, NPC class TID 1/2/2, model
+// mob\arenajob\job_arena_box.bsr). The client's own npcpos places
+// none - the server spawns them - so the spots are the port's:
+// four stands on the axis between the two entry gates, the west
+// pair in the Thief gate's region, the east pair in the Hunter
+// gate's, authored heights 0 like every arena object here
+// (PORT CHOICE, #3648 slice 3: no source carries the native
+// spots, and the count is the smallest field that makes the
+// centre contested from both gates).
+const (
+	BoxCodename   = "NPC_BATTLE_ARENA_BOX"
+	BoxRefObjID   = 40460
+	BoxNameSymbol = "SN_NPC_BATTLE_ARENA_BOX"
+	BoxModel      = `mob\arenajob\job_arena_box.bsr`
+)
+
+// BoxSpots are the four treasure boxes' stands (region, x, z).
+var BoxSpots = []OfficerPlacement{
+	{RegionID: 31985, X: 650, Z: -1832},
+	{RegionID: 31985, X: 800, Z: -1832},
+	{RegionID: 32242, X: 950, Z: -1832},
+	{RegionID: 32242, X: 1100, Z: -1832},
+}
 
 // The talk-row symbols. UIIT_STT_ARENA_JOB_WAR is the later client's
 // own "Styria Clash" title string; the two row symbols are port-only
