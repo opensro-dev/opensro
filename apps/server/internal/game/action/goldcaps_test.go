@@ -73,6 +73,10 @@ func TestStorageGoldDepositLimitFromEnv(t *testing.T) {
 		{"off", NativeStorageGoldDepositLimit},
 		{"junk", NativeStorageGoldDepositLimit},
 		{"0", NativeStorageGoldDepositLimit},
+		// The switch only raises: a smaller number keeps the native cap.
+		{"50", NativeStorageGoldDepositLimit},
+		{"99999999", NativeStorageGoldDepositLimit},
+		{"100000001", 100_000_001},
 		{"on", RaisedStorageGoldDepositLimit},
 		{"1", RaisedStorageGoldDepositLimit},
 		{"true", RaisedStorageGoldDepositLimit},

@@ -72,8 +72,9 @@ StorageGoldDepositLimitFromEnv
 
 The warehouse deposit cap the environment selects. "on", "1" and "true"
 keep the raised billion; a bare number names the cap itself, clamped to
-the u32 a gold move carries; unset, "off", junk and zero keep the native
-cap (a cap of zero would admit no deposit at all, so no shard means it).
+the u32 a gold move carries; unset, "off", junk and any number at or
+below the native cap keep the native cap: the switch only raises (owner
+2026-10-31), and a lower cap would refuse deposits the original admits.
 ================
 */
 func StorageGoldDepositLimitFromEnv() uint64 {
@@ -86,7 +87,7 @@ func StorageGoldDepositLimitFromEnv() uint64 {
 	if errors.Is(err, strconv.ErrRange) {
 		return MaxStorageGoldDepositLimit
 	}
-	if err == nil && value > 0 {
+	if err == nil && value > NativeStorageGoldDepositLimit {
 		if value > MaxStorageGoldDepositLimit {
 			return MaxStorageGoldDepositLimit
 		}
