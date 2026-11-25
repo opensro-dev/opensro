@@ -203,7 +203,16 @@ test("a malformed answer costs the window its request, never the session", () =>
 		version: 2,
 		op: "mine",
 		ok: true,
-		mine: { listings: [ row( 1 ) ], offersIn: [], offersOut: [], purchases: [], silk: 3, earnedSilk: 0, warehouseGold: 0, rules }
+		mine: {
+			listings: [ row( 1 ) ],
+			offersIn: [],
+			offersOut: [],
+			purchases: [],
+			silk: 3,
+			earnedSilk: 0,
+			warehouseGold: 0,
+			rules
+		}
 	} ) );
 	assert.equal( defined( market.state().mine ).listings.length, 1 );
 });
