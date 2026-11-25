@@ -44,7 +44,10 @@ import {
 } from "./animationUtils.mjs";
 import { parseBan, parseCharacterBsr } from "./formats.mjs";
 import { parseSkillAniSet } from "./parseSkillEffect.mjs";
-import { SKILL_EFFECT_ANIMATION_NAME_ID_ROWS } from "./native/skillEffectAnimationRegistry.ts";
+import {
+	LATER_SKILL_EFFECT_ANIMATION_ID_BY_NAME,
+	SKILL_EFFECT_ANIMATION_NAME_ID_ROWS
+} from "./native/skillEffectAnimationRegistry.ts";
 import { refreshPrecompressedSidecars } from "../generatedManifestSidecars.mjs";
 import { resolveRoster } from "./resolveCharRoster.mjs";
 import { dataAssetPath, loadDataAsset } from "../shared/jmxAssetIO.mjs";
@@ -69,7 +72,12 @@ collectRequiredSkillMotionIdsBySetName
 ================
 */
 function collectRequiredSkillMotionIdsBySetName() {
-	const animationIdByName = new Map( SKILL_EFFECT_ANIMATION_NAME_ID_ROWS );
+	// Port-only (SRO_NASRUN, #4407): the later Spirit rows' ANI_SHOT, which
+	// parseSkillAniSet admits for them alone.
+	const animationIdByName = new Map( [
+		...SKILL_EFFECT_ANIMATION_NAME_ID_ROWS,
+		...LATER_SKILL_EFFECT_ANIMATION_ID_BY_NAME
+	] );
 	const requiredSkillMotionIdsBySetName = new Map();
 	for ( const row of parseSkillAniSet( skillEffectPath ).values() ) {
 		const setName = row.aniGroup.toLowerCase();
