@@ -799,11 +799,7 @@ test("NPC UI uses authored talk bounds and native fonts through option, accept, 
 
 test("quest objectives repaint native progress, per-node status and color after updates and reopen", () => {
 	const f = uiFixture(), quests = createQuests( () => {} );
-	const captures = [],
-		subLayout = JSON.parse(
-			readFileSync( CLIENT_PUBLIC_ROOT + "/assets/cif/layouts/ifquestslotsub.json", "utf8" )
-		)
-			.controlsByName;
+	const captures = [];
 	const symbol = "SN_CON_QNO_CH_SOLDIER_EA1_1";
 	const record = {
 		refId: 2,
@@ -882,11 +878,12 @@ test("quest objectives repaint native progress, per-node status and color after 
 		settle( 1000 );
 		f.ui.event( { kind: "activate", id: "open-window:Quests" } );
 		settle( 1100 );
+		// The quest list window (#4245) lists each objective under its quest:
+		// the quest's content button stands for the row.
 		assert.ok(
-			defined( semantics ).controls.some( c => c.id === "quest-expand:2" ),
+			defined( semantics ).controls.some( c => c.id === "quest-list-content:2" ),
 			"Production quest row must exist"
 		);
-		f.ui.event( { kind: "activate", id: "quest-expand:2" } );
 		let firstRect;
 		for ( const [index, [kind, count]] of [ [ 1, 0 ], [ 0, 40 ], [ 1, 7 ], [ 2, 40 ], [ 1, 8 ] ].entries() ) {
 			update( kind, count );
@@ -896,16 +893,12 @@ test("quest objectives repaint native progress, per-node status and color after 
 			const description = "Hunt 40 Weasel (" + count + ")",
 				status = strings[complete ? "UIIT_STT_QUEST_END" : "UIIT_STT_QUEST_ING"];
 			const run = glyphRun( description, color ), statusRun = glyphRun( status, color );
-			const background = f.scenes.at( -1 ).quads.find( q =>
-				q.texture === subLayout.GDR_QUESTSLOT_SUB_WND.ddj.publicPath
-			);
-			assert.ok( background, "Expanded row background must be drawn" );
 			captures.push( {
 				kind,
 				count,
 				description,
 				status,
-				origin: background.rect.slice( 0, 2 ),
+				origin: run[0].rect.slice( 0, 2 ),
 				quads: [ ...run, ...statusRun ]
 			} );
 			firstRect ??= run[0].rect;

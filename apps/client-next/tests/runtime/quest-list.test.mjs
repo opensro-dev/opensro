@@ -139,7 +139,8 @@ test("layout decode: keyed path records refused when structurally damaged", () =
 		format: "res-ui-layout",
 		version: 1,
 		name: "questlist",
-		root: 76,
+		// The producer's contract: scripts/res_ui_layout.py writes the root key.
+		root: "76",
 		controls: [
 			{
 				key: "76",
@@ -178,4 +179,5 @@ test("layout decode: keyed path records refused when structurally damaged", () =
 	assert.equal( layout.root.rect[2], 624 );
 	assert.throws( () => decodeResLayout( { ...good, version: 2 } ) );
 	assert.throws( () => decodeResLayout( "nope" ) );
+	assert.throws( () => decodeResLayout( { ...good, root: "5" } ), /root/ );
 });

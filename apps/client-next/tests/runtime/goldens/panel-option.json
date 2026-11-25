@@ -91,7 +91,7 @@
   "{\"draggable\":false,\"id\":\"option-video-down\",\"kind\":\"button\",\"label\":\"Scroll down\",\"rect\":[945,576,16,16]}",
   "{\"draggable\":true,\"id\":\"option-video-thumb\",\"kind\":\"button\",\"label\":\"Scroll messages\",\"rect\":[945,431,16,16]}",
   "{\"disabled\":false,\"id\":\"option-video-combo:-1\",\"kind\":\"button\",\"label\":\"Resolution\",\"rect\":[789,323,176,20]}",
-  "{\"disabled\":true,\"id\":\"option-video-combo:-2\",\"kind\":\"button\",\"label\":\"Set Brightness\",\"rect\":[789,353,176,20]}",
+  "{\"disabled\":false,\"id\":\"option-video-combo:-2\",\"kind\":\"button\",\"label\":\"Set Brightness\",\"rect\":[789,353,176,20]}",
   "{\"disabled\":false,\"id\":\"option-video-combo:0\",\"kind\":\"button\",\"label\":\"Graphic Quality\",\"rect\":[790,420,156,20]}",
   "{\"disabled\":false,\"id\":\"option-video-combo:1\",\"kind\":\"button\",\"label\":\"Shadow Detail\",\"rect\":[790,450,156,20]}",
   "{\"disabled\":false,\"id\":\"option-video-combo:2\",\"kind\":\"button\",\"label\":\"Background Draw Distance\",\"rect\":[790,480,156,20]}",

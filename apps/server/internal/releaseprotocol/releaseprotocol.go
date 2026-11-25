@@ -9,15 +9,16 @@ versions; their encoders read them from here, so a wire change cannot
 happen without a new release protocol.
 
 Every browser request declares the protocol it was built for in the
-X-OpenSRO-Protocol header. A server refuses any other with 426 Upgrade
-Required and the protocol it speaks; the browser then offers the newer
+X-OpenSRO-Protocol header. A server serves every protocol from Oldest to
+Current and refuses any other with 426 Upgrade Required and the protocol
+it speaks; the browser then offers the newer
 release instead of failing inside a decoder. Release admission publishes a
 protocol change only as one coordinated server and client release.
 
 Transport sessions need no second check: their admission tokens are minted
 only by requests that passed this one.
 
-This package imports nothing from the module, so every owner can use it.
+This package imports only the standard library, so every owner can use it.
 
 ===========================================================================
 */
@@ -25,8 +26,12 @@ package releaseprotocol
 
 import (
 	"encoding/json"
+	"log/slog"
 	"net/http"
 	"strconv"
+	"strings"
+	"sync"
+	"time"
 )
 
 // Header carries the release protocol a browser was built for.
@@ -67,6 +72,19 @@ const (
 	// world layer (see WorldContract 1). Protocol 16 grows a pet chat
 	// link to name its pet (see ChatContract 2).
 	Current = 20
+	// Oldest is the oldest protocol this server still serves. A bump
+	// whose change an older client cannot survive in ordinary play moves
+	// Oldest with Current; a bump whose change only a new, opt-in action
+	// reaches keeps the older protocol served, so a running client (a
+	// player's open tab, an unattended automation client) is not locked
+	// out by a release it never needed (r204k, 2026-11-25: protocol 20
+	// refused every protocol-19 client with 426 although 19 and 20 differ
+	// only in the skill reset reply).
+	// 20 keeps 19: control 21 is sent only in reply to the player's own
+	// skill reset scroll use (progression/skillrecall.go), so a protocol-19
+	// client meets it only by using one, and that ends its own session as
+	// a 19 tab always did. Every other frame 20 sends, 19 reads.
+	Oldest = 19
 	// The market contract: 1 carries the port-only consignment market
 	// (SRO_CONSIGNMENT) on control opcode 20 both ways, and the server
 	// pushes it unasked: a sale's proceeds and notice to an online
@@ -195,7 +213,7 @@ func ContractsOf(protocol int) (Contracts, bool) {
 ================
 Require
 
-Refuses a browser request whose declared protocol is not Current. CORS
+Refuses a browser request whose declared protocol Accepts refuses. CORS
 preflights pass untouched: they carry no declaration and no application
 state, and the browser sends the declared request next.
 ================
@@ -223,16 +241,93 @@ func RequireRetiring(retire func(http.ResponseWriter, *http.Request), next http.
 			next.ServeHTTP(w, r)
 			return
 		}
-		declared, err := strconv.Atoi(r.Header.Get(Header))
-		if err != nil || declared != Current {
+		value := r.Header.Get(Header)
+		declared, err := strconv.Atoi(value)
+		if err != nil || !Accepts(declared) {
 			if retire != nil {
 				retire(w, r)
 			}
+			refusals.note(value, time.Now())
 			refuse(w)
 			return
 		}
 		next.ServeHTTP(w, r)
 	})
+}
+
+/*
+================
+Accepts
+
+True when this server serves a browser built for protocol declared.
+================
+*/
+func Accepts(declared int) bool {
+	return declared >= Oldest && declared <= Current
+}
+
+//============================================================================
+
+// refusalLogInterval paces the refusal summary: a release turns every
+// open tab away at once, and one line per request would flood the log.
+const refusalLogInterval = time.Minute
+
+// maxRefusalKinds bounds the declared values one summary counts; the
+// header is client text, so anything past the bound is counted as other.
+const maxRefusalKinds = 8
+
+/*
+================
+refusalLog
+
+Counts refused declarations and writes one summary per interval, naming
+each declared value, so a release that locks clients out shows in the
+log with the protocol they speak (r204k: the edge log keeps no request
+headers, and the lockout was found only by reading loopback traffic).
+================
+*/
+type refusalLog struct {
+	mu     sync.Mutex
+	since  time.Time
+	counts map[string]int
+}
+
+var refusals refusalLog
+
+/*
+================
+refusalLog.note
+================
+*/
+func (l *refusalLog) note(declared string, now time.Time) {
+	// The header is client text and becomes a log field key: only a
+	// short run of digits is named; anything else (spaces, "=", line
+	// breaks that could forge log text) is counted as other.
+	switch {
+	case declared == "":
+		declared = "none"
+	case len(declared) > 8 || strings.Trim(declared, "0123456789") != "":
+		declared = "other"
+	}
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	if l.counts == nil {
+		l.counts, l.since = map[string]int{}, now
+	}
+	// One slot stays free for "other" itself.
+	if _, seen := l.counts[declared]; !seen && declared != "other" && len(l.counts) >= maxRefusalKinds-1 {
+		declared = "other"
+	}
+	l.counts[declared]++
+	if now.Sub(l.since) < refusalLogInterval {
+		return
+	}
+	attrs := []any{"served", strconv.Itoa(Oldest) + "-" + strconv.Itoa(Current), "window", now.Sub(l.since).Round(time.Second).String()}
+	for value, count := range l.counts {
+		attrs = append(attrs, "declared_"+value, count)
+	}
+	slog.Warn("releaseprotocol: refused outdated clients with 426", attrs...)
+	l.counts, l.since = map[string]int{}, now
 }
 
 /*
