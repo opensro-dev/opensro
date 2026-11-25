@@ -1127,6 +1127,15 @@ const EARNED_SILK_CAPTION = "Earned silk";
 // The hourly rate, the cap and tradability are shard settings
 // (action/betasilk.go, SRO_EARNED_SILK_TRADABLE), so the help names none.
 const EARNED_SILK_HELP = "Earned silk: Silk you earn by playing in the world. Purchases spend it first.";
+// Bonus Silk is the wallet's gift balance: minted rewards such as referrals
+// land there (store/referrals.go creditGiftSilkTx); the mall takes it and the
+// consignment market never does.
+const BONUS_SILK_HELP = "Bonus silk: Silk from rewards such as referrals. " +
+	"Spend it in the Item Mall; the consignment market does not take it.";
+// The classic My information rows as [caption, black box, unit] control ids
+// (ifitemmallmyinfo); earned silk rides the Point row's place.
+const MALL_BONUS_SILK_ROW = [ 21, 16, 15 ] as const;
+const MALL_EARNED_SILK_ROW = [ 22, 17, 19 ] as const;
 // How far below its box a card name's second line may draw: the font's
 // descenders (g, p, y) under a 13-pixel pitch. The price row starts 7
 // pixels below the box.
@@ -29883,26 +29892,32 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 								oy + infoOrigin[1],
 								hudCopy( "UIIT_STT_ROLL_OF_CLOTH" )
 							);
-							// Hover anywhere on the row, caption to unit, for what the
-							// balance is and why it matters.
-							const [cx] = authoredRect( pointCaption, ox + infoOrigin[0], oy + infoOrigin[1] );
-							const [bx, by, bw, bh] = authoredRect(
-								mallControl( info, 17 ),
-								ox + infoOrigin[0],
-								oy + infoOrigin[1]
-							);
-							const [ux, , uw] = authoredRect(
-								mallControl( info, 19 ),
-								ox + infoOrigin[0],
-								oy + infoOrigin[1]
-							);
-							controls.push( {
-								id: "item-mall-earned-silk",
-								kind: "region",
-								label: EARNED_SILK_HELP,
-								helpText: EARNED_SILK_HELP,
-								rect: [ cx, by, Math.max( bx + bw, ux + uw ) - cx, bh ]
-							} );
+							// Port-only, not native: hovering a wallet row, caption to
+							// unit, says what that balance is, so a player can tell the
+							// three Silk kinds apart.
+							const walletRowHelp = (
+								id: string,
+								row: readonly [number, number, number],
+								help: string
+							) => {
+								const [captionId, boxId, unitId] = row;
+								const at = ( control: number ) =>
+									authoredRect(
+										mallControl( info, control ),
+										ox + infoOrigin[0],
+										oy + infoOrigin[1]
+									);
+								const [cx] = at( captionId ), [bx, by, bw, bh] = at( boxId ), [ux, , uw] = at( unitId );
+								controls.push( {
+									id,
+									kind: "region",
+									label: help,
+									helpText: help,
+									rect: [ cx, by, Math.max( bx + bw, ux + uw ) - cx, bh ]
+								} );
+							};
+							walletRowHelp( "item-mall-bonus-silk", MALL_BONUS_SILK_ROW, BONUS_SILK_HELP );
+							walletRowHelp( "item-mall-earned-silk", MALL_EARNED_SILK_ROW, EARNED_SILK_HELP );
 						}
 						const trunkOrigin = mallControl( root, 102 ).rect;
 						const tx = ox + trunkOrigin[0], ty = oy + trunkOrigin[1];
