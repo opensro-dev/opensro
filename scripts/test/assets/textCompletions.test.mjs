@@ -65,3 +65,43 @@ test("the later client's reverse scroll destinations complete the v1.150 table",
 	completeUiText( shipped );
 	assert.equal( shipped.UIIT_CLT_REVERSE_RETRUN_SCROLL_PARTY_MOVE, "Shipped" );
 });
+
+test("the later client's party summon lines complete the v1.150 table", () => {
+	// The v1.696 band (textuisystem_4600.txt ids 4528-4537, 4552-4563,
+	// 4579; textuisystem_5500.txt id 5404) for the party summon window
+	// (#3918). Native key spellings (POSSILBE, IMPOSSILBE, MGS) kept.
+	const entries = {};
+	completeUiText( entries );
+	assert.equal( entries.UIIT_PAG_PARTY_SUMMON, "Summon Party member" );
+	assert.equal( entries.UIIT_STT_PARTY_SUMMON, "Number of Players Allowed: 1-%d" );
+	assert.equal( entries.UIIT_STT_PARTY_SUMMON_PERSONNEL, "Current summoned number : %d" );
+	assert.equal( entries.UIIT_STT_PARTY_SUMMON_MEMBER_NAME, "Party Member Name" );
+	assert.equal( entries.UIIT_STT_PARTY_SUMMON_ENTRANCE, "Eligibility" );
+	assert.equal( entries.UIIT_STT_PARTY_SUMMON_LIMIT_TIME, "Time Limit for Entry" );
+	assert.equal( entries.UIIT_CTL_PARTY_SUMMON, "Summon" );
+	assert.equal( entries.UIIT_CTL_PARTY_SUMMON_POSSILBE, "Possible" );
+	assert.equal( entries.UIIT_CTL_PARTY_SUMMON_IMPOSSILBE, "Impossible" );
+	assert.equal(
+		entries.UIIT_STT_PARTY_SUMMON_CONFIRM_BOX,
+		"[%s] invites you to the world unknown. Would you like to comply?"
+	);
+	assert.equal(
+		entries.UIIT_STT_PARTY_SUMMON_IMPOSSILBE_1,
+		"The target character cannot be summoned for entry if the character is outside of a town."
+	);
+	assert.equal(
+		entries.UIIT_STT_PARTY_SUMMON_IMPOSSILBE_8,
+		"The target character is dead."
+	);
+	assert.equal( entries.UIIT_STT_PARTY_SUMMON_WAIT_ERR, "The summoning request is currently pending." );
+	assert.equal(
+		entries.UIIT_STT_PARTY_SUMMON_BUTTON,
+		"You must wait for 5 seconds before summoning again."
+	);
+	assert.equal( entries.UIIT_MGS_ERR_PARTY_SUMMON_NOT, "You must be a party leader to use it." );
+	assert.equal( entries.UIIT_STT_PARTY_SUMMON_LIMIT_COUNT, "Entry Remaining" );
+	// Fill-if-blank only: a shipped row would win over the completion.
+	const shipped = { UIIT_PAG_PARTY_SUMMON: "Shipped" };
+	completeUiText( shipped );
+	assert.equal( shipped.UIIT_PAG_PARTY_SUMMON, "Shipped" );
+});
