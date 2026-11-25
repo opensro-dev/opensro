@@ -10,6 +10,7 @@ the next queue write can reuse the source, including deferred frame submits.
 
 ===========================================================================
 */
+import type { GpuWork } from "@/engine/foundation/rendering/gpu-work";
 import { destroyNow, type Retire } from "./retirement";
 
 const INITIAL_UPLOAD_BYTES = 16384;
@@ -34,7 +35,7 @@ type UploadCopy = {
 createGeometryUploads
 ================
 */
-export function createGeometryUploads( device: GPUDevice, retire: Retire = destroyNow ) {
+export function createGeometryUploads( device: GPUDevice, retire: Retire = destroyNow, work?: GpuWork ) {
 	const limit = device.limits?.maxBufferSize ?? DEFAULT_MAX_BUFFER_BYTES;
 	const copies: UploadCopy[] = [];
 	let active = false, used = 0, data = new Uint8Array( 0 );
@@ -50,7 +51,10 @@ export function createGeometryUploads( device: GPUDevice, retire: Retire = destr
 	*/
 	function submit( commands?: GPUCommandBuffer ) {
 		if ( !used ) {
-			if ( commands ) device.queue.submit( [ commands ] );
+			if ( commands ) {
+				device.queue.submit( [ commands ] );
+				work?.noteSubmit();
+			}
 			return;
 		}
 		if ( stagingBytes < used ) {
@@ -64,12 +68,14 @@ export function createGeometryUploads( device: GPUDevice, retire: Retire = destr
 			stagingBytes = data.byteLength;
 		}
 		device.queue.writeBuffer( staging!, 0, data.buffer as ArrayBuffer, 0, used );
+		work?.noteUpload( used );
 		const encoder = device.createCommandEncoder( { label: "geometry-uploads" } );
 		for ( const copy of copies ) {
 			encoder.copyBufferToBuffer( staging!, copy.start, copy.buffer, copy.offset, copy.size );
 		}
 		const uploads = encoder.finish();
 		device.queue.submit( commands ? [ uploads, commands ] : [ uploads ] );
+		work?.noteSubmit();
 		used = 0;
 		copies.length = 0;
 	}
@@ -96,6 +102,7 @@ export function createGeometryUploads( device: GPUDevice, retire: Retire = destr
 			if ( active && used + size > limit ) submit();
 			if ( !active || !size || size > limit ) {
 				device.queue.writeBuffer( buffer, offset, source.buffer as ArrayBuffer, source.byteOffset, size );
+				work?.noteUpload( size );
 				return;
 			}
 			if ( data.byteLength < used + size ) {

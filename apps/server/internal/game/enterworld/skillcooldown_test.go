@@ -162,3 +162,33 @@ func TestBootstrapRestoresRunningItemCooldownGroups(t *testing.T) {
 		t.Fatalf("entry item cooldowns %+v, want %+v (an ended group is not restored)", result.ItemCooldowns, want)
 	}
 }
+
+/*
+================
+TestBootstrapRestoresLentSpiritSkillCooldowns
+
+Port-only (SRO_NASRUN, #4384): a worn Spirit's skill is not learned, but a
+reconnect inside its timer must still show the sweep, as the server keeps
+refusing the cast until the group's deadline.
+================
+*/
+func TestBootstrapRestoresLentSpiritSkillCooldowns(t *testing.T) {
+	character := chinaSpearman()
+	character.Skills = nil
+	character.OffensiveSkillCooldowns = map[uint32]int64{880: 1801000}
+	deps := testDeps(character)
+	deps.Now = func() time.Time { return time.UnixMilli(1000) }
+	deps.Skills = fakeSeedSkills{
+		"spirit": {ID: 31275, Codename: "SKILL_MALL_NASRUN_ECCENTRICDEMON_01", Icon: "skill/nasrun.ddj", Group: 880, CoolTimeMs: 1800000},
+	}
+	deps.SpiritSkills = func(string, *Character) []uint32 { return []uint32{31275} }
+	result := Build(deps, BootstrapRequest{CharacterName: character.Name})
+	want := []EntrySkillCooldown{{Skill: 31275, RemainingMs: 1800000, DurationMs: 1800000}}
+	if result.NativeResult != nativeResultSuccess || !reflect.DeepEqual(result.SkillCooldowns, want) {
+		t.Fatalf("lent cooldowns %+v, want %+v", result.SkillCooldowns, want)
+	}
+	deps.SpiritSkills = nil
+	if result = Build(deps, BootstrapRequest{CharacterName: character.Name}); len(result.SkillCooldowns) != 0 {
+		t.Fatalf("an unworn Spirit's timer leaked: %+v", result.SkillCooldowns)
+	}
+}

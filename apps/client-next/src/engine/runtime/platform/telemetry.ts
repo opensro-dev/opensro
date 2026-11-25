@@ -107,6 +107,13 @@ export function createTelemetry( options: TelemetryOptions ) {
 			`Frame avg / p95: ${ms( sample.frameMs )} / ${ms( sample.p95FrameMs )}`,
 			`CPU avg / p95: ${ms( sample.cpuMs )} / ${ms( sample.p95CpuMs )}`,
 			`Actors: ${sample.actors} · Draws: ${sample.draws} · Groups: ${sample.visibleGroups}`,
+			...(sample.work ?
+				[
+					`Submits ${sample.work.submitsPerFrame.toFixed( 1 )}/f · Uploads ${
+						sample.work.uploadsPerFrame.toFixed( 1 )
+					}/f · ${sample.work.uploadKiBPerFrame.toFixed( 1 )} KiB/f`
+				] :
+				[]),
 			...sample.build.lines,
 			sample.build.detail
 		].filter( Boolean ).join( "\n" );
