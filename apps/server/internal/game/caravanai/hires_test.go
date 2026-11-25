@@ -128,7 +128,7 @@ func TestHireRosterMarksWhoIsAvailableHere(t *testing.T) {
 	if want := -(HireFeeGold + GoodsForStars(5)); paid["Boss"] != want {
 		t.Fatalf("5-star hire charged %d, want %d", paid["Boss"], want)
 	}
-	rows := rt.HireRoster("division", "Boss", domain.JobTrader, TownJangan)
+	rows := rt.HireRoster("division", "Boss", domain.JobTrader, TownJangan, 1000)
 	seenUnavailable := false
 	status := map[string]string{}
 	for _, row := range rows {
@@ -144,7 +144,7 @@ func TestHireRosterMarksWhoIsAvailableHere(t *testing.T) {
 	if status["[AI]Trader_Jin"] != "Working for you" || !strings.HasPrefix(status["[AI]Trader_Mei"], "Waiting in") || status["[AI]Hunter_Kwan"] != "Available" {
 		t.Fatalf("statuses: Jin %q, Mei %q, Kwan %q", status["[AI]Trader_Jin"], status["[AI]Trader_Mei"], status["[AI]Hunter_Kwan"])
 	}
-	for _, row := range rt.HireRoster("division", "Boss", domain.JobTrader, TownThiefDen) {
+	for _, row := range rt.HireRoster("division", "Boss", domain.JobTrader, TownThiefDen, 1000) {
 		if row.Role != RoleThief || row.Available {
 			t.Fatalf("the Den offers %s (%v) to a Trader", row.Name, row.Available)
 		}

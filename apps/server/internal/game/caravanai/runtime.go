@@ -125,6 +125,10 @@ type AgentUnit struct {
 	// sellAt is the town whose shop a hired Trader's sale is priced at
 	// (set as it sells, read by endHireLocked).
 	sellAt TownID
+	// hirerOutAtMs is when a Hunter/Thief-only hire's hirer left town (0
+	// in town); expiryWarned: the end-of-hire notice went out.
+	hirerOutAtMs int64
+	expiryWarned bool
 	// carriesGoods: a Thief's transport holds goods (the world's report,
 	// NoteThiefCargo); denCargo: a hired Thief holds them in the Den for
 	// its hirer (thiefcargo.go).
@@ -181,7 +185,9 @@ type WorldHooks struct {
 	OnHirePayout func(division, playerName string, gold int64) bool
 	// OnHireEnded reports a released hire (gold is what OnHirePayout got).
 	OnHireEnded func(division, playerName, agentName string, end HireEnd, gold int64)
-	Heal        func(division, name string, amount int64) int64
+	// OnHireNotice tells a hirer about its hire (the end drawing near).
+	OnHireNotice func(division, playerName, text string)
+	Heal         func(division, name string, amount int64) int64
 	// UseItem has the actor drink one item from its bag (an HP, MP or
 	// transport potion); true when it was used. When set it replaces Heal.
 	UseItem func(division, name, codename string) bool

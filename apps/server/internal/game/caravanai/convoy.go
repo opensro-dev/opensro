@@ -44,6 +44,17 @@ const (
 	// HireLeaderMissingMs ends a hire whose hirer stays offline or out of
 	// the main world this long.
 	HireLeaderMissingMs int64 = 2 * 60_000
+	// A Hunter or Thief hire lasts HireDurationMs, renewable at a shop
+	// (ExtendHire, at most HireMaxAheadMs ahead), with a notice
+	// HireWarnMs before it ends. Hired with no Trader, it also ends when
+	// the hirer is back in a town after HireOutRunMs out.
+	HireDurationMs int64 = 60 * 60_000
+	HireMaxAheadMs int64 = 2 * HireDurationMs
+	HireWarnMs     int64 = 5 * 60_000
+	HireOutRunMs   int64 = 20 * 60_000
+	// HirePoolReserve Hunters (in a town) or Thieves (in the Den) always
+	// stay free for other players.
+	HirePoolReserve = 2
 	// HireRunMinOutMs: a hired Trader back in the town it was hired in sells
 	// only after this long outside (a quick step out is not a run).
 	HireRunMinOutMs int64 = 10 * 60_000
@@ -119,6 +130,8 @@ type outboxItem struct {
 	end      HireEnd
 	chat     bool
 	contract bool
+	// notice is a message for player alone (WorldHooks.OnHireNotice).
+	notice   bool
 	regionID uint16
 }
 
@@ -191,6 +204,8 @@ type HireRow struct {
 	Stars     uint8
 	Available bool
 	Status    string
+	// Extend: the player's own Hunter or Thief, renewable here.
+	Extend bool
 }
 
 /*
@@ -201,7 +216,7 @@ Every agent of the kind hired at place (Thieves in the Den, Hunters and
 Traders at a city shop), available ones first.
 ================
 */
-func (r *Runtime) HireRoster(division, player string, playerJob uint8, place TownID) []HireRow {
+func (r *Runtime) HireRoster(division, player string, playerJob uint8, place TownID, nowMs int64) []HireRow {
 	division = strings.TrimSpace(division)
 	r.EnsureDivisionRoster(division)
 	r.mu.Lock()
@@ -216,6 +231,11 @@ func (r *Runtime) HireRoster(division, player string, playerJob uint8, place Tow
 		switch {
 		case u.HiredBy != "" && strings.EqualFold(u.HiredBy, player):
 			row.Status = "Working for you"
+			if u.Role != RoleTrader {
+				left := max(u.HiredAtMs+HireDurationMs-nowMs, 0)
+				row.Status = fmt.Sprintf("Working for you (%d min left)", (left+59_999)/60_000)
+				row.Extend = true
+			}
 		case u.HiredBy != "":
 			row.Status = "Hired by " + u.HiredBy
 		case u.RespawnPending || u.HP <= 0:
@@ -232,6 +252,8 @@ func (r *Runtime) HireRoster(division, player string, playerJob uint8, place Tow
 			row.Status = "Won't work for you"
 		case full:
 			row.Status = "You lead too many already"
+		case u.Role != RoleTrader && r.freeOfRoleLocked(division, u.Role, row.Town) <= HirePoolReserve:
+			row.Status = "Kept free for others"
 		default:
 			row.Available, row.Status = true, "Available"
 		}

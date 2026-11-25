@@ -6,7 +6,7 @@ caravan-hire.ts - the AI caravan hire window (port-only 0x3FCF / 0x7FCF, not nat
 The server opens and refreshes the window with a JSON body (the agents
 hired where the player stands, available ones first, and a Trader's goods
 choices by star); the window's request is u8 operation (0 refresh,
-1 hire, 2 lead), u8 stars, then the agent's name. 0x3FD0 tells a hirer
+1 hire, 2 lead, 3 extend), u8 stars, then the agent's name. 0x3FD0 tells a hirer
 who leads its hired Traders and who may (itself and them); the party
 board's lead badges send operation 2 with the chosen name. 0x3FD1 follows
 an NPC select when that NPC hires agents (u32 gid, the row's label); the
@@ -28,6 +28,8 @@ export interface CaravanHireRow {
 	readonly role: string;
 	readonly town: string;
 	readonly available: boolean;
+	// The player's own Hunter or Thief, renewable here (operation 3).
+	readonly extend: boolean;
 	readonly status: string;
 }
 
@@ -129,6 +131,7 @@ body is a protocol error, never a partial window.
 					role: text( r.role, 16 ),
 					town: text( r.town, 32 ),
 					available: r.available === true,
+					extend: r.extend === true,
 					status: text( r.status, 64 )
 				}) ),
 				stars: raw.stars.map( ( s: Record<string, unknown> ) => {
@@ -151,7 +154,7 @@ request
 The window's request frame: refresh (0), hire (1) or lead (2).
 ================
 		*/
-		request( operation: 0 | 1 | 2, stars: number, name: string ): WireFrame {
+		request( operation: 0 | 1 | 2 | 3, stars: number, name: string ): WireFrame {
 			const bytes = new TextEncoder().encode( name );
 			if ( bytes.length > 64 || !Number.isInteger( stars ) || stars < 0 || stars > 5 ) {
 				throw new Error( "Invalid caravan hire request" );

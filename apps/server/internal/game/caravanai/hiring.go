@@ -116,6 +116,10 @@ func (r *Runtime) HireAgentStars(division, player string, playerJob uint8, agent
 		r.mu.Unlock()
 		return fmt.Sprintf("%s is already on the road and cannot be hired now.", short)
 	}
+	if unit.Role != RoleTrader && r.freeOfRoleLocked(division, unit.Role, r.homeLocked(unit)) <= HirePoolReserve {
+		r.mu.Unlock()
+		return fmt.Sprintf("Only %d free %ss are left in %s; they stay for other players.", HirePoolReserve, unit.Role.Title(), townTitle(r.homeLocked(unit)))
+	}
 	if len(r.hiresOfLocked(division, player)) >= MaxHiresPerPlayer {
 		r.mu.Unlock()
 		return fmt.Sprintf("You already lead %d hired companions.", MaxHiresPerPlayer)
@@ -148,7 +152,8 @@ func (r *Runtime) HireAgentStars(division, player string, playerJob uint8, agent
 
 	r.mu.Lock()
 	unit = r.findAgentLocked(division, agentName)
-	if unit == nil || !hireable(unit) || len(r.hiresOfLocked(division, player)) >= MaxHiresPerPlayer {
+	if unit == nil || !hireable(unit) || len(r.hiresOfLocked(division, player)) >= MaxHiresPerPlayer ||
+		(unit.Role != RoleTrader && r.freeOfRoleLocked(division, unit.Role, r.homeLocked(unit)) <= HirePoolReserve) {
 		r.mu.Unlock()
 		if r.hooks.OnHirePayout != nil {
 			r.hooks.OnHirePayout(division, player, price)
@@ -425,6 +430,12 @@ func (r *Runtime) superviseHireLocked(unit *AgentUnit, nowMs int64) bool {
 	}
 	if unit.IsDead(nowMs) {
 		return false
+	}
+	if unit.Role != RoleTrader && !unit.carriesGoods && !unit.denCargo {
+		// A Thief with a haul ends its hire after the sale (thiefcargo.go).
+		if r.superviseHireTimeLocked(unit, p, nowMs) {
+			return true
+		}
 	}
 	place, inTown := r.placeAtLocked(position(unit))
 	if !inTown {
@@ -718,6 +729,12 @@ func (r *Runtime) flushOutbox(division string) {
 			}
 			continue
 		}
+		if item.notice {
+			if r.hooks.OnHireNotice != nil {
+				r.hooks.OnHireNotice(division, item.player, item.text)
+			}
+			continue
+		}
 		if item.contract {
 			if r.hooks.OnContractFormed != nil {
 				r.hooks.OnContractFormed(division, item.player, item.agent)
@@ -801,4 +818,124 @@ func (r *Runtime) DebugHires(division, player string) string {
 			DisplayName(u.Name), u.State, u.lastAction, DisplayName(lead), u.WaypointIndex, len(u.Route), hirer, far))
 	}
 	return strings.Join(lines, "\n")
+}
+
+/*
+================
+superviseHireTimeLocked
+
+A Hunter's or Thief's hire time: a notice HireWarnMs before its hour runs
+out and the end when it does; hired with no Trader, the end of the run
+too - the hirer back in a town (or the Den) after HireOutRunMs out. A
+shorter trip out does not count. True when the hire ended.
+================
+*/
+func (r *Runtime) superviseHireTimeLocked(unit *AgentUnit, p PlayerPosition, nowMs int64) bool {
+	expires := unit.HiredAtMs + HireDurationMs
+	if nowMs >= expires {
+		r.endHireLocked([]*AgentUnit{unit}, HireTimedOut, nowMs)
+		return true
+	}
+	if nowMs >= expires-HireWarnMs && !unit.expiryWarned {
+		unit.expiryWarned = true
+		where := "a specialty shop"
+		if unit.Role == RoleThief {
+			where = "the Thief Den"
+		}
+		r.outbox = append(r.outbox, outboxItem{notice: true, player: unit.HiredBy, text: fmt.Sprintf("%s's hire ends in %d minutes. Extend it at %s.", DisplayName(unit.Name), HireWarnMs/60_000, where)})
+	}
+	if len(r.hiredTradersLocked(unit.Division, unit.HiredBy)) > 0 {
+		unit.hirerOutAtMs = 0
+		return false
+	}
+	if _, inTown := r.placeAtLocked(p.At); !inTown {
+		if unit.hirerOutAtMs == 0 {
+			unit.hirerOutAtMs = nowMs
+		}
+		return false
+	}
+	out := unit.hirerOutAtMs
+	unit.hirerOutAtMs = 0
+	if out > 0 && nowMs-out >= HireOutRunMs {
+		r.endHireLocked([]*AgentUnit{unit}, HireCompleted, nowMs)
+		return true
+	}
+	return false
+}
+
+/*
+================
+freeOfRoleLocked
+
+How many agents of role wait free for hire at place (Thieves in the Den,
+Hunters at their town).
+================
+*/
+func (r *Runtime) freeOfRoleLocked(division string, role AgentRole, place TownID) int {
+	n := 0
+	for _, u := range r.agents[division] {
+		if u.Role == role && hireable(u) && r.homeLocked(u) == place {
+			n++
+		}
+	}
+	return n
+}
+
+/*
+================
+ExtendHire
+
+The hire window's renewal of the player's own Hunter or Thief: another
+HireDurationMs for the hire fee, at a city shop (Hunters) or the Den
+(Thieves), never more than HireMaxAheadMs ahead.
+================
+*/
+func (r *Runtime) ExtendHire(division, player, agentName string, nowMs int64) string {
+	division = strings.TrimSpace(division)
+	if r.hooks.Player == nil {
+		return "Caravan hiring is unavailable."
+	}
+	at, ok := r.hooks.Player(division, player)
+	if !ok {
+		return "Caravan help is hired in town."
+	}
+	r.mu.Lock()
+	unit := r.findAgentLocked(division, agentName)
+	if unit == nil || !strings.EqualFold(unit.HiredBy, player) || unit.Role == RoleTrader {
+		r.mu.Unlock()
+		return "Only your own hired Hunters and Thieves can be extended."
+	}
+	short := DisplayName(unit.Name)
+	place, inTown := r.placeAtLocked(at.At)
+	if !inTown || (unit.Role == RoleThief) != (place == TownThiefDen) {
+		r.mu.Unlock()
+		if unit.Role == RoleThief {
+			return "Thieves' hires are extended in the Thief Den."
+		}
+		return "Hunters' hires are extended at a town's specialty shop."
+	}
+	if unit.HiredAtMs+HireDurationMs-nowMs > HireMaxAheadMs-HireDurationMs {
+		r.mu.Unlock()
+		return fmt.Sprintf("%s is already hired for the next %d minutes.", short, (unit.HiredAtMs+HireDurationMs-nowMs)/60_000)
+	}
+	r.mu.Unlock()
+	if r.hooks.OnHireFee == nil || !r.hooks.OnHireFee(division, player, HireFeeGold) {
+		return fmt.Sprintf("Extending %s's hire costs %s gold.", short, GoldText(HireFeeGold))
+	}
+	r.mu.Lock()
+	unit = r.findAgentLocked(division, agentName)
+	if unit == nil || !strings.EqualFold(unit.HiredBy, player) {
+		r.mu.Unlock()
+		if r.hooks.OnHirePayout != nil {
+			r.hooks.OnHirePayout(division, player, HireFeeGold)
+		}
+		return fmt.Sprintf("%s's hire already ended; your gold is returned.", short)
+	}
+	// The hour runs on from when it would have ended (or from now, if it is
+	// past due): HiredAtMs carries the end, and it is persisted with the hire.
+	unit.HiredAtMs = max(unit.HiredAtMs, nowMs-HireDurationMs) + HireDurationMs
+	unit.expiryWarned = false
+	left := (unit.HiredAtMs + HireDurationMs - nowMs) / 60_000
+	r.mu.Unlock()
+	return fmt.Sprintf("%s's hire is extended: %d minutes left. Paid %s gold.", short, left, GoldText(HireFeeGold))
 }

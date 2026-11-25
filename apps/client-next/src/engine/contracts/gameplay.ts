@@ -536,7 +536,12 @@ export type GameplayCommand =
 	| { readonly kind: "npc-talk"; }
 	| { readonly kind: "arena-dismiss"; }
 	// Port-only caravan hire window (caravan-hire.ts): refresh, hire or lead, and close.
-	| { readonly kind: "caravan-hire"; readonly operation: 0 | 1 | 2; readonly stars: number; readonly name: string; }
+	| {
+		readonly kind: "caravan-hire";
+		readonly operation: 0 | 1 | 2 | 3;
+		readonly stars: number;
+		readonly name: string;
+	}
 	| { readonly kind: "caravan-hire-close"; }
 	| { readonly kind: "arena-decision"; readonly operation: 0 | 1 | 2 | 5; readonly id: string; }
 	| {

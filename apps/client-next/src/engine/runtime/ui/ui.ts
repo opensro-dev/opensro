@@ -3946,7 +3946,7 @@ export function createUi( ports: UiPorts ) {
 	// (every hire asks first; a Trader's also picks its goods' stars, 0 for
 	// the others).
 	let caravanOnlyAvailable = false, caravanPage = 0;
-	let caravanStarPick: { name: string; display: string; role: string; stars: number; } | null = null;
+	let caravanStarPick: { name: string; display: string; role: string; stars: number; extend: boolean; } | null = null;
 	function activateCaravanHire( id: string ): boolean {
 		const hire = view?.gameplay?.caravanHire;
 		if ( !id.startsWith( "caravan-hire" ) || !hire ) return false;
@@ -3969,8 +3969,12 @@ export function createUi( ports: UiPorts ) {
 					name: row.name,
 					display: row.display,
 					role: row.role,
-					stars: trader ? Math.min( 3, hire.stars.length ) : 0
+					stars: trader ? Math.min( 3, hire.stars.length ) : 0,
+					extend: false
 				};
+			} else if ( row?.extend ) {
+				// The player's own Hunter or Thief: renew its hour, after a confirm.
+				caravanStarPick = { name: row.name, display: row.display, role: row.role, stars: 0, extend: true };
 			}
 		} else if ( id === "caravan-hire-star-less" || id === "caravan-hire-star-more" ) {
 			if ( caravanStarPick && caravanStarPick.stars > 0 ) {
@@ -3982,7 +3986,7 @@ export function createUi( ports: UiPorts ) {
 		} else if ( id === "caravan-hire-star-ok" && caravanStarPick ) {
 			sendGameplay( {
 				kind: "caravan-hire",
-				operation: 1,
+				operation: caravanStarPick.extend ? 3 : 1,
 				stars: caravanStarPick.stars,
 				name: caravanStarPick.name
 			} );
@@ -30796,7 +30800,7 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 				label( "Status", px + 330, top, muted );
 				rect( [ px + 28, top + 18, width - 56, 1 ], [ 0.46, 0.4, 0.28, 0.8 ] );
 				rows.slice( caravanPage * perPage, (caravanPage + 1) * perPage ).forEach( ( row, i ) => {
-					const y = top + 24 + i * rowH, color = row.available ? green : red;
+					const y = top + 24 + i * rowH, color = row.available ? green : row.extend ? gold : red;
 					if ( i % 2 === 0 ) rect( [ px + 28, y - 2, width - 56, rowH ], [ 1, 1, 1, 0.04 ] );
 					const who = row.role === "Thief" ?
 						`${row.display} (Thief)` :
@@ -30805,10 +30809,10 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 					quads.push(
 						...text.quads( row.status, [ px + 330, y, width - 366, rowH - 4 ], full, color, { vAlign: 1 } )
 					);
-					if ( row.available ) {
+					if ( row.available || row.extend ) {
 						controls.push( {
 							id: "caravan-hire-row:" + row.name,
-							label: `Hire ${row.display}`,
+							label: row.extend ? `Extend ${row.display}'s hire` : `Hire ${row.display}`,
 							kind: "button",
 							rect: [ px + 28, y - 2, width - 56, rowH ]
 						} );
@@ -30855,7 +30859,7 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 						choice = trader ? hire.stars[pick.stars - 1] : undefined;
 					const sw = 340, sh = 210, sx = px + Math.floor( (width - sw) / 2 ), sy = py + 120;
 					rect( [ px, py, width, height ], [ 0, 0, 0, 0.45 ] );
-					windowBox( `Confirm hire: ${pick.display}`, sx, sy, sw, sh );
+					windowBox( `${pick.extend ? "Extend hire" : "Confirm hire"}: ${pick.display}`, sx, sy, sw, sh );
 					quads.push(
 						...normalTile(
 							[ sx + 14, sy + 38, sw - 28, sh - 52 ],
@@ -30908,7 +30912,9 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 					} else {
 						quads.push(
 							...text.quads(
-								`Hire ${pick.display} (${pick.role}) for one trade run?`,
+								pick.extend ?
+									`Extend ${pick.display}'s hire by one hour?` :
+									`Hire ${pick.display} (${pick.role}) for one trade run?`,
 								[ sx + 20, sy + 66, sw - 40, 18 ],
 								full,
 								white,
@@ -30925,7 +30931,7 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 							)
 						);
 					}
-					button( "caravan-hire-star-ok", "Hire", sx + 40, sy + 166, 110 );
+					button( "caravan-hire-star-ok", pick.extend ? "Extend" : "Hire", sx + 40, sy + 166, 110 );
 					button( "caravan-hire-star-cancel", "Cancel", sx + sw - 150, sy + 166, 110 );
 				}
 				endWindow( admission, "caravan-hire" );

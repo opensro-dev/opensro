@@ -135,6 +135,7 @@ func (game *gameplayPlane) wireCaravanAgents() {
 				game.parties.InvitePlayerFromRuntimeActor(division, agentName, playerName)
 			}
 		},
+		OnHireNotice: game.caravanNotice,
 		OnHireEnded: func(division, playerName, agentName string, end caravanai.HireEnd, gold int64) {
 			if game.parties != nil {
 				game.parties.RemoveRuntimeActor(division, agentName)
@@ -773,6 +774,7 @@ type caravanHireRowJSON struct {
 	Town      string `json:"town"`
 	Available bool   `json:"available"`
 	Status    string `json:"status"`
+	Extend    bool   `json:"extend,omitempty"`
 }
 
 type caravanHireStarsJSON struct {
@@ -805,7 +807,7 @@ func (game *gameplayPlane) caravanHireWindow(character *enterworld.Character, me
 			out.Message = "Caravan help is hired at a specialty shop or in the Thief Den."
 		}
 	} else {
-		roster := game.caravanAgents.HireRoster(game.divisionID, name, job, place)
+		roster := game.caravanAgents.HireRoster(game.divisionID, name, job, place, time.Now().UnixMilli())
 		if place == caravanai.TownThiefDen {
 			out.Title = "Thieves for Hire"
 		} else {
@@ -827,7 +829,7 @@ func (game *gameplayPlane) caravanHireWindow(character *enterworld.Character, me
 		for _, row := range roster {
 			out.Rows = append(out.Rows, caravanHireRowJSON{
 				Name: row.Name, Display: caravanai.DisplayName(row.Name), Role: row.Role.Title(),
-				Town: formatCaravanTownName(row.Town), Available: row.Available, Status: row.Status,
+				Town: formatCaravanTownName(row.Town), Available: row.Available, Status: row.Status, Extend: row.Extend,
 			})
 		}
 	}
@@ -845,6 +847,13 @@ func (game *gameplayPlane) caravanHireRequest(division string, character *enterw
 	var job uint8
 	var name string
 	game.deps.Read(division, func() { job, name = enterworld.DressedJob(character), character.Name })
+	if payload[0] == action.CaravanHireOpExtend {
+		reply := game.caravanAgents.ExtendHire(division, name, string(payload[2:]), time.Now().UnixMilli())
+		return []wire.Frame{
+			{Opcode: chat.OpChatBroadcast, Payload: chat.EncodeChatNotice(reply)},
+			game.caravanHireWindow(character, reply),
+		}
+	}
 	if payload[0] == action.CaravanHireOpLead {
 		reply := game.caravanAgents.SetLead(division, name, string(payload[2:]))
 		return []wire.Frame{{Opcode: chat.OpChatBroadcast, Payload: chat.EncodeChatNotice(reply)}}

@@ -6,7 +6,7 @@ caravan_hire.go - the port-only caravan hire window's opcodes
 0x3FCF (S->C) opens or refreshes the hire window: a JSON body the
 gameworld's caravan wiring builds. 0x7FCF (C->S) is the window's request:
 
-	u8 operation (0 refresh, 1 hire, 2 lead), u8 stars (a Trader's goods
+	u8 operation (0 refresh, 1 hire, 2 lead, 3 extend), u8 stars (a Trader's goods
 	rating, 0 for the others), then the agent's name bytes (at most 64);
 	lead names who leads the sender's hired Traders (itself or one of them)
 
@@ -38,7 +38,8 @@ const (
 	OpCaravanLead        uint16 = 0x3fd0
 	OpCaravanHireNpc     uint16 = 0x3fd1
 
-	CaravanHireOpLead = 2
+	CaravanHireOpLead   = 2
+	CaravanHireOpExtend = 3
 )
 
 // CaravanHireNpcFrame tells the client the NPC gid offers the hire row label.
@@ -53,7 +54,7 @@ HandleCaravanHire
 ================
 */
 func (rt *Runtime) HandleCaravanHire(division string, c *enterworld.Character, payload []byte) OpResult {
-	if rt.CaravanHire == nil || len(payload) < 2 || payload[0] > CaravanHireOpLead || len(payload) > 2+64 {
+	if rt.CaravanHire == nil || len(payload) < 2 || payload[0] > CaravanHireOpExtend || len(payload) > 2+64 {
 		return OpResult{DiagnosticRefusal: "caravan hire request refused"}
 	}
 	return OpResult{Frames: rt.CaravanHire(division, c, payload)}

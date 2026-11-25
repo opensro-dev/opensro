@@ -389,7 +389,7 @@ Distances use 10 world units per in-game metre (skill ranges: 180 units = 18m); 
   hirer's own panel carry a "Lead" badge, the current leader shows "Leads" (0x7FCF operation 2; the
   server pushes the state as 0x3FD0). With no pick the first hired Trader in party order leads.
   `!leed` (or `!lead`) still toggles the hirer leading.
-- **Hire end (hands off):** no time limit and no command needed. A hired Trader that left town rides to
+- **Hire end (hands off):** no command needed. A hired Trader that left town rides to
   the shop of the next town it reaches (its hire town again only after 10 minutes out), sells there and
   stays in that town: the hirer gets the sale (cost + 15% per cargo star). When all of a hirer's Traders
   sold, its other hired agents are released as each reaches a town, where they stay. The hirer
@@ -397,6 +397,14 @@ Distances use 10 world units per in-game metre (skill ranges: 180 units = 18m); 
   cost back); so do a lost job, `!dismiss`, or the hirer being offline/out of the main world for
   2 minutes. Robbed goods pay nothing. Released agents leave the party; only one released outside a
   town is teleported home.
+- **Hunter/Thief hire limits (2026-11-25):** so nobody keeps escorts forever. A Hunter or Thief hired
+  with no Trader ends when the hirer is back in a town after at least 20 minutes out. Every Hunter or
+  Thief hire lasts one hour at most; the hirer gets a notice 5 minutes before the end, and can renew it
+  for another hour (the same fee) from the hire window at a specialty shop (Hunters) or the Den
+  (Thieves): their own rows read "Working for you (N min left)" and open "Extend" (0x7FCF operation 3).
+  A renewal never runs more than two hours ahead. A Thief carrying a haul is never cut off. Each town
+  keeps its last 2 idle Hunters (the Den its last 2 Thieves) free: those rows read "Kept free for
+  others" and cannot be hired.
 - **Restarts:** hires in flight are mirrored to the `caravan_hires` table every 5 seconds (and at
   shutdown). At boot each one resumes: the agent waits at the hire town's shop for up to 10 minutes,
   then teleports to the hirer and rejoins their party when they log in. A stored hire whose agent is busy or gone pays the goods' cost back.

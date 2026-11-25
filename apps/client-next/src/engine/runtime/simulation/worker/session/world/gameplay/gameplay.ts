@@ -2804,7 +2804,11 @@ state here before a command can claim a native wire conversation.
 				return null;
 			}
 			if ( command.kind === "caravan-hire" ) {
-				if ( !localGid || (command.operation !== 0 && command.operation !== 1 && command.operation !== 2) ) {
+				if (
+					!localGid ||
+					(command.operation !== 0 && command.operation !== 1 && command.operation !== 2 &&
+						command.operation !== 3)
+				) {
 					throw Error( "Invalid caravan hire" );
 				}
 				return sendFrame( caravanHire.request( command.operation, command.stars, command.name ) );
