@@ -701,6 +701,7 @@ test("server listing is unauthenticated and rejects duplicate routing identities
 		nativeFarmId: 1,
 		isTest: false,
 		operating: true,
+		comingSoon: false,
 		transportUrl: "http://localhost:9000"
 	};
 	let rows = [ server ];
