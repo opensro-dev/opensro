@@ -27624,12 +27624,14 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 					...layout.refuse.slice( 0, 3 ) as [number, number, number]
 				);
 			}
-			if ( worldVisible && mallUse.pending() !== null ) {
+			const mallAsk = worldVisible ? mallUse.pending() : null;
+			if ( mallAsk !== null ) {
 				// CIFMessageBox kind 0x1F (52F460): the same fixed 308x148 box
-				// (5C82D0) as the kind-0x1F confirm above, one question line.
+				// (5C82D0) as the kind-0x1F confirm above, one question line -
+				// the gate's question (mall-use.ts mallUseQuestion).
 				const layout = guildProposalLayout( w, h ),
 					message = text.guide(
-						guideTokens( "<center>" + hudCopy( "UIIT_MSG_QUESTION_SILKMALL_ITEM_USE" ) + "</center>" ),
+						guideTokens( "<center>" + hudCopy( mallAsk.question ) + "</center>" ),
 						[ layout.frame[0] + 4, layout.frame[1] + 48, 300, 49 ],
 						full,
 						white,
