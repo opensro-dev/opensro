@@ -16,6 +16,9 @@ import { defined } from "../helpers/defined.mjs";
 import { uiFixture, fontAtlas } from "../helpers/ui-fixture.mjs";
 const { emptyStall, stallRequest, stallFrame } = await import( "../../src/engine/foundation/gameplay/stall.ts" );
 const { stallTradingPresentation } = await import( "../../src/engine/runtime/ui/hud/stall-hud.ts" );
+const { POPUP_LIST_HOVER_BAR, POPUP_LIST_HOVER_TEXT, POPUP_LIST_PRESSED_TEXT, popupListRowBar } = await import(
+	"../../src/engine/foundation/ui/combo-box.ts"
+);
 
 const ICON_ROOT = "/assets/images/Media_extracted/interface/stall/";
 const ITEM_ICON = "/assets/images/Media_extracted/icon/item/etc/hp_potion_01.png";
@@ -730,4 +733,61 @@ test("an open stall network combo shows twelve rows at the font height plus four
 	assert.equal( short.rows.length, 3 );
 	assert.deepEqual( short.rows[2], { index: 2, rect: [ 104, 106, 88, 16 ] } );
 	assert.equal( short.track, undefined );
+});
+
+/*
+================
+argb
+
+A native 0xAARRGGBB colour as the renderer's [r, g, b, a].
+================
+*/
+function argb( value ) {
+	return [ (value >>> 16 & 255) / 255, (value >>> 8 & 255) / 255, (value & 255) / 255, (value >>> 24 & 255) / 255 ];
+}
+
+test("the stall network's combo rows hover pale yellow over a blue bar and press blue, as the original (#4403)", () => {
+	// 536E20: CIFListCtrl_SetRowStateColors (523CD0) state 1 0xFFFFFF80 and
+	// state 2 0xFF8080FF; CIFListCtrl_SetHoverBarColor (523D30) 0xFF8080FF.
+	assert.deepEqual( [ ...POPUP_LIST_HOVER_TEXT ], argb( 0xFFFFFF80 ) );
+	assert.deepEqual( [ ...POPUP_LIST_PRESSED_TEXT ], argb( 0xFF8080FF ) );
+	assert.deepEqual( [ ...POPUP_LIST_HOVER_BAR ], argb( 0xFF8080FF ) );
+	// The bar spans the row's client width at the text height, centred in
+	// the pitch (font 12, pitch 16).
+	assert.deepEqual( popupListRowBar( [ 104, 224, 92, 16 ], 12 ), [ 104, 226, 92, 12 ] );
+});
+
+test("an open stall network combo draws the hover bar behind the row under the cursor only (#4403)", () => {
+	const fixture = uiFixture();
+	try {
+		let time = 0, published;
+		const draw = () => {
+			for ( let i = 0; i < 4; i++ ) published = fixture.ui.step( fixture.state, ++time * 100 ) ?? published;
+			assert.equal( fixture.ui.stats().error, null );
+			return defined( published );
+		};
+		fixture.state.gameplay.stall = /** @type {any} */ ({
+			network: { open: true, rows: [], page: 0, pages: 1 }
+		});
+		draw();
+		fixture.ui.event( { kind: "activate", id: "stall-net-combo:41" } );
+		const opened = draw();
+		const row = defined( opened.controls.find( c => c.id === "stall-net-choice:1" ) );
+		const bars = () =>
+			defined( fixture.scenes.at( -1 ) ).quads.filter( q =>
+				q.texture === "" && q.color[0] === POPUP_LIST_HOVER_BAR[0] && q.color[2] === POPUP_LIST_HOVER_BAR[2] &&
+				q.color[1] === POPUP_LIST_HOVER_BAR[1]
+			);
+		assert.equal( bars().length, 0, "no bar before the cursor is on a row" );
+		fixture.ui.event( { kind: "hover", id: row.id } );
+		draw();
+		const drawn = bars();
+		assert.equal( drawn.length, 1 );
+		const [x, y, w, h] = defined( drawn[0] ).rect;
+		assert.equal( x, row.rect[0] );
+		assert.equal( w, row.rect[2] );
+		assert.ok( y >= row.rect[1] && y + h <= row.rect[1] + row.rect[3], "inside the hovered row" );
+	} finally {
+		fixture.dispose();
+	}
 });
