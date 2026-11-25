@@ -10,9 +10,9 @@ nameplates keep the old guild until the player walks out of sight and back
 (#4413, BUG-097).
 
 Native v1.188 sends 0x30FF to the nearby sessions on a bind
-(CGObjPC_BroadcastGuildAppearance30FF 4EA2F0, called from the join commit
+(its guild-face broadcast 4EA2F0, called from the join commit
 5C8BF0 and the create commit 5C8D40) and 0x3100 {u32 uid} on an unbind
-(CGuild_DisbandAndBroadcast3100 5C3D80 and the leave/kick path 5C3EA0).
+(the dissolve broadcast 5C3D80 and the leave/kick path 5C3EA0).
 The v1.150 client registers the same two handlers under its own opcodes
 (CPSMission_RegisterPacketHandlers 74E833 / 74E854):
 
