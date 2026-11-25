@@ -469,7 +469,13 @@ func (game *gameplayPlane) register(hub *transport.Hub, loadQuests questDefiniti
 	// optional port: a missing method would silently fall back to the
 	// saved row, so the build pins it).
 	var _ gmcommand.LivePositions = game.items
-	gmcommand.Register(hub, game.deps, game.presence, gmLaneOwner{Runtime: game.items, desk: game.gmModeration})
+	// Port-only, not native: the GM's /NOTICE banner, behind SRO_GM_NOTICE
+	// (gmcommand/notice.go).
+	gmNotice := gmcommand.GMNoticeFromEnv()
+	if gmNotice {
+		log.Infof("gm: /NOTICE ON (%s)", gmcommand.EnvGMNotice)
+	}
+	gmcommand.Register(hub, game.deps, game.presence, gmLaneOwner{Runtime: game.items, desk: game.gmModeration, notice: gmNotice})
 	game.matches.Register(hub)
 	game.parties.Register(hub)
 	guild.Register(hub, game.deps, game.presence, game.items, game.unions)

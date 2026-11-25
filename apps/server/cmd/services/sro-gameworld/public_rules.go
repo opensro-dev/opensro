@@ -61,6 +61,7 @@ var unlistedSettings = map[string]string{
 	action.EnvGMSetSpeed:                  "a GM command, not a rule players meet",
 	action.EnvGMItemForge:                 "a GM command, not a rule players meet",
 	gmcommand.EnvGMModeration:             "GM moderation commands, not a rule players meet",
+	gmcommand.EnvGMNotice:                 "a GM command, not a rule players meet",
 	monster.EnvTrainingDummy:              "GM-only training targets",
 	simulation.EnvBetaUniqueRespawn:       "unique monster spawn timing is not published",
 	simulation.EnvJanganCaveRespawn:       "spawn timing is not published",
