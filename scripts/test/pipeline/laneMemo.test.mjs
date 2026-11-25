@@ -104,6 +104,31 @@ test("an unchanged lane replays its result; code, upstream and output changes ru
 	} );
 });
 
+test("a record written before folder keys replays and learns them; a moved folder then names itself", async () => {
+	await withLane( async ( { memo, module, logs } ) => {
+		const counter = { runs: 0 }, inputs = { modules: [ module ] };
+		const first = memo( { data: { extracted: "a" }, startup: "s" } );
+		await first.lane( "lane", inputs, produce( counter ) );
+		await first.commit();
+		assert.equal( counter.runs, 1 );
+
+		// The same root hash, now carrying per-folder keys beside it:
+		// keys the record predates are instrumentation, not a change.
+		const widened = memo( { data: { extracted: "a", "extracted/A": "f1", "extracted/B": "f2" }, startup: "s" } );
+		await widened.lane( "lane", inputs, produce( counter ) );
+		assert.equal( counter.runs, 1, "folder keys a record predates must not rerun the lane" );
+
+		// A folder that actually moves reruns the lane and names itself.
+		const movedFolder = memo( {
+			data: { extracted: "a", "extracted/A": "f1", "extracted/B": "f3" },
+			startup: "s"
+		} );
+		await movedFolder.lane( "lane", inputs, produce( counter ) );
+		assert.equal( counter.runs, 2 );
+		assert.match( logs.at( -1 ), /data extracted\/B changed/ );
+	} );
+});
+
 test("a record is only written by commit", async () => {
 	await withLane( async ( { memo, module } ) => {
 		const counter = { runs: 0 }, inputs = { modules: [ module ] };
