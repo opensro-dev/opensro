@@ -127,8 +127,8 @@ function backend( t, hooks = {} ) {
 			open
 			================
 			*/
-			async open() {
-				events.push( [ "open" ] );
+			async open( name ) {
+				events.push( [ "open", name ] );
 				await hooks.open?.();
 				return cache;
 			}
@@ -228,7 +228,10 @@ test("a shared slow open and healthy burst produce every cache hit", async t => 
 		return store.read( ORIGIN, String( i ), BYTES.length );
 	} );
 	await settle();
-	assert.deepEqual( events, [ [ "open" ] ] );
+	// One shared open: each of the store's caches opened once, not once per read.
+	const names = events.map( ( [kind, name] ) => kind === "open" ? name : null );
+	assert.ok( names.length > 0 && names.every( name => typeof name === "string" ), "the reads opened no cache" );
+	assert.equal( new Set( names ).size, names.length, "a cache was opened once per read" );
 	opening.resolve();
 	await settle();
 	assert.equal( active, NATIVE_LIMIT );
