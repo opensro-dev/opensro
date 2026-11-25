@@ -63,3 +63,30 @@ func TestGMWarpCarriesTheRiddenVehicle(t *testing.T) {
 	}
 	t.Fatal("re-entry did not re-apply the ride")
 }
+
+/*
+================
+TestGMRecallBringsARiderWithItsVehicle
+
+The player teleports share gmTeleportMovable: a recalled target riding a
+vehicle comes to the GM mounted.
+================
+*/
+func TestGMRecallBringsARiderWithItsVehicle(t *testing.T) {
+	f := newGMTeleportFixture(t)
+	equipCombatTestPet(t, f.rt, f.target, 1)
+	f.target.ActiveCOS.Mounted = true
+	if out := f.command(gmcommand.SubRecallUser, "Target"); !bytes.Equal(out.Ack, []byte{1, gmcommand.SubRecallUser}) {
+		t.Fatalf("ack % X (%s)", out.Ack, out.Refusal)
+	}
+	if !f.target.ActiveCOS.Summoned || !f.target.ActiveCOS.Mounted {
+		t.Fatalf("vehicle left behind: %+v", f.target.ActiveCOS)
+	}
+	want := wire.EncodeCosRideState(enterworld.ObjectIDForCharacter(f.target), true, f.target.ActiveCOS.GID)
+	for _, frame := range f.sent[f.target.Name] {
+		if frame.Opcode == wire.OpCosRideState && bytes.Equal(frame.Payload, want) {
+			return
+		}
+	}
+	t.Fatal("re-entry did not re-apply the ride")
+}
