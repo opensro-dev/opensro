@@ -778,6 +778,10 @@ func buffModifierWrites(m enterworld.SkillBuffModifiers, itemAccuracy bool) []pa
 	if m.Ru {
 		writes = append(writes, paramkeeper.Write{Parameter: combat.AttackRangeParameter, Channel: paramkeeper.Flat, Value: float32(m.RuRate)})
 	}
+	// The v1.188 installer's dru case (0x595A97, args at
+	// skill +0x3E4 as the parser stores them at 0x587BB1): word 0 on
+	// parameters 0x80 and 0x81, word 1 on 0x82 and 0x83, mode 0 (flat) -
+	// the physical pair first, then the magical pair (#4407).
 	if m.Dru {
 		for i, params := range [2][2]uint16{{0x80, 0x81}, {0x82, 0x83}} {
 			for _, param := range params {
