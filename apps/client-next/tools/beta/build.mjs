@@ -32,6 +32,7 @@ import { nativeAssetUrls } from "../../src/engine/foundation/assets/native-asset
 import { archiveRelease } from "./archive.mjs";
 import { compressRoutes } from "./compression.mjs";
 import { projectPack } from "./public-data.mjs";
+import { openPackMemo } from "./pack-memo.mjs";
 import {
 	backgroundInstallDocument,
 	BACKGROUND_INSTALL_PUBLIC_PATH
@@ -226,13 +227,15 @@ export function requireNativeAssets( applicationFiles, native, members ) {
 buildBeta
 ================
 */
-/** @param {{ destination?: string, assetRoot?: string, makeArchive?: boolean, sourceSnapshot?: string }} [options] */
+/** @param {{ destination?: string, assetRoot?: string, makeArchive?: boolean, sourceSnapshot?: string, packMemo?: any }} [options] */
 export async function buildBeta(
 	{
 		destination = path.join( root, "temp/artifacts", "beta", new Date().toISOString().replace( /[:.]/g, "-" ) ),
 		assetRoot = CLIENT_PUBLIC_ROOT,
 		makeArchive = true,
-		sourceSnapshot
+		sourceSnapshot,
+		// Remembered pack projections (pack-memo.mjs); a test passes its own.
+		packMemo
 	} = {}
 ) {
 	// A fresh generation only: never delete or reuse a directory that could hold
@@ -286,9 +289,10 @@ export async function buildBeta(
 	// What add inspected, by path and sha256: verifyDirectory below skips
 	// re-inspecting a file whose bytes still match (#4337).
 	const inspected = new Map();
-	const add = async ( file, bytes, kind ) => {
+	// vouched: the pack memo already saw these exact bytes pass inspect.
+	const add = async ( file, bytes, kind, vouched = false ) => {
 		safeName( file );
-		inspect( file, bytes, { application: kind === "application" } );
+		if ( !vouched ) inspect( file, bytes, { application: kind === "application" } );
 		await write( path.join( packageRoot, file ), bytes );
 		const digest = sha( bytes );
 		inspected.set( file, digest );
@@ -324,6 +328,23 @@ export async function buildBeta(
 	manifest.excludedGroups = original.groups.filter( g => !index.groups.includes( g ) ).map( g => g.name );
 	const native = new Set( nativeAssetUrls() );
 	requireNativeAssets( applicationFiles, native, new Set( index.assets.map( a => a.path ) ) );
+	const memo = packMemo ?? await openPackMemo();
+	/*
+	================
+	projectRemembered
+
+	The pack's public payload: the memo's when it holds this pack under
+	this code, else projected here; the caller records a fresh one once it
+	has passed inspection (add).
+	================
+	*/
+	const projectRemembered = async ( pack, packBytes, members ) => {
+		const remembered = await memo.lookup( pack, members, packBytes );
+		return remembered ? { bytes: remembered, vouched: true } : {
+			bytes: projectPack( pack, packBytes, members ),
+			vouched: false
+		};
+	};
 	// Pack members are inspected even when no loose representation remains.
 	for ( const group of index.groups ) {
 		for ( const pack of group.packs ) {
@@ -334,14 +355,15 @@ export async function buildBeta(
 			================
 			*/
 			const resolve = n => path.join( assetRoot, safeName( n.slice( 1 ) ) );
-			let bytes = await readFile( resolve( pack.path ) );
-			if ( bytes.length !== pack.bytes || sha( bytes ) !== pack.sha256 ) {
+			const packBytes = await readFile( resolve( pack.path ) );
+			if ( packBytes.length !== pack.bytes || sha( packBytes ) !== pack.sha256 ) {
 				throw Error( "Publication pack drift " + pack.path );
 			}
 			const members = index.assets.filter( a => a.packPath === pack.path );
-			bytes = projectPack( pack, bytes, members );
+			const { bytes, vouched } = await projectRemembered( pack, packBytes, members );
 			const file = "payload/" + pack.sha256 + ".bin";
-			await add( file, bytes, "data" );
+			await add( file, bytes, "data", vouched );
+			if ( !vouched ) await memo.record( pack, members, packBytes, bytes );
 			route( { url: pack.path, file, length: bytes.length, mime: "application/octet-stream" } );
 			const { header, dataStart: start } = parsePackHeader( bytes, pack.path );
 			if ( header.files.length !== members.length ) throw Error( "Pack membership drift" );
@@ -399,14 +421,15 @@ export async function buildBeta(
 			for ( const pack of group.packs ) {
 				console.log( "[beta] hd pack", group.name, pack.path );
 				const resolve = n => path.join( assetRoot, safeName( n.slice( 1 ) ) );
-				let bytes = await readFile( resolve( pack.path ) );
-				if ( bytes.length !== pack.bytes || sha( bytes ) !== pack.sha256 ) {
+				const packBytes = await readFile( resolve( pack.path ) );
+				if ( packBytes.length !== pack.bytes || sha( packBytes ) !== pack.sha256 ) {
 					throw Error( "HD publication pack drift " + pack.path );
 				}
 				const members = hdIndex.assets.filter( a => a.packPath === pack.path );
-				bytes = projectPack( pack, bytes, members );
+				const { bytes, vouched } = await projectRemembered( pack, packBytes, members );
 				const file = "payload/" + pack.sha256 + ".bin";
-				await add( file, bytes, "data" );
+				await add( file, bytes, "data", vouched );
+				if ( !vouched ) await memo.record( pack, members, packBytes, bytes );
 				route( { url: pack.path, file, length: bytes.length, mime: "application/octet-stream" } );
 			}
 		}
