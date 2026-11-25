@@ -137,6 +137,11 @@ type gameplayPlane struct {
 	// caravanAgents is the AI Caravan & Thief runtime (nil when
 	// SRO_AI_CARAVANS is off; wiring_caravanai.go).
 	caravanAgents *caravanai.Runtime
+	// caravanPeers is the agents' peer-presentation leg (slice 3a,
+	// wiring_caravanai.go); peerReferences is the item reference
+	// catalog every peer-shaped spawn draws from (wiring.go).
+	caravanPeers   *caravanPeerLeg
+	peerReferences *action.PeerReferenceCatalog
 }
 
 /*

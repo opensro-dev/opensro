@@ -447,6 +447,7 @@ func newGameWorldApplication(
 	if err != nil {
 		return nil, fmt.Errorf("peer item references: %w", err)
 	}
+	gameplay.peerReferences = peerReferences
 	application.ticker = gameplay.newMissionTicker(peerReferences)
 	application.returnArrivals = gameplay.items.RunReturnArrivals
 	application.ticker.Commit = tickCommit(authority.store)

@@ -8,9 +8,9 @@ The later client's own words carry the rules this file builds: the
 arena manager says the side seizing more treasure wins, and the
 registration window says points come from acquiring treasure boxes
 and from PK against the opposing team. The five arena buffs are
-evidenced too (the later client's skills 34622-34626) but wait for
-their own slice: no table the port ships carries them and no
-server-initiated cast lane exists yet.
+evidenced too (the later client's skills 34622-34626); they land
+with the openings in styria_buffs.go, through the shared effect
+owner - the server-initiated cast lane this slice first needed.
 
 PORT CHOICES, recorded because no source carries the native
 numbers (the reference server's arena engine has no job-war world
@@ -266,11 +266,19 @@ func (rt *Runtime) styriaSelect(divisionID string, character *enterworld.Charact
 	side := participant.registrant.Side
 	match.score[side] += styriaPointsPerBox
 	match.boxes[index] = nowMs + styriaBoxRefillMs
+	// The opening earns the opener their side's next blessing
+	// (styria_buffs.go); the install itself runs off this lock.
+	blessing := match.blessings[side]
+	match.blessings[side] = (blessing + 1) % len(styriaBlessings)
 	text := fmt.Sprintf("Styria Clash: the %s take a treasure box. %s.",
 		styriaSideNamePlural(side), styriaScoreText(match.score))
+	opener := participant.registrant.Name
 	match.mu.Unlock()
 
 	rt.styriaAnnounce(match, text)
+	if rt.styriaGrantBlessing(divisionID, character, blessing, nowMs) {
+		rt.styriaAnnounce(match, styriaBlessingText(opener, blessing))
+	}
 	return outcome, true
 }
 

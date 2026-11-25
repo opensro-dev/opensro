@@ -58,10 +58,9 @@ type ItemBody struct {
 	// RentExpiresUnixMs is a rented item's deletion deadline in unix
 	// milliseconds (native _RentItemInfo PeriodEndTime; the later
 	// client's tooltip reads the same value as its rent remainder,
-	// #4240). It rides the equipment body after the magic options,
-	// present only on a rented row: 0 writes no leg, and a tab whose
-	// itemdata predates the rental goods refuses the frame's unknown
-	// reference atomically, as it does for any later-imported item.
+	// #4240). It rides the equipment body after the magic options on
+	// every row of a rental reference (rentrefs.go), as 0 on a permanent
+	// one; a row of any other reference carries no leg.
 	RentExpiresUnixMs int64
 }
 
@@ -101,7 +100,7 @@ func (b ItemBody) EncodedSize() int {
 		return size
 	}
 	size := ItemBodySize + 8*options
-	if b.RentExpiresUnixMs > 0 {
+	if b.carriesRentLeg() {
 		size += 8
 	}
 	return size
@@ -164,10 +163,23 @@ func (b ItemBody) Encode() []byte {
 	for _, encoded := range options {
 		w.U64(encoded)
 	}
-	if b.RentExpiresUnixMs > 0 {
-		w.U64(uint64(b.RentExpiresUnixMs))
+	if b.carriesRentLeg() {
+		// A permanent row of a rental kind writes 0 (rentrefs.go).
+		w.U64(uint64(max(b.RentExpiresUnixMs, 0)))
 	}
 	return w.Payload()
+}
+
+/*
+================
+carriesRentLeg
+
+A rented row, and every row of a rental reference: the reader measures
+the body by the reference, never by the value (rentrefs.go).
+================
+*/
+func (b ItemBody) carriesRentLeg() bool {
+	return b.RentExpiresUnixMs > 0 || IsRentRef(b.RefObjID)
 }
 
 /*
