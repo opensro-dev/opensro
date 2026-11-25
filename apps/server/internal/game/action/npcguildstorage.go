@@ -30,6 +30,7 @@ import (
 
 	"opensro.online/server/internal/domain"
 	"opensro.online/server/internal/game/enterworld"
+	"opensro.online/server/internal/game/item/inventory"
 	"opensro.online/server/internal/game/item/wire"
 	"opensro.online/server/internal/game/social/guild"
 	"opensro.online/server/internal/game/world/simulation"
@@ -281,6 +282,38 @@ func (rt *Runtime) releaseGuildStorage(division, name string) {
 
 /*
 ================
+containerHoldsBoundRow
+
+Whether a row being deposited is a summoner whose pet carries a bound
+row. A summoned pet's canonical bag is its live companion record and
+the summoner row's own copy is the dormant one; both are read, so the
+answer does not depend on which record travels with the row (#4479).
+================
+*/
+func containerHoldsBoundRow(snapshot *enterworld.Character, row inventory.Item) bool {
+	pet := row.Summon
+	if pet == nil {
+		return false
+	}
+	containers := []*domain.COSContainer{pet.Container}
+	if active := snapshot.ActiveCOS; active != nil && active.GID == pet.GID {
+		containers = append(containers, active.Container)
+	}
+	for _, container := range containers {
+		if container == nil {
+			continue
+		}
+		for _, held := range container.Rows {
+			if held.ForgeBound {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+/*
+================
 applyGuildStorageMove
 
 The five guild move types: the holder's moves at the manager, one store
@@ -302,9 +335,16 @@ func (rt *Runtime) applyGuildStorageMove(division string, c *enterworld.Characte
 	// the economy. The personal warehouse stays open to it (the owner's
 	// own round-trip), so the refusal lives here, not in storableItem,
 	// and ahead of the session gates: the caller's own bag is no secret.
+	// A summoner row is judged by what it carries as well as by its own
+	// mark (#4479): read in the v1.188 server, the storage move
+	// moves the summoner row alone and never inspects the rows a pet
+	// carries, so no native refusal exists to copy. The
+	// inference from #1980's own reason, recorded here: for this door a
+	// pet loaded with a bound row is the bound row.
 	if personal == wire.MoveTypeStorageDeposit {
 		if snapshot := rt.characterSnapshot(division, c); snapshot != nil {
-			if row, present := bagOf(snapshot).At(q.SourceSlot); present && row.ForgeBound {
+			if row, present := bagOf(snapshot).At(q.SourceSlot); present &&
+				(row.ForgeBound || containerHoldsBoundRow(snapshot, row)) {
 				return failureResult(errCodeInvalidStorageTarget)
 			}
 		}
