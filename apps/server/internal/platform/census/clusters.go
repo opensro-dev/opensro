@@ -607,7 +607,8 @@ type PersonAccount struct {
 	Tickets    []connjournal.TicketHour `json:"tickets"`
 }
 
-// PersonSpan is one entered session of the person's history. Activity
+// PersonSpan is one entered session of the person's history, its Session
+// a per-answer label (sessionLabels), never the journal's name. Activity
 // is what the span did on the wire (#3307): frames in, each handled
 // opcode's count and first offset - null while the span is open or when
 // it closed without a summary. "Time to first action" is read from it
@@ -702,8 +703,9 @@ func (s *Service) Person(character string) (Person, bool, error) {
 	if person.HistoryTruncated {
 		history = history[:personHistoryMax]
 	}
+	labels := sessionLabels{}
 	for _, span := range history {
-		person.History = append(person.History, PersonSpan{Session: span.Session, Account: span.Account,
+		person.History = append(person.History, PersonSpan{Session: labels.of(span.Session), Account: span.Account,
 			Character: span.Character, Transport: span.Transport, Started: span.Started, Ended: span.Ended,
 			Open: span.Ended == 0, Estimated: span.Estimated, Activity: span.Activity})
 	}

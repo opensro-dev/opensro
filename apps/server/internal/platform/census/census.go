@@ -16,7 +16,9 @@ only on two independent signals, so an address alone - a NAT, a
 household, a VPN exit - never merges strangers. No raw address and
 no hash value ever leaves this package: answers carry account and
 character names, times and counts, and link evidence reduced to
-kinds and sharing counts.
+kinds and sharing counts. A session is named by a per-answer label
+("Session 1", ...), never by the journal's session name, whose half
+is a per-boot random hex id (sessionLabels).
 
 Port-only, not native: the whole census runs behind
 SRO_CONNECTION_JOURNAL (connjournal), default off. With the flag off
@@ -28,6 +30,7 @@ installed (wiring_census.go).
 package census
 
 import (
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -41,6 +44,31 @@ import (
 // person view's ticket hours, #3307) keep it: a reader of version 1
 // ignores a field it does not know.
 const SchemaVersion = 1
+
+/*
+================
+sessionLabels
+
+Names each session of one answer by its first-seen order: "Session 1",
+"Session 2", ... Rows of one session share a label, and the journal's
+session name (connjournal: a per-boot random hex id joined to a
+transport counter) never leaves the package. The console's guard
+refused a whole person answer for that hex at history[199] (console#35):
+the id is an identifier, not evidence, so the answer carries only its
+grouping. A label means nothing across answers; a reader that needs one
+session asks by character and time.
+================
+*/
+type sessionLabels map[string]string
+
+func (labels sessionLabels) of(session string) string {
+	if label, ok := labels[session]; ok {
+		return label
+	}
+	label := "Session " + strconv.Itoa(len(labels)+1)
+	labels[session] = label
+	return label
+}
 
 // Path is the handler's route prefix on the operator listener.
 const Path = "/internal/operations/census"
