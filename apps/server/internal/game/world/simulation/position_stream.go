@@ -19,11 +19,16 @@ for this change and described in words, as #1701 asks):
     explicit stop sends the stop packet.
   - A resync position is sent from a timer of 5 when a living character
     stands more than 10 from its last sent position or in another
-    region, or is on a direction walk more than 100 from it. The port
-    runs this timer (position_resync.go): its unit is seconds, and it
-    repairs what the client cannot see - a peer its own collision
-    stopped at a contact point, or a long walk's drift (#3723). It is
-    native, so it runs under both stream settings.
+    region, or is on a direction walk more than 100 from it, as its own
+    opcode 0x3028. The port does not send it: the v1.150 client has no
+    handler for 0x3028. Its packet table (client 0x74D330) registers
+    the stop 0xB2F5 (client 0x74DAE4) and the source move 0x30E3
+    (client 0x74DAFD), and no client code names 0x3028, so the packet
+    is outside the v1.150 wire. Sent anyway it reached the mover too,
+    and the port's client-led walk is a round trip ahead of the server,
+    so every resync pulled the walking player back (#4418). A blocked
+    step's B2F5 stop already reaches every viewer; a shard that sees
+    peer drift turns the stream on.
 
 SRO_POSITION_STREAM=on (port-only, not native) restores the stream the
 port inherited from its Node fixture: every tick a live 0x30E3 sample of

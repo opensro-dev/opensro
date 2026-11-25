@@ -62,7 +62,6 @@ import {
 	OBJECT_LIST_CHUNK_OPCODE,
 	OBJECT_LIST_FINALIZE_OPCODE,
 	OBJECT_LIST_START_OPCODE,
-	OBJECT_POSITION_UPDATE_OPCODE,
 	OBJECT_SOURCE_CORRECTION_OPCODE,
 	OBJECT_SOURCE_MOVE_OPCODE,
 	OBJECT_STATE_REFRESH_OPCODE,
@@ -1872,13 +1871,7 @@ export function createEntities(
 				}
 				return;
 			}
-			// 0x3028 is the server's position resync: the 0x30E3 layout
-			// (gid last) and its source treatment - authoritative progress
-			// while travel remains active, never a stop.
-			if (
-				frame.opcode === OBJECT_SOURCE_MOVE_OPCODE || frame.opcode === OBJECT_SOURCE_CORRECTION_OPCODE ||
-				frame.opcode === OBJECT_POSITION_UPDATE_OPCODE
-			) {
+			if ( frame.opcode === OBJECT_SOURCE_MOVE_OPCODE || frame.opcode === OBJECT_SOURCE_CORRECTION_OPCODE ) {
 				if ( p.length !== 20 ) {
 					throw new Error( "Invalid entity position" );
 				}
