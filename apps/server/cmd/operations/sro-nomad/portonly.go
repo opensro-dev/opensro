@@ -141,6 +141,20 @@ func (settings portOnlySettings) maintenanceMessage() string {
 
 /*
 ================
+comingSoonShards
+
+The captured coming-soon switch, which only the Agent job takes
+(agentVariables): the Agent lists announced-but-unopened shards on the
+title server list (#3925); the GameWorld has no list to mark.
+================
+*/
+func (settings portOnlySettings) comingSoonShards() string {
+	raw, _ := settings["coming_soon_shards"].(string)
+	return raw
+}
+
+/*
+================
 jobVariables
 
 Adds the settings to the GameWorld job's variables.

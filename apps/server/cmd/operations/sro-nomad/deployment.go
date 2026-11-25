@@ -648,6 +648,9 @@ func (deployment *deployment) agentVariables() map[string]any {
 		),
 		"bug_report_directory": deployment.BugReports.Directory,
 		"maintenance_message":  deployment.PortOnly.maintenanceMessage(),
+		// Port-only (#3925): announced-but-unopened shards list as
+		// coming soon on the title server list; only the Agent reads it.
+		"coming_soon_shards": deployment.PortOnly.comingSoonShards(),
 		// deploy.py MAINTENANCE_GATE, the same file the GameWorld jobs
 		// carry: the Agent names a not-operating refusal MAINTENANCE
 		// only while this gate file exists (#2861).
