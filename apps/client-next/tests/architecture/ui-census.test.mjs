@@ -15,6 +15,7 @@ misattributed to the closure field.
 */
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import fs from "node:fs";
 import { census } from "../../tools/ui-census.mjs";
 import { ts } from "../../tools/project.mjs";
 import {
@@ -45,18 +46,21 @@ export function createUi( assets, commands ) {
 }
 `;
 
-test("routes: exact and prefix guards in activate and event, with anchors", () => {
+test("routes: exact and prefix guards in activate and event, keyed by pattern", () => {
 	const table = census( SOURCE );
+	// Committed order is the key order (function, kind, pattern), not the
+	// source order, so a moved guard cannot rewrite the table (#4456).
 	assert.deepEqual(
-		table.routes.map( route => [ route.fn, route.kind, route.pattern ] ),
+		table.routes.map( route => [ route.fn, route.kind, route.pattern, route.ordinal ] ),
 		[
-			[ "activate", "exact", "chat-send" ],
-			[ "activate", "prefix", "stall-" ],
-			[ "activate", "exact", "guild-close" ],
-			[ "event", "exact", "open-one" ]
+			[ "activate", "exact", "chat-send", 1 ],
+			[ "activate", "exact", "guild-close", 1 ],
+			[ "activate", "prefix", "stall-", 1 ],
+			[ "event", "exact", "open-one", 1 ]
 		]
 	);
-	assert.ok( table.routes.every( route => route.line > 1 ) );
+	assert.ok( table.routes.every( route => !("line" in route) ) );
+	assert.ok( table.fields.every( field => !("line" in field) ) );
 });
 
 test("state: buckets follow the nearest guard, shared means two buckets", () => {
@@ -97,6 +101,38 @@ test("state: constants are not fields, and writes are told from reads", () => {
 	const stallPage = table.fields.find( field => field.name === "stallPage" );
 	assert.equal( stallPage.buckets.stall.writes, 1 );
 	assert.equal( stallPage.buckets.step.reads, 1 );
+});
+
+test("state: an anonymous function is bucketed by its enclosing named function", () => {
+	const anonymous = `
+export function createUi( assets, commands ) {
+	let focus = null;
+	function step( next, now ) {
+		[ 1 ].forEach( () => { focus = next; } );
+		return focus;
+	}
+	return { step };
+}
+`;
+	const table = census( anonymous );
+	const focus = table.fields.find( field => field.name === "focus" );
+	// The arrow is named for `step`, never for its source position: the
+	// bucket is "step#anon1" whatever line the arrow sits on (#4456).
+	assert.deepEqual( Object.keys( focus.buckets ).sort(), [ "step", "step#anon1" ] );
+	assert.equal( focus.buckets["step#anon1"].writes, 1 );
+	assert.equal( focus.buckets.step.reads, 1 );
+});
+
+test("moves: blank lines change no key, in the fixture or the real ui.ts", () => {
+	assert.deepEqual( census( "\n\n\n\n\n" + SOURCE ), census( SOURCE ) );
+	// The acceptance of #4456 on the real file: reflow alone must leave
+	// the census byte-identical, or every ui.ts change keeps rewriting
+	// tests/runtime/ui-census.json and conflicting every open UI PR.
+	const source = fs.readFileSync(
+		new URL( "../../src/engine/runtime/ui/ui.ts", import.meta.url ),
+		"utf8"
+	);
+	assert.deepEqual( census( "\n".repeat( 64 ) + source ), census( source ) );
 });
 
 // ============================================================================
