@@ -198,6 +198,30 @@ test("a claim is released by its holder or a maintainer only", () => {
 	assert.equal( decideUnclaim( { lease: null, actor: "contributor", association: "NONE" } ).action, "none" );
 });
 
+test("an /unclaim naming a seat releases only that seat's own lease", () => {
+	// 11-25 #3907: cancelling an agent's task posted "/unclaim <agent>" from
+	// the maintainers' account and released a contributor's live claim.
+	const contributor = { holder: "contributor", seat: "", until: new Date( T0 + HOUR_MS ).toISOString(), hours: 72 };
+	const refused = decideUnclaim( { lease: contributor, actor: "maintainer", seat: "agent-2", association: "OWNER" } );
+	assert.equal( refused.action, "refuse" );
+	assert.equal( refused.seat, "agent-2" );
+	const seated = { holder: "maintainer", seat: "agent-2", until: new Date( T0 + HOUR_MS ).toISOString(), hours: 24 };
+	assert.equal(
+		decideUnclaim( { lease: seated, actor: "maintainer", seat: "agent-2", association: "OWNER" } ).action,
+		"release"
+	);
+	assert.equal(
+		decideUnclaim( { lease: seated, actor: "maintainer", seat: "agent-3", association: "OWNER" } ).action,
+		"refuse",
+		"another seat of the same account does not release it by name"
+	);
+	assert.equal(
+		decideUnclaim( { lease: contributor, actor: "maintainer", association: "OWNER" } ).action,
+		"release",
+		"a bare /unclaim stays the maintainers' moderation"
+	);
+});
+
 test("the sweep keeps a live lease, extends an active one and releases an idle one", () => {
 	const lease = { holder: "contributor", seat: "", until: new Date( T0 ).toISOString(), hours: 72 };
 	assert.equal( decideSweep( { lease, nowMs: T0 - 1, linkedPullRequests: [] } ).action, "keep" );

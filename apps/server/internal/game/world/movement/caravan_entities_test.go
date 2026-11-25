@@ -43,7 +43,7 @@ func TestCaravanAgentAppearanceResolves(t *testing.T) {
 
 	rt := caravanai.NewRuntime(
 		caravanai.Config{Enabled: true, BrainMode: caravanai.BrainHardcoded},
-		nil, caravanai.WorldHooks{},
+		nil, nil, caravanai.WorldHooks{},
 	)
 	entities := rt.AgentEntities("caravan-appearance")
 	if len(entities) == 0 {

@@ -53,7 +53,11 @@ func (game *gameplayPlane) wireCaravanAgents() {
 	if s, ok := game.deps.Characters.(caravanai.MemoryStore); ok {
 		memStore = s
 	}
-	rt := caravanai.NewRuntime(cfg, memStore, caravanai.WorldHooks{
+	var dayStore caravanai.EscortDayStore
+	if s, ok := game.deps.Characters.(caravanai.EscortDayStore); ok {
+		dayStore = s
+	}
+	rt := caravanai.NewRuntime(cfg, memStore, dayStore, caravanai.WorldHooks{
 		// Slice 4 (#3704): what an agent says goes out as local chat
 		// from its entity. The hook only buffers the line; the tick
 		// (caravanAgentsTick) addresses it to the viewers who can see
@@ -67,7 +71,12 @@ func (game *gameplayPlane) wireCaravanAgents() {
 		OnAgentStrike: func(division, agentName, targetPlayerName string, nowMs int64) (defeated bool) {
 			return game.caravanAgentStrike(division, agentName, targetPlayerName, nowMs)
 		},
-		Walker: caravanWalker{water: game.water},
+		// Slice 5 (#3704): the money hooks - escort rewards, hire
+		// fees, parley cargo (wiring_caravanai_economy.go).
+		OnContractReward:  game.caravanRewardHook(),
+		ChargeHireFee:     game.caravanHireFeeHook(),
+		OnParleyCargoDrop: game.caravanParleyDropHook(),
+		Walker:            caravanWalker{water: game.water},
 	})
 	rt.EnsureDivisionRoster(game.divisionID)
 	game.caravanAgents = rt

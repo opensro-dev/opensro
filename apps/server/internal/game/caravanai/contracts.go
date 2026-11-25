@@ -9,6 +9,14 @@ Manages two-way mercenary contracts between players and AI caravan agents:
  2. Real Trader players in town hire AI Hunters to follow and defend their
     caravan across the Jangan-Donwhang-Hotan highway.
 
+Slice 5 (#3704) makes the money side abuse-proof: an AI-trader escort
+pays only when the Hunter stayed within escort range for the whole run
+and the trader lived to deliver (NoteEscortWatch, VoidTraderEscort),
+one Hunter holds one AI-trader escort at a time, and paid escorts are
+counted per Hunter per UTC day against MaxPaidEscortsPerDay in the
+EscortDayStore ledger. The amounts are the sketch's; the cap is a
+placeholder for the owner's call.
+
 ===========================================================================
 */
 package caravanai
@@ -17,6 +25,9 @@ import (
 	"fmt"
 	"strings"
 	"sync"
+	"time"
+
+	"opensro.online/server/internal/domain"
 )
 
 /*
@@ -34,7 +45,28 @@ const (
 	// star rating (3★-5★) to compute the bonus gold paid to a real Hunter
 	// player upon safe arrival at the destination specialty shop.
 	BaseAITraderEscortRewardPerStar int64 = 20_000
+
+	// MaxPaidEscortsPerDay caps how many AI-trader escort rewards one
+	// Hunter may be paid in one UTC day; further completed escorts that
+	// day complete unpaid. PLACEHOLDER for the owner's call (#3704
+	// slice 5): no number is authored anywhere yet.
+	MaxPaidEscortsPerDay = 3
 )
+
+/*
+================
+EscortDayStore
+
+The consumer-owned ledger port behind the daily cap: one row per
+Hunter per day counting the escort rewards already paid. Nil keeps
+the counts in memory only (tests); the shard's store persists them
+(store layout 17), so a restart cannot reset the day.
+================
+*/
+type EscortDayStore interface {
+	LoadCaravanEscortDays(division string) ([]domain.CaravanEscortDayRow, error)
+	SaveCaravanEscortDay(row domain.CaravanEscortDayRow) error
+}
 
 // EscortContract represents an active mercenary escort agreement.
 type EscortContract struct {
@@ -50,24 +82,49 @@ type EscortContract struct {
 	UpfrontFee  int64
 	StartedAtMs int64
 	Active      bool
+	// EscortKept is slice 5's presence rule: true while the Hunter has
+	// been seen within escort range at every step of the run. One miss
+	// clears it for good; the run then completes unpaid.
+	EscortKept bool
+	// Void is set when the escorted trader dies on the road: the run
+	// was not survived, so it can never pay, even if the trader later
+	// respawns and reaches the destination.
+	Void bool
+}
+
+// paidEscortKey names one Hunter's paid-escort count for one UTC day.
+type paidEscortKey struct {
+	division, hunter, day string
 }
 
 // ContractBook tracks active escort contracts per division.
 type ContractBook struct {
 	mu        sync.RWMutex
 	contracts map[string]EscortContract
+	// days is the daily-cap ledger port (nil = in-memory only).
+	days EscortDayStore
+	// paid counts paid escorts per Hunter per day, loaded lazily per
+	// division from days; dirty holds the rows Flush still owes.
+	paid      map[paidEscortKey]int
+	dirtyDays map[paidEscortKey]domain.CaravanEscortDayRow
+	loaded    map[string]bool
 }
 
 /*
 ==================
 NewContractBook
 
-NewContractBook creates an empty mercenary ContractBook.
+NewContractBook creates an empty mercenary ContractBook. days may be
+nil, in which case the daily cap counts this process's payments only.
 ==================
 */
-func NewContractBook() *ContractBook {
+func NewContractBook(days EscortDayStore) *ContractBook {
 	return &ContractBook{
 		contracts: make(map[string]EscortContract),
+		days:      days,
+		paid:      make(map[paidEscortKey]int),
+		dirtyDays: make(map[paidEscortKey]domain.CaravanEscortDayRow),
+		loaded:    make(map[string]bool),
 	}
 }
 
@@ -95,7 +152,10 @@ func ComputeAITraderEscortReward(cargoStars uint8, from, to TownID) int64 {
 BindAITraderEscort
 
 BindAITraderEscort binds a real Hunter player (hunterName) to escort an AI
-Trader (aiTraderName) from fromTown to toTown.
+Trader (aiTraderName) from fromTown to toTown. Slice 5's one-contract
+rule: a Hunter who already holds an active AI-trader escort is refused
+(bound is false) until that run completes, so one Hunter cannot farm
+every departing trader at once.
 ==================
 */
 func (c *ContractBook) BindAITraderEscort(
@@ -103,9 +163,9 @@ func (c *ContractBook) BindAITraderEscort(
 	fromTown, toTown TownID,
 	cargoStars uint8,
 	nowMs int64,
-) EscortContract {
+) (contract EscortContract, bound bool) {
 	reward := ComputeAITraderEscortReward(cargoStars, fromTown, toTown)
-	contract := EscortContract{
+	contract = EscortContract{
 		Division:    strings.TrimSpace(division),
 		TraderName:  strings.TrimSpace(aiTraderName),
 		TraderIsAI:  true,
@@ -117,11 +177,63 @@ func (c *ContractBook) BindAITraderEscort(
 		RewardGold:  reward,
 		StartedAtMs: nowMs,
 		Active:      true,
+		EscortKept:  true,
 	}
 	c.mu.Lock()
+	defer c.mu.Unlock()
+	for _, held := range c.contracts {
+		if held.Active && held.TraderIsAI && !held.HunterIsAI &&
+			held.Division == contract.Division &&
+			strings.EqualFold(held.HunterName, contract.HunterName) {
+			return EscortContract{}, false
+		}
+	}
 	c.contracts[contractKey(division, aiTraderName)] = contract
-	c.mu.Unlock()
-	return contract
+	return contract, true
+}
+
+/*
+==================
+NoteEscortWatch
+
+Records one step's escort-presence verdict for an AI trader's
+contract: kept false means the Hunter was not seen within escort
+range this step, which clears EscortKept for the rest of the run.
+==================
+*/
+func (c *ContractBook) NoteEscortWatch(division, aiTraderName string, kept bool) {
+	if kept {
+		return
+	}
+	key := contractKey(division, aiTraderName)
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	contract, ok := c.contracts[key]
+	if !ok || !contract.Active {
+		return
+	}
+	contract.EscortKept = false
+	c.contracts[key] = contract
+}
+
+/*
+==================
+VoidTraderEscort
+
+Voids an AI trader's escort contract: the trader died on the road, so
+the run pays nothing however it ends.
+==================
+*/
+func (c *ContractBook) VoidTraderEscort(division, aiTraderName string) {
+	key := contractKey(division, aiTraderName)
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	contract, ok := c.contracts[key]
+	if !ok || !contract.Active {
+		return
+	}
+	contract.Void = true
+	c.contracts[key] = contract
 }
 
 /*
@@ -160,8 +272,10 @@ func (c *ContractBook) HireAIHunter(
 CompleteAITraderRun
 
 CompleteAITraderRun closes an active AI Trader escort contract on arrival at
-the destination specialty shop, returning the completed contract and recording
-+25 trust in memories.
+the destination specialty shop. payable reports slice 5's payment rule:
+the Hunter kept escort range for the whole run and the trader survived
+it. Only a payable completion records the +25 escort trust; the caller
+still owes the daily-cap check before any gold moves.
 ==================
 */
 func (c *ContractBook) CompleteAITraderRun(
@@ -169,19 +283,20 @@ func (c *ContractBook) CompleteAITraderRun(
 	destRegionID uint16,
 	nowMs int64,
 	memories *MemoryBook,
-) (EscortContract, bool) {
+) (contract EscortContract, completed bool, payable bool) {
 	key := contractKey(division, aiTraderName)
 	c.mu.Lock()
 	contract, ok := c.contracts[key]
 	if !ok || !contract.Active {
 		c.mu.Unlock()
-		return EscortContract{}, false
+		return EscortContract{}, false, false
 	}
 	contract.Active = false
 	delete(c.contracts, key)
 	c.mu.Unlock()
 
-	if memories != nil && !contract.HunterIsAI && contract.HunterName != "" {
+	payable = contract.EscortKept && !contract.Void
+	if payable && memories != nil && !contract.HunterIsAI && contract.HunterName != "" {
 		memories.RecordEscortSuccess(
 			contract.Division,
 			contract.TraderName,
@@ -190,7 +305,7 @@ func (c *ContractBook) CompleteAITraderRun(
 			nowMs,
 		)
 	}
-	return contract, true
+	return contract, true, payable
 }
 
 /*
@@ -234,4 +349,125 @@ func FormatContractReply(contract EscortContract) string {
 
 func contractKey(division, agentName string) string {
 	return strings.TrimSpace(division) + "|" + strings.TrimSpace(agentName)
+}
+
+/*
+================================================================================
+The daily paid-escort ledger (slice 5)
+================================================================================
+*/
+
+// escortDay is the UTC calendar day a payment counts against.
+func escortDay(nowMs int64) string {
+	return time.UnixMilli(nowMs).UTC().Format("2006-01-02")
+}
+
+/*
+==================
+ensureDayLoadedLocked
+
+Loads a division's ledger rows once. A store fault degrades the cap to
+this process's counts rather than blocking caravans. Callers hold c.mu.
+==================
+*/
+func (c *ContractBook) ensureDayLoadedLocked(division string) {
+	division = strings.TrimSpace(division)
+	if c.loaded[division] {
+		return
+	}
+	c.loaded[division] = true
+	if c.days == nil {
+		return
+	}
+	rows, err := c.days.LoadCaravanEscortDays(division)
+	if err != nil {
+		return
+	}
+	for _, row := range rows {
+		key := paidEscortKey{division: row.Division, hunter: strings.ToLower(row.HunterName), day: row.Day}
+		if row.PaidCount > c.paid[key] {
+			c.paid[key] = row.PaidCount
+		}
+	}
+}
+
+/*
+==================
+PaidEscortsToday
+
+How many AI-trader escort rewards hunterName has already been paid in
+the division on nowMs's UTC day.
+==================
+*/
+func (c *ContractBook) PaidEscortsToday(division, hunterName string, nowMs int64) int {
+	key := paidEscortKey{
+		division: strings.TrimSpace(division),
+		hunter:   strings.ToLower(strings.TrimSpace(hunterName)),
+		day:      escortDay(nowMs),
+	}
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.ensureDayLoadedLocked(division)
+	return c.paid[key]
+}
+
+/*
+==================
+RecordPaidEscort
+
+Counts one paid escort reward against the Hunter's day and marks the
+row for the next Flush.
+==================
+*/
+func (c *ContractBook) RecordPaidEscort(division, hunterName string, nowMs int64) {
+	key := paidEscortKey{
+		division: strings.TrimSpace(division),
+		hunter:   strings.ToLower(strings.TrimSpace(hunterName)),
+		day:      escortDay(nowMs),
+	}
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.ensureDayLoadedLocked(division)
+	c.paid[key]++
+	c.dirtyDays[key] = domain.CaravanEscortDayRow{
+		Division:   key.division,
+		HunterName: hunterName,
+		Day:        key.day,
+		PaidCount:  c.paid[key],
+	}
+}
+
+/*
+==================
+Flush
+
+Writes every dirty ledger row to the EscortDayStore, newest value per
+key. Called off the tick by the runtime's flush loop and once more by
+Close, with MemoryBook.Flush's retry discipline: a failed row goes
+back to the dirty set unless a newer value arrived meanwhile.
+==================
+*/
+func (c *ContractBook) Flush() error {
+	if c == nil || c.days == nil {
+		return nil
+	}
+	c.mu.Lock()
+	dirty := c.dirtyDays
+	c.dirtyDays = make(map[paidEscortKey]domain.CaravanEscortDayRow)
+	c.mu.Unlock()
+
+	var first error
+	for key, row := range dirty {
+		if err := c.days.SaveCaravanEscortDay(row); err != nil {
+			if first == nil {
+				first = err
+			}
+			c.mu.Lock()
+			if _, newer := c.dirtyDays[key]; !newer {
+				c.dirtyDays[key] = row
+			}
+			c.mu.Unlock()
+		}
+	}
+	return first
 }
