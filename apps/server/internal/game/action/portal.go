@@ -13,6 +13,7 @@ import (
 	"opensro.online/server/internal/domain"
 	"opensro.online/server/internal/game/item/commerce"
 	"os"
+	"sort"
 	"strings"
 
 	"opensro.online/server/internal/game/enterworld"
@@ -161,6 +162,29 @@ func linkRefusesTransport(source, target string, clientTransport bool) bool {
 		return refuses
 	}
 	return clientTransport
+}
+
+/*
+================
+ServerTransportLinkCodenames
+
+Every shipped teleport link as its (source, target) codename pair,
+sorted. The generated table stays unexported; readers outside the
+travel lane (world-data tests, tooling) come through here.
+================
+*/
+func ServerTransportLinkCodenames() [][2]string {
+	links := make([][2]string, 0, len(serverTransportLinks))
+	for pair := range serverTransportLinks {
+		links = append(links, pair)
+	}
+	sort.Slice(links, func(i, j int) bool {
+		if links[i][0] != links[j][0] {
+			return links[i][0] < links[j][0]
+		}
+		return links[i][1] < links[j][1]
+	})
+	return links
 }
 
 /*

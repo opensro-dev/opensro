@@ -16,8 +16,10 @@ package movement
 
 import (
 	"math"
+	"strings"
 	"testing"
 
+	"opensro.online/server/internal/game/action"
 	"opensro.online/server/internal/game/caravanai"
 	worldgeom "opensro.online/server/internal/game/world"
 	"opensro.online/server/internal/game/world/monster"
@@ -25,13 +27,57 @@ import (
 	"opensro.online/server/internal/testsupport/gamedatatest"
 )
 
-// caravanFerryCrossings are the shipped ferry portal pairs by landing
-// region (the GATE_NPC_*_FERRY link pairs in the portal data).
-var caravanFerryCrossings = map[[2]uint16]bool{
-	{24993, 25761}: true, {25761, 24993}: true,
-	{24734, 25244}: true, {25244, 24734}: true,
-	{23439, 23436}: true, {23436, 23439}: true,
-	{23183, 23180}: true, {23180, 23183}: true,
+/*
+==================
+caravanFerryCrossings
+
+The shipped ferry crossings by landing region, derived from the
+portal link table (action.ServerTransportLinkCodenames) resolved
+through the NPC roster: a crossing is a link whose source and target
+are both ferry gates (GATE_NPC_*_FERRY* codenames). The portal rows
+name each gate after the NPC that runs it, prefixed GATE_ (the same
+trim reversemap.go makes), so the roster join strips that prefix.
+Links whose gate no placed NPC runs are skipped; TestCaravanHighwayMarches
+fails by name on any route adjacency this set does not cover.
+==================
+*/
+func caravanFerryCrossings(t *testing.T) map[[2]uint16]bool {
+	t.Helper()
+	roster := simulation.LoadNpcWorldRoster(gamedatatest.TextdataDir(t))
+	regionByCodename := make(map[string]uint16)
+	for _, npc := range roster {
+		if npc.AuthoredSpawn {
+			regionByCodename[npc.Codename] = npc.Spawn.RegionID
+		}
+	}
+	crossings := make(map[[2]uint16]bool)
+	for _, link := range action.ServerTransportLinkCodenames() {
+		source, target := link[0], link[1]
+		if !caravanFerryGate(source) || !caravanFerryGate(target) {
+			continue
+		}
+		sourceRegion, okSource := regionByCodename[strings.TrimPrefix(source, "GATE_")]
+		targetRegion, okTarget := regionByCodename[strings.TrimPrefix(target, "GATE_")]
+		if !okSource || !okTarget {
+			continue
+		}
+		crossings[[2]uint16{sourceRegion, targetRegion}] = true
+	}
+	if len(crossings) == 0 {
+		t.Fatal("no ferry crossings derived from the shipped portal links")
+	}
+	return crossings
+}
+
+/*
+==================
+caravanFerryGate
+
+Whether a teleport codename is one of the ferry gates.
+==================
+*/
+func caravanFerryGate(codename string) bool {
+	return strings.HasPrefix(codename, "GATE_NPC_") && strings.Contains(codename, "_FERRY")
 }
 
 func caravanPose(wp caravanai.Waypoint) monster.Pose {
@@ -163,13 +209,14 @@ anchors) or a chord the monster march walks in both directions.
 */
 func TestCaravanHighwayMarches(t *testing.T) {
 	v := realAuthorityValidator(t)
+	crossings := caravanFerryCrossings(t)
 	seen := make(map[[2]caravanai.Waypoint]bool)
 	hops := 0
 	for _, route := range caravanRoutes() {
 		for i := 1; i < len(route); i++ {
 			a, b := route[i-1], route[i]
 			if a.Ferry && b.Ferry {
-				if !caravanFerryCrossings[[2]uint16{a.RegionID, b.RegionID}] {
+				if !crossings[[2]uint16{a.RegionID, b.RegionID}] {
 					t.Fatalf("anchors %q -> %q are both Ferry but not a shipped crossing", a.Name, b.Name)
 				}
 				continue
