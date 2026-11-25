@@ -193,6 +193,11 @@ export function createSessionDecoder() {
 					const v = object( item ), id = string( v.id );
 					if ( ids.has( id ) ) throw new Error( "Duplicate server identity" );
 					ids.add( id );
+					// Port-only, not native (#3925): only the port's own
+					// flag-on Agent marks a row; an absent mark is the native
+					// row. A marked row carries no transport URL at all -
+					// the one empty string this decoder admits.
+					const comingSoon = v.comingSoon === true;
 					return Object.freeze( {
 						id,
 						name: string( v.name ),
@@ -202,7 +207,8 @@ export function createSessionDecoder() {
 						nativeFarmId: integer( v.nativeFarmId ),
 						isTest: boolean( v.isTest ),
 						operating: boolean( v.operating ),
-						transportUrl: string( v.transportUrl )
+						comingSoon,
+						transportUrl: comingSoon && v.transportUrl === "" ? "" : string( v.transportUrl )
 					} );
 				} )
 			);

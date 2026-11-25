@@ -55,12 +55,46 @@ import { createKeepAwake } from "./keep-awake";
 import { createCursor } from "./ui/cursor";
 import type { UiEvent, UiSemantics } from "@/engine/contracts/ui";
 import type { RawInput, WorldClickInput } from "@/engine/contracts/input";
-import type { Platform } from "@/engine/contracts/runtime";
+import type { Platform, ReleaseNotice } from "@/engine/contracts/runtime";
 import type { AssetProgress } from "@/engine/contracts/assets";
 import { loadingDetailText } from "@/engine/foundation/ui/loading-detail";
 
 // How often the loading detail line may change while only its rate moves.
 const LOADING_DETAIL_REFRESH_MS = 250;
+
+// The update prompt's line for each shown notice (presentUpdate). "updating"
+// names no click: a reload before the page moves would be refused again.
+const UPDATE_NOTICE_TEXT = {
+	updating: "Silkroad Online is being updated. The game continues on its own in a moment.",
+	newer: "Silkroad Online has been updated. Refresh to continue playing."
+} as const;
+
+// The tab's last automatic reload (sessionStorage), and the gap within which a
+// second one is refused: a page that reloads and is still served the old
+// release must not loop.
+const RELEASE_RELOAD_KEY = "sro-release-reload-ms";
+const RELEASE_RELOAD_GAP_MS = 60 * 1000;
+
+/*
+================
+takeReleaseReload
+
+True, and stamps the tab, when no automatic reload ran in the last
+RELEASE_RELOAD_GAP_MS. Storage can throw (a private window, blocked site
+data); then the reload is refused and the player gets the Refresh button,
+the safe side of a loop.
+================
+*/
+function takeReleaseReload( nowMs: number ): boolean {
+	try {
+		const last = Number( sessionStorage.getItem( RELEASE_RELOAD_KEY ) );
+		if ( Number.isFinite( last ) && last > 0 && nowMs - last < RELEASE_RELOAD_GAP_MS ) return false;
+		sessionStorage.setItem( RELEASE_RELOAD_KEY, String( nowMs ) );
+		return true;
+	} catch {
+		return false;
+	}
+}
 
 /*
 ================
@@ -383,12 +417,14 @@ export function createPlatform(
 	let onlineAgain = false;
 	// A newer release is live: like a native client the gateway sends to the
 	// patcher, the outdated page stops playing until it reloads.
-	let updateRequired = false;
+	let updateNoticeShown: ReleaseNotice = "none";
 	window.addEventListener( "online", () => {
 		onlineAgain = true;
 	}, { signal: lifetime.signal } );
 	const updateNotice = document.getElementById( "update-notice" );
-	updateNotice?.querySelector( "button" )?.addEventListener( "click", () => location.reload(), {
+	const updateText = updateNotice?.querySelector( "span" );
+	const updateButton = updateNotice?.querySelector( "button" );
+	updateButton?.addEventListener( "click", () => location.reload(), {
 		signal: lifetime.signal
 	} );
 	document.addEventListener( "visibilitychange", () => {
@@ -635,8 +671,8 @@ export function createPlatform(
 	}, { signal: lifetime.signal, capture: true } );
 	window.addEventListener( "keydown", event => {
 		if ( !event.code || event.isComposing || event.keyCode === 229 ) return;
-		// The update prompt holds focus; Enter reaches its Refresh button.
-		if ( updateRequired ) return;
+		// The update prompt holds the keys; Enter reaches its Refresh button.
+		if ( updateNoticeShown !== "none" ) return;
 		// A letter is the one the layout prints on the key, as native VKs are.
 		const code = layoutKeys.down( event.code, event.key ), vk = virtualKey( code );
 		if (
@@ -1054,19 +1090,31 @@ export function createPlatform(
 		presentUpdate
 		================
 		*/
-		presentUpdate( newer ) {
+		presentUpdate( requested ) {
 			// An outdated page cannot keep playing (its next scene may name files
 			// the release replaced), so the prompt covers the game and takes the
-			// keys. The reload itself is the player's click.
+			// keys. A page still in session reloads on the player's click; a
+			// refused one reloads itself once, unless it already did moments ago
+			// (a cache that still serves the old page), when it offers the click.
 			// Called every frame: write only a change. Assigning hidden, even to its
 			// current value, invalidates style (1.8 ms a frame in a trace).
-			if ( updateNotice && updateNotice.hidden === newer ) updateNotice.hidden = !newer;
-			if ( newer === updateRequired ) return;
-			updateRequired = newer;
-			if ( !newer ) return;
-			uiPointer = false;
-			onInput( { kind: "release", timeMs: timeMs() } );
-			updateNotice?.querySelector( "button" )?.focus();
+			const notice = requested === "reload" && !takeReleaseReload( Date.now() ) ? "newer" : requested;
+			if ( notice === updateNoticeShown ) return;
+			const wasShown = updateNoticeShown !== "none";
+			updateNoticeShown = notice;
+			if ( notice === "reload" ) {
+				location.reload();
+				return;
+			}
+			if ( updateNotice ) updateNotice.hidden = notice === "none";
+			if ( notice === "none" ) return;
+			if ( updateText ) updateText.textContent = UPDATE_NOTICE_TEXT[notice];
+			if ( updateButton ) updateButton.hidden = notice !== "newer";
+			if ( !wasShown ) {
+				uiPointer = false;
+				onInput( { kind: "release", timeMs: timeMs() } );
+			}
+			if ( notice === "newer" ) updateButton?.focus();
 		},
 		/*
 		================

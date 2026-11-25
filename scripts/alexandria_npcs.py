@@ -34,6 +34,7 @@ tables already have is left alone.
 ===========================================================================
 """
 from collections import Counter
+import re
 
 import import_vsro_alexandria as stage1
 from pathlib import Path
@@ -242,6 +243,40 @@ def append_rows(raw, rows):
 	if not text.endswith("\n"):
 		text += "\r\n"
 	return b"\xff\xfe" + (text.lstrip("\ufeff") + table_text(rows)).encode("utf-16-le")
+
+
+# A text record starts on a "<digits>\t" line and a "//" line ends it
+# without joining any record; every other line, blank ones included,
+# continues the record above it (a multi-line message). Lines end at LF
+# only. The asset build splits the text tables by this rule
+# (textResources.mjs splitTextDataRecords), so a record dropped here is
+# exactly a record the build would have read (#4177, #4362).
+RECORD_START = re.compile(r"\d+\t")
+RECORD_LINE = re.compile(r"[^\n]*\n|[^\n]+")
+
+
+# ================
+# without_rows
+#
+# The UTF-16 table without the records of the given keys (column 1).
+# Every other byte stays as it was: the rows are not re-encoded. Split
+# into lines and joined back with CRLF, a table's multi-line messages
+# lose their bare LFs and blank lines, and the asset build's English
+# coverage then finds them stale.
+# ================
+def without_rows(raw, keys):
+	if not keys:
+		return raw
+	kept, dropping = [], False
+	for line in RECORD_LINE.findall(stage1.decode_table(raw).lstrip("\ufeff")):
+		if RECORD_START.match(line):
+			columns = line.split("\t")
+			dropping = len(columns) > 1 and columns[1].strip() in keys
+		elif line.strip().startswith("//"):
+			dropping = False
+		if not dropping:
+			kept.append(line)
+	return b"\xff\xfe" + "".join(kept).encode("utf-16-le")
 
 
 # ================

@@ -152,6 +152,9 @@ func loadAuthorityTextdata(devPaths enterworld.DevPaths) (authorityTextdata, err
 	if err := loot.InitCap110(textdataDir, monster.Cap110Enabled()); err != nil {
 		return authorityTextdata{}, err
 	}
+	// Port-only, not native (#4393): after InitCap110, so the level 95-110
+	// seal rows follow whichever ordinary table is installed.
+	loot.InitHighLevelSeals(loot.HighLevelSealsEnabled())
 	if err := loot.InitRoc(textdataDir, monster.RocEnabled()); err != nil {
 		return authorityTextdata{}, err
 	}

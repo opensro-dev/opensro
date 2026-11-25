@@ -14,7 +14,6 @@ package caravanai
 
 import (
 	"context"
-	"fmt"
 	"strings"
 	"sync"
 	"time"
@@ -39,6 +38,11 @@ const (
 	StateInCombat   AgentState = "IN_COMBAT"
 	StateParleying  AgentState = "PARLEYING"
 	StateDelivering AgentState = "DELIVERING"
+	// StateDead: the agent fell where it stands and waits out its
+	// respawn delay (agentRespawnDelayMs) before reappearing at its
+	// home town. Port-only pacing; native players own a different
+	// death flow and agents are not native.
+	StateDead AgentState = "DEAD"
 )
 
 // AgentUnit represents one active AI Caravan or Thief agent on the Silkroad.
@@ -64,10 +68,18 @@ type AgentUnit struct {
 	MP          int
 	WeaponCode  string
 	JobSuitCode string
+	// TransportCode is the shipped transport creature a trader
+	// agent travels with (entities.go, slice 3f); empty for the
+	// agents who walk their route alone.
+	TransportCode string
 	// ModelCode is the shipped character model the agent wears
 	// (entities.go): the roster's men and women match their suits.
 	ModelCode      string
 	PrimarySkillID uint32
+	// Level is the agent's combat level for damage taken (slice 3c):
+	// the defender level the strike formula weighs. Port-only flavour;
+	// agents mitigate nothing in this slice.
+	Level          uint8
 	CargoStars     uint8
 	CargoStacks    int
 	StackValueGold int64
@@ -75,6 +87,15 @@ type AgentUnit struct {
 	WaypointIndex  int
 	UnderAttack    bool
 	LastAttacker   string
+	// CombatTarget is the player the agent is currently fighting
+	// (its brain's attack decision), empty at peace. It is what lets
+	// the struck player legally fight back (slice 3c's refusal).
+	CombatTarget string
+	// lastStrikeAtMs paces the agent's own strikes (slice 3e).
+	lastStrikeAtMs int64
+	// DeadUntilMs is when a dead agent (StateDead) respawns at its
+	// home town; zero while the agent lives.
+	DeadUntilMs    int64
 	LastPotionAtMs int64
 	LastSpokeAtMs  int64
 	LastSpokenLine string
@@ -108,11 +129,20 @@ type Walker interface {
 // WorldHooks is an optional consumer-owned callback port invoked when an AI
 // agent speaks in local chat, drops parley cargo stacks, or pays out an escort
 // contract to a player. Walker is the movement port above.
+//
+// OnAgentChat is paced by StepAgent: a line is reported once, and the
+// same line again only after the agent has said something else, so a
+// standing situation (a trusted friend idling beside the caravan) does
+// not repeat itself in chat every step.
 type WorldHooks struct {
 	OnAgentChat       func(division, agentName string, regionID uint16, message string)
 	OnParleyCargoDrop func(division, agentName string, regionID uint16, x, y, z float32, stacks int, stackGoldValue int64)
 	OnContractReward  func(division, hunterPlayerName string, rewardGold int64, traderAgentName string)
-	Walker            Walker
+	// OnAgentStrike lands one of the agent's strikes on a player
+	// (slice 3e): the consumer strikes through the player-victim
+	// lanes and reports whether the player fell.
+	OnAgentStrike func(division, agentName, targetPlayerName string, nowMs int64) (defeated bool)
+	Walker        Walker
 }
 
 const (
@@ -129,6 +159,12 @@ const (
 	// on-foot walk pace the world uses for characters (simulation
 	// WalkSpeed, 20 units/sec). Port-only tuning, not native.
 	walkSpeedUnitsPerSec = 20.0
+
+	// agentStrikeRangeUnits is how close a player must be for an
+	// agent's strike to land, and agentStrikeIntervalMs the pace of
+	// one agent's strikes. Port-only tuning, not native.
+	agentStrikeRangeUnits = 10.0
+	agentStrikeIntervalMs = 1_500
 )
 
 // Runtime manages the division roster of AI Caravan & Thief agents.
@@ -147,6 +183,9 @@ type Runtime struct {
 	contracts *ContractBook
 	hooks     WorldHooks
 	agents    map[string][]*AgentUnit
+	// lastCommandAt is the slice-4 command rate limit: when each
+	// player last got a caravan command answer, by division+player.
+	lastCommandAt map[string]int64
 	// inflight holds each agent's outstanding remote decision.
 	inflight map[string]*remoteDecision
 	// remoteCtx ends every remote request at Close.
@@ -178,17 +217,18 @@ func NewRuntime(cfg Config, store MemoryStore, hooks WorldHooks) *Runtime {
 	}
 	remoteCtx, cancelRemote := context.WithCancel(context.Background())
 	return &Runtime{
-		cfg:          cfg,
-		local:        NewHardcodedBrain(),
-		remote:       remote,
-		memories:     NewMemoryBook(store),
-		parleys:      NewParleyTracker(),
-		contracts:    NewContractBook(),
-		hooks:        hooks,
-		agents:       make(map[string][]*AgentUnit),
-		inflight:     make(map[string]*remoteDecision),
-		remoteCtx:    remoteCtx,
-		cancelRemote: cancelRemote,
+		cfg:           cfg,
+		local:         NewHardcodedBrain(),
+		remote:        remote,
+		memories:      NewMemoryBook(store),
+		parleys:       NewParleyTracker(),
+		contracts:     NewContractBook(),
+		hooks:         hooks,
+		agents:        make(map[string][]*AgentUnit),
+		lastCommandAt: make(map[string]int64),
+		inflight:      make(map[string]*remoteDecision),
+		remoteCtx:     remoteCtx,
+		cancelRemote:  cancelRemote,
 	}
 }
 
@@ -367,7 +407,9 @@ func defaultDivisionRoster(division string, heat map[uint16]int) []*AgentUnit {
 			MP:             6000,
 			WeaponCode:     "ITEM_CH_SPEAR_07_C_RARE",
 			JobSuitCode:    "ITEM_CH_M_TRADE_TRADER_02",
+			TransportCode:  "COS_T_CAMEL1",
 			PrimarySkillID: 318,
+			Level:          60,
 			CargoStars:     4,
 			CargoStacks:    10,
 			StackValueGold: 25000,
@@ -394,7 +436,9 @@ func defaultDivisionRoster(division string, heat map[uint16]int) []*AgentUnit {
 			MP:             6500,
 			WeaponCode:     "ITEM_CH_BOW_07_C_RARE",
 			JobSuitCode:    "ITEM_CH_W_TRADE_TRADER_04",
+			TransportCode:  "COS_T_CAMEL2",
 			PrimarySkillID: 260,
+			Level:          60,
 			CargoStars:     5,
 			CargoStacks:    12,
 			StackValueGold: 30000,
@@ -422,6 +466,7 @@ func defaultDivisionRoster(division string, heat map[uint16]int) []*AgentUnit {
 			WeaponCode:     "ITEM_CH_BLADE_07_C_RARE",
 			JobSuitCode:    "ITEM_CH_M_TRADE_HUNTER_02",
 			PrimarySkillID: 112,
+			Level:          65,
 			Route:          routeHJ,
 		},
 		{
@@ -446,6 +491,7 @@ func defaultDivisionRoster(division string, heat map[uint16]int) []*AgentUnit {
 			WeaponCode:     "ITEM_CH_TBLADE_07_C_RARE",
 			JobSuitCode:    "ITEM_CH_M_TRADE_THIEF_02",
 			PrimarySkillID: 318,
+			Level:          65,
 			Route:          routeJD,
 			WaypointIndex:  viperIndex,
 		},
@@ -497,6 +543,16 @@ func (r *Runtime) StepAgent(
 		r.mu.Unlock()
 		return Decision{}, nil, false
 	}
+	if unit.State == StateDead {
+		if nowMs < unit.DeadUntilMs {
+			// Dead agents neither decide nor move; the snapshot
+			// still reports them so callers see the corpse's place.
+			snapshot := *unit
+			r.mu.Unlock()
+			return Decision{}, &snapshot, true
+		}
+		unit.respawnAtHomeLocked(nowMs)
+	}
 
 	enriched := make([]ObservedPlayer, len(nearby))
 	for i, p := range nearby {
@@ -539,11 +595,34 @@ func (r *Runtime) StepAgent(
 	if remote, ok := r.remoteDecisionLocked(unit, sit, nowMs); ok {
 		decision = remote
 	}
+	// The line the agent last spoke, captured before this decision
+	// overwrites it: the chat hook below reports a line only when it
+	// differs from it (the OnAgentChat pacing on WorldHooks).
+	spokenBefore := unit.LastSpokenLine
 	r.applyDecisionLocked(unit, decision, nowMs)
+	// A strike lands when the brain's attack target stands within
+	// reach and the agent's own pace allows it; the consumer strikes
+	// through the player-victim lanes (hooks.OnAgentStrike).
+	strikeTarget := ""
+	if decision.Action == ActionAttackTarget && decision.TargetName != "" &&
+		nowMs-unit.lastStrikeAtMs >= agentStrikeIntervalMs {
+		for _, p := range enriched {
+			if p.Name == decision.TargetName && p.Distance <= agentStrikeRangeUnits {
+				strikeTarget = p.Name
+				unit.lastStrikeAtMs = nowMs
+				break
+			}
+		}
+	}
 	snapshot := *unit
 	r.mu.Unlock()
 
-	if decision.Dialogue != "" && r.hooks.OnAgentChat != nil {
+	if strikeTarget != "" && r.hooks.OnAgentStrike != nil {
+		if r.hooks.OnAgentStrike(division, snapshot.Name, strikeTarget, nowMs) {
+			r.memories.RecordAgentKill(division, snapshot.Name, strikeTarget, snapshot.RegionID, "", nowMs)
+		}
+	}
+	if decision.Dialogue != "" && decision.Dialogue != spokenBefore && r.hooks.OnAgentChat != nil {
 		r.hooks.OnAgentChat(division, snapshot.Name, snapshot.RegionID, decision.Dialogue)
 	}
 	return decision, &snapshot, true
@@ -662,8 +741,10 @@ func (r *Runtime) applyDecisionLocked(unit *AgentUnit, d Decision, nowMs int64) 
 		}
 	case ActionAttackTarget:
 		unit.State = StateInCombat
+		unit.CombatTarget = d.TargetName
 	case ActionContinueRoute:
 		unit.State = StateTraveling
+		unit.CombatTarget = ""
 		r.advanceAlongRouteLocked(unit, nowMs)
 	}
 	if d.Dialogue != "" {
@@ -765,129 +846,6 @@ func (r *Runtime) deliverAgentLocked(unit *AgentUnit, nowMs int64) {
 	heat := r.memories.HeatSnapshot(unit.Division)
 	unit.Route = SelectRoute(unit.OriginTown, unit.DestTown, unit.CargoStars, unit.Personality, heat)
 	unit.WaypointIndex = 0
-}
-
-/*
-==================
-RecordPlayerAttack
-
-RecordPlayerAttack applies damage from attackerPlayerName onto agentName. If
-agentName was inside an active parley truce window, the attack immediately
-triggers a -100 Betrayal Vendetta. If the blow defeats the agent, robbery and
-route danger heat are recorded in the persistent MemoryBook.
-==================
-*/
-func (r *Runtime) RecordPlayerAttack(
-	division, agentName, attackerPlayerName string,
-	damage int,
-	nowMs int64,
-) (betrayedParley bool, defeated bool, memRow domain.CaravanAgentMemoryRow) {
-	r.EnsureDivisionRoster(division)
-	if _, row, betrayed := r.parleys.OnDamageDuringParley(division, agentName, attackerPlayerName, nowMs, r.memories); betrayed {
-		betrayedParley = true
-		memRow = row
-	}
-
-	r.mu.Lock()
-	unit := r.findAgentLocked(division, agentName)
-	if unit == nil {
-		r.mu.Unlock()
-		return betrayedParley, false, memRow
-	}
-	unit.UnderAttack = true
-	unit.LastAttacker = attackerPlayerName
-	if damage > 0 {
-		unit.HP -= damage
-	}
-	var stolenGold int64
-	regionID := unit.RegionID
-	if unit.HP <= 0 {
-		defeated = true
-		stolenGold = int64(unit.CargoStacks) * unit.StackValueGold
-		unit.CargoStacks = 0
-		home := TownWaypoint(unit.HomeTown)
-		unit.RegionID = home.RegionID
-		unit.X = home.X
-		unit.Z = home.Z
-		unit.HP = unit.MaxHP
-		unit.UnderAttack = false
-		unit.State = StateIdleInTown
-	}
-	r.mu.Unlock()
-
-	if defeated {
-		memRow = r.memories.RecordRobberyOrKill(division, agentName, attackerPlayerName, stolenGold, regionID, "", nowMs)
-	}
-	return betrayedParley, defeated, memRow
-}
-
-/*
-==================
-HandlePlayerCommand
-
-HandlePlayerCommand parses interactive player chat commands directed at AI
-caravan agents:
-  - "!accept <TraderAgentName>" (Hunter player accepts an AI Trader escort run)
-  - "!hire <HunterAgentName>"   (Trader player hires an AI Hunter escort)
-  - "!memory <AgentName>"       (Inspects how an AI agent remembers the player)
-
-==================
-*/
-func (r *Runtime) HandlePlayerCommand(
-	division, playerName string,
-	playerJob uint8,
-	rawText string,
-	nowMs int64,
-) (reply string, handled bool) {
-	fields := strings.Fields(strings.TrimSpace(rawText))
-	if len(fields) < 2 {
-		return "", false
-	}
-	cmd := strings.ToLower(fields[0])
-	targetAgent := fields[1]
-	r.EnsureDivisionRoster(division)
-
-	switch cmd {
-	case "!accept":
-		if playerJob != domain.JobHunter {
-			return "Only Hunter guild members can accept a caravan escort contract.", true
-		}
-		r.mu.Lock()
-		unit := r.findAgentLocked(division, targetAgent)
-		if unit == nil || unit.Role != RoleTrader {
-			r.mu.Unlock()
-			return fmt.Sprintf("No AI Trader named %s is recruiting here.", targetAgent), true
-		}
-		contract := r.contracts.BindAITraderEscort(division, unit.Name, playerName, unit.OriginTown, unit.DestTown, unit.CargoStars, nowMs)
-		r.mu.Unlock()
-		return FormatContractReply(contract), true
-
-	case "!hire":
-		if playerJob != domain.JobTrader {
-			return "Only Traders can hire an AI Hunter mercenary escort.", true
-		}
-		r.mu.Lock()
-		unit := r.findAgentLocked(division, targetAgent)
-		if unit == nil || unit.Role != RoleHunter {
-			r.mu.Unlock()
-			return fmt.Sprintf("No AI Hunter named %s is available for hire.", targetAgent), true
-		}
-		contract := r.contracts.HireAIHunter(division, playerName, unit.Name, unit.OriginTown, unit.DestTown, nowMs)
-		r.mu.Unlock()
-		return FormatContractReply(contract), true
-
-	case "!memory":
-		row, ok := r.memories.Relationship(division, targetAgent, playerName)
-		if !ok {
-			return fmt.Sprintf("%s has no recorded history with %s yet (Trust: 0).", targetAgent, playerName), true
-		}
-		return fmt.Sprintf(
-			"%s's memory of %s -> Trust: %d, Kills: %d, Deaths: %d, Gold Stolen: %d (%s)",
-			row.AgentName, row.PlayerName, row.TrustScore, row.Kills, row.Deaths, row.GoldStolen, row.LastNote,
-		), true
-	default:
-		return "", false
-	}
 }
 
 func (r *Runtime) findAgentLocked(division, agentName string) *AgentUnit {

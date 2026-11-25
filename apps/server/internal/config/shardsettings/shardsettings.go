@@ -120,6 +120,11 @@ var Settings = []Setting{
 	{Env: "SRO_LEVEL_CAP", NomadVar: "level_cap", Default: "90", Catalogue: true},
 	// Port-only, not native: database-authored Alexandria field population.
 	{Env: "SRO_CAP110_MONSTERS", NomadVar: "cap110_monsters", Default: "off", Catalogue: true},
+	// Port-only, not native (owner 2026-11-25, #4393: "default off, and
+	// off on server"): monsters of level 95-110 roll a Seal of Star of
+	// their level's degree at the native level-94 rare rate
+	// (loot/highlevelseals.go). Natively no rare row exists above 94.
+	{Env: "SRO_HIGH_LEVEL_SEALS", NomadVar: "high_level_seals", Default: "off", Catalogue: true},
 	// Port-only, not native: the level-100 slice of that population,
 	// admitted for hunting separately (#1741); switches on with the
 	// cap-110 catalogue (#1607).
@@ -141,6 +146,12 @@ var Settings = []Setting{
 	// Build time only: honor_items.py and honor_shops.py read it when the
 	// server data is built. Degrees 10-11 need SRO_CAP110_ITEMS too.
 	{Env: "SRO_HONOR_GOODS", NomadVar: "honor_goods", Default: "off"},
+	// Port-only, not native (#2846; owner 2026-11-25, on): the Alexandria
+	// variant's shops stock the port's own degree 10-11 goods - the full
+	// degree 10-11 alchemy band and its gear passes - instead of only what
+	// one official source had active. Build time only:
+	// build_alexandria_variant.py reads it when the server data is built.
+	{Env: "SRO_ALEXANDRIA_PORT_STOCK", NomadVar: "alexandria_port_stock", Default: "off"},
 	{Env: "SRO_CAP110_SKILLS", NomadVar: "cap110_skills", Default: "off"},
 	// Port-only, not native: the Blue Berserk quest chains (the 95/100
 	// Army and Military Tests and the Alexandria 105/110 steps) with what
@@ -296,6 +307,13 @@ var Settings = []Setting{
 	// answer different codes in the same window. Both read it with
 	// agentapi.MaintenanceMessageFromEnv (on, 1 or true).
 	{Env: "SRO_MAINTENANCE_MESSAGE", NomadVar: "maintenance_message", Default: "off"},
+	// Port-only, not native (#3925): announced-but-unopened shards (the
+	// catalog's disabled entries) also list on the Agent's title server
+	// list as coming soon, carrying no transport URL. Only the Agent
+	// reads it (agentVariables); the GameWorld job carries the value
+	// inertly like every table row. agentapi.ComingSoonShardsFromEnv
+	// (on, 1 or true).
+	{Env: "SRO_COMING_SOON_SHARDS", NomadVar: "coming_soon_shards", Default: "off"},
 	// Grab and growth pets at four fifths of their run speed (#320): never
 	// deployed, so the deployment default stays native.
 	{Env: "SRO_PET_PACING", NomadVar: "pet_pacing", Default: "off"},

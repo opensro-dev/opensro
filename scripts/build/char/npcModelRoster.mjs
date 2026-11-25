@@ -18,6 +18,7 @@ manifest against these same functions.
 */
 
 import { spawnSync } from "node:child_process";
+import { createHash } from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 import { sharedCacheEnvironment } from "../../lib/goEnvironment.mjs";
@@ -44,6 +45,9 @@ const ROSTER_EXPORT_MAX_BYTES = 16 * 1024 * 1024;
 
 // serverRoot -> the sro-evidence executable built from it this process.
 const evidenceTools = new Map();
+// One export's identity (server tree, subcommand, tomb posture) -> its
+// stdout, so the lane's key and the lane read one set of exports.
+const rosterExports = new Map();
 const EVIDENCE_TOOL_ROOT = buildStatePath( "sro-evidence" );
 const EVIDENCE_TOOL_STALE_MS = 60 * 60 * 1000;
 
@@ -142,22 +146,7 @@ entry reuses the base GLB.
 ================
 */
 function loadServerRoster( subcommand, expectedFormat, label, env = process.env ) {
-	const serverRoot = path.resolve(
-		process.env.SRO_SERVER_SOURCE_ROOT ?? path.join( repositoryRoot, "apps", "server" )
-	);
-	const result = spawnSync( evidenceTool( serverRoot ), [ subcommand, "-textdata-dir", textdataDir ], {
-		cwd: serverRoot,
-		env,
-		encoding: "utf8",
-		maxBuffer: ROSTER_EXPORT_MAX_BYTES
-	} );
-	if ( result.error || result.status !== 0 ) {
-		throw new Error(
-			`[npc] ${label} roster export failed (sro-evidence ${subcommand} in ${serverRoot}): ` +
-				`${result.error ?? ""} ${result.stderr ?? ""}`.trim()
-		);
-	}
-	const roster = JSON.parse( result.stdout );
+	const roster = JSON.parse( exportRoster( subcommand, label, env ) );
 	if (
 		roster.format !== expectedFormat ||
 		!Array.isArray( roster.refs ) ||
@@ -193,6 +182,82 @@ function loadServerRoster( subcommand, expectedFormat, label, env = process.env 
 
 /*
 ================
+exportRoster
+
+One sro-evidence export's stdout, run once per process for each server
+tree, subcommand and tomb posture (the only variable an export reads).
+================
+*/
+function exportRoster( subcommand, label, env ) {
+	const serverRoot = path.resolve(
+		process.env.SRO_SERVER_SOURCE_ROOT ?? path.join( repositoryRoot, "apps", "server" )
+	);
+	const identity = [ serverRoot, subcommand, env.SRO_QINSHI_TOMB ?? "" ].join( "\n" );
+	const known = rosterExports.get( identity );
+	if ( known !== undefined ) return known;
+	const result = spawnSync( evidenceTool( serverRoot ), [ subcommand, "-textdata-dir", textdataDir ], {
+		cwd: serverRoot,
+		env,
+		encoding: "utf8",
+		maxBuffer: ROSTER_EXPORT_MAX_BYTES
+	} );
+	if ( result.error || result.status !== 0 ) {
+		throw new Error(
+			`[npc] ${label} roster export failed (sro-evidence ${subcommand} in ${serverRoot}): ` +
+				`${result.error ?? ""} ${result.stderr ?? ""}`.trim()
+		);
+	}
+	rosterExports.set( identity, result.stdout );
+	return result.stdout;
+}
+
+/*
+================
+serverRosterKey
+
+The npc lane's key for what it reads from the server: the three roster
+exports' bytes, not the server's sources. Keyed on the sources (all of
+cmd/ and internal/), any Go change reran the 18-84 s bake: r204m's
+caravan code (#4353) did, though no roster moved. The exports are what
+the bake reads of the server (loadServerRoster is its only door), so
+equal exports bake equal models. About 2 s: one tool build from the
+shared Go cache and three runs, which the lane then reuses.
+================
+*/
+export function serverRosterKey() {
+	const hash = createHash( "sha256" );
+	for ( const [subcommand, env] of rosterExportSet() ) {
+		hash.update( `${subcommand}\n` ).update( exportRoster( subcommand, subcommand, env ) ).update( "\n" );
+	}
+	return hash.digest( "hex" );
+}
+
+/*
+================
+rosterExportSet
+
+Every export the bake reads, each with the env it runs under.
+================
+*/
+function rosterExportSet() {
+	return [
+		[ "creatable-monsters", creatableExportEnv() ],
+		[ "spawnable-npcs", process.env ],
+		[ "fortress-structures", process.env ]
+	];
+}
+
+/*
+================
+creatableExportEnv
+================
+*/
+function creatableExportEnv() {
+	return { ...process.env, SRO_QINSHI_TOMB: qinshiTombCombatEnabled() ? "on" : "off" };
+}
+
+/*
+================
 loadCreatableMobRoster
 
 The export is a Go child that reads only its env (monster.
@@ -205,10 +270,12 @@ and a default data build ships a client that cannot draw them (#2024).
 ================
 */
 export function loadCreatableMobRoster() {
-	return loadServerRoster( "creatable-monsters", "sro-creatable-monster-roster", "creatable monster", {
-		...process.env,
-		SRO_QINSHI_TOMB: qinshiTombCombatEnabled() ? "on" : "off"
-	} );
+	return loadServerRoster(
+		"creatable-monsters",
+		"sro-creatable-monster-roster",
+		"creatable monster",
+		creatableExportEnv()
+	);
 }
 
 /*

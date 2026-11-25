@@ -68,6 +68,24 @@ test("durability audio follows native signed comparisons, slot gates and exact t
 	assert.equal( degraded[0]?.code, "durability-unknown-slot" );
 	assert.deepEqual( owner.takeDegradations(), [], "the queue drains" );
 });
+test("a Devil's Spirit's clock rides the durability frame silently, in any bag slot (#4381)", () => {
+	// 3/1/14/1: the Spirit. After a wake the server sends its new clock
+	// on 0x31E8; the client must stop reading it as dormant.
+	const spiritFlags = (3 << 2) | (1 << 5) | (14 << 7) | (1 << 11);
+	const sounds = [], owner = createInventory( () => {}, handle => sounds.push( handle ) );
+	owner.bootstrap( {
+		refItemSnapshot: [ { refObjId: 7, typeFlags: spiritFlags } ],
+		equipItems: [ { slot: 65, refObjId: 7, body: Object.assign( equipment( 0 ), { 0: 7 } ) } ]
+	} );
+	assert.equal( owner.state().inventory.find( row => row.slot === 65 )?.durability, 0 );
+	const clock = 1798023382, frame = Buffer.alloc( 5 );
+	frame[0] = 65;
+	frame.writeUInt32LE( clock, 1 );
+	assert.equal( owner.receive( 0x31e8, frame ), true );
+	assert.equal( owner.state().inventory.find( row => row.slot === 65 )?.durability, clock );
+	assert.deepEqual( sounds, [], "no repair cue for a Spirit's clock" );
+	assert.deepEqual( owner.takeDegradations(), [] );
+});
 test("a durability answer for an unheld bag slot degrades instead of ending the session (#2877)", () => {
 	// Production incident: 0x31E8 25 36000000 (slot 37, durability 54)
 	// reached a client holding nothing there, after a repair, and ended

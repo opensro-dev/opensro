@@ -15,7 +15,14 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 
 const { pageEntryBundle } = await import( sourceFileUrl( "src/engine/foundation/assets/page-entry.ts" ).href );
-const { createReleaseWatch, RELEASE_CHECK_INTERVAL_MS, RELEASE_TRIGGER_GAP_MS, RELEASE_STALE_GAP_MS } = await import(
+const {
+	createReleaseWatch,
+	releaseNotice,
+	RELEASE_CHECK_INTERVAL_MS,
+	RELEASE_TRIGGER_GAP_MS,
+	RELEASE_STALE_GAP_MS,
+	RELEASE_OUTDATED_GAP_MS
+} = await import(
 	sourceFileUrl( "src/engine/runtime/release/release-watch.ts" ).href
 );
 
@@ -190,4 +197,34 @@ test("a lost file that is no release costs one check, then the normal schedule r
 	watch.step( 10 * RELEASE_STALE_GAP_MS, false );
 	assert.equal( assets.requests.length, 2, "the consumed stale file kept rechecking" );
 	assert.equal( watch.newerAvailable(), false );
+});
+
+test("a refused release keeps checking every outdated gap until the live page moves", () => {
+	// r204m (2026-11-25): the server switched about a minute before the page,
+	// and every reload in between loaded the same refused page.
+	const assets = scriptedAssets();
+	const watch = createReleaseWatch( assets, PAGE, RUNNING );
+	watch.step( 0, false );
+	assets.reply( { kind: "release", entry: RUNNING } );
+	watch.step( 16, false );
+	assets.setFree( 1 );
+	watch.step( RELEASE_OUTDATED_GAP_MS - 1, false, true );
+	assert.equal( assets.requests.length, 1, "a refused page checked inside the outdated gap" );
+	watch.step( RELEASE_OUTDATED_GAP_MS, false, true );
+	assert.equal( assets.requests.length, 2, "a refused page waited for the interval" );
+	assets.reply( { kind: "release", entry: RUNNING } );
+	watch.step( RELEASE_OUTDATED_GAP_MS + 16, false, true );
+	assert.equal( watch.newerAvailable(), false );
+	watch.step( 2 * RELEASE_OUTDATED_GAP_MS, false, true );
+	assert.equal( assets.requests.length, 3, "the refused page stopped checking" );
+	assets.reply( { kind: "release", entry: "/assets/index-BBBBBBBB.js" } );
+	watch.step( 2 * RELEASE_OUTDATED_GAP_MS + 16, false, true );
+	assert.equal( watch.newerAvailable(), true );
+});
+
+test("the notice waits while only the server moved and reloads a refused page once the page moved", () => {
+	assert.equal( releaseNotice( false, false ), "none" );
+	assert.equal( releaseNotice( false, true ), "updating", "a refused page with no newer page offered a reload" );
+	assert.equal( releaseNotice( true, false ), "newer", "a page still in session reloaded without a click" );
+	assert.equal( releaseNotice( true, true ), "reload" );
 });

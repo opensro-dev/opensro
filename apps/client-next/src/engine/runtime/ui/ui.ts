@@ -84,6 +84,8 @@ import {
 	AVATAR_STORAGE_SLOTS,
 	avatarSocket,
 	isAvatarItem,
+	isDormantSpirit,
+	isSpiritItem,
 	SPIRIT_SLOT,
 	SPIRIT_SOCKET
 } from "@/engine/foundation/gameplay/avatar-socket";
@@ -279,6 +281,7 @@ import {
 import { fitUiGroup } from "@/engine/foundation/ui/layout";
 import { createExperimentalHud, experimentalRows, experimentalTabs } from "./hud/experimental-hud";
 import { createEventCalendarHud } from "./hud/event-calendar-hud";
+import { createMaintenanceNoticeHud } from "./hud/maintenance-notice-hud";
 import { createJobHonorHud } from "./hud/job-honor-hud";
 import {
 	JOB_HONOR_HEIGHT,
@@ -289,6 +292,17 @@ import {
 } from "./hud/job-honor-view";
 import type { JobHonorPeriod, JobHonorTab } from "@/engine/foundation/ui/job-honor";
 import { honorRows } from "@/engine/foundation/ui/job-honor";
+import { createStyriaHud } from "./hud/styria-hud";
+import {
+	STYRIA_HEIGHT,
+	STYRIA_STRIP_HEIGHT,
+	STYRIA_STRIP_WIDTH,
+	STYRIA_WIDTH,
+	styriaPictures,
+	styriaStripOps,
+	styriaView
+} from "./hud/styria-view";
+import { styriaConversationChoices } from "@/engine/foundation/ui/styria";
 import {
 	EVENT_CALENDAR_HEIGHT,
 	EVENT_CALENDAR_WIDTH,
@@ -1098,6 +1112,38 @@ const PARTS = frameParts();
 // 2026-11-14): the client has no text rows for it, so hudCopy serves
 // these keys. The account names stay off the wire, so the prompt names
 // no account.
+// The Styria Clash windows' copy (port-only, not native; #3648 slice
+// 5): the client has no text rows for the arena, so hudCopy serves
+// these keys. The wordings the later client's own tables evidence
+// are carried as they stand ("Styria Clash", "Join Styria Clash",
+// "Cancel Registration", "Registration completed.", "Styria Clash
+// Results", "Styria Clash Rewards", "Skill exp : %d"); the rest is
+// the port's English for the manager's rules.
+const STYRIA_COPY: Readonly<Record<string, string>> = {
+	UIIT_STT_ARENA_JOB_WAR: "Styria Clash",
+	UIIT_PORT_STYRIA_APPLY: "Join Styria Clash",
+	UIIT_PORT_STYRIA_CANCEL: "Cancel Registration",
+	UIIT_PORT_STYRIA_PROMPT:
+		"Hunters and Thieves fight over the treasure of Styria. The side holding more treasure when the clock ends wins.",
+	UIIT_PORT_STYRIA_WAITING: "Waiting for the arena...",
+	UIIT_PORT_STYRIA_DESC:
+		"Earn points by opening treasure boxes and\ndefeating the opposing team. The side with\nmore points when the clock ends wins.",
+	UIIT_PORT_STYRIA_OPENS_IN: "Registration opens in",
+	UIIT_PORT_STYRIA_STARTS_IN: "Starts in",
+	UIIT_PORT_STYRIA_APPLICANTS: "Applicants",
+	UIIT_PORT_STYRIA_YOUR_SIDE: "Your side",
+	UIIT_PORT_STYRIA_APPLIED: "Registration completed.",
+	UIIT_PORT_STYRIA_SUIT_HINT: "Wear a job suit to fight for its side.",
+	UIIT_PORT_STYRIA_TIME_LEFT: "Time left",
+	UIIT_PORT_STYRIA_RESULT: "Styria Clash Results",
+	UIIT_PORT_STYRIA_REWARDS: "Styria Clash Rewards",
+	UIIT_PORT_STYRIA_SKILL_EXP: "Skill exp : %d",
+	UIIT_PORT_STYRIA_JOB_EXP: "Job EXP : %d",
+	UIIT_PORT_STYRIA_WIN: "Victory",
+	UIIT_PORT_STYRIA_LOSE: "Defeat",
+	UIIT_PORT_STYRIA_DRAW: "Draw",
+	UIIT_PORT_STYRIA_CONFIRM: "Confirm"
+};
 const CONTRIBUTOR_PROMPT_COPY: Readonly<Record<string, string>> = {
 	UIIT_PORT_CONTRIBUTOR_TITLE: "Contributor title",
 	UIIT_PORT_CONTRIBUTOR_ELSEWHERE: "Your Contributor title is on another of your accounts.\nMove it to this account?",
@@ -1452,8 +1498,15 @@ export function createUi( ports: UiPorts ) {
 	const experimental = createExperimentalHud();
 	// Port-only, not native (#3532): the Event Calendar's feed state.
 	const eventCalendar = createEventCalendarHud();
+	// Port-only (#3925): the title screens' maintenance notice feed.
+	const maintenanceHud = createMaintenanceNoticeHud();
 	// Port-only, not native (#3530): the Job Honor Rank window's state.
 	const jobHonor = createJobHonorHud();
+	// Port-only, not native (#3648): the Styria Clash windows' state,
+	// and whether the manager's conversation stood open last frame
+	// (the registration window opens on its edge).
+	const styria = createStyriaHud();
+	let styriaConversationWasOpen = false;
 	// The System menu's extra rows: one menu id per Experimental row
 	// that adds an entry, in the order the entries stack (#3532's
 	// calendar, then #3531's Unique Status, then #3529's market, then
@@ -2440,6 +2493,9 @@ export function createUi( ports: UiPorts ) {
 		// The Contributor login prompt (port-only, contributor-titles.ts).
 		const contributorCopy = CONTRIBUTOR_PROMPT_COPY[key];
 		if ( contributorCopy ) return contributorCopy;
+		// The Styria Clash windows and manager rows (port-only, #3648).
+		const styriaCopy = STYRIA_COPY[key];
+		if ( styriaCopy ) return styriaCopy;
 		return hud.data()?.strings[key] ?? "";
 	}
 	/*
@@ -2942,6 +2998,15 @@ export function createUi( ports: UiPorts ) {
 			avatars = game.avatarInventory ?? [],
 			item = (equip ? bag : avatars).find( i => i.slot === source );
 		if ( !item || !isAvatarItem( item.typeFlags ) ) return;
+		// Port-only (SRO_NASRUN, #4364): a Spirit arrives dormant and the
+		// server wears only an awake one, so an equip gesture on a dormant
+		// Spirit sends the use that wakes it (the v1.188 server's 3/1/14/1
+		// use path); the next gesture wears it. Inference: the later
+		// clients wake it the same way, by using it from the bag.
+		if ( equip && isDormantSpirit( item.typeFlags, item.durability ) ) {
+			useInventorySlot( item.slot );
+			return;
+		}
 		const socket = avatarSocket( item.typeFlags );
 		if ( equip ) {
 			if ( avatars.some( i => avatarSocket( i.typeFlags ) === socket ) ) {
@@ -3936,6 +4001,13 @@ export function createUi( ports: UiPorts ) {
 			const [day, index] = id.slice( "event-calendar-event:".length ).split( ":" ).map( Number );
 			const event = eventCalendar.state().week[day!]?.events[index!];
 			if ( event ) eventCalendar.select( event );
+			dirty = true;
+			return;
+		}
+		if ( panel === "Styria Clash" && id === "styria-dismiss" ) {
+			// Port-only (#3648): the result window's Confirm.
+			styria.dismissResult();
+			setPanel( "" );
 			dirty = true;
 			return;
 		}
@@ -11372,6 +11444,27 @@ export function createUi( ports: UiPorts ) {
 				experimental.state().saved.jobHonor,
 				Date.now()
 			);
+			// Port-only (#3648): the Styria windows read the worker's
+			// feed; a fresh result opens its window once, and the
+			// manager's conversation opening raises the registration.
+			styria.reconcile(
+				phase === "world" ? next.gameplay?.styria : null,
+				phase === "world" ? next.gameplay?.styriaResult : null,
+				Date.now()
+			);
+			if ( styria.resultPending() ) {
+				styria.markResultShown();
+				if ( panel !== "Styria Clash" ) setPanel( "Styria Clash" );
+			}
+			const styriaChoicesNow = styriaConversationChoices(
+				phase === "world" ? next.gameplay?.npcConversation : undefined
+			);
+			const styriaConversationOpen = styriaChoicesNow.apply !== undefined ||
+				styriaChoicesNow.cancel !== undefined;
+			if ( styriaConversationOpen && !styriaConversationWasOpen && panel !== "Styria Clash" ) {
+				setPanel( "Styria Clash" );
+			}
+			styriaConversationWasOpen = styriaConversationOpen;
 			if ( phase === "signed-out" || phase === "character-select" ) serverEventHud.reset();
 			if ( phase === "world" ) {
 				const before = serverEventHud.shown();
@@ -11451,6 +11544,8 @@ export function createUi( ports: UiPorts ) {
 					uniqueStatusHud.reset();
 					eventCalendar.reset();
 					jobHonor.reset();
+					styria.reset();
+					styriaConversationWasOpen = false;
 					sroMacroHud.reset();
 					windowPlacement.reset();
 					itemMall.reset();
@@ -12085,9 +12180,9 @@ export function createUi( ports: UiPorts ) {
 				// Port-only (#1976): only a seal drop's notice takes its
 				// tier's weight (noticeBannerRow); every other notice on
 				// this row keeps the native plate untouched. A reinforcement
-				// success takes the later client's centre banner (#3260)
-				// while its art is published, centred on the desktop;
-				// compact mode still stacks it with the other rows.
+				// success wears the later client's violet plate (#3260)
+				// while its art is published, at that client's y 190
+				// (CENTRE_ROW_Y, BUG-100).
 				const noticeRow = noticeBannerRow(
 					notificationBanner,
 					centreBannerPaths.every( p => !!resources.size( p ) )
@@ -12100,18 +12195,16 @@ export function createUi( ports: UiPorts ) {
 						y: 130,
 						color: [ 0, 52, 92 ] as const,
 						textRgb: undefined as readonly [number, number, number] | undefined,
-						frame: {},
-						centred: false
+						frame: {}
 					},
 					{
 						value: notificationBanner.value( hudCopy ),
 						alpha: notificationBanner.alpha(),
 						paths: noticeRow.paths,
-						y: 100,
+						y: noticeRow.y,
 						color: noticeRow.color,
 						textRgb: noticeRow.textRgb,
-						frame: noticeRow.frame,
-						centred: noticeRow.centred
+						frame: noticeRow.frame
 					},
 					{
 						value: questBanner.value(),
@@ -12120,8 +12213,7 @@ export function createUi( ports: UiPorts ) {
 						y: 160,
 						color: [ 0, 91, 66 ] as const,
 						textRgb: undefined as readonly [number, number, number] | undefined,
-						frame: {},
-						centred: false
+						frame: {}
 					}
 				];
 				if ( top !== undefined ) rows.sort( ( a, b ) => a.y - b.y );
@@ -12138,9 +12230,7 @@ export function createUi( ports: UiPorts ) {
 					const lineHeight = text.extentHeight( 0, 2 ),
 						width = Math.ceil( Math.max( 0, ...lines.map( value => text.run( value, 2 ).width ) ) ),
 						height = lineHeight * lines.length,
-						y = top === undefined ?
-							(row.centred ? Math.max( 0, (h - height) / 2 ) : row.y) :
-							bottom,
+						y = top === undefined ? row.y : bottom,
 						x = (w >> 1) - (width >> 1);
 					quads.push(
 						...uniqueBannerQuads(
@@ -12870,6 +12960,11 @@ export function createUi( ports: UiPorts ) {
 			const worldVisible = (phase === "world" || retainedWorld) && !loading && next.worldReady &&
 				(!next.frontend || next.frontend.phase === "world");
 			worldShown = worldVisible;
+			// Port-only (#3925): the maintenance notice reads the schedule
+			// only while the title screens are up and its row is on.
+			const noticeOn = experimental.state().saved.maintenanceNotice;
+			maintenanceHud.frame( apiBase, now, noticeOn && !worldVisible );
+			const maintenanceLine = noticeOn ? maintenanceHud.notice() ?? undefined : undefined;
 			if ( !(phase === "world" || retainedWorld) ) windowWarm.reset();
 			// One unseen window build per idle frame; see window-warm.ts.
 			const warming = windowWarm.begin(
@@ -12917,7 +13012,8 @@ export function createUi( ports: UiPorts ) {
 							offset: serverOffset,
 							now,
 							message: error,
-							credentialsLocked: loginReplyPending || phase === "authenticating"
+							credentialsLocked: loginReplyPending || phase === "authenticating",
+							notice: maintenanceLine
 						},
 						roster,
 						selectedCharacter
@@ -12949,7 +13045,8 @@ export function createUi( ports: UiPorts ) {
 						offset: serverOffset,
 						now,
 						message: error,
-						credentialsLocked: loginReplyPending || phase === "authenticating"
+						credentialsLocked: loginReplyPending || phase === "authenticating",
+						notice: maintenanceLine
 					},
 					roster,
 					selectedCharacter
@@ -15046,6 +15143,68 @@ export function createUi( ports: UiPorts ) {
 					}
 					endWindow( admission );
 				}
+				if ( panel === "Styria Clash" && hudData ) {
+					const admission = beginWindow();
+					// Port-only, not native (#3648 slice 5): the window's
+					// drawing is hud/styria-view.ts's ops; admission, the
+					// chrome and the op-to-quad loop stay here.
+					const [px, py] = windowOrigin( "Styria Clash", [
+						(w - STYRIA_WIDTH) / 2,
+						(h - STYRIA_HEIGHT) / 2,
+						STYRIA_WIDTH,
+						STYRIA_HEIGHT
+					] );
+					windowBox( "Styria Clash", px, py, STYRIA_WIDTH, STYRIA_HEIGHT );
+					closeButton( px + STYRIA_WIDTH - 26, py + 10, panelCloseId( "Styria Clash" ) );
+					const ops = styriaView( {
+						origin: [ px, py ],
+						tile: hudData.windows.ifoption!.GDR_OPTION_BGTILE!.texture,
+						state: styria.state( Date.now() ),
+						copy: hudCopy,
+						choices: styriaConversationChoices( next.gameplay?.npcConversation )
+					} );
+					paths.push( ...styriaPictures( ops ) );
+					for ( const op of ops ) {
+						if ( op.kind === "tile" ) {
+							quads.push( ...normalTile( op.rect, op.path, resources.size( op.path ), full ) );
+						} else if ( op.kind === "rect" ) {
+							rect( op.rect, op.color );
+						} else if ( op.kind === "text" ) {
+							quads.push( ...text.quads( op.value, op.rect, full, op.color, {
+								hAlign: op.hAlign,
+								vAlign: op.vAlign
+							} ) );
+						} else {
+							if ( op.texture && resources.has( op.texture ) ) rect( op.rect, op.color, op.texture );
+							controls.push( {
+								id: op.id,
+								label: op.label,
+								rect: op.rect,
+								kind: "button",
+								selected: op.selected,
+								disabled: false
+							} );
+						}
+					}
+					endWindow( admission );
+				}
+				// Port-only (#3648 slice 5): the score strip over the
+				// world while a Styria match runs.
+				if ( hudData && phase === "world" ) {
+					const strip = styriaStripOps( {
+						origin: [ (w - STYRIA_STRIP_WIDTH) / 2, 10 ],
+						state: styria.state( Date.now() )
+					} );
+					for ( const op of strip ) {
+						if ( op.kind === "rect" ) rect( op.rect, op.color );
+						else if ( op.kind === "text" ) {
+							quads.push( ...text.quads( op.value, op.rect, full, op.color, {
+								hAlign: op.hAlign,
+								vAlign: op.vAlign
+							} ) );
+						}
+					}
+				}
 				if ( panel === "Auto Potion" && hudData ) {
 					const admission = beginWindow();
 					const companionEnabled = experimental.state().saved.transportAutoPotion;
@@ -17089,13 +17248,17 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 						const sockets = Object.values( equipment ).filter( n => n.id >= 113 && n.id <= 116 )
 							.sort( ( a, b ) => a.id - b.id )
 							.map( node => ({ type: node.id - 112, r: authoredRect( node, ex, ey ) }) );
-						// Port-only, not native (SRO_NASRUN, #3456): a worn Devil's Spirit
-						// gets a fifth socket one socket pitch past the flag's. The
-						// v1.150 layout has no node for it; only a server with the
-						// switch on stores a Spirit, so a native shard draws four.
+						// Port-only, not native (SRO_NASRUN, #3456): a Devil's Spirit,
+						// worn or carried, gets a fifth socket one socket pitch past
+						// the flag's, so a player holding one sees where it goes
+						// (#4364). The v1.150 layout has no node for it; only a
+						// server with the switch on grants a Spirit, so a native
+						// shard draws four.
 						if (
-							sockets.length === 4 &&
-							game?.avatarInventory?.some( i => avatarSocket( i.typeFlags ) === SPIRIT_SOCKET )
+							sockets.length === 4 && (
+								game?.avatarInventory?.some( i => isSpiritItem( i.typeFlags ) ) ||
+								game?.inventory.some( i => isSpiritItem( i.typeFlags ) )
+							)
 						) {
 							const third = sockets[2]!, fourth = sockets[3]!;
 							sockets.push( {

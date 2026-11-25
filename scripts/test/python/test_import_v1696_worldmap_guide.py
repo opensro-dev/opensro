@@ -10,6 +10,7 @@ its pin.
 ===========================================================================
 """
 import script_paths  # noqa: F401  (puts scripts/ and its build folders on sys.path, #3410)
+import os
 import struct
 import sys
 import tempfile
@@ -117,6 +118,31 @@ class MaskTest(unittest.TestCase):
 		struct.pack_into("<I", raw, offset + 88, 0)
 		with self.assertRaises(SystemExit):
 			guide.tile_pixels(bytes(raw))
+
+
+class PublishTest(unittest.TestCase):
+	"""
+	================
+	PublishTest
+
+	A republished file with the same bytes keeps its mtime, so the interface
+	lane that published the native image first replays; new bytes replace
+	it, and no staged file is left behind either way.
+	================
+	"""
+
+	def test_same_bytes_keep_the_file_and_new_bytes_replace_it(self):
+		pixels = [0x80000005, 0x80000006]
+		with tempfile.TemporaryDirectory() as folder:
+			target = Path(folder) / "guide" / "m.png"
+			guide.write_mask(ddj(2, 1, pixels), [0x80000005], target)
+			old = 1_000_000_000_000_000_000
+			os.utime(target, ns=(old, old))
+			guide.write_mask(ddj(2, 1, pixels), [0x80000005], target)
+			self.assertEqual(target.stat().st_mtime_ns, old, "same bytes rewrote the file")
+			guide.write_mask(ddj(2, 1, pixels), [0x80000006], target)
+			self.assertNotEqual(target.stat().st_mtime_ns, old, "new bytes did not replace the file")
+			self.assertEqual(sorted(entry.name for entry in target.parent.iterdir()), ["m.png"])
 
 
 if __name__ == "__main__":

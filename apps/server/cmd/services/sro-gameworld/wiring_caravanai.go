@@ -16,11 +16,15 @@ package main
 
 import (
 	"context"
+	"strings"
+	"time"
 
 	log "github.com/sirupsen/logrus"
+	"opensro.online/server/internal/game/action"
 	"opensro.online/server/internal/game/caravanai"
 	"opensro.online/server/internal/game/enterworld"
 	"opensro.online/server/internal/game/item/wire"
+	"opensro.online/server/internal/game/social/chat"
 	worldgeom "opensro.online/server/internal/game/world"
 	"opensro.online/server/internal/game/world/monster"
 	"opensro.online/server/internal/game/world/movement"
@@ -50,21 +54,31 @@ func (game *gameplayPlane) wireCaravanAgents() {
 		memStore = s
 	}
 	rt := caravanai.NewRuntime(cfg, memStore, caravanai.WorldHooks{
+		// Slice 4 (#3704): what an agent says goes out as local chat
+		// from its entity. The hook only buffers the line; the tick
+		// (caravanAgentsTick) addresses it to the viewers who can see
+		// the agent, like every other agent frame.
 		OnAgentChat: func(division, agentName string, regionID uint16, message string) {
-			log.WithFields(log.Fields{
-				"division": division,
-				"agent":    agentName,
-				"region":   regionID,
-			}).Debugf("caravan-ai chat: %s", message)
+			game.caravanChatLines = append(game.caravanChatLines, caravanChatLine{agentName: agentName, text: message})
+		},
+		// Slice 3e (#3704): agents strike back. The action runtime
+		// lands the blow through the player-victim lanes; the tick
+		// flushes its frames.
+		OnAgentStrike: func(division, agentName, targetPlayerName string, nowMs int64) (defeated bool) {
+			return game.caravanAgentStrike(division, agentName, targetPlayerName, nowMs)
 		},
 		Walker: caravanWalker{water: game.water},
 	})
 	rt.EnsureDivisionRoster(game.divisionID)
 	game.caravanAgents = rt
+	// Slice 3c (#3704): players can fight the agents. The action
+	// runtime resolves agent gids and lands real damage through this
+	// directory; with the flag off it is never installed.
+	game.items.Agents = caravanAgentDirectory{game: game}
 	// Slice 3a (#3704): the agents appear in the world as peers. The
 	// reference catalog is wired later than this constructor runs, so
 	// the closure reads it at tick time.
-	game.caravanPeers = newCaravanPeerLeg(game.caravanAgentAppearance, func(ids []uint32) []simulation.Frame {
+	game.caravanPeers = newCaravanPeerLeg(game.caravanAgentAppearance, game.caravanTransportRow, func(ids []uint32) []simulation.Frame {
 		if game.peerReferences == nil {
 			return nil
 		}
@@ -91,7 +105,7 @@ func (game *gameplayPlane) caravanAgentsTick(ticker *simulation.Ticker, nowMs in
 		return nil
 	}
 	views := sessionViews(ticker.Source)
-	byRegion := make(map[uint16][]caravanai.ObservedPlayer)
+	byRegion := make(map[uint16][]observedPlayerPose)
 	var viewers []caravanPeerViewer
 	for _, view := range views {
 		if view.DivisionID != game.divisionID {
@@ -107,10 +121,11 @@ func (game *gameplayPlane) caravanAgentsTick(ticker *simulation.Ticker, nowMs in
 		if c == nil {
 			continue
 		}
-		byRegion[pose.RegionID] = append(byRegion[pose.RegionID], caravanai.ObservedPlayer{
-			Name:      c.Name,
-			JobType:   c.Job.Type,
-			HPPercent: game.playerHPPercent(c),
+		byRegion[pose.RegionID] = append(byRegion[pose.RegionID], observedPlayerPose{
+			name:      c.Name,
+			jobType:   c.Job.Type,
+			hpPercent: game.playerHPPercent(c),
+			pose:      pose,
 		})
 	}
 	roster := game.caravanAgents.EnsureDivisionRoster(game.divisionID)
@@ -118,13 +133,146 @@ func (game *gameplayPlane) caravanAgentsTick(ticker *simulation.Ticker, nowMs in
 	// the tick's own background context is enough here.
 	ctx := context.Background()
 	for _, unit := range roster {
-		_, _, _ = game.caravanAgents.StepAgent(ctx, game.divisionID, unit.Name, byRegion[unit.RegionID], nowMs)
-	}
-	if game.caravanPeers == nil {
-		return nil
+		_, _, _ = game.caravanAgents.StepAgent(ctx, game.divisionID, unit.Name, observedPlayersFor(unit, byRegion[unit.RegionID]), nowMs)
 	}
 	entities := game.caravanAgents.AgentEntities(game.divisionID)
-	return game.caravanPeers.frames(game.divisionID, viewers, entities)
+	var frames []simulation.DivisionFrames
+	if game.caravanPeers != nil {
+		frames = game.caravanPeers.frames(game.divisionID, viewers, entities)
+	}
+	// Slice 4 (#3704): the lines the agents spoke this tick ride out
+	// with the presentation frames, then the buffer starts over.
+	if len(game.caravanChatLines) > 0 {
+		frames = append(frames, caravanChatFrames(game.divisionID, viewers, entities, game.caravanChatLines)...)
+		game.caravanChatLines = nil
+	}
+	// Slice 3e (#3704): this tick's agent-strike publications ride out
+	// with the presentation frames.
+	frames = append(frames, game.caravanStrikeFrames...)
+	game.caravanStrikeFrames = nil
+	return frames
+}
+
+// caravanChatLine is one line an agent spoke during the tick, waiting
+// for the tick to address it (slice 4 of #3704).
+type caravanChatLine struct {
+	agentName string
+	text      string
+}
+
+/*
+================
+caravanChatFrames
+
+One spoken line becomes a gid-authored All-chat frame (0x3667) for
+every viewer who can see the speaking agent (the peer interest rule),
+so the line renders with the agent's name and its overhead bubble,
+exactly like a player's local chat. A line whose agent has no entity
+(the flag's roster mid-change) is dropped, never broadcast wide.
+================
+*/
+func caravanChatFrames(division string, viewers []caravanPeerViewer, entities []caravanai.AgentEntity, lines []caravanChatLine) []simulation.DivisionFrames {
+	byName := make(map[string]caravanai.AgentEntity, len(entities))
+	for _, entity := range entities {
+		byName[entity.Name] = entity
+	}
+	var out []simulation.DivisionFrames
+	for _, line := range lines {
+		entity, ok := byName[line.agentName]
+		if !ok {
+			continue
+		}
+		payload := chat.EncodeChatBroadcastGid(chat.ChatTypeAll, simulation.PlayerObjectID(entity.CharacterID), line.text)
+		for _, viewer := range viewers {
+			if !caravanEntityVisible(viewer.Pose, entity.Pose) {
+				continue
+			}
+			out = append(out, simulation.DivisionFrames{
+				DivisionID:      division,
+				Frames:          []simulation.Frame{{Opcode: chat.OpChatBroadcast, Payload: payload}},
+				OnlyCharacterID: viewer.CharacterID,
+			})
+		}
+	}
+	return out
+}
+
+/*
+================
+installCaravanChat
+
+Seats the caravan command intake on the chat runtime (slice 4 of
+#3704): !accept/!hire/!memory lines are answered by the caravan
+runtime and never reach the room. Called after chat registration; a
+shard without the caravan runtime keeps the native posture (the lines
+are ordinary chat).
+================
+*/
+func (game *gameplayPlane) installCaravanChat() {
+	if game.chat == nil || game.caravanAgents == nil {
+		return
+	}
+	game.chat.CaravanCommands = caravanCommandsPort(game.caravanAgents)
+}
+
+/*
+================
+caravanCommandsPort
+
+The chat runtime's caravan intake over one caravan runtime: the reply
+is authored by the named agent when there is one (the chat lane sends
+it as that agent's whisper), and a system notice otherwise (an unknown
+agent, a wrong job). The rate limit's silent answer stays silent.
+================
+*/
+func caravanCommandsPort(rt *caravanai.Runtime) func(divisionID string, sender *enterworld.Character, message string) (string, string, bool) {
+	return func(divisionID string, sender *enterworld.Character, message string) (string, string, bool) {
+		reply, handled := rt.HandlePlayerCommand(divisionID, sender.Name, sender.Job.Type, message, time.Now().UnixMilli())
+		if !handled || reply == "" {
+			return "", reply, handled
+		}
+		if fields := strings.Fields(message); len(fields) >= 2 {
+			if name, ok := rt.AgentNamed(divisionID, fields[1]); ok {
+				return name, reply, true
+			}
+		}
+		return "", reply, true
+	}
+}
+
+// observedPlayerPose is one entered player beside the pose the caravan
+// tick saw it at: the raw material of an agent's ObservedPlayer list.
+type observedPlayerPose struct {
+	name      string
+	jobType   uint8
+	hpPercent int
+	pose      simulation.Spawn
+}
+
+/*
+================
+observedPlayersFor
+
+One agent's nearby players with their real distances from where the
+agent stands (the brain's rules and the strike range read Distance;
+before slice 3e the tick never computed it).
+================
+*/
+func observedPlayersFor(unit *caravanai.AgentUnit, players []observedPlayerPose) []caravanai.ObservedPlayer {
+	if len(players) == 0 {
+		return nil
+	}
+	from := worldgeom.RegionXZ{RegionID: unit.RegionID, X: float64(unit.X), Z: float64(unit.Z)}
+	out := make([]caravanai.ObservedPlayer, 0, len(players))
+	for _, p := range players {
+		out = append(out, caravanai.ObservedPlayer{
+			Name:      p.name,
+			JobType:   p.jobType,
+			HPPercent: p.hpPercent,
+			Distance:  float32(worldgeom.Distance(from, worldgeom.RegionXZ{RegionID: p.pose.RegionID, X: p.pose.X, Z: p.pose.Z})),
+		})
+	}
+	return out
 }
 
 /*
@@ -236,6 +384,12 @@ leg emits (item references ahead of the 0x30D7 spawn row, the movement
 channel + 0xB738 goal while marching, the 0x36AB despawn on leaving),
 targeted at the one viewer through DivisionFrames.OnlyCharacterID.
 Visibility is the peer rule itself, worldgeom.InterestVisible.
+
+A trader's transport (slice 3f) rides the same leg as a second,
+COS-shaped entity (wiring_caravanai_transport.go): the band-2 spawn
+row players' transports get, a running goal re-acked as the trail
+point behind the trader drifts, and the same despawn when the
+trader dies or leaves sight.
 ================================================================================
 */
 
@@ -262,14 +416,17 @@ type caravanPeerAck struct {
 // reference catalog; both are consulted lazily so boot order between
 // the caravan wiring and the catalog build does not matter.
 type caravanPeerLeg struct {
-	resolve func(entity caravanai.AgentEntity) (simulation.PeerAppearance, bool)
-	refs    func(ids []uint32) []simulation.Frame
+	resolve          func(entity caravanai.AgentEntity) (simulation.PeerAppearance, bool)
+	resolveTransport func(entity caravanai.AgentEntity) (wire.CosSpawnBand2, bool)
+	refs             func(ids []uint32) []simulation.Frame
 
-	appearances map[int64]*simulation.PeerAppearance
-	shown       map[string]map[uint32]bool
-	sentRefs    map[string]map[uint32]bool
-	acked       map[string]map[uint32]caravanPeerAck
-	heading     map[uint32]uint16
+	appearances  map[int64]*simulation.PeerAppearance
+	transportRow map[int64]*wire.CosSpawnBand2
+	shown        map[string]map[uint32]bool
+	sentRefs     map[string]map[uint32]bool
+	acked        map[string]map[uint32]caravanPeerAck
+	tacked       map[string]map[uint32]caravanPeerAck
+	heading      map[uint32]uint16
 }
 
 /*
@@ -279,16 +436,20 @@ newCaravanPeerLeg
 */
 func newCaravanPeerLeg(
 	resolve func(entity caravanai.AgentEntity) (simulation.PeerAppearance, bool),
+	resolveTransport func(entity caravanai.AgentEntity) (wire.CosSpawnBand2, bool),
 	refs func(ids []uint32) []simulation.Frame,
 ) *caravanPeerLeg {
 	return &caravanPeerLeg{
-		resolve:     resolve,
-		refs:        refs,
-		appearances: make(map[int64]*simulation.PeerAppearance),
-		shown:       make(map[string]map[uint32]bool),
-		sentRefs:    make(map[string]map[uint32]bool),
-		acked:       make(map[string]map[uint32]caravanPeerAck),
-		heading:     make(map[uint32]uint16),
+		resolve:          resolve,
+		resolveTransport: resolveTransport,
+		refs:             refs,
+		appearances:      make(map[int64]*simulation.PeerAppearance),
+		transportRow:     make(map[int64]*wire.CosSpawnBand2),
+		shown:            make(map[string]map[uint32]bool),
+		sentRefs:         make(map[string]map[uint32]bool),
+		acked:            make(map[string]map[uint32]caravanPeerAck),
+		tacked:           make(map[string]map[uint32]caravanPeerAck),
+		heading:          make(map[uint32]uint16),
 	}
 }
 
@@ -309,10 +470,23 @@ func (leg *caravanPeerLeg) frames(division string, viewers []caravanPeerViewer, 
 		live[viewer.SessionID] = true
 		shown := leg.shownFor(viewer.SessionID)
 		acked := leg.ackedFor(viewer.SessionID)
+		tacked := leg.tackedFor(viewer.SessionID)
 		visible := make(map[uint32]caravanai.AgentEntity, len(entities))
 		for _, entity := range entities {
 			if caravanEntityVisible(viewer.Pose, entity.Pose) {
 				visible[simulation.PlayerObjectID(entity.CharacterID)] = entity
+			}
+		}
+		// Slice 3f: a visible trader's transport is a second entity
+		// beside it, visible by its own pose (it trails the trader,
+		// so it can straddle the interest edge on its own).
+		visibleTransports := make(map[uint32]caravanai.AgentEntity, len(visible))
+		for _, entity := range visible {
+			if entity.TransportCharacterID == 0 {
+				continue
+			}
+			if caravanEntityVisible(viewer.Pose, entity.TransportPose) {
+				visibleTransports[simulation.PlayerObjectID(entity.TransportCharacterID)] = entity
 			}
 		}
 		for gid, entity := range visible {
@@ -329,8 +503,25 @@ func (leg *caravanPeerLeg) frames(division string, viewers []caravanPeerViewer, 
 				out = append(out, *batch)
 			}
 		}
+		for tgid, entity := range visibleTransports {
+			if !shown[tgid] {
+				if batch := leg.showTransportBatch(viewer, entity); batch != nil {
+					batch.DivisionID = division
+					out = append(out, *batch)
+					shown[tgid] = true
+				}
+				continue
+			}
+			if batch := leg.moveTransportBatch(viewer, entity, tacked[tgid]); batch != nil {
+				batch.DivisionID = division
+				out = append(out, *batch)
+			}
+		}
 		for gid := range shown {
 			if _, ok := visible[gid]; ok {
+				continue
+			}
+			if _, ok := visibleTransports[gid]; ok {
 				continue
 			}
 			out = append(out, simulation.DivisionFrames{
@@ -344,6 +535,7 @@ func (leg *caravanPeerLeg) frames(division string, viewers []caravanPeerViewer, 
 			})
 			delete(shown, gid)
 			delete(acked, gid)
+			delete(tacked, gid)
 		}
 	}
 	for sessionID := range leg.shown {
@@ -351,6 +543,7 @@ func (leg *caravanPeerLeg) frames(division string, viewers []caravanPeerViewer, 
 			delete(leg.shown, sessionID)
 			delete(leg.sentRefs, sessionID)
 			delete(leg.acked, sessionID)
+			delete(leg.tacked, sessionID)
 		}
 	}
 	return out
@@ -638,4 +831,145 @@ func caravanEquipItem(ref *enterworld.ItemRef) wire.PlayerEquipItem {
 			uint8(ref.TypeIDs[0]), uint8(ref.TypeIDs[1]),
 			uint8(ref.TypeIDs[2]), uint8(ref.TypeIDs[3])),
 	}
+}
+
+//============================================================================
+
+/*
+================
+caravanAgentDirectory
+
+The caravan runtime as the action package's combat directory (slice
+3c): an object gid in the player band that names no stored character
+resolves to the agent wearing that synthetic identity, and damage
+lands through RecordPlayerAttack, the runtime's one damage door.
+================
+*/
+type caravanAgentDirectory struct {
+	game *gameplayPlane
+}
+
+/*
+================
+caravanAgentDirectory.AgentByGID
+
+The living agent whose synthetic character id maps to gid, with its
+model's body radius from the shipped roster. The dead are absent from
+the entity snapshot, so a corpse resolves to nothing.
+================
+*/
+func (dir caravanAgentDirectory) AgentByGID(division string, gid uint32) (action.AgentTarget, bool) {
+	if dir.game.caravanAgents == nil {
+		return action.AgentTarget{}, false
+	}
+	for _, entity := range dir.game.caravanAgents.AgentEntities(division) {
+		if simulation.PlayerObjectID(entity.CharacterID) != gid {
+			continue
+		}
+		target := action.AgentTarget{
+			Name:    entity.Name,
+			JobType: entity.JobType,
+			Pose: simulation.Spawn{RegionID: entity.Pose.RegionID,
+				X: float64(entity.Pose.X), Y: float64(entity.Pose.Y), Z: float64(entity.Pose.Z)},
+			Level:        entity.Level,
+			HP:           entity.HP,
+			MaxHP:        entity.MaxHP,
+			LastAttacker: entity.LastAttacker,
+			// Slice 3e (#3704): the strike-back identity - the gid a
+			// cast frame names, the roster skill it casts, the player
+			// it is fighting (its own fight-back admission), and its
+			// weapon's shipped ranges.
+			GID:          gid,
+			SkillID:      entity.SkillID,
+			CombatTarget: entity.CombatTarget,
+		}
+		if model := dir.game.deps.Roster.ModelByCodename(entity.ModelCode); model != nil {
+			target.BodyRadius = model.BodyRadius
+		}
+		if dir.game.deps.Items != nil {
+			if weapon, ok := dir.game.deps.Items.ItemRefByCodename(entity.WeaponCode); ok && weapon.Combat != nil {
+				target.PhysicalAttackMin = float64(weapon.Combat.PhysicalAttack.Minimum.Min)
+				target.PhysicalAttackMax = float64(weapon.Combat.PhysicalAttack.Maximum.Max)
+				target.MagicalAttackMin = float64(weapon.Combat.MagicalAttack.Minimum.Min)
+				target.MagicalAttackMax = float64(weapon.Combat.MagicalAttack.Maximum.Max)
+			}
+		}
+		return target, true
+	}
+	return action.AgentTarget{}, false
+}
+
+/*
+================
+caravanAgentDirectory.ApplyAgentDamage
+
+Real damage from a player's strike, through the runtime's damage
+door: parley betrayal, robbery and death bookkeeping stay there.
+================
+*/
+func (dir caravanAgentDirectory) ApplyAgentDamage(division, agentName, attackerName string, damage int, nowMs int64) (defeated bool) {
+	if dir.game.caravanAgents == nil {
+		return false
+	}
+	_, defeated, _ = dir.game.caravanAgents.RecordPlayerAttack(division, agentName, attackerName, damage, nowMs)
+	return defeated
+}
+
+/*
+================
+caravanAgentStrike
+
+The runtime's strike hook (slice 3e): resolve the agent through the
+directory, strike its player through the action runtime's agent lane,
+and queue the publication for this tick's flush - the room's frames
+scoped on the victim, the victim's own frames addressed to it.
+================
+*/
+func (game *gameplayPlane) caravanAgentStrike(division, agentName, targetPlayerName string, nowMs int64) (defeated bool) {
+	if game.caravanAgents == nil || game.items == nil {
+		return false
+	}
+	dir := caravanAgentDirectory{game: game}
+	for _, entity := range game.caravanAgents.AgentEntities(division) {
+		if entity.Name != agentName {
+			continue
+		}
+		target, ok := dir.AgentByGID(division, simulation.PlayerObjectID(entity.CharacterID))
+		if !ok {
+			return false
+		}
+		result := game.items.StrikePlayerByAgent(division, target, targetPlayerName, nowMs)
+		if !result.Committed {
+			return false
+		}
+		game.caravanStrikeFrames = append(game.caravanStrikeFrames,
+			simulation.DivisionFrames{
+				DivisionID: division,
+				SourceGID:  simulation.PlayerObjectID(result.Victim.CharacterID),
+				Frames:     caravanStrikeFrames(result.Public),
+			},
+			simulation.DivisionFrames{
+				DivisionID:      division,
+				OnlyCharacterID: result.Victim.CharacterID,
+				Frames:          caravanStrikeFrames(result.Victim.Frames),
+			},
+		)
+		return result.Defeated
+	}
+	return false
+}
+
+/*
+================
+caravanStrikeFrames
+
+The action package's wire frames as simulation frames for the tick.
+================
+*/
+func caravanStrikeFrames(frames []wire.Frame) []simulation.Frame {
+	out := make([]simulation.Frame, 0, len(frames))
+	for _, f := range frames {
+		out = append(out, simulation.Frame{Opcode: f.Opcode, Payload: f.Payload, Current: f.Current, Scope: f.Scope})
+	}
+	return out
 }

@@ -15,6 +15,7 @@ import (
 
 	log "github.com/sirupsen/logrus"
 	"opensro.online/server/internal/game/enterworld"
+	"opensro.online/server/internal/game/social/chat"
 	"opensro.online/server/internal/transport"
 )
 
@@ -31,7 +32,20 @@ Register
 ================
 */
 func Register(hub *transport.Hub, deps Dependencies, presence PresenceView, status ...BodyStatusCommands) {
-	hub.Handle(OpGmCommand, gmCommandHubHandler(deps, presence, status...))
+	hub.Handle(OpGmCommand, gmCommandHubHandler(hub, deps, presence, status...))
+}
+
+/*
+================
+noticeRecipient
+
+Who sees a /NOTICE line: a live, world-ready session of the GM's division
+(the same cohort the chat lane's public lines reach).
+================
+*/
+func noticeRecipient(s *transport.Session, divisionID string) bool {
+	division, bound := s.DivisionID()
+	return bound && division == divisionID && s.WorldReady() && !s.Evicted()
 }
 
 // gmCommandHubHandler adapts HandleGmCommand onto the hub: resolve the bound
@@ -44,7 +58,7 @@ func Register(hub *transport.Hub, deps Dependencies, presence PresenceView, stat
 gmCommandHubHandler
 ================
 */
-func gmCommandHubHandler(deps Dependencies, presence PresenceView, status ...BodyStatusCommands) transport.HandlerFunc {
+func gmCommandHubHandler(hub *transport.Hub, deps Dependencies, presence PresenceView, status ...BodyStatusCommands) transport.HandlerFunc {
 	audit := newPrivilegeAudit()
 	return func(s *transport.Session, opcode uint16, payload []byte) {
 		character, divisionID, bound := enterworld.SessionCharacter(deps, s)
@@ -64,6 +78,10 @@ func gmCommandHubHandler(deps Dependencies, presence PresenceView, status ...Bod
 		}
 		for _, extra := range outcome.ExtraAcks {
 			_ = s.Send(OpGmCommandAck, extra)
+		}
+		if outcome.Notice != nil {
+			hub.BroadcastFunc(func(peer *transport.Session) bool { return noticeRecipient(peer, divisionID) },
+				chat.OpChatBroadcast, outcome.Notice)
 		}
 	}
 }

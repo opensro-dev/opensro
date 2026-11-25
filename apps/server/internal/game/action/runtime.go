@@ -278,6 +278,10 @@ type Runtime struct {
 	// Monsters is the shared division-keyed population authority. It is nil
 	// only when the composition root's explicit monster kill switch is on.
 	Monsters *simulation.MonsterState
+	// Agents is the caravan agents' combat directory (agentstrike.go,
+	// port-only, #3704). It is nil unless the composition root wired
+	// the caravan runtime in, and every agent arm is inert while nil.
+	Agents AgentDirectory
 	// Port-only, not native: nil preserves every native admission/reward path.
 	sookArena *sookArenaRuntime
 	// roc runs the Roc worlds (roc.go); nil with SRO_ROC off.

@@ -55,6 +55,12 @@ const PREFIX = "/assets/npc/hunting-portraits/";
 // content-named publication below is ever claimed or packed.
 const CACHE_ROOT = path.join( generatedRoot, "hunting-portrait-cache" );
 const CLIENT = path.resolve( import.meta.dirname, "../../../apps/client-next" );
+// The client files the viewer loaded on its last complete draw
+// (recordRendererClosure): the code every cached still depends on.
+const RENDERER_CLOSURE = path.join( CACHE_ROOT, "renderer-closure.json" );
+const RENDERER_CLOSURE_FORMAT = "sro-portrait-renderer-closure";
+// What a closure file that no longer exists hashes as.
+const MISSING_FILE = Buffer.from( "\0missing\0" );
 export const MONSTER_PORTRAIT_SIZE = 384;
 const STILL_TIMEOUT_MS = 45000;
 const PNG_DATA_URL = /^data:image\/png;base64,([A-Za-z0-9+/=]+)$/;
@@ -136,9 +142,22 @@ The viewer's owners and presentation inputs invalidate cached stills. Include
 the NPC resources too: a riding unique's still depends on its mount's bytes.
 Ambient effects are drawn by the viewer; both their programs and referenced
 texture bytes must invalidate a still, even when no model changed.
+
+The viewer's code is the closure when one is recorded: the client files it
+loaded on its last complete draw, plus the lockfile that pins the compiler.
+Without one it is the whole src/engine tree, so the first build after a cold
+cache still keys on every file. The whole tree moved with any client change:
+r204m's six UI files (#4356) redrew all 1,102 stills, 89 s of a no-asset
+freeze. The client has no import.meta.glob and no computed import(), so a
+module can only join the viewer's graph through a change to a file already
+in it, which misses the key and records the new closure.
 ================
 */
-export async function monsterPortraitRendererFingerprint( manifest, readAsset = readPortraitAsset ) {
+export async function monsterPortraitRendererFingerprint(
+	manifest,
+	readAsset = readPortraitAsset,
+	{ client = CLIENT, closure = null } = {}
+) {
 	const hash = createHash( "sha256" );
 	/*
 	================
@@ -153,12 +172,17 @@ export async function monsterPortraitRendererFingerprint( manifest, readAsset = 
 		) {
 			const file = path.join( directory, entry.name );
 			if ( entry.isDirectory() ) await visit( file );
-			else hash.update( path.relative( CLIENT, file ) ).update( await readFile( file ) );
+			else hash.update( path.relative( client, file ) ).update( await readFile( file ) );
 		}
 	}
-	await visit( path.join( CLIENT, "src/engine" ) );
+	if ( closure ) {
+		hash.update( "closure\n" );
+		for ( const file of [ ...closure, "../../pnpm-lock.yaml" ] ) {
+			hash.update( file ).update( await readOrMissing( path.join( client, file ) ) );
+		}
+	} else await visit( path.join( client, "src/engine" ) );
 	for ( const file of [ "src/bootstrap.ts", "viewer.html" ] ) {
-		hash.update( await readFile( path.join( CLIENT, file ) ) );
+		hash.update( await readFile( path.join( client, file ) ) );
 	}
 	for ( const file of VIEWER_MANIFESTS ) hash.update( await readAsset( "/" + file ) );
 	// The effect programs are one file per effect and per mesh (#3951).
@@ -179,6 +203,101 @@ export async function monsterPortraitRendererFingerprint( manifest, readAsset = 
 	}
 	hash.update( await readFile( import.meta.filename ) );
 	return hash.digest( "hex" );
+}
+
+/*
+================
+readOrMissing
+
+A closure file's bytes, or MISSING_FILE when it was deleted since.
+================
+*/
+async function readOrMissing( file ) {
+	try {
+		return await readFile( file );
+	} catch ( error ) {
+		if ( error?.code === "ENOENT" ) return MISSING_FILE;
+		throw error;
+	}
+}
+
+/*
+================
+readRendererClosure
+
+The recorded closure, or null when none is recorded or it is not ours.
+================
+*/
+export async function readRendererClosure( file = RENDERER_CLOSURE ) {
+	let record;
+	try {
+		record = JSON.parse( await readFile( file, "utf8" ) );
+	} catch {
+		return null;
+	}
+	if ( record?.format !== RENDERER_CLOSURE_FORMAT || !Array.isArray( record.files ) ) return null;
+	if ( !record.files.every( entry => typeof entry === "string" && !entry.startsWith( ".." ) ) ) return null;
+	return record.files;
+}
+
+/*
+================
+viewerClosure
+
+The client files the dev server served to the viewer: every module in its
+graph inside the client tree, dependencies (pinned by the lockfile) aside,
+as sorted client-relative paths.
+================
+*/
+export function viewerClosure( moduleFiles, client = CLIENT ) {
+	const files = new Set();
+	for ( const file of moduleFiles ) {
+		const relative = path.relative( client, file ).split( path.sep ).join( "/" );
+		if ( relative.startsWith( "../" ) || path.isAbsolute( relative ) ) continue;
+		if ( relative.split( "/" ).includes( "node_modules" ) ) continue;
+		files.add( relative );
+	}
+	return [ ...files ].sort( compareText );
+}
+
+/*
+================
+nextRendererClosure
+
+The closure to record after a draw. A complete draw (every drawable row
+drawn) saw everything the stills need, so its set replaces the old one.
+A partial draw saw only its own rows, so it can only add to a closure the
+key already trusted; with none recorded it records nothing.
+================
+*/
+export function nextRendererClosure( previous, loaded, complete ) {
+	if ( complete ) return loaded;
+	if ( !previous ) return null;
+	return [ ...new Set( [ ...previous, ...loaded ] ) ].sort( compareText );
+}
+
+/*
+================
+recordRendererClosure
+
+Writes the closure and, when it moves the key, the stills under the new key
+first: a build that dies between the two keeps the old closure, whose
+stills are all still there.
+================
+*/
+async function recordRendererClosure( closure, manifest, fingerprint, outcomes ) {
+	const next = await monsterPortraitRendererFingerprint( manifest, readPortraitAsset, { closure } );
+	if ( next !== fingerprint ) {
+		await mkdir( CACHE_ROOT, { recursive: true } );
+		for ( const outcome of outcomes ) {
+			if ( outcome.source === "published" ) continue;
+			await writeFile(
+				path.join( CACHE_ROOT, monsterPortraitCacheKey( next, outcome.refObjId ) + ".png" ),
+				outcome.bytes
+			);
+		}
+	}
+	await writeJsonIfChanged( RENDERER_CLOSURE, { format: RENDERER_CLOSURE_FORMAT, files: closure } );
 }
 
 /*
@@ -338,7 +457,10 @@ buildMonsterPortraitAssets
 export async function buildMonsterPortraitAssets() {
 	const manifestData = JSON.parse( await readFile( path.join( publicRoot, "assets/npc/manifest.json" ), "utf8" ) );
 	const references = monsterPortraitReferences( manifestData );
-	const fingerprint = await monsterPortraitRendererFingerprint( manifestData ), rows = [], files = [];
+	const closure = await readRendererClosure();
+	const fingerprint = await monsterPortraitRendererFingerprint( manifestData, readPortraitAsset, { closure } ),
+		rows = [],
+		files = [];
 	const publishedIndex = await readFile( path.join( publicRoot, (PREFIX + "manifest.json").slice( 1 ) ), "utf8" )
 		.then( text => portraitManifestIndex( JSON.parse( text ) ) ).catch( () => new Map() );
 	// The viewer starts on the first still the cache cannot serve, so a
@@ -417,6 +539,16 @@ export async function buildMonsterPortraitAssets() {
 					null;
 			}
 		} );
+		if ( viewer ) {
+			const graph = viewer.server.environments?.client?.moduleGraph ?? viewer.server.moduleGraph;
+			const drawable = references.filter( portraitRowDrawable ).length;
+			const next = nextRendererClosure(
+				closure,
+				viewerClosure( graph.fileToModulesMap.keys() ),
+				collected.drawn === drawable && !collected.down
+			);
+			if ( next ) await recordRendererClosure( next, manifestData, fingerprint, collected.outcomes );
+		}
 		for ( const outcome of collected.outcomes ) {
 			const output = monsterPortraitPublishedPath( outcome.bytes ),
 				target = path.join( publicRoot, output.slice( 1 ) );

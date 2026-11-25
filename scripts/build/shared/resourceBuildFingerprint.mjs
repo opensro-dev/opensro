@@ -315,23 +315,6 @@ export async function dataRootsHash() {
 
 /*
 ================
-serverRosterRoots
-
-The server sources the roster exporter (sro-evidence) compiles from: the
-whole internal tree, since the roster joins enterworld, monster and more.
-================
-*/
-export function serverRosterRoots() {
-	return [
-		{ label: "server-go-mod", absolutePath: path.join( serverSourceRoot, "go.mod" ), source: true },
-		{ label: "server-go-sum", absolutePath: path.join( serverSourceRoot, "go.sum" ), source: true },
-		{ label: "server-cmd", absolutePath: path.join( serverSourceRoot, "cmd" ), source: true },
-		{ label: "server-internal", absolutePath: path.join( serverSourceRoot, "internal" ), source: true }
-	];
-}
-
-/*
-================
 computeResourceBuildFingerprint
 ================
 */

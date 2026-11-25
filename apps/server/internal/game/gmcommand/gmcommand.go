@@ -32,6 +32,10 @@ type Outcome struct {
 	// PrivilegeDenied marks a command from a character without GMPrivilege:
 	// silent on the wire, but an operator audit event (register.go).
 	PrivilegeDenied bool
+	// Notice, when non-nil, is a 0x3667 notice line register.go sends to
+	// every world-ready session of the sender's division (/NOTICE,
+	// notice.go).
+	Notice []byte
 }
 
 func refused(reason string) Outcome {
@@ -218,6 +222,8 @@ func dispatchGmCommand(deps Dependencies, presence PresenceView, divisionID stri
 		return handleRecallGuild(divisionID, sender, request, status)
 	case SubChatMute, SubChatUnmute, SubShadowMute, SubShadowUnmute, SubBlockLogout, SubAllowLogout:
 		return handleModeration(deps, divisionID, sender, request, status)
+	case SubNotice:
+		return handleNotice(divisionID, sender, request)
 	case SubLieName, SubRealName:
 		return handleWho(deps, presence, divisionID, request)
 	case SubFindUser:

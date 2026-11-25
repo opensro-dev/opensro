@@ -6,7 +6,10 @@ import { viewOf } from "@/engine/foundation/binary/byte-view";
 export function decodeCosRecord(
 	p: Uint8Array,
 	refs: ReadonlyMap<number, number>,
-	itemRefs: ReadonlyMap<number, number> = new Map()
+	itemRefs: ReadonlyMap<number, number> = new Map(),
+	// The rental kinds (inventory-item.ts): their rows carry the rent leg
+	// in the pet bag too (server wire rentrefs.go).
+	rentRefs: ReadonlySet<number> = new Set()
 ): CosRecord | null {
 	const v = viewOf( p );
 	let o = 0;
@@ -53,7 +56,7 @@ export function decodeCosRecord(
 			if ( slot >= status ) throw Error( "Invalid COS inventory slot" );
 			if ( slots.has( slot ) ) throw new Error( "Duplicate COS inventory slot" );
 			slots.add( slot );
-			const decoded = decodeInventoryItem( p, o, itemRefs, refs );
+			const decoded = decodeInventoryItem( p, o, itemRefs, refs, rentRefs );
 			o = decoded.next;
 			if ( decoded.item ) inventory.push( { ...decoded.item, slot } );
 		}

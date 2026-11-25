@@ -74,7 +74,11 @@ type serverInfo struct {
 	OnlinePlayers  int    `json:"onlinePlayers"`
 	Capacity       int    `json:"capacity"`
 	Operating      bool   `json:"operating"`
-	TransportURL   string `json:"transportUrl"`
+	// ComingSoon marks an announced shard the operator has not opened
+	// (SRO_COMING_SOON_SHARDS, #3925). Port-only, not native: the row
+	// carries no transport URL, so it can be shown but never entered.
+	ComingSoon   bool   `json:"comingSoon"`
+	TransportURL string `json:"transportUrl"`
 }
 
 /*
@@ -88,26 +92,54 @@ func (server *Server) handleServers(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	w.Header().Set("Cache-Control", "no-store")
-	writeJSON(w, http.StatusOK, serverRows(server.directory.Snapshot(server.now())))
+	writeJSON(w, http.StatusOK, serverListRows(server.directory.Snapshot(server.now()), server.comingSoonShards))
 }
 
 /*
 ================
 serverRows
 
-The public server list rows of a directory snapshot: the enabled,
-public shards. A disabled shard can never hold a lease or admit a
-login, so it is not a row, and a test shard is never public either:
-the development catalog carries one for its fixtures, and no catalog
-a host hands the Agent may leak it onto the title screen. An enabled
-shard with no live GameWorld stays listed, and the title shows it as
-Check.
+The native public server list: the enabled, public shards. A disabled
+shard can never hold a lease or admit a login, so it is not a row, and
+a test shard is never public either: the development catalog carries
+one for its fixtures, and no catalog a host hands the Agent may leak
+it onto the title screen. An enabled shard with no live GameWorld
+stays listed, and the title shows it as Check.
 ================
 */
 func serverRows(statuses []shard.Status) []serverInfo {
+	return serverListRows(statuses, false)
+}
+
+/*
+================
+serverListRows
+
+serverRows, plus - port-only, not native, behind SRO_COMING_SOON_SHARDS
+(#3925) - the announced-but-unopened shards when comingSoon is set: a
+disabled catalog shard also lists, marked ComingSoon and carrying no
+transport URL. It has no GameWorld and admission refuses it, so the
+row can be shown but never entered. Off is the native list above.
+================
+*/
+func serverListRows(statuses []shard.Status, comingSoon bool) []serverInfo {
 	rows := make([]serverInfo, 0, len(statuses))
 	for _, status := range statuses {
-		if !status.Enabled || status.Test {
+		if status.Test {
+			continue
+		}
+		if !status.Enabled {
+			if !comingSoon {
+				continue
+			}
+			rows = append(rows, serverInfo{
+				ID:             status.ID,
+				NativeServerID: status.NativeServerID,
+				NativeFarmID:   status.NativeFarmID,
+				Name:           status.Name,
+				Capacity:       status.Capacity,
+				ComingSoon:     true,
+			})
 			continue
 		}
 		rows = append(rows, serverInfo{

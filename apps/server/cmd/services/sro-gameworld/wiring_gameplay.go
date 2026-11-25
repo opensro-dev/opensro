@@ -142,6 +142,14 @@ type gameplayPlane struct {
 	// catalog every peer-shaped spawn draws from (wiring.go).
 	caravanPeers   *caravanPeerLeg
 	peerReferences *action.PeerReferenceCatalog
+	// caravanStrikeFrames are this tick's agent-strike publications,
+	// filled by the strike hook while the roster steps and flushed
+	// by caravanAgentsTick (slice 3e).
+	caravanStrikeFrames []simulation.DivisionFrames
+	// caravanChatLines are the lines the agents spoke this tick,
+	// filled by the chat hook while the roster steps and flushed as
+	// local chat by caravanAgentsTick (slice 4).
+	caravanChatLines []caravanChatLine
 }
 
 /*
@@ -516,6 +524,16 @@ func newGameplayPlane(
 	parties := party.NewRuntime(deps, presence)
 	parties.UseMemberVitals(items.GameplayVitals)
 	parties.UseLivePose(items.LiveSpawnFor)
+	parties.UseMemberGuild(func(divisionID string, character *enterworld.Character) string {
+		if character == nil || character.GuildID == nil || deps.Guilds == nil {
+			return ""
+		}
+		guild, ok := deps.Guilds.GuildRecord(divisionID, *character.GuildID)
+		if !ok {
+			return ""
+		}
+		return guild.Name
+	})
 	items.NextPartyLootMember = parties.Registry().NextLootMember
 	items.RewardActorPresent = func(division, name string) bool {
 		s, ok := presence.SessionByName(division, name)

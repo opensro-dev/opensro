@@ -57,6 +57,7 @@ export function uiPanels() {
 		"Skin change",
 		"Stall network",
 		"Storage",
+		"Styria Clash",
 		"System",
 		"Unique Status"
 	] as const;

@@ -156,6 +156,17 @@ const (
 	SubBlockLogout uint8 = 0xF9
 	SubAllowLogout uint8 = 0xFA
 
+	// SubNotice is the port's /NOTICE text (notice.go; not native - the
+	// v1.150 client's SR_IMPLE_COMMAND_* table has no notice word, and the
+	// original's notices came from the operator's server tools): subcmd,
+	// u16-sized UTF-8 text. The reply is EncodeModerationReply's.
+	SubNotice uint8 = 0xFB
+
+	// NoticeTextMaxBytes bounds the /NOTICE frame: the banner's
+	// MaxChatNoticeUnits UTF-16 units at four UTF-8 bytes each at most.
+	// The unit limit itself is the handler's, so the GM reads why.
+	NoticeTextMaxBytes = 400
+
 	// ModerationTextMaxBytes bounds a /MUTE reason or /SHADOWMUTE note.
 	ModerationTextMaxBytes = 1024
 
@@ -330,6 +341,16 @@ func DecodeGmCommand(payload []byte) (Request, error) {
 			}
 		}
 		request.Forge = string(textBytes)
+		return request, nil
+	}
+	if subcmd == SubNotice {
+		// subcmd, u16-sized UTF-8 text, nothing after it.
+		if request.Text, err = sizedText(reader, NoticeTextMaxBytes); err != nil {
+			return Request{}, err
+		}
+		if reader.Remaining() != 0 {
+			return Request{}, fmt.Errorf("gmcommand: trailing /NOTICE bytes")
+		}
 		return request, nil
 	}
 	if subcmd == SubMakeItem {

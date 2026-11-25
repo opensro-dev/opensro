@@ -32,7 +32,7 @@ import { createWorldStream } from "./world/world";
 import { createPresentation } from "./presentation/presentation";
 import type { SessionState } from "@/engine/contracts/session";
 import { createAssets } from "./assets/assets";
-import { createReleaseWatch } from "./release/release-watch";
+import { createReleaseWatch, releaseNotice } from "./release/release-watch";
 import { createInput } from "./input/input";
 import { createPlatform } from "./platform/platform";
 import { createBuildInfo } from "./build-info/build-info";
@@ -1486,9 +1486,11 @@ export function startRuntime(
 					world.retryTransient();
 					navigation.retryTransient();
 				}
-				releaseWatch.step( now, phaseTrigger || visibleAgain );
-				// A server's 426 is the same news, learned from a refused request.
-				platform.presentUpdate( releaseWatch.newerAvailable() || sessionState?.releaseOutdated === true );
+				// A server's 426 is the same news, learned from a refused request; it
+				// says the server moved, not that the page has (release-watch.ts).
+				const releaseRefused = sessionState?.releaseOutdated === true;
+				releaseWatch.step( now, phaseTrigger || visibleAgain, releaseRefused );
+				platform.presentUpdate( releaseNotice( releaseWatch.newerAvailable(), releaseRefused ) );
 				markStage( "ui" );
 				renderer.setDamageText( characters.damageText() );
 				// Hidden maintenance still acknowledges every ordered publication, but

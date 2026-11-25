@@ -103,6 +103,7 @@
 		"live-weather.test.mjs",
 		"local-mover.test.mjs",
 		"main-popup-drag.test.mjs",
+		"maintenance-notice.test.mjs",
 		"mall-use.test.mjs",
 		"market-window.test.mjs",
 		"minimap.test.mjs",

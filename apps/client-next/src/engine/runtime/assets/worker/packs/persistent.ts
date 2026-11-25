@@ -7,6 +7,17 @@ One owner for durable verified bytes, bounded publication and LRU order,
 kept in Cache Storage keyed by content digest. Cache failure is an
 optional-storage failure, never an asset admission failure.
 
+The store is STORE_SHARDS caches, picked by the digest's first hex digit.
+One cache cannot be listed past a size limit: Chrome refuses keys() with
+"Operation too large" (kErrorQueryTooLarge) once its answer grows past
+what one query may return, tens of thousands of entries. The single cache
+of the v1 store reached that on players who explored (2026-11-25: Jangan
+downloaded again on every refresh). Its reads still hit, but the inventory
+rebuild failed before every write, so nothing new was stored and nothing
+was evicted. A shard holds a sixteenth of the entries. A shard that still
+cannot be listed is dropped and starts empty rather than freezing the
+store, and the v1 cache is deleted on the first open.
+
 The budget is half the origin quota, between MIN_BUDGET_BYTES and
 MAX_BUDGET_BYTES: browsers grant an origin 60% of the disk (Chrome,
 Safari) or the smaller of 10% and 10 GiB (Firefox best effort), so the
@@ -39,6 +50,18 @@ release, so they are the first evicted.
 
 import { isResponseByteLimitError, readBytes } from "@/engine/foundation/assets/read-bytes";
 
+// The store's caches: STORE_SHARDS of them, named STORE_PREFIX plus the hex
+// digit their digests start with, and the older single cache they replace.
+const STORE_PREFIX = "sro-next-verified-v2-";
+const STORE_SHARDS = 16;
+// Entries one shard may hold. Headless Chromium answered keys() for 17,000
+// store keys and refused 18,000 ("Operation too large", measured
+// 2026-11-25); 12,000 keeps a third in reserve, about 190,000 entries in all.
+export const MAX_SHARD_ENTRIES = 12000;
+const LEGACY_STORES = [ "sro-next-verified-v1" ];
+// The deadline storage() gives an operation; its rejection is a slow backend,
+// not a store that cannot be listed.
+const CACHE_TIMEOUT_MESSAGE = "Cache operation timed out";
 const MIN_BUDGET_BYTES = 512 * 1024 * 1024;
 const MAX_BUDGET_BYTES = 4 * 1024 * 1024 * 1024;
 // Share of the origin quota this store may fill; the rest stays for the
@@ -57,6 +80,9 @@ const MAX_CACHE_WAITERS = 64;
 // memory, so a burst beyond them skips persistence rather than growing.
 const MAX_PENDING_WRITES = 64;
 const MAX_QUEUED_BYTES = 32 << 20;
+
+// The store's open caches, indexed by shard (shardOf).
+type Shards = readonly Cache[];
 
 /*
 ================
@@ -77,7 +103,12 @@ budgetOf turns the origin quota into this store's byte budget
 ================
 */
 export function createPersistentAssets( budgetOf: ( quota: number | undefined ) => number = budgetFromQuota ) {
-	let opened: Promise<Cache | null> | null = null, tail: Promise<void> = Promise.resolve();
+	let opened: Promise<Shards | null> | null = null, tail: Promise<void> = Promise.resolve();
+	// Shards dropped because they could not be listed (rebuild), and whether
+	// this worker has deleted the legacy single cache yet.
+	let resets = 0, legacyDeleted = false;
+	// Inventory entries per shard (shardOf), kept with the inventory.
+	let shardEntries: number[] = new Array( STORE_SHARDS ).fill( 0 );
 	let inventory: Map<string, number> | null = null, total = 0, budget = MIN_BUDGET_BYTES, estimatedAt = -Infinity;
 	// Keys of the current manifest's startup packs and members (setStartup).
 	let startup = new Set<string>();
@@ -171,7 +202,7 @@ export function createPersistentAssets( budgetOf: ( quota: number | undefined ) 
 					overdue = true;
 					stalled++;
 				}
-				deadline.abort( Error( "Cache operation timed out" ) );
+				deadline.abort( Error( CACHE_TIMEOUT_MESSAGE ) );
 				fail( deadline.signal.reason );
 				drain();
 			};
@@ -267,11 +298,21 @@ export function createPersistentAssets( budgetOf: ( quota: number | undefined ) 
 		if ( stalled > 0 ) return Promise.resolve( null );
 		// A failed or late open is retried by the next caller, never kept for
 		// the session.
-		opened ??= storage( () =>
-			typeof caches === "undefined" ?
-				Promise.resolve( null ) :
-				caches.open( "sro-next-verified-v1" )
-		).catch( () => {
+		opened ??= storage( async () => {
+			if ( typeof caches === "undefined" ) return null;
+			const shards: Cache[] = await Promise.all(
+				Array.from( { length: STORE_SHARDS }, ( _, n ) => caches.open( STORE_PREFIX + n.toString( 16 ) ) )
+			);
+			// The legacy cache serves nothing the shards do, and one that outgrew
+			// keys() can never be evicted: delete it once, in the background.
+			if ( !legacyDeleted ) {
+				legacyDeleted = true;
+				for ( const name of LEGACY_STORES ) {
+					void Promise.resolve().then( () => caches.delete( name ) ).catch( () => {} );
+				}
+			}
+			return shards;
+		} ).catch( () => {
 			errors++;
 			opened = null;
 			return null;
@@ -282,7 +323,7 @@ export function createPersistentAssets( budgetOf: ( quota: number | undefined ) 
 		if ( openingWaiters >= MAX_CACHE_WAITERS ) return Promise.resolve( null );
 		openingWaiters++;
 		const opening = opened;
-		return new Promise<Cache | null>( ( resolve, reject ) => {
+		return new Promise<Shards | null>( ( resolve, reject ) => {
 			const cancel = () => reject( signal!.reason );
 			signal?.addEventListener( "abort", cancel, { once: true } );
 			void opening.then( resolve, reject ).finally( () => {
@@ -299,6 +340,42 @@ export function createPersistentAssets( budgetOf: ( quota: number | undefined ) 
 	*/
 	function key( origin: string, digest: string ) {
 		return origin + "/assets/.verified/" + digest;
+	}
+	/*
+	================
+	shardOf
+
+	The shard index of a stored key: its digest's first hex digit. A key
+	that does not end in a hex digest (none does) lands in shard 0.
+	================
+	*/
+	function shardOf( url: string ) {
+		const digit = parseInt( url.charAt( url.lastIndexOf( "/" ) + 1 ), 16 );
+		return Number.isNaN( digit ) ? 0 : digit % STORE_SHARDS;
+	}
+	/*
+	================
+	cacheFor
+
+	The shard that holds a stored key. open() always opens STORE_SHARDS
+	caches, so every shardOf index names one.
+	================
+	*/
+	function cacheFor( shards: Shards, url: string ): Cache {
+		return shards[shardOf( url )]!;
+	}
+	/*
+	================
+	forget
+
+	Drops a key from the inventory and its totals, if it is listed.
+	================
+	*/
+	function forget( url: string ) {
+		if ( !inventory?.has( url ) ) return;
+		total -= inventory.get( url )!;
+		inventory.delete( url );
+		shardEntries[shardOf( url )]!--;
 	}
 	/*
 	================
@@ -331,13 +408,10 @@ export function createPersistentAssets( budgetOf: ( quota: number | undefined ) 
 		if ( removals.size >= MAX_CACHE_OPERATIONS ) return Promise.resolve();
 		const operation = tail.then( async () => {
 			try {
-				const cache = await open();
-				if ( !cache ) return;
-				await storage( () => cache.delete( url ) );
-				if ( inventory?.has( url ) ) {
-					total -= inventory.get( url )!;
-					inventory.delete( url );
-				}
+				const shards = await open();
+				if ( !shards ) return;
+				await storage( () => cacheFor( shards, url ).delete( url ) );
+				forget( url );
 				touched.delete( url );
 			} catch {
 				errors++;
@@ -354,20 +428,42 @@ export function createPersistentAssets( budgetOf: ( quota: number | undefined ) 
 	rebuild
 
 	The inventory from Cache Storage, with total set to its size: one
-	keys() walk, sizes from the admitted manifests (addSizes). Only keys
+	keys() walk per shard, sizes from the admitted manifests (addSizes). A
+	shard whose keys() is refused for anything but the deadline (Chrome's
+	"Operation too large") cannot be listed, so it cannot be evicted
+	either: it is deleted, the store reopens on the next write and that
+	shard starts empty. The write in hand is skipped. Only keys
 	no manifest names have their size header read, MAX_CACHE_OPERATIONS at
 	a time; one read per entry used to hold every write for minutes on a
 	store of tens of thousands. Unnamed keys lead the LRU order, so
 	eviction takes them first.
 	================
 	*/
-	async function rebuild( cache: Cache ) {
-		const requests = await storage( () => cache.keys(), undefined, undefined, undefined, CACHE_SCAN_MS );
+	async function rebuild( shards: Shards ) {
+		const requests: Request[] = [];
+		for ( let n = 0; n < shards.length; n++ ) {
+			try {
+				requests.push(
+					...await storage( () => shards[n]!.keys(), undefined, undefined, undefined, CACHE_SCAN_MS )
+				);
+			} catch ( error ) {
+				if ( error instanceof Error && error.message === CACHE_TIMEOUT_MESSAGE ) throw error;
+				await storage( () => caches.delete( STORE_PREFIX + n.toString( 16 ) ) );
+				resets++;
+				opened = null;
+				throw error;
+			}
+		}
+		// A key lives in one shard; list it once even if a backend answers
+		// every shard from one store.
+		const listed = new Set<string>();
 		// Classify every key before the first await: the HD index may add
 		// sizes during the scan, and a key it names then must not be counted
 		// both as read and as named.
 		const unnamed: Request[] = [], named: [string, number][] = [];
 		for ( const request of requests ) {
+			if ( listed.has( request.url ) ) continue;
+			listed.add( request.url );
 			const size = sizes.get( request.url );
 			if ( size === undefined ) unnamed.push( request );
 			else named.push( [ request.url, size ] );
@@ -379,7 +475,9 @@ export function createPersistentAssets( budgetOf: ( quota: number | undefined ) 
 			// Only the size header is read: dispose cancels the body at
 			// settlement, before the slot frees (storage).
 			const responses = await Promise.all(
-				batch.map( request => storage( () => cache.match( request ), undefined, undefined, release ) )
+				batch.map( request =>
+					storage( () => cacheFor( shards, request.url ).match( request ), undefined, undefined, release )
+				)
 			);
 			batch.forEach( ( request, n ) => {
 				const size = Number( responses[n]?.headers.get( "content-length" ) ) || 0;
@@ -400,6 +498,8 @@ export function createPersistentAssets( budgetOf: ( quota: number | undefined ) 
 		}
 		touched.clear();
 		total = sum;
+		shardEntries = new Array( STORE_SHARDS ).fill( 0 );
+		for ( const url of rebuilt.keys() ) shardEntries[shardOf( url )]!++;
 		return rebuilt;
 	}
 	/*
@@ -412,8 +512,10 @@ export function createPersistentAssets( budgetOf: ( quota: number | undefined ) 
 			skipped++;
 			return;
 		}
-		const cache = await open();
-		if ( !cache ) return;
+		const opening = await open();
+		if ( !opening ) return;
+		// evict below is a closure: name the narrowed store for it.
+		const shards: Shards = opening;
 		try {
 			if ( performance.now() - estimatedAt >= 60000 ) {
 				estimatedAt = performance.now();
@@ -423,7 +525,7 @@ export function createPersistentAssets( budgetOf: ( quota: number | undefined ) 
 				} catch {}
 			}
 			if ( bytes.length > budget ) return;
-			if ( !inventory ) inventory = await rebuild( cache );
+			if ( !inventory ) inventory = await rebuild( shards );
 			const target = key( origin, digest );
 			if ( inventory.has( target ) ) {
 				touch( target );
@@ -434,31 +536,40 @@ export function createPersistentAssets( budgetOf: ( quota: number | undefined ) 
 			evict
 			================
 			*/
-			async function evict() {
-				// Least recently used first, skipping the startup entries.
+			async function evict( shard?: number ) {
+				// Least recently used first (in one shard when named), skipping
+				// the startup entries.
 				let victim: [string, number] | undefined;
 				for ( const entry of inventory!.entries() ) {
-					if ( !startup.has( entry[0] ) ) {
+					if ( !startup.has( entry[0] ) && (shard === undefined || shardOf( entry[0] ) === shard) ) {
 						victim = entry;
 						break;
 					}
 				}
 				if ( !victim ) return false;
 				const [url, size] = victim;
-				await storage( () => cache!.delete( url ) );
+				await storage( () => cacheFor( shards, url ).delete( url ) );
 				total -= size;
 				inventory!.delete( url );
+				shardEntries[shardOf( url )]!--;
 				evictions++;
 				return true;
 			}
 			while ( total + bytes.length > budget && await evict() ) {}
+			// A shard past MAX_SHARD_ENTRIES could no longer be listed.
+			const shard = shardOf( target );
+			while ( shardEntries[shard]! >= MAX_SHARD_ENTRIES && await evict( shard ) ) {}
+			if ( shardEntries[shard]! >= MAX_SHARD_ENTRIES ) {
+				skipped++;
+				return;
+			}
 			// Only startup entries are left: the write is optional, the budget is not.
 			if ( total + bytes.length > budget ) {
 				skipped++;
 				return;
 			}
 			const put = () =>
-				cache.put(
+				cacheFor( shards, target ).put(
 					target,
 					new Response( bytes, {
 						headers: {
@@ -486,6 +597,7 @@ export function createPersistentAssets( budgetOf: ( quota: number | undefined ) 
 			}
 			inventory.set( target, bytes.length );
 			total += bytes.length;
+			shardEntries[shard]!++;
 			writes++;
 		} catch {
 			errors++;
@@ -516,18 +628,19 @@ export function createPersistentAssets( budgetOf: ( quota: number | undefined ) 
 		async has( origin: string, digest: string, signal?: AbortSignal ): Promise<boolean | null> {
 			try {
 				signal?.throwIfAborted();
-				const cache = await open( signal );
-				if ( !cache ) return null;
+				const shards = await open( signal );
+				if ( !shards ) return null;
+				const url = key( origin, digest );
 				// Presence needs no body: dispose hands it to cleanup at settlement,
 				// before the slot frees (storage), whether or not this caller waits.
 				const response = await storage(
-					() => cache.match( key( origin, digest ) ),
+					() => cacheFor( shards, url ).match( url ),
 					signal,
 					undefined,
 					release
 				);
 				if ( !response ) return false;
-				touch( key( origin, digest ) );
+				touch( url );
 				return true;
 			} catch {
 				errors++;
@@ -546,15 +659,12 @@ export function createPersistentAssets( budgetOf: ( quota: number | undefined ) 
 				signal?.throwIfAborted();
 				const url = key( origin, digest );
 				if ( removals.has( url ) ) return null;
-				const cache = await open( signal );
-				if ( !cache ) return null;
-				const response = await storage( () => cache.match( url ), signal, release );
+				const shards = await open( signal );
+				if ( !shards ) return null;
+				const response = await storage( () => cacheFor( shards, url ).match( url ), signal, release );
 				unclaimed = response;
 				if ( !response ) {
-					if ( inventory?.has( url ) ) {
-						total -= inventory.get( url )!;
-						inventory.delete( url );
-					}
+					forget( url );
 					touched.delete( url );
 					misses++;
 					return null;
@@ -669,6 +779,7 @@ export function createPersistentAssets( budgetOf: ( quota: number | undefined ) 
 			queuedBytes,
 			skipped,
 			writesStopped,
+			resets,
 			budget,
 			pinned: inventory ? [ ...inventory.keys() ].filter( url => startup.has( url ) ).length : 0
 		})
