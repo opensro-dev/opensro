@@ -1085,8 +1085,8 @@ test("a server speaking another release protocol marks the session outdated and 
 	await settle();
 	const state = session.step();
 	assert.equal( state.releaseOutdated, true );
-	assert.match( state.error, /newer version/i );
-	// Every later state keeps saying so: the page must be refreshed.
+	assert.match( state.error, /being updated/i );
+	// Every later state keeps saying so: the page reloads once a newer one is served.
 	session.command( { kind: "servers", apiBase: command.apiBase } );
 	session.step();
 	await settle();
