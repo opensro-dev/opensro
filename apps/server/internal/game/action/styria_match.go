@@ -80,6 +80,7 @@ type styriaMatch struct {
 	mu           sync.Mutex
 	division     string
 	lease        instance.Lease
+	seq          uint32 // the event's match number (styria_status.go)
 	startMs      int64
 	endsMs       int64
 	closeMs      int64 // 0 until the match clock ends
@@ -206,8 +207,11 @@ func (rt *Runtime) styriaStartMatch(division string, entrants []StyriaRegistrant
 	}
 
 	// Publish last: until this store no other lane can see the match,
-	// so the build above needs no lock of its own.
+	// so the build above needs no lock of its own. The match takes
+	// the event's next number as it publishes (styria_status.go).
 	rt.styria.mu.Lock()
+	rt.styria.matchSeq++
+	match.seq = rt.styria.matchSeq
 	rt.styria.matches[division] = match
 	rt.styria.mu.Unlock()
 }

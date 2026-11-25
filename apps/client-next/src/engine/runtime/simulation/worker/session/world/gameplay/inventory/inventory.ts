@@ -1070,7 +1070,7 @@ exchange's, else the category-1 notice code it raised (0 for none).
 ================
 		*/
 		exchangeReceive( frame: import("@/engine/contracts/network").WireFrame, localGid = 0 ): number | null {
-			const outcome = exchangeFrame( exchange, frame, refs, objRefs, localGid );
+			const outcome = exchangeFrame( exchange, frame, refs, objRefs, localGid, rentRefs );
 			if ( !outcome ) return null;
 			if ( outcome.swap ) {
 				slots = applyExchangeSwap( slots, outcome.swap, equipmentSlotCount ?? 13, inventorySlotCount ?? 45 );
@@ -1099,7 +1099,14 @@ not the stall's.
 ================
 		*/
 		stallReceive( frame: import("@/engine/contracts/network").WireFrame, localGid: number ): StallOutcome | null {
-			const outcome = stallFrame( stall, frame, { localGid, refs, objRefs, names, widePrice: raisedGoldCaps } );
+			const outcome = stallFrame( stall, frame, {
+				localGid,
+				refs,
+				objRefs,
+				rentRefs,
+				names,
+				widePrice: raisedGoldCaps
+			} );
 			if ( !outcome ) return null;
 			const firstBag = equipmentSlotCount ?? 13, endBag = inventorySlotCount ?? 45;
 			if ( outcome.receive?.length || outcome.give?.length ) {

@@ -218,6 +218,8 @@ export interface StallContext {
 	readonly localGid: number;
 	readonly refs: ReadonlyMap<number, number>;
 	readonly objRefs?: ReadonlyMap<number, number>;
+	// The rental kinds: a listed row of one carries the rent leg.
+	readonly rentRefs?: ReadonlySet<number>;
 	// Item display names by reference id, for the sale line.
 	readonly names?: ReadonlyMap<number, string>;
 	// Port-only, not native: SRO_RAISED_GOLD_CAPS writes the offer price as
@@ -298,7 +300,7 @@ export function stallFrame( state: StallState, frame: WireFrame, ctx: StallConte
 		return String.fromCharCode( ...p.subarray( at, at + n ) );
 	};
 	const item = () => {
-		const decoded = decodeInventoryItem( p, o, ctx.refs, ctx.objRefs );
+		const decoded = decodeInventoryItem( p, o, ctx.refs, ctx.objRefs, ctx.rentRefs );
 		o = decoded.next;
 		if ( !decoded.item ) throw Error( "Empty stall item" );
 		return decoded.item;

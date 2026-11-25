@@ -51,15 +51,18 @@ func (game *gameplayPlane) wireCaravanAgents() {
 		memStore = s
 	}
 	rt := caravanai.NewRuntime(cfg, memStore, caravanai.WorldHooks{
-		OnAgentStrike: func(division, agentName, targetPlayerName string, nowMs int64) (defeated bool) {
-			return game.caravanAgentStrike(division, agentName, targetPlayerName, nowMs)
-		},
 		OnAgentChat: func(division, agentName string, regionID uint16, message string) {
 			log.WithFields(log.Fields{
 				"division": division,
 				"agent":    agentName,
 				"region":   regionID,
 			}).Debugf("caravan-ai chat: %s", message)
+		},
+		// Slice 3e (#3704): agents strike back. The action runtime
+		// lands the blow through the player-victim lanes; the tick
+		// flushes its frames.
+		OnAgentStrike: func(division, agentName, targetPlayerName string, nowMs int64) (defeated bool) {
+			return game.caravanAgentStrike(division, agentName, targetPlayerName, nowMs)
 		},
 		Walker: caravanWalker{water: game.water},
 	})
@@ -134,6 +137,8 @@ func (game *gameplayPlane) caravanAgentsTick(ticker *simulation.Ticker, nowMs in
 		entities := game.caravanAgents.AgentEntities(game.divisionID)
 		frames = game.caravanPeers.frames(game.divisionID, viewers, entities)
 	}
+	// Slice 3e (#3704): this tick's agent-strike publications ride out
+	// with the presentation frames.
 	frames = append(frames, game.caravanStrikeFrames...)
 	game.caravanStrikeFrames = nil
 	return frames
@@ -721,7 +726,6 @@ func (dir caravanAgentDirectory) AgentByGID(division string, gid uint32) (action
 			continue
 		}
 		target := action.AgentTarget{
-			GID:     gid,
 			Name:    entity.Name,
 			JobType: entity.JobType,
 			Pose: simulation.Spawn{RegionID: entity.Pose.RegionID,
@@ -730,20 +734,24 @@ func (dir caravanAgentDirectory) AgentByGID(division string, gid uint32) (action
 			HP:           entity.HP,
 			MaxHP:        entity.MaxHP,
 			LastAttacker: entity.LastAttacker,
+			// Slice 3e (#3704): the strike-back identity - the gid a
+			// cast frame names, the roster skill it casts, the player
+			// it is fighting (its own fight-back admission), and its
+			// weapon's shipped ranges.
+			GID:          gid,
 			SkillID:      entity.SkillID,
 			CombatTarget: entity.CombatTarget,
 		}
 		if model := dir.game.deps.Roster.ModelByCodename(entity.ModelCode); model != nil {
 			target.BodyRadius = model.BodyRadius
 		}
-		if dir.game.deps.Items == nil {
-			return target, true
-		}
-		if weapon, ok := dir.game.deps.Items.ItemRefByCodename(entity.WeaponCode); ok && weapon.Combat != nil {
-			target.PhysicalAttackMin = float64(weapon.Combat.PhysicalAttack.Minimum.Min)
-			target.PhysicalAttackMax = float64(weapon.Combat.PhysicalAttack.Maximum.Max)
-			target.MagicalAttackMin = float64(weapon.Combat.MagicalAttack.Minimum.Min)
-			target.MagicalAttackMax = float64(weapon.Combat.MagicalAttack.Maximum.Max)
+		if dir.game.deps.Items != nil {
+			if weapon, ok := dir.game.deps.Items.ItemRefByCodename(entity.WeaponCode); ok && weapon.Combat != nil {
+				target.PhysicalAttackMin = float64(weapon.Combat.PhysicalAttack.Minimum.Min)
+				target.PhysicalAttackMax = float64(weapon.Combat.PhysicalAttack.Maximum.Max)
+				target.MagicalAttackMin = float64(weapon.Combat.MagicalAttack.Minimum.Min)
+				target.MagicalAttackMax = float64(weapon.Combat.MagicalAttack.Maximum.Max)
+			}
 		}
 		return target, true
 	}

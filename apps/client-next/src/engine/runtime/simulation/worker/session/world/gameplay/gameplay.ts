@@ -425,6 +425,7 @@ import { createServerEvent } from "./server-event/server-event";
 import { createUniqueDamageRank } from "./unique-rank/unique-rank";
 import { createJobHonor } from "./job-honor/job-honor";
 import { createJobHonorTiers } from "./job-honor/job-honor-tiers";
+import { createStyria } from "./styria/styria";
 import { createUniqueStatus } from "./unique-status/unique-status";
 import { createHwanLevel } from "./hwan-level/hwan-level";
 import { createReverseUserPoint } from "./reverse-user-point/reverse-user-point";
@@ -825,6 +826,7 @@ export function createGameplay(
 		uniqueRank = createUniqueDamageRank(),
 		jobHonor = createJobHonor(),
 		jobHonorTiers = createJobHonorTiers(),
+		styria = createStyria(),
 		uniqueStatus = createUniqueStatus(),
 		mostWanted = createMostWanted(),
 		hwanLevel = createHwanLevel(),
@@ -2092,6 +2094,7 @@ clears it when another character enters.
 		uniqueRank.clear();
 		jobHonor.clear();
 		jobHonorTiers.clear();
+		styria.clear();
 		uniqueStatus.clear();
 		mostWanted.clear();
 		hwanLevel.clear();
@@ -4839,6 +4842,12 @@ Packet handling must not depend on which HUD panel is currently open.
 					dirty = true;
 					return true;
 				}
+				// Port-only (#3648): the Styria Clash standing
+				// (styria.ts), under SRO_STYRIA_CLASH.
+				if ( styria.receive( frame ) ) {
+					dirty = true;
+					return true;
+				}
 				// Port-only (#3530): the tier titles' roster. Contained:
 				// a malformed roster costs the roster, never the session.
 				if ( jobHonorTiers.receiveContained( frame ) ) {
@@ -5694,7 +5703,7 @@ Packet handling must not depend on which HUD panel is currently open.
 					return true;
 				}
 				if ( frame.opcode === COS_RECORD_CREATE_OPCODE ) {
-					const record = decodeCosRecord( frame.payload, cosRefs, cosItemRefs );
+					const record = decodeCosRecord( frame.payload, cosRefs, cosItemRefs, inventory.rentRefs() );
 					if ( !record ) return false;
 					if ( !cosRecords.has( record.gid ) && cosRecords.size >= 64 ) {
 						throw new Error( "COS record capacity exceeded" );
@@ -5907,7 +5916,7 @@ Packet handling must not depend on which HUD panel is currently open.
 							.getUint32( 2, true ),
 						record = cosRecords.get( gid );
 					if ( !record ) throw Error( "Absent COS ground owner" );
-					const next = cosGroundResult( record, frame.payload, cosItemRefs );
+					const next = cosGroundResult( record, frame.payload, cosItemRefs, inventory.rentRefs() );
 					if ( frame.payload[1] !== 0x11 || !cosPickup.receipt( gid ) ) {
 						inventory.cosGrounded( frame.payload );
 					}
@@ -5936,7 +5945,7 @@ Packet handling must not depend on which HUD panel is currently open.
 							.getUint32( 2, true ),
 						record = cosRecords.get( gid );
 					if ( !record ) throw Error( "Absent COS grant owner" );
-					const next = cosGrantResult( record, frame.payload, cosItemRefs );
+					const next = cosGrantResult( record, frame.payload, cosItemRefs, inventory.rentRefs() );
 					// 756CF0's print case (756EEC) is shared by ground (0) and
 					// quest (3) sources and dispatches on the destination: a
 					// grant into the pet bag (0x7A) prints with grant rules -
@@ -7044,6 +7053,10 @@ The published plane when something changed since the last take, else null.
 				...(sroMacro.view() ? { sroMacro: sroMacro.view() } : {}),
 				uniqueDamageRank: uniqueRank.current(),
 				jobHonor: jobHonor.current(),
+				// Port-only (#3648): the Styria Clash standing and its
+				// latched result (styria.ts), under SRO_STYRIA_CLASH.
+				styria: styria.current(),
+				styriaResult: styria.result(),
 				// Port-only (#3530): the tier titles' roster
 				// (job-honor-tiers.ts), under SRO_JOB_HONOR.
 				jobHonorTiers: jobHonorTiers.tiers(),
