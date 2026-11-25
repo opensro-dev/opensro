@@ -36,7 +36,7 @@ func (rt *Runtime) beginUntargetedCast(division string, c, snapshot *enterworld.
 	}
 	var refusal uint16
 	if !rt.deps.Update(c, "prepare-untargeted-cast", func() bool {
-		if !enterworld.CharacterAlive(c) || !enterworld.SkillLearned(c, skill.ID) {
+		if !enterworld.CharacterAlive(c) || !enterworld.SkillUsable(c, skill) {
 			return false
 		}
 		_, refusal = rt.offensiveCost(division, c, skill, now)
@@ -65,7 +65,7 @@ time, resolves at once (skillareaburst.go). refused reports a refusal.
 ================
 */
 func (rt *Runtime) admitUntargetedCast(division string, snapshot *enterworld.Character, cast wire.SkillAction, skill enterworld.SkillRow, now int64, pending *pendingProjectileCast) (OpResult, bool) {
-	if cast.HasTarget || cast.HasGroundTarget || !enterworld.CharacterAlive(snapshot) || !enterworld.SkillLearned(snapshot, skill.ID) {
+	if cast.HasTarget || cast.HasGroundTarget || !enterworld.CharacterAlive(snapshot) || !enterworld.SkillUsable(snapshot, skill) {
 		return OpResult{DiagnosticRefusal: "untargeted-cast-admission-refused"}, true
 	}
 	if snapshot.ActiveCOS != nil && snapshot.ActiveCOS.Mounted || snapshot.NativeTeleportMode != 0 {
