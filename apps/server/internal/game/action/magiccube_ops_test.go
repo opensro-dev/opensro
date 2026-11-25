@@ -36,13 +36,13 @@ func magicCubeFixture(t *testing.T) (*Runtime, *enterworld.Character) {
 	}
 	items["ITEM_ETC_ARCHEMY_REINFORCE_RECIPE_WEAPON_A"] = &enterworld.ItemRef{
 		RefObjID: 2151, Codename: "ITEM_ETC_ARCHEMY_REINFORCE_RECIPE_WEAPON_A",
-		TypeIDs: [4]int64{3, 3, 10, 1},
+		TypeIDs:      [4]int64{3, 3, 10, 1},
 		NativeFields: enterworld.NewNativeFields(map[string]float64{"maxStack": 50}),
 		CanDrop:      true,
 	}
 	items["ITEM_ETC_ARCHEMY_REINFORCE_RECIPE_WEAPON_B"] = &enterworld.ItemRef{
 		RefObjID: 2152, Codename: "ITEM_ETC_ARCHEMY_REINFORCE_RECIPE_WEAPON_B",
-		TypeIDs: [4]int64{3, 3, 10, 1},
+		TypeIDs:      [4]int64{3, 3, 10, 1},
 		NativeFields: enterworld.NewNativeFields(map[string]float64{"maxStack": 50}),
 		CanDrop:      true,
 	}

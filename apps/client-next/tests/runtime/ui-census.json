@@ -873,7 +873,7 @@
 				},
 				"step": {
 					"reads": 53,
-					"writes": 48
+					"writes": 49
 				},
 				"step#anon34": {
 					"reads": 4,
@@ -1393,6 +1393,10 @@
 					"reads": 1,
 					"writes": 0
 				},
+				"magic": {
+					"reads": 1,
+					"writes": 0
+				},
 				"mall": {
 					"reads": 1,
 					"writes": 0
@@ -1774,7 +1778,7 @@
 					"writes": 0
 				},
 				"magic": {
-					"reads": 2,
+					"reads": 3,
 					"writes": 0
 				},
 				"mainPopup": {
@@ -1938,8 +1942,8 @@
 					"writes": 0
 				},
 				"step": {
-					"reads": 96,
-					"writes": 60
+					"reads": 97,
+					"writes": 61
 				},
 				"step#anon140": {
 					"reads": 1,
@@ -1965,11 +1969,7 @@
 					"reads": 1,
 					"writes": 0
 				},
-				"step#anon393": {
-					"reads": 1,
-					"writes": 0
-				},
-				"step#anon396": {
+				"step#anon394": {
 					"reads": 1,
 					"writes": 0
 				},
@@ -1977,7 +1977,11 @@
 					"reads": 1,
 					"writes": 0
 				},
-				"step#anon435": {
+				"step#anon398": {
+					"reads": 1,
+					"writes": 0
+				},
+				"step#anon439": {
 					"reads": 1,
 					"writes": 0
 				},
@@ -2509,7 +2513,7 @@
 				},
 				"magic": {
 					"reads": 0,
-					"writes": 1
+					"writes": 5
 				},
 				"main": {
 					"reads": 0,
@@ -2677,7 +2681,7 @@
 				},
 				"sendGameplay": {
 					"reads": 0,
-					"writes": 9
+					"writes": 10
 				},
 				"shop": {
 					"reads": 0,
@@ -2709,7 +2713,7 @@
 				},
 				"step": {
 					"reads": 3,
-					"writes": 92
+					"writes": 93
 				},
 				"structure": {
 					"reads": 0,
@@ -3157,7 +3161,7 @@
 					"reads": 6,
 					"writes": 4
 				},
-				"event#anon94": {
+				"event#anon97": {
 					"reads": 1,
 					"writes": 0
 				},
@@ -4141,7 +4145,7 @@
 					"reads": 1,
 					"writes": 0
 				},
-				"step#anon420": {
+				"step#anon424": {
 					"reads": 1,
 					"writes": 0
 				},
@@ -4909,6 +4913,10 @@
 					"reads": 1,
 					"writes": 0
 				},
+				"magic": {
+					"reads": 1,
+					"writes": 0
+				},
 				"main": {
 					"reads": 1,
 					"writes": 0
@@ -5570,7 +5578,7 @@
 					"writes": 0
 				},
 				"step": {
-					"reads": 111,
+					"reads": 113,
 					"writes": 2
 				},
 				"step#anon140": {
@@ -7562,7 +7570,7 @@
 					"writes": 0
 				},
 				"avatar": {
-					"reads": 13,
+					"reads": 14,
 					"writes": 0
 				},
 				"beginShopDialog": {
@@ -7754,7 +7762,7 @@
 					"writes": 0
 				},
 				"magic": {
-					"reads": 4,
+					"reads": 9,
 					"writes": 0
 				},
 				"main": {
@@ -12427,6 +12435,24 @@
 			"fn": "event",
 			"kind": "exact",
 			"ordinal": 1,
+			"pattern": "magic-cube-close"
+		},
+		{
+			"fn": "event",
+			"kind": "exact",
+			"ordinal": 1,
+			"pattern": "magic-cube-use-cancel"
+		},
+		{
+			"fn": "event",
+			"kind": "exact",
+			"ordinal": 1,
+			"pattern": "magic-cube-use-confirm"
+		},
+		{
+			"fn": "event",
+			"kind": "exact",
+			"ordinal": 1,
 			"pattern": "magic-option-thumb"
 		},
 		{
@@ -12949,6 +12975,18 @@
 			"fn": "event",
 			"kind": "prefix",
 			"ordinal": 1,
+			"pattern": "magic-cube-slot:"
+		},
+		{
+			"fn": "event",
+			"kind": "prefix",
+			"ordinal": 2,
+			"pattern": "magic-cube-slot:"
+		},
+		{
+			"fn": "event",
+			"kind": "prefix",
+			"ordinal": 1,
 			"pattern": "map-town:"
 		},
 		{
@@ -13207,7 +13245,7 @@
 	"source": "src/engine/runtime/ui/ui.ts",
 	"summary": {
 		"fields": 309,
-		"routes": 855,
+		"routes": 860,
 		"sharedFields": 252
 	}
 }

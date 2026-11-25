@@ -104,6 +104,9 @@ export const ITEM_WIRE_FIELDS = [
 	"itemParam3_2a4",
 	"itemParam4_2a8",
 	"itemParam5_2ac",
+	// Magic Cube capacity (Param9) and category filter (Param10).
+	"itemParam9_2bc",
+	"itemParam10_2c0",
 	"stoneFamilyMask",
 	"stoneTooltipMask"
 ] as const;

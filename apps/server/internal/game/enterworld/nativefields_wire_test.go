@@ -37,20 +37,21 @@ func TestItemWireFieldsKeepsTheReadSet(t *testing.T) {
 		"reqInt":                 35,
 		"itemParam3_2a4":         120,
 		"canUse":                 0x2001,
+		"itemParam9_2bc":         10,
+		"itemParam10_2c0":        1,
 		// Never read by the client: must not pass.
-		"canSell":        1,
-		"twoHanded":      1,
-		"sellPrice":      427,
-		"canTrade":       1,
-		"itemParam9_2bc": 7,
+		"canSell":   1,
+		"twoHanded": 1,
+		"sellPrice": 427,
+		"canTrade":  1,
 	})
 	wire := ItemWireFields(fields)
-	for _, name := range []string{"varianceIntMin1c0", "price", "itemParam1_29c", "useCooldownDuration528", "associatedSkillId", "stoneTooltipMask", "country", "reqStr", "reqInt", "itemParam3_2a4", "canUse"} {
+	for _, name := range []string{"varianceIntMin1c0", "price", "itemParam1_29c", "useCooldownDuration528", "associatedSkillId", "stoneTooltipMask", "country", "reqStr", "reqInt", "itemParam3_2a4", "canUse", "itemParam9_2bc", "itemParam10_2c0"} {
 		if _, ok := wire.Lookup(name); !ok {
 			t.Errorf("read field %q missing from the wire value", name)
 		}
 	}
-	for _, name := range []string{"canSell", "twoHanded", "sellPrice", "canTrade", "itemParam9_2bc"} {
+	for _, name := range []string{"canSell", "twoHanded", "sellPrice", "canTrade"} {
 		if _, ok := wire.Lookup(name); ok {
 			t.Errorf("unread field %q passed to the wire value", name)
 		}
@@ -68,8 +69,8 @@ func TestItemWireFieldsKeepsTheReadSet(t *testing.T) {
 	if err := json.Unmarshal(blob, &published); err != nil {
 		t.Fatalf("wire object does not parse: %v", err)
 	}
-	if len(published) != 11 {
-		t.Errorf("wire object %s has %d fields, want the 11 read ones", blob, len(published))
+	if len(published) != 13 {
+		t.Errorf("wire object %s has %d fields, want the 13 read ones", blob, len(published))
 	}
 }
 

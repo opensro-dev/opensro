@@ -6,7 +6,7 @@ magiccube.go - Magic Cube deposit and withdraw (0x706D 0x27 / 0x28)
 Port-only, not native (#3906). v1.150 has no Magic Cube. Behind
 SRO_MAGIC_CUBE (Runtime.MagicCube). Push: bag elixir → cube linked
 storage. Pop: linked storage → bag. Layout pinned on the v1.696 client
-jump table (0x7f7be0 / 0x7f7b90); full refusal is notice 01:8A.
+jump table (client 0x7f7be0 / client 0x7f7b90); full refusal is notice 01:8A.
 
 ===========================================================================
 */

@@ -337,11 +337,11 @@ const (
 	ErrCodeCannotDealAtShop uint8 = 0x3B
 	// ErrCodeMagicCubeFull is UIIT_STT_MAGIC_CUBE_INVENTORY_FULL (01:8A):
 	// deposit into a full Magic Cube (v1.696 client notice table at
-	// 0xbf42c0 index 123; issue #3906).
+	// client 0xbf42c0 index 123; issue #3906).
 	ErrCodeMagicCubeFull uint8 = 0x8A
 	// ErrCodeMagicCubeStoreSell is UIIT_STT_MAGIC_CUBE_STORE_SELL_ERROR
 	// (01:8E): selling a non-empty Magic Cube to a merchant (v1.696
-	// notice table index 127; issue #3906).
+	// client notice table index 127; issue #3906).
 	ErrCodeMagicCubeStoreSell uint8 = 0x8E
 	// ErrCodeLockedByOther is UIIT_MSG_STRGERR_LOCKED_BY_OTHER_ONE
 	// (01:12, banner + guide type 5): the drop is inside its ownership

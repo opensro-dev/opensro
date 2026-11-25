@@ -216,7 +216,13 @@ func isVersionMismatch(err error) bool {
 // (port-only, #3704 slice 5), so the daily cap survives a restart. A
 // Hunter without a row has been paid nothing that day; the offline
 // upgrade rewrites no record.
-const CurrentVersion = 60
+// Version 62 adds the optional Magic Cube linked-storage on item rows
+// (the step skips 60-61: the field sits inside item rows an older
+// binary strictly decodes, so it cannot ride the read window, #3093).
+// (linkedStorage, port-only, #3906): capacity and elixir rows nested
+// under a cube. Rows saved earlier carry none and are not cubes with
+// contents; the offline upgrade rewrites no record.
+const CurrentVersion = 62
 
 /*
 ================
@@ -290,7 +296,7 @@ var storeSteps = map[int]storeStep{
 	// 44 to 51 are no longer the current schema: each low end is the
 	// layout it ran at, and its high end follows the current layout
 	// (layouts 25 and up always end at the current one). The current
-	// schema (60) takes the wide low end.
+	// schema (62) takes the wide low end.
 	44: {true, "optional top-level ravenRefugeReadyAtMs recovery deadline", 12, 17},
 	45: {true, "no record change; layout 13 adds trade_history", 13, 17},
 	46: {true, "optional per-character Nasrun token balance and daily count", 13, 17},
@@ -304,6 +310,7 @@ var storeSteps = map[int]storeStep{
 	58: {false, "optional per-character inventoryAdditionUsed and account expansionUses (later capacity addition items, #4240); the warehouse count nests in the guild record", 15, 17},
 	59: {true, "no record change; layout 16 adds beta_silk_progress (the hourly silk clock, #4429)", 16, 17},
 	60: {true, "no record change; layout 17 adds caravan_escort_days (the AI caravan daily escort cap, #3704 slice 5)", 5, 17},
+	62: {false, "optional per-item linkedStorage (Magic Cube elixir rows, #3906)", 5, 17},
 }
 
 // SkillSeedFunc resolves the current racial base-skill set while preserving

@@ -315,38 +315,11 @@ func buildCharacterProjection(deps *Deps, divisionID string, character *Characte
 	hold.Mark("entry")
 	objectID := ObjectIDForCharacter(character)
 
-	var encodeItems func(rows []WireItem) []EquipItemRow
-	encodeItems = func(rows []WireItem) []EquipItemRow {
-		equipItems := make([]EquipItemRow, 0, len(rows))
-		for _, item := range rows {
-			body := BuildItemBody(item)
-			bodyInts := make([]int, len(body))
-			for index, value := range body {
-				bodyInts[index] = int(value)
-			}
-			row := EquipItemRow{
-				RefObjID: item.RefObjID,
-				Slot:     item.Slot,
-				Body:     bodyInts,
-			}
-			// Port-only (#3906): publish a Magic Cube's linked elixir rows
-			// beside the CSOItem body so the browser window can draw them.
-			if item.LinkedStorage != nil && item.LinkedStorage.Capacity > 0 {
-				nested := encodeItems(InventoryWireItems(item.LinkedStorage.Rows))
-				row.LinkedStorage = &LinkedStorageRow{
-					Capacity: item.LinkedStorage.Capacity,
-					Rows:     nested,
-				}
-			}
-			equipItems = append(equipItems, row)
-		}
-		return equipItems
-	}
-	equipItems := encodeItems(inventoryRows)
+	equipItems := encodeEquipItems(inventoryRows)
 	hold.Mark("items")
 	var avatarItems []EquipItemRow
 	if character.AvatarInventory != nil {
-		avatarItems = encodeItems(InventoryWireItems(character.AvatarInventory.Rows))
+		avatarItems = encodeEquipItems(InventoryWireItems(character.AvatarInventory.Rows))
 	}
 
 	refObjSnapshot := filteredRefObjSnapshot(deps)

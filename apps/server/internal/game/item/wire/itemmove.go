@@ -417,12 +417,12 @@ func readSubMove(r *Reader) (SubMove, error) {
 const MoveTypeAvatarToPlayer uint8 = 0x23
 const MoveTypePlayerToAvatar uint8 = 0x24
 
-// Magic Cube inventory ops (v1.188 _STRG_MOVE_ITEM / CGMagicCubeStorageOP;
-// issue #3906). Decimal 39/40 in the shard procedure; the 0x706D movement
-// bytes are the same values. v1.696 client jump table 0x7f6e4c:
-// 0x27 → 0x7f7be0 [src][dst][u16 qty]; 0x28 → 0x7f7b90 [u32 RefObjID] then
-// the same three fields (struct+0x38; result apply at 0xc9f631 feeds it to
-// the withdrawn elixir's RefObjID).
+// Magic Cube inventory ops (issue #3906): 0x706D movement bytes 0x27/0x28
+// (decimal 39/40 in the later shard procedure). v1.696 client jump table
+// at client 0x7f6e4c: 0x27 → client 0x7f7be0 [src][dst][u16 qty];
+// 0x28 → client 0x7f7b90 [u32 RefObjID] then the same three fields
+// (struct+0x38; client result apply feeds it to the withdrawn elixir's
+// RefObjID).
 const MoveTypePushIntoMagicCube uint8 = 0x27
 const MoveTypePopFromMagicCube uint8 = 0x28
 
@@ -527,10 +527,10 @@ func (q ItemMoveRequest) Encode() ([]byte, error) {
 		// Cases 2 and 3 (and 0x1E / 0x1F): [src][dst][u32 npc], no count.
 		w.U8(q.SourceSlot).U8(q.DestSlot).U32(q.NpcGID)
 	case MoveTypePushIntoMagicCube:
-		// v1.696 0x7f7be0: bag elixir slot, cube bag slot, quantity.
+		// v1.696 client 0x7f7be0: bag elixir slot, cube bag slot, quantity.
 		w.U8(q.SourceSlot).U8(q.DestSlot).U16(q.Quantity)
 	case MoveTypePopFromMagicCube:
-		// v1.696 0x7f7b90: elixir RefObjID, cube bag slot, receive slot, qty.
+		// v1.696 client 0x7f7b90: elixir RefObjID, cube bag slot, receive slot, qty.
 		if q.RefObjID == 0 {
 			return nil, fmt.Errorf("missing Magic Cube elixir identity")
 		}
@@ -852,41 +852,6 @@ func EncodePickupGoldResult(amount uint32) []byte {
 		U8(MoveTypePickup).
 		U8(PickupGoldSlot).
 		U32(amount).
-		Payload()
-}
-
-// EncodePushIntoMagicCubeResult returns a successful type-0x27 payload:
-// [0x01][0x27][src][dst][qty u16]. v1.696 body reader 0x7f7be0.
-/*
-================
-EncodePushIntoMagicCubeResult
-================
-*/
-func EncodePushIntoMagicCubeResult(sourceSlot, destSlot uint8, quantity uint16) []byte {
-	return NewWriter(6).
-		U8(ResultSuccess).
-		U8(MoveTypePushIntoMagicCube).
-		U8(sourceSlot).
-		U8(destSlot).
-		U16(quantity).
-		Payload()
-}
-
-// EncodePopFromMagicCubeResult returns a successful type-0x28 payload:
-// [0x01][0x28][u32 RefObjID][src][dst][qty u16]. v1.696 body reader 0x7f7b90.
-/*
-================
-EncodePopFromMagicCubeResult
-================
-*/
-func EncodePopFromMagicCubeResult(refObjID uint32, sourceSlot, destSlot uint8, quantity uint16) []byte {
-	return NewWriter(10).
-		U8(ResultSuccess).
-		U8(MoveTypePopFromMagicCube).
-		U32(refObjID).
-		U8(sourceSlot).
-		U8(destSlot).
-		U16(quantity).
 		Payload()
 }
 
