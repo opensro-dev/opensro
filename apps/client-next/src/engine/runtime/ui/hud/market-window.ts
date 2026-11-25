@@ -159,9 +159,14 @@ export function drawMarketWindow( frame: UiAuthoredFrame, frameDraw: MarketPaint
 	} );
 	frameDraw.closeButton( frame, px + WIDTH - 26, py + 10, "market-close" );
 	const pen = penOf( frame, frameDraw, view, px, py );
+	// A Silk listing is paid from Earned Silk first, then Silk (#4133), so
+	// both balances show, as the Item Mall header splits them.
+	const mine = view.market?.mine;
 	pen.text(
-		`Gold: ${marketAmount( view.gold )}  ·  Silk: ${marketAmount( view.market?.mine?.silk ?? 0 )}`,
-		[ px + WIDTH - 340, py + 8, 300, 22 ],
+		`Gold: ${marketAmount( view.gold )}  ·  Silk: ${marketAmount( mine?.silk ?? 0 )}  ·  Earned: ${
+			marketAmount( mine?.earnedSilk ?? 0 )
+		}`,
+		[ px + WIDTH - 420, py + 8, 380, 22 ],
 		GOLD,
 		2
 	);
