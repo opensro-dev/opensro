@@ -177,7 +177,7 @@ func TestPersonView(t *testing.T) {
 			t.Fatalf("account %s should read online", account.Account)
 		}
 	}
-	if len(person.History) != 3 || person.History[0].Session != "s2" {
+	if len(person.History) != 3 || person.History[0].Started != now-hourMs {
 		t.Fatalf("history: got %+v, want three spans newest first", person.History)
 	}
 	link, linked := findLink(person.PossibleLinks, "acct-a", "acct-c")
@@ -323,14 +323,14 @@ func TestPersonHistoryCarriesSpanActivity(t *testing.T) {
 	if err != nil || !found {
 		t.Fatalf("person: found=%v err=%v", found, err)
 	}
-	byID := map[string]PersonSpan{}
+	byStart := map[int64]PersonSpan{}
 	for _, entry := range person.History {
-		byID[entry.Session] = entry
+		byStart[entry.Started] = entry
 	}
-	if got := byID["s1"].Activity; got == nil || got.FramesIn != 77 || got.Opcodes[0].Count != 20 {
+	if got := byStart[now-3*hourMs].Activity; got == nil || got.FramesIn != 77 || got.Opcodes[0].Count != 20 {
 		t.Fatalf("closed span activity %+v", got)
 	}
-	if byID["s2"].Activity != nil {
+	if byStart[now-hourMs].Activity != nil {
 		t.Fatal("an open span carried a summary")
 	}
 }

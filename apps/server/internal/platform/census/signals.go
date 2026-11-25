@@ -65,6 +65,7 @@ SessionSignals
 
 One session in the signals window with the signals it fired
 (possibly none: an ordinary session listed so staff see the field).
+Session is a per-answer label (sessionLabels), never the journal's name.
 ================
 */
 type SessionSignals struct {
@@ -151,8 +152,9 @@ func (s *Service) Signals() (Signals, error) {
 	if answer.Truncated {
 		sessions = sessions[:signalsMax]
 	}
+	labels := sessionLabels{}
 	for _, span := range sessions {
-		entry := SessionSignals{Session: span.Session, Account: span.Account, Character: span.Character,
+		entry := SessionSignals{Session: labels.of(span.Session), Account: span.Account, Character: span.Character,
 			Started: span.Started, Ended: span.Ended, Open: span.Ended == 0, Estimated: span.Estimated,
 			Signals: []Signal{}}
 		length := span.end(now) - span.Started
