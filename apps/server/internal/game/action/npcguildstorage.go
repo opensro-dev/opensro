@@ -309,6 +309,23 @@ func (rt *Runtime) applyGuildStorageMove(division string, c *enterworld.Characte
 			}
 		}
 	}
+	// Port-only (#4491): the same judgment on the way out. A pet that
+	// entered the chest before the deposit gate existed still carries
+	// its bound rows, and a withdraw would hand them to whichever
+	// member takes the pet. The chest row's record is dormant - a pet
+	// in the chest is nobody's live companion - so it decides alone.
+	// Refusing removes nothing: the row stays the guild's until an
+	// operator empties the pet, where a sweep would have to destroy
+	// the bound rows outright.
+	if personal == wire.MoveTypeStorageWithdraw && store != nil {
+		if room, refusal, err := store.TransactGuildStorageAs(division, c.ID, nil); err == nil && !refusal.Refused() {
+			for _, row := range room.Rows {
+				if row.Slot == int64(q.SourceSlot) && row.Summon != nil && cosContainerHoldsBoundRow(row.Summon.Container) {
+					return failureResult(errCodeInvalidStorageTarget)
+				}
+			}
+		}
+	}
 	if code := rt.guildStorageHoldCode(division, c, gid, !goldMove); code != 0 {
 		return failureResult(code)
 	}
