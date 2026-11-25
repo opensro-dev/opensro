@@ -34,6 +34,7 @@ import { claimPublicFile } from "../shared/publicationLedger.mjs";
 import { buildStatePath } from "../../lib/generatedRoot.mjs";
 import { parseCharacterBsr } from "./formats.mjs";
 import { loadEquipmentRecords } from "./equipmentVisualRecords.mjs";
+import { loadVisualChanges } from "./visualChanges.mjs";
 import { equipmentGlowCatalog, equipmentGlowModelIds, equipmentGlowGlb } from "./equipmentGlowMetadata.mjs";
 import { publishEquipmentParticleMetadata } from "./equipmentParticles.mjs";
 import { modelReadRoots, publicAssetsRoot, publicRoot } from "../world/paths.mjs";
@@ -343,6 +344,37 @@ export async function buildEquipmentVisuals( dress, options = {} ) {
 						code: row.code,
 						key: body + "_" + sha256Hex( key ).slice( 0, 20 ),
 						held: row.slot === GLOW_SLOT_WEAPON || row.slot === GLOW_SLOT_SHIELD
+					} );
+				}
+				record.bodies[body] = entry;
+			}
+		}
+	}
+	// Port-only (SRO_NASRUN, #4407): the lent Spirit skills' costume pieces,
+	// avatar records under reserved negative ids (visualChanges.mjs).
+	dress.visualChanges = {};
+	for ( const piece of loadVisualChanges( retailTextdataRoot ) ) {
+		const record = { ...piece.record, model: piece.models.M, bodies: {} };
+		out[piece.id] = record;
+		(dress.visualChanges[piece.skillId] ??= []).push( piece.id );
+		for ( const race of [ "CH", "EU" ] ) {
+			for ( const sex of [ "M", "W" ] ) {
+				const body = `${race}_${sex}`, paths = [ sex === "M" ? piece.models.M : piece.models.W ];
+				const key = cacheKey( body, paths );
+				let entry = cache.get( key );
+				if ( !entry ) {
+					const donor = chooseDonor( roster, race, sex );
+					if ( !donor ) throw Error( `Missing donor ${body}` );
+					entry = {};
+					cache.set( key, entry );
+					sets.push( {
+						entry,
+						body,
+						donor,
+						paths,
+						code: record.code,
+						key: body + "_" + sha256Hex( key ).slice( 0, 20 ),
+						held: false
 					} );
 				}
 				record.bodies[body] = entry;

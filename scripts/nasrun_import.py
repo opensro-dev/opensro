@@ -363,6 +363,7 @@ def remove_skills(output, prior, marker, shard, manifest):
 	strip_texts(safe_target(output / TEXT_ROOT, NAME_TABLE), set(prior.get("texts", [])))
 	if shard.exists():
 		shard.unlink()
+	safe_target(output / TEXT_ROOT, VISUAL_CHANGE_TABLE).unlink(missing_ok=True)
 	if manifest.exists():
 		names = [row[0] for row in tables.table_rows(manifest.read_bytes()) if row]
 		kept = [name for name in names if sro_pk2.fold_ascii(name) != SKILL_SHARD]
@@ -384,6 +385,14 @@ def remove_skills(output, prior, marker, shard, manifest):
 # The later clients' active-Spirit icon edge: a 512x32 sheet of sixteen
 # 32x32 cells (item-slot-effects.ts spiritActiveOverlay).
 SPIRIT_EDGE_SHEET = "icon/item/etc/icon_edge_nasrun.ddj"
+
+# The later clients' character visual change table (#4407): a lent skill's
+# buff (ConditionID 3, the skill codename in StrPram1) dresses its caster in
+# the Spirit's costume, one row per piece: its slot mask, priority,
+# animation set and male/female BSR. The v1.150 tree has no such table;
+# the import stages the lent skills' rows alone, as the client ships them.
+VISUAL_CHANGE_TABLE = "charactervisualchange.txt"
+VC_SERVICE, VC_SKILL, VC_BSR_M, VC_BSR_F = 0, 9, 19, 20
 
 
 def add_nasrun_skills(vsro_root, native, output):
@@ -446,8 +455,20 @@ def add_nasrun_skills(vsro_root, native, output):
 		# The worn, awake Spirit's icon edge (#4384): the later clients
 		# animate it over the Spirit's avatar socket (item-slot-effects.ts).
 		icons.add(("Media", SPIRIT_EDGE_SHEET))
+		# The lent skills' costume rows and the BSRs they name (#4407).
+		visual_text = read_later(VISUAL_CHANGE_TABLE) if tables.TEXTDATA + VISUAL_CHANGE_TABLE in index else b""
+		visual_rows = [row for row in tables.table_rows(visual_text)
+			if len(row) > VC_BSR_F and row[VC_SERVICE].strip() == "1" and row[VC_SKILL].strip() in SKILL_CODES]
+		for row in visual_rows:
+			for column in (VC_BSR_M, VC_BSR_F):
+				icons.add(("Data", shared.normalized_path(row[column])))
 		assets = shared.copy_resource_closure(icons, native, output, archives)
 	write_atomically(shard, cap110.encode_rows(staged))
+	visual_path = safe_target(text_root, VISUAL_CHANGE_TABLE)
+	if visual_rows:
+		write_atomically(visual_path, cap110.encode_rows(visual_rows))
+	else:
+		visual_path.unlink(missing_ok=True)
 	write_atomically(name_path, merged_names)
 	current = manifest.read_bytes() if manifest.exists() else (native / TEXT_ROOT / SKILL_MANIFEST).read_bytes()
 	names = [row[0] for row in tables.table_rows(current) if row]
@@ -458,6 +479,7 @@ def add_nasrun_skills(vsro_root, native, output):
 		"laterArchiveHashes": identities,
 		"skills": {row[SKILL_CODENAME]: int(row[SKILL_ID]) for row in staged},
 		"texts": sorted(after - known), "absentDescriptions": absent, "assets": assets,
+		"visualChanges": len(visual_rows),
 		"limits": [
 			"Lent by a worn, awake Devil's Spirit alone (nasrun/ability.go); no learn row or mastery names them.",
 			"The event Spirit's skill (31141 in the VSRO client) is not imported, as the event copies are not.",
