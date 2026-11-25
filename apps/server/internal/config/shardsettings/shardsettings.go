@@ -141,6 +141,12 @@ var Settings = []Setting{
 	// Build time only: honor_items.py and honor_shops.py read it when the
 	// server data is built. Degrees 10-11 need SRO_CAP110_ITEMS too.
 	{Env: "SRO_HONOR_GOODS", NomadVar: "honor_goods", Default: "off"},
+	// Port-only, not native (#2846; owner 2026-11-25, on): the Alexandria
+	// variant's shops stock the port's own degree 10-11 goods - the full
+	// degree 10-11 alchemy band and its gear passes - instead of only what
+	// one official source had active. Build time only:
+	// build_alexandria_variant.py reads it when the server data is built.
+	{Env: "SRO_ALEXANDRIA_PORT_STOCK", NomadVar: "alexandria_port_stock", Default: "off"},
 	{Env: "SRO_CAP110_SKILLS", NomadVar: "cap110_skills", Default: "off"},
 	// Port-only, not native: the Blue Berserk quest chains (the 95/100
 	// Army and Military Tests and the Alexandria 105/110 steps) with what

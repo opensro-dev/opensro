@@ -90,6 +90,7 @@ var catalogueExempt = map[string]string{
 	"SRO_CAP110_SET_BONUSES":                   "wearing a set changes derived character stats; the catalogue publishes the set items and no set-bonus table",
 	"SRO_CAP110_ITEMS":                         "a build input consumed when the server data is built; the catalogue publishes the built data",
 	"SRO_HONOR_GOODS":                          "a build input consumed when the server data is built; the catalogue publishes the built data",
+	"SRO_ALEXANDRIA_PORT_STOCK":                "a build input consumed when the server data is built; the catalogue publishes the built data",
 	"SRO_CAP110_SKILLS":                        "a build input consumed when the server data is built; the catalogue publishes the built data",
 	"SRO_MALL_AVATARS":                         "a build input consumed when the server data is built; the catalogue publishes the built data",
 	"SRO_HALLOWEEN_HELMET_SEAL":                "the seal restricts trading the event helmets at runtime; items.json publishes the helmets either way",
