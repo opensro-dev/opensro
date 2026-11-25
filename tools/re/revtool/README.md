@@ -323,6 +323,7 @@ json.dump({"format": "sro-bn-function-names", "version": 1,
 ```
 py -3 -m unittest tools.re.revtool.test_revtool_cli_contract
 py -3 -m unittest tools.re.revtool.test_revtool_index_and_unpayable
+py -3 -m unittest tools.re.revtool.test_revtool_pipe
 py -3 -m unittest tools.re.revtool.test_revtool_port
 py -3 -m unittest tools.re.revtool.test_revtool_rizin
 py -3 -m unittest tools.re.revtool.test_revtool_seed

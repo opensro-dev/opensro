@@ -95,12 +95,19 @@ DEFAULT_EVIDENCE_LOCK = os.path.join(DATA_DIR, "evidence-lock.json")
 
 
 def resolve_default_binary():
+	"""
+	The retail client: REVTOOL_BINARY, else SRO_Client.exe beside the
+	main checkout (a worktree's own parent holds none), else beside this
+	checkout. With none found the bare name stays, and rizin's open
+	refuses it loudly (revtool_pipe.RizinExited); it used to spin.
+	"""
 	env = os.environ.get("REVTOOL_BINARY")
 	if env:
 		return env
-	beside_repo = os.path.join(WORKSPACE_ROOT, "SRO_Client.exe")
-	if os.path.exists(beside_repo):
-		return beside_repo
+	for root in (os.path.dirname(MAIN_CHECKOUT_ROOT), WORKSPACE_ROOT):
+		candidate = os.path.join(root, "SRO_Client.exe")
+		if os.path.exists(candidate):
+			return candidate
 	return "SRO_Client.exe"
 
 
