@@ -157,19 +157,24 @@ function shownTiming( notice: SystemNotice | null, timing: NoticeTiming ): Notic
 	return { showMs: Math.min( own.showMs, timing.showMs ), fadeMs: Math.min( own.fadeMs, timing.fadeMs ) };
 }
 
+// The notification row's native origin: 100 px from the top, between the
+// unique row (130 is below it) and the quest row (160).
+export const NOTICE_ROW_Y = 100;
+
 /*
 ================
 noticeBannerRow
 
 The notification row's plate choice (port-only, #1976): a line that
 announces a seal drop wears its tier's weight. A reinforcement success
-takes the later client's centre banner (#3260): the violet centre
-plate, worn at screen centre - but only while its art is published
-(centreArt); a build without the v1.696 import keeps the native plate,
-as does every failure, which the later client never centres. Every
-other notice - academy, guild war, friends, letters, plain server
-notices - keeps the native plate exactly: crimson, hugging the
-caption, the shipped alpha.
+takes the later client's violet centre plate (#3260) - but only while
+its art is published (centreArt); a build without the v1.696 import
+keeps the native plate, as does every failure. The plate stays on the
+notice row (NOTICE_ROW_Y) with every other notice: drawn at screen
+centre it sat on the player's own character (owner, BUG-100,
+2026-11-25). Every other notice - academy, guild war, friends,
+letters, plain server notices - keeps the native plate exactly:
+crimson, hugging the caption, the shipped alpha.
 ================
 */
 export function noticeBannerRow(
@@ -180,7 +185,7 @@ export function noticeBannerRow(
 	readonly textRgb: readonly [number, number, number];
 	readonly frame: BannerPlateStyle;
 	readonly paths: readonly string[];
-	readonly centred: boolean;
+	readonly y: number;
 } {
 	if ( centreArt && banner.centreSuccess() ) {
 		return {
@@ -188,20 +193,20 @@ export function noticeBannerRow(
 			textRgb: NOTICE_TEXT_RGB,
 			frame: {},
 			paths: centreBannerPaths,
-			centred: true
+			y: NOTICE_ROW_Y
 		};
 	}
 	const tier = banner.sealTier();
 	if ( tier !== undefined ) {
 		const style = sealBannerStyle( tier );
-		return { color: style.plate, textRgb: style.textRgb, frame: style.frame, paths: style.paths, centred: false };
+		return { color: style.plate, textRgb: style.textRgb, frame: style.frame, paths: style.paths, y: NOTICE_ROW_Y };
 	}
 	return {
 		color: NOTICE_PLATE,
 		textRgb: NOTICE_TEXT_RGB,
 		frame: {},
 		paths: notificationBannerPaths,
-		centred: false
+		y: NOTICE_ROW_Y
 	};
 }
 

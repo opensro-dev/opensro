@@ -12180,9 +12180,8 @@ export function createUi( ports: UiPorts ) {
 				// Port-only (#1976): only a seal drop's notice takes its
 				// tier's weight (noticeBannerRow); every other notice on
 				// this row keeps the native plate untouched. A reinforcement
-				// success takes the later client's centre banner (#3260)
-				// while its art is published, centred on the desktop;
-				// compact mode still stacks it with the other rows.
+				// success wears the later client's violet plate (#3260)
+				// while its art is published, on this same row (BUG-100).
 				const noticeRow = noticeBannerRow(
 					notificationBanner,
 					centreBannerPaths.every( p => !!resources.size( p ) )
@@ -12195,18 +12194,16 @@ export function createUi( ports: UiPorts ) {
 						y: 130,
 						color: [ 0, 52, 92 ] as const,
 						textRgb: undefined as readonly [number, number, number] | undefined,
-						frame: {},
-						centred: false
+						frame: {}
 					},
 					{
 						value: notificationBanner.value( hudCopy ),
 						alpha: notificationBanner.alpha(),
 						paths: noticeRow.paths,
-						y: 100,
+						y: noticeRow.y,
 						color: noticeRow.color,
 						textRgb: noticeRow.textRgb,
-						frame: noticeRow.frame,
-						centred: noticeRow.centred
+						frame: noticeRow.frame
 					},
 					{
 						value: questBanner.value(),
@@ -12215,8 +12212,7 @@ export function createUi( ports: UiPorts ) {
 						y: 160,
 						color: [ 0, 91, 66 ] as const,
 						textRgb: undefined as readonly [number, number, number] | undefined,
-						frame: {},
-						centred: false
+						frame: {}
 					}
 				];
 				if ( top !== undefined ) rows.sort( ( a, b ) => a.y - b.y );
@@ -12233,9 +12229,7 @@ export function createUi( ports: UiPorts ) {
 					const lineHeight = text.extentHeight( 0, 2 ),
 						width = Math.ceil( Math.max( 0, ...lines.map( value => text.run( value, 2 ).width ) ) ),
 						height = lineHeight * lines.length,
-						y = top === undefined ?
-							(row.centred ? Math.max( 0, (h - height) / 2 ) : row.y) :
-							bottom,
+						y = top === undefined ? row.y : bottom,
 						x = (w >> 1) - (width >> 1);
 					quads.push(
 						...uniqueBannerQuads(
