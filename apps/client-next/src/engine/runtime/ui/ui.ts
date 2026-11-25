@@ -598,7 +598,9 @@ import {
 	itemIsMallItem,
 	itemIsRare,
 	itemSlotBlockedOverlay,
-	itemSlotExchangeOverlay
+	itemSlotExchangeOverlay,
+	slotGlowOverlay,
+	slotSeed
 } from "@/engine/foundation/ui/item-slot-effects";
 import {
 	COS_CLASS_ATTACK,
@@ -21711,15 +21713,16 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 							const icon = iconPath( prize.icon );
 							if ( icon ) image( r, icon );
 							itemCount( { quantity: prize.quantity }, r );
-							// INFERENCE: 642550 sets the chosen slot's selected byte (+0x4FE) and 641DD0 clears the
-							// others, which the native slot draws as a highlight (565850). The effect's art is not
-							// recovered, so the port outlines the chosen slot in gold.
+							// 642550 arms the chosen prize slot's glow (CIFSlotWithHelp_SetRentGlow
+							// 54FAA0, selected byte +0x4FE) and 641DD0 clears the others; 565850
+							// draws it as the summoned companion's pt_edge_effect loop.
 							if ( frame.entry === entry ) {
-								const gold: UiQuad["color"] = [ 1, 0.82, 0.25, 1 ];
-								rect( [ r[0] - 1, r[1] - 1, r[2] + 2, 2 ], gold );
-								rect( [ r[0] - 1, r[1] + r[3] - 1, r[2] + 2, 2 ], gold );
-								rect( [ r[0] - 1, r[1] - 1, 2, r[3] + 2 ], gold );
-								rect( [ r[0] + r[2] - 1, r[1] - 1, 2, r[3] + 2 ], gold );
+								const glow = slotGlowOverlay(
+									r,
+									slotSeed( "gacha-prize:" + entry ),
+									view?.simulationTimeMs ?? uiNow
+								);
+								image( glow.rect, glow.path, white, glow.uv );
 							}
 							controls.push( {
 								id: "gacha-prize:" + entry,

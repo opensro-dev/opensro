@@ -76,6 +76,7 @@
 		"fortress-war-apply-help.test.mjs",
 		"friend-list-native.test.mjs",
 		"frontend.test.mjs",
+		"gacha-prize-glow.test.mjs",
 		"gacha-window.test.mjs",
 		"gender-tool.test.mjs",
 		"gm-console-input.test.mjs",
