@@ -17,7 +17,9 @@ breaking it; a build that dies leaves no journal behind.
 ===========================================================================
 """
 import script_paths  # noqa: F401  (puts scripts/ and its build folders on sys.path, #3410)
+import contextlib
 import importlib
+import io
 import os
 import sys
 import tempfile
@@ -138,8 +140,12 @@ class VariantSteps(unittest.TestCase):
 		# A change the reader's effect does not show: the reader reruns,
 		# the downstream step replays.
 		(source / "s.txt").write_bytes(b"AA")
-		run_build(self.variant, steps, roots)
+		said = io.StringIO()
+		with contextlib.redirect_stdout(said):
+			run_build(self.variant, steps, roots)
 		self.assertEqual(counters, {"reader": 2, "downstream": 1})
+		# A rerun names the key part that moved, as --explain would.
+		self.assertIn("step reader: stale: sources" + chr(10), said.getvalue())
 		self.assertEqual((self.variant / "extracted" / "d.txt").read_bytes(), b"down:AA")
 		# A change the effect does show: the downstream step reruns too.
 		(source / "s.txt").write_bytes(b"bb")

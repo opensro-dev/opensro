@@ -910,7 +910,8 @@ class Runner:
 		# Every earlier step is settled, so their results are in hand.
 		later = tuple(step["later"]()) if step["later"] else ()
 		later_key = arguments_digest(later) if later else ""
-		if entry is not None and entry.get("key") == self.key_of(step, entry.get("reads"), self.state, later_key):
+		now = None if entry is None else self.key_parts(step, entry.get("reads"), self.state, later_key)
+		if now is not None and entry.get("key") == parts_key(step["name"], now):
 			for relative, sha in entry["effect"]:
 				target = self.variant / relative
 				if sha is None:
@@ -920,6 +921,12 @@ class Runner:
 			self.state = chain(self.state, entry["effect"])
 			self.records.append(entry)
 			return decode_result(entry["result"], self.variant), "replayed"
+		if now is not None:
+			# Said, not silent: r204l's rebuild reran avatars-v1696 with no
+			# source or script changed, and nothing named the part that moved.
+			was = entry.get("parts") or {}
+			moved = [name for name in now if was.get(name) != now[name]] if was else ["result not journaled"]
+			print(f"step {step['name']}: stale: {', '.join(moved)}", flush=True)
 		arguments = step["arguments"] + later
 		before = snapshot(self.variant)
 		value, reads, code, imported = record_run(lambda: step["function"](*arguments))
