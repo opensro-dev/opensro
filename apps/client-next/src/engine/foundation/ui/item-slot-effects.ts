@@ -147,8 +147,8 @@ const SPIRIT_EDGE_STEP_MS = 50;
 ================
 spiritActiveOverlay
 
-The looping edge over a worn Devil's Spirit's socket while it lends its
-skills, that is while it is awake (spirit-skills.ts).
+The looping edge over a Devil's Spirit's icon for its whole awakening,
+worn or carried (frame/item-slot.ts).
 ================
 */
 export function spiritActiveOverlay( rect: UiRect, seed: number, nowMs: number ): ItemSlotOverlay {

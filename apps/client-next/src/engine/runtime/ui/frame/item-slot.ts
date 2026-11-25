@@ -20,7 +20,7 @@ import type { UiFrame } from "./frame-contract";
 import { EXPANSION_LEVEL_CAP } from "@/engine/foundation/gameplay/level-cap";
 import { itemCountQuads } from "@/engine/foundation/ui/item-count";
 import { equipmentWarningUv, itemEquipmentOverlay } from "@/engine/foundation/ui/item-equipment-overlay";
-import { SPIRIT_SOCKET } from "@/engine/foundation/gameplay/avatar-socket";
+import { isSpiritItem } from "@/engine/foundation/gameplay/avatar-socket";
 import {
 	itemSlotOverlays,
 	itemSlotWash,
@@ -133,9 +133,10 @@ export function itemEffects(
 		image( frame, { r: overlay.rect, path: overlay.path, uv: overlay.uv } );
 		slots.markEffect();
 	}
-	// Port-only (SRO_NASRUN, #4384): the worn Spirit's socket animates while
-	// the Spirit lends its skills, i.e. while it is awake.
-	if ( id === "avatar:" + SPIRIT_SOCKET && (game?.spiritSkills?.length ?? 0) > 0 ) {
+	// Port-only (SRO_NASRUN, #4384): a Devil's Spirit's icon animates for its
+	// whole awakening, worn or carried: its clock (unix seconds in the
+	// durability field, #4381) is still ahead.
+	if ( isSpiritItem( owned.typeFlags ) && owned.durability * 1000 > Date.now() ) {
 		const edge = spiritActiveOverlay( r, slotSeed( id + ":" + owned.refObjId ), slots.simulationTimeMs );
 		image( frame, { r: edge.rect, path: edge.path, uv: edge.uv } );
 		slots.markEffect();
