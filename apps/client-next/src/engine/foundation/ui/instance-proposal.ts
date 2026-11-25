@@ -10,16 +10,16 @@ forwards as {1, button}. The box has its own social slot and so owns its
 dragged position, separate from the invitation and resurrection boxes
 beside which it can be open.
 
-Geometry is the shared CIFMessageBox proposal geometry (partyProposalLayout
-over MsgBoxINIF): the box is the same window family as the other 0x3393
-proposals. Its own ConfigureByType case was not separately traced, so the
-shared frame is an inference, recorded here; the question, the answer pair
-and the dead-confirm gate (0x52EDD0) are traced behaviour, not inference.
+Geometry is the simple message box's: 7644E0 opens it through
+CGInterface_ShowSimpleMessageBox (6888C0, Yes/No type 1), which creates
+the box and lays it out by its text (CIFSimpleMessageBox_LayoutControls
+52E720, at least 360x151: textMessageBoxLayout), not the party proposal
+frame #2334 had inferred (#4403).
 
 ===========================================================================
 */
 import type { UiRect } from "@/engine/contracts/ui";
-import { partyProposalLayout } from "./party-proposal";
+import { messageBoxLines, textMessageBoxLayout } from "./text-message-box";
 
 /*
 ================
@@ -36,33 +36,46 @@ export function instanceQuestion(): readonly string[] {
 ================
 instanceBoxLayout
 
-The shared proposal geometry with the question line only: this box carries
-no inviter name line.
+The simple message box around the question, wrapped and sized by its
+text as every CGInterface_ShowSimpleMessageBox box is. measure is the
+HUD font's run width; question is the resolved line.
 ================
 */
-export function instanceBoxLayout(
-	width: number,
-	height: number,
-	position: readonly [number, number] | null
-): {
+export function instanceBoxLayout( view: InstanceBoxView, position: readonly [number, number] | null ): {
 	frame: UiRect;
 	drag: UiRect;
 	title: UiRect;
 	background: UiRect;
-	question: UiRect;
+	lines: readonly { text: string; rect: UiRect; }[];
 	accept: UiRect;
 	refuse: UiRect;
 } {
-	const box = partyProposalLayout( width, height, undefined, position );
+	const lines = messageBoxLines( [ view.question ], view.measure ),
+		box = textMessageBoxLayout( view.width, view.height, lines.map( view.measure ), position );
 	return {
 		frame: box.frame,
 		drag: box.drag,
 		title: box.title,
 		background: box.background,
-		question: box.question,
+		lines: lines.map( ( text, i ) => ({ text, rect: box.lines[i]! }) ),
 		accept: box.accept,
 		refuse: box.refuse
 	};
+}
+
+/*
+================
+InstanceBoxView
+
+What the layout needs from the screen: its size, the resolved question
+and the HUD font's measure.
+================
+*/
+export interface InstanceBoxView {
+	readonly width: number;
+	readonly height: number;
+	readonly question: string;
+	readonly measure: ( value: string ) => number;
 }
 
 /*

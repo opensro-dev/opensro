@@ -1917,6 +1917,20 @@ export function createUi( ports: UiPorts ) {
 	const storagePanel = createStoragePanel();
 	const resurrectionPrompt = createResurrectionPrompt();
 	const instancePrompt = createInstancePrompt();
+	/*
+	================
+	instanceBoxView
+
+	The quest instance prompt's layout inputs: the screen, its resolved
+	question and the HUD font's measure, shared by its draw and its drag.
+	================
+	*/
+	const instanceBoxView = ( width: number, height: number ) => ({
+		width,
+		height,
+		question: hudCopy( instanceQuestion()[0]! ),
+		measure: ( value: string ) => text.run( value ).width
+	});
 	// The party summon window and its invitation box (#3918).
 	const partySummonPrompt = createPartySummonPrompt();
 	const partySummonHud = createPartySummonHud();
@@ -9566,11 +9580,9 @@ export function createUi( ports: UiPorts ) {
 				return;
 			}
 			if ( event.kind === "drag" && event.id === "instance-drag" && view ) {
-				const layout = instanceBoxLayout( view.width, view.height, instancePrompt.position() ),
-					next = instanceBoxLayout( view.width, view.height, [
-						layout.frame[0] + event.dx,
-						layout.frame[1] + event.dy
-					] );
+				const box = instanceBoxView( view.width, view.height ),
+					layout = instanceBoxLayout( box, instancePrompt.position() ),
+					next = instanceBoxLayout( box, [ layout.frame[0] + event.dx, layout.frame[1] + event.dy ] );
 				instancePrompt.place( [ next.frame[0], next.frame[1] ] );
 				dirty = true;
 				return;
@@ -28566,7 +28578,7 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 					composing = false;
 				}
 				paths.push( ...partyProposalAssets() );
-				const layout = instanceBoxLayout( w, h, instancePrompt.position() );
+				const layout = instanceBoxLayout( instanceBoxView( w, h ), instancePrompt.position() );
 				controls.push( {
 					id: "instance-body",
 					label: hudCopy( "UIIT_STT_CONFIRM_BOX" ),
@@ -28591,7 +28603,7 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 						hAlign: 1,
 						vAlign: 0
 					} ),
-					...text.quads( hudCopy( instanceQuestion()[0]! ), layout.question, full, white, { vAlign: 0 } )
+					...layout.lines.flatMap( line => text.quads( line.text, line.rect, full, white, { vAlign: 0 } ) )
 				);
 				button( "instance-accept", hudCopy( "UIIT_CTL_YES" ), layout.accept[0], layout.accept[1], 76 );
 				button( "instance-refuse", hudCopy( "UIIT_CTL_NO" ), layout.refuse[0], layout.refuse[1], 76 );
