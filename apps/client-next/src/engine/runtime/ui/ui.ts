@@ -17287,12 +17287,14 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 						// CIFEquipSkillSlotWnd). A slot casts its skill on a right-click
 						// and drags to the hotbar, as the skill window's do; the strip
 						// is empty while no awake Spirit is worn.
-						// The strip's four slot backgrounds show with the Spirit's
-						// socket, empty or filled, as the avatar sockets do.
+						// The strip's slot backgrounds show with the Spirit's socket,
+						// empty or filled, as the avatar sockets do: one per lent
+						// skill and at least one (the owner's reference screenshots).
 						const slotBackground = ROOT + "interface/pet/pt_block02.png";
 						if ( spiritShown ) {
 							paths.push( slotBackground );
-							for ( const x of SPIRIT_SKILL_SLOT_BG_X ) {
+							const shownSlots = Math.max( 1, game?.spiritSkills?.length ?? 0 );
+							for ( const x of SPIRIT_SKILL_SLOT_BG_X.slice( 0, shownSlots ) ) {
 								if ( !resources.has( slotBackground ) ) break;
 								rect(
 									[
