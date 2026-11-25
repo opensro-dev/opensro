@@ -6724,6 +6724,13 @@ export function createUi( ports: UiPorts ) {
 				socialSubject = "";
 				socialContents = "";
 			}
+		} else if ( id === "academy-invite" ) {
+			// 5C4FD0: the leader invites the selected player (702C90: a
+			// mounted pet stands for its rider, oneself sends nothing).
+			if ( academyIsLeader( view.gameplay?.academy ) ) {
+				const player = targetPlayer( view.gameplay?.target, view.entities ?? [], view.gameplay?.localGid );
+				if ( player ) sendGameplay( { kind: "academy-invite", gid: player.gid } );
+			}
 		} else if ( id === "academy-dismiss" ) {
 			// 5C51A0 -> 5C53C0 case 1: leader confirms dissolution before 0x77C5.
 			if ( academyIsLeader( view.gameplay?.academy ) ) {
@@ -16771,8 +16778,10 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 									"academy-dismiss" :
 									"academy-notice",
 								copy = node.id === 48 ? hudCopy( "UIIT_STT_PARTY_DISSOLVE" ) : hudCopy( node.text ),
+								// 5C5EF0 enables Invite (20), Dismiss (48) and the
+								// notice button for the academy's leader only.
 								disabled = node.id !== 22 &&
-									((id !== "academy-notice" && id !== "academy-dismiss") ||
+									((id !== "academy-notice" && id !== "academy-dismiss" && id !== "academy-invite") ||
 										!academyIsLeader( camp ));
 							authoredButton( node, ox, oy, id, copy, disabled );
 							if ( copy ) {
