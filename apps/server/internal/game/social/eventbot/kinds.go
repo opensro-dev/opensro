@@ -87,6 +87,50 @@ type WorldKind interface {
 	HintEvery() time.Duration
 }
 
+/*
+================
+SpotPicker
+
+A world kind whose round's place is drawn, not rotated (Random
+Unique, #3537): the host passes its own pick (injected in tests),
+so the draw is the host's one random door.
+================
+*/
+type SpotPicker interface {
+	// PickSpot draws the round's place from the event's spots.
+	PickSpot(event Event, pick func(n int) int) (Spot, bool)
+}
+
+/*
+================
+MonsterPicker
+
+A world kind whose round's monster is drawn from the file's
+unique= codenames (Random Unique, #3537). The host records the
+pick on the live event's Hider field before the spawn door runs,
+so the door and the hints name the monster that actually stands.
+================
+*/
+type MonsterPicker interface {
+	// PickMonster draws the round's monster codename.
+	PickMonster(event Event, pick func(n int) int) (string, bool)
+}
+
+/*
+================
+KillKind
+
+A world kind won by slaying its monster (Random Unique, #3537),
+not by reaching it: the composition root reports the kill owner to
+the host (ReportSlain) and reaching the monster wins nothing.
+================
+*/
+type KillKind interface {
+	WorldKind
+	// WonByKill says the round is won by a kill.
+	WonByKill() bool
+}
+
 // kinds is the registry, by data-file name.
 var kinds = map[string]Kind{}
 

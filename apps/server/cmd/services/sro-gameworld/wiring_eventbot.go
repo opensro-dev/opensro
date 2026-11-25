@@ -31,6 +31,7 @@ import (
 	"opensro.online/server/internal/game/social/chat"
 	"opensro.online/server/internal/game/social/eventbot"
 	"opensro.online/server/internal/game/world/instance"
+	"opensro.online/server/internal/game/world/monster"
 	"opensro.online/server/internal/game/world/simulation"
 )
 
@@ -64,11 +65,23 @@ func buildEventBot(division string, deps *enterworld.Deps, presence *livepresenc
 		} else {
 			schedule = loaded
 			for _, event := range schedule.Events {
-				if event.Hider == "" {
-					continue
+				if event.Hider != "" {
+					if _, known := items.Monsters.ReferenceByCodename(event.Hider); !known {
+						log.Errorf("eventbot: %q hider %q is not a monster codename; its rounds will run hiderless", event.Title, event.Hider)
+					}
 				}
-				if _, known := items.Monsters.ReferenceByCodename(event.Hider); !known {
-					log.Errorf("eventbot: %q hider %q is not a monster codename; its rounds will run hiderless", event.Title, event.Hider)
+				for _, codename := range event.Uniques {
+					ref, known := items.Monsters.ReferenceByCodename(codename)
+					if !known {
+						log.Errorf("eventbot: %q unique %q is not a monster codename; its rounds will run without it", event.Title, codename)
+						continue
+					}
+					// Only a unique's death records a kill owner
+					// (RecordUniqueKiller), so any other monster's
+					// round always ends with no winner.
+					if !monster.RarityIsUnique(ref.MonsterType) {
+						log.Errorf("eventbot: %q unique %q is not a unique; its kills name no owner and its rounds can never be won", event.Title, codename)
+					}
 				}
 			}
 		}
@@ -201,11 +214,13 @@ func (game *gameplayPlane) installEventBotChat() {
 ================
 eventSeekTick
 
-Hide & Seek's world check (#3536): while a hider is live, the round
-goes to the first entrant standing close with the hider actually
-selected, alive and out of a stall. A slain (or otherwise gone)
-hider ends the round here. Per-tick over the division's characters;
-the host re-checks entry and the cap before paying.
+The world kinds' tick: while a hider is live, a seek round goes to
+the first entrant standing close with the hider actually selected,
+alive and out of a stall. A slain (or otherwise gone) spawn ends
+the round here - for a kill round (Random Unique, #3537) the host
+judges the recorded killer instead, and finds never count.
+Per-tick over the division's characters; the host re-checks entry
+and the cap before paying.
 ================
 */
 func (game *gameplayPlane) eventSeekTick(nowMs int64) {
@@ -218,7 +233,16 @@ func (game *gameplayPlane) eventSeekTick(nowMs int64) {
 		return
 	}
 	if spawn, ok := game.items.Monsters.Get(game.divisionID, hider.ObjectID); !ok || spawn.CurrentHP == 0 {
+		// A kill round's monster fell to a recorded killer: the
+		// host judges the kill. Anything else is simply lost.
+		if killer, known := game.items.Monsters.UniqueKiller(game.divisionID, hider.ObjectID); known && host.ReportSlain(killer) {
+			return
+		}
 		host.HiderLost()
+		return
+	}
+	// A kill round is judged on the kill, never on a find.
+	if host.LiveRoundWonByKill() {
 		return
 	}
 	var hunters []*enterworld.Character
