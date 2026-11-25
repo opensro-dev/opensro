@@ -246,7 +246,7 @@ func TestWornSpiritsSkillsCastAndApply(t *testing.T) {
 	}
 	landCast(rt, clock, skills, spiritTestConfusion)
 	// The buff's dru {20, 20} raises both damage-rate pairs by 20 while
-	// it holds (#4407: v1.188 installer 0x595A97; word 0 on the physical
+	// it holds (#4407: the v1.188 buff installer; word 0 on the physical
 	// pair 0x80/0x81, word 1 on the magical pair 0x82/0x83).
 	for i, got := range rates() {
 		if want := baseRates[i] + 20; got != want {

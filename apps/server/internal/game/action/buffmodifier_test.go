@@ -46,7 +46,7 @@ func TestOdarWritesFollowBitPairs(t *testing.T) {
 ================
 TestDruWritesBothDamageRatePairs
 
-The v1.188 installer (0x595A97) puts dru word 0 on
+The v1.188 server's buff installer puts dru word 0 on
 parameters 0x80 and 0x81 and word 1 on 0x82 and 0x83, mode 0 (flat):
 the physical damage-rate pair first, then the magical pair. Distinct
 words keep the mapping honest (#4407).
