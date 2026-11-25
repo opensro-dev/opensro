@@ -62,6 +62,8 @@ const (
 	// stored bit never changes meaning.
 	Mute
 	HoldLogout
+	// Notice is the in-game /NOTICE banner (gmcommand/notice.go).
+	Notice
 	capabilityEnd
 )
 
@@ -96,6 +98,7 @@ var Rows = []Row{
 	{Invisible, "invisible", "Invisible", "Visibility", false},
 	{Invincible, "invincible", "Invincible", "Visibility", false},
 	{WorldControl, "world", "World status, time, flags, instances", "World", false},
+	{Notice, "notice", "Send a notice to every player", "World", false},
 	{MakeItem, "make_item", "Make item", "Economy", true},
 	{SpawnMonster, "spawn_monster", "Spawn monsters (they drop loot)", "Economy", false},
 	{KillMonster, "kill_monster", "Kill monsters, ZOE (rewards)", "Economy", false},

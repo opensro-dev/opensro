@@ -71,6 +71,8 @@ var subcommandCapability = map[uint8]staff.Capability{
 	SubShadowUnmute: staff.Mute,
 	SubBlockLogout:  staff.HoldLogout,
 	SubAllowLogout:  staff.HoldLogout,
+
+	SubNotice: staff.Notice,
 }
 
 /*
