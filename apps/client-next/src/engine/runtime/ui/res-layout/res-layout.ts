@@ -209,15 +209,14 @@ export function createResLayoutWindow( layout: ResLayout ): ResLayoutWindow {
 				);
 			}
 		} else if ( control.type === RES_LAYOUT_TYPE_TILE ) {
-			paths.push( resLayoutImagePath( control.texture ) );
-			frame.quads.push( ...normalTile(
-				r,
-				resLayoutImagePath( control.texture ),
-				resources.size(
-					resLayoutImagePath( control.texture )
-				),
-				full
-			) );
+			// A tile with no texture draws nothing. Naming "" for loading
+			// would hold the whole window unadmitted: an empty path never
+			// becomes resident (frameDraw.unloadedImages).
+			const path = resLayoutImagePath( control.texture );
+			if ( path ) {
+				paths.push( path );
+				frame.quads.push( ...normalTile( r, path, resources.size( path ), full ) );
+			}
 		} else if ( control.type === RES_LAYOUT_TYPE_BUTTON ) {
 			const overlay = stateOverlay.get( control.key );
 			const pressed = overlay?.press ?? (frame.pressed === id && id !== undefined);
