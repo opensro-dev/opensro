@@ -6,9 +6,9 @@ wiring_itemmall.go - the Item Mall's catalogue and its port-only goods
 The mall lists the client's own packages (ConfigureMall reads them from
 textdata) plus the port-only goods each switch adds: the authored extra
 packages, the name change scroll, the stat and skill reset scrolls, the
-equipment switch scrolls. This file
-gathers those goods, picks the category layout and configures the mall
-once at boot; newGameplayPlane calls it after the commerce catalogue.
+equipment switch scrolls, and the Magic Cubes. This file gathers those
+goods, picks the category layout and configures the mall once at boot;
+newGameplayPlane calls it after the commerce catalogue.
 
 ===========================================================================
 */
@@ -57,6 +57,8 @@ func configureItemMall(items *action.Runtime, textdataDir string, mallAuthority 
 	mallExtra = append(mallExtra, applyResetScrolls(items, refs)...)
 	// The equipment switch scrolls (port-only, wiring_equipswitch.go).
 	mallExtra = append(mallExtra, applyEquipSwitchScrolls(items, refs)...)
+	// The Magic Cubes (port-only, wiring_magiccube.go).
+	mallExtra = append(mallExtra, applyMagicCubeMall(items, refs)...)
 	// SRO_MALL_CATEGORIES (port-only, not native, #3257): the later
 	// mall's categories, HOT shop and goods badges; "off" (the
 	// default) is the shipped mall (commerce/mallcategories.go).

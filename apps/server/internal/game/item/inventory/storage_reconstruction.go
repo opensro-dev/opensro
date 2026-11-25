@@ -66,6 +66,7 @@ func cloneInventoryRow(source Item) Item {
 	row := source
 	row.MagicOptions = append([]uint64(nil), source.MagicOptions...)
 	row.Summon = domain.CloneCOS(source.Summon)
+	row.LinkedStorage = domain.CloneCOSContainer(source.LinkedStorage)
 	return row
 }
 

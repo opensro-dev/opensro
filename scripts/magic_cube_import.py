@@ -259,7 +259,7 @@ def add_magic_cubes(native, output, v1696_root=None):
 		"items": {row[items.CODENAME]: int(row[items.IDENTITY]) for row in rows},
 		"texts": added_texts, "absentDescriptions": absent_descriptions, "assets": assets,
 		"limits": [
-			"Deposit, withdraw, sell and consignment refusals need SRO_MAGIC_CUBE on the server too.",
+			"Deposit, withdraw, mall listing, sell and consignment refusals need SRO_MAGIC_CUBE on the server too.",
 			"No drop or event reward is added; the rows arrive by mall purchase or GM grant alone.",
 		],
 	}

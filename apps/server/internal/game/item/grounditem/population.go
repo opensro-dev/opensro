@@ -73,6 +73,7 @@ func (r *Registry) AllInPopulation(division string, population Population) []Ite
 		item := items[gid]
 		item.MagicOptions = append([]uint64(nil), item.MagicOptions...)
 		item.Summon = domain.CloneCOS(item.Summon)
+		item.LinkedStorage = domain.CloneCOSContainer(item.LinkedStorage)
 		out = append(out, item)
 	}
 	return out

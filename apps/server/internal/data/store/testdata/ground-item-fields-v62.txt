@@ -7,6 +7,9 @@ forgeBound
 gid
 goldAmount
 heading
+linkedStorage
+linkedStorage.capacity
+linkedStorage.rows
 magicOptions
 ownerJid
 plus

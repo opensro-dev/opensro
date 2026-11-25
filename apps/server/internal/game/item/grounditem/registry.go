@@ -79,6 +79,9 @@ type Item struct {
 	// wire itself never carries them.
 	MagicOptions []uint64
 	Data         uint32 // item record data word (+0x38): capsule monster, Spirit clock
+	// LinkedStorage holds a Magic Cube's elixir rows (#3906) across a
+	// drop so pickup restores them; absent on every other ground item.
+	LinkedStorage *domain.COSContainer
 	// StackCount is the heap's count for a stackable ETC drop. It never
 	// reaches the CIItem spawn wire - the native ground label carries no
 	// count for non-gold items - but it is server state so a pickup can
@@ -300,11 +303,13 @@ func (r *Registry) Add(divisionID string, item Item) Item {
 	item.Gid = GidBase + slot
 	item.MagicOptions = append([]uint64(nil), item.MagicOptions...)
 	item.Summon = domain.CloneCOS(item.Summon)
+	item.LinkedStorage = domain.CloneCOSContainer(item.LinkedStorage)
 	r.division(divisionID)[item.Gid] = item
 	r.noteOwnerStampLocked(item)
 	r.stampLocked(divisionID, item.Gid)
 	item.MagicOptions = append([]uint64(nil), item.MagicOptions...)
 	item.Summon = domain.CloneCOS(item.Summon)
+	item.LinkedStorage = domain.CloneCOSContainer(item.LinkedStorage)
 	return item
 }
 
@@ -360,6 +365,7 @@ func (r *Registry) Get(divisionID string, gid uint32) (Item, bool) {
 	item, ok := r.byDivision[divisionID][gid]
 	item.MagicOptions = append([]uint64(nil), item.MagicOptions...)
 	item.Summon = domain.CloneCOS(item.Summon)
+	item.LinkedStorage = domain.CloneCOSContainer(item.LinkedStorage)
 	return item, ok
 }
 
@@ -564,6 +570,7 @@ func (r *Registry) ReleaseExpiredOwners(divisionID string, now time.Time, lifeti
 		items[gid] = item
 		item.MagicOptions = append([]uint64(nil), item.MagicOptions...)
 		item.Summon = domain.CloneCOS(item.Summon)
+		item.LinkedStorage = domain.CloneCOSContainer(item.LinkedStorage)
 		released = append(released, item)
 	}
 	if len(released) > 0 {
