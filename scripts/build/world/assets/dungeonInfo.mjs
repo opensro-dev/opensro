@@ -31,6 +31,7 @@ import { access, readFile } from "node:fs/promises";
 import path from "node:path";
 import { noteRead } from "../../graph/reads.mjs";
 import { decodeJmxText } from "../../shared/jmxBinaryReader.mjs";
+import { resolveOnDiskPath } from "../io.mjs";
 
 // Port-only, not native (#3295): the Mirror Dimension temple interiors
 // of the Jupiter import. The DOF file names are the later client's own
@@ -86,9 +87,15 @@ fileExists
 ================
 */
 async function fileExists( candidatePath ) {
-	noteRead( candidatePath );
+	// The probe names a DOF beside the table with authored case
+	// (Arabia/Bagh_mong/...) while an import writes the folded form:
+	// probe the on-disk spelling, or a case-sensitive file system
+	// silently drops the row (#3962). The read is recorded under the
+	// path that was actually probed.
+	const resolved = await resolveOnDiskPath( candidatePath );
+	noteRead( resolved );
 	try {
-		await access( candidatePath );
+		await access( resolved );
 		return true;
 	} catch {
 		return false;
