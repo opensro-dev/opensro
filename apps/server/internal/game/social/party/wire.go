@@ -188,9 +188,17 @@ const (
 // Masked member-row bits (CPartyMemberInfo_ReadMasked's
 // MemberInfoFlag). The server
 // composes the full-info subset: id + name/model + level + hp/mp status
-// + region/position. Bits 0x40 (secondary/guild name) and 0x80 (+0x41 byte)
-// stay unset - no guild/war state exists to fill them, and the client's
-// ctor defaults are the honest empty. Bit 0x08 (+0x50/+0x54 pair) is the
+// + region/position + guild name. Bit 0x40 is the GUILD NAME column of
+// the party window (CPartyMemberInfo_ReadMasked reads it after the
+// position block at 0x75DBF4 into record +0x20; the 0x3E58 type-6 arm
+// applies it through 0x822090, and the slot update 0x6E9350 falls back to
+// UIIT_STT_NO_GUILD on an empty string). Inferred, not read: the v1.188
+// server writer was not available to check, and the +0x20 -> slot copy
+// is untraced; no other string in the record fits the column. It
+// rides every row built from a live character record, empty for a
+// guildless member, so a member who left a guild clears on the next
+// update. Bit 0x80 (+0x41 byte) stays unset: the client's ctor default
+// is the honest empty. Bit 0x08 (+0x50/+0x54 pair) is the
 // member's primary and secondary mastery, computed natively for
 // every snapshot (the server) and written at mask 0xFF on roster,
 // match and coordinator rows and masked on type-6 updates (the
@@ -203,6 +211,7 @@ const (
 	MemberMaskStatus   uint8 = 0x04
 	MemberMaskPosition uint8 = 0x20
 	MemberMaskMastery  uint8 = 0x08
+	MemberMaskGuild    uint8 = 0x40
 	// MemberMaskFull is the composed subset above.
 	MemberMaskFull = MemberMaskID | MemberMaskName | MemberMaskLevel | MemberMaskStatus | MemberMaskPosition
 )
@@ -305,6 +314,10 @@ type MemberRow struct {
 	PosY          int16
 	PosZ          int16
 	War           uint32
+	// Guilded says the guild name rides the row (bit 0x40), empty for a
+	// member of no guild.
+	Guilded bool
+	Guild   string
 	// Masteries says the primary/secondary pair rides the row (bit 0x08).
 	Masteries        bool
 	PrimaryMastery   uint32
@@ -319,7 +332,7 @@ type MemberRow struct {
 // ONE encoder authoritative (match reaches it through the wiring.go
 // seam, never an import).
 func EncodeMaskedMemberRow(row MemberRow) []byte {
-	writer := wire.NewWriter(32 + len(row.Name))
+	writer := wire.NewWriter(32 + len(row.Name) + len(row.Guild))
 	appendMemberRow(writer, row)
 	return writer.Payload()
 }
@@ -327,10 +340,14 @@ func EncodeMaskedMemberRow(row MemberRow) []byte {
 // appendMemberRow writes the masked row in
 // CPartyMemberInfo_ReadMasked's read order:
 // mask, bit 0x10 id, bit 0x01 name + model dword, bit 0x02 level, bit
-// 0x04 status nibbles, bit 0x20 region + x/y/z int16 triplet + war, and
-// last bit 0x08's mastery pair when the row carries it.
+// 0x04 status nibbles, bit 0x20 region + x/y/z int16 triplet + war, bit
+// 0x40 guild name, and last bit 0x08's mastery pair when the row carries
+// them.
 func appendMemberRow(writer *wire.Writer, row MemberRow) {
 	mask := MemberMaskFull
+	if row.Guilded {
+		mask |= MemberMaskGuild
+	}
 	if row.Masteries {
 		mask |= MemberMaskMastery
 	}
@@ -345,6 +362,9 @@ func appendMemberRow(writer *wire.Writer, row MemberRow) {
 	writer.U16(uint16(row.PosY))
 	writer.U16(uint16(row.PosZ))
 	writer.U32(row.War)
+	if row.Guilded {
+		writeSizedString(writer, row.Guild)
+	}
 	if row.Masteries {
 		writer.U32(row.PrimaryMastery)
 		writer.U32(row.SecondaryMastery)
