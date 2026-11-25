@@ -84,6 +84,11 @@ func installPublicAPI(gameplay *gameplayPlane, hub *transport.Hub, authority *st
 			return
 		}
 		api.enqueue(kill)
+		// The Lottery's ticket drop (#3539): the same kill earns its
+		// owner one ticket while the EventBot host runs.
+		if gameplay.eventBot != nil {
+			gameplay.eventBot.TicketForKill(division, kill.KillerName)
+		}
 	}
 
 	addr := strings.TrimSpace(os.Getenv(publicstats.EnvAddr))

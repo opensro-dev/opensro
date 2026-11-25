@@ -127,6 +127,14 @@ type Dependencies struct {
 	KnownItem  func(codename string) bool
 	SpawnHider func(event Event, spot Spot, at time.Time) (Hider, bool)
 	Pick       func(n int) int
+	// TakeItem spends one of the codename from the character's bag
+	// (a TicketedKind's entry price, #3539); false = the bag holds
+	// none (or could not plan the spend), and the entry is refused.
+	TakeItem func(division string, character *enterworld.Character, codename string) bool
+	// GrantTicket drops one lottery ticket to a unique's kill owner
+	// (#3539), resolved by character name; false = undeliverable
+	// (offline, or the bag refused it). A nil door drops nothing.
+	GrantTicket func(division, name string) bool
 	// Now is the host's clock for whisper-side text (the tick brings
 	// its own); nil is the wall clock. Tests freeze it.
 	Now func() time.Time

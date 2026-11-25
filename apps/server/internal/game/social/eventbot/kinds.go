@@ -64,6 +64,23 @@ type EntryLiner interface {
 
 /*
 ================
+TicketedKind
+
+A kind whose entry spends an item (Lottery, #3539): before the
+first whisper enters, the host takes one of the named item from
+the entrant's bag through the ticket door; a bag without one is
+refused and nothing is spent. Repeats never reach the door (the
+host refuses them first), so an entry costs exactly one ticket.
+================
+*/
+type TicketedKind interface {
+	Kind
+	// TicketItem is the codename one entry spends.
+	TicketItem() string
+}
+
+/*
+================
 WorldKind
 
 A kind whose rounds act in the world while they run (Hide & Seek,

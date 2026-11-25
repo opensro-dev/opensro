@@ -44,7 +44,20 @@ func BetaPlayerMapEnabled() bool {
 runPlayerMap
 
 One roster frame per session, from the same snapshots the peer visibility
-leg reads. A session without appearance (never spawned) is left out.
+leg reads. A session without appearance (never spawned) is left out, and
+so is a GM in /INVISIBLE (body status 4).
+
+The roster is port-only (wire.OpBetaPlayerMap): the v1.150 world map draws
+only the local player and the party, so no native rule covers it. A
+GM-invisible character spawns for its party only (peer_visibility.go,
+gmInvisibleBodyStatus), so a roster that drew it for everyone would give
+away what the spawn leg hides. Party members still see the GM through the
+map's native party signs, so the roster leaves the GM out for every
+recipient instead of building a frame per viewer. The frame is rebuilt
+every playerMapIntervalMs from the live status, so the marker returns on
+the first frame after /INVISIBLE is turned off. The GM's own position
+stays on their map: the client draws the local player from its own pose
+and skips its gid in this roster.
 ================
 */
 func (t *Ticker) runPlayerMap(state *divisionTickState, nowMs int64, sessions []SessionSnapshot) {
@@ -55,7 +68,7 @@ func (t *Ticker) runPlayerMap(state *divisionTickState, nowMs int64, sessions []
 	players := make([]wire.BetaMapPlayer, 0, len(sessions))
 	for i := range sessions {
 		session := &sessions[i]
-		if session.Appearance == nil {
+		if session.Appearance == nil || session.NativeBodyStatus == gmInvisibleBodyStatus {
 			continue
 		}
 		pose := session.World.LiveSpawnAt(nowMs)

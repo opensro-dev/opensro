@@ -85,9 +85,9 @@ func TestMallCategoriesGearsListOnlyImportedStones(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	// The shipped 91 plus the one imported stone.
-	if len(catalog.Offers) != 92 {
-		t.Fatalf("layout mall with one gears row: %d offers, want 92", len(catalog.Offers))
+	// The 93 layout offers plus the one imported stone.
+	if len(catalog.Offers) != 94 {
+		t.Fatalf("layout mall with one gears row: %d offers, want 94", len(catalog.Offers))
 	}
 	gears := mallOffersOn(catalog, 4, 1)
 	if len(gears) != 1 || gears[0].Code != "PACKAGE_"+stone {
@@ -131,8 +131,8 @@ func TestMallCategoriesGearsAbsentWithoutImport(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(catalog.Offers) != 91 {
-		t.Fatalf("layout mall without gears rows: %d offers, want 91", len(catalog.Offers))
+	if len(catalog.Offers) != 93 {
+		t.Fatalf("layout mall without gears rows: %d offers, want 93", len(catalog.Offers))
 	}
 	if gears := mallOffersOn(catalog, 4, 1); len(gears) != 0 {
 		t.Fatalf("Gears tab holds %+v without the import, want empty", gears)
@@ -196,9 +196,9 @@ func TestMallCategoriesNasrunGoodsListWithTheSystem(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	// The shipped 91 plus the six Spirits, the gear and the jewel.
-	if len(catalog.Offers) != 99 {
-		t.Fatalf("layout mall with the Nasrun rows: %d offers, want 99", len(catalog.Offers))
+	// The 93 layout offers plus the six Spirits, the gear and the jewel.
+	if len(catalog.Offers) != 101 {
+		t.Fatalf("layout mall with the Nasrun rows: %d offers, want 101", len(catalog.Offers))
 	}
 	wantSilk := map[string]uint32{}
 	for _, spirit := range nasrunSpirits {
@@ -262,8 +262,8 @@ func TestMallCategoriesNasrunGoodsOffWithoutTheSystem(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(catalog.Offers) != 91 {
-		t.Fatalf("layout mall with SRO_NASRUN off: %d offers, want 91", len(catalog.Offers))
+	if len(catalog.Offers) != 93 {
+		t.Fatalf("layout mall with SRO_NASRUN off: %d offers, want 93", len(catalog.Offers))
 	}
 	for _, offer := range catalog.Offers {
 		if strings.Contains(offer.Code, "NASRUN") {

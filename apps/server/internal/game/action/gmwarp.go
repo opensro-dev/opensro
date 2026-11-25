@@ -52,11 +52,8 @@ func (rt *Runtime) WarpGM(division, name string, p wire.Position) bool {
 			why = "the character is dead"
 			return travelPoint{}, false
 		}
-		// Active COS need a joint owner/follower migration; do not split poses.
-		if c.ActiveCOS != nil && c.ActiveCOS.Summoned {
-			why = "a pet or transport is summoned"
-			return travelPoint{}, false
-		}
+		// A summoned companion, a ridden vehicle included, travels with
+		// its owner (gmTeleportMovable).
 		destination, admitted := authority.ResolveGMWarpDestination(c, requested)
 		if !admitted {
 			why = "the destination is not valid terrain (region, frame, height or surface)"

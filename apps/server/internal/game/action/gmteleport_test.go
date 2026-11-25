@@ -205,9 +205,6 @@ func TestGMPlayerTeleportRefusals(t *testing.T) {
 		}},
 		{"dead target recalled", gmcommand.SubRecallUser, "Target", func(f *gmTeleportFixture) { *f.target.CurrentHP = 0 }},
 		{"dead target sent to town", gmcommand.SubToTown, "Target", func(f *gmTeleportFixture) { *f.target.CurrentHP = 0 }},
-		{"target riding", gmcommand.SubRecallUser, "Target", func(f *gmTeleportFixture) {
-			f.target.ActiveCOS = &enterworld.CharacterCOS{Summoned: true}
-		}},
 		{"dead GM", gmcommand.SubMoveToUser, "Target", func(f *gmTeleportFixture) { *f.gm.CurrentHP = 0 }},
 		{"dead GM to town", gmcommand.SubGoTown, "", func(f *gmTeleportFixture) { *f.gm.CurrentHP = 0 }},
 	}

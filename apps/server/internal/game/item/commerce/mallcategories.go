@@ -285,38 +285,50 @@ func modelSwitcherGoods() []mallCategoryGood {
 	return goods
 }
 
-// PetScrollItems are the summon scrolls of the pet kinds the later
-// sources import (#3328: scripts/pet_import.py): the fox, an attack
-// (growth) pet, and the winter snowman, a pickup pet with an event
-// copy of its scroll. Each names its kind in itemdata column 119, so
-// the persistent summoner serves it once the import wrote its rows.
+// PetScrollItems are the summon scrolls of the pet kinds the mall
+// sells: the fox, an attack (growth) pet, and the winter snowman, a
+// pickup pet with an event copy of its scroll, both imported from the
+// later sources (#3328: scripts/pet_import.py), plus the kangaroo, a
+// growth pet, and the pegasus, a vehicle, whose rows the native tree
+// already carries (#4240 part 3). Each names its kind in itemdata
+// column 119, so the persistent summoner serves it once its rows are
+// in the tree.
 var PetScrollItems = []string{
 	"ITEM_COS_P_FOX_SCROLL",
 	"ITEM_COS_P_WINTER_SNOWMAN_SCROLL",
 	"ITEM_COS_P_WINTER_SNOWMAN_EVENT_SCROLL",
+	"ITEM_COS_P_KANGAROO_SCROLL",
+	"ITEM_COS_C_PEGASUS_SCROLL",
 }
 
-// The shipped mall's two pet tiers: every growth (attack) pet scroll is
-// 130 silk (bear, kangaroo, penguin, raven) and every silk pickup pet 88
-// (cat, brownie, pink pig, rabbit). The v1.696 client sells its winter
-// snowman at the same 88; its fox has no real price (a 9999999
-// placeholder), so the fox takes its kind's tier.
+// The shipped mall's pet tiers: every growth (attack) pet scroll is
+// 130 silk (bear, kangaroo, penguin, raven), every silk pickup pet 88
+// (cat, brownie, pink pig, rabbit) and every vehicle scroll 1
+// (scarabaeus, tiger, ostrich). The v1.696 client sells its winter
+// snowman at the same 88 and its whole vehicle tab at the same 1; its
+// fox has no real price (a 9999999 placeholder), so the fox takes its
+// kind's tier, while its kangaroo is a real 130 and its pegasus a
+// real 1.
 const (
-	growthPetScrollSilk = 130
-	pickupPetScrollSilk = 88
+	growthPetScrollSilk  = 130
+	pickupPetScrollSilk  = 88
+	vehiclePetScrollSilk = 1
 )
 
 /*
 ================
 petScrollGoods
 
-One Pet-shop listing per imported pet scroll the later mall sells, in
-the tabs the shipped mall keeps for its own kinds and at their tier:
-growth pets in MALL_PET_A_GROWTH, the silk pickup pets in
-MALL_PET_B_SILK. The event copy of the snowman scroll has no mall row in
-the v1.696 client, so it is not listed. The rows only exist when the
-optional pet import wrote them (Imported), so a build without a later
-source lists none and still boots.
+One Pet-shop listing per pet scroll the later mall sells, in the tabs
+the shipped mall keeps for its own kinds and at their tier: growth
+pets in MALL_PET_A_GROWTH, the silk pickup pets in MALL_PET_B_SILK,
+vehicles in MALL_PET_C_VEHICLE. The event copy of the snowman scroll
+has no mall row in the v1.696 client, so it is not listed. The
+kangaroo's and the pegasus's packages already stand in the tree's own
+data (at these same prices), so the layout only lists them; the rows
+stand only when the item is in the tree (Imported), so a build
+without the fox's and snowman's later source lists neither of those
+and still boots.
 ================
 */
 func petScrollGoods() []mallCategoryGood {
@@ -325,6 +337,10 @@ func petScrollGoods() []mallCategoryGood {
 			Item: "ITEM_COS_P_FOX_SCROLL", Silk: growthPetScrollSilk, Badge: mallBadgeNew, Imported: true},
 		{Tab: "MALL_PET_B_SILK", Package: "PACKAGE_ITEM_COS_P_WINTER_SNOWMAN_SCROLL",
 			Item: "ITEM_COS_P_WINTER_SNOWMAN_SCROLL", Silk: pickupPetScrollSilk, Badge: mallBadgeNew, Imported: true},
+		{Tab: "MALL_PET_A_GROWTH", Package: "PACKAGE_ITEM_COS_P_KANGAROO_SCROLL",
+			Item: "ITEM_COS_P_KANGAROO_SCROLL", Silk: growthPetScrollSilk, Badge: mallBadgeNew, Imported: true},
+		{Tab: "MALL_PET_C_VEHICLE", Package: "PACKAGE_ITEM_COS_C_PEGASUS_SCROLL",
+			Item: "ITEM_COS_C_PEGASUS_SCROLL", Silk: vehiclePetScrollSilk, Badge: mallBadgeNew, Imported: true},
 	}
 }
 
