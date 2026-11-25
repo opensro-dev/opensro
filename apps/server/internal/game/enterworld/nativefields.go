@@ -175,7 +175,14 @@ Groups: the equipment stat families and the durability range
 (item-tooltip-stats.ts, itemMaxDurability); the tooltip and price rows
 (item-tooltip, stall, storage, cos-trade, repair); the use, cooldown
 and macro readers (item-cooldowns, return-scroll, sro-macro-potion);
-the stone masks (item-tooltip-stone, alchemy-selection).
+the stone masks (item-tooltip-stone, alchemy-selection). The census
+covers every path a row's fields travel: the wire `nativeFields`, the
+`item.tooltip.fields` copy itemTooltipReference makes of it (read
+directly and through its aliases - `f`, `fields`, `targetFields`,
+`stoneFields`), and the direct `nativeFields` reads that bypass the
+tooltip (mall-use, cos-timer, the macro rows). The census itself runs
+as a test (nativefields_census_test.go) so a new client read of an
+unpublished field fails CI instead of a player's tooltip.
 ================
 */
 var wireItemFieldNames = []string{
@@ -198,13 +205,14 @@ var wireItemFieldNames = []string{
 	"varianceIntMin294", "varianceIntMax298",
 	// Tooltip rows, prices and gates.
 	"cashItem", "rarity", "canRepair", "price", "repairCostB4", "reviveCostB8",
+	"country", "reqStr", "reqInt",
 	"reqLevelType1", "requiredLevel", "maxStack", "reqGender", "itemClass", "setId",
 	"maxDurability", "itemParam2_2a0", "itemParam6_2b0",
 	"maxMagicOptions51c", "avatarAttachment51d",
 	// Use, cooldown, macro and stone readers.
 	"useCooldownGroup524", "useCooldownDuration528",
 	"associatedSkillId", "useSkillId", "useSkillDurationMs",
-	"itemParam1_29c", "itemParam4_2a8",
+	"canUse", "itemParam1_29c", "itemParam3_2a4", "itemParam4_2a8",
 	"stoneFamilyMask", "stoneTooltipMask",
 }
 
