@@ -7,6 +7,7 @@ entities.ts - The entity journal owns wire admission and ordered lifecycle publi
 */
 import { AVATAR_STORAGE_CAPACITY, avatarSlotFits, isAvatarItem } from "@/engine/foundation/gameplay/avatar-socket";
 import { petNameUpdate } from "@/engine/foundation/gameplay/pet-name";
+import { decodePeerGuildAppearance, decodePeerGuildCleared } from "@/engine/foundation/gameplay/peer-guild-face";
 import { decodePetBondPulse } from "@/engine/foundation/gameplay/damage-feedback";
 import { animationRate, decodeAnimationSpeed } from "@/engine/foundation/animation/animation-rate";
 import {
@@ -69,6 +70,8 @@ import {
 	PET_BOND_OPCODE,
 	PET_COUNTER_PULSE_OPCODE,
 	PET_SHIELD_OPCODE,
+	PEER_GUILD_APPEARANCE_OPCODE,
+	PEER_GUILD_CLEARED_OPCODE,
 	PET_SPIRIT_OPCODE,
 	PICKUP_ANIM_OPCODE,
 	RESET_CLIENT_OPCODE,
@@ -1332,6 +1335,29 @@ export function createEntities(
 							...entity,
 							characterTitleId: titleId || undefined,
 							characterTitleFormat: format || undefined
+						}
+					} );
+				}
+				return;
+			}
+			if ( frame.opcode === PEER_GUILD_APPEARANCE_OPCODE || frame.opcode === PEER_GUILD_CLEARED_OPCODE ) {
+				// A watched player's guild changed (peer-guild-face.ts, #4413).
+				// A frame for a gid with no entity is dropped, as 75FE90's
+				// registry lookup finds nothing to bind.
+				const face = frame.opcode === PEER_GUILD_APPEARANCE_OPCODE ?
+					decodePeerGuildAppearance( p ) :
+					decodePeerGuildCleared( p );
+				const entity = face && entities.get( face.gid );
+				if ( face && entity ) {
+					apply( {
+						kind: "state",
+						entity: {
+							...entity,
+							guildName: face.guildName,
+							guildId: face.guildId,
+							guildGrantName: face.guildGrantName,
+							guildCrests: face.guildCrests,
+							guildWarTeam: face.guildWarTeam
 						}
 					} );
 				}

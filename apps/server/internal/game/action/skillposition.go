@@ -91,7 +91,7 @@ the skill engage commits the destination with the vitals debit before publicatio
 func (rt *Runtime) acceptPositionSkill(division string, character, snapshot *enterworld.Character, cast wire.SkillAction, skill enterworld.SkillRow) OpResult {
 	now := rt.Now().UnixMilli()
 	groundCast := skill.PositionEffect.Pinned && cast.HasGroundTarget && !cast.HasTarget
-	casterReady := enterworld.SkillLearned(snapshot, skill.ID) && enterworld.CharacterAlive(snapshot)
+	casterReady := enterworld.SkillUsable(snapshot, skill) && enterworld.CharacterAlive(snapshot)
 	if !groundCast || !casterReady {
 		return OpResult{DiagnosticRefusal: "position-skill-admission-refused"}
 	}
@@ -118,7 +118,7 @@ func (rt *Runtime) acceptPositionSkill(division string, character, snapshot *ent
 		if character.DeletePending || character.NativeTeleportMode == 1 || mounted {
 			return false
 		}
-		if !enterworld.CharacterAlive(character) || !enterworld.SkillLearned(character, skill.ID) || rt.skillCastPostureBlocked(division, character, now) {
+		if !enterworld.CharacterAlive(character) || !enterworld.SkillUsable(character, skill) || rt.skillCastPostureBlocked(division, character, now) {
 			return false
 		}
 		cost, code := rt.offensivePhaseCost(division, character, skill, now, nil)

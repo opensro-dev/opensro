@@ -70,7 +70,7 @@ func (rt *Runtime) acceptAreaBurst(division string, c, snapshot *enterworld.Char
 		}
 	}
 	if !rt.deps.UpdateMany(roster.characters, "player-area-burst", func() bool {
-		if !enterworld.CharacterAlive(c) || !enterworld.SkillLearned(c, skill.ID) {
+		if !enterworld.CharacterAlive(c) || !enterworld.SkillUsable(c, skill) {
 			return false
 		}
 		cost, code := rt.offensivePhaseCost(division, c, skill, now, nil)

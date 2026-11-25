@@ -50,6 +50,9 @@ type PendingInvite struct {
 type InviteRuntime struct {
 	deps     Dependencies
 	presence Presence
+	// hub is set by Register: the join re-sends the joiner's nameplate
+	// to the players around them (peerface.go).
+	hub *transport.Hub
 
 	mu              sync.Mutex
 	pendingByTarget map[string]PendingInvite
@@ -103,6 +106,7 @@ func inviteKey(divisionID, name string) string {
 // ApplyConsent by pending-invite ownership (last-write-wins hub
 // registration means a second Handle(0x3393) would BREAK party consent).
 func (r *InviteRuntime) Register(hub *transport.Hub) {
+	r.hub = hub
 	hub.Handle(OpGuildInviteRequest, r.handleInvite)
 }
 
@@ -378,6 +382,7 @@ func (r *InviteRuntime) ApplyConsent(s *transport.Session, divisionID string, ac
 		}
 	}
 	r.Unions.GuildMembersChanged(divisionID, invite.GuildID)
+	peerFaces{hub: r.hub, deps: r.deps, presence: r.presence, unions: r.Unions}.refresh(divisionID, []string{actor.Name})
 	log.Debugf("guild: %s joined guild %d on %s's invitation (%d member(s))", actor.Name, invite.GuildID, inviter.Name, len(joined))
 }
 

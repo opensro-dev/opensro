@@ -56,7 +56,7 @@ func (rt *Runtime) acceptDiscordWave(division string, c, snapshot *enterworld.Ch
 		cast.HasTarget, cast.TargetGid = true, enterworld.ObjectIDForCharacter(snapshot)
 	}
 	if !skill.Threat.Decrease || rt.Monsters == nil || !cast.HasTarget || cast.HasGroundTarget || cast.TargetGid == 0 ||
-		!enterworld.CharacterAlive(snapshot) || !enterworld.SkillLearned(snapshot, skill.ID) {
+		!enterworld.CharacterAlive(snapshot) || !enterworld.SkillUsable(snapshot, skill) {
 		return OpResult{DiagnosticRefusal: "discord-admission-refused"}
 	}
 	target := rt.findCharacterByGid(division, cast.TargetGid)
@@ -85,7 +85,7 @@ func (rt *Runtime) acceptDiscordWave(division string, c, snapshot *enterworld.Ch
 	}
 	var refusal uint16
 	if !rt.deps.Update(c, "discord-wave", func() bool {
-		if !enterworld.CharacterAlive(c) || !enterworld.SkillLearned(c, skill.ID) {
+		if !enterworld.CharacterAlive(c) || !enterworld.SkillUsable(c, skill) {
 			return false
 		}
 		charge, code := rt.offensivePhaseCost(division, c, skill, now, nil)

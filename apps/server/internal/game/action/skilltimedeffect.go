@@ -34,7 +34,7 @@ func (rt *Runtime) acceptTimedSelfEffect(division string, c, snapshot *enterworl
 	timed := skill.TimedEffect.Pinned && !skill.TimedEffect.Persistent && !skill.TimedEffect.Targeted
 	concealment := skill.Concealment.Pinned && !skill.Concealment.Persistent
 	if !timed && !concealment || skill.ChainSub || cast.HasTarget || cast.HasGroundTarget ||
-		!enterworld.CharacterAlive(snapshot) || !enterworld.SkillLearned(snapshot, skill.ID) {
+		!enterworld.CharacterAlive(snapshot) || !enterworld.SkillUsable(snapshot, skill) {
 		return OpResult{DiagnosticRefusal: "timed-effect-admission-refused"}, skillCastRefused
 	}
 	if rt.skillCastPostureBlocked(division, snapshot, now) || pending == nil && rt.hasOpenSkillCast(division, snapshot.Name) {
@@ -49,7 +49,7 @@ func (rt *Runtime) acceptTimedSelfEffect(division string, c, snapshot *enterworl
 	if pending == nil && skill.ActionCastingTimeMs > 0 {
 		var refusal uint16
 		if !doors.update(c, "prepare-timed-effect", func() bool {
-			if !enterworld.CharacterAlive(c) || !enterworld.SkillLearned(c, skill.ID) {
+			if !enterworld.CharacterAlive(c) || !enterworld.SkillUsable(c, skill) {
 				return false
 			}
 			// The reference server validates replacement before the cast becomes current.
@@ -96,7 +96,7 @@ func (rt *Runtime) acceptTimedSelfEffect(division string, c, snapshot *enterworl
 	var effects []wire.Frame
 	var refusal uint16
 	if !doors.update(c, "release-timed-effect", func() bool {
-		if !enterworld.CharacterAlive(c) || !enterworld.SkillLearned(c, skill.ID) {
+		if !enterworld.CharacterAlive(c) || !enterworld.SkillUsable(c, skill) {
 			return false
 		}
 		cost, code := rt.offensivePhaseCost(division, c, skill, now, pending)
