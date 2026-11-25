@@ -30201,8 +30201,10 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 						}
 						// Port-only (#4133): the confirm states the outcome
 						// before the player buys; no native string names it.
+						// It takes the notice row the layout grew for it
+						// (#4424), under the currency rows.
 						authoredText(
-							{ ...mallControl( page, 40 ), rect: [ 20, height - 62, dialogWidth - 40, 14 ] },
+							{ ...mallControl( page, 40 ), rect: [ 20, currencyLayout.noticeY, dialogWidth - 40, 14 ] },
 							mx,
 							my,
 							mallPurchaseOutcomeText(
@@ -30395,9 +30397,10 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 							}
 						}
 						if ( question.kind === "basket" || question.kind === "worn" ) {
-							// Port-only (#4133): as the single purchase above.
+							// Port-only (#4133): as the single purchase above,
+							// on the notice row the layout grew for it (#4424).
 							authoredText(
-								{ ...template, rect: [ 16, layout.buttonY - 20, layout.width - 32, 14 ] },
+								{ ...template, rect: [ 16, layout.noticeY, layout.width - 32, 14 ] },
 								mx,
 								my,
 								mallPurchaseOutcomeText(
