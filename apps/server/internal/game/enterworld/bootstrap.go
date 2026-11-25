@@ -871,7 +871,7 @@ func (c *refItemCollector) add(codename string, typeFlags *uint16) {
 		Codename:     row.Codename,
 		Kind:         "equipment",
 		Name:         row.Name,
-		NativeFields: row.NativeFields,
+		NativeFields: ItemWireFields(row.NativeFields),
 		Rent:         row.Rent,
 	})
 }
@@ -917,7 +917,7 @@ func (c *refItemCollector) finish() []RefItemRow {
 			continue
 		}
 		c.rows[i].DescriptionSymbol = item.DescriptionSymbol
-		c.rows[i].NativeFields = ItemStoneNativeFields(ItemUseNativeFields(item, c.deps.Skills), item, c.deps.MagicOptions)
+		c.rows[i].NativeFields = ItemWireFields(ItemStoneNativeFields(ItemUseNativeFields(item, c.deps.Skills), item, c.deps.MagicOptions))
 		if characters == nil || item.AssociatedCharacterCodename == "" {
 			continue
 		}

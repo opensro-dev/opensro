@@ -351,7 +351,7 @@ func ResolveEquipRoster(character *Character, modelCodename string, items ItemRe
 			TypeFlags:    row.TypeFlags(),
 			Codename:     row.Codename,
 			Name:         name,
-			NativeFields: row.NativeFields,
+			NativeFields: ItemWireFields(row.NativeFields),
 			Icon:         row.Icon,
 			Kind:         "equipment",
 			Plus:         0,
@@ -386,7 +386,7 @@ func ResolveEquipRoster(character *Character, modelCodename string, items ItemRe
 			log.Warnf("bootstrap: starter ammunition %s missing from itemdata", code)
 			continue
 		}
-		roster = append(roster, WireItem{Slot: 7, RefObjID: ammo.RefObjID, Codename: ammo.Codename, TypeFlags: ammo.TypeFlags(), NativeFields: ammo.NativeFields, Name: ammo.Name, Icon: ammo.Icon, Kind: "item", StackCount: 250})
+		roster = append(roster, WireItem{Slot: 7, RefObjID: ammo.RefObjID, Codename: ammo.Codename, TypeFlags: ammo.TypeFlags(), NativeFields: ItemWireFields(ammo.NativeFields), Name: ammo.Name, Icon: ammo.Icon, Kind: "item", StackCount: 250})
 		break
 	}
 	return roster

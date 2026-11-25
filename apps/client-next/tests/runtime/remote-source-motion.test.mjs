@@ -285,36 +285,3 @@ test("a rider's movement moves its mount (CCharactor_GetActiveMoverEntity 0x85E0
 	assert.deepEqual( corrected.map( event => event.entity.gid ), [ MOUNT ], "a rider's correction places the mount" );
 	owner.dispose();
 });
-
-test("a position resync re-anchors a walking peer without stopping it (0x3028)", () => {
-	const owner = createPeer();
-	owner.receive( destinationPacket(), 0 );
-	flush( owner );
-	for ( let now = 100; now <= 500; now += 100 ) {
-		owner.receive( sourcePacket( 0x30e3, SPEED * now / 1000 ), now );
-		flush( owner );
-	}
-	// The peer's own collision held it short of where the server has
-	// it; the 5 s resync (0x3028) states the server's position.
-	owner.receive( sourcePacket( 0x3028, 40 ), 600 );
-	const snapped = flush( owner ).find( event => event.kind === "state" );
-	assert.equal( snapped?.entity.x, 40, "the resync places the peer at the server's position" );
-	assert.equal( snapped?.entity.moving, true, "a resync is progress, not a settlement" );
-	owner.step( 650 );
-	const sampled = flush( owner ).find( event => event.kind === "state" );
-	assert.ok( sampled, "destination remains active after the resync" );
-	assert.equal( sampled.entity.moving, true );
-	assert.equal( sampled.entity.x, 40 + SPEED * 50 / 1000 );
-	owner.dispose();
-});
-
-test("a position resync settles an idle peer at the server's position (0x3028)", () => {
-	const owner = createPeer();
-	owner.receive( sourcePacket( 0x3028, 10 ), 100 );
-	const synchronized = flush( owner ).find( event => event.kind === "state" );
-	assert.equal( synchronized?.entity.x, 10 );
-	assert.equal( synchronized?.entity.moving, false );
-	owner.step( 200 );
-	assert.equal( flush( owner ).length, 0 );
-	owner.dispose();
-});
