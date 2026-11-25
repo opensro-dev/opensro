@@ -20,9 +20,10 @@ import { stretchRing } from "./stretch-ring";
 // (CIFListCtrl_SetHoverBar 523D40 on, CIFListCtrl_SetHoverBarColor 523D30
 // 0xFF8080FF) is drawn behind the hovered row by CIFListCtrl_DrawRows
 // (5248A0, 524C3D..524CB4) as one flat quad (CIFListCtrl_DrawRowBar 5259E0).
-export const POPUP_LIST_HOVER_TEXT = [ 1, 1, 128 / 255, 1 ] as const;
-export const POPUP_LIST_PRESSED_TEXT = [ 128 / 255, 128 / 255, 1, 1 ] as const;
-export const POPUP_LIST_HOVER_BAR = [ 128 / 255, 128 / 255, 1, 1 ] as const;
+// 0xFFFFFF80, 0xFF8080FF and 0xFF8080FF as [r, g, b, a] (0x80 / 255 = 0.5019607843137255).
+export const POPUP_LIST_HOVER_TEXT = [ 1, 1, 0.5019607843137255, 1 ] as const;
+export const POPUP_LIST_PRESSED_TEXT = [ 0.5019607843137255, 0.5019607843137255, 1, 1 ] as const;
+export const POPUP_LIST_HOVER_BAR = [ 0.5019607843137255, 0.5019607843137255, 1, 1 ] as const;
 
 /*
 ================
