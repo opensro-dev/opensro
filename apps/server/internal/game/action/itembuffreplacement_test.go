@@ -1,13 +1,14 @@
 /*
 ===========================================================================
 
-itembuffreplacement_test.go - a buff item and a cast buff refuse each other
+itembuffreplacement_test.go - the 20% damage scroll and the attack-up buffs
 
-The 20% damage scroll (cbuf, packed states 4 and 5) and the Chinese fire
-attack-up buff (state 4) cannot both be active. Natively both directions
-refuse 0x300C: a cast through the skill admission, an item's skill through the
-indirect skill start, which runs the same admission with mask 0xFFFF. #bug-reports: "can't use lightning
-and fire damage buffs with the 20% damage scroll open".
+The native buff admission refuses a buff whose casting states an active
+effect holds. With the later retail states (enterworld/skillstates.go,
+#4382) the 20% damage scroll holds state 94 alone, so it stacks with the
+Chinese fire (4) and lightning (5) attack-up buffs in either order, while
+the quest damage-up buffs (94, 5, 4) still refuse both. #bug-reports:
+"can't use lightning and fire damage buffs with the 20% damage scroll open".
 
 ===========================================================================
 */
@@ -20,6 +21,7 @@ import (
 	"time"
 
 	"opensro.online/server/internal/game/enterworld"
+	"opensro.online/server/internal/game/item/statuseffect"
 	"opensro.online/server/internal/game/item/wire"
 )
 
@@ -91,41 +93,82 @@ func scrollsLeft(c *enterworld.Character) int64 {
 
 /*
 ================
-TestDamageScrollAndAttackUpRefuseEachOther
+TestDamageScrollAndAttackUpStack
+
+Both orders: the scroll under the buff and the buff under the scroll each
+install, and the scroll is spent once.
 ================
 */
-func TestDamageScrollAndAttackUpRefuseEachOther(t *testing.T) {
-	refusal := offensiveRefusal(refusedReplacement).Frames[0].Payload
-
-	// The scroll first: the buff's cast is refused, as natively.
-	rt, _, c, buff := buffScrollFixture(t)
+func TestDamageScrollAndAttackUpStack(t *testing.T) {
+	// The scroll first, then the buff's cast.
+	rt, clock, c, buff := buffScrollFixture(t)
 	useBuffScroll(rt, c)
 	if scrollsLeft(c) != 1 || len(rt.effects.Snapshot(testDivision, c.Name)) != 1 {
 		t.Fatalf("the scroll did not install: %d left", scrollsLeft(c))
 	}
-	cast := rt.HandleTargetInteract(testDivision, c, wire.SkillAction{ActionId: buff.ID}.Encode())
-	if len(cast.Frames) == 0 || !bytes.Equal(cast.Frames[0].Payload, refusal) || len(rt.effects.Snapshot(testDivision, c.Name)) != 1 {
-		t.Fatalf("the buff was not refused under the scroll: %+v", cast.Frames)
+	if cast := rt.HandleTargetInteract(testDivision, c, wire.SkillAction{ActionId: buff.ID}.Encode()); len(cast.Frames) == 0 || cast.Frames[0].Payload[0] != 1 {
+		t.Fatalf("the buff was refused under the scroll: %+v", cast.Frames)
 	}
+	releaseBuff(t, rt, clock, c, 2)
 
-	// The buff first, cast through to its release: the scroll is refused
-	// too, and not spent.
-	rt, clock, c, buff := buffScrollFixture(t)
+	// The buff first, cast through to its release, then the scroll.
+	rt, clock, c, buff = buffScrollFixture(t)
 	if cast := rt.HandleTargetInteract(testDivision, c, wire.SkillAction{ActionId: buff.ID}.Encode()); len(cast.Frames) == 0 || cast.Frames[0].Payload[0] != 1 {
 		t.Fatalf("the buff alone was refused: %+v", cast.Frames)
 	}
-	for step := 0; step < 40 && len(rt.effects.Snapshot(testDivision, c.Name)) == 0; step++ {
+	releaseBuff(t, rt, clock, c, 1)
+	used := useBuffScroll(rt, c)
+	if refusal := offensiveRefusal(refusedReplacement).Frames[0].Payload; len(used.Frames) != 0 && bytes.Equal(used.Frames[0].Payload, refusal) {
+		t.Fatalf("the scroll was refused under the buff: %+v", used.Frames)
+	}
+	if scrollsLeft(c) != 1 || len(rt.effects.Snapshot(testDivision, c.Name)) != 2 {
+		t.Fatalf("the scroll did not stack: %d left, %d effects", scrollsLeft(c), len(rt.effects.Snapshot(testDivision, c.Name)))
+	}
+}
+
+/*
+================
+releaseBuff
+
+Ticks until the caster holds want effects: the buff's cast has released.
+================
+*/
+func releaseBuff(t *testing.T, rt *Runtime, clock *fakeClock, c *enterworld.Character, want int) {
+	t.Helper()
+	for step := 0; step < 40 && len(rt.effects.Snapshot(testDivision, c.Name)) < want; step++ {
 		clock.Advance(buffReleaseStep)
 		rt.TickHook()(clock.NowMs())
 	}
-	if len(rt.effects.Snapshot(testDivision, c.Name)) != 1 {
-		t.Fatal("the buff never released")
+	if got := len(rt.effects.Snapshot(testDivision, c.Name)); got != want {
+		t.Fatalf("the buff never released: %d effects, want %d", got, want)
 	}
-	used := useBuffScroll(rt, c)
-	if len(used.Frames) == 0 || !bytes.Equal(used.Frames[0].Payload, refusal) {
-		t.Fatalf("the scroll was not refused under the buff: %+v", used.Frames)
+}
+
+/*
+================
+TestDamageFamilyKeepsTheLaterRetailConflicts
+
+The shipped rows, through the native conflict check: the scroll is free of
+the attack-up buffs, and a quest damage-up buff refuses the scroll and both
+attack-up buffs.
+================
+*/
+func TestDamageFamilyKeepsTheLaterRetailConflicts(t *testing.T) {
+	states := func(code string) uint32 { return shippedOffense(t, code).Replacement.PackedStates }
+	scroll, quest := states("SKILL_MALL_DAMAGE_INC_20P_SCROLL_01"), states("SKILL_ETC_GNGWC_DAMAGE_UP_20_01")
+	for _, code := range []string{"SKILL_CH_FIRE_GONGUP_A_01", "SKILL_CH_LIGHTNING_GWANTONG_A_01"} {
+		var held statuseffect.CastingConflictSnapshot
+		held.UpdateActive(states(code), false)
+		if held.Conflicts(scroll) {
+			t.Fatalf("the scroll (%#x) conflicts with %s", scroll, code)
+		}
+		if !held.Conflicts(quest) {
+			t.Fatalf("the quest damage-up buff (%#x) stacks with %s", quest, code)
+		}
 	}
-	if scrollsLeft(c) != 2 || len(rt.effects.Snapshot(testDivision, c.Name)) != 1 {
-		t.Fatalf("a refused scroll was spent or installed: %d left, %d effects", scrollsLeft(c), len(rt.effects.Snapshot(testDivision, c.Name)))
+	var held statuseffect.CastingConflictSnapshot
+	held.UpdateActive(scroll, false)
+	if !held.Conflicts(quest) {
+		t.Fatalf("the quest damage-up buff (%#x) stacks with the scroll", quest)
 	}
 }
