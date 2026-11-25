@@ -28,7 +28,8 @@ this file follows where the sources show it:
 With SRO_STYRIA_CLASH off, none of this exists: no manager stands in
 the roster, no talk row is offered, no world is registered and this
 file's tick is a nil check. The match itself lives in
-styria_match.go; treasure, scoring and rewards are later slices.
+styria_match.go, its treasure and scoring in styria_score.go;
+rewards are a later slice.
 
 ===========================================================================
 */
@@ -490,8 +491,7 @@ func (rt *Runtime) advanceStyriaClash(nowMs int64) []simulation.DivisionFrames {
 			rt.styriaStartMatches(start)
 		}
 	}
-	rt.advanceStyriaMatches(nowMs)
-	return nil
+	return rt.advanceStyriaMatches(nowMs)
 }
 
 /*
