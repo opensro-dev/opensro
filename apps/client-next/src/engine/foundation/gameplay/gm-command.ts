@@ -51,6 +51,14 @@ const GM_BLOCK_LOGOUT = 0xf9;
 const GM_ALLOW_LOGOUT = 0xfa;
 const MAX_MUTE_MINUTES = 0xffff;
 const MAX_MODERATION_TEXT_BYTES = 1024;
+// The port's /NOTICE <text...> (GM tooling, not native; always on, for a
+// GM whose staff grant carries the notice box): subcommand 0xFB and a
+// u16-sized UTF-8 text the server shows in every player's notice banner.
+// The original client has no notice word. The byte bound is the server
+// decoder's; the banner's 100-character limit is the server's to answer,
+// so the GM reads why a long notice was refused.
+const GM_NOTICE = 0xfb;
+const MAX_NOTICE_TEXT_BYTES = 400;
 // The port's /FORGE <CODENAME> [key=value ...] and /FORGE help <CODENAME>
 // (GM tooling, not native; the server's SRO_GM_ITEM_FORGE, off unless a
 // shard enables it): subcommand 0xF2 and a u16-sized ANSI string carrying
@@ -400,9 +408,10 @@ export function gmReply( p: Uint8Array ): GmReply | null {
 		const percent = viewOf( p ).getUint16( 2, true );
 		return { console: true, text: "-> speed set to " + percent + "%" };
 	}
-	if ( code >= GM_CHAT_MUTE && code <= GM_ALLOW_LOGOUT ) {
-		// The port's moderation answers carry the server's text on both
-		// results (gmcommand/moderation.go), so the GM always reads why.
+	if ( (code >= GM_CHAT_MUTE && code <= GM_ALLOW_LOGOUT) || code === GM_NOTICE ) {
+		// The port's moderation and notice answers carry the server's text
+		// on both results (gmcommand/moderation.go, notice.go), so the GM
+		// always reads why.
 		return { console: true, text: (result === 1 ? "-> " : "Failed. -> ") + string() };
 	}
 	if ( code === GM_FORGE ) {
@@ -690,6 +699,17 @@ export function gmRequest(
 	// Any case: the moderation commands are port-only.
 	const moderation = moderationFrame( tokens );
 	if ( moderation !== undefined ) return moderation;
+	// Any case: the command is port-only. The words are rejoined with one
+	// space, as the moderation reasons are. A bare /NOTICE still sends its
+	// empty text, so the GM reads the server's "type the notice text".
+	if ( name?.toUpperCase() === "/NOTICE" ) {
+		const text = sizedText( tokens.slice( 1 ).join( " " ) );
+		if ( text.length - 2 > MAX_NOTICE_TEXT_BYTES ) return null;
+		const payload = new Uint8Array( 1 + text.length );
+		payload[0] = GM_NOTICE;
+		payload.set( text, 1 );
+		return { opcode: OP_GM_COMMAND, payload };
+	}
 	// Any case: the command is port-only, and players type it as /forge.
 	// The tail is rejoined exactly as typed; the server re-derives and
 	// validates every key, so a malformed tail is its refusal, while a
