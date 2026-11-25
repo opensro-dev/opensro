@@ -469,7 +469,10 @@ func (game *gameplayPlane) publishCaravanActor(ticker *simulation.Ticker, views 
 				petShown = false
 			}
 			if visible && !petShown {
-				row := wire.CosSpawnBand2{Band: 2, RefObjID: pet.RefObjID, Gid: pet.GID, Position: wire.Position{RegionID: at.RegionID, X: unit.X, Y: unit.Y, Z: unit.Z}, Walk: 20, Run: unit.RunSpeed, Scale: 100, Name: pet.Name, OwnerName: c.Name, OwnerGid: gid}
+				row := wire.CosSpawnBand2{Band: 2, RefObjID: pet.RefObjID, Gid: pet.GID, Position: wire.Position{RegionID: at.RegionID, X: unit.X, Y: unit.Y, Z: unit.Z}, Walk: 20, Run: unit.RunSpeed, Scale: 100, Name: pet.Name, OwnerName: c.Name, OwnerGid: gid,
+					// The owner's job marks the transport for the client's hostility
+					// test (a Thief's plain click on a Trader's), as on the agent itself.
+					HoldType: enterworld.DressedJob(c)}
 				frames = append(frames, simulation.Frame{Opcode: wire.OpSingleObjectSpawn, Payload: wire.EncodeCosSpawnBand2(row), ScopeGID: pet.GID, ScopeVisible: true})
 			} else if !visible && petShown {
 				frames = append(frames, simulation.Frame{Opcode: wire.OpObjectDespawn, Payload: (wire.ObjectDespawn{Gid: pet.GID}).Encode(), ScopeGID: pet.GID})
