@@ -170,6 +170,30 @@ test("a complete index cannot hide an unavailable required pack route", async t 
 	await writeFile( path.join( f.packageRoot, "release.json" ), JSON.stringify( f.m ) );
 	await assert.rejects( verifyDirectory( f.packageRoot ), /Missing runtime pack route/ );
 });
+/*
+================
+TestBuilderInspectionIsReused
+
+verifyDirectory skips re-inspecting a file only when the builder inspected
+those exact bytes (#4337); a changed file or no record gets the full check.
+================
+*/
+test("verifyDirectory reuses the builder's inspection only for the same bytes", async t => {
+	const f = await fixture( t ), name = "application/assets/main-12345678.js";
+	const exposed = Buffer.from( "//# sourceMappingURL=main.js.map\n" );
+	await writeFile( path.join( f.packageRoot, name ), exposed );
+	const entry = defined( f.m.files.find( row => row.path === name ) );
+	entry.length = exposed.length;
+	entry.sha256 = sha( exposed );
+	f.m.releaseId = releaseIdentity( f.m );
+	await writeFile( path.join( f.packageRoot, "release.json" ), JSON.stringify( f.m ) );
+	await assert.rejects( verifyDirectory( f.packageRoot ), /Source\/development\/secret exposure/ );
+	await assert.rejects(
+		verifyDirectory( f.packageRoot, { inspected: new Map( [ [ name, sha( Buffer.from( "other" ) ) ] ] ) } ),
+		/Source\/development\/secret exposure/
+	);
+	await verifyDirectory( f.packageRoot, { inspected: new Map( [ [ name, entry.sha256 ] ] ) } );
+});
 test("manifest and archive detect extra files, replacement payloads and corruption", async t => {
 	const f = await fixture( t ), archive = path.join( f.root, "release.tar" );
 	await archiveRelease( f.packageRoot, archive );
