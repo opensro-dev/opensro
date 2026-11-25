@@ -395,6 +395,26 @@ func (h *Host) ReportSlain(killerName string) bool {
 
 /*
 ================
+TicketForKill
+
+A unique died anywhere on the shard: its kill owner (the world's
+top-damage name, the same report ReportSlain judges for event
+hiders) earns one Lottery Ticket through the grant door (#3539),
+whether or not a lottery round is live - the tickets are how a
+future round is entered, so hunting uniques stocks them. A
+disabled host, a nameless kill and an unwired door drop nothing.
+True means the ticket was delivered.
+================
+*/
+func (h *Host) TicketForKill(division, killerName string) bool {
+	if !h.Enabled() || killerName == "" || h.deps.GrantTicket == nil {
+		return false
+	}
+	return h.deps.GrantTicket(division, killerName)
+}
+
+/*
+================
 Shutdown
 
 The composition root is going down: the live hider leaves the
@@ -465,6 +485,15 @@ func (h *Host) HandleWhisper(sender WhisperSender, text string) []string {
 	name := sender.Character.Name
 	if _, entered := live.byName[strings.ToLower(name)]; entered {
 		return []string{"You are already in this round - one entry each, and your first answer stands."}
+	}
+	// A ticketed kind spends its entry item before the entry stands
+	// (#3539): a bag without one is refused and nothing is spent.
+	if kind, ok := kindByName(live.event.Kind); ok {
+		if ticketed, ok := kind.(TicketedKind); ok {
+			if h.deps.TakeItem == nil || !h.deps.TakeItem(sender.Division, sender.Character, ticketed.TicketItem()) {
+				return []string{fmt.Sprintf("You need a Lottery Ticket to enter %s - every unique drops one.", live.event.DisplayTitle())}
+			}
+		}
 	}
 	e := entry{
 		accountID: sender.Character.AccountID,

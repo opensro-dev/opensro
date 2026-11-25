@@ -180,6 +180,12 @@ const (
 	// (social/eventbot, port-only #3533): an audited free grant, so
 	// the daily win cap reads the same rows the audit keeps.
 	GrantEventBotReward = "eventbot-reward"
+	// GrantEventBotTicket is the Lottery ticket door (social/eventbot,
+	// port-only #3539): one ticket to a unique's kill owner, one
+	// spent at entry. Audited like any grant, but deliberately not
+	// a free grant (freeGrantDoors): a ticket is entry currency,
+	// not a win, and must never count toward the daily win cap.
+	GrantEventBotTicket = "eventbot-ticket"
 )
 
 // freeGrantDoors are the item doors whose gains count as free grants.

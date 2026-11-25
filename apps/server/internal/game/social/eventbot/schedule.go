@@ -13,6 +13,9 @@ many rounds of how long, and exactly what a win pays:
 	20:30 hideandseek rounds=5 round=10m reward=ITEM_ETC_SILK_SCROLLx10 hider=MOB_EVENT_HIDER spot=West_Gate|2499|100|200 title=Hide & Seek
 	# random unique: unique codenames and spots, one of each per round
 	21:00 randomunique rounds=1 round=30m reward=ITEM_ETC_SILK_SCROLLx10 unique=MOB_RM_TAHOMET spot=Hotan|2500|100|200 title=Random Unique
+	# lottery: entering spends one Lottery Ticket (dropped by every
+	# unique's death); the winner is drawn at round close
+	21:00 lottery rounds=1 round=2m reward=ITEM_ETC_SILK_SCROLLx10 title=Sunday Lottery
 
 Fields after the kind are key=value; title= takes the rest of the
 line. The parse is strict like the house's other operator files: one
