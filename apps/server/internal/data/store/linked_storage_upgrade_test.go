@@ -1,7 +1,7 @@
 /*
 ===========================================================================
 
-linked_storage_upgrade_test.go - the schema 62 step (per-item linkedStorage)
+linked_storage_upgrade_test.go - the schema 63 step (per-item linkedStorage)
 
 ===========================================================================
 */
@@ -18,13 +18,13 @@ import (
 ================
 TestLinkedStorageUpgradeRewritesNothing
 
-A schema 59 authority at layout 16 upgrades to 62 with its records
+A schema 59 authority at layout 16 upgrades to 63 with its records
 untouched (linkedStorage is optional and absent, so every saved item
 is not a cube with contents); a second upgrade has nothing to do.
 ================
 */
 func TestLinkedStorageUpgradeRewritesNothing(t *testing.T) {
-	tier.Long(t, "a schema-59 layout-16 authority upgrades to 62 with its records untouched")
+	tier.Long(t, "a schema-59 layout-16 authority upgrades to 63 with its records untouched")
 	dir := t.TempDir()
 	s := openTest(t, dir, newTestClock())
 	c := seededCharacter()
