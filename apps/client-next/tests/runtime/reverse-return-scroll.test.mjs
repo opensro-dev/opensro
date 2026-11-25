@@ -66,10 +66,10 @@ test("a bag use asks for the point, and a row sends the use with it", () => {
 		f.ui.event( { kind: "double-activate", id: "slot:13" } );
 		assert.equal( sent.length, 0, "the use waited for its point" );
 		const shown = f.ui.step( f.state, 1300 );
+		// No party: the party row is not offered (#4391).
 		assert.deepEqual( boxIds( shown ), [
 			"reverse-scroll:2",
 			"reverse-scroll:3",
-			"reverse-scroll-party",
 			"reverse-scroll-user",
 			"reverse-scroll-cancel"
 		] );
@@ -128,7 +128,7 @@ test("the box stacks its return buttons; the one under the pointer shows its foc
 		const frame = defined( idle.controls.find( c => c.id === "reverse-scroll:2" ) ).rect;
 		assert.deepEqual(
 			boxIds( idle ).map( id => defined( idle.controls.find( c => c.id === id ) ).rect ),
-			[ 0, 31, 62, 93, 124 ].map( dy => [ frame[0], frame[1] + dy, 252, 24 ] )
+			[ 0, 31, 62, 93 ].map( dy => [ frame[0], frame[1] + dy, 252, 24 ] )
 		);
 		for ( const id of boxIds( idle ) ) assert.equal( buttonArt( f, idle, id ), "", id + " at rest" );
 		f.ui.event( { kind: "hover", id: "reverse-scroll:3" } );
@@ -181,7 +181,7 @@ test("right-click opens a modal choice without toggling the inventory behind it"
 	const sent = [], f = open( sent );
 	try {
 		f.ui.event( { kind: "right-activate", id: "slot:13" } );
-		assert.equal( boxIds( f.ui.step( f.state, 1300 ) ).length, 5 );
+		assert.equal( boxIds( f.ui.step( f.state, 1300 ) ).length, 4 );
 		f.ui.event( { kind: "key", code: "KeyI" } );
 		f.ui.event( { kind: "activate", id: "reverse-scroll-cancel" } );
 		const restored = f.ui.step( f.state, 1400 );
@@ -252,7 +252,7 @@ test("the box survives a busy inventory", () => {
 	try {
 		f.ui.event( { kind: "double-activate", id: "slot:13" } );
 		const before = f.ui.step( f.state, 1300 );
-		assert.equal( boxIds( defined( before ) ).length, 5, "the box is up before the bag is busy" );
+		assert.equal( boxIds( defined( before ) ).length, 4, "the box is up before the bag is busy" );
 		/** @type {any} */ (f.state.gameplay).inventoryPending = true;
 		const busy = f.ui.step( f.state, 1400 );
 		/** @type {any} */ (f.state.gameplay).inventoryPending = false;
@@ -261,7 +261,6 @@ test("the box survives a busy inventory", () => {
 		assert.deepEqual( boxIds( shown ), [
 			"reverse-scroll:2",
 			"reverse-scroll:3",
-			"reverse-scroll-party",
 			"reverse-scroll-user",
 			"reverse-scroll-cancel"
 		] );
@@ -284,7 +283,7 @@ test("an answer during a busy inventory is held, not lost", () => {
 		f.ui.event( { kind: "activate", id: "reverse-scroll:3" } );
 		const held = f.ui.step( f.state, 1500 ) ?? before;
 		assert.equal( sent.filter( row => row.kind === "gameplay" ).length, 0, "the answer waited for the bag" );
-		assert.equal( boxIds( defined( held ) ).length, 5, "the box stayed up" );
+		assert.equal( boxIds( defined( held ) ).length, 4, "the box stayed up" );
 		/** @type {any} */ (f.state.gameplay).inventoryPending = false;
 		f.ui.step( f.state, 1600 );
 		f.ui.event( { kind: "activate", id: "reverse-scroll:3" } );
@@ -327,14 +326,13 @@ test("with no published table the box keeps its two native points", () => {
 		assert.deepEqual( boxIds( f.ui.step( f.state, 1300 ) ), [
 			"reverse-scroll:2",
 			"reverse-scroll:3",
-			"reverse-scroll-party",
 			"reverse-scroll-user",
 			"reverse-scroll-cancel"
 		] );
 		// The map row is not offered, so naming it leaves the box as it was.
 		f.ui.event( { kind: "activate", id: "reverse-scroll-map" } );
 		const after = f.ui.step( f.state, 1400 );
-		assert.ok( !after || boxIds( after ).length === 5, "the box stays up" );
+		assert.ok( !after || boxIds( after ).length === 4, "the box stays up" );
 		assert.ok( !after?.controls.some( c => c.id.startsWith( "reverse-map-point:" ) ), "no map points" );
 	} finally {
 		f.dispose();
@@ -349,7 +347,6 @@ test("with a published table, the map row picks a point and sends choice 7 with 
 			"reverse-scroll:2",
 			"reverse-scroll:3",
 			"reverse-scroll-map",
-			"reverse-scroll-party",
 			"reverse-scroll-user",
 			"reverse-scroll-cancel"
 		] );
@@ -521,6 +518,57 @@ test("the party row lists the members and a member sends choice 4 with its gid",
 			kind: "gameplay",
 			command: { kind: "item-use", slot: 13, reverseChoice: 4, reversePartyGid: 43 }
 		} );
+	} finally {
+		f.dispose();
+	}
+});
+
+test("with no party the box offers no party row, and naming it opens nothing (#4391)", () => {
+	const sent = [], f = open( sent );
+	try {
+		f.ui.event( { kind: "double-activate", id: "slot:13" } );
+		const shown = defined( f.ui.step( f.state, 1300 ) );
+		assert.ok( !boxIds( shown ).includes( "reverse-scroll-party" ), "no party row without a party" );
+		// Even named directly, the party window never opens onto an
+		// empty member list: nothing repaints, the box stands as it was.
+		f.ui.event( { kind: "activate", id: "reverse-scroll-party" } );
+		const after = f.ui.step( f.state, 1400 ) ?? shown;
+		assert.deepEqual( boxIds( after ), boxIds( shown ) );
+		assert.ok( !after.controls.some( c => c.id.startsWith( "reverse-party:" ) ), "no member buttons" );
+		assert.equal( sent.length, 0, "no use sent" );
+	} finally {
+		f.dispose();
+	}
+});
+
+test("a party of only the player offers no party row (#4391)", () => {
+	const sent = [], f = open( sent );
+	try {
+		const gid = f.state.gameplay.localGid;
+		f.state.gameplay = /** @type {any} */ ({
+			...f.state.gameplay,
+			social: { ...(f.state.gameplay.social ?? {}), members: [ { id: gid, name: "Self" } ] }
+		});
+		f.ui.event( { kind: "double-activate", id: "slot:13" } );
+		const shown = defined( f.ui.step( f.state, 1300 ) );
+		assert.ok( !boxIds( shown ).includes( "reverse-scroll-party" ), "no party row with nobody to move to" );
+	} finally {
+		f.dispose();
+	}
+});
+
+test("the party window returns to the box when the last member leaves (#4391)", () => {
+	const sent = [], f = withParty( open( sent ) );
+	try {
+		f.ui.event( { kind: "double-activate", id: "slot:13" } );
+		f.ui.step( f.state, 1300 );
+		f.ui.event( { kind: "activate", id: "reverse-scroll-party" } );
+		f.ui.step( f.state, 1400 );
+		f.state.gameplay = /** @type {any} */ ({ ...f.state.gameplay, social: { members: [] } });
+		const shown = defined( f.ui.step( f.state, 1500 ) );
+		assert.ok( boxIds( shown ).includes( "reverse-scroll:2" ), "back at the box" );
+		assert.ok( !shown.controls.some( c => c.id.startsWith( "reverse-party:" ) ), "no member buttons" );
+		assert.equal( sent.length, 0, "no use sent" );
 	} finally {
 		f.dispose();
 	}
