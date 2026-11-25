@@ -23,6 +23,7 @@ import { createParticleQuery } from "./particle-query";
 import { createGpuAnimationResources } from "./animation";
 import { createParticlePresentation } from "./particles";
 import { createGpuTiming } from "./timing";
+import { createGpuWork } from "@/engine/foundation/rendering/gpu-work";
 import { createThunder } from "./thunder";
 import { createFlares } from "./flares";
 import { createUiResources } from "./ui";
@@ -105,6 +106,9 @@ export function createDevice( timingEnabled = false, gpuAnimationEnabled = true,
 	*/
 	const sceneFormat = (): GPUTextureFormat => hdrOn ? "rgba16float" : navigator.gpu.getPreferredCanvasFormat();
 	let timing: ReturnType<typeof createGpuTiming> | null = null;
+	// The queue-work counters (#4392) outlive one device generation: a
+	// recreated device keeps counting into the same totals.
+	const work = createGpuWork();
 	let phase: RuntimePhase = "starting", failure: string | null = null, device: GPUDevice | null = null;
 	let environmentBuffer: GPUBuffer | null = null,
 		sky: import("@/engine/runtime/renderer/internal/gpu-contract").ImageDraw | null = null,
@@ -467,6 +471,7 @@ export function createDevice( timingEnabled = false, gpuAnimationEnabled = true,
 						}
 					}
 					current().queue.submit( [ encoder.finish() ] );
+					work.noteSubmit();
 				}
 			} );
 			environmentBuffer = created.createBuffer( {
@@ -475,7 +480,7 @@ export function createDevice( timingEnabled = false, gpuAnimationEnabled = true,
 				usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST
 			} );
 			animation = gpuAnimationEnabled ? createGpuAnimationResources( created, retirement.retire ) : undefined;
-			particles = createParticlePresentation( created, retirement.retire );
+			particles = createParticlePresentation( created, retirement.retire, work );
 			geometry = createGeometryResources(
 				created,
 				current,
@@ -490,7 +495,8 @@ export function createDevice( timingEnabled = false, gpuAnimationEnabled = true,
 				navigator.gpu.getPreferredCanvasFormat(),
 				particles,
 				retirement.retire,
-				pipelines.lightmapSampling
+				pipelines.lightmapSampling,
+				work
 			);
 			ui = createUiResources(
 				created,
@@ -518,7 +524,7 @@ export function createDevice( timingEnabled = false, gpuAnimationEnabled = true,
 
 			finish = createFinish( created, navigator.gpu.getPreferredCanvasFormat() );
 
-			particleQuery = createParticleQuery( created, navigator.gpu.getPreferredCanvasFormat() );
+			particleQuery = createParticleQuery( created, navigator.gpu.getPreferredCanvasFormat(), work );
 			/*
 			================
 			skyDraw
@@ -906,6 +912,14 @@ export function createDevice( timingEnabled = false, gpuAnimationEnabled = true,
 		================
 		*/
 		gpuTiming: () => timing?.stats() ?? null,
+		/*
+		================
+		gpuWork
+
+		The queue-work totals counted so far (#4392).
+		================
+		*/
+		gpuWork: () => work.read(),
 		textureFeatures: () => textureFeatures,
 		/*
 		================
