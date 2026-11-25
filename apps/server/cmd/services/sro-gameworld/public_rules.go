@@ -110,10 +110,11 @@ var unlistedSettings = map[string]string{
 	// Build-time inputs (#1745): the variant build's import tools read
 	// them when the server data is built; the GameWorld reads neither,
 	// so there is no running rule for the page to state.
-	"SRO_CAP110_ITEMS":  "degree-11 equipment build input, consumed when the server data is built",
-	"SRO_HONOR_GOODS":   "honor store goods build input, consumed when the server data is built",
-	"SRO_CAP110_SKILLS": "degree-11 skill build input, consumed when the server data is built",
-	"SRO_CAP110_QUESTS": "Blue Berserk quest build input, consumed when the server data is built",
+	"SRO_CAP110_ITEMS":          "degree-11 equipment build input, consumed when the server data is built",
+	"SRO_HONOR_GOODS":           "honor store goods build input, consumed when the server data is built",
+	"SRO_ALEXANDRIA_PORT_STOCK": "Alexandria shop stock build input, consumed when the server data is built",
+	"SRO_CAP110_SKILLS":         "degree-11 skill build input, consumed when the server data is built",
+	"SRO_CAP110_QUESTS":         "Blue Berserk quest build input, consumed when the server data is built",
 	// Operator knobs of the Blue Berserk quests (quest/hwanknobs.go): they tune
 	// a quest roll or a quest drop; the unset value is the original.
 	quest.EnvHwanNiyaCaptureRates: "operator odds of the Niya trap quest's capture roll",
