@@ -13,7 +13,7 @@ undefined shop closes it; other fields belong to the newest snapshot.
 */
 import type { MoverPublication } from "./mover-publication";
 import type { ArenaChest } from "@/engine/foundation/gameplay/arena-chest";
-import type { CaravanHire, CaravanLead } from "@/engine/foundation/gameplay/caravan-hire";
+import type { CaravanHire, CaravanHireNpc, CaravanLead } from "@/engine/foundation/gameplay/caravan-hire";
 export type { MovementAim } from "./mover-publication";
 
 /*
@@ -836,6 +836,8 @@ export interface GameplayState extends MoverPublication {
 	readonly caravanHire?: CaravanHire;
 	// Who leads the hirer's hired Traders (port-only, caravan-hire.ts).
 	readonly caravanLead?: CaravanLead;
+	// The NPC whose menu lists the caravan hire row first (caravan-hire.ts).
+	readonly caravanHireNpc?: CaravanHireNpc;
 	readonly petTailwind?: PetTraining["tailwind"];
 	readonly petGuidance?: PetTraining["guidance"];
 	readonly petHowl?: PetTraining["howl"];

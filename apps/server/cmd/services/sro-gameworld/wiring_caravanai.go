@@ -42,22 +42,26 @@ Port-only caravan state belongs with its feature wiring.
 ================
 */
 type caravanRuntimeState struct {
-	caravanSkills         map[string][]uint32
-	caravanRessSkill      map[string]uint32
-	caravanAttackAt       map[string]int64
-	caravanAgents         *caravanai.Runtime
-	caravanNextStepMs     int64
-	caravanActors         []*enterworld.Character
-	caravanMapAtMs        int64
-	caravanMoving         map[string]bool
-	caravanMode           map[string]uint8
-	caravanMovePub        map[string]caravanMovePublish
-	caravanLook           map[string]bool
-	caravanSpeedAtMs      map[string]int64
-	caravanSpeedRefused   map[string]bool
-	caravanSpeedSeen      bool
-	caravanLootAtMs       map[string]int64
-	caravanLootSeen       map[string]uint32
+	caravanSkills       map[string][]uint32
+	caravanRessSkill    map[string]uint32
+	caravanAttackAt     map[string]int64
+	caravanAgents       *caravanai.Runtime
+	caravanNextStepMs   int64
+	caravanActors       []*enterworld.Character
+	caravanMapAtMs      int64
+	caravanMoving       map[string]bool
+	caravanMode         map[string]uint8
+	caravanMovePub      map[string]caravanMovePublish
+	caravanLook         map[string]bool
+	caravanSpeedAtMs    map[string]int64
+	caravanSpeedRefused map[string]bool
+	caravanSpeedSeen    bool
+	caravanLootAtMs     map[string]int64
+	caravanLootSeen     map[string]uint32
+	// caravanLootRefused: ground items an agent's pickup was refused, by
+	// agent then gid, until when it leaves them alone (a full bag, a
+	// spot it cannot stand on).
+	caravanLootRefused    map[string]map[uint32]int64
 	caravanGround         []grounditem.Item
 	caravanGroundAtMs     int64
 	caravanRoads          map[string]*caravanRoad
@@ -169,6 +173,9 @@ func (game *gameplayPlane) wireCaravanAgents() {
 	}
 	if game.items != nil {
 		game.items.CaravanHire = game.caravanHireRequest
+		game.items.CaravanHireLabel = func(divisionID string, _ *enterworld.Character, npcCodename string) string {
+			return game.caravanHireLabel(npcCodename)
+		}
 		game.items.CaravanTransportStepDown = true
 	}
 	log.Infof(
@@ -365,7 +372,7 @@ func (game *gameplayPlane) caravanAgentsTick(ticker *simulation.Ticker, nowMs in
 					denRegion := caravanai.TownWaypoint(caravanai.TownThiefDen).RegionID
 					if game.caravanThiefReturning[c.Name] && liveSpawn.RegionID == denRegion {
 						delete(game.caravanThiefReturning, c.Name)
-						game.items.ServerActorDismissTransport(game.divisionID, c.Name)
+						game.items.PushDivisionPeerFrames(game.divisionID, c.Name, game.items.ServerActorDismissTransport(game.divisionID, c.Name))
 						game.caravanAgents.CompleteThiefDenReturn(game.divisionID, c.Name, caravanai.Waypoint{RegionID: liveSpawn.RegionID, X: float32(liveSpawn.X), Y: float32(liveSpawn.Y), Z: float32(liveSpawn.Z)}, nowMs)
 					}
 				}
@@ -373,6 +380,10 @@ func (game *gameplayPlane) caravanAgentsTick(ticker *simulation.Ticker, nowMs in
 			game.keepCaravanSpeed(c, unit, nowMs)
 			if !mustRejoin {
 				game.showCaravanLoot(c, unit, nearby, nowMs)
+			}
+			if unit.Role == caravanai.RoleTrader && unit.DeadUntilMs > 0 && unit.CargoStacks > 0 &&
+				!game.items.ServerActorHasTransportGoods(game.divisionID, c.Name) {
+				game.caravanAgents.NoteCargoGone(game.divisionID, c.Name)
 			}
 			hp, _, mp, _ := game.items.GameplayVitals(game.divisionID, c)
 			cosHP, cosMaxHP, lost := game.items.ServerActorTransportVitals(game.divisionID, c.Name)
@@ -617,7 +628,16 @@ func (game *gameplayPlane) showCaravanLoot(c *enterworld.Character, unit *carava
 	seen := game.items.ServerActorLootNear(game.divisionID, c.Name, trader || loaded, ground, func(p grounditem.Point) bool {
 		return caravanai.WaypointDistance(here, caravanai.Waypoint{RegionID: p.RegionID, X: p.X, Z: p.Z}) <= caravanai.LootReach
 	})
+	refused := game.caravanLootRefused[c.Name]
+	for gid, until := range refused {
+		if nowMs >= until {
+			delete(refused, gid)
+		}
+	}
 	for _, loot := range seen {
+		if _, skip := refused[loot.Gid]; skip {
+			continue
+		}
 		at := caravanai.Waypoint{RegionID: loot.RegionID, X: loot.X, Y: loot.Y, Z: loot.Z}
 		d := caravanai.WaypointDistance(here, at)
 		if (loot.Goods && !bestGoods) || (loot.Goods == bestGoods && d <= bestDist) {
@@ -641,6 +661,8 @@ func (game *gameplayPlane) showCaravanLoot(c *enterworld.Character, unit *carava
 	game.caravanAgents.NoteLoot(game.divisionID, c.Name, bestGID, best, nowMs)
 }
 
+const caravanLootRefusedMs int64 = 60_000
+
 func (game *gameplayPlane) caravanPickUp(division, name string, itemGID uint32) bool {
 	c := game.deps.CharacterByName(division, name)
 	if c == nil {
@@ -652,7 +674,16 @@ func (game *gameplayPlane) caravanPickUp(division, name string, itemGID uint32) 
 	if picked {
 		log.Debugf("caravan-ai: %s picked up ground item %d", name, itemGID)
 	} else {
-		log.WithField("refusal", result.DiagnosticRefusal).Warnf("caravan-ai: %s could not pick up ground item %d", name, itemGID)
+		// Leave that item alone for a minute: retrying every second only
+		// repeats the refusal (and the log line).
+		if game.caravanLootRefused == nil {
+			game.caravanLootRefused = make(map[string]map[uint32]int64)
+		}
+		if game.caravanLootRefused[name] == nil {
+			game.caravanLootRefused[name] = make(map[uint32]int64)
+		}
+		game.caravanLootRefused[name][itemGID] = time.Now().UnixMilli() + caravanLootRefusedMs
+		log.WithField("refusal", result.DiagnosticRefusal).Warnf("caravan-ai: %s could not pick up ground item %d; leaving it for a minute", name, itemGID)
 	}
 	return picked
 }
@@ -673,39 +704,31 @@ func (game *gameplayPlane) caravanNotice(division, player, text string) {
 
 /*
 ================
-caravanHireOptions / caravanHireService
+caravanHireLabel / caravanHireService
 
-The specialty shops' talk menu lists every agent the player may hire now
-(port-only rows; the client shows "[AI]" symbols as written).
+The specialty shops (Hunters and Traders) and the Thief Den's buyer
+(Thieves) offer one hire row. It is the first row of the NPC's own menu
+(action.OpCaravanHireNpc, sent at select), not a conversation row; the
+client opens the hire window with 0x7FC3 operation 0. caravanHireService
+still answers a conversation row from an older client.
 ================
 */
 const (
 	caravanHireServicePrefix = "caravan-hire:"
-	// caravanTextSymbol marks a port-only dialog symbol that is its own text
-	// (client ui.ts hudCopy shows what follows it).
-	caravanTextSymbol  = "UIIT_PORT_CARAVAN:"
-	caravanThiefDenNPC = "NPC_TD_THIEF_BUY"
+	caravanThiefDenNPC       = "NPC_TD_THIEF_BUY"
 )
 
-func (game *gameplayPlane) caravanHireOptions(divisionID string, character *enterworld.Character, npcCodename string) []action.NpcQuestOption {
+func (game *gameplayPlane) caravanHireLabel(npcCodename string) string {
 	if game.caravanAgents == nil || !game.caravanAgents.Enabled() {
-		return nil
+		return ""
 	}
-	// City specialty shops hire Hunters and Traders; the Thief Den's buyer hires Thieves.
-	var den bool
 	switch npcCodename {
 	case "NPC_CH_SPECIAL", "NPC_WC_SPECIAL", "NPC_KT_SPECIAL":
+		return "Hire Hunters and Traders"
 	case caravanThiefDenNPC:
-		den = true
-	default:
-		return nil
+		return "Hire Thieves"
 	}
-	label := "Hire Hunters and Traders"
-	if den {
-		label = "Hire Thieves"
-	}
-	// One row opens the hire window (OpCaravanHire).
-	return []action.NpcQuestOption{{Codename: caravanHireServicePrefix + "window", TitleSymbol: caravanTextSymbol + label, PromptSymbol: caravanTextSymbol + label, Immediate: true}}
+	return ""
 }
 
 func (game *gameplayPlane) caravanHireService(character *enterworld.Character, codename string) ([]wire.Frame, bool) {

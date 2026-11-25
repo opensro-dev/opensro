@@ -61,7 +61,9 @@ barrier.
 */
 type Runtime struct {
 	// Port-only server actors report committed player hits outside the authority door.
-	ServerActorHit    func(division, victim, attacker string, damage int, nowMs int64)
+	// ServerActorHit reports a player strike on a RuntimeOnly actor; fatal is
+	// the combat authority's own verdict (the actor's AI keeps a copy of HP).
+	ServerActorHit    func(division, victim, attacker string, damage int, fatal bool, nowMs int64)
 	berserkActors     sync.Map // derived expiry index; character store owns state
 	spiritActors      sync.Map // attached Devil's Spirit lapse index (spiritability.go)
 	battleActors      sync.Map // battle-state expiry index (battlestate.go)
@@ -191,7 +193,11 @@ type Runtime struct {
 	PublicationHold func(label string, elapsed time.Duration)
 	// CaravanHire answers the port-only caravan hire window's request
 	// (OpCaravanHireRequest); nil when AI caravans are off.
-	CaravanHire       func(division string, c *enterworld.Character, payload []byte) []wire.Frame
+	CaravanHire func(division string, c *enterworld.Character, payload []byte) []wire.Frame
+	// CaravanHireLabel names the caravan hire row an NPC offers this
+	// character ("" for none); select sends it as OpCaravanHireNpc so the
+	// client lists it first in the NPC's menu.
+	CaravanHireLabel  func(division string, c *enterworld.Character, npcCodename string) string
 	SkillObjects      skillobject.Registry
 	CanPlaceQuestTrap func(*enterworld.Character, string) ([]wire.Frame, bool)
 	CaptureQuestTrap  func(*enterworld.Character, string, string, func() bool) ([]wire.Frame, bool)
@@ -362,6 +368,9 @@ type Runtime struct {
 	// lowercase name): the probe walks up to 140 rows through caravanTier.
 	caravanStacksMu sync.Mutex
 	caravanStacks   map[string]caravanStacksMemo
+	// caravanHadTransport: the AI Trader had a transport this life (a
+	// missing one then means it was killed, not never summoned).
+	caravanHadTransport map[string]bool
 	// petDiag throttles the attack pet fight log (petdiagnostics.go).
 	petDiag petDiagnostics
 	// placements counts non-walk placements inside a closed object

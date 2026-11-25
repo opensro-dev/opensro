@@ -6370,6 +6370,7 @@ The published plane when something changed since the last take, else null.
 				// Port-only caravan hire window (caravan-hire.ts).
 				...(caravanHire.state() ? { caravanHire: caravanHire.state()! } : {}),
 				...(caravanHire.lead() ? { caravanLead: caravanHire.lead()! } : {}),
+				...(caravanHire.hireNpc() ? { caravanHireNpc: caravanHire.hireNpc()! } : {}),
 				eligibility,
 				...(gmCatalogPending && gmCatalog ? { gmCatalog } : {}),
 				autoPotion,

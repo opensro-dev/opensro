@@ -266,7 +266,7 @@ func (rt *Runtime) publishPlayerHit(division string, h playerHit, now int64) (pu
 			damage += hit.Applied
 		}
 		if damage > 0 {
-			rt.ServerActorHit(division, h.target.player.Name, h.strike.killer.player.Name, int(damage), now)
+			rt.ServerActorHit(division, h.target.player.Name, h.strike.killer.player.Name, int(damage), h.struck.fatal, now)
 		}
 	}
 	if h.struck.fatal {

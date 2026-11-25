@@ -3602,9 +3602,11 @@ export function createUi( ports: UiPorts ) {
 	*/
 	let arenaPage = 0, arenaPageKey = "", arenaHiddenID = "";
 	// The caravan hire window's local state (port-only, caravan-hire.ts):
-	// the availability filter, the list page, and a Trader's star choice.
+	// the availability filter, the list page, and the hire being confirmed
+	// (every hire asks first; a Trader's also picks its goods' stars, 0 for
+	// the others).
 	let caravanOnlyAvailable = false, caravanPage = 0;
-	let caravanStarPick: { name: string; display: string; stars: number; } | null = null;
+	let caravanStarPick: { name: string; display: string; role: string; stars: number; } | null = null;
 	function activateCaravanHire( id: string ): boolean {
 		const hire = view?.gameplay?.caravanHire;
 		if ( !id.startsWith( "caravan-hire" ) || !hire ) return false;
@@ -3621,13 +3623,17 @@ export function createUi( ports: UiPorts ) {
 			sendGameplay( { kind: "caravan-hire", operation: 0, stars: 0, name: "" } );
 		} else if ( id.startsWith( "caravan-hire-row:" ) ) {
 			const row = hire.rows.find( r => r.name === id.slice( "caravan-hire-row:".length ) );
-			if ( row?.available && row.role === "Trader" && hire.stars.length > 0 ) {
-				caravanStarPick = { name: row.name, display: row.display, stars: 3 };
-			} else if ( row?.available ) {
-				sendGameplay( { kind: "caravan-hire", operation: 1, stars: 0, name: row.name } );
+			if ( row?.available ) {
+				const trader = row.role === "Trader" && hire.stars.length > 0;
+				caravanStarPick = {
+					name: row.name,
+					display: row.display,
+					role: row.role,
+					stars: trader ? Math.min( 3, hire.stars.length ) : 0
+				};
 			}
 		} else if ( id === "caravan-hire-star-less" || id === "caravan-hire-star-more" ) {
-			if ( caravanStarPick ) {
+			if ( caravanStarPick && caravanStarPick.stars > 0 ) {
 				caravanStarPick.stars = Math.max(
 					1,
 					Math.min( hire.stars.length, caravanStarPick.stars + (id === "caravan-hire-star-less" ? -1 : 1) )
@@ -6254,6 +6260,9 @@ export function createUi( ports: UiPorts ) {
 			sendGameplay( { kind: "attack", gid: view.gameplay.target } );
 		} else if ( id.startsWith( "party-target:" ) ) {
 			sendGameplay( { kind: "select", gid: Number( id.slice( 13 ) ) } );
+		} else if ( id === "npc-caravan-hire" ) {
+			// The NPC menu's hire row (npc-talk.ts) opens the hire window.
+			sendGameplay( { kind: "caravan-hire", operation: 0, stars: 0, name: "" } );
 		} else if ( id.startsWith( "caravan-lead:" ) ) {
 			sendGameplay( { kind: "caravan-hire", operation: 2, stars: 0, name: id.slice( 13 ) } );
 		} else if ( id === "self-target" && view.gameplay?.localGid ) {
@@ -17677,6 +17686,9 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 							) :
 							null,
 						canTalk: !!(capabilities & 2),
+						...(game.caravanHireNpc && game.caravanHireNpc.gid === game.npcConversation.gid ?
+							{ caravanHireRow: game.caravanHireNpc.label } :
+							{}),
 						prompt: game.npcEventGreeting ?
 							copy( game.npcEventGreeting ) :
 							// 5D9409: EVENT_EXCHANGE_FUNCTION replaces the
@@ -28454,11 +28466,14 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 					)
 				);
 				if ( caravanStarPick ) {
-					// The Trader's goods: the hirer picks the stars and pays for those goods.
-					const pick = caravanStarPick, choice = hire.stars[pick.stars - 1];
+					// Every hire asks first. A Trader's also picks its goods' stars;
+					// the hirer pays the fee plus those goods.
+					const pick = caravanStarPick,
+						trader = pick.stars > 0,
+						choice = trader ? hire.stars[pick.stars - 1] : undefined;
 					const sw = 340, sh = 210, sx = px + Math.floor( (width - sw) / 2 ), sy = py + 120;
 					rect( [ px, py, width, height ], [ 0, 0, 0, 0.45 ] );
-					windowBox( `Hire ${pick.display}`, sx, sy, sw, sh );
+					windowBox( `Confirm hire: ${pick.display}`, sx, sy, sw, sh );
 					quads.push(
 						...normalTile(
 							[ sx + 14, sy + 38, sw - 28, sh - 52 ],
@@ -28467,31 +28482,52 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 							full
 						)
 					);
-					quads.push(
-						...text.quads(
-							"How many stars of goods will this Trader carry?",
-							[ sx + 20, sy + 46, sw - 40, 18 ],
-							full,
-							muted,
-							{ hAlign: 1 }
-						)
-					);
-					button( "caravan-hire-star-less", "-", sx + 70, sy + 74, 40, pick.stars <= 1 );
-					quads.push(
-						...text.quads(
-							`${pick.stars} ${pick.stars === 1 ? "star" : "stars"}`,
-							[ sx + 115, sy + 78, 110, 20 ],
-							full,
-							gold,
-							{ hAlign: 1 }
-						)
-					);
-					button( "caravan-hire-star-more", "+", sx + 230, sy + 74, 40, pick.stars >= hire.stars.length );
-					if ( choice ) {
+					if ( trader ) {
 						quads.push(
 							...text.quads(
-								`Goods: ${choice.goods} gold`,
-								[ sx + 20, sy + 112, sw - 40, 18 ],
+								"How many stars of goods will this Trader carry?",
+								[ sx + 20, sy + 46, sw - 40, 18 ],
+								full,
+								muted,
+								{ hAlign: 1 }
+							)
+						);
+						button( "caravan-hire-star-less", "-", sx + 70, sy + 74, 40, pick.stars <= 1 );
+						quads.push(
+							...text.quads(
+								`${pick.stars} ${pick.stars === 1 ? "star" : "stars"}`,
+								[ sx + 115, sy + 78, 110, 20 ],
+								full,
+								gold,
+								{ hAlign: 1 }
+							)
+						);
+						button( "caravan-hire-star-more", "+", sx + 230, sy + 74, 40, pick.stars >= hire.stars.length );
+						if ( choice ) {
+							quads.push(
+								...text.quads(
+									`Goods: ${choice.goods} gold`,
+									[ sx + 20, sy + 112, sw - 40, 18 ],
+									full,
+									white,
+									{ hAlign: 1 }
+								)
+							);
+							quads.push(
+								...text.quads(
+									`Pay ${choice.total} gold in total (fee included)?`,
+									[ sx + 20, sy + 132, sw - 40, 18 ],
+									full,
+									gold,
+									{ hAlign: 1 }
+								)
+							);
+						}
+					} else {
+						quads.push(
+							...text.quads(
+								`Hire ${pick.display} (${pick.role}) for one trade run?`,
+								[ sx + 20, sy + 66, sw - 40, 18 ],
 								full,
 								white,
 								{ hAlign: 1 }
@@ -28499,8 +28535,8 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 						);
 						quads.push(
 							...text.quads(
-								`Total with the fee: ${choice.total} gold`,
-								[ sx + 20, sy + 132, sw - 40, 18 ],
+								`Pay ${hire.fee} gold?`,
+								[ sx + 20, sy + 98, sw - 40, 18 ],
 								full,
 								gold,
 								{ hAlign: 1 }

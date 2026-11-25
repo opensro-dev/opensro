@@ -145,12 +145,6 @@ func (r *Runtime) beginDeathLocked(unit *AgentUnit, attacker string, nowMs int64
 	unit.deathPos = position(unit)
 	unit.deathWasVengeance = unit.RunKind == RunVengeance
 	if r.isGroupedOnDeathLocked(unit, nowMs) {
-		if attacker != "" {
-			// A player's killing strike scattered the transport's goods
-			// (pvpstrike): a resurrected Trader must not carry them again.
-			// A monster kill drops nothing, so its goods stay loaded.
-			unit.CargoStacks = 0
-		}
 		unit.HP = 0
 		unit.RespawnPending = false
 		unit.DeadUntilMs = nowMs + GroupedRespawnMs
@@ -263,4 +257,21 @@ func (r *Runtime) reviveInPlaceLocked(unit *AgentUnit, hp, mp int64) {
 		unit.State = StateIdleInTown
 	}
 	unit.AvailableForHire = hireable(unit)
+}
+
+/*
+================
+NoteCargoGone
+
+The world found a dead Trader's transport empty: its death scattered the
+goods (a killing strike, or a fall while riding). It carries none when
+resurrected, so they are never both on the ground and in its wagon.
+================
+*/
+func (r *Runtime) NoteCargoGone(division, name string) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if u := r.findAgentLocked(division, name); u != nil && u.Role == RoleTrader && u.DeadUntilMs > 0 {
+		u.CargoStacks = 0
+	}
 }

@@ -168,8 +168,8 @@ func (game *gameplayPlane) initCaravanActors() error {
 			}
 		}
 	}
-	game.items.ServerActorHit = func(division, victim, attacker string, damage int, nowMs int64) {
-		game.caravanAgents.RecordPlayerAttack(division, victim, attacker, damage, nowMs)
+	game.items.ServerActorHit = func(division, victim, attacker string, damage int, fatal bool, nowMs int64) {
+		game.caravanAgents.RecordPlayerStrike(division, victim, attacker, damage, fatal, nowMs)
 	}
 	return nil
 }

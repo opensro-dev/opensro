@@ -286,7 +286,7 @@ func (r *Runtime) ObserveVitals(division, name string, hp, mp int64, transportLo
 	damage := unit.MaxHP
 	r.mu.Unlock()
 	if dead {
-		r.RecordPlayerAttack(division, name, "", damage, nowMs)
+		r.RecordPlayerStrike(division, name, "", damage, true, nowMs)
 	}
 }
 
@@ -346,6 +346,8 @@ convoy does not remain deadlocked by an unreachable target.
 ================
 */
 func (r *Runtime) ApproachWorldThreatAt(division, name string, target Waypoint, nowMs int64) (*AgentUnit, bool) {
+	// World hooks run outside r.mu (the combat path calls back into it).
+	casting := r.hooks.Casting != nil && r.hooks.Casting(division, name)
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	unit := r.findAgentLocked(division, name)
@@ -358,7 +360,6 @@ func (r *Runtime) ApproachWorldThreatAt(division, name string, target Waypoint, 
 		return &snapshot, false
 	}
 	unit.State = StateInCombat
-	casting := r.hooks.Casting != nil && r.hooks.Casting(division, name)
 	before := Waypoint{RegionID: unit.RegionID, X: unit.X, Z: unit.Z}
 	dist := WaypointDistance(before, target)
 	stopDist := attackStopDistance(unit)

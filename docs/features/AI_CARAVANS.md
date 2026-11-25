@@ -371,12 +371,14 @@ Distances use 10 world units per in-game metre (skill ranges: 180 units = 18m); 
   Trader's own call. A Hunter killed by a Thief respawns in town, rallies up to 3 idle Hunters there
   and leads them back after that Thief, as a killed Thief does after a Trader.
 - **Hiring window** (port-only `0x3FC3` S->C JSON, `0x7FC3` C->S `u8 op, u8 stars, name`): the
-  specialty shops' talk menu has one row, "Hire Hunters and Traders" (the Thief Den's Stolen Goods
-  Dealer: "Hire Thieves"), which opens the window. It lists every agent of the kinds hired there,
+  specialty shops list "Hire Hunters and Traders" as the first row of their menu, before "Start
+  conversation" (the Thief Den's Stolen Goods Dealer: "Hire Thieves"); the server marks those NPCs
+  at select with `0x3FC5` (u32 npc gid, label) and the row opens the window. It lists every agent of the kinds hired there,
   available ones first in green, the rest in red with the reason (on a trade run, hired by X, waiting
   in another town, out hunting a caravan, won't work for you, ...). "Show only available" filters the
-  list; Previous/Next page and Refresh. Clicking a green Hunter or Thief hires it; clicking a green
-  Trader opens a second dialog to pick 1-5 stars of goods (100,000 gold per star) with the total.
+  list; Previous/Next page and Refresh. Clicking a green name always opens a confirm dialog
+  first: a Hunter or Thief shows the fee, a Trader also picks 1-5 stars of goods (100,000 gold per
+  star) with the total; nothing is paid until "Hire".
   Hunters and Traders hire Hunters and Traders; Thieves hire Thieves; the player must be dressed and in
   town. Flat fee 15000 gold plus a Trader's goods. At most 7 hires at once. Hunters and Thieves appear
   at the hirer; a Trader is hired only in the town it waits in and walks over. Everyone hired is invited

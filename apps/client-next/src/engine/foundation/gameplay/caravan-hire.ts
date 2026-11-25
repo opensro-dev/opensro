@@ -8,7 +8,9 @@ hired where the player stands, available ones first, and a Trader's goods
 choices by star); the window's request is u8 operation (0 refresh,
 1 hire, 2 lead), u8 stars, then the agent's name. 0x3FC4 tells a hirer
 who leads its hired Traders and who may (itself and them); the party
-board's lead badges send operation 2 with the chosen name. A client
+board's lead badges send operation 2 with the chosen name. 0x3FC5 follows
+an NPC select when that NPC hires agents (u32 gid, the row's label); the
+NPC's menu lists that row first and its click sends operation 0. A client
 that predates the frames drops the unknown opcodes.
 
 ===========================================================================
@@ -18,6 +20,7 @@ import type { WireFrame } from "@/engine/contracts/network";
 export const CARAVAN_HIRE_OPCODE = 0x3fc3;
 export const CARAVAN_HIRE_REQUEST_OPCODE = 0x7fc3;
 export const CARAVAN_LEAD_OPCODE = 0x3fc4;
+export const CARAVAN_HIRE_NPC_OPCODE = 0x3fc5;
 
 export interface CaravanHireRow {
 	readonly name: string;
@@ -43,6 +46,11 @@ export interface CaravanHire {
 	readonly stars: readonly CaravanHireStars[];
 }
 
+export interface CaravanHireNpc {
+	readonly gid: number;
+	readonly label: string;
+}
+
 export interface CaravanLead {
 	readonly leader: string;
 	readonly candidates: readonly { readonly name: string; readonly display: string; }[];
@@ -61,6 +69,7 @@ createCaravanHire
 export function createCaravanHire() {
 	let hire: CaravanHire | null = null;
 	let lead: CaravanLead | null = null;
+	let hireNpc: CaravanHireNpc | null = null;
 	let sequence = 0;
 	return {
 		/*
@@ -72,6 +81,17 @@ body is a protocol error, never a partial window.
 ================
 		*/
 		receive( frame: WireFrame ): boolean {
+			if ( frame.opcode === CARAVAN_HIRE_NPC_OPCODE ) {
+				if ( frame.payload.length < 5 || frame.payload.length > 4 + 64 ) {
+					throw new Error( "Invalid caravan hire NPC" );
+				}
+				const gid = new DataView( frame.payload.buffer, frame.payload.byteOffset, 4 ).getUint32( 0, true );
+				hireNpc = {
+					gid,
+					label: new TextDecoder( "utf-8", { fatal: true } ).decode( frame.payload.subarray( 4 ) )
+				};
+				return true;
+			}
 			if ( frame.opcode === CARAVAN_LEAD_OPCODE ) {
 				const raw = JSON.parse( new TextDecoder( "utf-8", { fatal: true } ).decode( frame.payload ) ) as Record<
 					string,
@@ -122,6 +142,8 @@ body is a protocol error, never a partial window.
 		},
 		state: () => hire,
 		lead: () => lead,
+		// The NPC that offers a hire row, as its select told (null for none).
+		hireNpc: () => hireNpc,
 		/*
 ================
 request
@@ -143,6 +165,7 @@ The window's request frame: refresh (0), hire (1) or lead (2).
 		reset() {
 			hire = null;
 			lead = null;
+			hireNpc = null;
 		}
 	};
 }

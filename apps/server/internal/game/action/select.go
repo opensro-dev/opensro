@@ -434,6 +434,13 @@ func (rt *Runtime) HandleObjectSelect(divisionID string, character *enterworld.C
 	if rt.AttackPetExpansion {
 		outcome.Frames = append(outcome.Frames, rt.petRecipientBuffFrames(divisionID, gid, rt.Now().UnixMilli())...)
 	}
+	if target.npc != nil && rt.CaravanHireLabel != nil {
+		// Port-only, not native: after the select result, so the client
+		// binds it to the NPC it just selected.
+		if label := rt.CaravanHireLabel(divisionID, character, target.npc.Codename); label != "" {
+			outcome.Frames = append(outcome.Frames, CaravanHireNpcFrame(gid, label))
+		}
+	}
 	return outcome
 }
 

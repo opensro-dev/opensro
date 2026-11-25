@@ -100,3 +100,22 @@ test("the lead state names the leader and who may lead; an empty list clears it"
 	const frame = hire.request( 2, 0, "[AI]Trader_Jin" );
 	assert.deepEqual( [ ...frame.payload.slice( 0, 2 ) ], [ 2, 0 ] );
 });
+
+test("an NPC select can carry the hire row its menu lists first", async () => {
+	const { CARAVAN_HIRE_NPC_OPCODE } = await import(
+		sourceFileUrl( "src/engine/foundation/gameplay/caravan-hire.ts" ).href
+	);
+	const hire = createCaravanHire();
+	const label = new TextEncoder().encode( "Hire Hunters and Traders" );
+	const payload = new Uint8Array( 4 + label.length );
+	new DataView( payload.buffer ).setUint32( 0, 0x1234, true );
+	payload.set( label, 4 );
+	assert.equal( hire.receive( { opcode: CARAVAN_HIRE_NPC_OPCODE, payload } ), true );
+	assert.deepEqual( hire.hireNpc(), { gid: 0x1234, label: "Hire Hunters and Traders" } );
+	assert.throws(
+		() => hire.receive( { opcode: CARAVAN_HIRE_NPC_OPCODE, payload: Uint8Array.of( 1, 2 ) } ),
+		/Invalid caravan hire NPC/
+	);
+	hire.reset();
+	assert.equal( hire.hireNpc(), null );
+});

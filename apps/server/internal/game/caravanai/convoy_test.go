@@ -610,14 +610,14 @@ func TestTraderRecruitsAfterRobberyAndTravelsSoloAfterDelivery(t *testing.T) {
 
 /*
 ================
-TestRevivedTraderKeepsOnlyGoodsAPlayerDidNotScatter
+TestRevivedTraderCarriesOnlyGoodsStillInItsWagon
 
-A hired Trader waits dead for resurrection. A player's killing strike
-scatters its transport's goods on the ground, so it carries none after;
-a monster kill drops nothing, so it keeps them.
+A hired Trader waits dead for resurrection. When the world finds its
+transport empty (the death scattered the goods) it carries none after; a
+wagon that still holds them keeps them.
 ================
 */
-func TestRevivedTraderKeepsOnlyGoodsAPlayerDidNotScatter(t *testing.T) {
+func TestRevivedTraderCarriesOnlyGoodsStillInItsWagon(t *testing.T) {
 	players := map[string]*hirePlayer{"Boss": {at: TownWaypoint(TownJangan), job: domain.JobTrader, online: true}}
 	paid := map[string]int64{}
 	rt := hireRuntime(t, players, &paid)
@@ -632,12 +632,34 @@ func TestRevivedTraderKeepsOnlyGoodsAPlayerDidNotScatter(t *testing.T) {
 		u := rt.findAgentLocked("division", name)
 		return u.CargoStacks, u.DeadUntilMs > 0
 	}
-	rt.RecordPlayerAttack("division", "[AI]Trader_Jin", "AIThief_Kael", 1<<30, 2000)
+	rt.RecordPlayerStrike("division", "[AI]Trader_Jin", "AIThief_Kael", 1, true, 2000)
+	rt.RecordPlayerStrike("division", "[AI]Trader_Bao", "", 1, true, 2000)
+	rt.NoteCargoGone("division", "[AI]Trader_Jin")
 	if stacks, waiting := cargo("[AI]Trader_Jin"); !waiting || stacks != 0 {
-		t.Fatalf("player-killed Trader: waiting %v, still carries %d stacks", waiting, stacks)
+		t.Fatalf("emptied wagon: waiting %v, still carries %d stacks", waiting, stacks)
 	}
-	rt.RecordPlayerAttack("division", "[AI]Trader_Bao", "", 1<<30, 2000)
 	if stacks, waiting := cargo("[AI]Trader_Bao"); !waiting || stacks == 0 {
-		t.Fatalf("monster-killed Trader: waiting %v, lost its goods (%d stacks)", waiting, stacks)
+		t.Fatalf("loaded wagon: waiting %v, lost its goods (%d stacks)", waiting, stacks)
+	}
+}
+
+/*
+================
+TestOnlyAFatalStrikeKillsAnAgent
+
+The agent's HP copy can lag the world's heals: a strike the combat
+authority did not judge fatal never starts a death, a fatal one always does.
+================
+*/
+func TestOnlyAFatalStrikeKillsAnAgent(t *testing.T) {
+	players := map[string]*hirePlayer{"Boss": {at: TownWaypoint(TownJangan), job: domain.JobTrader, online: true}}
+	paid := map[string]int64{}
+	rt := hireRuntime(t, players, &paid)
+	rt.HireAgent("division", "Boss", domain.JobTrader, "[AI]Hunter_Kwan", 1000)
+	if _, defeated, _ := rt.RecordPlayerStrike("division", "[AI]Hunter_Kwan", "Thief", 1<<30, false, 2000); defeated {
+		t.Fatal("a non-fatal strike killed the agent")
+	}
+	if _, defeated, _ := rt.RecordPlayerStrike("division", "[AI]Hunter_Kwan", "Thief", 1, true, 3000); !defeated {
+		t.Fatal("a fatal strike did not kill the agent")
 	}
 }

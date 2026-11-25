@@ -81,8 +81,22 @@ func (rt *Runtime) SyncServerActorCargo(division string, c *enterworld.Character
 	unlock := rt.lockDivision(division)
 	defer unlock()
 	var restored *enterworld.CharacterCOS
+	// A missing transport is rebuilt at respawn, or for a living Trader that
+	// never had one this life. One that had a horse and lost it was killed:
+	// the AI runtime must read that loss (ServerActorTransportVitals) before
+	// anything else, or a fresh, fully loaded horse would hide it.
+	key := strings.ToLower(c.Name)
+	rt.caravanStacksMu.Lock()
+	if rt.caravanHadTransport == nil {
+		rt.caravanHadTransport = make(map[string]bool)
+	}
+	if respawn {
+		rt.caravanHadTransport[key] = false
+	}
+	hadTransport := rt.caravanHadTransport[key]
+	rt.caravanStacksMu.Unlock()
 	needTraderTransport := c.Job.Type == domain.JobTrader && c.RuntimeTransportGID != 0 &&
-		(respawn || (c.ActiveCOS == nil && enterworld.CharacterAlive(c) && stacks > 0))
+		(respawn || (c.ActiveCOS == nil && !hadTransport && enterworld.CharacterAlive(c) && stacks > 0))
 	if needTraderTransport {
 		var err error
 		restored, err = rt.NewServerActorTransport(c.RuntimeTransportGID)
@@ -106,7 +120,10 @@ func (rt *Runtime) SyncServerActorCargo(division string, c *enterworld.Character
 		if restored != nil {
 			c.ActiveCOS = restored
 		}
-		if c.Job.Type == domain.JobTrader && c.ActiveCOS != nil && c.ActiveCOS.Container != nil {
+		// A dead Trader's goods are not refilled: what its death scattered
+		// stays scattered, and the AI reads the empty transport
+		// (ServerActorHasTransportGoods) before a resurrection.
+		if c.Job.Type == domain.JobTrader && c.ActiveCOS != nil && c.ActiveCOS.Container != nil && (respawn || enterworld.CharacterAlive(c)) {
 			pet := c.ActiveCOS
 			desired := stacks
 			if targetStars > 0 && stacks > 0 {
@@ -157,7 +174,13 @@ func (rt *Runtime) SyncServerActorCargo(division string, c *enterworld.Character
 	}
 	rt.petMu.Unlock()
 	rt.registerCaravan(division, c)
-	return rt.characterSnapshot(division, c)
+	snapshot := rt.characterSnapshot(division, c)
+	if snapshot != nil && snapshot.ActiveCOS != nil {
+		rt.caravanStacksMu.Lock()
+		rt.caravanHadTransport[key] = true
+		rt.caravanStacksMu.Unlock()
+	}
+	return snapshot
 }
 
 type caravanStacksMemo struct {
@@ -287,16 +310,22 @@ Dismisses a RuntimeOnly actor's active transport (e.g. after a Thief returns
 to Bandit Den with stolen goods).
 ================
 */
-func (rt *Runtime) ServerActorDismissTransport(division, name string) {
+func (rt *Runtime) ServerActorDismissTransport(division, name string) []wire.Frame {
 	unlock := rt.lockDivision(division)
 	defer unlock()
 	c := rt.findCharacter(division, name)
-	if c == nil || !c.RuntimeOnly {
-		return
+	if c == nil || !c.RuntimeOnly || c.ActiveCOS == nil {
+		return nil
 	}
+	gid := c.ActiveCOS.GID
 	rt.deps.Mutate(c, "caravan transport dismiss", func() {
 		c.ActiveCOS = nil
 	})
+	// Unbind the pet session and mover the summon bound, as every native
+	// release does, and take the horse out of view; the peers' despawn is
+	// the caller's to publish.
+	frames := rt.retireCosRuntime(division, c, gid)
+	return append(frames, wire.Frame{Opcode: wire.OpObjectDespawn, Payload: wire.ObjectDespawn{Gid: gid}.Encode()})
 }
 
 /*

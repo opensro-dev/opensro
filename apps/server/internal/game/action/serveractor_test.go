@@ -25,7 +25,7 @@ func TestServerActorTakesRealSkillDamageWithoutKillRewards(t *testing.T) {
 	actor.RuntimeOnly = true
 	actor.CurrentHP = testInt64(1)
 	called := false
-	rt.ServerActorHit = func(division, victim, attacker string, damage int, nowMs int64) {
+	rt.ServerActorHit = func(division, victim, attacker string, damage int, _ bool, nowMs int64) {
 		called = victim == actor.Name && attacker == player.Name && damage == 1
 	}
 	var exp int64
