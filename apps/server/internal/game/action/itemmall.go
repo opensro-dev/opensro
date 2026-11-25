@@ -14,12 +14,16 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+
+	log "github.com/sirupsen/logrus"
 	"opensro.online/server/internal/domain"
 	"opensro.online/server/internal/game/enterworld"
 	"opensro.online/server/internal/game/item/commerce"
+	"opensro.online/server/internal/game/item/gacha"
 	"opensro.online/server/internal/game/item/grounditem"
 	"opensro.online/server/internal/game/item/inventory"
 	"opensro.online/server/internal/game/item/wire"
+	"opensro.online/server/internal/game/nasrun"
 	"opensro.online/server/internal/transport"
 )
 
@@ -108,8 +112,55 @@ func (rt *Runtime) ConfigureMall(dir string, authority domain.MallAuthority, ext
 	if err := catalog.Hydrate(rt.deps.ItemReferences()); err != nil {
 		return err
 	}
+	rt.withholdUniqueOnlyGoods(catalog)
 	rt.mallCatalog, rt.mallAuthority = catalog, authority
 	return nil
+}
+
+/*
+================
+withholdUniqueOnlyGoods
+
+Port-only, not native (owner 2026-11-25): goods a unique kill guarantees
+or rolls come from uniques only, so the mall stops selling every package
+that holds one. While SRO_UNIQUE_POP_TICKET adds a Magic Pop card to each
+unique kill the card leaves the mall; while the Devil's Spirit lucky drops
+run (NasrunTokens, nasrun_drops.go) their two prizes leave it: every
+Spirit, both sexes and colours, and Sabakun's Jewel. The token shop keeps
+selling Spirits: its tokens are unique rewards too. Both off, the mall is
+the one the built tree carries. The wiring sets
+UniqueRules before the mall loads (wiring_gameplay.go).
+================
+*/
+func (rt *Runtime) withholdUniqueOnlyGoods(catalog *commerce.MallCatalog) {
+	refs := rt.deps.ItemReferences()
+	if refs == nil {
+		return
+	}
+	var card uint32
+	if rt.UniqueRules.PopTicket {
+		if ref, ok := refs.ItemRefByCodename(gacha.CardCodename); ok && ref != nil {
+			card = ref.RefObjID
+		}
+	}
+	spirits := rt.NasrunTokens
+	if card == 0 && !spirits {
+		return
+	}
+	removed := catalog.WithholdPackagesHolding(func(refObjID uint32) bool {
+		if card != 0 && refObjID == card {
+			return true
+		}
+		if !spirits {
+			return false
+		}
+		ref, ok := refs.ItemRefByID(refObjID)
+		return ok && ref != nil && (nasrun.IsSpirit(ref.TypeFlags()) || ref.Codename == nasrunDropJewel)
+	})
+	if removed > 0 {
+		log.Infof("mall: %d unique-only offer(s) withheld (Magic Pop card %t, Devil's Spirit %t; port-only)",
+			removed, card != 0, spirits)
+	}
 }
 
 /*
