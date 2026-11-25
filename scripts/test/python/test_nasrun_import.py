@@ -415,7 +415,7 @@ if __name__ == "__main__":
 # SkillEffectMergeTest
 #
 # The lent skills' effect rows join the tree's skilleffect.txt in their own
-# sections, the transformation's animation group falls back to DEFAULT,
+# sections, the transformation keeps its own animation group,
 # and a rerun swaps the previous pass's rows for the new ones (#4407).
 # ================
 class SkillEffectMergeTest(unittest.TestCase):
@@ -443,7 +443,7 @@ class SkillEffectMergeTest(unittest.TestCase):
 		merged, efps = nasrun.merge_skill_effects(self.TREE, self.LATER, keys, set())
 		lines = merged.split("\r\n")
 		aniset, effectset = lines.index("#section\tskillaniset2"), lines.index("#section\tskilleffectset")
-		self.assertIn("1\tlent\tSKILL_LENT\t0\tFALSE\t0\tDEFAULT\tANI_READY01", lines[aniset:effectset])
+		self.assertIn("1\tlent\tSKILL_LENT\t0\tFALSE\t0\tAVATAR_NASRUN1\tANI_READY01", lines[aniset:effectset])
 		self.assertIn("-\tAVATAR_LENT\tACT_L\tsystem\tavatar_nasrun01_skill01_body01.efp", lines[effectset:])
 		self.assertNotIn("SKILL_OTHER", merged)
 		self.assertEqual(efps, ["avatar_nasrun01_skill01_body01.efp", "avatar_nasrun01_skill01_ready01.efp"])

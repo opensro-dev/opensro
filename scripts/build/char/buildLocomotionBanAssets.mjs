@@ -6,6 +6,7 @@ binding fallback. BAN bytes remain unchanged for the browser native loader.
 ===========================================================================
 */
 import { loadAvatarVisualOverrides, avatarAnimationRequirements } from "./avatarVisualOverrides.mjs";
+import { loadLaterAnimationSources, withLaterAnimationSets } from "./laterAnimationSets.mjs";
 import { writeIntoPublicTreeSync } from "../shared/publicWrite.mjs";
 import { loadEquipmentRecords } from "./equipmentVisualRecords.mjs";
 import { attachedMotionMetadata, pickAttachedMotionClips } from "./attachedMotionClips.mjs";
@@ -50,7 +51,13 @@ import { dataAssetPath, loadDataAsset } from "../shared/jmxAssetIO.mjs";
 import { writeJsonIfChangedSync } from "../shared/jsonOut.mjs";
 import { isMainScript } from "../shared/fsUtils.mjs";
 import { splitTextDataRow } from "../shared/textDataIo.mjs";
-import { normalizeAssetPath, publicRoot, retailTextdataRoot, clientV150ResinfoRoot } from "../world/paths.mjs";
+import {
+	clientV150ResinfoRoot,
+	extractedRoot,
+	normalizeAssetPath,
+	publicRoot,
+	retailTextdataRoot
+} from "../world/paths.mjs";
 
 const animPublicRoot = path.join( publicRoot, "assets", "anim" );
 const textdataDir = retailTextdataRoot;
@@ -172,11 +179,17 @@ export async function buildLocomotionBanAssets() {
 	const publishedByPath = new Map();
 	const models = {};
 	let clipCount = 0;
+	// Port-only (SRO_NASRUN, #4407): the later bodies' transformation sets.
+	const laterSets = loadLaterAnimationSources( extractedRoot );
 
 	for ( const model of resolved ) {
 		let bsr;
 		try {
-			bsr = parseCharacterBsr( await loadDataAsset( model.bsrPath ), model.bsrPath );
+			bsr = withLaterAnimationSets(
+				parseCharacterBsr( await loadDataAsset( model.bsrPath ), model.bsrPath ),
+				model.bsrPath,
+				laterSets
+			);
 		} catch ( error ) {
 			throw new Error( `[anim] ${model.codename}: cannot read ${model.bsrPath}: ${error?.message ?? error}`, {
 				cause: error

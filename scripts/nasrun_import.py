@@ -46,6 +46,8 @@ resources stay, as the other imports leave theirs: no row names them.
 import json
 from contextlib import ExitStack
 import os
+import re
+import shutil
 from pathlib import Path
 
 import alexandria_npcs as text_tables
@@ -365,6 +367,7 @@ def remove_skills(output, prior, marker, shard, manifest):
 	if shard.exists():
 		shard.unlink()
 	safe_target(output / TEXT_ROOT, VISUAL_CHANGE_TABLE).unlink(missing_ok=True)
+	shutil.rmtree(safe_target(output, LATER_BSR_DIR), ignore_errors=True)
 	effect_path = safe_target(output / TEXT_ROOT, SKILL_EFFECT_TABLE)
 	if effect_path.exists() and prior.get("effectKeys"):
 		text, _ = merge_skill_effects(tables.decode_table(effect_path.read_bytes()), "", set(), set(prior["effectKeys"]))
@@ -413,7 +416,6 @@ def effect_key(section, line):
 #
 # The tree's skilleffect.txt with the previous pass's rows (by key) taken
 # out and later's rows of keys appended at the end of their sections.
-# The rows' animation group moves off the later transformation set.
 # ================
 def merge_skill_effects(tree_text, later_text, keys, previous):
 	header, sections = effect_sections(tree_text)
@@ -427,8 +429,6 @@ def merge_skill_effects(tree_text, later_text, keys, previous):
 			if effect_key(name, line) not in keys:
 				continue
 			cells = line.rstrip("\r\n").split("\t")
-			if name == "skillaniset2" and len(cells) > ANI_GROUP_COLUMN and cells[ANI_GROUP_COLUMN] == LATER_ANI_GROUP:
-				cells[ANI_GROUP_COLUMN] = "DEFAULT"
 			if name == "skilleffectset":
 				efps.update(cell for cell in cells if cell.lower().endswith(".efp"))
 			added[name].append("\t".join(cells) + ending)
@@ -506,14 +506,45 @@ VC_SERVICE, VC_SKILL, VC_AVATAR_EFFECT, VC_BSR_M, VC_BSR_F = 0, 9, 10, 19, 20
 # They join the tree's table in their own sections.
 SKILL_EFFECT_TABLE = "skilleffect.txt"
 EFFECT_SECTIONS = {"skillaniset2": 2, "skilleffectset": 1}
-# The skill rows' animation group: AVATAR_NASRUN1 is the later clients'
-# transformation set, which the v1.150 animation-set table lacks
-# (animationSetNames.ts); until the transformation animations land the
-# casts take the default set, whose ANI_READY01 the native skills share.
-ANI_GROUP_COLUMN = 6
 # A skilleffectset scale cell that grows the character, not the particle.
 CHAR_SCALE_TOKEN = "SCT_CHAR_SCALE"
-LATER_ANI_GROUP = "AVATAR_NASRUN1"
+# The skill rows' animation group, AVATAR_NASRUN1, names a set the later
+# character BSRs author and the v1.150 ones lack: the transformation's
+# contraction (state 40) and explosive jump (state 191), then its stand,
+# run and wait. Those BSRs are staged beside the tree (LATER_BSR_DIR) for
+# the locomotion build to take the sets from (laterAnimationSets.mjs), and
+# their clips are copied into it.
+TRANSFORM_SETS = ("avatar_nasrun1", "avatar_nasrun2", "avatar_nasrun3")
+LATER_BODY_ROOT = "res/char/"
+LATER_BSR_DIR = ".opensro-nasrun-bsr"
+TRANSFORM_CLIP_ROOT = "prim/ani/avatar/nasrun"
+BAN_PATH = re.compile(rb"prim[\\/]ani[\\/][ -~]+?\.ban", re.IGNORECASE)
+
+
+# ================
+# later_bodies
+#
+# The later client's character BSRs that author the transformation sets,
+# for the bodies the tree has: {archive path: bytes}, and the Nasrun clips
+# they play. The locomotion build takes only those sets from them
+# (laterAnimationSets.mjs); every other clip they name is the body's own.
+# ================
+def later_bodies(data, index, trees):
+	bodies, clips = {}, set()
+	for key, entry in index.items():
+		if not key.endswith(".bsr") or not key.startswith(LATER_BODY_ROOT):
+			continue
+		body = bytes(sro_pk2.payload(data, entry))
+		if TRANSFORM_SETS[0].encode() not in body:
+			continue
+		if not any((tree / shared.FOLDERS["Data"] / key).is_file() for tree in trees):
+			continue
+		bodies[key] = body
+		for match in BAN_PATH.findall(body):
+			clip = shared.normalized_path(match.decode("ascii"))
+			if clip.startswith(TRANSFORM_CLIP_ROOT):
+				clips.add(clip)
+	return bodies, clips
 
 
 def add_nasrun_skills(vsro_root, native, output):
@@ -597,6 +628,12 @@ def add_nasrun_skills(vsro_root, native, output):
 				tables.decode_table(read_later(SKILL_EFFECT_TABLE)), effect_keys, set(prior.get("effectKeys", [])))
 		for efp in efps:
 			icons.add(("Particles", "system/" + shared.normalized_path(efp)))
+		# The transformation's animation sets and clips.
+		bodies, clips = {}, set()
+		if merged_effects is not None and "Data" in archives:
+			data, data_index = archives["Data"]
+			bodies, clips = later_bodies(data, data_index, (output, native))
+		icons.update(("Data", clip) for clip in clips)
 		assets = shared.copy_resource_closure(icons, native, output, archives)
 		# The costume's steady auras, its effect files now in the tree.
 		particles = (output / "Particles_extracted", native / "Particles_extracted")
@@ -611,6 +648,12 @@ def add_nasrun_skills(vsro_root, native, output):
 		write_atomically(visual_path, cap110.encode_rows(visual_rows))
 	else:
 		visual_path.unlink(missing_ok=True)
+	later_root = safe_target(output, LATER_BSR_DIR)
+	shutil.rmtree(later_root, ignore_errors=True)
+	for key, body in bodies.items():
+		target = safe_target(later_root, key)
+		target.parent.mkdir(parents=True, exist_ok=True)
+		write_atomically(target, body)
 	write_atomically(name_path, merged_names)
 	current = manifest.read_bytes() if manifest.exists() else (native / TEXT_ROOT / SKILL_MANIFEST).read_bytes()
 	names = [row[0] for row in tables.table_rows(current) if row]
@@ -624,6 +667,8 @@ def add_nasrun_skills(vsro_root, native, output):
 		"visualChanges": len(visual_rows),
 		"effectKeys": sorted(effect_keys),
 		"costumeEffects": worn, "costumeEffectsRefused": worn_refused,
+		"animationSources": {key: f"{LATER_BSR_DIR}/{key}" for key in sorted(bodies)},
+		"animationSets": list(TRANSFORM_SETS) if bodies else [],
 		"limits": [
 			"Lent by a worn, awake Devil's Spirit alone (nasrun/ability.go); no learn row or mastery names them.",
 			"The event Spirit's skill (31141 in the VSRO client) is not imported, as the event copies are not.",
