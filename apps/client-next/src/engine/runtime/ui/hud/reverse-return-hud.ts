@@ -20,7 +20,7 @@ are one pending scroll in three postures, like the map posture.
 
 ===========================================================================
 */
-import type { GameplayCommand, InventoryItem } from "@/engine/contracts/gameplay";
+import type { GameplayCommand, GameplayState, InventoryItem } from "@/engine/contracts/gameplay";
 import type { UiView } from "@/engine/contracts/ui";
 import { isReverseReturnScroll } from "@/engine/foundation/gameplay/cos-item-use";
 import { REVERSE_RETURN_LAST_DEATH, REVERSE_RETURN_LAST_RECALL } from "@/engine/foundation/gameplay/count-job";
@@ -60,19 +60,39 @@ export function createReverseReturnHud() {
 		if ( !pending ) return false;
 		const game = view?.gameplay;
 		const row = game?.inventory.find( row => row.slot === pending?.slot );
-		if (
-			view?.session?.phase === "world" && !view.travel && game?.localGid === pending.gid &&
+		const stands = view?.session?.phase === "world" && !view.travel && game?.localGid === pending.gid &&
 			!game.reverseReturnChoice && row?.refObjId === pending.refObjId &&
-			isReverseReturnScroll( row.typeFlags ) && row.quantity > 0
-		) return false;
+			isReverseReturnScroll( row.typeFlags ) && row.quantity > 0;
+		if ( stands ) {
+			// The party window lists members; the last one leaving takes
+			// it back to the box rather than leaving an empty window (#4391).
+			if ( window === "party" && !partyOffered( game ) ) {
+				window = null;
+				return true;
+			}
+			return false;
+		}
 		pending = null;
 		mapping = false;
 		window = null;
 		confirmEnroll = false;
 		return true;
 	}
+	/*
+	================
+	partyOffered
+
+	The party row's offer (#4391): another member exists to move to.
+	The box's row and the party window share this one test, so the row
+	is never offered when its window would list nobody.
+	================
+	*/
+	function partyOffered( game: GameplayState | null | undefined ): boolean {
+		return (game?.social?.members ?? []).some( member => member.id !== game?.localGid );
+	}
 	return {
 		reconcile,
+		partyOffered,
 		/*
 		================
 		open
@@ -154,12 +174,20 @@ export function createReverseReturnHud() {
 		================
 		openParty
 
-		The box's party row: the scroll waits for a member.
+		The box's party row: the scroll waits for a member. With no other
+		member the window never opens: in the v1.696 client the party
+		window's own show (CNIFReversePortalParty sub_E11F40) reads a
+		state byte (sub_FD5580) and sets its visibility from it, so the
+		window does not appear unconditionally. That the row itself
+		hides while the party is empty is inferred from that gate and
+		from this box's offered rows (the map row); what sets the
+		native byte was not isolated.
 		================
 		*/
 		openParty( view: UiView | null ): boolean {
 			reconcile( view );
 			if ( !pending ) return false;
+			if ( !partyOffered( view?.gameplay ) ) return false;
 			window = "party";
 			return true;
 		},

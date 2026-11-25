@@ -18460,9 +18460,14 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 					controls = drawFrame.controls = [];
 					// Port-only: the scroll's box grows a map row when it is offered.
 					const mapRow = reverseScrollHud.active() && reverseMapOffered();
-					// Later-native (#3903): the scroll's box always grows the
-					// party and user rows (the premium box keeps its two).
-					const laterRows = reverseScrollHud.active() ? 2 : 0;
+					// Later-native (#3903): the scroll's box grows the user row,
+					// and the party row only while another member exists
+					// (#4391: the v1.696 party window's show is state-gated,
+					// sub_E11F40, so an empty member window is never offered;
+					// the premium box keeps its two).
+					const userRow = reverseScrollHud.active(),
+						partyRow = userRow && reverseScrollHud.partyOffered( game );
+					const laterRows = (userRow ? 1 : 0) + (partyRow ? 1 : 0);
 					const admission = beginWindow(),
 						box = reverseReturnLayout( w, h, 2 + (mapRow ? 1 : 0) + laterRows );
 					blocks.push( full );
@@ -18517,7 +18522,7 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 							hudCopy( "UIIT_CLT_REVERSE_RETRUN_SCROLL_TO_APPOINT_CHANGE" )
 						);
 					}
-					if ( laterRows ) {
+					if ( partyRow ) {
 						authoredLabeledButton(
 							reverseReturnButton( box.points[pointRow++]! ),
 							0,
@@ -18525,6 +18530,8 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 							"reverse-scroll-party",
 							hudCopy( "UIIT_CLT_REVERSE_RETRUN_SCROLL_PARTY_MOVE" )
 						);
+					}
+					if ( userRow ) {
 						authoredLabeledButton(
 							reverseReturnButton( box.points[pointRow++]! ),
 							0,
