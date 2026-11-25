@@ -19,18 +19,32 @@ the timing and every other bone stay authored.
 ===========================================================================
 */
 import { compileBanTimeline } from "./compileBanTimeline.mjs";
+import { mulMat4, quatToMat4 } from "./mat4.mjs";
 
-// BAN files whose authored walk keys drive the feet through the ground
-// plane. Measured on the retail data through this module's own skinning
-// (lowest skinned vertex, model units, ground plane = 0):
+// BAN files whose authored locomotion keys drive the feet through the
+// ground plane. Measured on the retail data through this module's own
+// skinning (lowest skinned vertex, model units, ground plane = 0):
 //
 //   p_bear02_walk.ban (13 keys over 1666 ms): keyframes 3, 4, 5, 9, 10
 //   and 11 reach -3.01, -2.88, -2.06, -2.56, -2.23 and -1.80; sampled
 //   between keys the lowest paw reaches -3.52. The same model's stand
 //   clip never goes below -0.04, and the smaller bear rig (p_bear01)
-//   stays above -0.57, so only this one file is registered (#4416).
-//   Its run clip dips too (-1.94 sampled); that is a separate call.
-const GROUNDED_BAN_BASENAMES = new Set( [ "p_bear02_walk.ban" ] );
+//   stays above -0.57 (#4416).
+//   p_bear02_run.ban (16 keys): keyframe 8 reaches -1.78 and keyframe
+//   10 -1.10; sampled between keys the paw reaches -1.94. A following
+//   pet runs whenever its owner runs, so the run carries the same
+//   defect at the faster gait (#4458 review).
+//   p_seowon_walk.ban (14 keys): keyframes 1 and 2 reach -2.36 and
+//   -2.38 and nearly every key plants a foot about a unit under;
+//   sampled between keys the foot reaches -2.67. Its stand clip never
+//   goes below -0.07: the same defect on the monkey rig. Its run
+//   stays authored (sampled -1.26, about -1.19 under its stand floor,
+//   above the census line in cosWalkClearance.test.mjs).
+const GROUNDED_BAN_BASENAMES = new Set( [
+	"p_bear02_walk.ban",
+	"p_bear02_run.ban",
+	"p_seowon_walk.ban"
+] );
 
 // How far under the plane still counts as touching it while the
 // grounding iterates; the runtime interpolates a hair past the keys.
@@ -40,61 +54,9 @@ const GROUND_EPSILON = 0.002;
 // between keys.
 const GROUND_SAMPLES_PER_INTERVAL = 16;
 
-// ---- small math (column-major mat4, rigid transforms only) ----
-
-/*
-================
-quatToMat4
-
-Convert a native {q, t} bone transform (BSK/ BAN space) into a
-column-major matrix. The inverse bind needs no general inverse: the BSK
-stores each bone's inverse world transform beside the world one.
-================
-*/
-function quatToMat4( q, t ) {
-	const [x, y, z, w] = q;
-	const [tx, ty, tz] = t;
-	const x2 = x + x, y2 = y + y, z2 = z + z;
-	const xx = x * x2, xy = x * y2, xz = x * z2;
-	const yy = y * y2, yz = y * z2, zz = z * z2;
-	const wx = w * x2, wy = w * y2, wz = w * z2;
-	return new Float64Array( [
-		1 - (yy + zz),
-		xy + wz,
-		xz - wy,
-		0,
-		xy - wz,
-		1 - (xx + zz),
-		yz + wx,
-		0,
-		xz + wy,
-		yz - wx,
-		1 - (xx + yy),
-		0,
-		tx,
-		ty,
-		tz,
-		1
-	] );
-}
-
-/*
-================
-mulMat4
-
-Compose parent and child transforms in column-major order.
-================
-*/
-function mulMat4( a, b ) {
-	const o = new Float64Array( 16 );
-	for ( let c = 0; c < 4; c += 1 ) {
-		for ( let r = 0; r < 4; r += 1 ) {
-			o[c * 4 + r] = a[r] * b[c * 4] + a[4 + r] * b[c * 4 + 1] + a[8 + r] * b[c * 4 + 2] +
-				a[12 + r] * b[c * 4 + 3];
-		}
-	}
-	return o;
-}
+// quatToMat4/mulMat4 live in mat4.mjs, shared with exportGlb.mjs. The
+// inverse bind needs no general inverse: the BSK stores each bone's
+// inverse world transform beside the world one.
 
 /*
 ================
