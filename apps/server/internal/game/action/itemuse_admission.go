@@ -71,6 +71,8 @@ const (
 	itemUsePandoraBox
 	itemUseEquipSwitch
 	itemUseRigidSummonScroll
+	itemUseExpScroll
+	itemUseExpansion
 )
 
 /*
@@ -242,6 +244,18 @@ func admittedItemUseFamily(ref *enterworld.ItemRef) itemUseFamily {
 	// The composite scroll (UIU1 param jobs).
 	if ref.TypeIDs == [4]int64{3, 3, 13, 14} {
 		return itemUseComposite
+	}
+	// Later-native (#4240 part 3): the EXP/SP increase scrolls (3/3/13/21)
+	// start a timed param-job keeper (expscroll.go); no v1.150 row
+	// carries the type.
+	if ref.TypeIDs == [4]int64{3, 3, 13, 21} {
+		return itemUseExpScroll
+	}
+	// Later-native (#4240 part 3): the inventory and warehouse addition
+	// items (3/3/13/17) grow a capacity once their limits allow
+	// (expansion.go); no v1.150 row carries the type.
+	if ref.TypeIDs == [4]int64{3, 3, 13, 17} {
+		return itemUseExpansion
 	}
 	// The crest delete items (#2282, crestdelete.go): the four crest
 	// items share type 3/3/12/2 and split on their params - param1

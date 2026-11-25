@@ -489,6 +489,12 @@ type Character struct {
 	// the next entry presents them.
 	InventorySize      uint8 `json:"inventorySize,omitempty"`
 	InventoryExpansion uint8 `json:"inventoryExpansion,omitempty"`
+	// InventoryAdditionUsed marks the character's one use of the later
+	// inventory addition item (ITEM_MALL_INVENTORY_ADDITION, #4240 part
+	// 3; schema 58): its v1.696 text limits it to one time per character,
+	// so the record of the use is the character's own. A record from
+	// before the step reads as never used.
+	InventoryAdditionUsed bool `json:"inventoryAdditionUsed,omitempty"`
 
 	// AvatarInventory is the persisted costume inventory. Rows reuse the
 	// equipment item body and occupy native avatar slots 0..3. Every row's

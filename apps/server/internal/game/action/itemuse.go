@@ -479,6 +479,16 @@ func (rt *Runtime) handleItemUse(
 				division: divisionID, ref: ref, row: rowIndex, request: request, nowMs: nowMs,
 			}, character, tail, family == itemUseSkillTimeTicket, &result)
 		}
+		if family == itemUseExpScroll {
+			return rt.useExpScroll(skillItemUse{
+				division: divisionID, ref: ref, row: rowIndex, request: request, nowMs: nowMs,
+			}, character, tail, &result)
+		}
+		if family == itemUseExpansion {
+			return rt.useExpansion(skillItemUse{
+				division: divisionID, ref: ref, row: rowIndex, request: request, nowMs: nowMs,
+			}, character, tail, &result, &after)
+		}
 		if family == itemUseNameChange {
 			// The queue door takes the store's own lock, so it cannot
 			// run inside this character door: admit here, queue and
