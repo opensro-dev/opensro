@@ -337,9 +337,8 @@ func (rt *Runtime) applyGuildStorageMove(division string, c *enterworld.Characte
 	// and ahead of the session gates: the caller's own bag is no secret.
 	// A summoner row is judged by what it carries as well as by its own
 	// mark (#4479): read in the v1.188 server, the storage move
-	// (0x43F941 toward its move procedure; CGStorage::MoveItem
-	// 0x4B7820) moves the summoner row alone and never inspects the
-	// rows a pet carries, so no native refusal exists to copy. The
+	// moves the summoner row alone and never inspects the rows a pet
+	// carries, so no native refusal exists to copy. The
 	// inference from #1980's own reason, recorded here: for this door a
 	// pet loaded with a bound row is the bound row.
 	if personal == wire.MoveTypeStorageDeposit {
