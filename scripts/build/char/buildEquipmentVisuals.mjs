@@ -379,6 +379,19 @@ export async function buildEquipmentVisuals( dress, options = {} ) {
 		const record = { ...piece.record, model: piece.models.M, bodies: {} };
 		out[piece.id] = record;
 		(dress.visualChanges[piece.skillId] ??= []).push( piece.id );
+		// The costume's AnimationName (avatar_nasrun1..3) moves the wearer
+		// onto the transformation's own stand, run and wait while it is
+		// worn, through the worn-avatar override path (8EADF0) an
+		// avataritemdata row takes; those sets come from the later bodies
+		// (laterAnimationSets.mjs). The costume replaces every worn avatar,
+		// so no other override competes with it.
+		if ( piece.animation && piece.animation.toLowerCase() !== "xxx" ) {
+			dress.avatarVisualOverrides[piece.id] = {
+				animation: piece.animation.toLowerCase(),
+				priority: 0,
+				additionalBsr: ""
+			};
+		}
 		for ( const race of [ "CH", "EU" ] ) {
 			for ( const sex of [ "M", "W" ] ) {
 				const body = `${race}_${sex}`, paths = [ sex === "M" ? piece.models.M : piece.models.W ];
