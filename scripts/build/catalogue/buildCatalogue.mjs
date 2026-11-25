@@ -51,6 +51,9 @@ const SHARD_SETTINGS = path.join( serverRoot, "config", "shard-settings.json" );
 // The WebP encoders' content cache (webp_pool.py): an image unchanged since
 // any earlier build is copied, not encoded again.
 const WEBP_CACHE = buildStatePath( "catalogue-webp-cache" );
+// The portrait stills, kept under the key of the viewer and packs that
+// drew them (renderPortraits.mjs portraitKey).
+const PORTRAIT_CACHE = buildStatePath( "catalogue-portrait-cache" );
 // A requirement value no item asks for: requirements read as met (white),
 // since the catalogue has no player to compare against.
 const MET = 0xffff;
@@ -402,7 +405,8 @@ async function main() {
 			const { drawn, failed } = await renderPortraits( {
 				viewerBase: options.portraits,
 				monsters: monsters.monsters,
-				workDir: path.join( work, "portraits" )
+				workDir: path.join( work, "portraits" ),
+				cacheDir: PORTRAIT_CACHE
 			} );
 			for ( const monster of monsters.monsters ) {
 				const png = drawn.get( monster.id );
