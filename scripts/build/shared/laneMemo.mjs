@@ -156,6 +156,22 @@ export function decodeResult( text ) {
 
 /*
 ================
+coveredFolderKey
+
+True when a data key the record lacks is a per-folder key ("<label>/<name>",
+resourceBuildFingerprint folderHashes) whose root hash the record holds:
+that root hash covers the folder's files already, so the key's first
+appearance is instrumentation, not a change (#4337). Any other missing key,
+a new data root above all, is a change.
+================
+*/
+function coveredFolderKey( key, recordedData ) {
+	const slash = key.indexOf( "/" );
+	return slash > 0 && key.slice( 0, slash ) in recordedData;
+}
+
+/*
+================
 changedParts
 
 The names of the record parts that differ from this build's, so a lane
@@ -165,16 +181,18 @@ that runs says why.
 function changedParts( recorded, current ) {
 	if ( !recorded ) return [ "record format" ];
 	const changed = KEY_PARTS.filter( name => recorded[name] !== current[name] );
-	// A data key the record lacks is a per-folder key written beside its
-	// root hash (#4337): the root hash covers the folder's files already,
-	// so the key's first appearance is instrumentation, not a change.
+	const recordedData = recorded.data ?? {};
 	// Keys the record holds still name every move and deletion.
 	for ( const root of Object.keys( current.data ) ) {
-		if ( root in (recorded.data ?? {}) && recorded.data[root] !== current.data[root] ) {
+		if (
+			root in recordedData ?
+				recordedData[root] !== current.data[root] :
+				!coveredFolderKey( root, recordedData )
+		) {
 			changed.push( `data ${root}` );
 		}
 	}
-	for ( const root of Object.keys( recorded.data ?? {} ) ) {
+	for ( const root of Object.keys( recordedData ) ) {
 		if ( !(root in current.data) ) changed.push( `data ${root}` );
 	}
 	for ( const file of new Set( [ ...Object.keys( recorded.code ?? {} ), ...Object.keys( current.code ) ] ) ) {

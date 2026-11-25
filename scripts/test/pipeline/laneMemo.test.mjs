@@ -129,6 +129,32 @@ test("a record written before folder keys replays and learns them; a moved folde
 	} );
 });
 
+test("a data root the record never held reruns the lane; only a recorded root's folder keys are learned", async () => {
+	await withLane( async ( { memo, module, logs } ) => {
+		const counter = { runs: 0 }, inputs = { modules: [ module ] };
+		const first = memo( { data: { extracted: "a" }, startup: "s" } );
+		await first.lane( "lane", inputs, produce( counter ) );
+		await first.commit();
+
+		// A new root, or a folder key under a root the record lacks, is new
+		// input the record never covered, not instrumentation.
+		await memo( { data: { extracted: "a", textdata: "t" }, startup: "s" } ).lane(
+			"lane",
+			inputs,
+			produce( counter )
+		);
+		assert.equal( counter.runs, 2 );
+		assert.match( logs.at( -1 ), /data textdata changed/ );
+		await memo( { data: { extracted: "a", "textdata/A": "t1" }, startup: "s" } ).lane(
+			"lane",
+			inputs,
+			produce( counter )
+		);
+		assert.equal( counter.runs, 3 );
+		assert.match( logs.at( -1 ), /data textdata\/A changed/ );
+	} );
+});
+
 test("a record is only written by commit", async () => {
 	await withLane( async ( { memo, module } ) => {
 		const counter = { runs: 0 }, inputs = { modules: [ module ] };
