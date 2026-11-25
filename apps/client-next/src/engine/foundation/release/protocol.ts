@@ -22,6 +22,10 @@ checks) reads the same numbers the client ships.
 // #3903) rides protocol 20 unbumped: a tab that predates it meets an
 // unmatched opcode, which the receive chain drops silently, so the tab
 // simply never learns a saved location until it reloads.
+// The port-only 0x3FC8 Styria Clash status (styria.ts, #3648) rides
+// protocol 20 unbumped the same way: only a shard running the arena
+// sends it, and a tab that predates it drops the frame and simply
+// never shows the arena windows.
 // Protocol 20 admits the port-only skill reset control (opcode 21,
 // commerce-controls.ts SKILL_RECALL_CONTROL; SRO_SKILL_RESET_SCROLL), which
 // 19's world gate ended the session on.

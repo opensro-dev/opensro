@@ -22,6 +22,7 @@ import (
 	"opensro.online/server/internal/game/item/gacha"
 	"opensro.online/server/internal/game/item/wire"
 	"opensro.online/server/internal/game/world/simulation"
+	"opensro.online/server/internal/game/world/styria"
 	"opensro.online/server/internal/transport"
 )
 
@@ -182,6 +183,14 @@ func (rt *Runtime) HandleNpcAction(divisionID string, character *enterworld.Char
 				frames := []wire.Frame{{
 					Opcode: wire.OpNpcDialog, Payload: wire.EncodeNpcDialogOptions(prompt, symbols),
 				}}
+				// Port-only (#3648): the arena manager's conversation
+				// carries the talker's Styria status, so the client's
+				// registration window opens current.
+				if rt.styria != nil && npc.Codename == styria.ManagerCodename {
+					if frame, ok := rt.styriaStatusFrame(divisionID, character); ok {
+						frames = append(frames, frame)
+					}
+				}
 
 				return frames, ""
 			}
