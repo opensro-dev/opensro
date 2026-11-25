@@ -38,6 +38,7 @@ export const SOURCE_GATE_NAMES = new Set( [
 ] );
 
 // Longest first, so the critical path starts immediately.
+/** @type {[string, string[]][]} */
 export const GATES = [
 	// Reuses each file's pass while every input it read is unchanged.
 	[ "test", [ "tools/run-tests.mjs", "tests/architecture", "tests/runtime" ] ],
