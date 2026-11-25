@@ -4081,6 +4081,11 @@ state here before a command can claim a native wire conversation.
 				letters.remove( command.index );
 				return null;
 			}
+			if ( command.kind === "letter-view" ) {
+				letters.view();
+				dirty = true;
+				return null;
+			}
 			if ( command.kind === "chat" ) {
 				chat.request(
 					command.channel === 1 && eligibility.gm ? 3 : command.channel,

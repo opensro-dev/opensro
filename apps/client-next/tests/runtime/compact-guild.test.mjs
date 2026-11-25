@@ -194,7 +194,7 @@ for ( const [width, height] of [ [ 375, 667 ], [ 667, 375 ] ] ) {
 			// The Letter page reflowed: its rows and commands, then the write and
 			// read windows narrowed into the viewport.
 			const row = { sender: "Berk", modelRefId: 1907, received: 0, read: false, body: "Hello" };
-			Object.assign( fixture.state.gameplay, { letters: { rows: [ row ], reading: -1 } } );
+			Object.assign( fixture.state.gameplay, { letters: { rows: [ row ], reading: -1, alarm: false } } );
 			fixture.ui.event( { kind: "activate", id: "guild-tab:5" } );
 			output = draw();
 			assert.ok( output.controls.some( control => control.id === "letter-row:0" ) );
@@ -205,10 +205,10 @@ for ( const [width, height] of [ [ 375, 667 ], [ 667, 375 ] ] ) {
 			assert.ok( output.controls.some( control => control.id === "letter-body" ) );
 			fixture.ui.event( { kind: "activate", id: "letter-write-cancel" } );
 			draw();
-			Object.assign( fixture.state.gameplay, { letters: { rows: [ row ], reading: 0 } } );
+			Object.assign( fixture.state.gameplay, { letters: { rows: [ row ], reading: 0, alarm: false } } );
 			output = draw();
 			assert.ok( output.controls.some( control => control.id === "letter-read-close" ) );
-			Object.assign( fixture.state.gameplay, { letters: { rows: [ row ], reading: -1 } } );
+			Object.assign( fixture.state.gameplay, { letters: { rows: [ row ], reading: -1, alarm: false } } );
 			draw();
 			fixture.ui.event( { kind: "activate", id: "guild-tab:4" } );
 			output = draw();

@@ -60,7 +60,7 @@ function openLetter( { write } ) {
 	const row = { sender: "Berk", modelRefId: 1907, received: 0, read: false, body: "Hello" };
 	Object.assign( fixture.state.gameplay, {
 		social: emptySocial( "Player" ),
-		letters: { rows: [ row ], reading: -1 }
+		letters: { rows: [ row ], reading: -1, alarm: false }
 	} );
 	draw();
 	fixture.ui.event( { kind: "activate", id: "open-window:Guild" } );
@@ -68,7 +68,7 @@ function openLetter( { write } ) {
 	fixture.ui.event( { kind: "activate", id: "guild-tab:5" } );
 	draw();
 	if ( write ) fixture.ui.event( { kind: "activate", id: "letter-write" } );
-	else Object.assign( fixture.state.gameplay, { letters: { rows: [ row ], reading: 0 } } );
+	else Object.assign( fixture.state.gameplay, { letters: { rows: [ row ], reading: 0, alarm: false } } );
 	return { fixture, output: draw() };
 }
 

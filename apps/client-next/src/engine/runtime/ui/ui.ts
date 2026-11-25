@@ -1583,6 +1583,9 @@ export function createUi( ports: UiPorts ) {
 	// delete box asks about (-1 when none).
 	let letterSelected = -1, letterOffset = 0, letterSortByTime = false, letterSortDescending = false;
 	let letterDraft: { receiver: string; body: string; } | null = null, letterDeleting = -1;
+	// The LetterAlarmGuide's view report goes out once per lighting, when
+	// the mailbox window comes on screen (69D400 with 0).
+	let letterAlarmAcked = false;
 	/*
 	================
 	letterActivate
@@ -2966,6 +2969,7 @@ export function createUi( ports: UiPorts ) {
 		letterOffset = 0;
 		letterDraft = null;
 		letterDeleting = -1;
+		letterAlarmAcked = false;
 		petNameDialog = null;
 		petNameInput = "";
 		blockOffset = 0;
@@ -14396,6 +14400,22 @@ export function createUi( ports: UiPorts ) {
 							);
 						}
 					} );
+				}
+				// The LetterAlarmGuide (ginterface child 55, 69D400): an
+				// arrival the player has not seen lights the authored 40x40
+				// letteralarm icon at the frame's bottom right, clear of the
+				// underbar; the mailbox view itself puts the light out, so
+				// an arrival that lands while it is viewed never lights.
+				const letterAlarm = game?.letters?.alarm ?? false,
+					mailboxViewed = panel === "Guild" && guildTab === 5;
+				if ( letterAlarm && mailboxViewed && !letterAlarmAcked ) {
+					letterAlarmAcked = true;
+					sendGameplay( { kind: "letter-view" } );
+				} else if ( !letterAlarm ) {
+					letterAlarmAcked = false;
+				}
+				if ( letterAlarm && !mailboxViewed && hudData?.root.GDR_LETTER_ALARM_GUIDE ) {
+					authoredImage( hudData.root.GDR_LETTER_ALARM_GUIDE, w - 46, h - 40 );
 				}
 				if (
 					hudData && game?.cosRecords?.length &&

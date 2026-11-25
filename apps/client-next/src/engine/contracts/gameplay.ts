@@ -254,6 +254,7 @@ export type GameplayCommand =
 	| { readonly kind: "letter-read"; readonly index: number; }
 	| { readonly kind: "letter-close"; }
 	| { readonly kind: "letter-delete"; readonly index: number; }
+	| { readonly kind: "letter-view"; }
 	| { readonly kind: "stat-increase"; readonly stat: "str" | "int"; }
 	| { readonly kind: "beginner-mark"; readonly enabled: boolean; }
 	| { readonly kind: "helper-mark"; }
