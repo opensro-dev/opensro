@@ -61,10 +61,11 @@ const STORAGE_EXPANSION_INVENTORY = 0;
 const STORAGE_EXPANSION_WAREHOUSE = 1;
 // The question the native box asks for every other gated item.
 export const MALL_USE_QUESTION = "UIIT_MSG_QUESTION_SILKMALL_ITEM_USE";
-const STORAGE_EXPANSION_QUESTIONS: Readonly<Record<number, string>> = {
-	[STORAGE_EXPANSION_INVENTORY]: "UIIT_STT_STORAGE_EXPANSION_INVENTORY_ADDITION_ITEM_USE",
-	[STORAGE_EXPANSION_WAREHOUSE]: "UIIT_STT_STORAGE_EXPANSION_WAREHOUSE_ADDITION_ITEM_USE"
-};
+// Keyed by Param2: 0 (STORAGE_EXPANSION_INVENTORY), 1 (_WAREHOUSE).
+const STORAGE_EXPANSION_QUESTIONS = {
+	0: "UIIT_STT_STORAGE_EXPANSION_INVENTORY_ADDITION_ITEM_USE",
+	1: "UIIT_STT_STORAGE_EXPANSION_WAREHOUSE_ADDITION_ITEM_USE"
+} as const;
 
 /*
 ================
@@ -91,7 +92,11 @@ for any other item and for a Param2 neither kind names.
 */
 function storageExpansionQuestion( item: InventoryItem ): string | null {
 	if ( mallTid4( item.typeFlags ) !== STORAGE_EXPANSION_TID4 ) return null;
-	return STORAGE_EXPANSION_QUESTIONS[item.nativeFields?.itemParam2_2a0 ?? -1] ?? null;
+	const kind = item.nativeFields?.itemParam2_2a0;
+	if ( kind === STORAGE_EXPANSION_INVENTORY || kind === STORAGE_EXPANSION_WAREHOUSE ) {
+		return STORAGE_EXPANSION_QUESTIONS[kind];
+	}
+	return null;
 }
 
 /*
