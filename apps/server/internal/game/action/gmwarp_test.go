@@ -70,7 +70,7 @@ func TestGMWarpAuthorityAndReentry(t *testing.T) {
 }
 
 func TestGMWarpRefusals(t *testing.T) {
-	for _, kind := range []string{"denied-region", "missing-terrain", "stranded", "pet", "dead", "malformed", "nonfinite", "out-of-region"} {
+	for _, kind := range []string{"denied-region", "missing-terrain", "stranded", "dead", "malformed", "nonfinite", "out-of-region"} {
 		t.Run(kind, func(t *testing.T) {
 			c := rebirthTestCharacter(20, 100)
 			c.GMPrivilege = true
@@ -79,9 +79,6 @@ func TestGMWarpRefusals(t *testing.T) {
 			deps.CanEnterWorldRegion = func(*enterworld.Character, uint16) bool { return kind != "denied-region" }
 			deps.SpawnTerrainHeight = func(uint16, float64, float64) (float64, bool) { return 20, kind != "missing-terrain" }
 			deps.RelocateStrandedSpawn = func(p simulation.Spawn) (simulation.Spawn, bool, bool) { return p, kind == "stranded", false }
-			if kind == "pet" {
-				c.ActiveCOS = &enterworld.CharacterCOS{Summoned: true}
-			}
 			if kind == "dead" {
 				*c.CurrentHP = 0
 			}
@@ -128,5 +125,42 @@ func TestGMWarpEntryFailureRestoresMovement(t *testing.T) {
 	restored := rt.Worlds.Snapshot(simulation.WorldKey(testDivision, c.Name), func() simulation.WorldState { return simulation.SeedWorldState(c) })
 	if missionSpawnFromWorld(c.World.Spawn, simulation.Spawn{}) != before || restored.Spawn != previousState.Spawn || (restored.MoveSegment == nil || *restored.MoveSegment != *previousState.MoveSegment) {
 		t.Fatal("old movement not restored")
+	}
+}
+
+/*
+==================
+TestGMWarpCarriesMountedVehicle
+
+Issue #4422: a GM riding a vehicle warps like one on foot. The warp lands
+at the destination and the vehicle stays summoned and ridden.
+==================
+*/
+func TestGMWarpCarriesMountedVehicle(t *testing.T) {
+	c := rebirthTestCharacter(20, 100)
+	c.GMPrivilege = true
+	rt, _ := newTestRuntime(c, testCosSource(testItems()))
+	c.ActiveCOS = &enterworld.CharacterCOS{
+		GID: 0x00C00003, RefObjID: 3914, Codename: "COS_T_DHORSE3",
+		CurrentHP: 87829, Summoned: true, Mounted: true,
+	}
+	deps := rt.deps.(*enterworld.Deps)
+	deps.CanEnterWorldRegion = func(*enterworld.Character, uint16) bool { return true }
+	deps.SpawnTerrainHeight = func(uint16, float64, float64) (float64, bool) { return 20, true }
+	var sent []wire.Frame
+	rt.PushCharacterFrames = func(_, _ string, f []wire.Frame) { sent = append(sent, f...) }
+	out := gmcommand.HandleGmCommand(deps, nil, testDivision, c, warpFrame(), rt)
+	if !bytes.Equal(out.Ack, []byte{1, 16}) {
+		t.Fatalf("mounted warp refused: %+v", out)
+	}
+	if len(sent) == 0 || sent[0].Opcode != enterworld.OpcodeResetClient {
+		t.Fatalf("entry missing: %+v", sent)
+	}
+	got := missionSpawnFromWorld(c.World.Spawn, simulation.Spawn{})
+	if got.RegionID != 25416 || got.X != 703 || got.Z != 1575 {
+		t.Fatalf("mounted warp landed at %+v", got)
+	}
+	if c.ActiveCOS == nil || !c.ActiveCOS.Summoned || !c.ActiveCOS.Mounted {
+		t.Fatalf("vehicle lost on warp: %+v", c.ActiveCOS)
 	}
 }

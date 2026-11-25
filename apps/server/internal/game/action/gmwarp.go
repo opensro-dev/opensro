@@ -43,10 +43,13 @@ func (rt *Runtime) WarpGM(division, name string, p wire.Position) bool {
 		if !c.GMPrivilege || !enterworld.CharacterAlive(c) {
 			return travelPoint{}, false
 		}
-		// Active COS need a joint owner/follower migration; do not split poses.
-		if c.ActiveCOS != nil && c.ActiveCOS.Summoned {
-			return travelPoint{}, false
-		}
+		// A summoned COS does not refuse the warp (issue #4422): the warp is
+		// the server-driven PC world teleport (relocation.go) that the
+		// fortress expulsions already run on riders. relocateCharacter carries
+		// the companions to the destination, a mounted transport rides on the
+		// rider's own world pose, and re-entry respawns the COS with its ride
+		// state (enterworld bootstrap). INFERENCE: native /warp moves a mounted
+		// GM like any other teleport; no binary read was possible here.
 		destination, admitted := authority.ResolveGMWarpDestination(c, requested)
 		// INFERENCE: /warp names field coordinates (the GM tool targets the
 		// region grid the field map loads); a GM inside a fortress or instance
