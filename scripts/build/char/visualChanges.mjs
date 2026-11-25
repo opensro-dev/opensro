@@ -13,7 +13,7 @@ male/female BSR. The v1.150 tree has no such table, so a native build
 publishes none.
 
 Each piece is published as an avatar record of the equipment catalog
-under a reserved negative id (no RefItemID is negative), so the
+under a reserved id above every RefItemID (VISUAL_CHANGE_ID_BASE), so the
 appearance assembly dresses it as it dresses any avatar: its mask hides
 what it covers, its priority admits it before the worn equipment
 (equipment-visuals.ts selectEquipmentVisuals). dress.visualChanges names
@@ -49,6 +49,9 @@ const MASK_HAT = 0x0800;
 const MASK_SHOULDER_ONLY = 0x0204;
 // A skill holds at most this many pieces; ids step by it.
 const PIECES_PER_SKILL = 4;
+// The reserved id band: far above every RefItemID (the trees' stay under
+// a million), and still a decimal catalog key the client admits.
+export const VISUAL_CHANGE_ID_BASE = 2_000_000_000;
 
 /*
 ================
@@ -100,7 +103,7 @@ export function loadVisualChanges( root ) {
 		perSkill.set( skillId, index + 1 );
 		const mask = Number( c[VC_SLOT_MASK] );
 		pieces.push( {
-			id: -(skillId * PIECES_PER_SKILL + index),
+			id: VISUAL_CHANGE_ID_BASE + skillId * PIECES_PER_SKILL + index,
 			skillId,
 			skill,
 			animation: c[VC_ANIMATION].trim(),

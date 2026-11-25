@@ -7,8 +7,8 @@ Port-only, not native to v1.150 (SRO_NASRUN, #4407). The later clients'
 charactervisualchange.txt dresses a character while a skill's buff holds
 (ConditionID 3): a Devil's Spirit's lent skill puts its costume on its
 caster - the hat, the shoulders and the body. The build publishes each
-piece as an avatar record of the equipment catalog under a reserved
-negative id, and dress.visualChanges names each skill's pieces
+piece as an avatar record of the equipment catalog under a reserved id
+above every RefItemID, and dress.visualChanges names each skill's pieces
 (scripts/build/char/visualChanges.mjs). While such a buff is attached to
 an actor, the costume replaces its worn avatars; the pieces' masks and
 priority hide the equipment they cover, as any avatar's do.

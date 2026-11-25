@@ -600,6 +600,14 @@ export function createPresentationCatalog( owners: CatalogOwners ) {
 							if ( entry.auxiliary ) auxiliaryEntries[id + body] = entry.auxiliary;
 						}
 					}
+					// Port-only (SRO_NASRUN, #4407): a costume names avatar records the
+					// catalog holds (visual-changes.ts).
+					for ( const [skill, pieces] of Object.entries( value.dress.visualChanges ?? {} ) ) {
+						if (
+							!/^\d+$/.test( skill ) || !Array.isArray( pieces ) || !pieces.length ||
+							pieces.some( id => value.dress.equipment?.[String( id )]?.avatarSlot === undefined )
+						) throw Error( "Invalid visual change" );
+					}
 					for (
 						const entry of [
 							...Object.values( value.dress.avatarAuxiliary ?? {} ),

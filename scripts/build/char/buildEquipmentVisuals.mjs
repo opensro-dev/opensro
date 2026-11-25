@@ -351,7 +351,7 @@ export async function buildEquipmentVisuals( dress, options = {} ) {
 		}
 	}
 	// Port-only (SRO_NASRUN, #4407): the lent Spirit skills' costume pieces,
-	// avatar records under reserved negative ids (visualChanges.mjs).
+	// avatar records under reserved ids (visualChanges.mjs).
 	dress.visualChanges = {};
 	for ( const piece of loadVisualChanges( retailTextdataRoot ) ) {
 		const record = { ...piece.record, model: piece.models.M, bodies: {} };
