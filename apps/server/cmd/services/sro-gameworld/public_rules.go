@@ -28,6 +28,7 @@ import (
 	"opensro.online/server/internal/game/gmcommand"
 	"opensro.online/server/internal/game/item/alchemy"
 	"opensro.online/server/internal/game/item/commerce"
+	"opensro.online/server/internal/game/item/loot"
 	"opensro.online/server/internal/game/macro"
 	"opensro.online/server/internal/game/nasrun"
 	"opensro.online/server/internal/game/progression"
@@ -386,6 +387,10 @@ func publicRules() publicstats.RulesResponse {
 				Native: "A unique's equipment is rolled from the table of the unique's own level.",
 				Now:    "A unique within ten levels of the highest installed loot level rolls its equipment from that level: degree 9 with the native catalog, degree 11 with the cap-110 catalog installed. Every other unique keeps its own level's table.",
 				Why:    "Opt-in beta tuning, so the endgame uniques pay the endgame table; off keeps the native equipment table for every unique."},
+			{Flag: loot.EnvHighLevelSeals, On: loot.HighLevelSealsEnabled(),
+				Native: "Monsters above level 94 never drop sealed (SoX) equipment: no rare row exists past level 94.",
+				Now:    "Monsters of level 95-110 can drop a Seal of Star item of the degree their level drops, at the level-94 rate (about 0.27% of equipment drops).",
+				Why:    "Opt-in tuning so the endgame field has a seal roll; off keeps the native table."},
 			{Flag: progression.EnvUniqueSealDrops, On: progression.UniqueRulesFromEnv().SealDrops,
 				Native: "A unique drops sealed (SoX) equipment only from its ordinary rare roll, without a guaranteed seal reward.",
 				Now:    "Every unique kill leaves one Seal of Star of the top degree and one Seal of Moon on a kill in ten. No Seal of Sun is guaranteed; it drops only from the ordinary rare roll.",
