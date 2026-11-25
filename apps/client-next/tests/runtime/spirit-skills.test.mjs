@@ -105,3 +105,14 @@ test("a worn Spirit's lent skill casts and binds as learned until the server tak
 	assert.equal( game.receive( frame( SPIRIT_SKILL ), 30 ), true );
 	game.command( { kind: "quickslot-bind", slot: 1, skillId: SPIRIT_SKILL }, 40, undefined, local );
 });
+
+test("a worn, awake Spirit's socket loops the later clients' sixteen-cell edge", async () => {
+	const { spiritActiveOverlay } = await import( "../../src/engine/foundation/ui/item-slot-effects.ts" );
+	const rect = [ 10, 20, 32, 32 ];
+	const first = spiritActiveOverlay( rect, 0, 0 ), next = spiritActiveOverlay( rect, 0, 50 );
+	assert.equal( first.path, "/assets/images/Media_extracted/icon/item/etc/icon_edge_nasrun.png" );
+	assert.deepEqual( first.rect, rect );
+	assert.equal( first.uv[2], 1 / 16 );
+	assert.equal( next.uv[0] - first.uv[0], 1 / 16, "one cell per 50 ms" );
+	assert.deepEqual( spiritActiveOverlay( rect, 0, 16 * 50 ).uv, first.uv, "sixteen cells, then it loops" );
+});

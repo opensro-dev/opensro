@@ -20,7 +20,13 @@ import type { UiFrame } from "./frame-contract";
 import { EXPANSION_LEVEL_CAP } from "@/engine/foundation/gameplay/level-cap";
 import { itemCountQuads } from "@/engine/foundation/ui/item-count";
 import { equipmentWarningUv, itemEquipmentOverlay } from "@/engine/foundation/ui/item-equipment-overlay";
-import { itemSlotOverlays, itemSlotWash, slotSeed } from "@/engine/foundation/ui/item-slot-effects";
+import { SPIRIT_SOCKET } from "@/engine/foundation/gameplay/avatar-socket";
+import {
+	itemSlotOverlays,
+	itemSlotWash,
+	slotSeed,
+	spiritActiveOverlay
+} from "@/engine/foundation/ui/item-slot-effects";
 import { image, rect } from "./draw";
 
 const ICON_ROOT = "/assets/images/Media_extracted/icon/";
@@ -125,6 +131,13 @@ export function itemEffects(
 	);
 	for ( const overlay of overlays ) {
 		image( frame, { r: overlay.rect, path: overlay.path, uv: overlay.uv } );
+		slots.markEffect();
+	}
+	// Port-only (SRO_NASRUN, #4384): the worn Spirit's socket animates while
+	// the Spirit lends its skills, i.e. while it is awake.
+	if ( id === "avatar:" + SPIRIT_SOCKET && (game?.spiritSkills?.length ?? 0) > 0 ) {
+		const edge = spiritActiveOverlay( r, slotSeed( id + ":" + owned.refObjId ), slots.simulationTimeMs );
+		image( frame, { r: edge.rect, path: edge.path, uv: edge.uv } );
 		slots.markEffect();
 	}
 }
