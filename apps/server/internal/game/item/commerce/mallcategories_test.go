@@ -98,9 +98,10 @@ func TestMallCategoriesOn(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	// 81 shipped + 6 Halloween + the Rondo + the 3 summon scrolls.
-	if len(catalog.Offers) != 91 {
-		t.Fatalf("layout mall: %d offers, want 91", len(catalog.Offers))
+	// 81 shipped + 6 Halloween + the Rondo + the 3 summon scrolls
+	// + the kangaroo and pegasus scrolls.
+	if len(catalog.Offers) != 93 {
+		t.Fatalf("layout mall: %d offers, want 93", len(catalog.Offers))
 	}
 	// 16 shipped tabs + 2 HOT + 2 Premium + 1 Alchemy.
 	if len(catalog.Tabs) != 21 {
@@ -218,6 +219,25 @@ func TestMallCategoriesOn(t *testing.T) {
 			t.Fatalf("%s is listed without its imported item row", code)
 		}
 	}
+	// The kangaroo's and the pegasus's rows are the tree's own, so
+	// their listings stand: badged new at their kinds' tiers, and the
+	// purchase quotes resolve their scroll items.
+	for code, silk := range map[string]uint32{
+		"PACKAGE_ITEM_COS_P_KANGAROO_SCROLL": growthPetScrollSilk,
+		"PACKAGE_ITEM_COS_C_PEGASUS_SCROLL":  vehiclePetScrollSilk,
+	} {
+		offer := mallOfferNamed(catalog, code)
+		if offer == nil || offer.Silk != silk || offer.Badge != mallBadgeNew {
+			t.Fatalf("%s = %+v, want a new-badged listing at %d silk", code, offer, silk)
+		}
+		quote, err := catalog.Quote(wire.MallPurchase{
+			Group: offer.Group, Shop: offer.Shop, Tab: offer.Tab, Slot: offer.Slot,
+			Package: offer.PackageID, Quantity: 1,
+		})
+		if err != nil || quote.Cost.Silk != silk {
+			t.Fatalf("%s quote = %+v, %v; want %d silk", code, quote.Cost, err, silk)
+		}
+	}
 }
 
 /*
@@ -271,10 +291,11 @@ func TestMallCategoriesWithExtraGoods(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	// 81 shipped + 22 extra + the Rondo + the 3 summon scrolls: the
-	// Halloween six are among the 22 and move tabs rather than twice.
-	if len(catalog.Offers) != 107 {
-		t.Fatalf("both settings: %d offers, want 107", len(catalog.Offers))
+	// 81 shipped + 22 extra + the Rondo + the 3 summon scrolls + the
+	// kangaroo and pegasus scrolls: the Halloween six are among the
+	// 22 and move tabs rather than twice.
+	if len(catalog.Offers) != 109 {
+		t.Fatalf("both settings: %d offers, want 109", len(catalog.Offers))
 	}
 	listings := map[string]int{}
 	for _, offer := range catalog.Offers {
@@ -429,8 +450,8 @@ func TestMallCategoriesListOnlyImportedSwitchers(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(catalog.Offers) != 92 {
-		t.Fatalf("layout mall: %d offers, want 91 plus the one imported switcher", len(catalog.Offers))
+	if len(catalog.Offers) != 94 {
+		t.Fatalf("layout mall: %d offers, want 93 plus the one imported switcher", len(catalog.Offers))
 	}
 	offer := mallOfferNamed(catalog, "PACKAGE_ITEM_ORIGIN_CH_HW_SWORD_SCROLL")
 	if offer == nil || offer.Shop != 5 || offer.Tab != 1 || offer.Silk != modelSwitcherSilk || offer.Badge != mallBadgeHot {
@@ -452,9 +473,10 @@ func TestMallCategoriesListOnlyImportedSwitchers(t *testing.T) {
 ================
 TestImportedPetScrollsTakeTheShippedTiers
 
-The imported pets sell at the shipped mall's own pet prices, read from
-its listings: the fox at the growth pets' (the bear's), the snowman at
-the silk pickup pets' (the cat's). The event snowman scroll is never
+The mall's pet scrolls sell at the shipped mall's own pet prices, read
+from its listings: the fox and the kangaroo at the growth pets' (the
+bear's), the snowman at the silk pickup pets' (the cat's), the pegasus
+at the vehicles' (the ostrich's). The event snowman scroll is never
 sold (#3328 listed all three at 30).
 ================
 */
@@ -466,12 +488,15 @@ func TestImportedPetScrollsTakeTheShippedTiers(t *testing.T) {
 	}
 	growth := mallOfferNamed(catalog, "PACKAGE_ITEM_COS_P_BEAR_SCROLL")
 	pickup := mallOfferNamed(catalog, "PACKAGE_ITEM_COS_P_CAT_SCROLL")
-	if growth == nil || pickup == nil {
-		t.Fatal("the shipped mall lost its bear or cat scroll")
+	vehicle := mallOfferNamed(catalog, "PACKAGE_ITEM_COS_C_OSTRICH_SCROLL")
+	if growth == nil || pickup == nil || vehicle == nil {
+		t.Fatal("the shipped mall lost its bear, cat or ostrich scroll")
 	}
 	want := map[string]uint32{
 		"PACKAGE_ITEM_COS_P_FOX_SCROLL":            growth.Silk,
 		"PACKAGE_ITEM_COS_P_WINTER_SNOWMAN_SCROLL": pickup.Silk,
+		"PACKAGE_ITEM_COS_P_KANGAROO_SCROLL":       growth.Silk,
+		"PACKAGE_ITEM_COS_C_PEGASUS_SCROLL":        vehicle.Silk,
 	}
 	goods := petScrollGoods()
 	if len(goods) != len(want) {
