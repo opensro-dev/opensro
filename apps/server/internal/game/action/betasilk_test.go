@@ -132,11 +132,10 @@ func TestBetaSilkEarnsPerInWorldHourUpToTheCap(t *testing.T) {
 	if frame := pushed[0].Frames[0]; frame.Opcode != opMallBalance || json.Unmarshal(frame.Payload, &balance) != nil || balance.Silk != wallet.silk {
 		t.Fatalf("push: %+v", pushed[0].Frames[0])
 	}
-	// The push body is frozen at the three fields every shipped client
-	// decodes (#4133): an earnedSilk key here would toss the frame on
-	// an old tab.
-	if frame := pushed[0].Frames[0]; strings.Contains(string(frame.Payload), "earnedSilk") {
-		t.Fatalf("push carries earnedSilk: %s", frame.Payload)
+	// The push carries the earned half the hourly credit lands in, so
+	// the open mall's Earned figure moves with it (#4429).
+	if frame := pushed[0].Frames[0]; !strings.Contains(string(frame.Payload), `"earnedSilk":`) {
+		t.Fatalf("push lacks earnedSilk: %s", frame.Payload)
 	}
 
 	// Time away (no session in the tick) never counts.
