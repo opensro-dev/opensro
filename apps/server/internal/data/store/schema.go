@@ -211,7 +211,12 @@ func isVersionMismatch(err error) bool {
 // so a GameWorld restart no longer drops an unfinished hour. An
 // account without a row has earned nothing toward its next credit; the
 // offline upgrade rewrites no record.
-const CurrentVersion = 59
+// Version 60 changes no record: layout 17 adds caravan_escort_days,
+// the per-Hunter daily count of paid AI-trader escort rewards
+// (port-only, #3704 slice 5), so the daily cap survives a restart. A
+// Hunter without a row has been paid nothing that day; the offline
+// upgrade rewrites no record.
+const CurrentVersion = 60
 
 /*
 ================
@@ -263,41 +268,42 @@ var storeSteps = map[int]storeStep{
 	22: {true, "optional community site fields; layout 9 adds unique_kills", 5, 9},
 	23: {true, "optional publicGearHidden", 5, 9},
 	24: {true, "optional mostWanted", 5, 9},
-	25: {true, "no record change; layout 10 adds economy_ledger", 5, 16},
-	26: {true, "optional guild foundedAtMs", 5, 16},
-	27: {true, "optional training-camp honor fields and campDisbandedAtMs", 5, 16},
-	28: {true, "optional companion training and treeVersion", 5, 16},
-	29: {true, "optional world.instanceReturn", 5, 16},
-	30: {true, "optional fortress structure madeAtMs", 10, 16},
-	31: {true, "optional pet cast capacity, charges and recharge period", 10, 16},
-	32: {true, "optional breakNotice", 10, 16},
-	33: {true, "optional name-change scroll state; layout 11 adds name_reservations", 11, 16},
-	34: {true, "optional per-character Halloween box count", 11, 16},
-	35: {true, "optional mostWanted.expiresAtMs", 11, 16},
-	36: {false, "the Halloween count moves to the account plane: the character count becomes a seed, so an older binary would count against it", 11, 16},
-	37: {true, "optional time-online record", 11, 16},
-	38: {true, "optional Academy cumulated-buff fields on camp members", 11, 16},
-	39: {true, "no record change; layout 12 adds silk_history", 12, 16},
-	40: {true, "optional mostWanted.nextDecayAtMs and item forgeBound; expiresAtMs stays as an unread seed", 12, 16},
-	41: {true, "optional account gourdCount", 12, 16},
-	42: {true, "optional arena entry markers and reward chest", 12, 16},
-	43: {false, "the survival arena count moves to the account plane: the character count becomes a seed, so an older binary would count against it", 12, 16},
+	25: {true, "no record change; layout 10 adds economy_ledger", 5, 17},
+	26: {true, "optional guild foundedAtMs", 5, 17},
+	27: {true, "optional training-camp honor fields and campDisbandedAtMs", 5, 17},
+	28: {true, "optional companion training and treeVersion", 5, 17},
+	29: {true, "optional world.instanceReturn", 5, 17},
+	30: {true, "optional fortress structure madeAtMs", 10, 17},
+	31: {true, "optional pet cast capacity, charges and recharge period", 10, 17},
+	32: {true, "optional breakNotice", 10, 17},
+	33: {true, "optional name-change scroll state; layout 11 adds name_reservations", 11, 17},
+	34: {true, "optional per-character Halloween box count", 11, 17},
+	35: {true, "optional mostWanted.expiresAtMs", 11, 17},
+	36: {false, "the Halloween count moves to the account plane: the character count becomes a seed, so an older binary would count against it", 11, 17},
+	37: {true, "optional time-online record", 11, 17},
+	38: {true, "optional Academy cumulated-buff fields on camp members", 11, 17},
+	39: {true, "no record change; layout 12 adds silk_history", 12, 17},
+	40: {true, "optional mostWanted.nextDecayAtMs and item forgeBound; expiresAtMs stays as an unread seed", 12, 17},
+	41: {true, "optional account gourdCount", 12, 17},
+	42: {true, "optional arena entry markers and reward chest", 12, 17},
+	43: {false, "the survival arena count moves to the account plane: the character count becomes a seed, so an older binary would count against it", 12, 17},
 	// 44 to 51 are no longer the current schema: each low end is the
 	// layout it ran at, and its high end follows the current layout
 	// (layouts 25 and up always end at the current one). The current
-	// schema (59) takes the wide low end.
-	44: {true, "optional top-level ravenRefugeReadyAtMs recovery deadline", 12, 16},
-	45: {true, "no record change; layout 13 adds trade_history", 13, 16},
-	46: {true, "optional per-character Nasrun token balance and daily count", 13, 16},
-	47: {true, "no record change; layout 14 adds the AI caravan tables", 14, 16},
-	48: {true, "optional per-character SRO Macro settings", 14, 16},
-	49: {true, "optional per-character titleId (later-native titles, #3502)", 14, 16},
-	50: {true, "optional per-item earnedBought (#4133); layout 15 adds the earned-silk wallet and silk-history split tables", 15, 16},
-	51: {true, "optional per-character plusFailOptOut (failed-reinforcement announcement opt-out, #3682)", 15, 16},
-	54: {false, "optional per-item rentExpiresUnix (native _RentItemInfo, #4240)", 15, 16},
-	55: {true, "optional per-character reverseUserPoint (reverse return scroll saved location, #3903)", 15, 16},
-	58: {false, "optional per-character inventoryAdditionUsed and account expansionUses (later capacity addition items, #4240); the warehouse count nests in the guild record", 15, 16},
-	59: {true, "no record change; layout 16 adds beta_silk_progress (the hourly silk clock, #4429)", 5, 16},
+	// schema (60) takes the wide low end.
+	44: {true, "optional top-level ravenRefugeReadyAtMs recovery deadline", 12, 17},
+	45: {true, "no record change; layout 13 adds trade_history", 13, 17},
+	46: {true, "optional per-character Nasrun token balance and daily count", 13, 17},
+	47: {true, "no record change; layout 14 adds the AI caravan tables", 14, 17},
+	48: {true, "optional per-character SRO Macro settings", 14, 17},
+	49: {true, "optional per-character titleId (later-native titles, #3502)", 14, 17},
+	50: {true, "optional per-item earnedBought (#4133); layout 15 adds the earned-silk wallet and silk-history split tables", 15, 17},
+	51: {true, "optional per-character plusFailOptOut (failed-reinforcement announcement opt-out, #3682)", 15, 17},
+	54: {false, "optional per-item rentExpiresUnix (native _RentItemInfo, #4240)", 15, 17},
+	55: {true, "optional per-character reverseUserPoint (reverse return scroll saved location, #3903)", 15, 17},
+	58: {false, "optional per-character inventoryAdditionUsed and account expansionUses (later capacity addition items, #4240); the warehouse count nests in the guild record", 15, 17},
+	59: {true, "no record change; layout 16 adds beta_silk_progress (the hourly silk clock, #4429)", 16, 17},
+	60: {true, "no record change; layout 17 adds caravan_escort_days (the AI caravan daily escort cap, #3704 slice 5)", 5, 17},
 }
 
 // SkillSeedFunc resolves the current racial base-skill set while preserving

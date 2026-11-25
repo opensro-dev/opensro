@@ -109,7 +109,7 @@ CREATE TABLE IF NOT EXISTS beta_silk_progress (
 ) WITHOUT ROWID;
 `
 
-const dbSchema = mallAccountsSchema + mallEarnedSilkSchema + silkHistoryEarnedSchema + betaSilkProgressSchema + marketSchema + accountStorageSchema + fortressSchema + allianceSchema + guildWarSchema + fortressItemForgeSchema + uniqueKillsSchema + economyLedgerSchema + economyBucketSchema + itemLedgerSchema + grantDaySchema + referralSchema + nameReservationsSchema + silkHistorySchema + tradeHistorySchema + caravanAgentSchema + `
+const dbSchema = mallAccountsSchema + mallEarnedSilkSchema + silkHistoryEarnedSchema + betaSilkProgressSchema + marketSchema + accountStorageSchema + fortressSchema + allianceSchema + guildWarSchema + fortressItemForgeSchema + uniqueKillsSchema + economyLedgerSchema + economyBucketSchema + itemLedgerSchema + grantDaySchema + referralSchema + nameReservationsSchema + silkHistorySchema + tradeHistorySchema + caravanAgentSchema + caravanEscortDaySchema + `
 CREATE TABLE IF NOT EXISTS meta (
   key   TEXT PRIMARY KEY,
   value TEXT NOT NULL
@@ -203,10 +203,11 @@ const (
 // layout 10, the name-reservation table for layout 11, the silk-history
 // table for layout 12, the trade-history table for layout 13, the AI
 // caravan memory and route-heat tables for layout 14, the earned-silk
-// wallet and silk-history split tables for layout 15 and the beta silk
-// hour-progress table for layout 16 (authority_upgrade.go).
+// wallet and silk-history split tables for layout 15, the beta silk
+// hour-progress table for layout 16 and the AI caravan escort-day
+// ledger for layout 17 (authority_upgrade.go).
 // The release receiver runs it.
-const CurrentLayoutVersion = 16
+const CurrentLayoutVersion = 17
 
 /*
 ==================

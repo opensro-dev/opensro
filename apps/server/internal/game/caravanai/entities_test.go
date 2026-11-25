@@ -27,7 +27,7 @@ gids stay disjoint from minted characters.
 ================
 */
 func TestAgentEntitiesCarryIdentityJobAndGear(t *testing.T) {
-	rt := NewRuntime(Config{Enabled: true, BrainMode: BrainHardcoded}, nil, WorldHooks{})
+	rt := NewRuntime(Config{Enabled: true, BrainMode: BrainHardcoded}, nil, nil, WorldHooks{})
 	const div = "div"
 	entities := rt.AgentEntities(div)
 	if len(entities) != 4 {
@@ -83,7 +83,7 @@ the pose toward the target.
 func TestAgentEntityMarchTargetAndPose(t *testing.T) {
 	rt := NewRuntime(
 		Config{Enabled: true, BrainMode: BrainHardcoded},
-		nil,
+		nil, nil,
 		WorldHooks{Walker: straightWalker{}},
 	)
 	const div = "div"
@@ -135,7 +135,7 @@ entity is omitted (slice 3b), so its transport leaves with it.
 ================
 */
 func TestAgentEntitiesCarryTraderTransports(t *testing.T) {
-	rt := NewRuntime(Config{Enabled: true, BrainMode: BrainHardcoded}, nil, WorldHooks{})
+	rt := NewRuntime(Config{Enabled: true, BrainMode: BrainHardcoded}, nil, nil, WorldHooks{})
 	const div = "div"
 	entities := rt.AgentEntities(div)
 	wantTransport := map[string]string{

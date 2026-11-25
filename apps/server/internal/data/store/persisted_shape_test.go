@@ -160,6 +160,7 @@ var tableOnlySchemaSteps = map[int]string{
 	45: "layout 13 adds trade_history (trade_history.go)",
 	47: "layout 14 adds caravan_agent_memories and caravan_route_heat (caravan_agents.go)",
 	59: "layout 16 adds beta_silk_progress (betasilk.go)",
+	60: "layout 17 adds caravan_escort_days (caravan_escort_days.go)",
 }
 
 /*

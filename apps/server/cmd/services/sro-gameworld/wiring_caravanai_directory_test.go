@@ -57,7 +57,7 @@ wounds her, and a lethal one defeats her and ends resolution.
 ==================
 */
 func TestCaravanAgentDirectory(t *testing.T) {
-	rt := caravanai.NewRuntime(caravanai.Config{Enabled: true, BrainMode: caravanai.BrainHardcoded}, nil, caravanai.WorldHooks{})
+	rt := caravanai.NewRuntime(caravanai.Config{Enabled: true, BrainMode: caravanai.BrainHardcoded}, nil, nil, caravanai.WorldHooks{})
 	const div = "directory-test"
 	rt.EnsureDivisionRoster(div)
 	game := &gameplayPlane{
