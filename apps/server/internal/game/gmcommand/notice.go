@@ -7,11 +7,12 @@ Port-only, not native. /NOTICE text shows the text in the notice banner
 of every player in the GM's division, the same 0x3667 chat type 7 line
 the server already sends for its own notices (chat.EncodeChatNotice).
 
-The v1.150 client has no notice command: its SR_IMPLE_COMMAND_* string
-table (UTF-16, file offsets 0x7cc488..0x7cd228 of the client build hashed
-e46084ed..., not the pinned 375e8682... build, so read by string, not by
-address) names no notice word, and its chat input composes no type 7
-line (social/chat routeChat refuses one).
+The v1.150 client has no notice command. Its GM dispatcher (pinned
+client 375e8682..., ChatInput_HandleGmCommand 0x509cf0) matches the 35
+words of the UTF-16 SR_IMPLE_COMMAND_* table (client VA 0xbcc488..0xbcd228)
+and two literals, /TEXTCHAT and /SMSG, neither of which sends anything;
+none is a notice word. A player cannot reach the banner through chat
+either: social/chat routeChat refuses a type 7 line.
 The original's notices came from the operator's server tools, so the
 port picks subcommand 0xFB (wire.go) and its own reply text.
 
