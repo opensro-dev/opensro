@@ -38,7 +38,7 @@ func TestGrantsRouteAnswersPerAccountFromTheSnapshot(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	if _, _, err := authority.CreditBetaSilk("farm-1", 7, 1000); err != nil {
+	if _, _, err := authority.CreditBetaSilk("farm-1", 7, 1000, 0); err != nil {
 		t.Fatal(err)
 	}
 

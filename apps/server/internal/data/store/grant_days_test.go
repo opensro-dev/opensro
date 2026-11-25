@@ -183,7 +183,7 @@ func TestFreeSilkGrantsCountAndOperatorGrantsDoNot(t *testing.T) {
 	if granted, err := s.GrantBetaSilkStarter("silk-acct", 100); !granted || err != nil {
 		t.Fatalf("starter silk: %v, %v", granted, err)
 	}
-	if _, credited, err := s.CreditBetaSilk("silk-acct", 7, 1000); !credited || err != nil {
+	if _, credited, err := s.CreditBetaSilk("silk-acct", 7, 1000, 0); !credited || err != nil {
 		t.Fatalf("beta silk: %v, %v", credited, err)
 	}
 	if _, err := s.GrantSilk("silk-acct", 500); err != nil {

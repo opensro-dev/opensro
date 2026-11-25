@@ -13,6 +13,10 @@ The original asks for the mailbox (0x73CD) only when the panel opens
 before any seed arrived (605BB0); the port's server seeds it at every
 world entry, so the request is never needed.
 
+An arrival also lights the LetterAlarmGuide, the main frame's letter
+indicator, until the mailbox is viewed (69D400; case 8 of 760FB0). The
+owner keeps the light; the UI draws it and reports the view.
+
 Notices are returned to the composer, which owns the notice list: the
 send confirmation and an unknown letter in the notice window (67D030),
 error codes as notice 0x14/code.
@@ -82,7 +86,7 @@ createLetters
 ================
 */
 export function createLetters( send: ( frame: WireFrame ) => void ) {
-	let rows: readonly LetterRow[] = [], reading = -1;
+	let rows: readonly LetterRow[] = [], reading = -1, alarm = false;
 
 	return {
 		/*
@@ -96,6 +100,7 @@ export function createLetters( send: ( frame: WireFrame ) => void ) {
 		reset() {
 			rows = [];
 			reading = -1;
+			alarm = false;
 		},
 		/*
 		================
@@ -103,7 +108,19 @@ export function createLetters( send: ( frame: WireFrame ) => void ) {
 		================
 		*/
 		state(): LettersState {
-			return { rows, reading };
+			return { rows, reading, alarm };
+		},
+		/*
+		================
+		view
+
+		The mailbox window came on screen: the LetterAlarmGuide goes out
+		(69D400 with 0, from the show paths at 605BEB and 60C08D). Reading
+		or deleting a letter does not put it out; only the view does.
+		================
+		*/
+		view() {
+			alarm = false;
 		},
 		/*
 		================
@@ -181,7 +198,13 @@ export function createLetters( send: ( frame: WireFrame ) => void ) {
 				if ( event.kind === "unknown" ) {
 					return { handled: true, notices: [ windowNotice( "UIIT_MSG_LETTERERR_UNKNOWNLETTER" ) ] };
 				}
+				// 0x7612CD: the row joins the mailbox and, while the
+				// mailbox window is not on screen, the LetterAlarmGuide
+				// lights (69D400 with 1). The port keeps the light as
+				// state; the UI draws it only while the mailbox is not
+				// being viewed and reports the view back (view()).
 				rows = [ ...rows, event.row ];
+				alarm = true;
 				return { handled: true, notices: [] };
 			}
 			if ( frame.opcode === LETTER_SEND_RESULT_OPCODE ) {

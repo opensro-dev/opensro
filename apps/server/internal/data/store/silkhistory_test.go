@@ -201,7 +201,7 @@ func TestSilkHistoryRecordsCharges(t *testing.T) {
 	if _, err := s.GrantSilk("charge-account", 50); err != nil {
 		t.Fatal(err)
 	}
-	if _, credited, err := s.CreditBetaSilk("charge-account", 100, 120); err != nil || !credited {
+	if _, credited, err := s.CreditBetaSilk("charge-account", 100, 120, 0); err != nil || !credited {
 		t.Fatalf("beta credit: %v %v", credited, err)
 	}
 	if granted, err := s.GrantBetaSilkStarter("starter-account", 25); err != nil || !granted {

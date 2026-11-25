@@ -72,7 +72,7 @@ func (w *betaWiringWallet) MallBalance(*domain.Character) (domain.MallBalance, e
 CreditBetaSilk
 ================
 */
-func (w *betaWiringWallet) CreditBetaSilk(_ string, amount, cap uint32) (domain.MallBalance, bool, error) {
+func (w *betaWiringWallet) CreditBetaSilk(_ string, amount, cap uint32, _ int64) (domain.MallBalance, bool, error) {
 	w.mu.Lock()
 	defer w.mu.Unlock()
 	if w.silk >= cap {
@@ -81,6 +81,24 @@ func (w *betaWiringWallet) CreditBetaSilk(_ string, amount, cap uint32) (domain.
 	w.silk = min(w.silk+amount, cap)
 	w.credits++
 	return domain.MallBalance{Silk: w.silk}, true, nil
+}
+
+/*
+================
+BetaSilkProgress
+================
+*/
+func (w *betaWiringWallet) BetaSilkProgress(string) (int64, error) {
+	return 0, nil
+}
+
+/*
+================
+SaveBetaSilkProgress
+================
+*/
+func (w *betaWiringWallet) SaveBetaSilkProgress(string, int64) error {
+	return nil
 }
 
 /*

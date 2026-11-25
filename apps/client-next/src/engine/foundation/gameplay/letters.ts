@@ -75,13 +75,15 @@ export interface LetterRow {
 ================
 LettersState
 
-The lane as the UI reads it: the mailbox and the letter the read window
-shows (-1 when closed).
+The lane as the UI reads it: the mailbox, the letter the read window
+shows (-1 when closed), and whether the LetterAlarmGuide is lit (an
+arrival nobody has seen in the mailbox window yet; 69D400).
 ================
 */
 export interface LettersState {
 	readonly rows: readonly LetterRow[];
 	readonly reading: number;
+	readonly alarm: boolean;
 }
 
 /*

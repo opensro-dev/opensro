@@ -346,13 +346,13 @@ func TestBootRefusesANewTableThatHoldsRows(t *testing.T) {
 	dir, clock := t.TempDir(), newTestClock()
 	s := openTest(t, dir, clock)
 	s.Close()
-	execAuthority(t, dir, "INSERT INTO mall_earned_silk (account_id, earned_silk) VALUES ('asd2fixture', 1)")
+	execAuthority(t, dir, "INSERT INTO beta_silk_progress (account_id, earned_ms) VALUES ('asd2fixture', 1)")
 	rewriteDatabaseMeta(t, dir, metaKeyLayoutVersion, CurrentLayoutVersion-1)
-	if _, err := openWithHeadroom(t, dir, clock, 1); !isVersionMismatch(err) || !strings.Contains(err.Error(), "mall_earned_silk") {
-		t.Fatalf("open = %v, want an incompatible-schema refusal naming mall_earned_silk", err)
+	if _, err := openWithHeadroom(t, dir, clock, 1); !isVersionMismatch(err) || !strings.Contains(err.Error(), "beta_silk_progress") {
+		t.Fatalf("open = %v, want an incompatible-schema refusal naming beta_silk_progress", err)
 	}
-	if got := rowRecord(t, dir, "SELECT count(*) FROM mall_earned_silk"); got != "1" {
-		t.Fatalf("mall_earned_silk holds %s rows", got)
+	if got := rowRecord(t, dir, "SELECT count(*) FROM beta_silk_progress"); got != "1" {
+		t.Fatalf("beta_silk_progress holds %s rows", got)
 	}
 	if got := metaStamp(t, dir, metaKeyLayoutVersion); got != strconv.Itoa(CurrentLayoutVersion-1) {
 		t.Fatalf("layout stamp = %s", got)
