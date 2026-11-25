@@ -51,18 +51,22 @@ test("the upload arena counts one write and one submit per flushed frame", () =>
 		}
 	};
 	const work = createGpuWork();
-	const uploads = createGeometryUploads( device, undefined, work );
-	const target = {};
+	const uploads = createGeometryUploads(
+		/** @type {GPUDevice} */ (/** @type {unknown} */ (device)),
+		undefined,
+		work
+	);
+	const target = /** @type {GPUBuffer} */ (/** @type {unknown} */ ({}));
 	// Two snapshots in one frame batch into the arena's single write.
 	uploads.beginFrame();
 	uploads.write( target, 0, new Float32Array( 4 ) );
 	uploads.write( target, 16, new Float32Array( 2 ) );
-	uploads.submit( {} );
+	uploads.submit( /** @type {GPUCommandBuffer} */ (/** @type {unknown} */ ({})) );
 	assert.deepEqual( written, [ 24 ] );
 	assert.deepEqual( submitted, [ 2 ] );
 	assert.deepEqual( work.read(), { submits: 1, uploadWrites: 1, uploadBytes: 24 } );
 	// A submit with nothing pending is still a submit, with no write.
-	uploads.submit( {} );
+	uploads.submit( /** @type {GPUCommandBuffer} */ (/** @type {unknown} */ ({})) );
 	assert.deepEqual( work.read(), { submits: 2, uploadWrites: 1, uploadBytes: 24 } );
 	// A write outside a frame goes direct and counts as itself.
 	uploads.endFrame();
