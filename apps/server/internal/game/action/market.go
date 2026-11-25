@@ -241,6 +241,7 @@ type marketMine struct {
 	OffersOut     []marketOfferRow             `json:"offersOut"`
 	Purchases     []publicstats.MarketSaleView `json:"purchases"`
 	Silk          uint32                       `json:"silk"`
+	EarnedSilk    uint32                       `json:"earnedSilk"`
 	WarehouseGold int64                        `json:"warehouseGold"`
 	Rules         publicstats.MarketRulesView  `json:"rules"`
 }
@@ -379,7 +380,8 @@ func (rt *Runtime) marketMineOf(account publicstats.OwnMarketResponse) (marketMi
 		return marketMine{}, wire.Frame{}, err
 	}
 	mine := marketMine{Listings: []marketRow{}, OffersIn: []marketOfferRow{}, OffersOut: []marketOfferRow{},
-		Purchases: account.Purchases, Silk: account.Silk, WarehouseGold: account.WarehouseGold, Rules: account.Rules}
+		Purchases: account.Purchases, Silk: account.Silk, EarnedSilk: account.EarnedSilk,
+		WarehouseGold: account.WarehouseGold, Rules: account.Rules}
 	next := 0
 	for _, view := range account.Listings {
 		mine.Listings = append(mine.Listings, marketListingRow(view, previews[next]))
