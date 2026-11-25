@@ -419,7 +419,9 @@ func (r *Runtime) stepFollowLocked(unit *AgentUnit, nowMs int64) *Waypoint {
 	if unit.Role == RoleTrader {
 		return r.stepTraderFollowLocked(unit, leader, leaderUnit, nowMs)
 	}
-	if dist > EscortTeleportDistance || (unit.catchingUp && unit.noteProgress(nowMs) >= followStuckMs) {
+	// A Thief hauling goods is never moved to its leader: it is on its
+	// way to the Den with them (thiefcargo.go).
+	if !unit.carriesGoods && (dist > EscortTeleportDistance || (unit.catchingUp && unit.noteProgress(nowMs) >= followStuckMs)) {
 		angle := escortFormationAngle(unit.Name)
 		unit.place(offsetPoint(leader, 28*math.Cos(angle), 28*math.Sin(angle)), nowMs)
 		unit.catchingUp, unit.escortMoving, unit.roamAtMs = false, false, 0

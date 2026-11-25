@@ -125,6 +125,11 @@ type AgentUnit struct {
 	// sellAt is the town whose shop a hired Trader's sale is priced at
 	// (set as it sells, read by endHireLocked).
 	sellAt TownID
+	// carriesGoods: a Thief's transport holds goods (the world's report,
+	// NoteThiefCargo); denCargo: a hired Thief holds them in the Den for
+	// its hirer (thiefcargo.go).
+	carriesGoods bool
+	denCargo     bool
 	// lastAction is the decision the last step applied (!caravandebug).
 	lastAction       ActionKind
 	roamDX, roamDZ   float64
@@ -843,6 +848,11 @@ func (r *Runtime) applyDecisionLocked(unit *AgentUnit, d Decision, worldThreatAc
 				unit.Walking = false
 				r.moveLocked(unit, unit.lootAt, stepDistanceFor(unit))
 			}
+		case unit.denCargo:
+			// A hired Thief holds its haul in the Den until its hirer
+			// comes to sell it (thiefcargo.go): it strolls there, no follow.
+			unit.State = StateIdleInTown
+			r.wanderInTownLocked(unit, nowMs)
 		case unit.EscortingTrader != "":
 			// Escorts, grand-caravan members and hired agents follow their leader.
 			unit.State = StateTraveling

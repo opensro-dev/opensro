@@ -369,11 +369,23 @@ func (game *gameplayPlane) caravanAgentsTick(ticker *simulation.Ticker, nowMs in
 					delete(game.caravanThiefReturning, c.Name)
 				} else {
 					liveSpawn := game.items.LiveSpawnFor(game.divisionID, c)
+					landed := caravanai.Waypoint{RegionID: liveSpawn.RegionID, X: float32(liveSpawn.X), Y: float32(liveSpawn.Y), Z: float32(liveSpawn.Z)}
 					denRegion := caravanai.TownWaypoint(caravanai.TownThiefDen).RegionID
+					game.caravanAgents.NoteThiefCargo(game.divisionID, c.Name, game.items.ServerActorHasTransportGoods(game.divisionID, c.Name))
 					if game.caravanThiefReturning[c.Name] && liveSpawn.RegionID == denRegion {
 						delete(game.caravanThiefReturning, c.Name)
-						game.items.PushDivisionPeerFrames(game.divisionID, c.Name, game.items.ServerActorDismissTransport(game.divisionID, c.Name))
-						game.caravanAgents.CompleteThiefDenReturn(game.divisionID, c.Name, caravanai.Waypoint{RegionID: liveSpawn.RegionID, X: float32(liveSpawn.X), Y: float32(liveSpawn.Y), Z: float32(liveSpawn.Z)}, nowMs)
+						// An unhired Thief sells at once and moves on; a hired one
+						// holds the haul for its hirer (caravanai thiefcargo.go).
+						if game.caravanAgents.ThiefLandedInDen(game.divisionID, c.Name, landed, nowMs) {
+							game.sellThiefHaul(c, "")
+							game.caravanAgents.CompleteThiefDenReturn(game.divisionID, c.Name, landed, nowMs)
+						}
+					}
+					if hirer, sell := game.caravanAgents.ThiefDenSale(game.divisionID, c.Name); sell {
+						game.sellThiefHaul(c, hirer)
+						if hirer == "" {
+							game.caravanAgents.CompleteThiefDenReturn(game.divisionID, c.Name, landed, nowMs)
+						}
 					}
 				}
 			}
@@ -923,4 +935,27 @@ func (game *gameplayPlane) pushCaravanLeads(ticker *simulation.Ticker, views []s
 			delete(game.caravanLeadSent, key)
 		}
 	}
+}
+
+/*
+================
+sellThiefHaul
+
+A Thief sells the goods on its transport to the Den's buyer and lets the
+transport go. A hirer gets the sale (the Den buyer's price for each
+row, as a player Thief's sale is valued); without one the gold is the
+agent's own and leaves the world with the goods.
+================
+*/
+func (game *gameplayPlane) sellThiefHaul(c *enterworld.Character, hirer string) {
+	gold, _ := game.items.ServerActorCargoSale(game.divisionID, c.Name, caravanThiefDenNPC)
+	game.items.PushDivisionPeerFrames(game.divisionID, c.Name, game.items.ServerActorDismissTransport(game.divisionID, c.Name))
+	if hirer == "" {
+		return
+	}
+	if gold > 0 && game.caravanHirePayout(game.divisionID, hirer, gold) {
+		game.caravanNotice(game.divisionID, hirer, fmt.Sprintf("%s sold the stolen goods: %s gold paid to you.", caravanai.DisplayName(c.Name), caravanai.GoldText(gold)))
+		return
+	}
+	game.caravanNotice(game.divisionID, hirer, fmt.Sprintf("%s handed the stolen goods to the Den's buyer.", caravanai.DisplayName(c.Name)))
 }
