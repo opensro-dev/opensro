@@ -18,7 +18,7 @@ protocol change only as one coordinated server and client release.
 Transport sessions need no second check: their admission tokens are minted
 only by requests that passed this one.
 
-This package imports nothing from the module, so every owner can use it.
+This package imports only the standard library, so every owner can use it.
 
 ===========================================================================
 */
@@ -26,12 +26,11 @@ package releaseprotocol
 
 import (
 	"encoding/json"
+	"log/slog"
 	"net/http"
 	"strconv"
 	"sync"
 	"time"
-
-	log "github.com/sirupsen/logrus"
 )
 
 // Header carries the release protocol a browser was built for.
@@ -319,11 +318,11 @@ func (l *refusalLog) note(declared string, now time.Time) {
 	if now.Sub(l.since) < refusalLogInterval {
 		return
 	}
-	fields := log.Fields{"served": strconv.Itoa(Oldest) + "-" + strconv.Itoa(Current), "window": now.Sub(l.since).Round(time.Second).String()}
+	attrs := []any{"served", strconv.Itoa(Oldest) + "-" + strconv.Itoa(Current), "window", now.Sub(l.since).Round(time.Second).String()}
 	for value, count := range l.counts {
-		fields["declared_"+value] = count
+		attrs = append(attrs, "declared_"+value, count)
 	}
-	log.WithFields(fields).Warn("releaseprotocol: refused outdated clients with 426")
+	slog.Warn("releaseprotocol: refused outdated clients with 426", attrs...)
 	l.counts, l.since = map[string]int{}, now
 }
 
