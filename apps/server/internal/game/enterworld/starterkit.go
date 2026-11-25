@@ -148,7 +148,7 @@ func ResolveStarterKit(items ItemRefSource) []WireItem {
 			TypeFlags:    row.TypeFlags(),
 			Codename:     row.Codename,
 			Name:         row.Name,
-			NativeFields: row.NativeFields,
+			NativeFields: ItemWireFields(row.NativeFields),
 			Icon:         row.Icon,
 			Kind:         "item",
 			StackCount:   1,

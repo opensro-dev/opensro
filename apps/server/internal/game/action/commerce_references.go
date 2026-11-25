@@ -86,7 +86,7 @@ func (rt *Runtime) commerceReferences(items, before []inventory.Item) wire.Frame
 				name = reference.Name
 				icon = reference.Icon
 				descriptionSymbol = reference.DescriptionSymbol
-				nativeFields = enterworld.ItemUseNativeFields(reference, rt.deps.SkillData())
+				nativeFields = enterworld.ItemWireFields(enterworld.ItemUseNativeFields(reference, rt.deps.SkillData()))
 			}
 			rent := reference != nil && reference.Rent
 			refs = append(refs, ref{descriptionSymbol, row.RefObjID, row.TypeFlags, codename, name, rt.maxStackFor(row.TypeFlags, codename), icon, nativeFields, rent})
