@@ -68,10 +68,15 @@ const STORE_SHARDS = 16;
 // 2026-11-25); 12,000 keeps a third in reserve, about 190,000 entries in all.
 export const MAX_SHARD_ENTRIES = 12000;
 const LEGACY_STORE = "sro-next-verified-v1";
-// How long the legacy cache is kept for its entries to move, and the entry in
-// it that records when that ends.
+// How long the legacy cache is kept for its entries to move, and the entry
+// that records when that ends. The entry lives in the store's own metadata
+// cache, not in the legacy cache: an older release still running beside
+// this one writes to that cache under its own eviction and could evict a
+// marker stored there, starting the 14 days again. The metadata cache is
+// never listed, so nothing rebuilds or evicts it.
 export const LEGACY_KEEP_MS = 14 * 24 * 60 * 60 * 1000;
 const LEGACY_EXPIRY_KEY = "/assets/.verified/legacy-expiry", LEGACY_EXPIRY_HEADER = "x-sro-expires";
+const META_STORE = STORE_PREFIX + "meta";
 // The deadline storage() gives an operation; its rejection is a slow backend,
 // not a store that cannot be listed.
 const CACHE_TIMEOUT_MESSAGE = "Cache operation timed out";
@@ -357,16 +362,36 @@ export function createPersistentAssets( budgetOf: ( quota: number | undefined ) 
 	openLegacy
 
 	The legacy cache, or null when there is none or its time is over (it is
-	then deleted in the background). The first open starts that time.
+	then deleted in the background). The first open starts that time; the
+	deadline is the metadata cache's (META_STORE), never the legacy cache's
+	own entry, so an older release evicting entries beside it cannot start
+	the 14 days again. An in-legacy deadline from an earlier release is
+	adopted once, unchanged.
 	================
 	*/
 	async function openLegacy(): Promise<Cache | null> {
 		if ( !await caches.has( LEGACY_STORE ) ) return null;
 		const cache = await caches.open( LEGACY_STORE );
-		const marker = await cache.match( LEGACY_EXPIRY_KEY );
+		const meta = await caches.open( META_STORE );
+		let marker = await meta.match( LEGACY_EXPIRY_KEY );
+		if ( !marker ) {
+			// A deadline an earlier release stored in the legacy cache is
+			// adopted once, unchanged: the upgrade must not restart it.
+			const placed = await cache.match( LEGACY_EXPIRY_KEY );
+			if ( placed ) {
+				const expires = placed.headers.get( LEGACY_EXPIRY_HEADER );
+				if ( expires ) {
+					await meta.put(
+						LEGACY_EXPIRY_KEY,
+						new Response( null, { headers: { [LEGACY_EXPIRY_HEADER]: expires } } )
+					);
+				}
+				marker = placed;
+			}
+		}
 		if ( !marker ) {
 			const expires = String( Date.now() + LEGACY_KEEP_MS );
-			await cache.put(
+			await meta.put(
 				LEGACY_EXPIRY_KEY,
 				new Response( null, { headers: { [LEGACY_EXPIRY_HEADER]: expires } } )
 			);
@@ -392,7 +417,13 @@ export function createPersistentAssets( budgetOf: ( quota: number | undefined ) 
 				Promise.all(
 					Array.from( { length: STORE_SHARDS }, ( _, n ) => caches.open( STORE_PREFIX + n.toString( 16 ) ) )
 				),
-				openLegacy().catch( () => null )
+				openLegacy().catch( error => {
+					// The store works without its legacy cache, but the
+					// failure is counted: a browser that cannot open it
+					// re-downloads everything, and diagnostics must say why.
+					noteFailure( "open", error );
+					return null;
+				} )
 			] );
 			legacy = older;
 			return shards;
