@@ -333,6 +333,50 @@ func TestArmedNestSpawnsOnePartyMonster(t *testing.T) {
 
 /*
 ================
+TestAuthoredPartyNestArmsAtBoot
+
+In the retail server, a nest whose authored spawn kind is 1 starts with its
+live spawn-kind byte set, so its first hatch already rolls a party monster;
+the party hatch clears the byte, and later spawns are ordinary until something
+arms the nest again. A kind carried without population evidence (the cap-110
+families' own preserved fact) never arms a nest here.
+================
+*/
+func TestAuthoredPartyNestArmsAtBoot(t *testing.T) {
+	nest := lifecycleNest(100)
+	nest.SpawnType = 1
+	w := newLifecycleWorld(t, lifecycleRef(1), nest)
+	live := w.expectLive(0, 1)
+	if live[0].Rarity() != 0x10 || w.nest(0).partyArmed {
+		t.Fatalf("first hatch rarity=%#02x armed=%v, want 0x10 disarmed", live[0].Rarity(), w.nest(0).partyArmed)
+	}
+	if live[0].EffectiveMaxHP() != 1000 {
+		t.Fatalf("party monster HP = %d, want x10", live[0].EffectiveMaxHP())
+	}
+	w.kill(0, live[0].Gid)
+	live = w.expectLive(10000, 1)
+	if live[0].Rarity() != 0 {
+		t.Fatalf("respawn rarity=%#02x, want ordinary after the one-shot arm", live[0].Rarity())
+	}
+
+	foreign := lifecycleNest(100)
+	foreign.SpawnType = 1
+	foreign.RetailEvidence = false
+	w = newLifecycleWorld(t, lifecycleRef(1), foreign)
+	live = w.expectLive(0, 1)
+	if live[0].Rarity() != 0 || w.nest(0).partyArmed {
+		t.Fatalf("evidence-less kind armed: rarity=%#02x armed=%v, want ordinary unarmed", live[0].Rarity(), w.nest(0).partyArmed)
+	}
+
+	w = newLifecycleWorld(t, lifecycleRef(1), lifecycleNest(100))
+	live = w.expectLive(0, 1)
+	if live[0].Rarity() != 0 || w.nest(0).partyArmed {
+		t.Fatalf("ordinary nest armed: rarity=%#02x armed=%v", live[0].Rarity(), w.nest(0).partyArmed)
+	}
+}
+
+/*
+================
 overwriteHiveNests
 ================
 */
