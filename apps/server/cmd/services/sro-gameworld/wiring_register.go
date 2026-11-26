@@ -167,6 +167,11 @@ func (game *gameplayPlane) register(hub *transport.Hub, loadQuests questDefiniti
 	if game.items.GMSetSpeed {
 		log.Infof("gm: /SETSPEED ON (%s)", action.EnvGMSetSpeed)
 	}
+	// Port-only, not native: a GM's /WEATHER (owner 2026-11-26).
+	game.items.GMWeather = action.GMWeatherFromEnv()
+	if game.items.GMWeather {
+		log.Infof("gm: /WEATHER ON (%s)", action.EnvGMWeather)
+	}
 	// Port-only, not native: a GM's /FORGE item forge (issue #1980).
 	game.items.GMItemForge = action.GMItemForgeFromEnv()
 	if game.items.GMItemForge {

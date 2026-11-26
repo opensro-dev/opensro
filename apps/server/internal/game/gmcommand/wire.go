@@ -163,8 +163,8 @@ const (
 	SubNotice uint8 = 0xFB
 
 	// SubWeather is the port's /WEATHER clear|rain|snow [amount] [minutes]
-	// (GM tooling, not native; always on for a grant carrying world
-	// control, owner decision 2026-11-26; action/weather.go): subcmd, u8
+	// (GM tooling, not native; owner decision 2026-11-26: behind
+	// SRO_GM_WEATHER, for a grant carrying world control; action/weather.go): subcmd, u8
 	// kind (the 0x3BDE kinds: 1 clear, 2 rain, 3 snow), u8 amount (0 = the
 	// climate's own), u16 minutes (0 = the default). The reply is
 	// EncodeModerationReply's, so the GM reads what was set or why not.

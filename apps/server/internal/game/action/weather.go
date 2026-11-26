@@ -37,6 +37,8 @@ package action
 
 import (
 	"fmt"
+	"os"
+	"strings"
 	"sync"
 
 	"opensro.online/server/internal/game/enterworld"
@@ -242,6 +244,25 @@ func (rt *Runtime) appendWeatherFrame(out []simulation.DivisionFrames, division,
 
 //============================================================================
 
+// EnvGMWeather admits a GM's /WEATHER (port-only, not native; owner
+// 2026-11-26: off by default, on for the shard): "on", "1" or "true".
+// Off, the command answers why and sets nothing, as natively there is no
+// such command.
+const EnvGMWeather = "SRO_GM_WEATHER"
+
+/*
+================
+GMWeatherFromEnv
+================
+*/
+func GMWeatherFromEnv() bool {
+	switch strings.ToLower(strings.TrimSpace(os.Getenv(EnvGMWeather))) {
+	case "on", "1", "true":
+		return true
+	}
+	return false
+}
+
 // gmWeatherDefaultMinutes is a /WEATHER spell's length when none was typed.
 const gmWeatherDefaultMinutes = 10
 
@@ -257,13 +278,17 @@ spell on the climate of the region the GM stands in, for minutes. The
 climate fades to it the native way and its players are told on each
 step by advanceWeather, as for a rolled spell; when the spell ends the
 climate goes back to its own cycle. The reply text says what was set,
-or why nothing was: the cycle is off (SRO_WEATHER), the GM's region has
-no climate, or the kind is not one the client draws.
+or why nothing was: the command is off (SRO_GM_WEATHER), the cycle is
+off (SRO_WEATHER), the GM's region has no climate, or the kind is not one
+the client draws.
 ================
 */
 func (rt *Runtime) SetWeatherGM(division, name string, kind, amount uint8, minutes uint16) (string, bool) {
+	if rt == nil || !rt.GMWeather {
+		return "/WEATHER is off on this shard (" + EnvGMWeather + ")", false
+	}
 	kindName, known := gmWeatherNames[kind]
-	if rt == nil || !known {
+	if !known {
 		return "type /WEATHER clear|rain|snow [amount] [minutes]", false
 	}
 	c := rt.findCharacter(division, name)

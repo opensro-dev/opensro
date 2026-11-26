@@ -60,7 +60,8 @@ const MAX_MODERATION_TEXT_BYTES = 1024;
 const GM_NOTICE = 0xfb;
 const MAX_NOTICE_TEXT_BYTES = 400;
 // The port's /WEATHER clear|rain|snow [amount] [minutes] (GM tooling, not
-// native; always on, for a GM whose staff grant carries world control):
+// native; behind the server's SRO_GM_WEATHER, for a GM whose staff grant
+// carries world control):
 // subcommand 0xFC, u8 kind (the 0x3BDE kinds), u8 amount and u16 minutes,
 // zero for either meaning the server's default. The bounds are the
 // server's (action/weather.go); the reply is the moderation text reply.

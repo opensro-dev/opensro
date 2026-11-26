@@ -8,8 +8,14 @@ weather fades in over about half a minute. The switch is on by default, as the o
 | Switch | Where | Effect |
 | --- | --- | --- |
 | `SRO_WEATHER` | Server | `on` (the default, native): every climate runs its weather cycle. `off`: no weather is sent and every client stays clear |
+| `SRO_GM_WEATHER` | Server | Port-only, not native (owner, 2026-11-26). `off` (the default, native): `/WEATHER` answers that it is off. `on` (this shard, `config/shard-settings.json`): a GM with world control types `/WEATHER clear\|rain\|snow [amount] [minutes]` |
 
-Unset reads as on. The ops GameWorld job carries it as the Nomad variable `weather` (default `"on"`).
+`SRO_WEATHER` unset reads as on. The ops GameWorld job carries it as the Nomad variable `weather` (default `"on"`).
+
+With `SRO_GM_WEATHER` on, `/WEATHER` sets the weather on the climate of the region the GM stands in. The climate fades
+to it the native way, holds it for the minutes (default 10, 1 to 120), then goes back to its own cycle. An amount of 0
+or none takes the climate's own rain or snow base. It needs `SRO_WEATHER` on too. The Nomad variable is `gm_weather`
+(default `"off"`).
 
 ## How it works
 

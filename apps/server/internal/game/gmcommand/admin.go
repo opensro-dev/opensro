@@ -253,8 +253,8 @@ type WeatherControl interface {
 ================
 handleWeather
 
-Port-only, not native (owner decision 2026-11-26: always on, no flag,
-as /SILK). Both results carry the owner's text (EncodeModerationReply).
+Port-only, not native (owner decision 2026-11-26): behind SRO_GM_WEATHER,
+off by default and on for the shard; the action owner refuses it off. Both results carry the owner's text (EncodeModerationReply).
 ================
 */
 func handleWeather(divisionID string, sender *enterworld.Character, request Request, status []BodyStatusCommands) Outcome {

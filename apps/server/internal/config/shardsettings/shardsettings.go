@@ -567,6 +567,10 @@ var Settings = []Setting{
 	// /UNMUTE, /BLOCKLOGOUT and /ALLOWLOGOUT (gmcommand/moderation.go).
 	// "off" is native; /SHADOWMUTE is always on.
 	{Env: "SRO_GM_MODERATION", NomadVar: "gm_moderation", Default: "off"},
+	// Port-only, not native (owner, 2026-11-26): a GM's /WEATHER sets the
+	// weather on the GM's climate for some minutes (action/weather.go).
+	// "off" is native; the shard turns it on (config/shard-settings.json).
+	{Env: "SRO_GM_WEATHER", NomadVar: "gm_weather", Default: "off"},
 	{Env: "SRO_ALCHEMY_RATES", NomadVar: "alchemy_rates", Default: "on", Catalogue: true},
 	// Owner, 2026-10-18: reversed the 2026-10-13 +11 cap; the deployment
 	// default stays native ("off", ceiling 250).
