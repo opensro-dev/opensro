@@ -220,6 +220,8 @@ export interface DeviceOwner extends Disposable {
 	gpuTiming(): GpuTimingStats | null;
 	/** The queue-work totals counted so far (foundation/rendering/gpu-work.ts). */
 	gpuWork(): import("@/engine/foundation/rendering/gpu-work").GpuWorkTotals;
+	/** The live GPU allocation totals counted so far (foundation/rendering/gpu-allocations.ts). */
+	gpuAllocations(): import("@/engine/foundation/rendering/gpu-allocations").GpuAllocationTotals;
 	portraitTarget( id?: string, width?: number, height?: number ): GPUTextureView;
 	/** A portrait target's last frame as packed RGBA (the 3D viewer's still). */
 	readPortrait( id: string ): Promise<{ width: number; height: number; rgba: Uint8ClampedArray; }>;

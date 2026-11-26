@@ -112,6 +112,7 @@ const SHARED_ENVIRONMENT_FIELDS = [
 	"network",
 	"replay",
 	"gpu",
+	"gpuAllocations",
 	"previousPage"
 ] as const;
 const SHARED_MOVEMENT_FIELDS = [
@@ -322,11 +323,17 @@ const TECHNICAL_FIELDS = new Set( [
 	"walkSpeed",
 	"runSpeed",
 	"animationRate",
-	// The previous page's death certificate (#4545, page-lifetime.ts).
+	// The previous page's death certificate (#4545, page-lifetime.ts),
+	// with the GPU totals it died holding (gpu-allocations.ts).
 	"died",
 	"uptimeS",
 	"lastEntities",
 	"lastPhase",
+	"lastGpu",
+	"buffers",
+	"bufferBytes",
+	"textures",
+	"textureBytes",
 	"secondsSinceLastBeat"
 ] );
 const TECHNICAL_STRINGS: Readonly<Record<string, readonly string[]>> = {
@@ -447,8 +454,9 @@ movement.json     up to two minutes of movement commands, server receipts, corre
                   and frame hitches; clock domains are explicit in the header/events.
 state.json        the game's state when the report was sent (large catalogs omitted).
 environment.json  browser, screen, CPU, memory, network, the WebGPU adapter's features,
-                  limits, vendor and architecture, the player's options, and every
-                  resource loaded during the last minute (time, size, status).
+                  limits, vendor and architecture, the page's GPU allocation totals,
+                  the player's options, and every resource loaded during the last
+                  minute (time, size, status).
 assets.json       the asset queue every 5 s for the last six minutes (#1975): free
                   request slots and each open load's path, state and age, with the
                   session phase; it says why a loading screen stalled.

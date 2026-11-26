@@ -24,6 +24,7 @@ import { createGpuAnimationResources } from "./animation";
 import { createParticlePresentation } from "./particles";
 import { createGpuTiming } from "./timing";
 import { createGpuWork } from "@/engine/foundation/rendering/gpu-work";
+import { createGpuAllocations, instrumentGpuAllocations } from "@/engine/foundation/rendering/gpu-allocations";
 import { createThunder } from "./thunder";
 import { createFlares } from "./flares";
 import { createUiResources } from "./ui";
@@ -109,6 +110,10 @@ export function createDevice( timingEnabled = false, gpuAnimationEnabled = true,
 	// The queue-work counters (#4392) outlive one device generation: a
 	// recreated device keeps counting into the same totals.
 	const work = createGpuWork();
+	// The GPU allocation totals (#4545) outlive one device generation
+	// for the same reason: a bug report reads the page's standing
+	// total, whichever device generation the page is on.
+	const allocations = createGpuAllocations();
 	let phase: RuntimePhase = "starting", failure: string | null = null, device: GPUDevice | null = null;
 	let environmentBuffer: GPUBuffer | null = null,
 		sky: import("@/engine/runtime/renderer/internal/gpu-contract").ImageDraw | null = null,
@@ -209,6 +214,9 @@ export function createDevice( timingEnabled = false, gpuAnimationEnabled = true,
 				return;
 			}
 			device = created;
+			// Every allocation this device hands out joins the page's
+			// standing GPU totals (#4545).
+			instrumentGpuAllocations( created, allocations );
 			texturesKnown(
 				[ "texture-compression-bc", "texture-compression-etc2", "texture-compression-astc" ].filter( name =>
 					created.features?.has( name ) === true
@@ -920,6 +928,14 @@ export function createDevice( timingEnabled = false, gpuAnimationEnabled = true,
 		================
 		*/
 		gpuWork: () => work.read(),
+		/*
+		================
+		gpuAllocations
+
+		The live GPU allocation totals counted so far (#4545).
+		================
+		*/
+		gpuAllocations: () => allocations.read(),
 		textureFeatures: () => textureFeatures,
 		/*
 		================
