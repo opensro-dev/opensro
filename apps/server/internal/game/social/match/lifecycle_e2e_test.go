@@ -213,19 +213,19 @@ func TestMatchReplacedTabKeepsWinnerRows(t *testing.T) {
 	}
 	loser.BindCharacter(e2eDivision, e2eHeroName, 0)
 
-	// The WINNER registers fresh rows.
+	// The WINNER registers a fresh row (one standing at a time across
+	// the boards, so the party row is the one it can hold here).
 	sendFrame(t, conn2, match.OpPartyRegisterRequest, partyRequest(0, 3003, 1, 0, 20, 60, "winner party"))
 	expectFrame(t, conn2, match.OpPartyRegisterAck, "winner party register")
-	sendFrame(t, conn2, match.OpMentorRegisterRequest, mentorRequest(0, 9, 1, "winner camp"))
-	expectFrame(t, conn2, match.OpMentorRegisterAck, "winner mentor register")
 
 	// The loser's close hook fires with a resolvable identity: the guard
-	// must see the winner holding the bind and purge NOTHING.
+	// must see the winner holding the bind and purge NOTHING (the same
+	// guard covers the mentor board - PurgeOwner clears both).
 	server.runtime.SessionClosed(loser)
 
 	party, mentor := ownRows(board, e2eHeroName)
-	if len(party) != 1 || len(mentor) != 1 {
-		t.Fatalf("winner's rows after the loser's close: party %d, mentor %d, want 1 and 1", len(party), len(mentor))
+	if len(party) != 1 || len(mentor) != 0 {
+		t.Fatalf("winner's rows after the loser's close: party %d, mentor %d, want 1 and 0", len(party), len(mentor))
 	}
 
 	sendFrame(t, conn2, transport.OpBye, []byte{transport.ByeReasonNormal})

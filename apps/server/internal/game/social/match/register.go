@@ -296,10 +296,15 @@ func (r *Runtime) handlePartyRegister(s *transport.Session, opcode uint16, paylo
 		_ = s.Send(opcode+0x4000, []byte{2, refusal})
 		return
 	}
+	if r.registrationHeld(divisionID, character) {
+		log.Debugf("match: party register from %s refused (already registered)", character.Name)
+		_ = s.Send(opcode+0x4000, []byte{2, partyMatchErrAlreadyRegistered})
+		return
+	}
 	entry, ok := r.board.RegisterParty(divisionID, ownerKey(divisionID, character.Name), r.partyEntryFromRequest(divisionID, character, request))
 	if !ok {
 		log.Debugf("match: party register from %s refused (already registered)", character.Name)
-		_ = s.Send(opcode+0x4000, []byte{2, 2})
+		_ = s.Send(opcode+0x4000, []byte{2, partyMatchErrAlreadyRegistered})
 		return
 	}
 	_ = s.Send(OpPartyRegisterAck, EncodePartyRegAck(entry))
@@ -415,9 +420,15 @@ func (r *Runtime) handleMentorRegister(s *transport.Session, opcode uint16, payl
 		log.Debugf("match: 0x%04X malformed from %s: %v", opcode, character.Name, err)
 		return
 	}
+	if r.registrationHeld(divisionID, character) {
+		log.Debugf("match: mentor register from %s refused (already registered)", character.Name)
+		_ = s.Send(OpMentorRegisterAck, []byte{2, partyMatchErrAlreadyRegistered})
+		return
+	}
 	entry, ok := r.board.RegisterMentor(divisionID, ownerKey(divisionID, character.Name), r.mentorEntryFromRequest(character, request))
 	if !ok {
-		log.Debugf("match: mentor register from %s refused silently (already registered; flag-2 codes unpinned)", character.Name)
+		log.Debugf("match: mentor register from %s refused (already registered)", character.Name)
+		_ = s.Send(OpMentorRegisterAck, []byte{2, partyMatchErrAlreadyRegistered})
 		return
 	}
 	_ = s.Send(OpMentorRegisterAck, EncodeMentorRegisterAckB55D(entry))
@@ -554,11 +565,15 @@ func (r *Runtime) SessionClosed(s *transport.Session) {
 // precheck and its purpose test (0x2C0A, 0x2C1D,
 // 0x2C23); the v1.150 client shows them as UIIT_MSG_PARTYERR_* /
 // UIIT_MSG_PARTYMATCH_RECORD_ERROR_* through the 0x200 notice table.
+// AlreadyRegistered is the client's RECORD_ERROR_AGAIN code: the
+// register precheck refuses while the character already holds a
+// registration or has a join application outstanding.
 const (
-	partyMatchErrUnknown        uint8 = 0x02
-	partyMatchErrCreatorLevel   uint8 = 0x0A
-	partyMatchErrNotPartyLeader uint8 = 0x1D
-	partyMatchErrPurpose        uint8 = 0x23
+	partyMatchErrUnknown           uint8 = 0x02
+	partyMatchErrCreatorLevel      uint8 = 0x0A
+	partyMatchErrAlreadyRegistered uint8 = 0x1B
+	partyMatchErrNotPartyLeader    uint8 = 0x1D
+	partyMatchErrPurpose           uint8 = 0x23
 )
 
 // minPartyCreatorLevel is the level a partyless registrant needs: the native precheck
@@ -593,6 +608,23 @@ registrant below level 5 too (0x0A); a party's listing takes the party's
 options. Returns the refusal code, 0 when admitted.
 ================
 */
+/*
+================
+registrationHeld
+
+The register precheck's standing test: the character already holds a
+live registration on either board, or has a join application
+outstanding. Either one refuses a fresh registration with
+partyMatchErrAlreadyRegistered - one standing at a time.
+================
+*/
+func (r *Runtime) registrationHeld(divisionID string, character *domain.Character) bool {
+	if r.board.HasRegistration(ownerKey(divisionID, character.Name)) {
+		return true
+	}
+	return r.joins.hasJoiner(divisionID, character.Name)
+}
+
 func (r *Runtime) preparePartyRegistration(division string, character *domain.Character, request PartyMatchRequest) (PartyMatchRequest, uint8) {
 	titleLength := len(utf16.Encode([]rune(request.Title)))
 	if request.TypeBits&^7 != 0 || request.MinLevel < 1 || int64(request.MaxLevel) > r.levelCap() || request.MinLevel > request.MaxLevel || titleLength == 0 || titleLength > 50 {
