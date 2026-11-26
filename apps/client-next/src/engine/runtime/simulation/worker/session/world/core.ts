@@ -48,6 +48,7 @@ import {
 	GUILD_WAR_SEED_OPCODE,
 	ITEM_USE_RESPONSE_OPCODE,
 	MOVEMENT_SPEED_OPCODE,
+	OBJECT_SELECT_RESULT_OPCODE,
 	OBJECT_SOURCE_CORRECTION_OPCODE,
 	OBJECT_SOURCE_MOVE_OPCODE,
 	OBJECT_STATE_REFRESH_OPCODE,
@@ -412,6 +413,9 @@ cross-owner follow-ups (name colours, displacements, cancellations).
 			entities.receive( frame, now );
 		}
 		if ( leftMount ) entities.placeMount( leftMount, gameplay.localPose() );
+		// A granted selection is the target window's new subject: a COS
+		// becomes the anti-bot monster's look (automob.ts, 0x581851).
+		if ( frame.opcode === OBJECT_SELECT_RESULT_OPCODE ) entities.noteTarget( gameplay.selectedTarget() );
 		// The owner's edit receipt carries no title; gameplay resolves the
 		// accepted request before the entity journal publishes it.
 		if ( stallReceipt?.title !== undefined ) entities.renameStall( localGid, stallReceipt.title );

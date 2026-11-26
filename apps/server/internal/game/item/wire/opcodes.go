@@ -255,6 +255,10 @@ const (
 	ErrCodeCosRefused     uint8 = 0x03
 	ErrCodeItemReuseDelay uint8 = 0x5B
 	ErrCodeMultipleCOS    uint8 = 0x5C
+	// ErrCodeSummonInDungeon is the low byte of the expendable handler's
+	// 0x1879: a monster summon scroll other than the anti-bot stone used
+	// in a dungeon region. v1.150 notice 01:79 is UIIT_MSG_COS_CREATE_DUNGEON.
+	ErrCodeSummonInDungeon uint8 = 0x79
 	// ErrCodeInputFewerThanRemain is
 	// UIIT_MSG_STRGERR_ENABLEINPUT_FEWERTHAN_REMAIN (01:14): a quantity
 	// larger than the stack holds. INFERRED from the client notice table;

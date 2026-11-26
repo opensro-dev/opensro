@@ -70,7 +70,7 @@ const (
 	itemUsePartySummonScroll
 	itemUsePandoraBox
 	itemUseEquipSwitch
-	itemUseRigidSummonScroll
+	itemUseMonsterSummonScroll
 	itemUseExpScroll
 	itemUseExpansion
 )
@@ -132,12 +132,12 @@ func admittedItemUseFamily(ref *enterworld.ItemRef) itemUseFamily {
 	if ref.Codename == PandoraBoxItem {
 		return itemUsePandoraBox
 	}
-	// Later-native (#3785): the Rigid L2 summon scrolls (3/3/3/23),
-	// admitted by codename; no v1.150-native family claims the type,
-	// and the handler needs no switch - the use path is the later
-	// server's (rigidsummonscroll.go).
-	if _, ok := RigidSummonScrollMonster(ref.Codename); ok {
-		return itemUseRigidSummonScroll
+	// The monster summon scrolls, admitted by codename: the later-native
+	// Rigid L2 scrolls (3/3/3/23, #3785) and the native anti-bot stone
+	// (3/3/3/2, #4530). The handler needs no switch: the use path is
+	// the later server's (monstersummonscroll.go).
+	if _, ok := MonsterSummonScrollMonster(ref.Codename); ok {
+		return itemUseMonsterSummonScroll
 	}
 	if ref.TypeIDs == [4]int64{3, 3, 9, 0} {
 		return itemUseQuestTool

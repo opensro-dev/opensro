@@ -2262,6 +2262,30 @@ test("wire despawn retires identity immediately but preserves the final rendered
 	assert.equal( f.actors.length, 0 );
 	f.dispose();
 });
+test("a vanishing monster (MOB_AUTOMOB) leaves no fading copy when it despawns", () => {
+	// CIGIDObject_Despawn 0x852848 fades an exact CICMonster with +0x774
+	// set over 0 s; every other despawn keeps the 1.5 s copy (above).
+	const f = fixture();
+	f.warm();
+	const vanisher = entity( 1, { kind: "monster", vanishes: true } );
+	f.presentation.receiveLifecycle( [ { kind: "spawn", entity: vanisher } ] );
+	f.step( [ vanisher ], 1 );
+	f.step( [ vanisher ], 4 );
+	assert.equal( f.actors.length, 1 );
+	f.presentation.receiveLifecycle( [ { kind: "despawn", gid: 1 } ] );
+	f.step( [], 4.1 );
+	assert.equal( f.actors.length, 0, "the body is gone on the next frame" );
+	// A plain monster spawned under the same gid fades again.
+	const plain = entity( 1, { kind: "monster" } );
+	f.presentation.receiveLifecycle( [ { kind: "spawn", entity: plain } ] );
+	f.step( [ plain ], 5 );
+	f.step( [ plain ], 8 );
+	f.presentation.receiveLifecycle( [ { kind: "despawn", gid: 1 } ] );
+	f.step( [], 8.1 );
+	assert.equal( f.actors.length, 1 );
+	assert.ok( f.actors[0].gid < 0, "the plain monster keeps its fading copy" );
+	f.dispose();
+});
 
 test("sit and stand transitions retain the underlying pose; death and revival interrupt them", () => {
 	const f = fixture( {}, 2, false, false, true );

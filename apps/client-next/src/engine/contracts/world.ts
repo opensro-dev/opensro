@@ -164,6 +164,9 @@ export interface EntityState {
 	// by the worker: HOVER_ATTACK_PLAIN without Alt, HOVER_ATTACK_ALT with it
 	// (foundation/gameplay/player-attack.ts).
 	readonly hoverAttack?: number;
+	// The despawn removes the body at once instead of fading it over 1.5 s:
+	// a MOB_AUTOMOB (CIGIDObject_Despawn 0x852848, foundation/gameplay/automob.ts).
+	readonly vanishes?: boolean;
 	readonly appearanceState?: readonly number[];
 	readonly groundItem?: {
 		readonly typeFlags: number;

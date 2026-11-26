@@ -21,6 +21,7 @@ import { decodeMovementSpeeds } from "@/engine/foundation/gameplay/native-moveme
 import { spawnSkillReferences, entrySpawnSkills } from "@/engine/foundation/gameplay/spawn-skills";
 import { merchantBranches } from "@/engine/foundation/gameplay/merchant-branches";
 import { decodeCharacterSpawn } from "@/engine/foundation/gameplay/character-spawn";
+import { AUTOMOB_CODENAME, autoMobSpawn } from "@/engine/foundation/gameplay/automob";
 import { decodeGroundItem, sunSealDrop } from "@/engine/foundation/gameplay/ground-item";
 import { fortressStructureState } from "@/engine/foundation/gameplay/fortress";
 import {
@@ -157,6 +158,11 @@ export function createEntities(
 	// Reverse of monsterCodenames: hunt pillar skip (68c3d0) reads CodeName
 	// by the living monster's RefObjID.
 	const monsterCodenameByRef = new Map<number, string>();
+	// The reference of the last COS whose selection the server granted
+	// (CGInterface+0x4e0, CIFTargetWindow_SetTarget 0x581851): the look a
+	// MOB_AUTOMOB spawn takes (automob.ts). It outlives world entries, as
+	// the interface does.
+	let lastTargetedCosRef = 0;
 	// Port-only (#1640): the Experimental Sun drop marker's admission state:
 	// the row's byte and the local player's gid (its drops are the marked).
 	let sunMarkerOn = false, ownGid = 0;
@@ -738,7 +744,15 @@ export function createEntities(
 			frame.opcode === SINGLE_OBJECT_SPAWN_OPCODE,
 			skillRefs
 		);
-		return { kind: "spawn", entity: { ...ref, ...entity, name: entity.name || ref.name || "" } };
+		const spawned = { ...ref, ...entity, name: entity.name || ref.name || "" };
+		if ( ref.kind !== "monster" || monsterCodenameByRef.get( refObjId ) !== AUTOMOB_CODENAME ) {
+			return { kind: "spawn", entity: spawned };
+		}
+		const look = refs.get( lastTargetedCosRef );
+		return {
+			kind: "spawn",
+			entity: autoMobSpawn( spawned, look && { refObjId: lastTargetedCosRef, name: look.name } )
+		};
 	}
 	/*
 	================
@@ -804,6 +818,19 @@ export function createEntities(
 		*/
 		monsterCodename( refObjId: number ): string | undefined {
 			return monsterCodenameByRef.get( refObjId );
+		},
+		/*
+		================
+		noteTarget
+
+		The server granted the selection of gid (0xB45A): a COS becomes the
+		look of the next MOB_AUTOMOB spawn (automob.ts); any other target
+		leaves the remembered look alone, as 0x581851 only writes for a COS.
+		================
+		*/
+		noteTarget( gid: number ) {
+			const entity = entities.get( gid );
+			if ( entity?.kind === "cos" ) lastTargetedCosRef = entity.refObjId;
 		},
 		characterCountry( refObjId: number ): number | undefined {
 			return refs.get( refObjId )?.countryByte9c;

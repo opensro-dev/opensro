@@ -20,7 +20,8 @@ these fields replaced (#1646).
 */
 func TestPlaneFeaturesPinTheCaveColumn(t *testing.T) {
 	outdoor := PlaneFeatures{QuestMonsterSpawns: true, CaravanBandits: true, UniqueReturnAnchors: true, Dormancy: true,
-		SpawnTerrainLift: true, SpawnStrandedRescue: true, QuestGatherAreas: true, HelpCallSight: true}
+		SpawnTerrainLift: true, SpawnStrandedRescue: true, QuestGatherAreas: true, HelpCallSight: true,
+		MonsterSummonScrolls: true}
 	if got := FeaturesAt(0x62a8); got != outdoor {
 		t.Errorf("outdoor features %+v, want %+v", got, outdoor)
 	}
