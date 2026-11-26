@@ -539,7 +539,9 @@ TestSkillEquipmentWeaponKinds
 
 Reference server: without reqi the primary weapon's TID4 must be one of the two
 kinds, bare hand counting as 1; a broken weapon is 0x300F whatever the
-kind; TID4 16 needs a siege fortress this port never has.
+kind; TID4 16 (a fortress weapon) instead needs the caster's
+fortress-guild role to share a bit with the worn weapon's role mask,
+and no member record (role 0) never shares.
 ==================
 */
 func TestSkillEquipmentWeaponKinds(t *testing.T) {
@@ -550,24 +552,33 @@ func TestSkillEquipmentWeaponKinds(t *testing.T) {
 		dur   int64
 		equip bool
 		kinds [2]uint8
+		role  uint8
+		mask  int64
 		want  uint16
 	}{
-		{"match", 7, 10, true, [2]uint8{7, 0xff}, 0},
-		{"second kind", 7, 10, true, [2]uint8{3, 7}, 0},
-		{"mismatch", 8, 10, true, [2]uint8{7, 0xff}, 0x300d},
-		{"bare hand is kind 1", 0, 0, false, [2]uint8{1, 0xff}, 0},
-		{"bare hand mismatch", 0, 0, false, [2]uint8{7, 0xff}, 0x300d},
-		{"any", 8, 10, true, [2]uint8{0xff, 0xff}, 0},
+		{"match", 7, 10, true, [2]uint8{7, 0xff}, 0, 0, 0},
+		{"second kind", 7, 10, true, [2]uint8{3, 7}, 0, 0, 0},
+		{"mismatch", 8, 10, true, [2]uint8{7, 0xff}, 0, 0, 0x300d},
+		{"bare hand is kind 1", 0, 0, false, [2]uint8{1, 0xff}, 0, 0, 0},
+		{"bare hand mismatch", 0, 0, false, [2]uint8{7, 0xff}, 0, 0, 0x300d},
+		{"any", 8, 10, true, [2]uint8{0xff, 0xff}, 0, 0, 0},
 		// A broken weapon's TID reads 0, i.e. kind 1, and then fails 5D0.
-		{"broken", 7, 0, true, [2]uint8{7, 0xff}, 0x300f},
-		{"fortress", 16, 10, true, [2]uint8{16, 0xff}, 0x3047},
+		{"broken", 7, 0, true, [2]uint8{7, 0xff}, 0, 0, 0x300f},
+		{"fortress without a member record", 16, 10, true, [2]uint8{16, 0xff}, 0, -1, 0x3047},
+		{"fortress roled for any mask", 16, 10, true, [2]uint8{16, 0xff}, 1, -1, 0},
+		{"fortress role inside the mask", 16, 10, true, [2]uint8{16, 0xff}, 2, 6, 0},
+		{"fortress role outside the mask", 16, 10, true, [2]uint8{16, 0xff}, 2, 1, 0x3047},
+		{"fortress empty mask refuses every role", 16, 10, true, [2]uint8{16, 0xff}, 4, 0, 0x3047},
 	} {
 		k := newReqiKit()
 		if tc.equip {
 			k.equip(6, weapon(tc.tid4), tc.dur)
+			for _, ref := range k.items {
+				ref.FortressRoleMask = tc.mask
+			}
 		}
 		skill.RequiredWeaponKinds = tc.kinds
-		if got := skillEquipmentRefusal(k.c, k.items, skill); got != tc.want {
+		if got := skillEquipmentRefusal(k.c, k.items, skill, tc.role); got != tc.want {
 			t.Errorf("%s: %#x want %#x", tc.name, got, tc.want)
 		}
 	}

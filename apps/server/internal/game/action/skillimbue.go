@@ -145,7 +145,7 @@ func (rt *Runtime) instantSelfEffectCost(division string, c *enterworld.Characte
 		// An unparsed row or a cooling skill answers before the weapon.
 		return cost, code
 	}
-	if refusal := skillEquipmentRefusal(c, rt.statCatalogs().Items, skill); refusal != 0 {
+	if refusal := skillEquipmentRefusal(c, rt.statCatalogs().Items, skill, rt.guildFortressRole(division, c)); refusal != 0 {
 		return 0, refusal
 	}
 	return cost, code

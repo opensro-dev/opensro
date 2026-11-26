@@ -271,7 +271,7 @@ func (rt *Runtime) contextSkillAdmission(division string, c *enterworld.Characte
 	}
 
 	if mask&admitEquipment != 0 {
-		if code := skillEquipmentRefusal(c, rt.statCatalogs().Items, skill); code != 0 {
+		if code := skillEquipmentRefusal(c, rt.statCatalogs().Items, skill, rt.guildFortressRole(division, c)); code != 0 {
 			return code
 		}
 	}
@@ -334,7 +334,7 @@ compared with the primary weapon's TID4, bare hand counting as 1, and
 0xFF / 0xFF admits anything.
 ==================
 */
-func skillEquipmentRefusal(c *enterworld.Character, items enterworld.ItemRefSource, skill enterworld.SkillRow) uint16 {
+func skillEquipmentRefusal(c *enterworld.Character, items enterworld.ItemRefSource, skill enterworld.SkillRow, fortressRole uint8) uint16 {
 	if skill.Reqi.Present {
 		return combat.ReqiRefusal(c, items, skill.Reqi)
 	}
@@ -354,10 +354,15 @@ func skillEquipmentRefusal(c *enterworld.Character, items enterworld.ItemRefSour
 	case tid4 != kinds[0] && tid4 != kinds[1]:
 		code = 0x300d
 	case tid4 == 0x10:
-		// The native fortress siege equipment check needs a siege
-		// fortress context (the player's +0x72F*4). Nothing in this port creates
-		// one, so a fortress weapon is always refused.
-		code = 0x3047
+		// The fortress siege check runs at every cast: the worn
+		// weapon's role mask (its Param5 low byte) must share a bit
+		// with the caster's fortress-guild role. Without a member
+		// record the role reads 0 and shares nothing, so a guild-less
+		// or role-less caster is refused like a mismatched one.
+		ref, _, worn := eq.Item(6)
+		if !worn || ref == nil || fortressRole&uint8(ref.FortressRoleMask) == 0 {
+			code = 0x3047
+		}
 	}
 
 	// Natively a broken main weapon is 0x300F whatever the kind said.
