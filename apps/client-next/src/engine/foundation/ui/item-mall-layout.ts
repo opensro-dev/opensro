@@ -464,10 +464,10 @@ export function mallPurchaseOutcomeText(
 	const tradable = mallPurchaseTradable( state, silkTotal, giftSilkTotal, points );
 	if ( many ) {
 		return tradable ?
-			"Paid with earned Silk: these items will be tradable" :
+			"Paid with Earned Silk: these items will be tradable" :
 			"These items will be account-bound";
 	}
-	return tradable ? "Paid with earned Silk: this item will be tradable" : "This item will be account-bound";
+	return tradable ? "Paid with Earned Silk: this item will be tradable" : "This item will be account-bound";
 }
 
 /*

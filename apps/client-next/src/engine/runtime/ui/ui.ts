@@ -230,6 +230,7 @@ import {
 	renewalNameLayout
 } from "@/engine/foundation/ui/renewal-mall";
 import { renewalMallPictures, renewalMallView } from "./hud/renewal-mall-view";
+import { EARNED_SILK_CAPTION, silkWalletHelp } from "@/engine/foundation/ui/mall-wallet";
 import {
 	quickslotCooldownQuads,
 	quickslotItemCooldownQuads,
@@ -1128,19 +1129,10 @@ const MALL_NOTICE_FRAME = ROOT + "interface/mall/mall_communicate.png";
 // A disabled renewal mall button's picture: the later art has no disable
 // face for every button, so the base face is drawn dimmed.
 const RENEWAL_DISABLED = [ 0.5, 0.5, 0.5, 1 ] as const;
-// Port-only (#4133): the classic mall's earned Silk row. No native string
-// names earned silk, so the caption and its hover help are the port's own.
-const EARNED_SILK_CAPTION = "Earned silk";
-// The hourly rate, the cap and tradability are shard settings
-// (action/betasilk.go, SRO_EARNED_SILK_TRADABLE), so the help names none.
-const EARNED_SILK_HELP = "Earned silk: Silk you earn by playing in the world. Purchases spend it first.";
-// Bonus Silk is the wallet's gift balance: minted rewards such as referrals
-// land there (store/referrals.go creditGiftSilkTx); the mall takes it and the
-// consignment market never does.
-const BONUS_SILK_HELP = "Bonus silk: Silk from rewards such as referrals. " +
-	"Spend it in the Item Mall; the consignment market does not take it.";
 // The classic My information rows as [caption, black box, unit] control ids
-// (ifitemmallmyinfo); earned silk rides the Point row's place.
+// (ifitemmallmyinfo); earned silk rides the Point row's place. Captions and
+// hover help are foundation/ui/mall-wallet.ts's.
+const MALL_SILK_ROW = [ 20, 6, 13 ] as const;
 const MALL_BONUS_SILK_ROW = [ 21, 16, 15 ] as const;
 const MALL_EARNED_SILK_ROW = [ 22, 17, 19 ] as const;
 // How far below its box a card name's second line may draw: the font's
@@ -29830,6 +29822,15 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 									kind: "button",
 									disabled: op.disabled
 								} );
+							} else if ( op.kind === "help" ) {
+								// A wallet row's hover help (foundation/ui/mall-wallet.ts).
+								controls.push( {
+									id: op.id,
+									kind: "region",
+									label: op.text,
+									helpText: op.text,
+									rect: op.rect
+								} );
 							} else if ( op.kind === "edit" ) {
 								controls.push( {
 									id: op.id,
@@ -30060,8 +30061,18 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 									rect: [ cx, by, Math.max( bx + bw, ux + uw ) - cx, bh ]
 								} );
 							};
-							walletRowHelp( "item-mall-bonus-silk", MALL_BONUS_SILK_ROW, BONUS_SILK_HELP );
-							walletRowHelp( "item-mall-earned-silk", MALL_EARNED_SILK_ROW, EARNED_SILK_HELP );
+							const tradable = game.itemMall.earnedTradable;
+							walletRowHelp( "item-mall-silk", MALL_SILK_ROW, silkWalletHelp( "silk", tradable ) );
+							walletRowHelp(
+								"item-mall-bonus-silk",
+								MALL_BONUS_SILK_ROW,
+								silkWalletHelp( "bonus", tradable )
+							);
+							walletRowHelp(
+								"item-mall-earned-silk",
+								MALL_EARNED_SILK_ROW,
+								silkWalletHelp( "earned", tradable )
+							);
 						}
 						const trunkOrigin = mallControl( root, 102 ).rect;
 						const tx = ox + trunkOrigin[0], ty = oy + trunkOrigin[1];
