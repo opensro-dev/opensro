@@ -1,3 +1,11 @@
+/*
+===========================================================================
+
+wiring_runtime_test.go - the runtime's composition: shard gates, transport
+defaults, and the timing sinks a plane without a hub must leave unset
+
+===========================================================================
+*/
 package main
 
 import (
@@ -5,10 +13,18 @@ import (
 	"time"
 
 	"opensro.online/server/internal/cluster/shard"
+	"opensro.online/server/internal/game/action"
+	"opensro.online/server/internal/game/world/simulation"
 	"opensro.online/server/internal/security/auth"
+	"opensro.online/server/internal/testsupport/wait"
 	"opensro.online/server/internal/transport"
 )
 
+/*
+================
+TestEnterWorldVerifierRejectsForeignShardBeforeTokenVerification
+================
+*/
 func TestEnterWorldVerifierRejectsForeignShardBeforeTokenVerification(
 	t *testing.T,
 ) {
@@ -35,6 +51,11 @@ func TestEnterWorldVerifierRejectsForeignShardBeforeTokenVerification(
 	}
 }
 
+/*
+================
+TestEnterWorldVerifierAcceptsOwnedShardToken
+================
+*/
 func TestEnterWorldVerifierAcceptsOwnedShardToken(t *testing.T) {
 	const secret = "enterworld-test-secret-at-least-32-bytes"
 	const shardID = "global-official"
@@ -63,6 +84,11 @@ func TestEnterWorldVerifierAcceptsOwnedShardToken(t *testing.T) {
 	}
 }
 
+/*
+================
+TestTransportDefaultsComeFromOwnedShard
+================
+*/
 func TestTransportDefaultsComeFromOwnedShard(t *testing.T) {
 	definition := shard.Definition{
 		ID:           "test",
@@ -99,5 +125,30 @@ func TestTransportDefaultsComeFromOwnedShard(t *testing.T) {
 	if config.WTAddr != "0.0.0.0:443" ||
 		config.WSAddr != "0.0.0.0:8443" {
 		t.Fatalf("explicit deployment binds were overwritten: %+v", config)
+	}
+}
+
+/*
+================
+TestMissionTickerWithoutAHubDropsSlowReports
+
+A plane with no transport hub (the wiring tests' fixture) must leave the
+slow-step and publication-hold sinks unset. Bound to the nil hub they
+panicked the first time a hold crossed SlowHookThreshold, which only a
+loaded machine reached in the beta-silk barrier test; here the hold is
+made long on purpose.
+================
+*/
+func TestMissionTickerWithoutAHubDropsSlowReports(t *testing.T) {
+	game, _, _ := betaWiringFixture()
+	game.newMissionTicker(&action.PeerReferenceCatalog{})
+	unlock := game.items.LockPublication(betaWiringDivision, "test")
+	// The runtime times the hold with the wall clock (publicationRelease),
+	// so the window is spent, not simulated.
+	wait.Consistently(t, simulation.SlowHookThreshold+10*time.Millisecond, "the publication gate stays held", func() bool { return true })
+	unlock()
+	// The runtime calls the slow-step sink only when it is set, as here.
+	if slow := game.items.Steps.Slow; slow != nil {
+		slow("test", simulation.SlowHookThreshold)
 	}
 }

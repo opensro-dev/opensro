@@ -27,7 +27,11 @@ func TestRowsReadsBackOpenAndClosedSpans(t *testing.T) {
 	journal.RecordEntered(Entry{Session: "s2", Account: "acct-b", Character: "Mage", Shard: "global-official",
 		Transport: "websocket", Address: "198.51.100.9:6000", UserAgent: "TestBrowser/2.0"})
 	journal.CloseSession("s1", nil)
+	// Wait for the close, not only the two entries: the writer applies
+	// them in turn, so a read between the entries and the close finds s1
+	// still open.
 	rows(t, journal, 2)
+	waitEnded(t, journal, "s1")
 
 	found, err := journal.Rows(0)
 	if err != nil {

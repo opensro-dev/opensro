@@ -178,10 +178,11 @@ EXTRACTED_FOLDERS = ("Media_extracted", "Data_extracted", "Map_extracted", "Part
 
 
 LATER_SOURCES = ("SRO_VSRO_ROOT", "SRO_V1696_ROOT", "SRO_AVATARS_ZIP")
+PORTABLE_MIPS = "SRO_PORTABLE_MIPS"
 
 
 def run_doctor(game_root, **later):
-	env = {k: v for k, v in os.environ.items() if k not in LATER_SOURCES}
+	env = {k: v for k, v in os.environ.items() if k not in LATER_SOURCES and k != PORTABLE_MIPS}
 	env.update(later, SRO_GAME_ROOT=str(game_root))
 	return subprocess.run(["node", "scripts/assets_doctor.mjs"], cwd=REPO_ROOT, env=env, capture_output=True, text=True)
 
@@ -229,6 +230,19 @@ class DoctorTests(unittest.TestCase):
 			self.assertRegex(result.stdout, r"FAIL\s+SRO_V1696_ROOT\s+.*Media\.pk2 is missing")
 			(Path(later) / "Media.pk2").write_bytes(b"x")
 			self.assertRegex(run_doctor(root, SRO_V1696_ROOT=later).stdout, r"ok\s+SRO_V1696_ROOT")
+
+	@unittest.skipUnless(sys.platform == "win32", "the DirectX runtime is checked on Windows only")
+	def test_a_missing_directx_runtime_fails_unless_portable_mips_are_chosen(self):
+		# A fresh clone without the runtime and with SRO_PORTABLE_MIPS=1 builds
+		# (nativeMipGenerator.mjs), so the doctor must not call that host a
+		# failure; without the opt-in the build stops, and so does the doctor.
+		with tempfile.TemporaryDirectory() as root, tempfile.TemporaryDirectory() as windir:
+			complete_root(root)
+			result = run_doctor(root, WINDIR=windir)
+			self.assertRegex(result.stdout, r"FAIL\s+DirectX runtime\s+.*SRO_PORTABLE_MIPS=1")
+			result = run_doctor(root, WINDIR=windir, **{PORTABLE_MIPS: "1"})
+			self.assertRegex(result.stdout, r"warn\s+DirectX runtime\s+.*portable mips")
+			self.assertNotRegex(result.stdout, r"FAIL\s+DirectX")
 
 	def test_an_empty_folder_counts_as_missing(self):
 		with tempfile.TemporaryDirectory() as root:

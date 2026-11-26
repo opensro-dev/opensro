@@ -83,9 +83,12 @@ export function generatorCandidates( host ) {
 /*
 ================
 portableAllowed
+
+Whether this process opted into the portable generator (SRO_PORTABLE_MIPS=1).
+The doctor asks the same question, so it never fails a host the build accepts.
 ================
 */
-function portableAllowed() {
+export function portableAllowed() {
 	return process.env[PORTABLE_OPT_IN] === "1";
 }
 

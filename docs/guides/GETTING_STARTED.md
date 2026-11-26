@@ -17,8 +17,9 @@ deployment tooling is not part of this repository.
 | pnpm | 12.6.0, the version `package.json` `packageManager` names; through Corepack (`npm install --global corepack` if missing) |
 | Python | 3.12 (`py -3`) with `py -3 -m pip install -r scripts/requirements-build.txt`: client extraction, image and font conversion, cursor extraction |
 | ffmpeg | Any current build on `PATH`; `assets prepare` converts the client's OGG music to MP3 with it |
-| DirectX End-User Runtime | Install [Microsoft's runtime](https://www.microsoft.com/en-us/download/details.aspx?id=35); lens mip generation uses its 32-bit `d3dx9_39.dll`. Windows' built-in DirectX alone does not supply this library. |
+| DirectX End-User Runtime | Install [Microsoft's runtime](https://www.microsoft.com/en-us/download/details.aspx?id=35); lens mip generation uses its 32-bit `d3dx9_39.dll`. Windows' built-in DirectX alone does not supply this library. Without it (no elevation, Remote Desktop), set `SRO_PORTABLE_MIPS=1` for a local build: the portable generator writes equivalent mips that are not byte-identical. |
 | Browser | Current Chrome or Edge with WebGPU |
+| C compiler (only for `pnpm check`'s Go race step) | `go test -race` needs cgo, so a 64-bit gcc on `PATH` (or the one `go env CC` names): on Windows an MSYS2 MinGW-w64 gcc or a WinLibs build. Every other gate runs without it. The gate puts the compiler's own folder first on `PATH` (`scripts/checks/check_go_server.mjs`), so Git's older MinGW DLLs do not break it. |
 
 ```powershell
 go version; node --version; corepack pnpm --version
@@ -163,7 +164,9 @@ terminal to stop: on Windows the children share the runner's console and
 each closes its own store; elsewhere the runner forwards SIGTERM. A
 process that outlives a 30-second grace period is killed, and if one of
 the three exits early the runner stops the rest - nothing is left
-orphaned either way.
+orphaned either way. Under a script or a test harness (stdin is not a
+terminal), closing the runner's stdin is the stop: keep it open for as
+long as the stack should run.
 
 The first boot of a fresh world fills the world population and can take
 a few minutes on a slower machine (seconds on a warm one); the runner
