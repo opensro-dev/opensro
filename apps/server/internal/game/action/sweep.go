@@ -41,7 +41,7 @@ func (rt *Runtime) SweepExpired(nowMs int64) []simulation.DivisionFrames {
 	// registry's own write-through hook retires with the door cutover).
 	rt.deps.MutateDeferred(nil, "ttl-sweep", func() {
 		for _, divisionID := range rt.Ground.DivisionIDs() {
-			expired := rt.Ground.ExpireItems(divisionID, now, grounditem.FixtureLifetime)
+			expired := rt.Ground.ExpireItemsBy(divisionID, now, rt.groundLifetime)
 			if len(expired) == 0 {
 				continue
 			}
@@ -59,15 +59,35 @@ func (rt *Runtime) SweepExpired(nowMs int64) []simulation.DivisionFrames {
 }
 
 // hasExpired is the read-only twin of the sweep's expiry predicate
-// (registry ExpireItems: DroppedAt set and now-DroppedAt >= lifetime).
+// (registry ExpireItemsBy: DroppedAt set and now-DroppedAt >= lifetime).
 // It holds only the ground registry's own lock. A false negative only delays
 // the sweep one interval; a false positive (an expired drop picked up between
 // the peek and the sweep's lock) only costs one no-op commit - both self-heal.
 func (rt *Runtime) hasExpired(now time.Time) bool {
 	for _, divisionID := range rt.Ground.DivisionIDs() {
-		if rt.Ground.HasExpired(divisionID, now, grounditem.FixtureLifetime) {
+		if rt.Ground.HasExpiredBy(divisionID, now, rt.groundLifetime) {
 			return true
 		}
 	}
 	return false
+}
+
+/*
+================
+groundLifetime
+
+How long a drop of one item kind lies on the ground: its itemdata
+DecayTime (3 minutes for almost every item, 30 for the trade goods), or
+grounditem.FixtureLifetime when the kind has no ref or no DecayTime.
+================
+*/
+func (rt *Runtime) groundLifetime(refObjID uint32) time.Duration {
+	if rt.deps != nil {
+		if refs := rt.deps.ItemReferences(); refs != nil {
+			if ref, ok := refs.ItemRefByID(refObjID); ok && ref != nil && ref.DecayTimeMs > 0 {
+				return time.Duration(ref.DecayTimeMs) * time.Millisecond
+			}
+		}
+	}
+	return grounditem.FixtureLifetime
 }

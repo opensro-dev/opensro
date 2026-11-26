@@ -590,6 +590,9 @@ func buildItemRef(fields []string, names map[string]string) *ItemRef {
 	// itemdataRecordColumns as reqLevelType1/requiredLevel +
 	// reqLevelType2..4/requiredLevel2..4.
 	if len(fields) > 14 {
+		if v, ok := textdataInt(fields[13]); ok && v > 0 {
+			ref.DecayTimeMs = v
+		}
 		if v, ok := textdataInt(fields[14]); ok {
 			ref.Country = v
 		}
