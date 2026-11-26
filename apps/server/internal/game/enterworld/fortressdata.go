@@ -71,6 +71,12 @@ var hotanSiegeFortressRow = SiegeFortressDataRow{
 	TaxTargets:      63,
 }
 
+// fortressOfficialIDs is the raw characterdata codename index
+// (enterworld.TextdataItems).
+type fortressOfficialIDs interface {
+	CharacterRefObjIDByCodename(codename string) (uint32, bool)
+}
+
 /*
 ================
 siegeFortressRows
@@ -81,6 +87,12 @@ data. The Bandit fortress joins unconditionally (later-native content,
 fortress id order as the later tables list them. The authority catalog
 and the world's structures come from the built tables, not from this
 projection.
+
+The id resolves through the complete codename index, not
+CharacterRefByCodename: the officials are stationary NPC rows (MaxHP
+0), the full character reference refuses them, and a miss here ships
+the row with no id, which leaves the fortress war window's list empty
+(#4475).
 ================
 */
 func siegeFortressRows(deps *Deps) []SiegeFortressDataRow {
@@ -95,13 +107,13 @@ func siegeFortressRows(deps *Deps) []SiegeFortressDataRow {
 	if deps == nil {
 		return rows
 	}
-	characters, ok := deps.Items.(CharacterRefSource)
+	characters, ok := deps.Items.(fortressOfficialIDs)
 	if !ok {
 		return rows
 	}
 	for i := range rows {
-		if ref, found := characters.CharacterRefByCodename(rows[i].OfficialNpcCode); found && ref != nil {
-			rows[i].OfficialRefObjID = ref.RefObjID
+		if id, found := characters.CharacterRefObjIDByCodename(rows[i].OfficialNpcCode); found {
+			rows[i].OfficialRefObjID = id
 		}
 	}
 	return rows

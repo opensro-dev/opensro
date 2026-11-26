@@ -85,3 +85,84 @@ func TestSiegeFortressRowsLaterFortresses(t *testing.T) {
 		t.Fatalf("bandit row %+v", bandit)
 	}
 }
+
+// fortressOfficialSource models the production TextdataItems for a
+// fortress official: the clerk is a stationary NPC row (MaxHP 0), so
+// buildCharacterRef refuses it and CharacterRefByCodename misses, while
+// the complete codename index still carries its RefObjID (#4475).
+type fortressOfficialSource struct {
+	ids map[string]uint32
+}
+
+func (s fortressOfficialSource) ItemRefByCodename(codename string) (*ItemRef, bool) {
+	return nil, false
+}
+
+func (s fortressOfficialSource) ItemRefByID(id uint32) (*ItemRef, bool) {
+	return nil, false
+}
+
+func (s fortressOfficialSource) CharacterRefByCodename(codename string) (*CharacterRef, bool) {
+	return nil, false
+}
+
+func (s fortressOfficialSource) SummonableCharacterRefs() []CharacterRef {
+	return nil
+}
+
+func (s fortressOfficialSource) CharacterRefObjIDByCodename(codename string) (uint32, bool) {
+	id, ok := s.ids[codename]
+	return id, ok
+}
+
+/*
+================
+TestSiegeFortressRowsOfficialRefObjID
+
+#4475: the fortress war window lists the fortresses of the official in
+conversation, matched by RefObjID. The officials are stationary NPC
+rows the full character reference refuses, so the rows must resolve
+their id through the complete codename index; resolving through
+CharacterRefByCodename left every row at 0 and the window empty.
+================
+*/
+func TestSiegeFortressRowsOfficialRefObjID(t *testing.T) {
+	deps := &Deps{Items: fortressOfficialSource{ids: map[string]uint32{
+		"NPC_CH_FORTRESS_OFFICIAL": 19520,
+	}}}
+	rows := siegeFortressRows(deps)
+	if len(rows) != 2 {
+		t.Fatalf("rows %+v", rows)
+	}
+	if rows[0].OfficialRefObjID != 19520 || rows[1].OfficialRefObjID != 19520 {
+		t.Fatalf("official ids jangan=%d bandit=%d, want 19520", rows[0].OfficialRefObjID, rows[1].OfficialRefObjID)
+	}
+
+	deps.Items = fortressOfficialSource{ids: map[string]uint32{}}
+	for _, row := range siegeFortressRows(deps) {
+		if row.OfficialRefObjID != 0 {
+			t.Fatalf("unresolvable official resolved: %+v", row)
+		}
+	}
+}
+
+/*
+================
+TestSiegeFortressRowsShippedOfficial
+
+The shipped textdata itself: the Jangan fortress clerk's row carries
+MaxHP 0, so the full character reference refuses it while the codename
+index answers 19520. The bootstrap row must carry that id or the
+fortress war window lists nothing (#4475).
+================
+*/
+func TestSiegeFortressRowsShippedOfficial(t *testing.T) {
+	items := sharedShippedItems(t)
+	if _, found := items.CharacterRefByCodename("NPC_CH_FORTRESS_OFFICIAL"); found {
+		t.Fatal("shipped official unexpectedly in the full character reference")
+	}
+	rows := siegeFortressRows(&Deps{Items: items})
+	if len(rows) == 0 || rows[0].OfficialRefObjID != 19520 {
+		t.Fatalf("jangan row %+v", rows)
+	}
+}
