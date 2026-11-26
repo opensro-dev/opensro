@@ -661,7 +661,13 @@ if(env.stages2.w>0.5&&material.reflection.z>0.5&&material.skin.z==0.0&&material.
  let fading=material.lighting.z>0.5&&input.opacity<1.0;
  // An effect fades its own stage alpha (diffuse animation included).
  let fadeAlpha=select(select(tex.a,1.0,material.lighting.w>0.5),color.a,material.stage.x>0.0)*input.opacity;
- let cutoff=select(material.options.x,floor(material.options.x*255.0*round(input.opacity*255.0)/256.0)/255.0,fading);
+ // The alpha reference never scales with the fade: the native state
+ // applier (0xAAE3E0) derives it from the material flags alone (128 for
+ // a tested material) and the fade reaches the tested alpha through
+ // fadeAlpha above, so a fading cutout erodes from its edges instead
+ // of ghosting inside its authored silhouette. The sun-shadow caster
+ // already tests against this same unscaled reference.
+ let cutoff=material.options.x;
  // D3D9 HAL alpha-test conversion: truncate to 12 fractional bits, then
  // nearest UNORM8 with half-way values down. Keep blending alpha unmodified.
  let alphaFixed=floor(clamp(select(color.a,fadeAlpha,fading),0.0,1.0)*4096.0);
