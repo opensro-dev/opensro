@@ -70,7 +70,7 @@ func SummonedSightRange(ref MonsterRef, grade uint8, random func() float64) (flo
 
 // ResolveSummonTactics selects one whole record, consuming at most one draw.
 func ResolveSummonTactics(ref MonsterRef, grade uint8, random func() float64) (SummonTactics, bool) {
-	rows, ok := summonTacticsByCode[ref.Codename]
+	rows, ok := summonTacticsByCode[ref.BaseCodename()]
 	if !ok {
 		rows, ok = summonTacticsByCode[ref.OriginalCodename]
 	}

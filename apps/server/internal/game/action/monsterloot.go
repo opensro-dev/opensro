@@ -378,7 +378,7 @@ func (rt *Runtime) prepareEquipmentDrop(
 		return grounditem.Item{}, false
 	}
 	rare := rareEquipmentRoll(rarityRoll, rt.rareWindow())
-	_, _, attempts := loot.MonsterDropBudget(monster.Rarity(), monster.Ref.Codename)
+	_, _, attempts := loot.MonsterDropBudget(monster.Rarity(), monster.Ref.BaseCodename())
 	for attempt := 0; attempt < attempts; attempt++ {
 		if item, ok := rt.prepareEquipmentDropKind(monster, at, droppedBy, now, rare); ok {
 			return item, true
@@ -607,7 +607,7 @@ func (rt *Runtime) planMonsterKillLoot(
 	if flakes, only := rt.christmasSnowflakeOnly(snapshot, monster, at, now); only {
 		return flakes
 	}
-	capacity, passes, _ := loot.MonsterDropBudget(monster.Rarity(), monster.Ref.Codename)
+	capacity, passes, _ := loot.MonsterDropBudget(monster.Rarity(), monster.Ref.BaseCodename())
 	// Port-only, not native: the beta rate scales a kill's drops, its
 	// assigned rewards and ordinary passes and the capacity bounding them, so
 	// testers see every item family (equipment to upgrade, alchemy materials)
@@ -639,7 +639,9 @@ func (rt *Runtime) planMonsterKillLoot(
 	uniqueRound := len(prepared)
 	unique := RollsUniqueDrops(monster.Rarity())
 	for round := 0; round < familyRate("assigned") && len(prepared) < capacity; round++ {
-		for _, chosen := range loot.AssignedDrops(monster.Ref.Codename, capacity-len(prepared), rt.DropRoll) {
+		// A build-locked copy keeps its base's assigned rows (SRO_STR_INT_UNIQUES):
+		// the native table is keyed by the shipped codename.
+		for _, chosen := range loot.AssignedDrops(monster.Ref.BaseCodename(), capacity-len(prepared), rt.DropRoll) {
 			chosen.FromUnique = unique
 			if item, ok := rt.prepareSelectedDrop(chosen, at, snapshot.Name, now); ok {
 				prepared = append(prepared, item)

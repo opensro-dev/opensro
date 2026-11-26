@@ -51,6 +51,12 @@ func BuildPool(refs []monster.MonsterRef) Pool {
 		if !strings.HasPrefix(ref.Codename, "MOB_") || strings.Contains(ref.Codename, "_STRONG_") || strings.Contains(ref.Codename, "_L2") || strings.Contains(ref.Codename, "_L3") || strings.Contains(ref.Codename, "_L4") {
 			continue
 		}
+		// Port-only (SRO_STR_INT_UNIQUES): a build-locked copy is a field
+		// unique's tuning, not an arena encounter, and its admission rule
+		// could strand a wave no party member is allowed to finish.
+		if ref.VariantOf != "" {
+			continue
+		}
 		if ref.TrainingDummy || ref.Structure || ref.MaxHP == 0 || ref.ModelPath == "" || ref.DefaultSkillIDs == ([10]uint32{}) || !ref.CombatPinned || !ref.RewardActionPinned || ref.ExpToGive == 0 || ref.RunSpeed <= 0 || monster.TradeNpcMonster(ref) {
 			continue
 		}

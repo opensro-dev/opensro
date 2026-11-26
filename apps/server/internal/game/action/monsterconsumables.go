@@ -30,7 +30,7 @@ prepareConsumableDrop
 ================
 */
 func (rt *Runtime) prepareConsumableDrop(mob monster.Instance, family int, at simulation.Spawn, owner string, now time.Time) (grounditem.Item, bool) {
-	_, _, attempts := loot.MonsterDropBudget(mob.Rarity(), mob.Ref.Codename)
+	_, _, attempts := loot.MonsterDropBudget(mob.Rarity(), mob.Ref.BaseCodename())
 	for attempt := 0; attempt < attempts; attempt++ {
 		v, ok := rt.rollCombinedMillion()
 		if !ok {

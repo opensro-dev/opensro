@@ -184,7 +184,7 @@ func (s *MonsterState) RejectSummonCommand(divisionID string, gid uint32, nowMs 
 	defer s.mu.Unlock()
 	state := s.populationForObject(divisionID, gid)
 	parent, exists := state.instances.lookup(gid)
-	if !exists || parent.CurrentHP == 0 || monster.UniqueSummonPolicy(parent.Ref.Codename) == monster.NoSummonPolicy {
+	if !exists || parent.CurrentHP == 0 || monster.UniqueSummonPolicy(parent.Ref.BaseCodename()) == monster.NoSummonPolicy {
 		return
 	}
 	parent.DamageSinceSummon = 0

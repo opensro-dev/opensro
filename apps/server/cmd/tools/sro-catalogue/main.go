@@ -342,6 +342,10 @@ func shardPopulation(dir string, cap110 bool) (monster.Template, error) {
 	if err != nil {
 		return monster.Template{}, fmt.Errorf("catalogue pharaoh temple population: %w", err)
 	}
+	template, err = monster.AppendStrIntUniques(template, monster.StrIntUniquesEnabled())
+	if err != nil {
+		return monster.Template{}, fmt.Errorf("catalogue str/int unique variants: %w", err)
+	}
 	return template, nil
 }
 

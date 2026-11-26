@@ -107,6 +107,13 @@ type NestRow struct {
 	// import). Preserved as a fact on the nest; what the second kind
 	// changes at spawn time is pinned by #1800 step 3 slice 4.
 	SpawnType int
+	// UniqueShare names the species whose spawn points this nest shares
+	// (strint_uniques.go, SRO_STR_INT_UNIQUES). Every build of the species
+	// keeps the whole anchor list in a hive of its own, and a spawn is
+	// skipped while another live unique already stands on that point, so the
+	// copies can be up together but never on the same ground. Empty is every
+	// shipped nest.
+	UniqueShare string
 }
 
 /*

@@ -345,6 +345,13 @@ func NewDevDepsWithRoster(paths DevPaths, textdata *TextdataCatalogs, roster *Ro
 		if err != nil {
 			return nil, fmt.Errorf("bootstrap: %w", err)
 		}
+		// Port-only, not native: the build-locked STR and INT copies of the
+		// field uniques (SRO_STR_INT_UNIQUES). Before the summon references,
+		// so a copy keeps its base's unique summon behaviour.
+		template, err = monster.AppendStrIntUniques(template, monster.StrIntUniquesEnabled())
+		if err != nil {
+			return nil, fmt.Errorf("bootstrap: %w", err)
+		}
 		if rate, _ := monster.PharaohGearRateFromEnv(); rate > 1 && monster.PharaohTombEnabled() {
 			log.Infof("bootstrap: Pharaoh Tomb elites and uniques roll equipment x%d (%s, port-only)", rate, monster.EnvPharaohGearRate)
 		}

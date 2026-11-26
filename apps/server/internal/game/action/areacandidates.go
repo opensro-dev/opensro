@@ -87,6 +87,12 @@ func (rt *Runtime) areaCandidates(q areaQuery) []areaCandidate {
 			if q.caster != nil && rt.jobMonsterTargetRefusal(q.caster, m) != 0 {
 				continue
 			}
+			// Port-only (SRO_STR_INT_UNIQUES): a copy this caster's build may
+			// not damage is no candidate at all, so it never costs a target
+			// slot in any area selector.
+			if q.caster != nil && uniqueVariantRefused(q.caster, m) {
+				continue
+			}
 			mover, ok := rt.Monsters.Mover(q.division, m.Gid)
 			if !ok {
 				continue

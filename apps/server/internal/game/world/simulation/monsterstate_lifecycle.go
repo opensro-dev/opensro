@@ -652,9 +652,7 @@ func (s *MonsterState) tickOverwriteHive(state *divisionMonsterState, key string
 	// Native: a full hive neither ticks nor advances its callback phase.
 	if h.live < limit && nowMs-h.tickMs >= monster.NestHiveTickMs {
 		h.tickMs = nowMs
-		if h.selected >= 0 {
-			members = []int{h.selected}
-		}
+		members = s.hiveMembers(state, members, h.selected, nowMs)
 		for _, index := range members {
 			n := state.nests[index]
 			if n.elapsed(nowMs) && n.live < s.template.Nests[index].InstanceLimit() &&
@@ -693,6 +691,11 @@ func (s *MonsterState) attemptNestSpawn(state *divisionMonsterState, index int, 
 	nest := s.template.Nests[index]
 	if n.occupant != 0 {
 		nest.RefObjID = n.occupant
+	}
+	// Port-only (SRO_STR_INT_UNIQUES): a copy never spawns on a point another
+	// living copy of the species already holds.
+	if s.anchorHeld(state, nest) {
+		return false
 	}
 	ref := s.template.Refs[nest.RefObjID]
 	roll := monster.RollNativeSpawn(ref, nest, n.partyArmed, s.randomWord)
@@ -749,6 +752,7 @@ func (s *MonsterState) attemptNestSpawn(state *divisionMonsterState, index int, 
 	state.behavior.set(gid, 0)
 	state.listRegionGid(spawn.RegionID, gid)
 	state.gidNests[gid] = index
+	s.holdAnchor(state, nest, gid)
 	// Native bookkeeping: count the spawn before re-rolling the delay.
 	n.live++
 	n.lastMs = nowMs
@@ -856,6 +860,7 @@ func (s *MonsterState) Defeat(divisionID string, gid uint32, at time.Time) bool 
 	delete(state.uniqueKillers, gid)
 	delete(state.lifetimes, gid)
 	state.instances.remove(gid)
+	s.releaseAnchorHeldBy(state, gid)
 	state.forgetDormant(gid)
 	delete(state.contributions, gid)
 	state.releaseApproachActor(gid)

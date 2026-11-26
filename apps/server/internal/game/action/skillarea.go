@@ -139,6 +139,12 @@ func (rt *Runtime) planAreaVictims(in areaPlanInput) (areaStrikePlan, bool) {
 			continue
 		}
 		target := *victim.monster
+		// Port-only, not native (SRO_STR_INT_UNIQUES): a build-locked copy is
+		// left out of the sweep entirely, so one of them in range never
+		// refuses the whole area. It takes no share of the hit chain.
+		if uniqueVariantRefused(in.snapshot, target) {
+			continue
+		}
 		defender, err := combat.MonsterInstanceStats(target)
 		if err != nil {
 			return areaStrikePlan{}, false
