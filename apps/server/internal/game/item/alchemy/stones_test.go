@@ -94,6 +94,32 @@ func TestStoneAssimilationProtectionAndUnrelatedAttribute(t *testing.T) {
 	}
 }
 
+/*
+================
+TestStoneAssimilationReRollsNotReparableToOne
+
+NOT_REPARABLE is not one of the spared options: assimilation re-rolls
+it, and its row's zero value kind makes the write the clamp's floor,
+1, with no value draw taken (the draw sequence ends at the pick).
+================
+*/
+func TestStoneAssimilationReRollsNotReparableToOne(t *testing.T) {
+	c, items := stoneFixture(false)
+	items[1].Plus = 100
+	c.Magic[65] = Magic{ID: 65, Name: "MATTR_NOT_REPARABLE", Degree: 1, Tag: 0x6e726570, Params: [3]uint32{6, 400, 1949133172}, Categories: []string{"weapon"}}
+	items[0].MagicOptions = []uint64{400<<32 | 65}
+	r, e := c.Stone(items, []uint8{13, 14}, false, 0, sequence(t, 0, 1, 1, 1, 1, 0, 7))
+	if e != nil {
+		t.Fatal(e)
+	}
+	if !r.Success {
+		t.Fatal("stone did not succeed")
+	}
+	if !reflect.DeepEqual(r.Items[0].MagicOptions, []uint64{1<<32 | 65}) {
+		t.Fatalf("not-reparable write = %+v, want the floor value 1", r.Items[0].MagicOptions)
+	}
+}
+
 func TestAstralRequiresMoreImmortalChargesAndEnforcesCapacity(t *testing.T) {
 	c, items := stoneFixture(true)
 	r := c.Items["stone"]
