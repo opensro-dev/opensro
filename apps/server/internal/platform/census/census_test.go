@@ -14,6 +14,7 @@ package census
 
 import (
 	"encoding/json"
+	"errors"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -138,6 +139,53 @@ func TestPublicCounts(t *testing.T) {
 	}
 	if peopleNow != 1 || uniquePeople7d != 2 {
 		t.Fatalf("public counts: got peopleNow=%d uniquePeople7d=%d, want 1/2", peopleNow, uniquePeople7d)
+	}
+}
+
+/*
+================
+TestPublicCountsReuseTheirAnswer
+
+The public pair reloads the journal at most once per publicCountsTTL,
+however often the public route polls and even after the staff
+snapshot has gone stale; a failed read is retried on the next call.
+================
+*/
+func TestPublicCountsReuseTheirAnswer(t *testing.T) {
+	now := nowMs()
+	spans := []Span{span("s1", "acct-a", "Anna", now-2*hourMs, 0, "ip-a", "net-a", "client-a")}
+	clock := testNowTime
+	loads := 0
+	var failNext bool
+	service := NewService(func(int64) ([]Span, error) {
+		loads++
+		if failNext {
+			failNext = false
+			return nil, errors.New("journal unavailable")
+		}
+		return spans, nil
+	}, nil, nil, func() time.Time { return clock })
+
+	for poll := 0; poll < 5; poll++ {
+		if _, _, err := service.PublicCounts(); err != nil {
+			t.Fatal(err)
+		}
+		clock = clock.Add(snapshotTTL)
+	}
+	if loads != 1 {
+		t.Fatalf("public polls inside the TTL loaded the journal %d times, want 1", loads)
+	}
+	clock = testNowTime.Add(publicCountsTTL)
+	failNext = true
+	if _, _, err := service.PublicCounts(); err == nil {
+		t.Fatal("a failed reload answered from the stale pair")
+	}
+	peopleNow, _, err := service.PublicCounts()
+	if err != nil || peopleNow != 1 {
+		t.Fatalf("the retry after a failed read: people=%d err=%v", peopleNow, err)
+	}
+	if loads != 3 {
+		t.Fatalf("expected a reload after the TTL and a retry after the failure: loads=%d", loads)
 	}
 }
 
