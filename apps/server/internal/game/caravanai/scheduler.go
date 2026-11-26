@@ -288,6 +288,18 @@ func (r *Runtime) stepReinforcementLocked(unit *AgentUnit, call *DistressCall) {
 	}
 }
 
+// playerCommandCooldownMs spaces one player's answered caravan chat
+// commands: at most one answer per player per window, the excess is
+// consumed silently.
+const playerCommandCooldownMs int64 = 5_000
+
+// playerCommands are the chat words HandlePlayerCommand answers; any
+// other line stays ordinary chat.
+var playerCommands = map[string]bool{
+	"!leed": true, "!lead": true, "!dismiss": true, "!caravans": true, "!caravan": true,
+	"!accept": true, "!hire": true, "!memory": true, "!attack": true,
+}
+
 /*
 ==================
 HandlePlayerCommand
@@ -299,9 +311,13 @@ caravan agents:
   - "!hire [AgentName]"         (Hires an idle agent for one trade run; without a name lists them)
   - "!leed"                     (Toggles the hirer leading its hired Traders; the party board's Lead badges pick anyone)
   - "!dismiss"                  (Ends every hire of the player now)
-  - "!attack <AgentName> [dmg]" (Simulates an ambush strike, triggering distress aid or parley)
+  - "!attack"                   (Answers how to fight: chat never deals damage)
   - "!memory [AgentName]"       (Inspects how an AI agent remembers the player)
 
+Answers are rate-limited per player (claimCommandSlot, from main's slice
+4): inside playerCommandCooldownMs the command is consumed with an empty
+reply, so a flood can neither make the agents spam nor reach the room
+as ordinary chat. Unrecognized text is not handled and stays chat.
 ==================
 */
 func (r *Runtime) HandlePlayerCommand(
@@ -315,7 +331,13 @@ func (r *Runtime) HandlePlayerCommand(
 		return "", false
 	}
 	cmd := strings.ToLower(fields[0])
+	if !playerCommands[cmd] {
+		return "", false
+	}
 	division = strings.TrimSpace(division)
+	if !r.claimCommandSlot(division, playerName, nowMs) {
+		return "", true
+	}
 	r.EnsureDivisionRoster(division)
 	defer r.flushOutbox(division)
 
@@ -411,6 +433,29 @@ func (r *Runtime) HandlePlayerCommand(
 	default:
 		return "", false
 	}
+}
+
+/*
+==================
+claimCommandSlot
+
+The command rate limit: true when the player may be answered now (and
+stamps the slot); false means the caller consumes the line silently.
+Refusals are answers too and cost the slot.
+==================
+*/
+func (r *Runtime) claimCommandSlot(division, playerName string, nowMs int64) bool {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if r.lastCommandAt == nil {
+		r.lastCommandAt = make(map[string]int64)
+	}
+	key := division + "\x00" + strings.ToLower(playerName)
+	if last, seen := r.lastCommandAt[key]; seen && nowMs-last < playerCommandCooldownMs {
+		return false
+	}
+	r.lastCommandAt[key] = nowMs
+	return true
 }
 
 func formatAgentRosterStatus(u *AgentUnit) string {

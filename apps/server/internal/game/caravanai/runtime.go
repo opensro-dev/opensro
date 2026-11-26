@@ -241,6 +241,9 @@ type Runtime struct {
 	partyOrder    map[string][]string
 	grand         map[string]*grandCaravan
 	scheduledAtMs map[string]int64
+	// lastCommandAt is each player's last answered chat command
+	// (claimCommandSlot, scheduler.go).
+	lastCommandAt map[string]int64
 	outbox        []outboxItem
 	// manualRuns stops the standing-run scheduler (tests drive runs by hand).
 	manualRuns bool

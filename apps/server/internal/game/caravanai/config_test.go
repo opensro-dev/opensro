@@ -116,3 +116,20 @@ func TestConfiguredHireFeeIsCharged(t *testing.T) {
 		}
 	}
 }
+
+/*
+==================
+TestCaravansFlagOnAndOff
+
+Unset and "off" leave the agents off (the native world); "on" runs them.
+Main's slice-1 test, kept across the fork's rewrite.
+==================
+*/
+func TestCaravansFlagOnAndOff(t *testing.T) {
+	for raw, want := range map[string]bool{"": false, "off": false, "on": true} {
+		t.Setenv(EnvAICaravans, raw)
+		if cfg := ConfigFromEnv(); cfg.Enabled != want {
+			t.Fatalf("%s=%q: Enabled %v, want %v", EnvAICaravans, raw, cfg.Enabled, want)
+		}
+	}
+}
