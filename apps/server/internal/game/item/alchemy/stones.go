@@ -211,9 +211,15 @@ func (c *Catalog) assimilate(item *inventory.Item, stone inventory.Item, changed
 	case 0x61746861, 0x6c75636b, 0x736f6c69, 0x61737472, 0x64757261, 0x726570:
 		return nil
 	}
-	v, e := RollMagicValue(m, roll)
-	if e != nil {
-		return e
+	// NOT_REPARABLE is not spared, but its row's value kind is zero, so
+	// the native re-roll writes the clamp's floor without drawing.
+	v := uint32(1)
+	if m.Tag != 0x6e726570 {
+		var e error
+		v, e = RollMagicValue(m, roll)
+		if e != nil {
+			return e
+		}
 	}
 	if v < 1 {
 		v = 1
