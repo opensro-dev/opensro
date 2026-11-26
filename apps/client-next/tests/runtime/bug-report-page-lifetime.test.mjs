@@ -43,7 +43,13 @@ reporter's frame does.
 function harness() {
 	const stored = new Map();
 	let nowMs = T0;
-	const live = { entities: 3, phase: "entering-world", gpu: null };
+	const live = {
+		entities: 3,
+		phase: "entering-world",
+		gpu: /** @type {import("../../src/engine/foundation/rendering/gpu-allocations.ts").GpuAllocationTotals | null} */ (
+			null
+		)
+	};
 	const hooks = {
 		storage: {
 			getItem: key => stored.get( key ) ?? null,

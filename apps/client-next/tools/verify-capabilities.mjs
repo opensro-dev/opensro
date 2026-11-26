@@ -82,6 +82,9 @@ const ambientOcclusion = runtime + "renderer/device/ambient-occlusion.ts";
 const msaa = runtime + "renderer/device/msaa.ts";
 const animation = runtime + "renderer/device/animation.ts";
 const particleQuery = runtime + "renderer/device/particle-query.ts";
+// The allocation meter (device/gpu-allocation-meter.ts): wraps the device's
+// two creation methods to count what every owner allocates (#4545).
+const allocationMeter = runtime + "renderer/device/gpu-allocation-meter.ts";
 // Port-only: the 3D viewer's still readback (docs/guides/VIEWER.md).
 const portraitReadback = runtime + "renderer/device/portrait-readback.ts";
 // The device's bundle-encoder wrapper: finishes the raw encoder it wraps (#2560).
@@ -91,6 +94,7 @@ const geometryUploads = runtime + "renderer/device/geometry-uploads.ts";
 // Slabs of geometry's small buffers (uniforms, instances, vertex and index ranges).
 const bufferSlabs = runtime + "renderer/device/buffer-slabs.ts";
 const deviceInternals = [
+	allocationMeter,
 	waterReflection,
 	bloom,
 	finish,
@@ -270,6 +274,9 @@ for (
 // The sun cascade's comparison sampler (bindings 13/14) is geometry-owned:
 // every world draw binds it, so it lives with the draws' other samplers.
 rules.createSampler.push( geometry );
+// The allocation meter creates nothing itself: it wraps the device's
+// creation methods so every owner's allocation joins the GPU totals.
+for ( const name of [ "createBuffer", "createTexture" ] ) rules[name].push( allocationMeter );
 for ( const name of [ "createBuffer", "writeBuffer", "createCommandEncoder", "finish", "submit" ] ) {
 	rules[name].push( geometryUploads );
 }

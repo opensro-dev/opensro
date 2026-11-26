@@ -266,6 +266,7 @@
     "src/engine/runtime/renderer/device/images.ts": "src/engine/runtime/renderer/device/device.ts",
     "src/engine/runtime/renderer/device/geometry.ts": "src/engine/runtime/renderer/device/device.ts",
     "src/engine/runtime/renderer/device/geometry-uploads.ts": "src/engine/runtime/renderer/device/device.ts",
+    "src/engine/runtime/renderer/device/gpu-allocation-meter.ts": "src/engine/runtime/renderer/device/device.ts",
     "src/engine/runtime/renderer/device/buffer-slabs.ts": "src/engine/runtime/renderer/device/device.ts",
     "src/engine/runtime/renderer/device/ui.ts": "src/engine/runtime/renderer/device/device.ts",
     "src/engine/runtime/renderer/device/portrait-readback.ts": "src/engine/runtime/renderer/device/device.ts",
