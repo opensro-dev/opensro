@@ -14,6 +14,7 @@ import (
 	"opensro.online/server/internal/game/action"
 	"opensro.online/server/internal/game/caravanai"
 	"opensro.online/server/internal/game/enterworld"
+	"opensro.online/server/internal/game/progression"
 	"sort"
 	"strings"
 )
@@ -97,8 +98,20 @@ func (game *gameplayPlane) trainCaravanActor(c *enterworld.Character) error {
 			c.Masteries[i].Level = *c.Level
 		}
 	}
+	// One force mastery (Cold, Lightning or Fire, by actor) with what the
+	// flat Chinese total leaves: its weapon imbue runs before an attack.
+	element, used := uint32(273+c.ID%3), int64(0)
+	for _, m := range c.Masteries {
+		used += m.Level
+	}
+	elementLevel := min(*c.Level, progression.TotalMasteryCapChina-used)
+	for i := range c.Masteries {
+		if c.Masteries[i].ID == element && elementLevel > c.Masteries[i].Level {
+			c.Masteries[i].Level = elementLevel
+		}
+	}
 	groups := map[uint32]enterworld.SkillRow{}
-	var bestRess enterworld.SkillRow
+	var bestRess, bestImbue enterworld.SkillRow
 	for _, row := range source.SpawnSkillRows() {
 		skill, found := game.deps.Skills.SkillByID(row.ID)
 		if !found {
@@ -113,6 +126,17 @@ func (game *gameplayPlane) trainCaravanActor(c *enterworld.Character) error {
 			}
 			if ressAllowed && (bestRess.ID == 0 || skill.Abnormal.ResuMaxLevel > bestRess.Abnormal.ResuMaxLevel || (skill.Abnormal.ResuMaxLevel == bestRess.Abnormal.ResuMaxLevel && skill.Level > bestRess.Level)) {
 				bestRess = skill
+			}
+		}
+		if strings.HasPrefix(skill.Codename, "SKILL_CH_") && skill.Imbue.Pinned && !skill.ChainSub && len(skill.Masteries) > 0 && action.SkillPressHandled(game.deps.Skills, skill) {
+			imbueAllowed := true
+			for _, req := range skill.Masteries {
+				if req.Level > elementLevel || (req.Level > 0 && req.ID != element) {
+					imbueAllowed = false
+				}
+			}
+			if imbueAllowed && (bestImbue.ID == 0 || skill.Masteries[0].Level > bestImbue.Masteries[0].Level) {
+				bestImbue = skill
 			}
 		}
 		if !strings.HasPrefix(skill.Codename, "SKILL_CH_"+family+"_") || strings.Contains(skill.Codename, "_BASE_") || skill.ChainSub || skill.SPCost <= 0 || !skill.CombatPinned || !skill.Attack.Present || skill.OffenseRefusal != "" || skill.Reqc.KnockedDown || skill.PositionEffect.Pinned || !action.SkillPressHandled(game.deps.Skills, skill) {
@@ -152,6 +176,13 @@ func (game *gameplayPlane) trainCaravanActor(c *enterworld.Character) error {
 	for _, skill := range skills[:min(3, len(skills))] {
 		c.Skills = append(c.Skills, skill.ID)
 		game.caravanSkills[c.Name] = append(game.caravanSkills[c.Name], skill.ID)
+	}
+	if bestImbue.ID != 0 {
+		if game.caravanImbueSkill == nil {
+			game.caravanImbueSkill = map[string]uint32{}
+		}
+		c.Skills = append(c.Skills, bestImbue.ID)
+		game.caravanImbueSkill[c.Name] = bestImbue.ID
 	}
 	if bestRess.ID != 0 {
 		if game.caravanRessSkill == nil {

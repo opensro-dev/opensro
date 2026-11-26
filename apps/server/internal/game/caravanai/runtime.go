@@ -204,8 +204,10 @@ const (
 	HPPotionItem        = "ITEM_ETC_HP_POTION_05"
 	MPPotionItem        = "ITEM_ETC_MP_POTION_05"
 	TransportPotionItem = "ITEM_ETC_COS_HP_POTION_03"
-	SpeedPotionItem     = "ITEM_MALL_MOVE_SPEED_UP_50"
-	SpeedPotionFactor   = 1.5
+	// UniversalPillItem cures freeze, frostbite, burn, shock, poison and zombie.
+	UniversalPillItem = "ITEM_ETC_CURE_ALL_04"
+	SpeedPotionItem   = "ITEM_MALL_MOVE_SPEED_UP_50"
+	SpeedPotionFactor = 1.5
 )
 
 const (

@@ -121,6 +121,31 @@ func TestCaravanShippedActors(t *testing.T) {
 		}
 		game.items.ServerActorRide(game.divisionID, actor.Name, false)
 	}
+	// Every agent keeps a force imbue, drinks the universal pill and
+	// leaves town with its gear repaired.
+	for _, actor := range game.caravanActors {
+		imbue := game.caravanImbueSkill[actor.Name]
+		if imbue == 0 || !slices.Contains(actor.Skills, imbue) {
+			t.Fatalf("%s has no force imbue", actor.Name)
+		}
+		game.items.SyncServerActor(game.divisionID, actor, simulation.SeedWorldState(actor).Spawn, false, 10, false)
+		game.items.HandleTargetInteract(game.divisionID, actor, wire.SkillAction{ActionId: imbue}.Encode())
+		if !game.items.ServerActorImbued(game.divisionID, actor.Name, time.Now().UnixMilli()) {
+			t.Fatalf("%s imbue %d did not go up", actor.Name, imbue)
+		}
+		if game.items.ServerActorNeedsCure(game.divisionID, actor.Name) {
+			t.Fatalf("%s needs a cure unhurt", actor.Name)
+		}
+		if !action.ItemUsed(game.items.ServerActorUseItem(game.divisionID, actor.Name, caravanai.UniversalPillItem)) {
+			t.Fatalf("%s cannot drink %s", actor.Name, caravanai.UniversalPillItem)
+		}
+		// Repaired to the native maximum (the row's variance), as at a blacksmith.
+		deps.UpdateCharacter(actor, "wear", func() bool { actor.MissionInventory[0].Durability = 1; return true })
+		game.items.ServerActorRepair(game.divisionID, actor.Name)
+		if actor.MissionInventory[0].Durability <= 1 {
+			t.Fatalf("%s weapon not repaired: %d", actor.Name, actor.MissionInventory[0].Durability)
+		}
+	}
 
 	gold := int64(100)
 	hunter := &enterworld.Character{Name: "escorthunter", Gold: &gold}

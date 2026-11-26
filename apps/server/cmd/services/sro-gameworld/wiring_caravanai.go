@@ -44,6 +44,8 @@ Port-only caravan state belongs with its feature wiring.
 type caravanRuntimeState struct {
 	caravanSkills     map[string][]uint32
 	caravanRessSkill  map[string]uint32
+	caravanImbueSkill map[string]uint32
+	caravanUpkeepAtMs map[string]int64
 	caravanAttackAt   map[string]int64
 	caravanAgents     *caravanai.Runtime
 	caravanNextStepMs int64
@@ -358,7 +360,8 @@ func (game *gameplayPlane) caravanAgentsTick(ticker *simulation.Ticker, nowMs in
 			if c == nil {
 				continue
 			}
-			if p, ok := game.caravanPlayer(game.divisionID, c.Name); ok && p.HPPercent > 0 {
+			// A player out of a job suit is no party to the job war: agents never see him as prey.
+			if p, ok := game.caravanPlayer(game.divisionID, c.Name); ok && p.HPPercent > 0 && p.JobType != domain.JobNone {
 				p.Distance = float32(caravanai.WaypointDistance(p.At, caravanai.Waypoint{RegionID: unit.RegionID, X: unit.X, Z: unit.Z}))
 				if p.Distance <= 320 {
 					nearby = append(nearby, p.ObservedPlayer)
@@ -397,6 +400,7 @@ func (game *gameplayPlane) caravanAgentsTick(ticker *simulation.Ticker, nowMs in
 				}
 			}
 			game.keepCaravanSpeed(c, unit, nowMs)
+			game.keepCaravanFit(c, unit, nowMs)
 			if !mustRejoin {
 				game.showCaravanLoot(c, unit, nearby, nowMs)
 			}
@@ -448,7 +452,9 @@ func (game *gameplayPlane) caravanAgentsTick(ticker *simulation.Ticker, nowMs in
 			} else if !deadNow && decision.Action == caravanai.ActionAttackTarget && !mustRejoin {
 				if target := game.deps.CharacterByName(game.divisionID, decision.TargetName); target != nil {
 					alive := false
-					game.deps.Read(game.divisionID, func() { alive = enterworld.CharacterAlive(target) })
+					game.deps.Read(game.divisionID, func() {
+						alive = enterworld.CharacterAlive(target) && enterworld.DressedJob(target) != domain.JobNone
+					})
 					if alive {
 						tSpawn := game.items.LiveSpawnFor(game.divisionID, target)
 						targetDist := caravanai.WaypointDistance(
