@@ -329,6 +329,69 @@ func TestCOSGroundManualPickupSealEquipmentDrop(t *testing.T) {
 
 /*
 ================
+TestCOSGroundPickupMergesOntoPetStackAndLeavesTheRemainder
+
+BR-261126-1224-8083: the reporter watched Reverse Return Scrolls
+"stack into the pet, not all, just a random amount" on arriving in a
+busy area. The only road into a pet container is a ground grant, and
+the grant's stack rules are the whole story: a ground heap larger
+than the room left on the pet's matching stack tops that stack up
+and leaves the remainder lying on the ground. The player's bag is
+never read or written by a pickup, so no bag stack can travel this
+road; what moves is bounded by the pet stack's free room, which is
+why the moved amount looks arbitrary.
+================
+*/
+func TestCOSGroundPickupMergesOntoPetStackAndLeavesTheRemainder(t *testing.T) {
+	c := testCharacter()
+	const scrollCodename = "ITEM_MALL_REVERSE_RETURN_SCROLL"
+	items := testItems()
+	items[scrollCodename] = &enterworld.ItemRef{
+		RefObjID: 3795, Codename: scrollCodename, TypeIDs: [4]int64{3, 3, 3, 3},
+		NativeFields: enterworld.NewNativeFields(map[string]float64{"maxStack": 50}),
+	}
+	refs := testCosSource(items)
+	refs.characters["PET"] = &enterworld.CharacterRef{Codename: "PET", RefObjID: 9, TidWord: 0x21c6, RunSpeed: 100}
+	rt, _ := newTestRuntime(c, refs)
+	rt.Now = func() time.Time { return time.UnixMilli(1000) }
+	gid, _ := enterworld.CosObjectIDForCharacter(c)
+	scrollFlags := wire.PackTypeFlags(3, 3, 3, 3)
+	c.ActiveCOS = &enterworld.CharacterCOS{GID: gid, RefObjID: 9, Codename: "PET", CurrentHP: 100, Summoned: true,
+		Container: &domain.COSContainer{Capacity: 2, Rows: []domain.InventoryRow{
+			{Slot: 0, RefObjID: 3795, Codename: scrollCodename, TypeFlags: scrollFlags, StackCount: 45},
+		}}}
+	rt.ConstrainMovement = func(_ string, from, to simulation.Spawn) (simulation.Spawn, *simulation.MoveError) { return to, nil }
+	rt.BindPetSession(testDivision, c, 1)
+	rt.TickHook()(1000)
+	pose := rt.PetPresentation(testDivision, c.Name).World.Spawn
+	drop := rt.Ground.Add(testDivision, grounditem.Item{RefObjID: 3795, Codename: scrollCodename,
+		TypeFlags: scrollFlags, StackCount: 20, OwnerJID: enterworld.ObjectIDForCharacter(c),
+		Position: grounditem.Point{RegionID: pose.RegionID, X: float32(pose.X), Z: float32(pose.Z)}, Y: float32(pose.Y)})
+	bagBefore := c.Snapshot().MissionInventory
+	p, err := wire.ItemMoveRequest{MovementType: wire.MoveTypeCosPickup, CosGID: gid, GroundGID: drop.Gid}.Encode()
+	if err != nil {
+		t.Fatal(err)
+	}
+	r := rt.HandleItemMove(testDivision, c, p)
+	if len(r.Frames) == 0 || r.Frames[0].Opcode != wire.OpItemMoveResponse ||
+		len(r.Frames[0].Payload) < 2 || r.Frames[0].Payload[0] != 1 || r.Frames[0].Payload[1] != wire.MoveTypeCosPickup {
+		t.Fatalf("partial pickup answered %v, want a 0x11 success receipt", r.Frames)
+	}
+	rows := c.ActiveCOS.Container.Rows
+	if len(rows) != 1 || rows[0].StackCount != 50 {
+		t.Fatalf("pet stack = %v, want the single stack topped to the 50 cap", rows)
+	}
+	ground := rt.Ground.All(testDivision)
+	if len(ground) != 1 || ground[0].StackCount != 15 {
+		t.Fatalf("ground = %v, want the 15-scroll remainder left lying", ground)
+	}
+	if !reflect.DeepEqual(c.Snapshot().MissionInventory, bagBefore) {
+		t.Fatal("a ground pickup read or wrote the player's bag")
+	}
+}
+
+/*
+================
 TestCOSGroundQuestItemGrantsToOwnerPlayerBagAndUpdatesQuestProgress
 
 The native pickup recipient choice: when a grab pet
