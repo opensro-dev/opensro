@@ -257,6 +257,7 @@ import {
 	merchantSelection,
 	merchantCommand,
 	merchantQuote,
+	merchantSaleQuantity,
 	merchantPage,
 	merchantDialogPage,
 	type MerchantSelection
@@ -3411,9 +3412,21 @@ export function createUi( ports: UiPorts ) {
 		if ( game.inventoryPending || game.shop.error || game.target !== game.shop.npc ) return;
 		const choice = merchantSelection( "sell", item.slot, game.shop, merchantRows( game ) );
 		if ( !choice || choice.binding !== merchantBinding( item ) ) return;
+		// Magic Cube quantity is StoredItemCount; only an empty cube sells (bag stack 1).
+		if ( isMagicCube( item.typeFlags ) && item.quantity > 0 ) {
+			hudMessages.append(
+				hudCopy( "UIIT_STT_MAGIC_CUBE_STORE_SELL_ERROR" ) ||
+					MAGIC_CUBE_COPY.UIIT_STT_MAGIC_CUBE_STORE_SELL_ERROR,
+				0xffff7070
+			);
+			dirty = true;
+			return;
+		}
+		const saleCount = merchantSaleQuantity( item );
+		if ( saleCount < 1 ) return;
 		const sale = game.shop.saleQuotes?.find( q =>
 			q.slot === item.slot && (q.cosGid ?? 0) === (game.shop?.cosGid ?? 0) && q.refObjId === item.refObjId &&
-			q.quantity === item.quantity
+			q.quantity === saleCount
 		);
 		if ( !acknowledged && sale?.noBuyback ) {
 			shopWarning = { selection: choice, name: item.name ?? "", quick };
@@ -3423,14 +3436,14 @@ export function createUi( ports: UiPorts ) {
 			return;
 		}
 		if ( quick ) {
-			sendGameplay( merchantCommand( choice, item.quantity ) );
+			sendGameplay( merchantCommand( choice, saleCount ) );
 			return;
 		}
 		if ( game.shop.cosGid && isTradeGoods( item.typeFlags ) ) {
 			openSpecialtySale( choice, item );
 			return;
 		}
-		beginShopDialog( choice, String( item.quantity ) );
+		beginShopDialog( choice, String( saleCount ) );
 		if ( shopChoice ) sendGameplay( { kind: "shop-open", gid: shopChoice.npc } );
 	}
 	/*

@@ -13,6 +13,7 @@ import { itemTooltipReference, type ItemTooltipReference } from "./item-tooltip-
 import type { InventoryItem } from "@/engine/contracts/gameplay";
 import { ITEM_MOVE_RESPONSE_OPCODE } from "@/engine/contracts/opcodes";
 import { viewOf } from "@/engine/foundation/binary/byte-view";
+import { isMagicCube } from "./magic-cube";
 
 /*
 ================
@@ -38,6 +39,10 @@ export function saleResult( opcode: number, p: Uint8Array ) {
 /*
 ================
 soldInventory
+
+Remove sold units from a bag projection. A Magic Cube's quantity field is
+StoredItemCount (0 when empty), not the bag stack; the server always sells
+the cube as Quantity 1 and the whole row leaves the bag.
 ================
 */
 export function soldInventory(
@@ -46,9 +51,14 @@ export function soldInventory(
 	quantity: number
 ): readonly InventoryItem[] {
 	const item = items.find( row => row.slot === slot );
-	if ( !item || !Number.isInteger( quantity ) || quantity < 1 || quantity > item.quantity ) {
+	if ( !item || !Number.isInteger( quantity ) || quantity < 1 ) {
 		throw Error( "Stale sale result" );
 	}
+	if ( isMagicCube( item.typeFlags ) ) {
+		if ( quantity !== 1 ) throw Error( "Stale sale result" );
+		return items.filter( row => row.slot !== slot );
+	}
+	if ( quantity > item.quantity ) throw Error( "Stale sale result" );
 	return items.flatMap( row =>
 		row.slot !== slot ? [ row ] : quantity === row.quantity ? [] : [ { ...row, quantity: row.quantity - quantity } ]
 	);
