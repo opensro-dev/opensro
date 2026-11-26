@@ -380,7 +380,14 @@ newNestRuntime
 */
 func (s *MonsterState) newNestRuntime(index int) *nestRuntime {
 	nest := s.template.Nests[index]
-	n := &nestRuntime{enabled: true, respawn: nest.Respawn, remaining: nest.InstanceLimit(), vacant: nest.StartVacant}
+	// A population-evidence nest of authored spawn kind 1 starts armed:
+	// the hatch reads its live spawn-kind byte, which the nest row's kind
+	// fills at creation, and a hatched party monster clears it. The
+	// cap-110 families carry their own kind on the same field without
+	// population evidence; that kind's spawn-time meaning stays with
+	// its own slices, so it never arms here.
+	n := &nestRuntime{enabled: true, respawn: nest.Respawn, remaining: nest.InstanceLimit(), vacant: nest.StartVacant,
+		partyArmed: nest.RetailEvidence && nest.SpawnType == 1}
 	n.intervalMs, n.reduceMs = s.nestDelay(nest, n.ratePct)
 	return n
 }

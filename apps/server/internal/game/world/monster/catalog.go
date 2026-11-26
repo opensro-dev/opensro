@@ -236,6 +236,7 @@ func LoadTemplate(textdataDir string) Template {
 			nest.HasChampionTactics = evidence.HasChampion
 			nest.ChampionTactics = evidence.Champion
 			nest.InitialDir = evidence.InitialDir
+			nest.SpawnType = evidence.SpawnType
 			if controls, ok := populationTacticsControls[evidenceKey(ref.Codename, point.RegionID, point.X, point.Y, point.Z)]; ok {
 				nest.Controls, nest.HasControls = controls.Normal, true
 				if nest.HasChampionTactics && controls.HasChampion {
