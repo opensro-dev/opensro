@@ -42,7 +42,7 @@ func TestExpireItemsSweepsOnlyElapsedEntries(t *testing.T) {
 	untimed := registry.Add("1", Item{RefObjID: 4})
 	otherDivision := registry.Add("2", Item{RefObjID: 5, DroppedAt: now.Add(-FixtureLifetime)})
 
-	expired := registry.ExpireItems("1", now, FixtureLifetime)
+	expired := registry.ExpireItems("1", now)
 	if len(expired) != 2 {
 		t.Fatalf("expired %d entries, want 2", len(expired))
 	}
@@ -64,8 +64,45 @@ func TestExpireItemsSweepsOnlyElapsedEntries(t *testing.T) {
 
 	// The boundary is inclusive: exactly-elapsed entries sweep (stale above
 	// sat exactly at the lifetime).
-	if len(registry.ExpireItems("1", now, FixtureLifetime)) != 0 {
+	if len(registry.ExpireItems("1", now)) != 0 {
 		t.Fatal("a second sweep found something new")
+	}
+}
+
+/*
+================
+TestExpireItemsHonoursEachEntrysOwnLifetime
+
+Each entry decays on its own clock (the lifetime its item row
+stamped): a thirty-minute specialty-goods entry is still lying ten
+minutes on while a default entry and a one-second entry are long
+gone, and it reaps exactly at its own boundary.
+================
+*/
+func TestExpireItemsHonoursEachEntrysOwnLifetime(t *testing.T) {
+	registry := NewRegistry()
+	now := time.Unix(20_000, 0)
+
+	def := registry.Add("1", Item{RefObjID: 1, DroppedAt: now.Add(-FixtureLifetime)})
+	longLived := registry.Add("1", Item{RefObjID: 2, DroppedAt: now, Lifetime: 30 * time.Minute})
+	shortLived := registry.Add("1", Item{RefObjID: 3, DroppedAt: now, Lifetime: time.Second})
+
+	expired := registry.ExpireItems("1", now.Add(10*time.Minute))
+	if len(expired) != 2 || expired[0].Gid != def.Gid || expired[1].Gid != shortLived.Gid {
+		t.Fatalf("expired = %+v, want the default and one-second entries only", expired)
+	}
+	if _, ok := registry.Get("1", longLived.Gid); !ok {
+		t.Fatal("the thirty-minute entry was swept ten minutes in")
+	}
+
+	// One millisecond short of its own boundary it still lies; at the
+	// boundary it reaps.
+	if expired := registry.ExpireItems("1", now.Add(30*time.Minute-time.Millisecond)); len(expired) != 0 {
+		t.Fatalf("expired %+v one millisecond before the entry's own boundary", expired)
+	}
+	expired = registry.ExpireItems("1", now.Add(30*time.Minute))
+	if len(expired) != 1 || expired[0].Gid != longLived.Gid {
+		t.Fatalf("expired = %+v, want the thirty-minute entry at its boundary", expired)
 	}
 }
 
@@ -115,30 +152,30 @@ func TestRegistryHasExpired(t *testing.T) {
 	registry := NewRegistry()
 	now := time.Unix(10_000, 0)
 
-	if registry.HasExpired("1", now, FixtureLifetime) {
+	if registry.HasExpired("1", now) {
 		t.Fatal("an empty division reported an expired entry")
 	}
 	registry.Add("1", Item{RefObjID: 4})
-	if registry.HasExpired("1", now, FixtureLifetime) {
+	if registry.HasExpired("1", now) {
 		t.Fatal("an entry without a timestamp reported expired")
 	}
 	fresh := registry.Add("1", Item{RefObjID: 3, DroppedAt: now.Add(-FixtureLifetime + time.Second)})
-	if registry.HasExpired("1", now, FixtureLifetime) {
+	if registry.HasExpired("1", now) {
 		t.Fatal("an entry one second short of its lifetime reported expired")
 	}
 	registry.Add("1", Item{RefObjID: 1, DroppedAt: now.Add(-FixtureLifetime)})
-	if !registry.HasExpired("1", now, FixtureLifetime) {
+	if !registry.HasExpired("1", now) {
 		t.Fatal("an entry exactly at its lifetime did not report expired")
 	}
 	// The peek is read-only: the fresh entry is still swept by the real pass.
-	expired := registry.ExpireItems("1", now, FixtureLifetime)
+	expired := registry.ExpireItems("1", now)
 	if len(expired) != 1 || expired[0].RefObjID != 1 {
 		t.Fatalf("sweep after the peek expired %v, want only the elapsed entry", expired)
 	}
 	if _, ok := registry.Get("1", fresh.Gid); !ok {
 		t.Fatal("the peek disturbed a fresh entry")
 	}
-	if registry.HasExpired("1", now, FixtureLifetime) {
+	if registry.HasExpired("1", now) {
 		t.Fatal("the peek still reports expired after the sweep took the entry")
 	}
 }
@@ -266,7 +303,7 @@ func TestRegistryHasExpiredOwnerReplacedOnlyOwnedDrop(t *testing.T) {
 	if !aged.HasExpiredOwner(now, OwnerLifetime) {
 		t.Fatal("an aged owned drop did not report expired")
 	}
-	aged.ExpireItems("1", now, FixtureLifetime)
+	aged.ExpireItems("1", now)
 	if aged.HasExpiredOwner(now, OwnerLifetime) {
 		t.Fatal("an expired owned drop's stamp survived the sweep")
 	}

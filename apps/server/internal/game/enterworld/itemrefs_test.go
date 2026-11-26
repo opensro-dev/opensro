@@ -5,6 +5,7 @@ import (
 	"opensro.online/server/internal/testsupport/gamedatatest"
 	"strings"
 	"testing"
+	"time"
 )
 
 func TestProjectedConsumableNames(t *testing.T) {
@@ -235,6 +236,73 @@ func TestBuildItemRefRequirementColumns(t *testing.T) {
 		if !present || got != want {
 			t.Errorf("Record[%q] = %v (present=%v), want %v", key, got, present, want)
 		}
+	}
+}
+
+/*
+================
+TestBuildItemRefDecayTimeColumn
+
+Column 13 is the row's ground decay time in milliseconds: the
+thirty-minute trade rows and the three-minute common rows land as
+durations, and a missing, unparseable or non-positive column leaves
+zero (the ground registry's default then applies).
+================
+*/
+func TestBuildItemRefDecayTimeColumn(t *testing.T) {
+	fields := make([]string, 160)
+	for i := range fields {
+		fields[i] = "0"
+	}
+	fields[2] = "ITEM_ETC_TRADE_CH_01"
+
+	fields[13] = "1800000"
+	if got := buildItemRef(fields, map[string]string{}).DecayTime; got != 30*time.Minute {
+		t.Fatalf("DecayTime = %v, want 30m from column 13", got)
+	}
+	fields[13] = "180000"
+	if got := buildItemRef(fields, map[string]string{}).DecayTime; got != 3*time.Minute {
+		t.Fatalf("DecayTime = %v, want 3m from column 13", got)
+	}
+	fields[13] = "0"
+	if got := buildItemRef(fields, map[string]string{}).DecayTime; got != 0 {
+		t.Fatalf("DecayTime = %v, want 0 for a non-positive column", got)
+	}
+	fields[13] = "abc"
+	if got := buildItemRef(fields, map[string]string{}).DecayTime; got != 0 {
+		t.Fatalf("DecayTime = %v, want 0 for an unparseable column", got)
+	}
+	if got := buildItemRef(fields[:13], map[string]string{}).DecayTime; got != 0 {
+		t.Fatalf("DecayTime = %v, want 0 for a short row", got)
+	}
+}
+
+/*
+================
+TestShippedRowsCarryTheirDecayTimes
+
+On the shipped itemdata the decay column lands as authored:
+specialty trade goods carry thirty minutes and common items three,
+so a dropped consignment outlives a dropped potion in the field.
+================
+*/
+func TestShippedRowsCarryTheirDecayTimes(t *testing.T) {
+	dir := gamedatatest.TextdataDir(t)
+	items := NewTextdataItems(dir)
+
+	trade, ok := items.ItemRefByCodename("ITEM_ETC_TRADE_CH_01")
+	if !ok {
+		t.Fatal("ITEM_ETC_TRADE_CH_01 missing from the shipped itemdata")
+	}
+	if trade.DecayTime != 30*time.Minute {
+		t.Fatalf("ITEM_ETC_TRADE_CH_01 decay = %v, want 30m", trade.DecayTime)
+	}
+	potion, ok := items.ItemRefByCodename("ITEM_ETC_HP_POTION_01")
+	if !ok {
+		t.Fatal("ITEM_ETC_HP_POTION_01 missing from the shipped itemdata")
+	}
+	if potion.DecayTime != 3*time.Minute {
+		t.Fatalf("ITEM_ETC_HP_POTION_01 decay = %v, want 3m", potion.DecayTime)
 	}
 }
 

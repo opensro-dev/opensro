@@ -492,7 +492,7 @@ func TestGroundTTLContinuityThroughStore(t *testing.T) {
 	// crosses the 180s fixture lifetime; the timed row expires, the
 	// never-expires row does not.
 	expireAt := clock.Now().Add(81 * time.Second)
-	expired := registry.ExpireItems(testDivision, expireAt, grounditem.FixtureLifetime)
+	expired := registry.ExpireItems(testDivision, expireAt)
 	if len(expired) != 1 || expired[0].Gid != timed.Gid {
 		t.Fatalf("expiry across reboot wrong: %+v", expired)
 	}

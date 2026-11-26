@@ -439,7 +439,7 @@ func TestGroundCacheDeltasMatchAWholeRebuild(t *testing.T) {
 		clock = clock.Add(time.Second)
 		switch choice := random.Intn(100); {
 		case choice < 45 || len(live) == 0:
-			item := grounditem.Item{RefObjID: 62, Codename: "ITEM_ETC_GOLD_02", StackCount: 1, DroppedAt: clock,
+			item := grounditem.Item{RefObjID: 62, Codename: "ITEM_ETC_GOLD_02", StackCount: 1, DroppedAt: clock, Lifetime: 90 * time.Second,
 				MagicOptions: []uint64{uint64(step)},
 				Position:     grounditem.Point{RegionID: 0x6a9a, X: float32(random.Intn(1900)), Z: float32(random.Intn(1900))}}
 			if random.Intn(3) == 0 {
@@ -458,7 +458,7 @@ func TestGroundCacheDeltasMatchAWholeRebuild(t *testing.T) {
 		case choice < 95:
 			rt.Ground.ReleaseExpiredOwners("main", clock, 30*time.Second)
 		case choice < 98:
-			for _, gone := range rt.Ground.ExpireItems("main", clock, 90*time.Second) {
+			for _, gone := range rt.Ground.ExpireItems("main", clock) {
 				live = slices.DeleteFunc(live, func(gid uint32) bool { return gid == gone.Gid })
 			}
 		default:

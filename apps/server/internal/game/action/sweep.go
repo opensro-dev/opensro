@@ -9,7 +9,7 @@ import (
 	"opensro.online/server/internal/game/world/simulation"
 )
 
-// SweepExpired removes every drop whose fixture lifetime elapsed and returns
+// SweepExpired removes every drop whose own decay clock elapsed and returns
 // the per-division 0x36AB despawn broadcasts, ready for the simulation tick.
 //
 // The hook rides the shared simulation tick but the sweep honours the declared
@@ -41,7 +41,7 @@ func (rt *Runtime) SweepExpired(nowMs int64) []simulation.DivisionFrames {
 	// registry's own write-through hook retires with the door cutover).
 	rt.deps.MutateDeferred(nil, "ttl-sweep", func() {
 		for _, divisionID := range rt.Ground.DivisionIDs() {
-			expired := rt.Ground.ExpireItems(divisionID, now, grounditem.FixtureLifetime)
+			expired := rt.Ground.ExpireItems(divisionID, now)
 			if len(expired) == 0 {
 				continue
 			}
@@ -59,13 +59,14 @@ func (rt *Runtime) SweepExpired(nowMs int64) []simulation.DivisionFrames {
 }
 
 // hasExpired is the read-only twin of the sweep's expiry predicate
-// (registry ExpireItems: DroppedAt set and now-DroppedAt >= lifetime).
+// (registry ExpireItems: DroppedAt set and the entry's age at or past
+// its own decay clock).
 // It holds only the ground registry's own lock. A false negative only delays
 // the sweep one interval; a false positive (an expired drop picked up between
 // the peek and the sweep's lock) only costs one no-op commit - both self-heal.
 func (rt *Runtime) hasExpired(now time.Time) bool {
 	for _, divisionID := range rt.Ground.DivisionIDs() {
-		if rt.Ground.HasExpired(divisionID, now, grounditem.FixtureLifetime) {
+		if rt.Ground.HasExpired(divisionID, now) {
 			return true
 		}
 	}

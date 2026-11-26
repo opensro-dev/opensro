@@ -19,6 +19,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"time"
 	"unicode/utf16"
 
 	"opensro.online/server/internal/game/world/monster"
@@ -589,6 +590,11 @@ func buildItemRef(fields []string, names map[string]string) *ItemRef {
 	// four typed quad pairs (32..39) also land in the Record JSON via
 	// itemdataRecordColumns as reqLevelType1/requiredLevel +
 	// reqLevelType2..4/requiredLevel2..4.
+	if len(fields) > 13 {
+		if v, ok := textdataInt(fields[13]); ok && v > 0 {
+			ref.DecayTime = time.Duration(v) * time.Millisecond
+		}
+	}
 	if len(fields) > 14 {
 		if v, ok := textdataInt(fields[14]); ok {
 			ref.Country = v

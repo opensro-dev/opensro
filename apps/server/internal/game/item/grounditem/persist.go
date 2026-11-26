@@ -58,6 +58,9 @@ func persistedFromItem(item Item) domain.GroundItemRecord {
 	if !item.DroppedAt.IsZero() {
 		row.DroppedAtMs = item.DroppedAt.UnixMilli()
 	}
+	if item.Lifetime > 0 {
+		row.LifetimeMs = item.Lifetime.Milliseconds()
+	}
 	return row
 }
 
@@ -96,11 +99,16 @@ func itemFromPersisted(row domain.GroundItemRecord) Item {
 		ForgeBound:    row.ForgeBound,
 		EarnedBought:  row.EarnedBought,
 	}
-	// The ORIGINAL drop timestamp comes back so the fixture TTL continues
+	// The ORIGINAL drop timestamp comes back so the decay TTL continues
 	// across a restart as if it never happened (witnessed red: without this
 	// line, rehydrated drops never expire - TestGroundStateTTLContinuesAcrossReboot).
 	if row.DroppedAtMs != 0 {
 		item.DroppedAt = time.UnixMilli(row.DroppedAtMs)
+	}
+	// The drop's own decay clock rides along: a restored drop keeps its
+	// row's lifetime instead of resetting to the default.
+	if row.LifetimeMs > 0 {
+		item.Lifetime = time.Duration(row.LifetimeMs) * time.Millisecond
 	}
 	return item
 }

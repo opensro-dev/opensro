@@ -66,6 +66,10 @@ type GroundItemRecord struct {
 	OwnerJID      uint32        `json:"ownerJid,omitempty"`
 	DroppedBy     string        `json:"droppedBy,omitempty"`
 	DroppedAtMs   int64         `json:"droppedAtMs,omitempty"`
+	// LifetimeMs is the drop's own decay clock in milliseconds, stamped
+	// from its itemdata row. Absent (old snapshots) reads as zero, and
+	// the ground registry's default lifetime then applies.
+	LifetimeMs int64 `json:"lifetimeMs,omitempty"`
 	// ForgeBound carries the forge mark onto the ground plane so a bound
 	// drop stays bound through pickup and restart (issue #1980).
 	ForgeBound bool `json:"forgeBound,omitempty"`

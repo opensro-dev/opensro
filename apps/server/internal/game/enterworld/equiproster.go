@@ -11,6 +11,7 @@ package enterworld
 import (
 	"opensro.online/server/internal/domain"
 	"strconv"
+	"time"
 
 	"opensro.online/server/internal/game/world/monster"
 
@@ -86,6 +87,13 @@ type ItemRef struct {
 	// RefItemData bytes). Absent columns default to their pass values so a
 	// degraded textdata load never invents a refusal.
 
+	// DecayTime is media column 13, in milliseconds: how long this item
+	// lies on the ground before the server removes it. The native row
+	// keeps it in seconds and the ground object's age is compared
+	// against it, so specialty trade goods lie for thirty minutes while
+	// most items lie for three. Zero when the row carried no usable
+	// value; the ground registry's default then applies.
+	DecayTime time.Duration
 	// Country is media column 14 (native ref[0x27]): 0 China, 1 Europe,
 	// 3 = every character (the client 789C60 bit 0x200 wildcard). Default 3.
 	Country int64

@@ -78,6 +78,6 @@ func BenchmarkRegistryHasExpired(b *testing.B) {
 	b.ReportAllocs()
 	b.ResetTimer()
 	for n := 0; n < b.N; n++ {
-		_ = r.HasExpired("global-official", now, FixtureLifetime)
+		_ = r.HasExpired("global-official", now)
 	}
 }

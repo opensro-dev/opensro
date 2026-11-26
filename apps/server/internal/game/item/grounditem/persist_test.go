@@ -111,16 +111,42 @@ func TestGroundStateTTLContinuesAcrossReboot(t *testing.T) {
 	restored := rebootedRegistry(registry.Snapshot())
 
 	// 1ms shy of the ORIGINAL drop's lifetime: still alive.
-	if expired := restored.ExpireItems("global-official", droppedAt.Add(FixtureLifetime-time.Millisecond), FixtureLifetime); len(expired) != 0 {
+	if expired := restored.ExpireItems("global-official", droppedAt.Add(FixtureLifetime-time.Millisecond)); len(expired) != 0 {
 		t.Fatalf("expired %+v before the lifetime elapsed - the reboot must not reset the clock", expired)
 	}
 	// Exactly the lifetime since the ORIGINAL drop: reaps.
-	expired := restored.ExpireItems("global-official", droppedAt.Add(FixtureLifetime), FixtureLifetime)
+	expired := restored.ExpireItems("global-official", droppedAt.Add(FixtureLifetime))
 	if len(expired) != 1 || expired[0].Gid != timed.Gid {
 		t.Fatalf("expired = %+v, want exactly the timed drop %d - rehydration must keep DroppedAt", expired, timed.Gid)
 	}
 	if _, ok := restored.Get("global-official", untimed.Gid); !ok {
 		t.Fatal("the never-expiring drop was reaped after the reboot")
+	}
+}
+
+/*
+================
+TestGroundStatePerItemLifetimeSurvivesReboot
+
+A restored drop keeps its own row's decay clock: ten minutes after a
+reboot the thirty-minute entry still lies, past the fixture default,
+and it reaps at its own boundary counted from the ORIGINAL drop.
+================
+*/
+func TestGroundStatePerItemLifetimeSurvivesReboot(t *testing.T) {
+	registry := NewRegistry()
+
+	droppedAt := time.UnixMilli(2_000_000_000)
+	trade := registry.Add("global-official", Item{RefObjID: 11459, DroppedAt: droppedAt, Lifetime: 30 * time.Minute})
+
+	restored := rebootedRegistry(registry.Snapshot())
+
+	if expired := restored.ExpireItems("global-official", droppedAt.Add(10*time.Minute)); len(expired) != 0 {
+		t.Fatalf("expired %+v - the restored drop lost its own thirty-minute clock", expired)
+	}
+	expired := restored.ExpireItems("global-official", droppedAt.Add(30*time.Minute))
+	if len(expired) != 1 || expired[0].Gid != trade.Gid {
+		t.Fatalf("expired = %+v, want the trade drop at its own boundary", expired)
 	}
 }
 

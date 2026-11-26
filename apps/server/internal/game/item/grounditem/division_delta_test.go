@@ -98,7 +98,7 @@ func TestDeltasRebuildTheDivision(t *testing.T) {
 		switch choice := random.Intn(100); {
 		case choice < 45 || len(live) == 0:
 			item := Item{RefObjID: 62, Codename: "ITEM_ETC_GOLD_02", StackCount: uint16(1 + random.Intn(50)),
-				MagicOptions: []uint64{uint64(step)}, DroppedAt: clock,
+				MagicOptions: []uint64{uint64(step)}, DroppedAt: clock, Lifetime: 120 * time.Second,
 				Position: Point{RegionID: 0x6a9a, X: float32(random.Intn(1900)), Z: float32(random.Intn(1900))}}
 			if random.Intn(4) == 0 {
 				item.Population = instance
@@ -116,7 +116,7 @@ func TestDeltasRebuildTheDivision(t *testing.T) {
 		case choice < 93:
 			registry.ReleaseExpiredOwners("main", clock, 30*time.Second)
 		case choice < 97:
-			for _, gone := range registry.ExpireItems("main", clock, 120*time.Second) {
+			for _, gone := range registry.ExpireItems("main", clock) {
 				live = slices.DeleteFunc(live, func(gid uint32) bool { return gid == gone.Gid })
 			}
 		case choice < 99:

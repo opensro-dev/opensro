@@ -42,13 +42,39 @@ func (rt *Runtime) characterGround(division string, c *enterworld.Character, gid
 	return rt.Ground.GetInPopulation(division, population, gid)
 }
 
+/*
+================
+stampGroundLifetime
+
+A ground entry decays on its own item row's clock: the registry
+expires each entry against the lifetime stamped on it, so the stamp
+lands here, at the two seams every ground spawn passes, resolved by
+codename from the item references. An entry whose codename names no
+row (a test fixture, an arena powerup) or whose row carries no decay
+time keeps the registry's default lifetime.
+================
+*/
+func (rt *Runtime) stampGroundLifetime(item grounditem.Item) grounditem.Item {
+	if item.Lifetime > 0 || item.Codename == "" {
+		return item
+	}
+	refs := rt.deps.ItemReferences()
+	if refs == nil {
+		return item
+	}
+	if ref, found := refs.ItemRefByCodename(item.Codename); found && ref != nil && ref.DecayTime > 0 {
+		item.Lifetime = ref.DecayTime
+	}
+	return item
+}
+
 func (rt *Runtime) addCharacterGround(division string, c *enterworld.Character, item grounditem.Item) grounditem.Item {
 	population, ok := rt.groundPopulation(division, c)
 	if !ok {
 		return grounditem.Item{}
 	}
 	item.Population = population
-	return rt.Ground.Add(division, item)
+	return rt.Ground.Add(division, rt.stampGroundLifetime(item))
 }
 
 func (rt *Runtime) CharacterGroundItems(division string, c *enterworld.Character) []grounditem.Item {
@@ -72,5 +98,5 @@ func (rt *Runtime) addMonsterGround(division string, gid uint32, item grounditem
 	} else {
 		item.Population = grounditem.Population{}
 	}
-	return rt.Ground.Add(division, item)
+	return rt.Ground.Add(division, rt.stampGroundLifetime(item))
 }

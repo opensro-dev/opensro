@@ -152,9 +152,9 @@ func TestEveryRegistryMutatorPersists(t *testing.T) {
 		{"Remove", func(f *groundChangeFixture) { f.r.Remove(testDivision, f.gids[3]) }},
 		{"SetStackCount", func(f *groundChangeFixture) { f.r.SetStackCount(testDivision, f.gids[4], 9) }},
 		{"ExpireItems", func(f *groundChangeFixture) {
-			f.r.Add(testDivision, grounditem.Item{RefObjID: 62, GoldAmount: 1, DroppedAt: dropped})
+			f.r.Add(testDivision, grounditem.Item{RefObjID: 62, GoldAmount: 1, DroppedAt: dropped, Lifetime: time.Minute})
 			f.s.Mutate("ground-change-arm", nil)
-			if len(f.r.ExpireItems(testDivision, dropped.Add(time.Hour), time.Minute)) != 1 {
+			if len(f.r.ExpireItems(testDivision, dropped.Add(time.Hour))) != 1 {
 				panic("nothing expired")
 			}
 		}},
