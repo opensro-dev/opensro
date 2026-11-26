@@ -88,3 +88,37 @@ test("a reference whose BSR has no resource rejects the manifest", () => {
 	assert.match( String( rejected[0].error ), /Missing model resource/ );
 	assert.equal( published.catalog.get( 3 ), undefined );
 });
+
+test("the STR and INT copies of a field unique wear their base's model", () => {
+	// SRO_STR_INT_UNIQUES: the copies are synthetic references with no row of
+	// their own; the catalog aliases them to the base (server ids 5001000+).
+	const { published, rejected } = catalogFixture();
+	admit( published, {
+		format: "sro-mission-npc-models",
+		version: 9,
+		resources: {
+			[TIGER_BSR]: { glb: "/assets/npc/mob/china/tiger.glb", clips: [ "stand", "walk" ] }
+		},
+		models: {
+			MOB_CH_TIGERWOMAN: {
+				codename: "MOB_CH_TIGERWOMAN",
+				refObjId: 1954,
+				kind: "monster",
+				bsr: TIGER_BSR,
+				scalePercent: 100
+			}
+		}
+	} );
+	assert.deepEqual( rejected, [] );
+	const base = defined( published.catalog.get( 1954 ) );
+	for ( const copy of [ 5001000, 5001001 ] ) {
+		const row = defined( published.catalog.get( copy ) );
+		assert.equal( row.refObjId, copy );
+		assert.equal( row.glb, base.glb );
+		assert.equal( row.clips, base.clips );
+	}
+	// A copy whose base is absent keeps no row of its own.
+	const { published: withoutBase } = catalogFixture();
+	admit( withoutBase, { format: "sro-mission-npc-models", version: 9, resources: {}, models: {} } );
+	assert.equal( withoutBase.catalog.get( 5001000 ), undefined );
+});

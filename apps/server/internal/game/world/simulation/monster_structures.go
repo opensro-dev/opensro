@@ -255,6 +255,7 @@ the nest's death bookkeeping.
 */
 func (s *MonsterState) removeInstanceLocked(state *divisionMonsterState, gid uint32, row monster.Instance) {
 	state.instances.remove(gid)
+	s.releaseAnchorHeldBy(state, gid)
 	state.forgetDormant(gid)
 	delete(state.contributions, gid)
 	state.releaseApproachActor(gid)

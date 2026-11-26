@@ -275,6 +275,11 @@ func (rt *Runtime) acceptSkillStagePhaseAt(divisionID string, character, snapsho
 	if code := rt.jobMonsterTargetRefusal(snapshot, target); code != 0 {
 		return offensiveRefusal(code), skillCastRefused
 	}
+	// Port-only, not native (SRO_STR_INT_UNIQUES): the copy's refusal reaches
+	// the client as an ordinary attack refusal, as a job monster's does.
+	if uniqueVariantRefused(snapshot, target) {
+		return offensiveRefusal(0x3006), skillCastRefused
+	}
 	if d := skill.TimedEffect.Periodic; d.Pinned {
 		code := rt.periodicEffects.Refusal(linkedpulse.Effect{Division: divisionID,
 			SourceGID: enterworld.ObjectIDForCharacter(snapshot), TargetGID: target.Gid,

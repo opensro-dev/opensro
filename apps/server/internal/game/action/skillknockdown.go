@@ -84,10 +84,14 @@ and GID. Reward credit is independent of the actor that rolled the hit.
 type monsterImpactCaster struct {
 	division  string
 	character *enterworld.Character
-	actor     criticalActor
-	credit    uint32
-	level     uint8
-	from      simulation.Spawn
+	// owner is the character a companion acts for: it decides a build-locked
+	// unique's admission without a store lookup, while the hit itself stays
+	// the companion's (uniquevariant.go).
+	owner  *enterworld.Character
+	actor  criticalActor
+	credit uint32
+	level  uint8
+	from   simulation.Spawn
 }
 
 /*
@@ -99,6 +103,12 @@ Player and companion attacks share displacement, status and HP admission.
 */
 func (rt *Runtime) planCreatureMonsterImpacts(caster monsterImpactCaster, skill enterworld.SkillRow, target monster.Instance, formulas []combat.Result, now int64) ([]simulation.MonsterDamagePlan, bool) {
 	division, from := caster.division, caster.from
+	// Port-only, not native (SRO_STR_INT_UNIQUES): a build-locked copy admits
+	// no plan from a character whose permanent allocation does not match. The
+	// refusal happens before any status is rolled or any reward credited.
+	if rt.monsterImpactRefused(caster, target) {
+		return nil, false
+	}
 	mover, ok := rt.Monsters.Mover(division, target.Gid)
 	if !ok {
 		return nil, false

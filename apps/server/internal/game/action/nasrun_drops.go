@@ -65,7 +65,7 @@ func (rt *Runtime) payNasrunLuckyDropsInsideDoor(division string, actor *enterwo
 	if !rt.NasrunTokens || arena || !impact.Fatal || impact.Instance.GMSpawned || !impact.Instance.IsUnique() {
 		return nil, nil
 	}
-	spiritBps, jewelBps, ok := nasrun.LuckyDropOdds(impact.Instance.Ref.Codename)
+	spiritBps, jewelBps, ok := nasrun.LuckyDropOdds(impact.Instance.Ref.BaseCodename())
 	if !ok {
 		return nil, nil
 	}

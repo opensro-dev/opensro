@@ -121,6 +121,10 @@ lifecycle. Returns the frames to publish and whether the kill committed.
 func (rt *Runtime) killGMKillTarget(division string, c *enterworld.Character, request gmKillTarget, now int64) ([]simulation.DivisionFrames, bool) {
 	target, rewards := request.instance, request.rewards
 	gid := target.Gid
+	// A GM command is not a character's attack: the kill is planned here and
+	// committed through the ordinary HP door, never through the impact funnel
+	// that enforces a build-locked unique's admission (uniquevariant.go). Both
+	// /MOBKILL and /ZOE therefore work whatever the GM's own allocation is.
 	plan := simulation.MonsterDamagePlan{GID: gid, ExpectedHP: target.CurrentHP, Damage: target.CurrentHP}
 	var impacts []simulation.MonsterDamageResult
 	var settlement monsterSettlement

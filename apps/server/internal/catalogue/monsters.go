@@ -217,7 +217,7 @@ func BuildMonsters(source MonsterSource) ([]Monster, error) {
 		if m.Name == "" {
 			m.Name = ref.Codename
 		}
-		drops, err := assignedDrops(ref.Codename, source.ItemID)
+		drops, err := assignedDrops(ref.BaseCodename(), source.ItemID)
 		if err != nil {
 			return nil, err
 		}
@@ -279,7 +279,7 @@ func producibleMonsters(source MonsterSource) (map[uint32]string, error) {
 	}
 	var summoners []uint32
 	for id := range produced {
-		if monster.UniqueSummonPolicy(template.Refs[id].Codename) != monster.NoSummonPolicy {
+		if monster.UniqueSummonPolicy(template.Refs[id].BaseCodename()) != monster.NoSummonPolicy {
 			summoners = append(summoners, id)
 		}
 	}
@@ -351,7 +351,7 @@ func monsterVariants(ref monster.MonsterRef, promotes bool) []MonsterVariant {
 	}
 	out := make([]MonsterVariant, 0, len(grades))
 	for _, grade := range grades {
-		capacity, passes, attempts := loot.MonsterDropBudget(grade, ref.Codename)
+		capacity, passes, attempts := loot.MonsterDropBudget(grade, ref.BaseCodename())
 		goldMin, goldMax, _ := action.MonsterGoldHeapRange(ref.Level, grade)
 		variant := MonsterVariant{Grade: gradeName(grade), Party: grade>>4 == 1, Capacity: capacity, Passes: passes,
 			Attempts: attempts, GoldMin: goldMin, GoldMax: goldMax}
@@ -407,7 +407,7 @@ func uniqueBonus(ref monster.MonsterRef) *UniqueBonus {
 	// a party nibble on the authored byte changes none of its counts;
 	// the published counts read the same nibble.
 	grade := ref.MonsterType & 0x0f
-	c := action.UniqueDropCounts(grade, ref.Codename)
+	c := action.UniqueDropCounts(grade, ref.BaseCodename())
 	bonus := &UniqueBonus{Table: equipmentTableKey(ref.Level, ref.Country),
 		EquipmentMin: c[0].Min + c[1].Min, EquipmentMax: c[0].Max + c[1].Max,
 		RecipesMin: c[2].Min, RecipesMax: c[2].Max, ScrollsMin: c[3].Min, ScrollsMax: c[3].Max}

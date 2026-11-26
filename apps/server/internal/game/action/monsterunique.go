@@ -251,7 +251,9 @@ func (rt *Runtime) prepareUniqueDrops(ctx uniqueDropContext) []grounditem.Item {
 	if !RollsUniqueDrops(rarity) {
 		return nil
 	}
-	counts := UniqueDropCounts(rarity, ctx.mob.Ref.Codename)
+	// A build-locked copy rolls its base's counts (SRO_STR_INT_UNIQUES): the
+	// codename-keyed overrides belong to the shipped species.
+	counts := UniqueDropCounts(rarity, ctx.mob.Ref.BaseCodename())
 	count, ok := rt.rollUniqueStage(uniqueStageEquipment, counts)
 	if !ok {
 		return nil
