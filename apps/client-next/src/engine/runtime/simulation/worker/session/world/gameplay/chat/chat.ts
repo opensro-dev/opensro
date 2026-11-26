@@ -5,8 +5,10 @@ chat.ts - character-session chat, receipts and received public history
 
 World travel replaces scene data, not the conversation, and so does a
 re-entry of the same character after its session was lost (#3435): the
-lines a player was away for stay to be read. Character changes, a departure
-to character select and session disposal clear it. A server-authored public
+lines a player was away for stay to be read. A forgetting disconnect
+suspends it and hands the decision to the entry that follows (#4513).
+Character changes, a departure to character select and session disposal
+clear it. A server-authored public
 echo determines the beta channel; its later native receipt only releases the
 outstanding request.
 
