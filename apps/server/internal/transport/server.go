@@ -76,6 +76,9 @@ type Server struct {
 	wtClosing  closeGroup
 	wtDisabled string
 	wtServer   *webtransport.Server
+	// wtCompress compresses large WebTransport records for the clients
+	// that ask; nil when the switch is off (conn_wt_compress.go).
+	wtCompress *streamCompressor
 	httpServer *http.Server
 	// pprofServer is the loopback profiling listener (pprof.go), nil when
 	// profiling is off.
@@ -507,6 +510,9 @@ func NewServer(cfg Config) (*Server, error) {
 	}
 	wtMux := http.NewServeMux()
 	h3.Handler = wtMux
+	if cfg.WebTransportCompression {
+		s.wtCompress = &streamCompressor{}
+	}
 	s.wtServer = &webtransport.Server{H3: h3, CheckOrigin: checkOrigin}
 	// Installs the ConnContext hook Upgrade needs, datagram support, and the
 	// SETTINGS Safari requires.
@@ -526,6 +532,9 @@ func NewServer(cfg Config) (*Server, error) {
 		conn := newWTConn(sess, &s.wtClosing)
 		conn.clientAddr = clientAddr(sess.RemoteAddr().String(), r.Header)
 		conn.userAgent = r.Header.Get("User-Agent")
+		if wantsCompressedRecords(r) {
+			conn.compress = s.wtCompress
+		}
 		go s.Hub.AcceptConn(conn)
 	})
 	wtMux.HandleFunc(PathCertHash, s.handleCertHash)

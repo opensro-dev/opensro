@@ -184,6 +184,13 @@ func gameWorldTransportServer(ownedShard shard.Definition) (*transport.Server, e
 	transportConfig.PrivateNetwork =
 		os.Getenv("SRO_GAMEWORLD_PRIVATE_NETWORK") == "1"
 	transportConfig.WebTransportPublic = transport.WebTransportPublicEnabled()
+	// Port-only, not native: large WebTransport records compressed for the
+	// clients that ask; off sends every record raw.
+	transportConfig.WebTransportCompression = transport.WebTransportCompressionEnabled()
+	if transportConfig.WebTransportCompression {
+		log.Infof("transport: large WebTransport records travel compressed (%s, port-only, not native)",
+			transport.EnvWebTransportCompression)
+	}
 	// Port-only, not native (#2671): the conduct cap on live sessions per
 	// client address, off unless SRO_MAX_SESSIONS_PER_CLIENT arms it.
 	transportConfig.MaxSessionsPerClient = transport.MaxSessionsPerClientLimit()

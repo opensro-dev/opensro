@@ -64,6 +64,11 @@ type Config struct {
 	// non-loopback WTAddr; off refuses a non-loopback WTAddr, so no bind
 	// change alone can expose the UDP listener.
 	WebTransportPublic bool
+	// WebTransportCompression gzips large WebTransport records for the
+	// clients that ask (SRO_WEBTRANSPORT_COMPRESSION, shard setting
+	// webtransport_compression; port-only, not native, default off;
+	// conn_wt_compress.go).
+	WebTransportCompression bool
 
 	// HelloTimeout is how long a fresh connection may sit without HELLO.
 	HelloTimeout time.Duration
@@ -190,6 +195,26 @@ value fails closed rather than half-enabling a public endpoint.
 */
 func WebTransportPublicEnabled() bool {
 	switch strings.ToLower(strings.TrimSpace(os.Getenv(EnvWebTransportPublic))) {
+	case "on", "1", "true":
+		return true
+	}
+	return false
+}
+
+// EnvWebTransportCompression is the shard switch for compressed records;
+// see Config.WebTransportCompression.
+const EnvWebTransportCompression = "SRO_WEBTRANSPORT_COMPRESSION"
+
+/*
+================
+WebTransportCompressionEnabled
+
+The composition's read of EnvWebTransportCompression: on/1/true (any
+case) enable, everything else - unset included - is off.
+================
+*/
+func WebTransportCompressionEnabled() bool {
+	switch strings.ToLower(strings.TrimSpace(os.Getenv(EnvWebTransportCompression))) {
 	case "on", "1", "true":
 		return true
 	}

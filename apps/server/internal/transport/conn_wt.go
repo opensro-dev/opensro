@@ -106,6 +106,11 @@ type wtConn struct {
 	// quic-go forbids closing a stream concurrently with a write to it.
 	writeMu sync.Mutex
 
+	// compress encodes the control stream's large records; nil sends
+	// every record raw (conn_wt_compress.go). Set by the listener before
+	// AcceptConn (server.go), as clientAddr is.
+	compress *streamCompressor
+
 	// closing is the server's count of goodbyes still in flight
 	// (Server.Shutdown waits on it before closing the QUIC listener);
 	// nil when nothing waits, as in the unit tests' bare connections.
@@ -305,7 +310,7 @@ func (w *wtConn) WriteFrame(f Frame) error {
 	case <-w.readDone:
 		return w.getReadErr()
 	}
-	buf, err := EncodeStreamFrame(f)
+	buf, err := w.compress.encode(f)
 	if err != nil {
 		return err
 	}
@@ -336,7 +341,7 @@ func (w *wtConn) WriteFrames(frames []Frame) error {
 	}
 	buf := make([]byte, 0, size)
 	for _, f := range frames {
-		record, err := EncodeStreamFrame(f)
+		record, err := w.compress.encode(f)
 		if err != nil {
 			// The records ahead of the refused one still go, as one
 			// WriteFrame each would have sent them.

@@ -14,7 +14,11 @@
 //   - WebSocket: one binary WebSocket message per frame, no extra framing.
 //   - WebTransport bidirectional stream: length-prefixed. Each frame is
 //     preceded by a uint32 little-endian length equal to 2+len(payload).
-//     The stream is the session's reliable, ordered channel.
+//     The stream is the session's reliable, ordered channel. A client
+//     that asks for it in the session URL (?compress=gzip) may be sent a
+//     large server frame gzip-compressed: the length's top bit marks the
+//     record, and the other bits are the gzip stream's length
+//     (conn_wt_compress.go; port-only, off by default).
 //   - WebTransport datagram: one datagram per frame, no length prefix.
 //     Unreliable and unordered; used for state that is superseded every
 //     tick (movement), never for state transitions.
