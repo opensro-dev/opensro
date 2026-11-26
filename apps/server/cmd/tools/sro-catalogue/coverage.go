@@ -229,6 +229,7 @@ var catalogueExempt = map[string]string{
 	"SRO_JANGAN_TOMB_TELEPORT":                 "the Jangan gate's tomb floor links; the teleport menu comes from the asset bake's teleportData.json, not the catalogue",
 	"SRO_CROSS_CITY_TELEPORT":                  "the direct town gate links; the teleport menu comes from the asset bake's teleportData.json, not the catalogue",
 	"SRO_WEBTRANSPORT_PUBLIC":                  "how the shard's transport is served; no catalogue file carries it",
+	"SRO_WEBTRANSPORT_COMPRESSION":             "how the shard's transport encodes large records; no catalogue file carries it",
 	"SRO_CAP110_QUESTS":                        "a build input consumed when the server data is built; the catalogue publishes the built data",
 	"SRO_HWAN_NIYA_CAPTURE_RATES":              "the odds of a quest's capture roll at runtime; the catalogue publishes no quest rolls",
 	"SRO_HWAN_SUN_RELIC":                       "the odds of a quest's dig roll at runtime; the catalogue publishes no quest rolls",

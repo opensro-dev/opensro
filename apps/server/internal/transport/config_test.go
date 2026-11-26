@@ -65,6 +65,23 @@ func TestWebTransportPublicEnabledVocabulary(t *testing.T) {
 	}
 }
 
+/*
+================
+TestWebTransportCompressionEnabledVocabulary
+================
+*/
+func TestWebTransportCompressionEnabledVocabulary(t *testing.T) {
+	for value, want := range map[string]bool{
+		"on": true, "ON": true, " on ": true, "1": true, "true": true,
+		"off": false, "0": false, "false": false, "": false, "yes": false,
+	} {
+		t.Setenv(EnvWebTransportCompression, value)
+		if got := WebTransportCompressionEnabled(); got != want {
+			t.Fatalf("%s=%q: got %v, want %v", EnvWebTransportCompression, value, got, want)
+		}
+	}
+}
+
 func TestConfigFromViperReadsOutboundQueueBounds(t *testing.T) {
 	viper.Reset()
 	t.Cleanup(viper.Reset)

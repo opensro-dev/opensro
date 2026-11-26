@@ -76,6 +76,18 @@ so later tests cannot inherit sockets or sessions from this hub.
 */
 func startServer(t *testing.T) *transport.Server {
 	t.Helper()
+	return startServerWith(t, func(*transport.Config) {})
+}
+
+/*
+================
+startServerWith
+
+startServer with the test's own change to the configuration.
+================
+*/
+func startServerWith(t *testing.T, configure func(*transport.Config)) *transport.Server {
+	t.Helper()
 	cfg := transport.Config{
 		WTAddr:            "127.0.0.1:0",
 		WSAddr:            "127.0.0.1:0",
@@ -86,6 +98,7 @@ func startServer(t *testing.T) *transport.Server {
 		IdleTimeout:       smokeIdleTimeout,
 		OutboundQueue:     smokeOutboundQueue,
 	}
+	configure(&cfg)
 	srv, err := transport.NewServer(cfg)
 	if err != nil {
 		t.Fatal(err)
@@ -119,6 +132,18 @@ Trust only this test server's certificate and open its reliable control stream.
 */
 func dialWT(t *testing.T, srv *transport.Server) (*webtransport.Session, *webtransport.Stream) {
 	t.Helper()
+	return dialWTQuery(t, srv, "")
+}
+
+/*
+================
+dialWTQuery
+
+dialWT with a query on the session's URL.
+================
+*/
+func dialWTQuery(t *testing.T, srv *transport.Server, query string) (*webtransport.Session, *webtransport.Stream) {
+	t.Helper()
 	pool := x509.NewCertPool()
 	pool.AddCert(srv.Cert.Leaf)
 	d := webtransport.Transport{TLSClientConfig: &tls.Config{RootCAs: pool}}
@@ -126,7 +151,7 @@ func dialWT(t *testing.T, srv *transport.Server) (*webtransport.Session, *webtra
 
 	ctx, cancel := context.WithTimeout(context.Background(), smokeIOTimeout)
 	defer cancel()
-	url := fmt.Sprintf("https://%s%s", srv.WTAddr(), transport.PathWT)
+	url := fmt.Sprintf("https://%s%s%s", srv.WTAddr(), transport.PathWT, query)
 	_, sess, err := d.Dial(ctx, url, nil)
 	if err != nil {
 		t.Fatalf("webtransport dial %s: %v", url, err)

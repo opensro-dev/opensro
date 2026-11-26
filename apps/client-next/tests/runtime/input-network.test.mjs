@@ -15,6 +15,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import path from "node:path";
 import { root } from "../../tools/project.mjs";
+import { flush, record, settle, socketHarness, welcome, wtHarness } from "../helpers/transport-harness.mjs";
 async function load( file ) {
 	return import( sourceFileUrl( path.join( root, file ) ).href );
 }
@@ -102,39 +103,6 @@ test("codec matches server v2 golden frames and validates direction-specific lim
 	welcome[1] = 2;
 	assert.throws( () => codec.welcome( welcome ) );
 });
-function socketHarness( t ) {
-	const sockets = [];
-	class Socket {
-		static OPEN = 1;
-		readyState = 1;
-		bufferedAmount = 0;
-		sent = [];
-		closed = false;
-		constructor() {
-			sockets.push( this );
-		}
-		send( bytes ) {
-			this.sent.push( bytes.slice() );
-		}
-		close() {
-			this.closed = true;
-		}
-		receive( bytes ) {
-			this.onmessage?.( { data: bytes.buffer } );
-		}
-	}
-	const original = Object.getOwnPropertyDescriptor( globalThis, "WebSocket" );
-	Object.defineProperty( globalThis, "WebSocket", { value: Socket, configurable: true, writable: true } );
-	t.after( () => Object.defineProperty( globalThis, "WebSocket", original ) );
-	return sockets;
-}
-function welcome() {
-	const bytes = new Uint8Array( 29 );
-	bytes[0] = 2;
-	bytes[2] = 2;
-	bytes[12] = 16;
-	return bytes;
-}
 function streamAckPositions( socket ) {
 	return socket.sent
 		.filter( bytes => bytes[0] === 11 && bytes[1] === 0 )
@@ -616,134 +584,6 @@ test("a journal overflow leaves a gap row that counts every dropped frame", t =>
 	network.dispose();
 });
 
-/*
-================
-settle
-================
-*/
-const settle = () => new Promise( resolve => setImmediate( resolve ) );
-/*
-================
-flush
-
-Let the WebTransport attempt's promise chain run to its next rest.
-================
-*/
-async function flush( rounds = 8 ) {
-	for ( let i = 0; i < rounds; i++ ) await settle();
-}
-/*
-================
-record
-
-One u32-length-prefixed stream record carrying a frame (server envelope).
-================
-*/
-function record( frame ) {
-	const out = new Uint8Array( frame.byteLength + 4 );
-	new DataView( out.buffer ).setUint32( 0, frame.byteLength, true );
-	out.set( frame, 4 );
-	return out;
-}
-/*
-================
-wtHarness
-
-A controllable WebTransport global: sessions the test drives by hand.
-Written chunks are recorded; nothing does I/O of its own. The cert-hash
-fetch answers from fetchDoc, or not at all (a 404) when it is null.
-================
-*/
-function wtHarness( t, fetchDoc = null ) {
-	const transports = [];
-	class Transport {
-		constructor( url, options ) {
-			this.url = String( url );
-			this.options = options;
-			this.written = [];
-			this.closedFlag = false;
-			this.ready = new Promise( ( resolve, reject ) => {
-				this.readyResolve = resolve;
-				this.readyReject = reject;
-			} );
-			this.closed = new Promise( ( resolve, reject ) => {
-				this.closedResolve = resolve;
-				this.closedReject = reject;
-			} );
-			transports.push( this );
-		}
-		/*
-		================
-		createBidirectionalStream
-		================
-		*/
-		createBidirectionalStream() {
-			const readable = new ReadableStream( {
-				/*
-				================
-				start
-				================
-				*/
-				start: controller => {
-					this.inbound = controller;
-				}
-			} );
-			const writable = new WritableStream( {
-				/*
-				================
-				write
-				================
-				*/
-				write: chunk => {
-					this.written.push( chunk.slice() );
-				}
-			} );
-			return Promise.resolve( { readable, writable } );
-		}
-		/*
-		================
-		close
-		================
-		*/
-		close() {
-			this.closedFlag = true;
-			// A browser settles closed with the close info, here
-			// the clean application code 0; an abrupt end rejects
-			// instead (abort below). It never resolves with nothing.
-			this.closedResolve( { closeCode: 0, reason: "" } );
-		}
-		/*
-		================
-		abort
-		================
-		*/
-		abort( error ) {
-			this.closedFlag = true;
-			this.closedReject( error );
-		}
-		/*
-		================
-		push
-		================
-		*/
-		push( bytes ) {
-			this.inbound.enqueue( bytes );
-		}
-	}
-	const original = Object.getOwnPropertyDescriptor( globalThis, "WebTransport" );
-	Object.defineProperty( globalThis, "WebTransport", { value: Transport, configurable: true, writable: true } );
-	t.after( () => {
-		if ( original ) Object.defineProperty( globalThis, "WebTransport", original );
-		else Reflect.deleteProperty( globalThis, "WebTransport" );
-	} );
-	t.mock.method(
-		globalThis,
-		"fetch",
-		async () => fetchDoc ? { ok: true, json: async () => fetchDoc } : { ok: false }
-	);
-	return transports;
-}
-
 test("with the Experimental row off, an available WebTransport is never touched", async t => {
 	// Port-only, default off (#1448): the flag-off connect is today's socket
 	// path even where the browser offers WebTransport - no cert-hash fetch,
@@ -775,7 +615,7 @@ test("webtransport carries the handshake and frames on its control stream when e
 	assert.equal( sockets.length, 0, "the socket waits for the QUIC attempt" );
 	assert.equal( transports.length, 1 );
 	const transport = transports[0];
-	assert.equal( transport.url, "https://localhost/transport/wt" );
+	assert.equal( transport.url, "https://localhost/transport/wt?compress=gzip" );
 	assert.equal( transport.options, undefined, "no certificate document, no pins" );
 	assert.throws( () => network.send( { opcode: 256, payload: new Uint8Array() } ), /handshake/ );
 	transport.readyResolve();
