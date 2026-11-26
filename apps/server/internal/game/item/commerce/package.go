@@ -108,6 +108,12 @@ func packageContent(row []string, refs enterworld.ItemRefSource, rents rentTerms
 		if data != 0 || plus != 0 || variance != 0 || count != 0 {
 			return Content{}, fmt.Errorf("commerce: summoner template has an unexpected record: %s", row[3])
 		}
+	case wire.IsMagicCube(flags):
+		// Port-only (#3906): an unopened Magic Cube (TID 3/2/3/1) holds zero
+		// elixirs (Data = 0) and carries no plus, variance or magic options.
+		if data != 0 || plus != 0 || variance != 0 || count != 0 {
+			return Content{}, fmt.Errorf("commerce: magic cube template has an unexpected record: %s", row[3])
+		}
 	default:
 		return Content{}, fmt.Errorf("commerce: unsupported item template %s", row[3])
 	}

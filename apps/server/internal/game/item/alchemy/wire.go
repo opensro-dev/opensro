@@ -49,6 +49,13 @@ func ResultFrames(op uint16, before []inventory.Item, result Outcome) []wire.Fra
 			frames = append(frames, wire.Frame{Opcode: 0x3645, Payload: wire.NewWriter(4).U8(old.Slot).U8(8).U16(quantity).Payload()})
 		}
 	}
+	if result.CubeConsume != nil {
+		cc := result.CubeConsume
+		frames = append(frames, wire.Frame{
+			Opcode:  wire.OpItemMoveResponse,
+			Payload: wire.EncodeConsumeMagicCubeResult(cc.Slot, cc.RefObjID, cc.Quantity),
+		})
+	}
 	status := uint8(0)
 	if result.Success {
 		status = 1

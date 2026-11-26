@@ -638,6 +638,8 @@ const GROUND_SKILL_MOVE_SUPPRESS_MS = 500;
 const INVENTORY_SORT_CANCELLERS: readonly GameplayCommand["kind"][] = [
 	"inventory-move",
 	"avatar-move",
+	"magic-cube-push",
+	"magic-cube-pop",
 	"item-use",
 	"item-drop",
 	"gold-drop",
@@ -4257,6 +4259,18 @@ state here before a command can claim a native wire conversation.
 			}
 			if ( command.kind === "avatar-move" ) {
 				return inventory.avatarMove( command.equip, command.source, command.destination, now );
+			}
+			if ( command.kind === "magic-cube-push" ) {
+				return inventory.magicCubePush( command.source, command.cubeSlot, command.quantity, now );
+			}
+			if ( command.kind === "magic-cube-pop" ) {
+				return inventory.magicCubePop(
+					command.cubeSlot,
+					command.destination,
+					command.refObjId,
+					command.quantity,
+					now
+				);
 			}
 			if ( command.kind === "inventory-move" ) {
 				// 594980 is the equipment drop action: the key is pushed

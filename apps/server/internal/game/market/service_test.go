@@ -16,6 +16,7 @@ import (
 
 	"opensro.online/server/internal/agent/publicstats"
 	"opensro.online/server/internal/domain"
+	"opensro.online/server/internal/game/item/wire"
 )
 
 /*
@@ -219,6 +220,7 @@ func TestCategoryFollowsTheTypeIDs(t *testing.T) {
 		{3, 1, 12, 1}: "accessory",
 		{3, 1, 13, 1}: "avatar",
 		{3, 2, 1, 1}:  "pet",
+		{3, 2, 3, 1}:  "other",
 		{3, 3, 1, 1}:  "consumable",
 		{3, 1, 7, 1}:  "other",
 		{1, 1, 1, 1}:  "other",
@@ -460,6 +462,19 @@ func TestGameDoorsActForTheOnlineCharacter(t *testing.T) {
 	}
 	if _, err := s.GameList(kekw, 14, domain.MarketGold, 500, false); !errors.Is(err, domain.ErrMarketNotTradeable) {
 		t.Fatalf("a forge-bound listing: %v", err)
+	}
+	store.storage.Rows = append(store.storage.Rows, domain.InventoryRow{
+		Slot: 15, Codename: "ITEM_PRE_MALL_MAGIC_CUBE_WEAPON_10",
+		TypeFlags: wire.PackTypeFlags(3, 2, 3, 1), Data: 3,
+	}, domain.InventoryRow{
+		Slot: 16, Codename: "ITEM_PRE_MALL_MAGIC_CUBE_WEAPON_10",
+		TypeFlags: wire.PackTypeFlags(3, 2, 3, 1), Data: 0,
+	})
+	if _, err := s.GameList(kekw, 15, domain.MarketGold, 500, false); !errors.Is(err, domain.ErrMarketMagicCube) {
+		t.Fatalf("a non-empty Magic Cube listed: %v", err)
+	}
+	if _, err := s.GameList(kekw, 16, domain.MarketGold, 500, false); err != nil {
+		t.Fatalf("an empty Magic Cube refused: %v", err)
 	}
 
 	if _, err := s.GameBuy(kekw, 1, 4, domain.MarketToBag, 20); err != nil {

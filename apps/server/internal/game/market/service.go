@@ -40,6 +40,7 @@ import (
 
 	"opensro.online/server/internal/agent/publicstats"
 	"opensro.online/server/internal/domain"
+	"opensro.online/server/internal/game/item/wire"
 )
 
 // searchScan bounds how many open listings one search reads: 20 per
@@ -891,6 +892,11 @@ A listing's admission: the exchange's rule (Tradeable).
 ================
 */
 func (s *Service) admit(row domain.InventoryRow) error {
+	// Port-only, not native (#3906): a Magic Cube that still holds elixirs
+	// refuses consignment (UIIT_STT_OPEN_MARKET_SELL_IMPOSSIBLE_MAGIC_CUBE).
+	if wire.IsMagicCube(row.TypeFlags) && row.Data > 0 {
+		return domain.ErrMarketMagicCube
+	}
 	if !s.Tradeable(row) {
 		return domain.ErrMarketNotTradeable
 	}

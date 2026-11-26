@@ -358,6 +358,8 @@ func marketError(err error) (int, string) {
 		return http.StatusUnprocessableEntity, "own-listing"
 	case errors.Is(err, domain.ErrMarketNotTradeable):
 		return http.StatusUnprocessableEntity, "not-tradeable"
+	case errors.Is(err, domain.ErrMarketMagicCube):
+		return http.StatusUnprocessableEntity, "magic-cube"
 	case errors.Is(err, domain.ErrMarketFunds):
 		return http.StatusUnprocessableEntity, "funds"
 	case errors.Is(err, domain.ErrMarketPrice):

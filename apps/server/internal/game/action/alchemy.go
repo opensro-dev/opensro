@@ -21,6 +21,7 @@ import (
 	"opensro.online/server/internal/game/item/alchemy"
 	"opensro.online/server/internal/game/item/inventory"
 	"opensro.online/server/internal/game/item/wire"
+	"opensro.online/server/internal/game/magiccube"
 	"opensro.online/server/internal/game/nasrun"
 	"opensro.online/server/internal/transport"
 )
@@ -50,6 +51,8 @@ func (rt *Runtime) ConfigureAlchemy(dir string) error {
 	}
 	// Port-only, not native (#3456 step 3c): Sabakun's jewel on a Spirit.
 	c.Nasrun = nasrun.Enabled(os.Getenv(nasrun.Env))
+	// Port-only, not native (#3906): Magic Cube in the reinforce elixir slot.
+	c.MagicCube = magiccube.Enabled(os.Getenv(magiccube.Env))
 	rt.Alchemy = c
 	return nil
 }

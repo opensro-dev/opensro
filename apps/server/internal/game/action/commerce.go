@@ -639,6 +639,14 @@ func (rt *Runtime) applyCommerce(division string, c *enterworld.Character, q wir
 				refusal = wire.ErrCodeCannotDealAtShop
 				return false
 			}
+			// Port-only, not native (#3906): a Magic Cube that still holds
+			// elixirs refuses the merchant (UIIT_STT_MAGIC_CUBE_STORE_SELL_
+			// ERROR / 01:8E). Empty cubes sell like any other mall item.
+			// Off (MagicCube false) never sees a cube row in a native bag.
+			if rt.MagicCube && wire.IsMagicCube(item.TypeFlags) && item.Data > 0 {
+				refusal = wire.ErrCodeMagicCubeStoreSell
+				return false
+			}
 			// Port-only, not native (halloween.go): the seal leaves the
 			// merchant open. A sealed event helmet may be sold; the sale
 			// destroys it (the bag row drops) and the item classes a

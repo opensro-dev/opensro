@@ -69,6 +69,7 @@ func (s *Store) TransactStorage(character *domain.Character, mutate func(next *d
 	for i := range storage.Rows {
 		storage.Rows[i].Summon = domain.CloneCOS(current.Rows[i].Summon)
 		storage.Rows[i].MagicOptions = append([]uint64(nil), current.Rows[i].MagicOptions...)
+		storage.Rows[i].LinkedStorage = domain.CloneCOSContainer(current.Rows[i].LinkedStorage)
 	}
 	if err := mutate(next, &storage); err != nil {
 		return current, err
@@ -127,12 +128,12 @@ writeAccountStorageTx
 */
 func writeAccountStorageTx(tx *sql.Tx, account string, storage domain.AccountStorage) error {
 	// The replaced row's unknown fields are written again (json.go).
-	unknown, err := storedUnknownFields[domain.AccountStorage](tx,
+	unknown, err := storedUnknownFields[accountStorageRecord](tx,
 		"SELECT record FROM account_storage WHERE account_id = ?", account)
 	if err != nil {
 		return err
 	}
-	record, err := encodeRecordFields(storage, unknown)
+	record, err := encodeRecordFields(packAccountStorage(storage), unknown)
 	if err != nil {
 		return err
 	}
@@ -185,12 +186,13 @@ decodeAccountStorage
 ================
 */
 func decodeAccountStorage(record string) (domain.AccountStorage, error) {
-	var storage domain.AccountStorage
+	var stored accountStorageRecord
 	// Unknown top-level fields stay on disk: writeAccountStorageTx
 	// reads them back before replacing the row (json.go).
-	if _, err := decodeRecordFields([]byte(record), &storage); err != nil {
-		return storage, fmt.Errorf("storage: record: %w", err)
+	if _, err := decodeRecordFields([]byte(record), &stored); err != nil {
+		return domain.AccountStorage{}, fmt.Errorf("storage: record: %w", err)
 	}
+	storage := unpackAccountStorage(stored)
 	return storage, validateAccountStorage(storage)
 }
 

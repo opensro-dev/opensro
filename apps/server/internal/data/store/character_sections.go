@@ -48,7 +48,7 @@ var characterSectionFields = [][]string{
 	// companions: summoned and captured creatures and their skills.
 	{"ActiveCOS", "Mercenaries", "PetSkillWindows", "ParamJobs", "CompositeJobs"},
 	// inventory: bags, avatar bag and stall dressing.
-	{"MissionInventory", "AvatarInventory", "InventorySize", "InventoryExpansion", "InventoryAdditionUsed", "BuybackNext", "StallDecoration"},
+	{"MissionInventory", "CubeStorages", "AvatarInventory", "InventorySize", "InventoryExpansion", "InventoryAdditionUsed", "BuybackNext", "StallDecoration"},
 	// skills: masteries, learned skills and quick slots.
 	{"Masteries", "Skills", "QuickSlots", "SkillExp"},
 	// quests: mission state and quest bookkeeping.

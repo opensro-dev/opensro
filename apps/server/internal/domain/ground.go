@@ -45,24 +45,27 @@ type GroundItemRecord struct {
 	MagicOptions    []uint64 `json:"magicOptions,omitempty"`
 	// Data is the dropped item's data word (InventoryRow.Data): a capsule's
 	// monster or a Spirit's clock survives the drop, as the server's does.
-	Data         uint32  `json:"transformRefObjId,omitempty"`
-	Gid          uint32  `json:"gid"`
-	RefObjID     uint32  `json:"refObjId"`
-	Codename     string  `json:"codename,omitempty"`
-	TypeFlags    uint16  `json:"typeFlags"`
-	GoldAmount   uint32  `json:"goldAmount,omitempty"`
-	Plus         uint8   `json:"plus,omitempty"`
-	VarianceBits string  `json:"varianceBits,omitempty"`
-	Durability   uint32  `json:"durability,omitempty"`
-	StackCount   uint16  `json:"stackCount,omitempty"`
-	RegionID     uint16  `json:"regionId"`
-	X            float32 `json:"x"`
-	Y            float32 `json:"y"`
-	Z            float32 `json:"z"`
-	Heading      uint16  `json:"heading,omitempty"`
-	OwnerJID     uint32  `json:"ownerJid,omitempty"`
-	DroppedBy    string  `json:"droppedBy,omitempty"`
-	DroppedAtMs  int64   `json:"droppedAtMs,omitempty"`
+	Data uint32 `json:"transformRefObjId,omitempty"`
+	// LinkedStorage carries a Magic Cube's elixir rows (#3906) onto the
+	// ground plane so a drop keeps its contents through pickup and restart.
+	LinkedStorage *COSContainer `json:"linkedStorage,omitempty"`
+	Gid           uint32        `json:"gid"`
+	RefObjID      uint32        `json:"refObjId"`
+	Codename      string        `json:"codename,omitempty"`
+	TypeFlags     uint16        `json:"typeFlags"`
+	GoldAmount    uint32        `json:"goldAmount,omitempty"`
+	Plus          uint8         `json:"plus,omitempty"`
+	VarianceBits  string        `json:"varianceBits,omitempty"`
+	Durability    uint32        `json:"durability,omitempty"`
+	StackCount    uint16        `json:"stackCount,omitempty"`
+	RegionID      uint16        `json:"regionId"`
+	X             float32       `json:"x"`
+	Y             float32       `json:"y"`
+	Z             float32       `json:"z"`
+	Heading       uint16        `json:"heading,omitempty"`
+	OwnerJID      uint32        `json:"ownerJid,omitempty"`
+	DroppedBy     string        `json:"droppedBy,omitempty"`
+	DroppedAtMs   int64         `json:"droppedAtMs,omitempty"`
 	// ForgeBound carries the forge mark onto the ground plane so a bound
 	// drop stays bound through pickup and restart (issue #1980).
 	ForgeBound bool `json:"forgeBound,omitempty"`

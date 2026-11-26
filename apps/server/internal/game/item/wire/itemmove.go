@@ -75,7 +75,7 @@ func (b ItemBody) EncodedSize() int {
 	if options > MaxMagicOptionsPerItem {
 		options = MaxMagicOptionsPerItem
 	}
-	if IsMonsterCapsule(b.TypeFlags) {
+	if IsMonsterCapsule(b.TypeFlags) || IsMagicCube(b.TypeFlags) {
 		return 4 + 4
 	}
 	if IsCosSummoner(b.TypeFlags) {
@@ -118,7 +118,9 @@ func (b ItemBody) Encode() []byte {
 		options = options[:MaxMagicOptionsPerItem]
 	}
 	w := NewWriter(b.EncodedSize()).U32(b.RefObjID)
-	if IsMonsterCapsule(b.TypeFlags) {
+	if IsMonsterCapsule(b.TypeFlags) || IsMagicCube(b.TypeFlags) {
+		// Capsule: Data is the captured monster. Magic Cube: Data is
+		// StoredItemCount (issue #3906).
 		return w.U32(b.Data).Payload()
 	}
 	if IsCosSummoner(b.TypeFlags) {
@@ -228,6 +230,20 @@ func readItemBody(r *Reader, typeFlags uint16, rented func(refObjID uint32) bool
 		out.Quantity = 1
 		out.Data, err = r.U32()
 		return out, err
+	}
+	if IsMagicCube(typeFlags) {
+		out.Data, err = r.U32()
+		if err != nil {
+			return out, err
+		}
+		// StoredItemCount fits the cube's authored capacity (10..50); keep
+		// Quantity in step for callers that read the stack field. Zero is a
+		// real empty cube, not a missing stack.
+		if out.Data > 0xffff {
+			return out, fmt.Errorf("wire: magic-cube stored count %d exceeds the stack bound", out.Data)
+		}
+		out.Quantity = uint16(out.Data)
+		return out, nil
 	}
 	if IsCosSummoner(typeFlags) {
 		out.Quantity = 1
@@ -405,15 +421,29 @@ func readSubMove(r *Reader) (SubMove, error) {
 const MoveTypeAvatarToPlayer uint8 = 0x23
 const MoveTypePlayerToAvatar uint8 = 0x24
 
+// Magic Cube inventory ops (issue #3906): 0x706D movement bytes 0x27/0x28/0x29
+// (decimal 39/40/41 in the later shard procedure). v1.696 client jump table
+// at client 0x7f6e4c: 0x27 → client 0x7f7be0 [src][dst][u16 qty];
+// 0x28 → client 0x7f7b90 [u32 RefObjID] then the same three fields
+// (struct+0x38; client result apply feeds it to the withdrawn elixir's
+// RefObjID); 0x29 → client 0x7f7480 [u8 cubeSlot][u32 RefObjID][u16 qty]
+// (server-to-client consume from cube during Alchemy Reinforce).
+const MoveTypePushIntoMagicCube uint8 = 0x27
+const MoveTypePopFromMagicCube uint8 = 0x28
+const MoveTypeConsumeMagicCube uint8 = 0x29
+
 /*
 ================
 ItemMoveRequest
 ================
 */
 type ItemMoveRequest struct {
-	NpcGID       uint32
-	CosGID       uint32
-	GroundGID    uint32
+	NpcGID    uint32
+	CosGID    uint32
+	GroundGID uint32
+	// RefObjID is the elixir reference on MoveTypePopFromMagicCube (the
+	// u32 at client struct+0x38). Other movement types leave it zero.
+	RefObjID     uint32
 	ShopTab      uint8
 	ShopSlot     uint8
 	MovementType uint8
@@ -502,6 +532,15 @@ func (q ItemMoveRequest) Encode() ([]byte, error) {
 	case MoveTypeStorageDeposit, MoveTypeStorageWithdraw, MoveTypeGuildStorageDeposit, MoveTypeGuildStorageWithdraw:
 		// Cases 2 and 3 (and 0x1E / 0x1F): [src][dst][u32 npc], no count.
 		w.U8(q.SourceSlot).U8(q.DestSlot).U32(q.NpcGID)
+	case MoveTypePushIntoMagicCube:
+		// v1.696 client 0x7f7be0: bag elixir slot, cube bag slot, quantity.
+		w.U8(q.SourceSlot).U8(q.DestSlot).U16(q.Quantity)
+	case MoveTypePopFromMagicCube:
+		// v1.696 client 0x7f7b90: elixir RefObjID, cube bag slot, receive slot, qty.
+		if q.RefObjID == 0 {
+			return nil, fmt.Errorf("missing Magic Cube elixir identity")
+		}
+		w.U32(q.RefObjID).U8(q.SourceSlot).U8(q.DestSlot).U16(q.Quantity)
 	default:
 		return nil, ErrUnsupportedMovementType(q.MovementType)
 	}
@@ -653,6 +692,32 @@ func DecodeItemMoveRequest(payload []byte) (ItemMoveRequest, error) {
 		if out.NpcGID, err = r.U32(); err != nil {
 			return out, err
 		}
+	case MoveTypePushIntoMagicCube:
+		if out.SourceSlot, err = r.U8(); err != nil {
+			return out, err
+		}
+		if out.DestSlot, err = r.U8(); err != nil {
+			return out, err
+		}
+		if out.Quantity, err = r.U16(); err != nil {
+			return out, err
+		}
+	case MoveTypePopFromMagicCube:
+		if out.RefObjID, err = r.U32(); err != nil {
+			return out, err
+		}
+		if out.RefObjID == 0 {
+			return out, fmt.Errorf("missing Magic Cube elixir identity")
+		}
+		if out.SourceSlot, err = r.U8(); err != nil {
+			return out, err
+		}
+		if out.DestSlot, err = r.U8(); err != nil {
+			return out, err
+		}
+		if out.Quantity, err = r.U16(); err != nil {
+			return out, err
+		}
 	default:
 		return out, ErrUnsupportedMovementType(movementType)
 	}
@@ -689,7 +754,9 @@ type ItemMoveResult struct {
 	SubMoves     []SubMove
 	PickupSlot   uint8
 	GoldAmount   uint32
-	Item         ItemBody
+	// RefObjID is set on MoveTypePopFromMagicCube success (elixir identity).
+	RefObjID uint32
+	Item     ItemBody
 }
 
 // IsGoldPickup reports whether a successful pickup granted gold rather than an
@@ -872,6 +939,29 @@ func DecodeItemMoveResult(payload []byte, pickupTypeFlags uint16) (ItemMoveResul
 		}
 	case MoveTypeGoldDrop:
 		if out.GoldAmount, err = r.U32(); err != nil {
+			return out, err
+		}
+	case MoveTypePushIntoMagicCube:
+		if out.SourceSlot, err = r.U8(); err != nil {
+			return out, err
+		}
+		if out.DestSlot, err = r.U8(); err != nil {
+			return out, err
+		}
+		if out.Quantity, err = r.U16(); err != nil {
+			return out, err
+		}
+	case MoveTypePopFromMagicCube:
+		if out.RefObjID, err = r.U32(); err != nil {
+			return out, err
+		}
+		if out.SourceSlot, err = r.U8(); err != nil {
+			return out, err
+		}
+		if out.DestSlot, err = r.U8(); err != nil {
+			return out, err
+		}
+		if out.Quantity, err = r.U16(); err != nil {
 			return out, err
 		}
 	default:

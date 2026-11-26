@@ -141,6 +141,10 @@ func TestMarketListTakesTheItemOutOfTheWarehouse(t *testing.T) {
 	if _, err := s.MarketList(request); !errors.Is(err, domain.ErrMarketNotTradeable) {
 		t.Fatalf("an untradeable item listed: %v", err)
 	}
+	request.Admit = func(domain.InventoryRow) error { return domain.ErrMarketMagicCube }
+	if _, err := s.MarketList(request); !errors.Is(err, domain.ErrMarketMagicCube) {
+		t.Fatalf("a non-empty Magic Cube refusal was masked: %v", err)
+	}
 	request.Admit = admitAll
 	request.Price = 0
 	if _, err := s.MarketList(request); !errors.Is(err, domain.ErrMarketPrice) {

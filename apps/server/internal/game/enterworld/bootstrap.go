@@ -315,27 +315,11 @@ func buildCharacterProjection(deps *Deps, divisionID string, character *Characte
 	hold.Mark("entry")
 	objectID := ObjectIDForCharacter(character)
 
-	encodeItems := func(rows []WireItem) []EquipItemRow {
-		equipItems := make([]EquipItemRow, 0, len(rows))
-		for _, item := range rows {
-			body := BuildItemBody(item)
-			bodyInts := make([]int, len(body))
-			for index, value := range body {
-				bodyInts[index] = int(value)
-			}
-			equipItems = append(equipItems, EquipItemRow{
-				RefObjID: item.RefObjID,
-				Slot:     item.Slot,
-				Body:     bodyInts,
-			})
-		}
-		return equipItems
-	}
-	equipItems := encodeItems(inventoryRows)
+	equipItems := encodeEquipItems(inventoryRows)
 	hold.Mark("items")
 	var avatarItems []EquipItemRow
 	if character.AvatarInventory != nil {
-		avatarItems = encodeItems(InventoryWireItems(character.AvatarInventory.Rows))
+		avatarItems = encodeEquipItems(InventoryWireItems(character.AvatarInventory.Rows))
 	}
 
 	refObjSnapshot := filteredRefObjSnapshot(deps)

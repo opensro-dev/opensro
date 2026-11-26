@@ -26,6 +26,17 @@ import { isNameChangeScrollItem, nameChangeTail } from "@/engine/foundation/game
 import { isWeaponSwitchScroll, weaponSwitchTail } from "@/engine/foundation/gameplay/weapon-switch";
 import { raceSwitchKindOf, raceSwitchTail } from "@/engine/foundation/gameplay/race-switch";
 import {
+	applyMagicCubeConsumeLocal,
+	applyMagicCubePopLocal,
+	applyMagicCubePushLocal,
+	encodeMagicCubePop,
+	encodeMagicCubePush,
+	isMagicCube,
+	MAGIC_CUBE_MOVE_CONSUME,
+	MAGIC_CUBE_MOVE_POP,
+	MAGIC_CUBE_MOVE_PUSH
+} from "@/engine/foundation/gameplay/magic-cube";
+import {
 	nativeStackIdentity,
 	planContainerMove,
 	sameStackIdentity,
@@ -332,6 +343,12 @@ present
 		const cached = presentations.get( item );
 		if ( cached ) return cached;
 		const tooltip = tooltipRefs.get( item.refObjId );
+		const linked = item.linkedStorage ?
+			{
+				capacity: item.linkedStorage.capacity,
+				rows: item.linkedStorage.rows.map( row => present( row ) )
+			} :
+			undefined;
 		const result = {
 			...item,
 			name: names.get( item.refObjId ) ?? item.name,
@@ -339,7 +356,8 @@ present
 			icon: icons.get( item.refObjId ) ?? item.icon,
 			tooltip,
 			nativeFields: tooltip?.fields,
-			magicReferences: itemMagicDefinitions( item.magic, magicRefs, tooltip?.fields.itemClass )
+			magicReferences: itemMagicDefinitions( item.magic, magicRefs, tooltip?.fields.itemClass ),
+			...(linked ? { linkedStorage: linked } : {})
 		};
 		presentations.set( item, result );
 		return result;
@@ -969,6 +987,14 @@ bootstrap
 					slot: number;
 					refObjId: number;
 					body: number[];
+					linkedStorage?: {
+						capacity: number;
+						rows: {
+							slot: number;
+							refObjId: number;
+							body: number[];
+						}[];
+					};
 				}[];
 			};
 			if (
@@ -1034,6 +1060,49 @@ bootstrap
 					durationMs
 				} ];
 			}
+			const decodeEquip = (
+				row: {
+					slot: number;
+					refObjId: number;
+					body: number[];
+					linkedStorage?: {
+						capacity: number;
+						rows: { slot: number; refObjId: number; body: number[]; }[];
+					};
+				}
+			): InventoryItem | null => {
+				const item = body( Uint8Array.from( row.body ), 0 );
+				if ( (item?.refObjId ?? 0) !== row.refObjId ) {
+					throw new Error( "Inventory reference mismatch" );
+				}
+				if ( !item ) return null;
+				const linked = row.linkedStorage;
+				if ( !linked ) return { ...item, slot: slot( row.slot ) };
+				if (
+					!Number.isInteger( linked.capacity ) || linked.capacity < 1 || linked.capacity > 128 ||
+					!Array.isArray( linked.rows ) || linked.rows.length > linked.capacity
+				) {
+					throw new Error( "Invalid Magic Cube linked storage" );
+				}
+				const nested: InventoryItem[] = [], seen = new Set<number>();
+				for ( const nestedRow of linked.rows ) {
+					const nestedSlot = slot( nestedRow.slot );
+					if ( nestedSlot >= linked.capacity || seen.has( nestedSlot ) ) {
+						throw new Error( "Invalid Magic Cube linked slot" );
+					}
+					seen.add( nestedSlot );
+					const nestedItem = body( Uint8Array.from( nestedRow.body ), 0 );
+					if ( !nestedItem || nestedItem.refObjId !== nestedRow.refObjId ) {
+						throw new Error( "Magic Cube linked reference mismatch" );
+					}
+					nested.push( { ...nestedItem, slot: nestedSlot } );
+				}
+				return {
+					...item,
+					slot: slot( row.slot ),
+					linkedStorage: { capacity: linked.capacity, rows: nested }
+				};
+			};
 			const next = new Map<number, InventoryItem>(), seenSlots = new Set<number>();
 			for ( const row of b.equipItems ?? [] ) {
 				const n = slot( row.slot );
@@ -1041,11 +1110,8 @@ bootstrap
 					throw new Error( "Duplicate inventory slot" );
 				}
 				seenSlots.add( n );
-				const item = body( Uint8Array.from( row.body ), 0 );
-				if ( (item?.refObjId ?? 0) !== row.refObjId ) {
-					throw new Error( "Inventory reference mismatch" );
-				}
-				if ( item ) next.set( n, { ...item, slot: n } );
+				const item = decodeEquip( row );
+				if ( item ) next.set( n, item );
 			}
 			const nextAvatars = new Map<number, InventoryItem>();
 			for ( const row of b.avatarItems ?? [] ) {
@@ -1693,6 +1759,90 @@ avatarMove
 				};
 			send( frame );
 			pending = { opcode: ITEM_MOVE_RESPONSE_OPCODE, source, destination, movementType, deadline: now + 10000 };
+			error = null;
+			return frame;
+		},
+		/*
+================
+magicCubePush
+
+Port-only (#3906): deposit an elixir stack into a Magic Cube (0x706D 0x27).
+================
+		*/
+		magicCubePush( source: number, cubeSlot: number, quantity: number, now: number ) {
+			if ( timedOut ) throw Error( timeoutMessage() );
+			if ( busy() || !Number.isInteger( quantity ) || quantity < 1 || quantity > 65535 ) {
+				throw Error( "Magic Cube deposit unavailable" );
+			}
+			slot( source );
+			slot( cubeSlot );
+			const elixir = slots.get( source ), cube = slots.get( cubeSlot );
+			if (
+				!elixir || !cube || source === cubeSlot || !isMagicCube( cube.typeFlags ) ||
+				elixir.quantity < quantity || source < (equipmentSlotCount ?? 13) ||
+				cubeSlot < (equipmentSlotCount ?? 13)
+			) {
+				throw Error( "Invalid Magic Cube deposit" );
+			}
+			const frame = {
+				opcode: ITEM_MOVE_REQUEST_OPCODE,
+				payload: encodeMagicCubePush( source, cubeSlot, quantity )
+			};
+			send( frame );
+			pending = {
+				opcode: ITEM_MOVE_RESPONSE_OPCODE,
+				source,
+				destination: cubeSlot,
+				movementType: MAGIC_CUBE_MOVE_PUSH,
+				quantity,
+				deadline: now + 10000
+			};
+			error = null;
+			return frame;
+		},
+		/*
+================
+magicCubePop
+
+Port-only (#3906): withdraw an elixir from a Magic Cube (0x706D 0x28).
+================
+		*/
+		magicCubePop(
+			cubeSlot: number,
+			destination: number,
+			refObjId: number,
+			quantity: number,
+			now: number
+		) {
+			if ( timedOut ) throw Error( timeoutMessage() );
+			if (
+				busy() || !Number.isInteger( quantity ) || quantity < 1 || quantity > 65535 ||
+				!Number.isInteger( refObjId ) || refObjId < 1
+			) {
+				throw Error( "Magic Cube withdraw unavailable" );
+			}
+			slot( cubeSlot );
+			slot( destination );
+			const cube = slots.get( cubeSlot );
+			if (
+				!cube || !isMagicCube( cube.typeFlags ) || cubeSlot < (equipmentSlotCount ?? 13) ||
+				destination < (equipmentSlotCount ?? 13) || destination >= (inventorySlotCount ?? 0)
+			) {
+				throw Error( "Invalid Magic Cube withdraw" );
+			}
+			const frame = {
+				opcode: ITEM_MOVE_REQUEST_OPCODE,
+				payload: encodeMagicCubePop( refObjId, cubeSlot, destination, quantity )
+			};
+			send( frame );
+			pending = {
+				opcode: ITEM_MOVE_RESPONSE_OPCODE,
+				source: cubeSlot,
+				destination,
+				movementType: MAGIC_CUBE_MOVE_POP,
+				quantity,
+				deadline: now + 10000
+			};
 			error = null;
 			return frame;
 		},
@@ -2426,6 +2576,77 @@ receive
 				pending = null;
 				error = null;
 				for ( const cue of cues ) playItem( cue );
+				return true;
+			}
+			// Port-only (#3906): Magic Cube deposit / withdraw. Layouts are
+			// pinned on the v1.696 body readers; apply locally so the bag
+			// never hits the unappliable-resync path for 0x27 / 0x28.
+			if ( op === 0xb06d && p[1] === MAGIC_CUBE_MOVE_PUSH ) {
+				if (
+					p.length !== 6 || pending?.movementType !== MAGIC_CUBE_MOVE_PUSH ||
+					pending.source !== p[2] || pending.destination !== p[3] ||
+					v.getUint16( 4, true ) !== pending.quantity
+				) throw Error( "Unmatched Magic Cube deposit result" );
+				const source = p[2]!, cubeSlot = p[3]!, quantity = v.getUint16( 4, true );
+				const bag = new Map( slots ), elixir = bag.get( source ), cube = bag.get( cubeSlot );
+				if ( !elixir || !cube || !isMagicCube( cube.typeFlags ) ) {
+					throw Error( "Magic Cube deposit occupancy mismatch" );
+				}
+				const cap = tooltipRefs.get( elixir.refObjId )?.fields.maxStack ?? 0;
+				const cubeCap = tooltipRefs.get( cube.refObjId )?.fields.itemParam9_2bc ?? 0;
+				const applied = applyMagicCubePushLocal( cube, elixir, quantity, cap, cubeCap );
+				if ( !applied ) throw Error( "Magic Cube deposit apply failed" );
+				if ( applied.elixirLeft ) bag.set( source, applied.elixirLeft );
+				else bag.delete( source );
+				bag.set( cubeSlot, applied.cube );
+				slots = bag;
+				published = null;
+				pending = null;
+				error = null;
+				playItem( { handle: "SND_EQUIP", typeFlags: elixir.typeFlags } );
+				return true;
+			}
+			if ( op === 0xb06d && p[1] === MAGIC_CUBE_MOVE_POP ) {
+				if (
+					p.length !== 10 || pending?.movementType !== MAGIC_CUBE_MOVE_POP ||
+					pending.source !== p[6] || pending.destination !== p[7] ||
+					v.getUint16( 8, true ) !== pending.quantity
+				) throw Error( "Unmatched Magic Cube withdraw result" );
+				const refObjId = v.getUint32( 2, true ),
+					cubeSlot = p[6]!,
+					destination = p[7]!,
+					quantity = v.getUint16( 8, true );
+				const bag = new Map( slots ), cube = bag.get( cubeSlot );
+				if ( !cube || !isMagicCube( cube.typeFlags ) ) {
+					throw Error( "Magic Cube withdraw occupancy mismatch" );
+				}
+				const existing = bag.get( destination ) ?? null;
+				const cap = tooltipRefs.get( refObjId )?.fields.maxStack ?? 0;
+				const applied = applyMagicCubePopLocal( cube, refObjId, quantity, existing, destination, cap );
+				if ( !applied ) throw Error( "Magic Cube withdraw apply failed" );
+				bag.set( cubeSlot, applied.cube );
+				bag.set( destination, applied.destination );
+				slots = bag;
+				published = null;
+				pending = null;
+				error = null;
+				playItem( { handle: "SND_EQUIP", typeFlags: applied.destination.typeFlags } );
+				return true;
+			}
+			if ( op === 0xb06d && p[1] === MAGIC_CUBE_MOVE_CONSUME ) {
+				if ( p.length !== 9 ) throw Error( "Invalid Magic Cube consume result" );
+				const cubeSlot = p[2]!,
+					refObjId = v.getUint32( 3, true ),
+					quantity = v.getUint16( 7, true );
+				const bag = new Map( slots ), cube = bag.get( cubeSlot );
+				if ( !cube || !isMagicCube( cube.typeFlags ) ) {
+					throw Error( "Magic Cube consume occupancy mismatch" );
+				}
+				const nextCube = applyMagicCubeConsumeLocal( cube, refObjId, quantity );
+				if ( !nextCube ) throw Error( "Magic Cube consume apply failed" );
+				bag.set( cubeSlot, nextCube );
+				slots = bag;
+				published = null;
 				return true;
 			}
 			const sale = saleResult( op, p );

@@ -127,6 +127,15 @@ export function resolveNativeNotice(
 			}
 		};
 	}
+	// Port-only later-client Magic Cube notices (#3906). Absent from the
+	// v1.150 dispatch table; the v1.696 category-01 jump indexes 123 / 127
+	// (01:8A full, 01:8E sell while non-empty).
+	if ( category === 1 && code === 0x8A ) {
+		return notice( "UIIT_STT_MAGIC_CUBE_INVENTORY_FULL", 5, false );
+	}
+	if ( category === 1 && code === 0x8E ) {
+		return notice( "UIIT_STT_MAGIC_CUBE_STORE_SELL_ERROR", 5, false );
+	}
 	return route;
 }
 // Constant-only caller. Contextual branches must be handled by their owner;

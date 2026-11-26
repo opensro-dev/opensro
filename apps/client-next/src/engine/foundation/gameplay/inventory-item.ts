@@ -126,7 +126,11 @@ options
 		}
 	} else if ( band === 0x40 ) {
 		if ( group === 0x100 ) transformRefObjId = u32();
-		else if ( group === 0x80 ) {
+		else if ( group === 0x180 ) {
+			// Magic Cube (TID 3.2.3): u32 StoredItemCount, not a stack
+			// (DaxterSoul CHARACTER_DATA MAGIC_CUBE Quantity; issue #3906).
+			quantity = u32();
+		} else if ( group === 0x80 ) {
 			const state = u8();
 			if ( state < 1 || state > 4 ) throw Error( "Invalid summon state" );
 			const rentals: { kind: 0 | 5; id: number; seconds: number; tag?: number; flag?: number; }[] = [];
