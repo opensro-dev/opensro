@@ -324,7 +324,7 @@ import {
 import { createCastMotionLock } from "@/engine/foundation/gameplay/cast-motion-lock";
 import { createSkillPressQueue, decidePress } from "@/engine/foundation/gameplay/skill-queue";
 import { combatAdmissionRadius, combatStopPoint, refBodyRadius } from "@/engine/foundation/gameplay/combat-spacing";
-import { equipmentBroken, equippedWeaponKind, pressAdmission } from "@/engine/foundation/gameplay/press-admission";
+import { equippedWeaponKind, pressAdmission } from "@/engine/foundation/gameplay/press-admission";
 import { movementHeading } from "@/engine/foundation/gameplay/native-movement";
 import {
 	bootstrapProgression,
@@ -403,7 +403,8 @@ import {
 	isMacroHuntNeverTarget,
 	macroUsageTimeEnded,
 	pickMacroHuntAction,
-	spiritNeedsWake
+	spiritNeedsWake,
+	wornEquipmentBroken
 } from "@/engine/foundation/gameplay/sro-macro-hunt";
 import {
 	MACRO_NOTICE_TELEPORT_OFF,
@@ -7511,9 +7512,7 @@ the configured range. Notices mirror 00dade90 / return-reason UIIT rows
 				party
 			) :
 			undefined;
-		const wornBroken = bag.some( entry =>
-			entry.slot < BAG_FIRST_SLOT && equipmentBroken( entry.typeFlags, entry.durability )
-		);
+		const wornBroken = wornEquipmentBroken( bag );
 		const spiritSlot = findSpiritWakeSlot();
 		// 006872d0 requires skill-on (+0x181) before the VIP walk.
 		const usageTimeEnded = !!settings.skillOn &&
