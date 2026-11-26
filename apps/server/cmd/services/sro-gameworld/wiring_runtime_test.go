@@ -16,6 +16,7 @@ import (
 	"opensro.online/server/internal/game/action"
 	"opensro.online/server/internal/game/world/simulation"
 	"opensro.online/server/internal/security/auth"
+	"opensro.online/server/internal/testsupport/wait"
 	"opensro.online/server/internal/transport"
 )
 
@@ -142,7 +143,9 @@ func TestMissionTickerWithoutAHubDropsSlowReports(t *testing.T) {
 	game, _, _ := betaWiringFixture()
 	game.newMissionTicker(&action.PeerReferenceCatalog{})
 	unlock := game.items.LockPublication(betaWiringDivision, "test")
-	time.Sleep(simulation.SlowHookThreshold + 10*time.Millisecond)
+	// The runtime times the hold with the wall clock (publicationRelease),
+	// so the window is spent, not simulated.
+	wait.Consistently(t, simulation.SlowHookThreshold+10*time.Millisecond, "the publication gate stays held", func() bool { return true })
 	unlock()
 	// The runtime calls the slow-step sink only when it is set, as here.
 	if slow := game.items.Steps.Slow; slow != nil {
