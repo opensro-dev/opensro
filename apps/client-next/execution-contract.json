@@ -79,7 +79,7 @@
 		{
 			"consumer": "src/engine/foundation/animation/suit-socket.ts",
 			"provider": "src/engine/runtime/characters/actor-appearance.ts",
-			"functions": ["callback:suitSocketParts:1"]
+			"functions": ["fits", "callback:suitSocketParts:2"]
 		},
 		{
 			"consumer": "src/engine/runtime/ui/frame/frame.ts",
