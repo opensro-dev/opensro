@@ -56,16 +56,23 @@ suitSocketParts
 The model paths the appearance would need with each bag candidate worn in
 the suit socket, and the bare socket's while a candidate is worn there.
 partsFor assembles one equipment list into its parts' model paths.
+
+fits says whether the wearer's body can wear a bag item. A suit of the
+other race or sex is never a candidate: the equip refuses it (country
+0x200, sex 0x040; requirements.go), and the catalog publishes no model
+for that body, so assembling it would fail the whole appearance. The
+thief NPC sells both races' suits, so such a suit is an ordinary bag item.
 ================
 */
 export function suitSocketParts<Row extends SocketRow>(
 	equipment: readonly Row[],
+	fits: ( row: Row ) => boolean,
 	partsFor: ( equipment: readonly Row[] ) => readonly string[]
 ): readonly string[] {
 	const others = equipment.filter( row => row.slot !== JOB_SUIT_SLOT );
 	const models = new Set<string>();
 	for ( const row of equipment ) {
-		if ( row.slot > LAST_EQUIPMENT_SLOT && isSuitSocketItem( row ) ) {
+		if ( row.slot > LAST_EQUIPMENT_SLOT && isSuitSocketItem( row ) && fits( row ) ) {
 			// The candidate moves: it leaves its bag slot for the socket.
 			const worn = [ ...others.filter( other => other !== row ), { ...row, slot: JOB_SUIT_SLOT } ];
 			for ( const model of partsFor( worn ) ) models.add( model );

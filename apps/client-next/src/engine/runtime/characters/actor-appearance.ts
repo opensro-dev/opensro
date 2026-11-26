@@ -15,7 +15,7 @@ import { visualChangeAvatars } from "@/engine/foundation/animation/visual-change
 import { fortressAppearance } from "@/engine/foundation/animation/fortress-appearance";
 import { isGoldHeapType, isSurvivalPowerEgg } from "@/engine/foundation/gameplay/ground-item";
 import { defaultWearFrozen } from "@/engine/foundation/animation/default-wear-policy";
-import { assembleEquipmentAppearance } from "@/engine/foundation/animation/equipment-appearance";
+import { assembleEquipmentAppearance, bodyPrefix } from "@/engine/foundation/animation/equipment-appearance";
 import { readyThenWarm, suitBagKey, suitSocketParts } from "@/engine/foundation/animation/suit-socket";
 import { stallAttachments } from "@/engine/foundation/animation/emote";
 import { STALL_TITLE_MODE } from "@/engine/foundation/gameplay/interaction-approach";
@@ -491,7 +491,12 @@ export function createActorAppearance( owner: ActorOwner ) {
 						// wear in the suit socket are warmed now, so a dress swaps the
 						// outfit the moment it lands instead of a load later.
 						if ( entity.gid === gameplay?.localGid ) {
-							socketWarm = suitSocketParts( equipment, candidate =>
+							// Only suits published for this body: the other race's or
+							// sex's suit in the bag can never be worn (suit-socket.ts).
+							const body = bodyPrefix( resource.codename );
+							const fits = ( row: { readonly refObjId: number; } ) =>
+								published.dress.equipment?.[String( row.refObjId )]?.bodies[body] !== undefined;
+							socketWarm = suitSocketParts( equipment, fits, candidate =>
 								assembleEquipmentAppearance( {
 									resource,
 									dress: published.dress,
