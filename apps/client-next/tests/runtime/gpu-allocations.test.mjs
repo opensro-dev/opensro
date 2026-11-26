@@ -193,16 +193,17 @@ the garbage collector, on demand.
 function fakeFinalizer() {
 	const held = new Map();
 	return {
-		register( target, release ) {
-			held.set( target, release );
+		register( target, release, token ) {
+			held.set( token, release );
 		},
-		unregister( target ) {
-			held.delete( target );
+		unregister( token ) {
+			held.delete( token );
 		},
-		collect( target ) {
-			held.get( target )?.();
+		collect( token ) {
+			held.get( token )?.();
 		},
-		pending: () => held.size
+		pending: () => held.size,
+		tokenHeld: token => held.has( token )
 	};
 }
 
@@ -214,6 +215,7 @@ test("a resource nothing destroys leaves the totals when it is collected", () =>
 	const buffer = device.createBuffer( { size: 77 } );
 	assert.equal( totals.read().bufferBytes, 77 );
 	assert.equal( finalizer.pending(), 1, "the buffer registered its release" );
+	assert.equal( finalizer.tokenHeld( buffer ), true, "the resource itself is the unregister token" );
 	finalizer.collect( buffer );
 	assert.equal( totals.read().bufferBytes, 0, "collection released its bytes" );
 	buffer.destroy();
@@ -227,9 +229,10 @@ test("a destroyed resource owes the collector nothing", () => {
 	const finalizer = fakeFinalizer();
 	instrumentGpuAllocations( /** @type {any} */ (device), totals, /** @type {any} */ (finalizer) );
 	const buffer = device.createBuffer( { size: 33 } );
+	assert.equal( finalizer.tokenHeld( buffer ), true, "the resource itself is the unregister token" );
 	buffer.destroy();
 	assert.equal( totals.read().bufferBytes, 0 );
-	assert.equal( finalizer.pending(), 0, "destroy unregistered the release" );
+	assert.equal( finalizer.pending(), 0, "destroy unregistered the release by its token" );
 	finalizer.collect( buffer );
 	assert.equal( totals.read().bufferBytes, 0, "collection after destroy changes nothing" );
 });

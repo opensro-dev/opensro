@@ -271,6 +271,7 @@ function cameraWorldFixture( t ) {
 		scenery: unexpectedCameraWork,
 		gpuTiming: unexpectedCameraWork,
 		gpuWork: unexpectedCameraWork,
+		gpuAllocations: unexpectedCameraWork,
 		adapterFacts: unexpectedCameraWork,
 		videoOptions: unexpectedCameraWork,
 		experimentalVideo: unexpectedCameraWork,

@@ -170,14 +170,15 @@ AllocationFinalizer
 
 The finalization registry's shape the meter needs (the platform's
 FinalizationRegistry in production, a fake in tests): register pairs
-a counted resource with the release it owes; unregister withdraws it
-on destroy. The held value is the release closure, never the
-resource, so the registry itself keeps nothing alive.
+a counted resource with the release it owes, under the resource
+itself as the unregister token; unregister withdraws it on destroy.
+The held value is the release closure, never the resource, so the
+registry itself keeps nothing alive.
 ================
 */
 export interface AllocationFinalizer {
-	register( target: object, held: () => void ): void;
-	unregister( target: object ): void;
+	register( target: object, held: () => void, token: object ): void;
+	unregister( token: object ): void;
 }
 
 /*
@@ -221,6 +222,26 @@ function withdrawRelease( finalizer: AllocationFinalizer | null, resource: GPUBu
 
 /*
 ================
+onceRelease
+
+One resource's release, runnable exactly once. It is built here, in
+a scope that never sees the resource: the finalizer holds this
+closure strongly until collection, and a closure shares its scope's
+context - built beside the resource, it would keep the resource
+reachable, pinning the very memory the count watches.
+================
+*/
+function onceRelease( release: () => void ): () => void {
+	let done = false;
+	return () => {
+		if ( !done ) {
+			done = true;
+			release();
+		}
+	};
+}
+/*
+================
 countedRelease
 
 Wraps one resource's destroy so the first release - the destroy, or
@@ -237,13 +258,7 @@ function countedRelease(
 	finalizer: AllocationFinalizer | null
 ): boolean {
 	const destroy = resource.destroy.bind( resource );
-	let released = false;
-	const releaseOnce = () => {
-		if ( !released ) {
-			released = true;
-			release();
-		}
-	};
+	const releaseOnce = onceRelease( release );
 	try {
 		resource.destroy = () => {
 			withdrawRelease( finalizer, resource );
@@ -254,7 +269,7 @@ function countedRelease(
 		return false;
 	}
 	try {
-		finalizer?.register( resource, releaseOnce );
+		finalizer?.register( resource, releaseOnce, resource );
 	} catch {
 		// Counting without the collector's net: destroy still releases.
 	}
