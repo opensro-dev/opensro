@@ -123,6 +123,47 @@ func TestAbsoluteRateAndRandomFailure(t *testing.T) {
 
 /*
 ================
+TestSelectEquipmentKeepsLastDrawnPastTheLastClass
+
+Stepping past the last class with a piece drawn keeps that piece even
+though it is too high for the monster; the absolute admission decides.
+The kept piece is the LAST drawn one: a same-type piece drawn in a
+lower class replaces the one from above.
+================
+*/
+func TestSelectEquipmentKeepsLastDrawnPastTheLastClass(t *testing.T) {
+	rollSeq := func(values ...uint32) func() (uint32, error) {
+		calls := 0
+		return func() (uint32, error) {
+			value := values[calls]
+			calls++
+			return value, nil
+		}
+	}
+	high := equipmentRef{Codename: "high", Type: "weapon", Weight: 100, Absolute: 50, Level: 9}
+	single := equipmentCatalog{buckets: map[equipmentKey]*equipmentBucket{
+		{0, 0, false}: {refs: []equipmentRef{high}, weights: []uint32{100}, alternatives: map[string][]uint32{"weapon": {0}}},
+	}, widths: [2]int{1, 1}}
+	if got, ok := single.selectEquipment(0, 0, false, 1, rollSeq(0, 50)); !ok || got.Codename != "high" {
+		t.Fatalf("bottom keep at the admission edge = %+v / %v, want the too-high piece kept", got, ok)
+	}
+	if _, ok := single.selectEquipment(0, 0, false, 1, rollSeq(0, 51)); ok {
+		t.Fatal("bottom keep admitted past its absolute rate")
+	}
+
+	top := equipmentRef{Codename: "top", Type: "weapon", Weight: 100, Absolute: 100, Level: 20}
+	low := equipmentRef{Codename: "low", Type: "weapon", Weight: 100, Absolute: 100, Level: 15}
+	two := equipmentCatalog{buckets: map[equipmentKey]*equipmentBucket{
+		{0, 1, false}: {refs: []equipmentRef{top}, weights: []uint32{100}, alternatives: map[string][]uint32{"weapon": {0}}},
+		{0, 0, false}: {refs: []equipmentRef{low}, weights: []uint32{100}, alternatives: map[string][]uint32{"weapon": {0}}},
+	}, widths: [2]int{2, 1}}
+	if got, ok := two.selectEquipment(0, 1, false, 10, rollSeq(0, 0, 0)); !ok || got.Codename != "low" {
+		t.Fatalf("bottom keep after a same-type redraw = %+v / %v, want the last drawn (low) piece", got, ok)
+	}
+}
+
+/*
+================
 TestRareEquipmentFallbackStepsWithinTier
 
 The native server sets the rare-equipment table's class-fallback
