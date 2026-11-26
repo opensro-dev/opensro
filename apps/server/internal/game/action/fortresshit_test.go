@@ -103,8 +103,8 @@ func TestFortressWeaponBlockedHitDealsNothing(t *testing.T) {
 	attacker := combat.Stats{Level: 1,
 		PhysicalAttackMin: 100, PhysicalAttackMax: 200, MagicalAttackMin: 500, MagicalAttackMax: 600}
 	out, err := rt.resolveCombatRequest(combatRequest{
-		actor:    criticalActor{division: testDivision, character: c.Name},
-		skill:    fortressHitSkill(), attacker: attacker,
+		actor: criticalActor{division: testDivision, character: c.Name},
+		skill: fortressHitSkill(), attacker: attacker,
 		defender: combat.Stats{BlockRate: 100}, lanes: 4,
 	})
 	if err != nil {
