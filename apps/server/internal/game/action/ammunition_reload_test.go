@@ -34,7 +34,7 @@ func TestLastArrowReloadsLowestSameTypeBagStack(t *testing.T) {
 		{Slot: 15, RefObjID: 9999, TypeFlags: arrowTypeFlags, StackCount: 40},
 		{Slot: 14, RefObjID: 10376, TypeFlags: 4716, StackCount: 99}, // bolts: another TID
 	}}
-	result := applyAmmunitionDebit(character, ammunitionDebit{index: 0, remaining: 0})
+	result := applyAmmunitionDebit(character, ammunitionDebit{index: 0, remaining: 0}, false)
 	if result.reload == nil || result.reload.from != 15 || result.count != 40 {
 		t.Fatalf("reload = %+v count %d, want the slot 15 stack of 40", result.reload, result.count)
 	}
@@ -67,11 +67,56 @@ func TestLastArrowWithoutBagStockEmptiesSocket(t *testing.T) {
 	character := &enterworld.Character{MissionInventory: []enterworld.InventoryRow{
 		{Slot: int64(inventory.SocketShield), RefObjID: 62, TypeFlags: arrowTypeFlags, StackCount: 1},
 	}}
-	result := applyAmmunitionDebit(character, ammunitionDebit{index: 0, remaining: 0})
+	result := applyAmmunitionDebit(character, ammunitionDebit{index: 0, remaining: 0}, false)
 	if result.reload != nil || result.count != 0 || len(character.MissionInventory) != 0 {
 		t.Fatalf("result %+v, inventory %+v: want an empty socket", result, character.MissionInventory)
 	}
 	if frames := ammunitionFrames(result); len(frames) != 1 {
 		t.Fatalf("frames = %d, want only the zero count", len(frames))
+	}
+}
+
+/*
+================
+TestSmallestStackReloadPicksSmallestStack
+
+The Experimental smallest-stack choice (#4527, port-only) takes the
+smallest matching stack instead of the native lowest slot.
+================
+*/
+func TestSmallestStackReloadPicksSmallestStack(t *testing.T) {
+	character := &enterworld.Character{MissionInventory: []enterworld.InventoryRow{
+		{Slot: int64(inventory.SocketShield), RefObjID: 62, TypeFlags: arrowTypeFlags, StackCount: 1},
+		{Slot: 15, RefObjID: 62, TypeFlags: arrowTypeFlags, StackCount: 250},
+		{Slot: 20, RefObjID: 9999, TypeFlags: arrowTypeFlags, StackCount: 40},
+	}}
+	result := applyAmmunitionDebit(character, ammunitionDebit{index: 0, remaining: 0}, true)
+	if result.reload == nil || result.reload.from != 20 || result.count != 40 {
+		t.Fatalf("reload = %+v count %d, want the slot 20 stack of 40", result.reload, result.count)
+	}
+	for _, row := range character.MissionInventory {
+		if row.Slot == 15 && row.StackCount != 250 {
+			t.Fatalf("slot 15 = %+v, want the 250 stack left in the bag", row)
+		}
+	}
+}
+
+/*
+================
+TestSmallestStackReloadTieGoesToTheLowerSlot
+
+Equal stacks under the smallest-stack choice still go to the lower
+slot, so the choice never scrambles a bag of equal stacks.
+================
+*/
+func TestSmallestStackReloadTieGoesToTheLowerSlot(t *testing.T) {
+	character := &enterworld.Character{MissionInventory: []enterworld.InventoryRow{
+		{Slot: int64(inventory.SocketShield), RefObjID: 62, TypeFlags: arrowTypeFlags, StackCount: 1},
+		{Slot: 20, RefObjID: 9999, TypeFlags: arrowTypeFlags, StackCount: 40},
+		{Slot: 15, RefObjID: 9999, TypeFlags: arrowTypeFlags, StackCount: 40},
+	}}
+	result := applyAmmunitionDebit(character, ammunitionDebit{index: 0, remaining: 0}, true)
+	if result.reload == nil || result.reload.from != 15 || result.count != 40 {
+		t.Fatalf("reload = %+v count %d, want the slot 15 stack of 40", result.reload, result.count)
 	}
 }

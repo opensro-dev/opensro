@@ -313,6 +313,11 @@ type Runtime struct {
 	// over.
 	monsterScrollReady map[string]int64
 
+	// ammoReloadSmallest is the client's smallest-stack reload choice by
+	// character name (ammunitionpreference.go; port-only, not native).
+	// Runtime-only and never stored: a relog redeclares it at entry.
+	ammoReloadSmallest map[string]bool
+
 	// NpcSpawn scopes the 0x745A liveness gate's NPC-gid domain to the
 	// same env gates that put the roster on the wire (select.go); tests
 	// override it directly.

@@ -75,7 +75,7 @@ func TestRaisedArrowStackReloadsWhole(t *testing.T) {
 		{Slot: int64(inventory.SocketShield), RefObjID: 62, TypeFlags: arrowTypeFlags, StackCount: 1},
 		{Slot: 13, RefObjID: 62, TypeFlags: arrowTypeFlags, StackCount: raisedAmmoStack},
 	}}
-	result := applyAmmunitionDebit(character, ammunitionDebit{index: 0, remaining: 0})
+	result := applyAmmunitionDebit(character, ammunitionDebit{index: 0, remaining: 0}, false)
 	if result.reload == nil || result.reload.quantity != raisedAmmoStack || result.count != raisedAmmoStack {
 		t.Fatalf("reload = %+v count %d, want the whole %d stack", result.reload, result.count, raisedAmmoStack)
 	}

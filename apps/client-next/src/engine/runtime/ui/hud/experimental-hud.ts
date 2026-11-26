@@ -348,6 +348,14 @@ export const EXPERIMENTAL_TABS: readonly ExperimentalTab[] = [
 						description: "Steer straight projectiles toward a moving target."
 					},
 					{
+						// Port-only, not native (#4527): off is the
+						// original's reload from the lowest bag slot.
+						key: "smallestAmmoStack",
+						id: "experimental-smallest-ammo-stack",
+						label: "Reload bolts and arrows from the smallest stack",
+						description: "When the quiver empties, refill it from the smallest bag stack."
+					},
+					{
 						key: "uniqueDamageRank",
 						id: "experimental-unique-damage-rank",
 						label: "Unique damage ranking",

@@ -40,6 +40,11 @@ export const MARKET_CONTROL = 20;
 // progression/skillrecall.go SkillRecallControl; port-only, not native,
 // SRO_SKILL_RESET_SCROLL; release protocol 20).
 export const SKILL_RECALL_CONTROL = 21;
+// The smallest-stack reload choice, one byte (server
+// action/ammunitionpreference.go opAmmoReloadPreference; port-only,
+// not native, #4527): 1 reloads the quiver from the smallest matching
+// bag stack, 0 is the original's lowest bag slot. There is no answer.
+export const AMMO_RELOAD_CONTROL = 22;
 
 /*
 ================
