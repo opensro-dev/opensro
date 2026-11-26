@@ -120,6 +120,15 @@ func packageContent(row []string, refs enterworld.ItemRefSource, rents rentTerms
 			}
 			return Content{}, fmt.Errorf("commerce: rent term %s has no refrentitem row", term)
 		}
+		// The wire measures a row by its reference: the leg rides every
+		// row of the item the term's row names (itemrefs_rent.go,
+		// wire/rentrefs.go), and the deadline rides this content's rows.
+		// A term renting another item would send a deadline the client
+		// does not measure for, as r204l's rows did (they named the
+		// later client's ids), so the catalogue refuses it.
+		if rented := rents.items[term]; rented != ref.RefObjID {
+			return Content{}, fmt.Errorf("commerce: rent term %s rents item %d, not %s (%d)", term, rented, ref.Codename, ref.RefObjID)
+		}
 		content.RentMinutes = minutes
 	}
 	return content, nil

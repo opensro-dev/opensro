@@ -60,7 +60,7 @@ type ItemBody struct {
 	// client's tooltip reads the same value as its rent remainder,
 	// #4240). It rides the equipment body after the magic options on
 	// every row of a rental reference (rentrefs.go), as 0 on a permanent
-	// one; a row of any other reference carries no leg.
+	// one; a row of any other reference carries no leg, deadline or not.
 	RentExpiresUnixMs int64
 }
 
@@ -174,12 +174,16 @@ func (b ItemBody) Encode() []byte {
 ================
 carriesRentLeg
 
-A rented row, and every row of a rental reference: the reader measures
-the body by the reference, never by the value (rentrefs.go).
+Every row of a rental reference, and only those: the reader measures the
+body by the reference, never by the value (rentrefs.go). A deadline on
+another reference stays server-side (the expiry sweep reads the row);
+writing it desynced every packet after it on r204l, whose rent table
+named the later client's item ids, so the Item Mall's rental deliveries
+and the avatars' blessings failed to apply.
 ================
 */
 func (b ItemBody) carriesRentLeg() bool {
-	return b.RentExpiresUnixMs > 0 || IsRentRef(b.RefObjID)
+	return IsRentRef(b.RefObjID)
 }
 
 /*

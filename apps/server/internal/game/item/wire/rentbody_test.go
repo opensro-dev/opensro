@@ -21,10 +21,13 @@ permanent row's); only a rental reference reads the leg.
 ================
 */
 func TestRentDeadlineBodyRoundTrip(t *testing.T) {
+	SetRentRefs([]uint32{4242})
+	defer SetRentRefs(nil)
 	flags := PackTypeFlags(3, 1, 13, 1)
 	rented := ItemBody{RefObjID: 4242, TypeFlags: flags, Plus: 3, VarianceBits: 7, Durability: 90,
 		RentExpiresUnixMs: 1_800_000_000_000}
 	permanent := rented
+	permanent.RefObjID = 4243
 	permanent.RentExpiresUnixMs = 0
 	if rented.EncodedSize()-permanent.EncodedSize() != 8 || len(rented.Encode())-len(permanent.Encode()) != 8 {
 		t.Fatalf("rent leg = %d bytes, want 8", len(rented.Encode())-len(permanent.Encode()))
@@ -39,7 +42,6 @@ func TestRentDeadlineBodyRoundTrip(t *testing.T) {
 	// installed. A rent-reference body WITHOUT the leg is malformed:
 	// every row of a rental kind carries its deadline, exactly as
 	// native keeps no rent row without its _RentItemInfo.
-	permanent.RefObjID = 4243
 	if bytes.Equal(rented.Encode()[4:len(permanent.Encode())], permanent.Encode()[4:]) != true {
 		t.Fatal("the leg changed the permanent bytes past the reference")
 	}
@@ -47,10 +49,40 @@ func TestRentDeadlineBodyRoundTrip(t *testing.T) {
 	if err != nil || short.RentExpiresUnixMs != 0 {
 		t.Fatalf("permanent round trip = %+v, %v", short, err)
 	}
-	legless := rented
-	legless.RentExpiresUnixMs = 0
-	if _, err := readItemBody(NewReader(legless.Encode()), flags, isRent); err == nil {
+	legless := permanent
+	legless.RefObjID = 4242
+	if _, err := readItemBody(NewReader(legless.Encode()[:len(legless.Encode())-8]), flags, isRent); err == nil {
 		t.Fatal("a rent-reference body without its deadline leg was accepted")
+	}
+}
+
+/*
+================
+TestDeadlineOnAnotherReferenceWritesNoLeg
+
+The r204l live failure: the rent table named the later client's item
+ids, so a rented Winter attachment (29411 here, 28268 there) carried a
+deadline its reference was never marked for. The leg went out anyway,
+and the client, measuring by the reference, read the body 8 bytes short:
+"Invalid shop item body" on the mall delivery, then "Mall receipt lacks
+delivery", then "Invalid inventory item body" on its blessing. A row is
+measured by its reference alone, so that body is the permanent one.
+================
+*/
+func TestDeadlineOnAnotherReferenceWritesNoLeg(t *testing.T) {
+	SetRentRefs([]uint32{28268})
+	defer SetRentRefs(nil)
+	flags := PackTypeFlags(3, 1, 13, 1)
+	rented := ItemBody{RefObjID: 29411, TypeFlags: flags, Plus: 1, Durability: 50,
+		MagicOptions: []uint64{0x0000000500000f8}, RentExpiresUnixMs: 1_798_000_000_000}
+	permanent := rented
+	permanent.RentExpiresUnixMs = 0
+	if !bytes.Equal(rented.Encode(), permanent.Encode()) || rented.EncodedSize() != len(permanent.Encode()) {
+		t.Fatalf("deadline on a non-rental reference = %x, want the permanent body %x", rented.Encode(), permanent.Encode())
+	}
+	back, err := readItemBody(NewReader(rented.Encode()), flags, IsRentRef)
+	if err != nil || back.RefObjID != 29411 || len(back.MagicOptions) != 1 || back.RentExpiresUnixMs != 0 {
+		t.Fatalf("round trip = %+v, %v", back, err)
 	}
 }
 

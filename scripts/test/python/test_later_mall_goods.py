@@ -38,8 +38,30 @@ def empty():
 	return {name: [] for name in ("refpackageitem.txt", "refscrapofpackageitem.txt", "refpricepolicyofitem.txt", "refshopgoods.txt")}
 
 
+# The tree's own identity of the rented Arabia dress: never the later
+# client's 4242, as the Winter attachment is 29411 here and 28268 there.
+TREE_DRESS_ID = "29411"
+
+
+# ================
+# tree_of
+#
+# A built tree holding items: a mapping names each one's identity,
+# any other collection numbers them from 9000.
+# ================
 def tree_of(items, creatures=(), tabs=("MALL_ARCHEMY_ATHANASIA", "MALL_PET_B_SILK", "MALL_AVATAR_DRESS"), current=None, carry=()):
-	return goods.TreeView(set(items), set(creatures), current or empty(), set(tabs), set(carry))
+	ids = dict(items) if isinstance(items, dict) else {code: str(9000 + n) for n, code in enumerate(sorted(items))}
+	return goods.TreeView(ids, set(creatures), current or empty(), set(tabs), set(carry))
+
+
+# ================
+# tree_rent_row
+#
+# The later rent row as the tree ships it: the same row, renting the
+# tree's own identity of the item.
+# ================
+def tree_rent_row(rent_row):
+	return rent_row[:2] + [TREE_DRESS_ID] + rent_row[3:]
 
 
 # ================
@@ -128,7 +150,8 @@ class LaterMallGoodsTest(unittest.TestCase):
 	#
 	# The 1-day Arabia dress at 14 silk: its term resolves to a 1440
 	# minute period naming the scrap's own item, so the good lists and
-	# the term's refrentitem row is written for the server's clock.
+	# the term's refrentitem row is written for the server's clock,
+	# renting the tree's identity of the dress, not the later client's.
 	# ================
 	def test_a_rental_lists_and_writes_its_rent_row(self):
 		later = empty()
@@ -136,12 +159,12 @@ class LaterMallGoodsTest(unittest.TestCase):
 			rent="RENT_ITEM_MALL_AVATAR_M_ARABIA_2_1D")
 		rent_row = ["1", "RENT_ITEM_MALL_AVATAR_M_ARABIA_2_1D", "4242", "0", "0", "2",
 			"NULL", "NULL", "1", "1440", "0", "0", "0", "0"]
-		rows, summary = goods.goods_rows(later, tree_of({"ITEM_MALL_AVATAR_M_ARABIA_2"}),
+		rows, summary = goods.goods_rows(later, tree_of({"ITEM_MALL_AVATAR_M_ARABIA_2": TREE_DRESS_ID}),
 			rent_rows={rent_row[1]: rent_row}, item_by_id={"4242": "ITEM_MALL_AVATAR_M_ARABIA_2"})
 		self.assertEqual(summary["packages"], [package])
 		self.assertEqual(summary["rentals"], 1)
 		self.assertEqual(summary["rentTerms"], ["RENT_ITEM_MALL_AVATAR_M_ARABIA_2_1D"])
-		self.assertEqual(rows["refrentitem.txt"], [rent_row])
+		self.assertEqual(rows["refrentitem.txt"], [tree_rent_row(rent_row)])
 		self.assertEqual(rows["refscrapofpackageitem.txt"][0][21], "RENT_ITEM_MALL_AVATAR_M_ARABIA_2_1D")
 
 	# ================
@@ -183,8 +206,9 @@ class LaterMallGoodsTest(unittest.TestCase):
 	# test_a_staged_rental_ships_its_rent_row
 	#
 	# A good an earlier step already staged sells through the same
-	# goods table; its rent row ships with it or the mall load stops.
-	# Nothing else is written: the good is already listed.
+	# goods table; its rent row ships with it, renting the tree's
+	# identity of the item, or the mall load stops. Nothing else is
+	# written: the good is already listed.
 	# ================
 	def test_a_staged_rental_ships_its_rent_row(self):
 		current = empty()
@@ -195,12 +219,13 @@ class LaterMallGoodsTest(unittest.TestCase):
 			rent="RENT_ITEM_MALL_AVATAR_M_ARABIA_2_1D")
 		rent_row = ["1", "RENT_ITEM_MALL_AVATAR_M_ARABIA_2_1D", "4242", "0", "0", "2",
 			"NULL", "NULL", "1", "1440", "0", "0", "0", "0"]
-		rows, summary = goods.goods_rows(later, tree_of({"ITEM_MALL_AVATAR_M_ARABIA_2"}, current=current),
+		rows, summary = goods.goods_rows(later,
+			tree_of({"ITEM_MALL_AVATAR_M_ARABIA_2": TREE_DRESS_ID}, current=current),
 			rent_rows={rent_row[1]: rent_row}, item_by_id={"4242": "ITEM_MALL_AVATAR_M_ARABIA_2"})
 		self.assertEqual(summary["packages"], [])
 		self.assertEqual(summary["rentals"], 1)
 		self.assertEqual(summary["rentTerms"], ["RENT_ITEM_MALL_AVATAR_M_ARABIA_2_1D"])
-		self.assertEqual(rows["refrentitem.txt"], [rent_row])
+		self.assertEqual(rows["refrentitem.txt"], [tree_rent_row(rent_row)])
 		self.assertEqual(summary["unstage"], [])
 
 	# ================

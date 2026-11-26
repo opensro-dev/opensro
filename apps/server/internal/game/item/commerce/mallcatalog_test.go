@@ -8,6 +8,7 @@ mallcatalog_test.go - complete authored mall coverage and native shop addresses
 package commerce
 
 import (
+	"strconv"
 	"strings"
 	"testing"
 
@@ -218,16 +219,18 @@ func rentScrapFixture(term string) map[string][][]string {
 	return tables
 }
 
-// rentTermRow is a refrentitem row: the term at cell 1, RentTime at 9.
+// rentTermRow is a refrentitem row: the term at cell 1, the rented
+// item's RefObjID at 2, RentTime at 9.
 /*
 ================
 rentTermRow
 ================
 */
-func rentTermRow(term, minutes string) []string {
+func rentTermRow(term string, item uint32, minutes string) []string {
 	row := make([]string, 15)
 	row[0] = "1"
 	row[1] = term
+	row[2] = strconv.FormatUint(uint64(item), 10)
 	row[9] = minutes
 	return row
 }
@@ -236,25 +239,32 @@ func rentTermRow(term, minutes string) []string {
 ================
 TestRentTermsParse
 
-Periods resolve to their minutes, fixed windows are kept apart, and a
-row too short or unparseable is skipped, never priced.
+Periods resolve to their minutes and the item they rent, fixed
+windows are kept apart, and a row too short or unparseable is skipped,
+never priced.
 ================
 */
 func TestRentTermsParse(t *testing.T) {
+	noItem := rentTermRow("RENT_ITEM_NO_ITEM", 0, "1440")
+	noItem[rentTermItem] = "NULL"
 	terms := parseRentTerms([][]string{
-		rentTermRow("RENT_ITEM_D1", "1440"),
-		rentTermRow("RENT_ITEM_D7", "10080"),
-		rentTermRow("RENT_ITEM_WINDOW", "0"),
+		rentTermRow("RENT_ITEM_D1", 29411, "1440"),
+		rentTermRow("RENT_ITEM_D7", 29405, "10080"),
+		rentTermRow("RENT_ITEM_WINDOW", 29411, "0"),
 		{"1", "RENT_ITEM_SHORT"},
-		rentTermRow("RENT_ITEM_BAD", "abc"),
+		rentTermRow("RENT_ITEM_BAD", 29411, "abc"),
+		noItem,
 	})
 	if terms.periods["RENT_ITEM_D1"] != 1440 || terms.periods["RENT_ITEM_D7"] != 10080 {
 		t.Fatalf("periods = %v, want the one-day and seven-day terms", terms.periods)
 	}
+	if terms.items["RENT_ITEM_D1"] != 29411 || terms.items["RENT_ITEM_D7"] != 29405 {
+		t.Fatalf("items = %v, want the attachment and the hat", terms.items)
+	}
 	if !terms.windows["RENT_ITEM_WINDOW"] {
 		t.Fatalf("windows = %v, want RENT_ITEM_WINDOW", terms.windows)
 	}
-	for _, code := range []string{"RENT_ITEM_SHORT", "RENT_ITEM_BAD"} {
+	for _, code := range []string{"RENT_ITEM_SHORT", "RENT_ITEM_BAD", "RENT_ITEM_NO_ITEM"} {
 		if terms.periods[code] != 0 || terms.windows[code] {
 			t.Fatalf("%s resolved; want it skipped", code)
 		}
@@ -266,14 +276,20 @@ func TestRentTermsParse(t *testing.T) {
 TestRentTermStampsItsContent
 
 A rented scrap delivers with its refrentitem period on the content;
-a term with no row, and a fixed-window term, both fail hydration
-instead (a rental without a clock would ship permanently).
+a term with no row, a fixed-window term, and a term renting another
+item all fail hydration instead (a rental without a clock would ship
+permanently, and one whose row names another item sends a deadline the
+wire does not measure that item's rows for).
 ================
 */
 func TestRentTermStampsItsContent(t *testing.T) {
 	tier.Long(t, "a rented scrap resolves its refrentitem period")
 	dir := gamedatatest.TextdataDir(t)
 	items := enterworld.NewTextdataItems(dir)
+	rondo, ok := items.ItemRefByCodename("ITEM_ETC_ARCHEMY_RONDO_02")
+	if !ok || rondo == nil {
+		t.Fatal("fixture item ITEM_ETC_ARCHEMY_RONDO_02 missing from the shipped textdata")
+	}
 	for _, test := range []struct {
 		name    string
 		term    string
@@ -281,9 +297,11 @@ func TestRentTermStampsItsContent(t *testing.T) {
 		minutes uint32
 		refusal string
 	}{
-		{"daily", "RENT_ITEM_D1", parseRentTerms([][]string{rentTermRow("RENT_ITEM_D1", "1440")}), 1440, ""},
+		{"daily", "RENT_ITEM_D1", parseRentTerms([][]string{rentTermRow("RENT_ITEM_D1", rondo.RefObjID, "1440")}), 1440, ""},
 		{"no row", "RENT_ITEM_MISSING", parseRentTerms(nil), 0, "has no refrentitem row"},
-		{"window", "RENT_ITEM_WINDOW", parseRentTerms([][]string{rentTermRow("RENT_ITEM_WINDOW", "0")}), 0, "fixed window"},
+		{"window", "RENT_ITEM_WINDOW", parseRentTerms([][]string{rentTermRow("RENT_ITEM_WINDOW", rondo.RefObjID, "0")}), 0, "fixed window"},
+		// r204l: the row named the later client's id for the item.
+		{"another item", "RENT_ITEM_D1", parseRentTerms([][]string{rentTermRow("RENT_ITEM_D1", rondo.RefObjID+1, "1440")}), 0, "rents item"},
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			catalog, err := buildMallCatalog(rentScrapFixture(test.term))
