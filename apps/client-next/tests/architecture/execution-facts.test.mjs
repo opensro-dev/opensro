@@ -7,7 +7,8 @@ The execution graph's checker facts are cached per file and extracted in
 worker threads (tools/execution-facts.mjs). That is only sound when a
 file's facts do not depend on which other files one program was asked
 about, and when a file's key changes exactly when its type closure does.
-These tests hold both on a closed fixture project.
+These tests hold both on a closed fixture project, and that the shared
+store stays within its byte budget.
 
 ===========================================================================
 */
@@ -17,7 +18,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { executionFlow } from "../../tools/execution-flow.mjs";
-import { extractFacts, factKeys, readProject } from "../../tools/execution-facts.mjs";
+import { extractFacts, factKeys, pruneStore, readProject } from "../../tools/execution-facts.mjs";
 
 const TSCONFIG = {
 	compilerOptions: {
@@ -129,4 +130,28 @@ test("a global augmentation changes the key of a file that never imports it", ( 
 		"export {};\ndeclare global {\n\tvar sroFixture: string | undefined;\n}\n"
 	);
 	assert.notEqual( keyOf( "reader.ts" ), reader, "the augmentation's change reaches the reader's key" );
+});
+
+/*
+================
+the store evicts the least recently used entries past its byte budget
+
+Five 100-byte entries used one to five hours ago and a budget of 300
+bytes: this run's own entry (the oldest) stays, the two least recently
+used of the rest go, and the store ends at or under the budget. Only the
+age rule ran before the cap, so a week of edits reached 14.8 GB.
+================
+*/
+test("the store evicts the least recently used entries past its byte budget", ( t ) => {
+	const store = fs.mkdtempSync( path.join( os.tmpdir(), "facts-store-" ) );
+	t.after( () => fs.rmSync( store, { recursive: true, force: true } ) );
+	const hour = 3600000;
+	for ( let age = 1; age <= 5; age++ ) {
+		const file = path.join( store, `k${age}.json` );
+		fs.writeFileSync( file, "x".repeat( 100 ) );
+		const when = new Date( Date.now() - age * hour );
+		fs.utimesSync( file, when, when );
+	}
+	pruneStore( store, new Set( [ "k5" ] ), 300 );
+	assert.deepEqual( fs.readdirSync( store ).sort(), [ "k1.json", "k2.json", "k5.json" ] );
 });

@@ -53,6 +53,11 @@ const MAX_WORKERS = 6;
 const CHILD_FLAG = "--execution-facts-child";
 // Store entries no run has used for this long are pruned.
 const STALE_DAYS = 7;
+// The store's byte budget. One full set of the client's facts is about
+// 300 MB (2026-11-26: 920 sources), so this keeps six or seven distinct
+// sets; with only the age rule, a week of edits across worktrees reached
+// 46,000 entries and 14.8 GB.
+export const MAX_STORE_BYTES = 2 * 1024 ** 3;
 // A module that augments a global or another module (factKeys).
 const AUGMENTATION = /^\s*declare\s+(global\b|module\s+["'])/m;
 
@@ -423,8 +428,14 @@ The stored facts for a key, or null on a miss or an unreadable entry.
 */
 function readStored( store, key, file ) {
 	try {
-		const facts = JSON.parse( fs.readFileSync( path.join( store, `${key}.json` ), "utf8" ) );
-		return facts?.file === file ? facts : null;
+		const entry = path.join( store, `${key}.json` );
+		const facts = JSON.parse( fs.readFileSync( entry, "utf8" ) );
+		if ( facts?.file !== file ) return null;
+		// A hit is a use: the prune rules evict by last use, not first write,
+		// so an entry every run reads is the last one to go.
+		const now = new Date();
+		fs.utimesSync( entry, now, now );
+		return facts;
 	} catch {
 		return null;
 	}
@@ -454,17 +465,34 @@ function writeStored( store, key, facts ) {
 ================
 pruneStore
 
-Drops entries this run did not use and nothing has touched for
-STALE_DAYS. A cache, never an input: failures only warn.
+Drops entries this run did not use and nothing has used for STALE_DAYS,
+then, while the store still exceeds maxBytes, the least recently used of
+the rest. This run's entries always stay. A cache, never an input:
+failures only warn.
 ================
 */
-function pruneStore( store, used ) {
+export function pruneStore( store, used, maxBytes = MAX_STORE_BYTES ) {
 	try {
 		const cutoff = Date.now() - STALE_DAYS * 86400000;
+		const evictable = [];
+		let bytes = 0;
 		for ( const name of fs.readdirSync( store ) ) {
-			if ( !name.endsWith( ".json" ) || used.has( name.replace( /\.json$/, "" ) ) ) continue;
-			const file = path.join( store, name );
-			if ( fs.statSync( file ).mtimeMs < cutoff ) fs.rmSync( file, { force: true } );
+			if ( !name.endsWith( ".json" ) ) continue;
+			const file = path.join( store, name ), info = fs.statSync( file );
+			if ( used.has( name.replace( /\.json$/, "" ) ) ) {
+				bytes += info.size;
+			} else if ( info.mtimeMs < cutoff ) {
+				fs.rmSync( file, { force: true } );
+			} else {
+				evictable.push( { file, size: info.size, mtimeMs: info.mtimeMs } );
+				bytes += info.size;
+			}
+		}
+		evictable.sort( ( a, b ) => a.mtimeMs - b.mtimeMs );
+		for ( const entry of evictable ) {
+			if ( bytes <= maxBytes ) break;
+			fs.rmSync( entry.file, { force: true } );
+			bytes -= entry.size;
 		}
 	} catch ( error ) {
 		console.error( `execution facts: prune skipped (${error.message})` );
