@@ -359,6 +359,17 @@ export const LATER_UI_TEXT_COMPLETIONS = Object.freeze( {
 
 export function completeUiText( entries ) {
 	completeRestrictionText( entries );
+	// Product correction for a defective shipped English cell, not a
+	// claim of native output (#4512): the Option window's camera tab.
+	// The native routine at 0x5c9f19 resolves UIIT_CTL_MENU_CAMERASET
+	// into tab slot 2, and the v1.150 English cell ships "Set time"
+	// while the row's Korean (viewpoint settings), "Setting Sight"
+	// and "View" cells all name the camera page, so the retail
+	// English client shows the wrong tab name. Only the defective
+	// value is corrected; any other shipped value stands.
+	if ( entries.UIIT_CTL_MENU_CAMERASET === "Set time" ) {
+		entries.UIIT_CTL_MENU_CAMERASET = "Camera";
+	}
 	// Client 7508C0 requests this key, but v1.150 omits the entire row.
 	// Product completion uses the shipped Shaitan appearance/kill wording.
 	if ( !entries.UIIT_MSG_DEAD_TAHOMET?.trim() ) {
