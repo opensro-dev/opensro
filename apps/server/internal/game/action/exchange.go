@@ -272,8 +272,9 @@ Tradeable
 Whether an item may pass to another player: the exchange's rule, which
 the stall offers through and the market (game/market) applies to a
 listing too - the one owner of the decision. RefObjCommon CanTrade
-(token 16) must be set, a summoned pet stays with its owner, and two
-port-only seals refuse whatever the reference says.
+(token 16) must be set, a summoned pet stays with its owner, a pet
+carrying a bound row stays too, and two port-only seals refuse
+whatever the reference says.
 
 Port-only (#4133): an Item Mall item paid for wholly with earned Silk
 carries its tradability on the instance (earnedBought), because every
@@ -289,6 +290,16 @@ func (rt *Runtime) Tradeable(codename string, forgeBound bool, earnedBought bool
 		return false
 	}
 	if summon != nil && summon.Summoned {
+		return false
+	}
+	// Port-only (#4491; the guild warehouse's rule in #4479): a pet
+	// changes hands with everything it carries, so it passes only when
+	// every carried row would pass on its own - a forged-bound row, a
+	// record-bound mall row (#4217) and a sealed helmet alike. The
+	// summoned refusal above leaves only the dormant record to judge,
+	// and it is the record every door holds: the table and the stall
+	// read the bag row, the market reads the stored row.
+	if summon != nil && !rt.carriedRowsTradeable(summon.Container) {
 		return false
 	}
 	items := rt.deps.ItemReferences()
@@ -307,6 +318,52 @@ func (rt *Runtime) Tradeable(codename string, forgeBound bool, earnedBought bool
 	// Port-only, not native (halloween.go): a sealed event helmet never
 	// reaches the table either, however tradeable its row is.
 	return !rt.HalloweenHelmetSeal.Sealed(codename)
+}
+
+/*
+================
+carriedRowsTradeable
+
+Whether every row a pet carries would pass Tradeable on its own. The
+one trade judgment applies to the load too, so no door keeps a second
+list of what may not change hands.
+================
+*/
+func (rt *Runtime) carriedRowsTradeable(container *domain.COSContainer) bool {
+	if container == nil {
+		return true
+	}
+	for _, held := range container.Rows {
+		if !rt.Tradeable(held.Codename, held.ForgeBound, held.EarnedBought, held.Summon) {
+			return false
+		}
+	}
+	return true
+}
+
+/*
+================
+cosContainerHoldsBoundRow
+
+Whether one COS container holds a bound row (the forge's mark,
+#1980). The doors judge a summoner row by what its pet carries as
+well as by its own mark - at the guild warehouse (#4479) and at the
+trade doors above (#4491) - because a bound row inside a pet changes
+hands with the pet unless the summoner row itself is refused.
+The guild warehouse door reads this same scan over a row's dormant
+record and its live companion together.
+================
+*/
+func cosContainerHoldsBoundRow(container *domain.COSContainer) bool {
+	if container == nil {
+		return false
+	}
+	for _, held := range container.Rows {
+		if held.ForgeBound {
+			return true
+		}
+	}
+	return false
 }
 
 /*
