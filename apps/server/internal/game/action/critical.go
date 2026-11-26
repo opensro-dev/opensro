@@ -96,8 +96,16 @@ func (rt *Runtime) resolveCombatRequest(request combatRequest) (combat.WallOutco
 	actor.character = strings.ToLower(actor.character)
 	key := skill.ID & 0xffffff // key is 0x43000000 | skill ID.
 	previous := rt.criticals.actors[actor][key]
+	// A player swinging a fortress weapon (worn weapon kind TID4 16) is
+	// the hit-outcome routine's fortress hit group: no critical is
+	// rolled for it and its damage never touches the lanes (the
+	// fortress branch below).
+	fortressArmed := false
+	if actor.monster == 0 && actor.character != "" {
+		fortressArmed = rt.fortressArmed(actor.division, actor.character)
+	}
 	critical, next := false, previous
-	if request.lanes&4 != 0 {
+	if request.lanes&4 != 0 && !fortressArmed {
 		rate, err := combat.EffectiveCriticalRate(attacker.CriticalRate, skill.CriticalModifier)
 		if err != nil {
 			return combat.WallOutcome{}, err
@@ -112,7 +120,7 @@ func (rt *Runtime) resolveCombatRequest(request combatRequest) (combat.WallOutco
 	// In the reference server's hit-outcome routine, MATTR_AVATAR_MDIA rolls
 	// after critical and before the damage lanes so the random stream order matches.
 	ignoreDefense := false
-	if actor.monster == 0 {
+	if actor.monster == 0 && !fortressArmed {
 		if chance := combat.IgnoreDefenseChance(attacker, defender); chance > 0 {
 			mdiaKey := ignoreDefenseProbabilityPrefix | skill.ID&0xffffff
 			procced, mdiaNext, err := combat.CriticalOutcome(chance, rt.criticals.actors[actor][mdiaKey], rt.CombatRoll)
@@ -122,6 +130,48 @@ func (rt *Runtime) resolveCombatRequest(request combatRequest) (combat.WallOutco
 			rt.rememberProbability(actor, mdiaKey, mdiaNext)
 			ignoreDefense = procced
 		}
+	}
+	// rollBlock rolls the target's block chance on the attacker's history
+	// (key 0x42000000 | skill); the caller decides what a blocked record
+	// drops.
+	rollBlock := func() (bool, error) {
+		chance := combat.BlockChance(attacker, defender, skill.Attack.Flags, skill.Ck)
+		blockKey := 0x42000000 | skill.ID&0xffffff
+		blocked, blockNext, err := combat.CriticalOutcome(float64(chance), rt.criticals.actors[actor][blockKey], rt.CombatRoll)
+		if err != nil {
+			return false, err
+		}
+		rt.rememberProbability(actor, blockKey, blockNext)
+		return blocked, nil
+	}
+
+	if fortressArmed {
+		// The block roll comes first, as for any hit; a blocked
+		// fortress hit is a bare type-2 record and consumes no damage
+		// draw. Against an ordinary target the hit deals exactly 1;
+		// against a fortress structure it deals the attack-power draw
+		// (combat.FortressDamage). The hit has no lanes, so a standing
+		// wall never splits it and its lane accumulators stay zero.
+		blocked := false
+		if skill.Attack.Present {
+			var blockErr error
+			blocked, blockErr = rollBlock()
+			if blockErr != nil {
+				return combat.WallOutcome{}, blockErr
+			}
+		}
+		if blocked {
+			return combat.WallOutcome{Defender: combat.Result{ResultFlags: 1, Blocked: true}}, nil
+		}
+		damage := uint32(1)
+		if defender.Structure {
+			var damageErr error
+			damage, damageErr = combat.FortressDamage(attacker, rt.CombatRoll)
+			if damageErr != nil {
+				return combat.WallOutcome{}, damageErr
+			}
+		}
+		return combat.WallOutcome{Defender: combat.Result{Damage: damage, ResultFlags: 1}}, nil
 	}
 	var out combat.WallOutcome
 	var err error
@@ -141,13 +191,10 @@ func (rt *Runtime) resolveCombatRequest(request combatRequest) (combat.WallOutco
 	// skill rolls the target's block chance on the attacker's history
 	// (key 0x42000000 | skill); a block drops the defender's damage.
 	if skill.Attack.Present {
-		chance := combat.BlockChance(attacker, defender, skill.Attack.Flags, skill.Ck)
-		blockKey := 0x42000000 | skill.ID&0xffffff
-		blocked, blockNext, err := combat.CriticalOutcome(float64(chance), rt.criticals.actors[actor][blockKey], rt.CombatRoll)
-		if err != nil {
-			return combat.WallOutcome{}, err
+		blocked, blockErr := rollBlock()
+		if blockErr != nil {
+			return combat.WallOutcome{}, blockErr
 		}
-		rt.rememberProbability(actor, blockKey, blockNext)
 		if blocked {
 			out.Defender = combat.Result{ResultFlags: out.Defender.ResultFlags, Blocked: true}
 		} else if skill.CkChance != 0 {
@@ -168,6 +215,23 @@ func (rt *Runtime) resolveCombatRequest(request combatRequest) (combat.WallOutco
 	}
 	rt.rememberProbability(actor, key, next)
 	return out, nil
+}
+
+/*
+================
+fortressArmed
+
+Whether the named player character's worn weapon (slot 6) is a fortress
+weapon: the packed type word's kind bits (TID4 << 11) read 16. A broken
+or missing weapon reads 0, as the server's equipped-item TID read does.
+================
+*/
+func (rt *Runtime) fortressArmed(division, name string) bool {
+	c := rt.findCharacter(division, name)
+	if c == nil {
+		return false
+	}
+	return combat.ReqiEquipment{C: c, Items: rt.statCatalogs().Items}.WeaponTID(6)&0xf800 == 0x8000
 }
 
 /*

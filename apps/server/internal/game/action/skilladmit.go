@@ -355,7 +355,7 @@ func skillEquipmentRefusal(c *enterworld.Character, items enterworld.ItemRefSour
 		code = 0x300d
 	case tid4 == 0x10:
 		// The fortress siege check runs at every cast: the worn
-		// weapon's role mask (its Param5 low byte) must share a bit
+		// weapon's role mask (media column 124) must share a bit
 		// with the caster's fortress-guild role. Without a member
 		// record the role reads 0 and shares nothing, so a guild-less
 		// or role-less caster is refused like a mismatched one.
