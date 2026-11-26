@@ -222,6 +222,7 @@ test("the hire window's page follows the filter and never runs past the list", a
 test("the hire window draws a control only for the rows a click can take", async () => {
 	const { createCaravanHireHud } = await hireHud();
 	const { drawCaravanHire } = await hireWindow();
+	/** @type {{ quads: any[], controls: any[], blocks: any[], paths: string[], [key: string]: any }} */
 	const frame = {
 		quads: [],
 		controls: [],
@@ -235,6 +236,7 @@ test("the hire window draws a control only for the rows a click can take", async
 		resources: { size: () => [ 16, 16 ] },
 		text: { quads: value => [ { value } ] }
 	};
+	/** @type {any[]} */
 	const buttons = [];
 	const paint = {
 		beginWindow: () => [ 0, 0, 0, 0 ],

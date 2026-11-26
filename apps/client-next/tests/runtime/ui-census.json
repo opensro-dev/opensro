@@ -751,6 +751,10 @@
 					"reads": 2,
 					"writes": 0
 				},
+				"caravanLeadBadge": {
+					"reads": 1,
+					"writes": 0
+				},
 				"createUi": {
 					"reads": 1,
 					"writes": 0
@@ -872,7 +876,7 @@
 					"writes": 0
 				},
 				"step": {
-					"reads": 53,
+					"reads": 54,
 					"writes": 49
 				},
 				"step#anon36": {
@@ -883,15 +887,15 @@
 					"reads": 1,
 					"writes": 0
 				},
-				"step#anon53": {
-					"reads": 1,
-					"writes": 0
-				},
 				"step#anon54": {
 					"reads": 1,
 					"writes": 0
 				},
-				"step#anon61": {
+				"step#anon55": {
+					"reads": 1,
+					"writes": 0
+				},
+				"step#anon62": {
 					"reads": 1,
 					"writes": 0
 				}
@@ -1021,7 +1025,7 @@
 					"reads": 6,
 					"writes": 3
 				},
-				"step#anon44": {
+				"step#anon45": {
 					"reads": 1,
 					"writes": 0
 				}
@@ -1201,7 +1205,7 @@
 					"reads": 1,
 					"writes": 1
 				},
-				"step#anon44": {
+				"step#anon45": {
 					"reads": 1,
 					"writes": 0
 				}
@@ -1237,7 +1241,7 @@
 					"reads": 3,
 					"writes": 1
 				},
-				"step#anon44": {
+				"step#anon45": {
 					"reads": 1,
 					"writes": 0
 				}
@@ -1255,7 +1259,7 @@
 					"reads": 1,
 					"writes": 1
 				},
-				"step#anon44": {
+				"step#anon45": {
 					"reads": 1,
 					"writes": 0
 				}
@@ -1319,7 +1323,7 @@
 					"reads": 1,
 					"writes": 1
 				},
-				"step#anon44": {
+				"step#anon45": {
 					"reads": 1,
 					"writes": 0
 				}
@@ -1449,7 +1453,7 @@
 					"reads": 1,
 					"writes": 8
 				},
-				"step#anon44": {
+				"step#anon45": {
 					"reads": 1,
 					"writes": 0
 				},
@@ -1691,6 +1695,10 @@
 				},
 				"avatar": {
 					"reads": 2,
+					"writes": 0
+				},
+				"caravanLeadBadge": {
+					"reads": 1,
 					"writes": 0
 				},
 				"chat": {
@@ -1943,25 +1951,25 @@
 				},
 				"step": {
 					"reads": 98,
-					"writes": 61
+					"writes": 62
 				},
-				"step#anon142": {
+				"step#anon143": {
 					"reads": 1,
 					"writes": 0
 				},
-				"step#anon301": {
+				"step#anon302": {
 					"reads": 1,
 					"writes": 0
 				},
-				"step#anon337": {
+				"step#anon338": {
 					"reads": 1,
 					"writes": 0
 				},
-				"step#anon342": {
+				"step#anon343": {
 					"reads": 1,
 					"writes": 0
 				},
-				"step#anon354": {
+				"step#anon355": {
 					"reads": 1,
 					"writes": 0
 				},
@@ -1969,11 +1977,7 @@
 					"reads": 3,
 					"writes": 0
 				},
-				"step#anon396": {
-					"reads": 1,
-					"writes": 0
-				},
-				"step#anon399": {
+				"step#anon397": {
 					"reads": 1,
 					"writes": 0
 				},
@@ -1981,11 +1985,11 @@
 					"reads": 1,
 					"writes": 0
 				},
-				"step#anon441": {
+				"step#anon401": {
 					"reads": 1,
 					"writes": 0
 				},
-				"step#anon59": {
+				"step#anon442": {
 					"reads": 1,
 					"writes": 0
 				},
@@ -1994,6 +1998,10 @@
 					"writes": 0
 				},
 				"step#anon61": {
+					"reads": 1,
+					"writes": 0
+				},
+				"step#anon62": {
 					"reads": 4,
 					"writes": 0
 				},
@@ -2385,7 +2393,7 @@
 				},
 				"activate": {
 					"reads": 0,
-					"writes": 5
+					"writes": 6
 				},
 				"activateMarket": {
 					"reads": 0,
@@ -3241,7 +3249,7 @@
 					"reads": 1,
 					"writes": 1
 				},
-				"step#anon44": {
+				"step#anon45": {
 					"reads": 1,
 					"writes": 0
 				},
@@ -4043,7 +4051,7 @@
 					"reads": 2,
 					"writes": 1
 				},
-				"step#anon53": {
+				"step#anon54": {
 					"reads": 1,
 					"writes": 0
 				}
@@ -4053,6 +4061,10 @@
 		},
 		{
 			"buckets": {
+				"caravanLeadBadge": {
+					"reads": 1,
+					"writes": 0
+				},
 				"disconnect": {
 					"reads": 0,
 					"writes": 1
@@ -4141,15 +4153,15 @@
 					"reads": 19,
 					"writes": 2
 				},
-				"step#anon426": {
+				"step#anon427": {
 					"reads": 1,
 					"writes": 0
 				},
-				"step#anon44": {
+				"step#anon45": {
 					"reads": 1,
 					"writes": 0
 				},
-				"step#anon46": {
+				"step#anon47": {
 					"reads": 1,
 					"writes": 0
 				},
@@ -4815,7 +4827,7 @@
 					"reads": 1,
 					"writes": 0
 				},
-				"step#anon242": {
+				"step#anon243": {
 					"reads": 1,
 					"writes": 0
 				},
@@ -4823,7 +4835,7 @@
 					"reads": 2,
 					"writes": 0
 				},
-				"step#anon46": {
+				"step#anon47": {
 					"reads": 1,
 					"writes": 0
 				},
@@ -5095,7 +5107,7 @@
 					"reads": 5,
 					"writes": 0
 				},
-				"step#anon301": {
+				"step#anon302": {
 					"reads": 1,
 					"writes": 0
 				}
@@ -5405,6 +5417,10 @@
 					"reads": 1,
 					"writes": 0
 				},
+				"caravanLeadBadge": {
+					"reads": 1,
+					"writes": 0
+				},
 				"createUi": {
 					"reads": 1,
 					"writes": 0
@@ -5581,7 +5597,7 @@
 					"reads": 113,
 					"writes": 2
 				},
-				"step#anon142": {
+				"step#anon143": {
 					"reads": 1,
 					"writes": 0
 				},
@@ -5593,15 +5609,15 @@
 					"reads": 3,
 					"writes": 0
 				},
-				"step#anon53": {
-					"reads": 2,
-					"writes": 0
-				},
 				"step#anon54": {
 					"reads": 2,
 					"writes": 0
 				},
-				"step#anon60": {
+				"step#anon55": {
+					"reads": 2,
+					"writes": 0
+				},
+				"step#anon61": {
 					"reads": 1,
 					"writes": 0
 				},
@@ -5993,11 +6009,11 @@
 					"reads": 17,
 					"writes": 1
 				},
-				"step#anon44": {
+				"step#anon45": {
 					"reads": 1,
 					"writes": 0
 				},
-				"step#anon46": {
+				"step#anon47": {
 					"reads": 1,
 					"writes": 0
 				},
@@ -6075,7 +6091,7 @@
 					"reads": 4,
 					"writes": 2
 				},
-				"step#anon142": {
+				"step#anon143": {
 					"reads": 1,
 					"writes": 0
 				}
@@ -6285,7 +6301,7 @@
 					"reads": 7,
 					"writes": 4
 				},
-				"step#anon142": {
+				"step#anon143": {
 					"reads": 1,
 					"writes": 0
 				}
@@ -6399,7 +6415,7 @@
 					"reads": 2,
 					"writes": 1
 				},
-				"step#anon140": {
+				"step#anon141": {
 					"reads": 1,
 					"writes": 0
 				}
@@ -6521,7 +6537,7 @@
 					"reads": 6,
 					"writes": 0
 				},
-				"step#anon44": {
+				"step#anon45": {
 					"reads": 2,
 					"writes": 0
 				},
@@ -7251,7 +7267,7 @@
 					"reads": 2,
 					"writes": 1
 				},
-				"step#anon46": {
+				"step#anon47": {
 					"reads": 1,
 					"writes": 0
 				}
@@ -7269,7 +7285,7 @@
 					"reads": 2,
 					"writes": 1
 				},
-				"step#anon46": {
+				"step#anon47": {
 					"reads": 2,
 					"writes": 0
 				}
@@ -7542,7 +7558,7 @@
 					"writes": 0
 				},
 				"activate": {
-					"reads": 2,
+					"reads": 3,
 					"writes": 0
 				},
 				"activateMarket": {
@@ -7598,6 +7614,10 @@
 					"writes": 0
 				},
 				"canLeavePanel": {
+					"reads": 1,
+					"writes": 0
+				},
+				"caravan": {
 					"reads": 1,
 					"writes": 0
 				},
@@ -9655,6 +9675,12 @@
 			"fn": "activate",
 			"kind": "exact",
 			"ordinal": 1,
+			"pattern": "npc-caravan-hire"
+		},
+		{
+			"fn": "activate",
+			"kind": "exact",
+			"ordinal": 1,
 			"pattern": "npc-close"
 		},
 		{
@@ -11018,6 +11044,12 @@
 			"kind": "prefix",
 			"ordinal": 1,
 			"pattern": "blocking-tab:"
+		},
+		{
+			"fn": "activate",
+			"kind": "prefix",
+			"ordinal": 1,
+			"pattern": "caravan-lead:"
 		},
 		{
 			"fn": "activate",
@@ -13249,7 +13281,7 @@
 	"source": "src/engine/runtime/ui/ui.ts",
 	"summary": {
 		"fields": 309,
-		"routes": 860,
+		"routes": 862,
 		"sharedFields": 252
 	}
 }

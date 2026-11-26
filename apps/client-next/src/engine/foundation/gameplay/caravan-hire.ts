@@ -64,10 +64,18 @@ export interface CaravanLead {
 	readonly candidates: readonly { readonly name: string; readonly display: string; }[];
 }
 
-const text = ( v: unknown, max: number ): string => {
+/*
+================
+text
+
+One string field of a hire frame, refused when it is missing or longer
+than max: a malformed frame is a protocol error, never a partial window.
+================
+*/
+function text( v: unknown, max: number ): string {
 	if ( typeof v !== "string" || v.length > max ) throw new Error( "Invalid caravan hire" );
 	return v;
-};
+}
 
 /*
 ================
