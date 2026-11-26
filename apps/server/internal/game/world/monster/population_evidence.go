@@ -41,6 +41,10 @@ type populationEvidence struct {
 	Champion    ChampionTactics
 	// InitialDir is Tab_RefNest.wInitialDir (runtime nest +1C).
 	InitialDir uint16
+	// SpawnType is Tab_RefNest.btType, the nest's authored spawn kind:
+	// kind 1 arms the hatch's party-monster roll. The ISRO-R supplement
+	// predates this column and reads as kind 0.
+	SpawnType int
 }
 
 type populationEvidenceKey struct {
@@ -125,8 +129,8 @@ func mustLoadPopulationEvidence(input string) map[populationEvidenceKey]populati
 			continue
 		}
 		columns := strings.Split(line, "\t")
-		if len(columns) != 22 {
-			panic(fmt.Sprintf("monster evidence line %d: got %d columns, want 22", lineNumber+1, len(columns)))
+		if len(columns) != 22 && len(columns) != 23 {
+			panic(fmt.Sprintf("monster evidence line %d: got %d columns, want 22 or 23", lineNumber+1, len(columns)))
 		}
 
 		region := mustEvidenceUint(columns[1], 16, lineNumber)
@@ -154,11 +158,15 @@ func mustLoadPopulationEvidence(input string) map[populationEvidenceKey]populati
 			},
 			InitialDir: uint16(mustEvidenceUint(columns[21], 16, lineNumber)),
 		}
+		if len(columns) == 23 {
+			row.SpawnType = mustEvidenceInt(columns[22], lineNumber)
+		}
 		if row.Radius < 0 || row.GenerateRadius < 0 ||
 			row.RespawnDelayMinSec < 0 ||
 			row.RespawnDelayMaxSec < row.RespawnDelayMinSec ||
 			row.ChampionGenPercentage < 0 || row.ChampionGenPercentage > 100 ||
 			row.MaxCount < 0 || row.SightRange < 0 || row.Champion.SightRange < 0 ||
+			row.SpawnType < 0 || row.SpawnType > 255 ||
 			!row.HasChampion && row.Champion != (ChampionTactics{}) {
 			panic(fmt.Sprintf("monster evidence line %d: value outside contract", lineNumber+1))
 		}
