@@ -9,7 +9,7 @@ in the escort-day ledger); the gold moves here, through the character's
 own mutation door, so the store's economy ledger records each change
 under its door (domain.economyDoorReasons: caravan-hire, caravan-escort,
 caravan-hire-payout). Every door refuses a character pending deletion
-and a balance it would carry past wire.MaxGold, and changes nothing then;
+and a balance it would carry past caravanPurseMax, and changes nothing then;
 only the hire payout, the player's own gold, then fills the purse to the
 cap.
 
@@ -18,11 +18,18 @@ cap.
 package main
 
 import (
+	"math"
+
 	log "github.com/sirupsen/logrus"
 	"opensro.online/server/internal/domain"
 	"opensro.online/server/internal/game/enterworld"
 	"opensro.online/server/internal/game/item/wire"
 )
+
+// caravanPurseMax bounds a character's balance: the int64 gold field's
+// range, as inventory.PickupGold saturates. wire.MaxGold is the native
+// ceiling on one gold move (100,000,000), not on what a purse holds.
+const caravanPurseMax int64 = math.MaxInt64
 
 /*
 ================
@@ -30,7 +37,7 @@ caravanGoldDoor
 
 Moves amount (signed) through door when allowed holds under the door.
 false when the character is unknown, runtime-only or pending deletion,
-when allowed refuses, or when the balance would leave [0, MaxGold]. An
+when allowed refuses, or when the balance would leave [0, caravanPurseMax]. An
 online character is pushed its new balance.
 ================
 */
@@ -47,7 +54,7 @@ func (game *gameplayPlane) caravanGoldDoor(division, name, door string, amount i
 		if c.Gold != nil {
 			balance = *c.Gold
 		}
-		if balance < 0 || (amount > 0 && balance > int64(wire.MaxGold)-amount) || (amount < 0 && balance < -amount) {
+		if balance < 0 || (amount > 0 && balance > caravanPurseMax-amount) || (amount < 0 && balance < -amount) {
 			return false
 		}
 		balance += amount
@@ -83,7 +90,7 @@ caravanHirePayout
 
 A hired Trader's sale or returned goods cost, or a refused hire's fee:
 the player's own gold coming back, so no daily cap. When the purse cannot
-hold all of it, it is filled to wire.MaxGold and only the excess is lost,
+hold all of it, it is filled to caravanPurseMax and only the excess is lost,
 logged with its amount (the goods are already sold, so there is nothing
 to refuse); the door re-checks the bound, so a balance that moved
 meanwhile refuses the fill instead of passing the cap.
@@ -96,7 +103,7 @@ func (game *gameplayPlane) caravanHirePayout(division, player string, gold int64
 	if game.caravanGoldDoor(division, player, "caravan-hire-payout", gold, nil) {
 		return true
 	}
-	room := int64(wire.MaxGold) - game.caravanGold(division, player)
+	room := caravanPurseMax - game.caravanGold(division, player)
 	if room > 0 && room < gold && game.caravanGoldDoor(division, player, "caravan-hire-payout", room, nil) {
 		log.WithFields(log.Fields{"player": player, "gold": gold, "lost": gold - room}).Warn("caravan hire payout filled the purse to its cap; the excess is lost")
 		return true
