@@ -37,10 +37,11 @@ test("the smallest-stack row maps to the gameplay slice and defaults off (#4527)
 });
 
 test("an entry with the row on declares it once the world is ready, and only then", () => {
-	const sent = [], g = createGameplay( f => sent.push( f ) );
+	const sent = /** @type {{ opcode: number, payload: Uint8Array }[]} */ ([]),
+		g = createGameplay( f => sent.push( f ) );
 	g.bootstrap( {} );
 	g.experimental( slice( true ) );
-	assert.deepEqual( sent, [], "nothing rides the wire before the world is ready" );
+	assert.equal( sent.length, 0, "nothing rides the wire before the world is ready" );
 	g.worldReady();
 	assert.deepEqual(
 		sent.map( f => [ f.opcode, ...f.payload ] ),
@@ -51,7 +52,8 @@ test("an entry with the row on declares it once the world is ready, and only the
 });
 
 test("a row that stays off never puts a byte on the wire", () => {
-	const sent = [], g = createGameplay( f => sent.push( f ) );
+	const sent = /** @type {{ opcode: number, payload: Uint8Array }[]} */ ([]),
+		g = createGameplay( f => sent.push( f ) );
 	g.bootstrap( {} );
 	g.experimental( slice( false ) );
 	g.worldReady();
@@ -62,7 +64,8 @@ test("a row that stays off never puts a byte on the wire", () => {
 });
 
 test("toggling the row under a live world declares each change once", () => {
-	const sent = [], g = createGameplay( f => sent.push( f ) );
+	const sent = /** @type {{ opcode: number, payload: Uint8Array }[]} */ ([]),
+		g = createGameplay( f => sent.push( f ) );
 	g.bootstrap( {} );
 	g.experimental( slice( false ) );
 	g.worldReady();
@@ -78,7 +81,8 @@ test("toggling the row under a live world declares each change once", () => {
 });
 
 test("a later entry with the row on declares again (#4527)", () => {
-	const sent = [], g = createGameplay( f => sent.push( f ) );
+	const sent = /** @type {{ opcode: number, payload: Uint8Array }[]} */ ([]),
+		g = createGameplay( f => sent.push( f ) );
 	g.bootstrap( {} );
 	g.experimental( slice( true ) );
 	g.worldReady();
