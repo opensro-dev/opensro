@@ -431,30 +431,56 @@ func EncodePartyBroken3E58() []byte {
 // VitalStatusNibbles packs the wire status byte: hp tenths low, mp
 // tenths high, against the client insert's 0xa/0xa denominators
 // (CPSMission_OnPartyInfoUpdate0x35D6; the client's type-6 unpack
-// (id, s & 0xf, 0xa, s >> 4, 0xa)). The tenths derivation is SERVER
-// policy (the wire
-// pins only the packing): rounded to nearest with a floor of 1 for any
-// living vital so a member never renders an empty gauge while alive.
+// (id, s & 0xf, 0xa, s >> 4, 0xa)). The tenths derivation is the
+// reference server's own: the HP nibble runs one step ahead of the
+// MP nibble, so the party gauge reads full from nine tenths up.
 func VitalStatusNibbles(currentHP, maxHP, currentMP, maxMP int64) uint8 {
-	return vitalTenths(currentMP, maxMP)<<4 | vitalTenths(currentHP, maxHP)
+	return mpTenths(currentMP, maxMP)<<4 | hpTenths(currentHP, maxHP)
 }
 
-// vitalTenths maps one vital pair onto 0..10.
-func vitalTenths(current, max int64) uint8 {
+/*
+================
+hpTenths
+
+The HP nibble: 0 for the dead, else 1 + the whole tenths of the
+remaining fraction - 1..11, reaching the client's full at nine
+tenths. The fraction is taken in float32 first, as the reference
+server's does, so an exact-tenth boundary rounds the way its does.
+A maximum of zero has no native reading (it divides by it); the
+nibble reads empty. A current above the maximum (a stale keeper
+row) reads as full, as the exact-maximum case does.
+================
+*/
+func hpTenths(current, max int64) uint8 {
 	if max <= 0 || current <= 0 {
 		return 0
 	}
-	if current >= max {
-		return 10
+	if current > max {
+		current = max
 	}
-	tenths := (current*10 + max/2) / max
-	if tenths < 1 {
-		tenths = 1
+	ratio := float64(float32(current) / float32(max))
+	return uint8(1 - int64(ratio*-10.0))
+}
+
+/*
+================
+mpTenths
+
+The MP nibble: the whole tenths of the remaining fraction, 0..10,
+with no living floor - a member at almost no MP shows the empty
+gauge. The fraction is taken in float32 first, as the reference
+server's does. A maximum of zero reads empty, as in hpTenths.
+================
+*/
+func mpTenths(current, max int64) uint8 {
+	if max <= 0 || current <= 0 {
+		return 0
 	}
-	if tenths > 10 {
-		tenths = 10
+	if current > max {
+		current = max
 	}
-	return uint8(tenths)
+	ratio := float64(float32(current) / float32(max))
+	return uint8(int64(ratio * 10.0))
 }
 
 // writeSizedString appends the native sized-ANSI layout: u16 byte

@@ -111,7 +111,8 @@ const SHARED_ENVIRONMENT_FIELDS = [
 	"canvas",
 	"network",
 	"replay",
-	"gpu"
+	"gpu",
+	"previousPage"
 ] as const;
 const SHARED_MOVEMENT_FIELDS = [
 	"version",
@@ -320,7 +321,13 @@ const TECHNICAL_FIELDS = new Set( [
 	"worldSequence",
 	"walkSpeed",
 	"runSpeed",
-	"animationRate"
+	"animationRate",
+	// The previous page's death certificate (#4545, page-lifetime.ts).
+	"died",
+	"uptimeS",
+	"lastEntities",
+	"lastPhase",
+	"secondsSinceLastBeat"
 ] );
 const TECHNICAL_STRINGS: Readonly<Record<string, readonly string[]>> = {
 	kind: [
@@ -349,6 +356,22 @@ const TECHNICAL_STRINGS: Readonly<Record<string, readonly string[]>> = {
 	reason: [ "spawn", "input", "correction", "receipt", "native", "cast", "displacement", "death", "clear" ],
 	source: [ "native", "receipt", "server", "prediction", "cast", "pickup", "native-stop", "native-source" ],
 	phase: [ "starting", "title", "connecting", "login", "character", "loading-world", "world", "disconnected" ],
+	// The dead page's last session phase (#4545): the session contract's
+	// vocabulary (contracts/session.ts), not the journal sample's above.
+	lastPhase: [
+		"signed-out",
+		"listing-servers",
+		"loading-roster",
+		"authenticating",
+		"character-select",
+		"failed",
+		"connecting",
+		"entering-world",
+		"world",
+		"reconnecting",
+		"disconnected",
+		"unknown"
+	],
 	targetKind: [ "player", "monster", "npc", "item", "pet" ],
 	type: [ "slow-2g", "2g", "3g", "4g" ],
 	key: [

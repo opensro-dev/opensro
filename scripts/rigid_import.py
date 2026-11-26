@@ -275,15 +275,9 @@ def add_rigid(native, out, env=os.environ):
 # already, so only the kinds' rows join.
 # ================
 def add_presentation(output, read, refs, kinds, prior):
-	text_root = output / later_world_import.TEXT_ROOT
-	later = {row[2]: row[2:] for row in winter.later_text_table_rows(read, "characterinfo.txt")
-		if len(row) >= characters.SKILL_EFFECT_COLUMNS + 2 and row[0] in ("0", "1")}
-	effect_path = text_root / "skilleffect.txt"
-	effect_text = tables.decode_table(effect_path.read_bytes())
-	known = cap110.characterinfo_codenames(effect_text) | set(kinds.get("characterInfo", []))
-	info = [later[code][:characters.SKILL_EFFECT_KEPT] for code in sorted(refs) if code in later and code not in known]
-	write_atomically(effect_path, characters.skill_effect_section(effect_path.read_bytes(), info))
-	return {"characterInfo": sorted(set(kinds.get("characterInfo", [])) | {row[0] for row in info})}
+	staged = kinds.get("characterInfo", [])
+	joined = winter.add_characterinfo(output, winter.later_characterinfo(read), refs, staged)
+	return {"characterInfo": sorted(set(staged) | set(joined))}
 
 
 # ================
