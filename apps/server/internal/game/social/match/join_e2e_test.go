@@ -219,7 +219,7 @@ func joinAnswer(requestID, entryID uint32, answer uint8) []byte {
 
 // chinaRow is the expected masked member row for this suite's fresh
 // China-male seeds (the party e2e's chinaMaleRow with the level
-// parameterized): model 1907 fallback, full vitals 0xAA, the China
+// parameterized): model 1907 fallback, full vitals 0xAB, the China
 // start profile spawn.
 /*
 ================
@@ -232,7 +232,7 @@ func chinaRow(gid uint32, name string, level uint8) party.MemberRow {
 		Name:          name,
 		ModelRefID:    1907,
 		Level:         level,
-		StatusNibbles: 0xAA,
+		StatusNibbles: 0xAB,
 		Region:        0x62A8,
 		PosX:          960,
 		PosY:          20,
