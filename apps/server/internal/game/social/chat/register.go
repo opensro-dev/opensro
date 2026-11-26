@@ -96,6 +96,19 @@ func (rt *Runtime) chatHubHandler(hub *transport.Hub, deps Dependencies, presenc
 				}
 			}
 		}
+		if rt.CaravanCommand != nil {
+			if request, err := DecodeChatRequestWithLinks(payload); err == nil {
+				if answer, handled := rt.CaravanCommand(divisionID, character.Name, character.Job.Type, request.Message); handled {
+					_ = s.Send(OpChatAck, EncodeChatAckSuccess(request.ChatType, request.Second))
+					for _, line := range strings.Split(answer, "\n") {
+						if trimmed := strings.TrimSpace(line); trimmed != "" {
+							_ = s.Send(OpChatBroadcast, EncodeChatNotice(trimmed))
+						}
+					}
+					return
+				}
+			}
+		}
 		// Port-only, not native (#3682): a /plusfail line sets whether
 		// the speaker's failed high-plus reinforcements are announced
 		// and is consumed the same way. With no setter wired the line
@@ -119,27 +132,6 @@ func (rt *Runtime) chatHubHandler(hub *transport.Hub, deps Dependencies, presenc
 				if answer, handled := rt.Reports.File(reporter, request.Message); handled {
 					_ = s.Send(OpChatAck, EncodeChatAckSuccess(request.ChatType, request.Second))
 					_ = s.Send(OpChatBroadcast, EncodeChatNotice(answer))
-					return
-				}
-			}
-		}
-		// Port-only, not native (#3704 slice 4): a caravan command line
-		// (!accept/!hire/!memory) the AI caravan runtime claims is
-		// consumed the same way: the speaker gets the success ack and
-		// the agent's whispered answer (a notice when no agent
-		// answers, silence at the rate limit), and nothing reaches
-		// the room, the transcript or the feed. With no runtime wired
-		// the lines fall through as ordinary chat.
-		if rt.CaravanCommands != nil {
-			if request, err := DecodeChatRequestWithLinks(payload); err == nil && request.ChatType == ChatTypeAll {
-				if speaker, reply, handled := rt.CaravanCommands(divisionID, character, request.Message); handled {
-					_ = s.Send(OpChatAck, EncodeChatAckSuccess(request.ChatType, request.Second))
-					switch {
-					case speaker != "" && reply != "":
-						_ = s.Send(OpChatBroadcast, EncodeChatBroadcastNamed(ChatTypeWhisper, speaker, reply))
-					case reply != "":
-						_ = s.Send(OpChatBroadcast, EncodeChatNotice(reply))
-					}
 					return
 				}
 			}

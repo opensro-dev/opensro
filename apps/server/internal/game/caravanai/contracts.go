@@ -3,19 +3,22 @@
 
 contracts.go - Two-way Mercenary Escort Contracts (port-only)
 
-Manages two-way mercenary contracts between players and AI caravan agents:
- 1. AI Traders departing on 3★-5★ runs recruit real Hunter players in town
-    and pay bonus gold + trust upon delivery at the destination shop.
- 2. Real Trader players in town hire AI Hunters to follow and defend their
-    caravan across the Jangan-Donwhang-Hotan highway.
+Owns the escort contracts between real Hunter players and AI caravan
+Traders: an AI Trader departing on a 3-5 star run recruits a Hunter in
+town (!accept), and pays bonus gold and trust when it delivers at the
+destination shop. Hiring AI agents for gold is hiring.go's, not this
+file's.
 
-Slice 5 (#3704) makes the money side abuse-proof: an AI-trader escort
-pays only when the Hunter stayed within escort range for the whole run
-and the trader lived to deliver (NoteEscortWatch, VoidTraderEscort),
-one Hunter holds one AI-trader escort at a time, and paid escorts are
-counted per Hunter per UTC day against MaxPaidEscortsPerDay in the
-EscortDayStore ledger. The amounts are the sketch's; the cap is a
-placeholder for the owner's call.
+Slice 5 (#3704, #4487) makes the money side abuse-proof:
+  - one contract per Hunter and per Trader (BindAITraderEscort);
+  - the runtime samples the Hunter's distance along the run
+    (SampleEscort), and a gap past escortSampleGapMs voids the run;
+    delivery pays only after escortMinRunMs with the Hunter near for
+    escortNearPercent of it (CompleteAITraderRun), and a Trader that
+    dies loses its contract (Cancel);
+  - paid escorts are counted per Hunter per UTC day against
+    MaxPaidEscortsPerDay in the EscortDayStore ledger, asked both at
+    !accept and at delivery.
 
 ===========================================================================
 */
@@ -37,10 +40,6 @@ Mercenary contract records and ContractBook
 */
 
 const (
-	// BaseHunterHireFeeGold is the base gold fee for a real Trader player to
-	// hire an AI Hunter escort for one town-to-town leg.
-	BaseHunterHireFeeGold int64 = 15_000
-
 	// BaseAITraderEscortRewardPerStar is multiplied by the AI Trader's cargo
 	// star rating (3★-5★) to compute the bonus gold paid to a real Hunter
 	// player upon safe arrival at the destination specialty shop.
@@ -51,6 +50,15 @@ const (
 	// day complete unpaid. PLACEHOLDER for the owner's call (#3704
 	// slice 5): no number is authored anywhere yet.
 	MaxPaidEscortsPerDay = 3
+	// escortMinRunMs is the shortest run that can pay: a trader bound at
+	// its destination's gate earns nothing.
+	escortMinRunMs = 30_000
+	// escortNearPercent is the share of the run the Hunter must be
+	// sampled within escort range of the trader.
+	escortNearPercent = 90
+	// escortSampleGapMs is the longest gap between two samples; a longer
+	// one (the Hunter offline, the tick stalled) invalidates the run.
+	escortSampleGapMs = 5000
 )
 
 /*
@@ -70,26 +78,20 @@ type EscortDayStore interface {
 
 // EscortContract represents an active mercenary escort agreement.
 type EscortContract struct {
-	Division    string
-	TraderName  string
-	TraderIsAI  bool
-	HunterName  string
-	HunterIsAI  bool
-	FromTown    TownID
-	ToTown      TownID
-	CargoStars  uint8
-	RewardGold  int64
-	UpfrontFee  int64
-	StartedAtMs int64
-	Active      bool
-	// EscortKept is slice 5's presence rule: true while the Hunter has
-	// been seen within escort range at every step of the run. One miss
-	// clears it for good; the run then completes unpaid.
-	EscortKept bool
-	// Void is set when the escorted trader dies on the road: the run
-	// was not survived, so it can never pay, even if the trader later
-	// respawns and reaches the destination.
-	Void bool
+	Division     string
+	TraderName   string
+	TraderIsAI   bool
+	HunterName   string
+	HunterIsAI   bool
+	FromTown     TownID
+	ToTown       TownID
+	CargoStars   uint8
+	RewardGold   int64
+	StartedAtMs  int64
+	Active       bool
+	LastSampleMs int64
+	NearMs       int64
+	Invalid      bool
 }
 
 // paidEscortKey names one Hunter's paid-escort count for one UTC day.
@@ -140,6 +142,9 @@ func ComputeAITraderEscortReward(cargoStars uint8, from, to TownID) int64 {
 	if cargoStars == 0 {
 		cargoStars = 1
 	}
+	if cargoStars > 5 {
+		cargoStars = 5
+	}
 	hops := int64(1)
 	if (from == TownJangan && to == TownHotan) || (from == TownHotan && to == TownJangan) {
 		hops = 2
@@ -152,10 +157,10 @@ func ComputeAITraderEscortReward(cargoStars uint8, from, to TownID) int64 {
 BindAITraderEscort
 
 BindAITraderEscort binds a real Hunter player (hunterName) to escort an AI
-Trader (aiTraderName) from fromTown to toTown. Slice 5's one-contract
-rule: a Hunter who already holds an active AI-trader escort is refused
-(bound is false) until that run completes, so one Hunter cannot farm
-every departing trader at once.
+Trader (aiTraderName) from fromTown to toTown. One contract per Hunter
+and per trader: a Hunter who already holds an active escort, or a
+trader already under one, is refused (bound is false) until that run
+ends, so one Hunter cannot farm every departing trader at once.
 ==================
 */
 func (c *ContractBook) BindAITraderEscort(
@@ -177,94 +182,17 @@ func (c *ContractBook) BindAITraderEscort(
 		RewardGold:  reward,
 		StartedAtMs: nowMs,
 		Active:      true,
-		EscortKept:  true,
 	}
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	for _, held := range c.contracts {
-		if held.Active && held.TraderIsAI && !held.HunterIsAI &&
-			held.Division == contract.Division &&
-			strings.EqualFold(held.HunterName, contract.HunterName) {
+	for _, existing := range c.contracts {
+		if existing.Division == contract.Division && existing.Active && (strings.EqualFold(existing.HunterName, contract.HunterName) || strings.EqualFold(existing.TraderName, contract.TraderName)) {
 			return EscortContract{}, false
 		}
 	}
+	contract.LastSampleMs = nowMs
 	c.contracts[contractKey(division, aiTraderName)] = contract
 	return contract, true
-}
-
-/*
-==================
-NoteEscortWatch
-
-Records one step's escort-presence verdict for an AI trader's
-contract: kept false means the Hunter was not seen within escort
-range this step, which clears EscortKept for the rest of the run.
-==================
-*/
-func (c *ContractBook) NoteEscortWatch(division, aiTraderName string, kept bool) {
-	if kept {
-		return
-	}
-	key := contractKey(division, aiTraderName)
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	contract, ok := c.contracts[key]
-	if !ok || !contract.Active {
-		return
-	}
-	contract.EscortKept = false
-	c.contracts[key] = contract
-}
-
-/*
-==================
-VoidTraderEscort
-
-Voids an AI trader's escort contract: the trader died on the road, so
-the run pays nothing however it ends.
-==================
-*/
-func (c *ContractBook) VoidTraderEscort(division, aiTraderName string) {
-	key := contractKey(division, aiTraderName)
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	contract, ok := c.contracts[key]
-	if !ok || !contract.Active {
-		return
-	}
-	contract.Void = true
-	c.contracts[key] = contract
-}
-
-/*
-==================
-HireAIHunter
-
-HireAIHunter binds an AI Hunter (aiHunterName) to escort a real Trader player
-(playerTraderName) on their caravan run.
-==================
-*/
-func (c *ContractBook) HireAIHunter(
-	division, playerTraderName, aiHunterName string,
-	fromTown, toTown TownID,
-	nowMs int64,
-) EscortContract {
-	contract := EscortContract{
-		Division:    strings.TrimSpace(division),
-		TraderName:  strings.TrimSpace(playerTraderName),
-		TraderIsAI:  false,
-		HunterName:  strings.TrimSpace(aiHunterName),
-		HunterIsAI:  true,
-		FromTown:    fromTown,
-		ToTown:      toTown,
-		UpfrontFee:  BaseHunterHireFeeGold,
-		StartedAtMs: nowMs,
-		Active:      true,
-	}
-	c.mu.Lock()
-	c.contracts[contractKey(division, aiHunterName)] = contract
-	c.mu.Unlock()
-	return contract
 }
 
 /*
@@ -272,10 +200,13 @@ func (c *ContractBook) HireAIHunter(
 CompleteAITraderRun
 
 CompleteAITraderRun closes an active AI Trader escort contract on arrival at
-the destination specialty shop. payable reports slice 5's payment rule:
-the Hunter kept escort range for the whole run and the trader survived
-it. Only a payable completion records the +25 escort trust; the caller
-still owes the daily-cap check before any gold moves.
+the destination specialty shop. payable is the payment rule: the run
+lasted escortMinRunMs, the Hunter was sampled near the trader for at
+least escortNearPercent of it, and no sample gap exceeded
+escortSampleGapMs (SampleEscort). A trader who died was cancelled at
+its respawn and never completes. Only a payable completion records the
++25 escort trust; the caller still owes the daily-cap check before any
+gold moves.
 ==================
 */
 func (c *ContractBook) CompleteAITraderRun(
@@ -294,8 +225,9 @@ func (c *ContractBook) CompleteAITraderRun(
 	contract.Active = false
 	delete(c.contracts, key)
 	c.mu.Unlock()
-
-	payable = contract.EscortKept && !contract.Void
+	elapsed := nowMs - contract.StartedAtMs
+	payable = !contract.Invalid && elapsed >= escortMinRunMs &&
+		contract.NearMs*100 >= elapsed*escortNearPercent && nowMs-contract.LastSampleMs <= escortSampleGapMs
 	if payable && memories != nil && !contract.HunterIsAI && contract.HunterName != "" {
 		memories.RecordEscortSuccess(
 			contract.Division,
@@ -349,6 +281,43 @@ func FormatContractReply(contract EscortContract) string {
 
 func contractKey(division, agentName string) string {
 	return strings.TrimSpace(division) + "|" + strings.TrimSpace(agentName)
+}
+
+/*
+================
+SampleEscort
+
+Missing/offline/dead/wrong-job escorts and observation gaps invalidate a run.
+================
+*/
+func (c *ContractBook) SampleEscort(division, agent string, near bool, nowMs int64) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	key := contractKey(division, agent)
+	contract, ok := c.contracts[key]
+	if !ok || !contract.Active || !contract.TraderIsAI {
+		return
+	}
+	delta := nowMs - contract.LastSampleMs
+	if delta < 0 || delta > escortSampleGapMs {
+		contract.Invalid = true
+	}
+	if near && delta > 0 {
+		contract.NearMs += min(delta, escortSampleGapMs)
+	}
+	contract.LastSampleMs = nowMs
+	c.contracts[key] = contract
+}
+
+/*
+================
+Cancel
+================
+*/
+func (c *ContractBook) Cancel(division, agent string) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	delete(c.contracts, contractKey(division, agent))
 }
 
 /*
@@ -413,13 +382,68 @@ func (c *ContractBook) PaidEscortsToday(division, hunterName string, nowMs int64
 
 /*
 ==================
-RecordPaidEscort
+payEscort
 
-Counts one paid escort reward against the Hunter's day and marks the
-row for the next Flush.
+Pays one delivered escort, off the runtime's lock. The ledger reserves
+the Hunter's daily slot first and writes it at once
+(ContractBook.ReservePaidEscort); the character door then moves the
+gold, and a door that refuses gives the slot back. A full day pays
+nothing.
 ==================
 */
-func (c *ContractBook) RecordPaidEscort(division, hunterName string, nowMs int64) {
+func (r *Runtime) payEscort(division string, contract EscortContract, traderName string, nowMs int64) {
+	if r.hooks.OnContractReward == nil || !r.contracts.ReservePaidEscort(division, contract.HunterName, nowMs) {
+		return
+	}
+	if !r.hooks.OnContractReward(division, contract.HunterName, contract.RewardGold, traderName) {
+		r.contracts.ReleasePaidEscort(division, contract.HunterName, nowMs)
+	}
+}
+
+/*
+==================
+ReservePaidEscort
+
+Counts one paid escort against the Hunter's day before its gold moves,
+when the day still has room (false when the cap is reached; the check
+and the count are one step under the book's lock), and writes the row at
+once instead of waiting for the flush loop. A crash after the gold then
+never leaves the count behind: the worst a crash can do is spend a slot
+the payment never reached, never pay a fourth escort.
+==================
+*/
+func (c *ContractBook) ReservePaidEscort(division, hunterName string, nowMs int64) bool {
+	key, row, ok := c.adjustPaidEscort(division, hunterName, nowMs, 1)
+	if ok {
+		c.persistDay(key, row)
+	}
+	return ok
+}
+
+/*
+==================
+ReleasePaidEscort
+
+Gives back a reservation whose gold the character door refused (the
+Hunter died, left the suit, or the purse is full): an unpaid delivery
+costs no daily slot.
+==================
+*/
+func (c *ContractBook) ReleasePaidEscort(division, hunterName string, nowMs int64) {
+	if key, row, ok := c.adjustPaidEscort(division, hunterName, nowMs, -1); ok {
+		c.persistDay(key, row)
+	}
+}
+
+/*
+==================
+adjustPaidEscort
+
+Moves the Hunter's count for the day by delta under the lock, refusing a
+count past MaxPaidEscortsPerDay or below zero, and marks the row dirty.
+==================
+*/
+func (c *ContractBook) adjustPaidEscort(division, hunterName string, nowMs int64, delta int) (paidEscortKey, domain.CaravanEscortDayRow, bool) {
 	key := paidEscortKey{
 		division: strings.TrimSpace(division),
 		hunter:   strings.ToLower(strings.TrimSpace(hunterName)),
@@ -428,12 +452,33 @@ func (c *ContractBook) RecordPaidEscort(division, hunterName string, nowMs int64
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	c.ensureDayLoadedLocked(division)
-	c.paid[key]++
-	c.dirtyDays[key] = domain.CaravanEscortDayRow{
-		Division:   key.division,
-		HunterName: hunterName,
-		Day:        key.day,
-		PaidCount:  c.paid[key],
+	count := c.paid[key] + delta
+	if count < 0 || count > MaxPaidEscortsPerDay {
+		return key, domain.CaravanEscortDayRow{}, false
+	}
+	c.paid[key] = count
+	row := domain.CaravanEscortDayRow{Division: key.division, HunterName: hunterName, Day: key.day, PaidCount: count}
+	c.dirtyDays[key] = row
+	return key, row, true
+}
+
+/*
+==================
+persistDay
+
+Writes one ledger row now. A failed write stays dirty for the flush
+loop's retry; a written one leaves the dirty set unless a newer value
+arrived meanwhile.
+==================
+*/
+func (c *ContractBook) persistDay(key paidEscortKey, row domain.CaravanEscortDayRow) {
+	if c.days == nil || c.days.SaveCaravanEscortDay(row) != nil {
+		return
+	}
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if dirty, ok := c.dirtyDays[key]; ok && dirty == row {
+		delete(c.dirtyDays, key)
 	}
 }
 

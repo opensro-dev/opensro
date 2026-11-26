@@ -76,6 +76,24 @@ type CaravanRouteHeatRow struct {
 
 /*
 ================
+CaravanHireRow
+
+One player's hire of an AI caravan agent, kept so a restart resumes it
+instead of burning the fee and the goods' cost.
+================
+*/
+type CaravanHireRow struct {
+	Division      string
+	AgentName     string
+	PlayerName    string
+	HiredAtMs     int64
+	HireTown      string
+	GoodsCostGold int64
+	CargoStacks   int
+}
+
+/*
+================
 ClampCaravanTrust
 
 Clamp a relationship trust score to the [-100, +100] range.

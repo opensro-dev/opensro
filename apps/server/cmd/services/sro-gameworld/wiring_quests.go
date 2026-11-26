@@ -129,6 +129,9 @@ func (game *gameplayPlane) wireQuestDoors(quests *quest.Runtime) {
 			return result.Frames, err
 		},
 		Finish: func(character *enterworld.Character, codename, npcCodename string) ([]wire.Frame, error) {
+			if frames, hire := game.caravanHireService(character, codename); hire {
+				return frames, nil
+			}
 			if codename == action.HalloweenExchangeService {
 				return game.items.ExchangeHalloweenBox(character, npcCodename)
 			}

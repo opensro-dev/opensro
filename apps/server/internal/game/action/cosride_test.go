@@ -288,9 +288,10 @@ func TestCosDismountRefusedWhileTheMountRuns(t *testing.T) {
 	if result := rt.HandleCosRide(testDivision, c, dismount); !reflect.DeepEqual(result.Frames, cosRideFailure(cosRideRunning).Frames) || !c.ActiveCOS.Mounted {
 		t.Fatal("a running mount let the rider step down", result)
 	}
-	clock.Advance(2 * time.Second)
-	rt.HandleCosRide(testDivision, c, dismount)
-	if c.ActiveCOS.Mounted {
-		t.Fatal("a stopped mount refused the dismount")
+	rt.CaravanTransportStepDown = true
+	result := rt.HandleCosRide(testDivision, c, dismount)
+	assertOpcodes(t, result.Frames, wire.OpObjectSourceCorrection, wire.OpCosRideState, movementSpeedOpcode)
+	if c.ActiveCOS == nil || c.ActiveCOS.Mounted || rt.Worlds.Snapshot(key, seed).MovingAt(now) {
+		t.Fatal("caravan dismount did not stop and park the trade transport")
 	}
 }

@@ -59,7 +59,6 @@ func installShardLedgers(application *gameWorldApplication, gameplay *gameplayPl
 	if err := installJobHonor(application, gameplay, shardID); err != nil {
 		return err
 	}
-	application.ledgers.caravans = gameplay.caravanAgents
 	return nil
 }
 

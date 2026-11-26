@@ -476,6 +476,14 @@ export function createPresentationCatalog( owners: CatalogOwners ) {
 						animationStates: row.animationStates ? animationMetadata( row.animationStates ) : undefined
 					} );
 				}
+				const dhorseBase = nextCatalog.get( 3912 );
+				if ( dhorseBase ) {
+					for ( const id of [ 3913, 3914 ] as const ) {
+						if ( !nextCatalog.has( id ) ) {
+							nextCatalog.set( id, { ...dhorseBase, refObjId: id } );
+						}
+					}
+				}
 
 				if ( result.path === "/assets/anim/manifest.json" ) {
 					for (

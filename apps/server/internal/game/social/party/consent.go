@@ -11,6 +11,7 @@ must either publish membership or notify the surviving participants.
 package party
 
 import (
+	log "github.com/sirupsen/logrus"
 	"opensro.online/server/internal/game/enterworld"
 	"opensro.online/server/internal/transport"
 )
@@ -86,7 +87,7 @@ func (r *Runtime) applyPartyConsent(session *transport.Session, divisionID strin
 	}
 	inviter := findCharacterByName(r.deps, divisionID, invite.InviterName)
 	inviterSession, online := r.sessionByName(divisionID, invite.InviterName)
-	if inviter == nil || !online {
+	if inviter == nil || (!online && !inviter.RuntimeOnly) {
 		// Natively 2C0E is reported when the proposer has disappeared.
 		r.notifyInvitationFailure(invite, partyFailureCreatorMissing)
 		return
@@ -139,8 +140,12 @@ func (r *Runtime) commitFormConsent(consent partyConsent) byte {
 		return partyFailureUnknown
 	}
 	rows := r.rosterRows(divisionID, snapshot)
-	sendPartySeed(inviterSession, leader.MemberID, snapshot, rows)
-	sendPartySeed(targetSession, second.MemberID, snapshot, rows)
+	if inviterSession != nil {
+		sendPartySeed(inviterSession, leader.MemberID, snapshot, rows)
+	}
+	if targetSession != nil {
+		sendPartySeed(targetSession, second.MemberID, snapshot, rows)
+	}
 	return 0
 }
 
@@ -190,7 +195,9 @@ func (r *Runtime) commitJoinConsent(consent partyConsent) byte {
 			_ = peer.Send(OpPartyUpdate, EncodePartyJoin3E58(joinRow))
 		}
 	}
-	sendPartySeed(targetSession, joiner.MemberID, joined, r.rosterRows(divisionID, joined))
+	if targetSession != nil {
+		sendPartySeed(targetSession, joiner.MemberID, joined, r.rosterRows(divisionID, joined))
+	}
 	return 0
 }
 
@@ -212,4 +219,236 @@ func (r *Runtime) partyJobClass(divisionID string, snapshot Snapshot, inviter *e
 		}
 	}
 	return enterworld.PartyJobClass(inviter)
+}
+
+func (r *Runtime) acceptRuntimeActorFormInvite(s *transport.Session, divisionID string, actor, target *enterworld.Character, optionBits uint8) {
+	if r.CanPartyWithRuntimeActor == nil || !r.CanPartyWithRuntimeActor(divisionID, actor.Name, target.Name) {
+		log.Debugf("party: 0x70D5 (invite) refused for %s: not contracted with %s", actor.Name, target.Name)
+		_ = s.Send(OpCreatePartyAck, []byte{2, partyFailureFormRefused})
+		return
+	}
+	if !enterworld.JobsMayParty(enterworld.PartyJobClass(actor), enterworld.PartyJobClass(target)) {
+		_ = s.Send(OpCreatePartyAck, []byte{2, partyFailureJobMismatch})
+		return
+	}
+	code := r.commitFormConsent(partyConsent{
+		invite: PendingInvite{
+			divisionID:  divisionID,
+			Kind:        PendingInviteForm,
+			InviterName: actor.Name,
+			OptionBits:  optionBits,
+		},
+		inviterSession: s,
+		inviter:        actor,
+		target:         target,
+	})
+	if code != 0 {
+		_ = s.Send(OpCreatePartyAck, []byte{2, code})
+		return
+	}
+	if r.PartyChanged != nil {
+		if snapshot, ok := r.registry.PartyOf(divisionID, actor.Name); ok {
+			for _, member := range snapshot.Members {
+				r.PartyChanged(divisionID, member.Name)
+			}
+		}
+	}
+}
+
+func (r *Runtime) acceptRuntimeActorJoinInvite(s *transport.Session, divisionID string, snapshot Snapshot, actor, target *enterworld.Character) {
+	if r.CanPartyWithRuntimeActor == nil || !r.CanPartyWithRuntimeActor(divisionID, actor.Name, target.Name) {
+		log.Debugf("party: 0x751A (join-invite) refused for %s: not contracted with %s", actor.Name, target.Name)
+		_ = s.Send(OpPartyJoinInviteAck, []byte{2, partyFailureJoinRefused})
+		return
+	}
+	if !enterworld.JobsMayParty(r.partyJobClass(divisionID, snapshot, actor), enterworld.PartyJobClass(target)) {
+		_ = s.Send(OpPartyJoinInviteAck, []byte{2, partyFailureJobMismatch})
+		return
+	}
+	code := r.commitJoinConsent(partyConsent{
+		invite: PendingInvite{
+			divisionID:  divisionID,
+			Kind:        PendingInviteJoin,
+			InviterName: actor.Name,
+			OptionBits:  snapshot.OptionBits,
+		},
+		inviterSession: s,
+		inviter:        actor,
+		target:         target,
+	})
+	if code != 0 {
+		_ = s.Send(OpPartyJoinInviteAck, []byte{2, code})
+		return
+	}
+	if r.PartyChanged != nil {
+		if joinedSnapshot, ok := r.registry.PartyOf(divisionID, actor.Name); ok {
+			for _, member := range joinedSnapshot.Members {
+				r.PartyChanged(divisionID, member.Name)
+			}
+		}
+	}
+}
+
+/*
+==================
+InvitePlayerFromRuntimeActor
+
+Has a hired/contracted runtime actor propose or join a party with playerName.
+==================
+*/
+func (r *Runtime) InvitePlayerFromRuntimeActor(divisionID, actorName, playerName string) bool {
+	if r == nil {
+		return false
+	}
+	actor := findCharacterByName(r.deps, divisionID, actorName)
+	if actor == nil || !actor.RuntimeOnly {
+		return false
+	}
+	target := findCharacterByName(r.deps, divisionID, playerName)
+	targetSession, online := r.sessionByName(divisionID, playerName)
+	if target == nil || target.DeletePending || !online || target.ID == actor.ID {
+		return false
+	}
+	if !enterworld.JobsMayParty(enterworld.PartyJobClass(actor), enterworld.PartyJobClass(target)) {
+		return false
+	}
+	actorID := enterworld.ObjectIDForCharacter(actor)
+	if snapshot, inParty := r.registry.PartyOf(divisionID, target.Name); inParty {
+		for _, member := range snapshot.Members {
+			if member.MemberID == actorID {
+				return true
+			}
+		}
+		if !enterworld.JobsMayParty(r.partyJobClass(divisionID, snapshot, target), enterworld.PartyJobClass(actor)) {
+			return false
+		}
+		if _, actorInParty := r.registry.PartyOf(divisionID, actor.Name); actorInParty {
+			r.dropMember(divisionID, actor.Name, PartyLeaveReasonSecede, nil)
+		}
+		joined, refusal := r.registry.Join(divisionID, target.Name, Member{MemberID: actorID, Name: actor.Name})
+		if refusal != "" {
+			return false
+		}
+		joinRow := r.memberRowFor(divisionID, actor)
+		for _, member := range joined.Members {
+			if member.MemberID == actorID {
+				continue
+			}
+			if peer, peerOnline := r.sessionByName(divisionID, member.Name); peerOnline {
+				_ = peer.Send(OpPartyUpdate, EncodePartyJoin3E58(joinRow))
+			}
+		}
+		if r.PartyChanged != nil {
+			for _, member := range joined.Members {
+				r.PartyChanged(divisionID, member.Name)
+			}
+		}
+		return true
+	}
+	if actorSnap, actorInParty := r.registry.PartyOf(divisionID, actor.Name); actorInParty {
+		if !r.partyHasHumanMember(divisionID, actorSnap.Members) {
+			r.dropMember(divisionID, actor.Name, PartyLeaveReasonSecede, nil)
+		}
+	}
+	if _, actorInParty := r.registry.PartyOf(divisionID, actor.Name); !actorInParty {
+		// Port-only, not native: the player consented by hiring (the hire
+		// window's confirm, or !hire/!accept), so no prompt follows. The
+		// hirer forms the party and leads it, so it can put an agent out
+		// or disband the party, which ends that hire (caravanai).
+		leader := Member{MemberID: enterworld.ObjectIDForCharacter(target), Name: target.Name}
+		second := Member{MemberID: actorID, Name: actor.Name}
+		opts := uint8(PartyOptionExpShare | PartyOptionItemShare | PartyOptionJoinAnyone)
+		snapshot, refusal := r.registry.Form(divisionID, leader, second, opts)
+		if refusal != "" {
+			return false
+		}
+		sendPartySeed(targetSession, leader.MemberID, snapshot, r.rosterRows(divisionID, snapshot))
+		if r.PartyChanged != nil {
+			for _, member := range snapshot.Members {
+				r.PartyChanged(divisionID, member.Name)
+			}
+		}
+		return true
+	}
+	if r.proposalPending(divisionID, target.Name) {
+		return false
+	}
+	if actorSnap, actorInParty := r.registry.PartyOf(divisionID, actor.Name); actorInParty {
+		r.registry.SetPendingInvite(divisionID, target.Name, PendingInvite{
+			Kind:        PendingInviteJoin,
+			InviterName: actor.Name,
+			OptionBits:  actorSnap.OptionBits,
+		})
+		_ = targetSession.Send(OpInvitationProposal, EncodeInvitationPrompt3393(InvitationTypePartyJoin, actorID, actorSnap.OptionBits))
+	}
+	return true
+}
+
+/*
+==================
+MemberNames
+
+The names in playerName's party, in member order (nil outside a party).
+==================
+*/
+func (r *Runtime) MemberNames(divisionID, playerName string) []string {
+	if r == nil {
+		return nil
+	}
+	snapshot, ok := r.registry.PartyOf(divisionID, playerName)
+	if !ok {
+		return nil
+	}
+	names := make([]string, 0, len(snapshot.Members))
+	for _, member := range snapshot.Members {
+		names = append(names, member.Name)
+	}
+	return names
+}
+
+/*
+==================
+RemoveRuntimeActor
+
+A hired runtime actor whose hire ended leaves its party.
+==================
+*/
+func (r *Runtime) RemoveRuntimeActor(divisionID, actorName string) {
+	if r == nil {
+		return
+	}
+	actor := findCharacterByName(r.deps, divisionID, actorName)
+	if actor == nil || !actor.RuntimeOnly {
+		return
+	}
+	if _, inParty := r.registry.PartyOf(divisionID, actorName); inParty {
+		r.dropMember(divisionID, actorName, PartyLeaveReasonSecede, nil)
+	}
+}
+
+func (r *Runtime) partyHasHumanMember(divisionID string, members []Member) bool {
+	for _, member := range members {
+		c := findCharacterByName(r.deps, divisionID, member.Name)
+		if c != nil && !c.RuntimeOnly {
+			return true
+		}
+	}
+	return false
+}
+
+/*
+================
+memberPosition
+
+A member row's position: a runtime-only (AI caravan) actor's live pose,
+since it is never saved; a player's saved world spawn otherwise.
+================
+*/
+func (r *Runtime) memberPosition(divisionID string, character *enterworld.Character) (uint16, int16, int16, int16) {
+	if character.RuntimeOnly && r.livePose != nil {
+		pose := r.livePose(divisionID, character)
+		return pose.RegionID, int16(pose.X), int16(pose.Y), int16(pose.Z)
+	}
+	world := enterworld.WorldStateForCharacter(character, enterworld.ResolveCharacterRaceKey(character))
+	return uint16(world.Spawn.RegionID), int16(world.Spawn.X), int16(world.Spawn.Y), int16(world.Spawn.Z)
 }

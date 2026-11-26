@@ -132,7 +132,7 @@ to every observer; shares are the job EXP its party members still earn.
 */
 func (rt *Runtime) payPlayerKillInDoor(division string, killer, victim *enterworld.Character, kill playerKill, now int64) (actor, public []wire.Frame, after jobKillPayout) {
 	after.division = division
-	if killer == nil || victim == nil {
+	if killer == nil || victim == nil || killer.RuntimeOnly || victim.RuntimeOnly {
 		return nil, nil, after
 	}
 	victimGid := enterworld.ObjectIDForCharacter(victim)

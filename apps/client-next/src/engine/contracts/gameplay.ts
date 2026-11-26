@@ -14,6 +14,7 @@ undefined shop closes it; other fields belong to the newest snapshot.
 import type { MoverPublication } from "./mover-publication";
 import type { ItemFieldValues } from "./item-wire-fields";
 import type { ArenaChest } from "@/engine/foundation/gameplay/arena-chest";
+import type { CaravanHire, CaravanHireNpc, CaravanLead } from "@/engine/foundation/gameplay/caravan-hire";
 export type { MovementAim } from "./mover-publication";
 
 /*
@@ -550,6 +551,14 @@ export type GameplayCommand =
 	| { readonly kind: "cos-select"; readonly gid: number; }
 	| { readonly kind: "npc-talk"; }
 	| { readonly kind: "arena-dismiss"; }
+	// Port-only caravan hire window (caravan-hire.ts): refresh, hire or lead, and close.
+	| {
+		readonly kind: "caravan-hire";
+		readonly operation: 0 | 1 | 2 | 3;
+		readonly stars: number;
+		readonly name: string;
+	}
+	| { readonly kind: "caravan-hire-close"; }
 	| { readonly kind: "arena-decision"; readonly operation: 0 | 1 | 2 | 5; readonly id: string; }
 	| {
 		readonly kind: "arena-decision";
@@ -919,6 +928,11 @@ export interface GameplayState extends MoverPublication {
 	// Port-only wolf skill tree of the pet window's wolf (pet-training.ts).
 	readonly petTraining?: PetTraining;
 	readonly arenaChest?: ArenaChest;
+	readonly caravanHire?: CaravanHire;
+	// Who leads the hirer's hired Traders (port-only, caravan-hire.ts).
+	readonly caravanLead?: CaravanLead;
+	// The NPC whose menu lists the caravan hire row first (caravan-hire.ts).
+	readonly caravanHireNpc?: CaravanHireNpc;
 	readonly petTailwind?: PetTraining["tailwind"];
 	readonly petGuidance?: PetTraining["guidance"];
 	readonly petHowl?: PetTraining["howl"];

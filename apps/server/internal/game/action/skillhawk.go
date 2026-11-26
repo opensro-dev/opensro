@@ -177,9 +177,8 @@ func (rt *Runtime) advanceHawk(h summonedHawk, now int64) []simulation.DivisionF
 	}
 	target, exists := rt.resolveCombatTarget(h.division, snapshot, h.target, now)
 	// A hawk strikes monsters and players only (playerstrike_cos.go covers a
-	// player's own single-target hit on a COS). Caravan agents are not
-	// hawk targets in this slice (port-only).
-	if !exists || target.cos != nil || target.agent != nil {
+	// player's own single-target hit on a COS).
+	if !exists || target.cos != nil {
 		rt.updateHawk(key, h.token, func(live *summonedHawk) { live.target = 0 })
 		return nil
 	}

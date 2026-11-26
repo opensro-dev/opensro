@@ -119,6 +119,18 @@ func (p *ParleyTracker) CanOfferParley(division, traderName string, nowMs int64)
 }
 
 /*
+================
+TruceActive
+================
+*/
+func (p *ParleyTracker) TruceActive(division, trader string, nowMs int64) bool {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	offer, ok := p.active[parleyKey(division, trader)]
+	return ok && nowMs < offer.ExpiresAtMs
+}
+
+/*
 ==================
 StartParley
 

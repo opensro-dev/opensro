@@ -169,7 +169,7 @@ func (game *gameplayPlane) newMissionTicker(peerReferences *action.PeerReference
 	// and gates the push itself.
 	if game.items.TradeTiers {
 		hooks = append(hooks, simulation.NamedTickHook{Name: "caravan-stars", Hook: func(nowMs int64) []simulation.DivisionFrames {
-			frames := game.items.CaravanStarFrames(game.divisionID, sessionViews(ticker.Source), nowMs)
+			frames := game.items.CaravanStarFrames(game.divisionID, sessionViews(ticker.Source), game.caravanActors, nowMs)
 			if len(frames) != 0 {
 				ticker.Push.PushToDivision(game.divisionID, frames, "")
 			}
@@ -261,9 +261,11 @@ func (game *gameplayPlane) newMissionTicker(peerReferences *action.PeerReference
 		}
 	}
 	log.Infof("simulation: a tick stuck %v dumps to %s and exits for restart (%s, 0 = never)", ticker.StallExit, ticker.StallDumpDir, simulation.EnvTickStallExit)
-	ticker.PlayerMap = simulation.BetaPlayerMapEnabled()
+	ticker.PlayerMap = simulation.BetaPlayerMapEnabled() && (game.caravanAgents == nil || !game.caravanAgents.Enabled())
 	if ticker.PlayerMap {
 		log.Infof("simulation: beta world map roster ON (%s)", simulation.EnvBetaPlayerMap)
+	} else if simulation.BetaPlayerMapEnabled() && game.caravanAgents != nil && game.caravanAgents.Enabled() {
+		log.Infof("simulation: beta world map roster ON via AI caravan tick (%s)", simulation.EnvBetaPlayerMap)
 	}
 	if game.deps.MonsterState != nil {
 		navigation := &simulation.NavigationMetrics{}
@@ -329,6 +331,10 @@ func (game *gameplayPlane) newMissionTicker(peerReferences *action.PeerReference
 			FirstAttackGuard: game.items.FirstAttackGuard,
 			// The server's target picker: a candidate player's companions are weighed with it.
 			Companions: game.items.CompanionTargets,
+		}
+		if game.caravanAgents != nil {
+			ticker.Monsters.ServerCombatants = game.caravanCombatants
+			ticker.RuntimeObject = game.caravanObject
 		}
 		// Port-only, not native: the monster leg's worker pool
 		// (#2205). Unset keeps the serial leg; the pool only changes

@@ -116,12 +116,14 @@ beginDoorLocked
 
 Snapshots the characters a door is about to change, before it changes
 them. A character already in the open door keeps its first snapshot,
-so a door that declares one twice counts its change once.
+so a door that declares one twice counts its change once. A runtime-only
+actor (an AI caravan agent, never saved) is no holder of the economy:
+its operating float and consumables stay out of the ledger.
 ================
 */
 func (s *Store) beginDoorLocked(cs ...*domain.Character) {
 	for _, c := range cs {
-		if c == nil || s.openedLocked(c) {
+		if c == nil || c.RuntimeOnly || s.openedLocked(c) {
 			continue
 		}
 		slot := s.openSlotLocked(c)

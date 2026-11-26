@@ -13,6 +13,12 @@ model on the same host: an SRO_AGENT_LLM_URL that is not loopback is refused
 and the agents run on the hardcoded brain (LoopbackURL). The SRO_AGENT_*
 settings are not job variables (shardsettings), so no deployment sets them.
 
+SRO_CARAVAN_HIRE_FEE is: the gold one AI agent's hire (and each hour's
+extension) costs, a whole 1..MaxHireFeeGold, default DefaultHireFeeGold
+(owner, 2026-11-26: a shard setting, the contributor's 1,500,000 as the
+default). Anything else keeps the default and is reported in
+Config.RefusedHireFee.
+
 ===========================================================================
 */
 package caravanai
@@ -21,6 +27,7 @@ import (
 	"net"
 	"net/url"
 	"os"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -35,6 +42,18 @@ const (
 	// EnvAICaravans gates the port-only AI caravan & thief agent system.
 	// Unset or false leaves the shard 100% native.
 	EnvAICaravans = "SRO_AI_CARAVANS"
+
+	// EnvHireFee sets the AI agents' hire fee in gold (ParseHireFee).
+	EnvHireFee = "SRO_CARAVAN_HIRE_FEE"
+
+	// DefaultHireFeeGold is the hire fee when SRO_CARAVAN_HIRE_FEE is
+	// unset or refused (owner, 2026-11-26).
+	DefaultHireFeeGold int64 = 1_500_000
+
+	// MaxHireFeeGold bounds the fee: a hire debits it from one purse,
+	// which holds at most wire.MaxGold (config_test.go pins the two
+	// equal, so config imports no item package).
+	MaxHireFeeGold int64 = 100_000_000
 
 	// EnvAgentBrain selects the agent decision engine:
 	//   - "hardcoded" (default): deterministic utility & state-machine AI
@@ -72,6 +91,10 @@ const (
 
 // Config holds the resolved runtime configuration for AI caravan agents.
 type Config struct {
+	Terminals  map[TownID]Waypoint
+	Highway    map[[2]TownID][]Waypoint
+	Detours    map[[2]TownID][]Waypoint
+	Routes     map[[2]TownID][][]Waypoint
 	Enabled    bool
 	BrainMode  BrainMode
 	LLMURL     string
@@ -81,6 +104,28 @@ type Config struct {
 	// RefusedLLMURL is the SRO_AGENT_LLM_URL that ConfigFromEnv refused
 	// as not loopback; BrainMode is then BrainHardcoded.
 	RefusedLLMURL string
+	// HireFeeGold is one hire's (and one extension's) fee; 0 means
+	// DefaultHireFeeGold (Runtime.HireFee).
+	HireFeeGold int64
+	// RefusedHireFee is the SRO_CARAVAN_HIRE_FEE value ConfigFromEnv
+	// refused; HireFeeGold is then the default.
+	RefusedHireFee string
+}
+
+/*
+==================
+ParseHireFee
+
+A whole number of gold 1..MaxHireFeeGold; ok is false for anything
+else, unset included.
+==================
+*/
+func ParseHireFee(raw string) (fee int64, ok bool) {
+	fee, err := strconv.ParseInt(strings.TrimSpace(raw), 10, 64)
+	if err != nil || fee < 1 || fee > MaxHireFeeGold {
+		return 0, false
+	}
+	return fee, true
 }
 
 /*
@@ -145,14 +190,24 @@ func ConfigFromEnv() Config {
 	if mode != BrainHardcoded && llmURL != "" && !LoopbackURL(llmURL) {
 		refused, mode, llmURL = llmURL, BrainHardcoded, ""
 	}
+	fee, refusedFee := DefaultHireFeeGold, ""
+	if raw := os.Getenv(EnvHireFee); strings.TrimSpace(raw) != "" {
+		if parsed, ok := ParseHireFee(raw); ok {
+			fee = parsed
+		} else {
+			refusedFee = raw
+		}
+	}
 	return Config{
-		Enabled:       enabled,
-		BrainMode:     mode,
-		LLMURL:        llmURL,
-		LLMModel:      llmModel,
-		LLMKey:        llmKey,
-		LLMTimeout:    DefaultLLMTimeout,
-		RefusedLLMURL: refused,
+		HireFeeGold:    fee,
+		RefusedHireFee: refusedFee,
+		Enabled:        enabled,
+		BrainMode:      mode,
+		LLMURL:         llmURL,
+		LLMModel:       llmModel,
+		LLMKey:         llmKey,
+		LLMTimeout:     DefaultLLMTimeout,
+		RefusedLLMURL:  refused,
 	}
 }
 

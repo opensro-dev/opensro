@@ -89,3 +89,43 @@ func TestCaravanAgentMemoriesPersistenceAndPruning(t *testing.T) {
 		t.Fatalf("unexpected route heat: %+v", heat)
 	}
 }
+
+/*
+================
+TestCaravanHiresSurviveAReopen
+
+A hire row is upserted per agent, read back after a reopen, and deleted.
+================
+*/
+func TestCaravanHiresSurviveAReopen(t *testing.T) {
+	dir := t.TempDir()
+	s, err := Open(dir, Options{})
+	if err != nil {
+		t.Fatalf("open store: %v", err)
+	}
+	row := domain.CaravanHireRow{Division: "d", AgentName: "Trader_Jin", PlayerName: "Boss", HiredAtMs: 7, HireTown: "jangan", GoodsCostGold: 200_000, CargoStacks: 10}
+	if err := s.SaveCaravanHire(row); err != nil {
+		t.Fatal(err)
+	}
+	row.CargoStacks = 4
+	if err := s.SaveCaravanHire(row); err != nil {
+		t.Fatal(err)
+	}
+	s.Close()
+
+	s, err = Open(dir, Options{})
+	if err != nil {
+		t.Fatalf("reopen store: %v", err)
+	}
+	t.Cleanup(func() { s.Close() })
+	rows, err := s.LoadCaravanHires("d")
+	if err != nil || len(rows) != 1 || rows[0] != row {
+		t.Fatalf("hires after reopen: %v %+v", err, rows)
+	}
+	if err := s.DeleteCaravanHire("d", "Trader_Jin"); err != nil {
+		t.Fatal(err)
+	}
+	if rows, _ := s.LoadCaravanHires("d"); len(rows) != 0 {
+		t.Fatalf("deleted hire still stored: %+v", rows)
+	}
+}

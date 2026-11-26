@@ -16,19 +16,79 @@ package main
 
 import (
 	"context"
+	"encoding/json"
+	"fmt"
 	"strings"
+	"sync"
 	"time"
 
 	log "github.com/sirupsen/logrus"
+	"opensro.online/server/internal/domain"
 	"opensro.online/server/internal/game/action"
 	"opensro.online/server/internal/game/caravanai"
 	"opensro.online/server/internal/game/enterworld"
+	"opensro.online/server/internal/game/item/grounditem"
 	"opensro.online/server/internal/game/item/wire"
 	"opensro.online/server/internal/game/social/chat"
 	worldgeom "opensro.online/server/internal/game/world"
-	"opensro.online/server/internal/game/world/monster"
-	"opensro.online/server/internal/game/world/movement"
 	"opensro.online/server/internal/game/world/simulation"
+)
+
+/*
+================
+caravanRuntimeState
+
+Port-only caravan state belongs with its feature wiring.
+================
+*/
+type caravanRuntimeState struct {
+	caravanSkills     map[string][]uint32
+	caravanRessSkill  map[string]uint32
+	caravanAttackAt   map[string]int64
+	caravanAgents     *caravanai.Runtime
+	caravanNextStepMs int64
+	caravanActors     []*enterworld.Character
+	// caravanObjects holds every actor's and transport's gid, filled once
+	// at boot with caravanActors (caravanObject).
+	caravanObjects      map[uint32]bool
+	caravanMapAtMs      int64
+	caravanMoving       map[string]bool
+	caravanMode         map[string]uint8
+	caravanMovePub      map[string]caravanMovePublish
+	caravanLook         map[string]bool
+	caravanSpeedAtMs    map[string]int64
+	caravanSpeedRefused map[string]bool
+	caravanSpeedSeen    bool
+	caravanLootAtMs     map[string]int64
+	caravanLootSeen     map[string]uint32
+	// caravanLootRefused: ground items an agent's pickup was refused, by
+	// agent then gid, until when it leaves them alone (a full bag, a
+	// spot it cannot stand on).
+	caravanLootRefused    map[string]map[uint32]int64
+	caravanGround         []grounditem.Item
+	caravanGroundAtMs     int64
+	caravanRoads          map[string]*caravanRoad
+	caravanIgnoredThreats map[string]map[uint32]int64
+	caravanThiefReturning map[string]bool
+	// caravanLeadSent is the lead state last pushed to each hirer (by
+	// lowercase name): its session and body.
+	caravanLeadSent  map[string]caravanLeadPush
+	caravanChatMu    sync.Mutex
+	caravanChatLines []caravanChatLine
+}
+
+type caravanLeadPush struct {
+	session string
+	body    string
+}
+
+type caravanChatLine struct {
+	gid  uint32
+	text string
+}
+
+const (
+	caravanStepIntervalMs int64 = 100
 )
 
 /*
@@ -49,50 +109,98 @@ func (game *gameplayPlane) wireCaravanAgents() {
 		// The LLM brain may only reach a model on this host (config.go).
 		log.Warnf("job: %s is not a loopback URL; AI caravan agents use the hardcoded brain", caravanai.EnvAgentLLMURL)
 	}
+	if cfg.RefusedHireFee != "" {
+		log.Warnf("job: %s=%q is not a whole 1..%d; AI caravan hires cost the default %d gold",
+			caravanai.EnvHireFee, cfg.RefusedHireFee, caravanai.MaxHireFeeGold, caravanai.DefaultHireFeeGold)
+	}
 	var memStore caravanai.MemoryStore
 	if s, ok := game.deps.Characters.(caravanai.MemoryStore); ok {
 		memStore = s
 	}
+	if err := game.configureCaravanHighway(&cfg); err != nil {
+		log.WithError(err).Error("AI caravan highway disabled")
+		return
+	}
+	// The daily paid-escort cap's ledger (layout 17): the character
+	// store implements it; a store without it caps per process only.
 	var dayStore caravanai.EscortDayStore
 	if s, ok := game.deps.Characters.(caravanai.EscortDayStore); ok {
 		dayStore = s
 	}
 	rt := caravanai.NewRuntime(cfg, memStore, dayStore, caravanai.WorldHooks{
-		// Slice 4 (#3704): what an agent says goes out as local chat
-		// from its entity. The hook only buffers the line; the tick
-		// (caravanAgentsTick) addresses it to the viewers who can see
-		// the agent, like every other agent frame.
+		Move: game.caravanMove, Player: game.caravanPlayer, Heal: game.items.HealServerActor,
+		Casting: game.items.ServerActorCasting,
+		Ferry:   game.caravanFerry, FollowFerry: game.caravanFollowFerry,
+		OnHireFee: game.caravanHireFee, OnHirePayout: game.caravanHirePayout,
+		UseItem: game.caravanUseItem,
+		PickUp:  game.caravanPickUp,
+		// Hired goods are priced and sold like a player's own load.
+		StarGoods: game.items.ServerActorStarGoods,
+		CargoSale: func(division, agentName string, town caravanai.TownID) (int64, bool) {
+			shop, ok := caravanShopCodename[town]
+			if !ok {
+				return 0, false
+			}
+			return game.items.ServerActorCargoSale(division, agentName, shop)
+		},
+		OnContractFormed: func(division, playerName, agentName string) {
+			if game.parties != nil {
+				game.parties.InvitePlayerFromRuntimeActor(division, agentName, playerName)
+			}
+		},
+		OnHireNotice: game.caravanNotice,
+		OnHireEnded: func(division, playerName, agentName string, end caravanai.HireEnd, gold int64) {
+			if game.parties != nil {
+				game.parties.RemoveRuntimeActor(division, agentName)
+			}
+			name := caravanai.DisplayName(agentName)
+			text := fmt.Sprintf("%s's hire has %s.", name, end)
+			switch {
+			case gold > 0 && end == caravanai.HireCompleted:
+				text = fmt.Sprintf("%s sold the goods: %s gold paid to you.", name, caravanai.GoldText(gold))
+			case gold > 0:
+				text = fmt.Sprintf("%s's hire has %s: %s gold for the goods paid back.", name, end, caravanai.GoldText(gold))
+			}
+			game.caravanNotice(division, playerName, text)
+		},
+		OnContractReward: game.caravanEscortReward,
+		OnParleyCargoDrop: func(division, name string, _ uint16, _, _, _ float32, stacks int, _ int64) {
+			frames := game.items.DropServerActorCargo(division, name, stacks)
+			if c := game.deps.CharacterByName(division, name); c != nil {
+				game.items.PushDivisionPeerFrames(division, name, frames)
+			}
+		},
 		OnAgentChat: func(division, agentName string, regionID uint16, message string) {
-			game.caravanChatLines = append(game.caravanChatLines, caravanChatLine{agentName: agentName, text: message})
+			log.WithFields(log.Fields{
+				"division": division,
+				"agent":    agentName,
+				"region":   regionID,
+			}).Debugf("caravan-ai chat: %s", message)
+			if c := game.deps.CharacterByName(division, agentName); c != nil && game.hub != nil {
+				game.caravanChatMu.Lock()
+				game.caravanChatLines = append(game.caravanChatLines, caravanChatLine{gid: enterworld.ObjectIDForCharacter(c), text: message})
+				game.caravanChatMu.Unlock()
+			}
 		},
-		// Slice 3e (#3704): agents strike back. The action runtime
-		// lands the blow through the player-victim lanes; the tick
-		// flushes its frames.
-		OnAgentStrike: func(division, agentName, targetPlayerName string, nowMs int64) (defeated bool) {
-			return game.caravanAgentStrike(division, agentName, targetPlayerName, nowMs)
-		},
-		// Slice 5 (#3704): the money hooks - escort rewards, hire
-		// fees, parley cargo (wiring_caravanai_economy.go).
-		OnContractReward:  game.caravanRewardHook(),
-		ChargeHireFee:     game.caravanHireFeeHook(),
-		OnParleyCargoDrop: game.caravanParleyDropHook(),
-		Walker:            caravanWalker{water: game.water},
 	})
 	rt.EnsureDivisionRoster(game.divisionID)
 	game.caravanAgents = rt
-	// Slice 3c (#3704): players can fight the agents. The action
-	// runtime resolves agent gids and lands real damage through this
-	// directory; with the flag off it is never installed.
-	game.items.Agents = caravanAgentDirectory{game: game}
-	// Slice 3a (#3704): the agents appear in the world as peers. The
-	// reference catalog is wired later than this constructor runs, so
-	// the closure reads it at tick time.
-	game.caravanPeers = newCaravanPeerLeg(game.caravanAgentAppearance, game.caravanTransportRow, func(ids []uint32) []simulation.Frame {
-		if game.peerReferences == nil {
-			return nil
+	if err := game.initCaravanActors(); err != nil {
+		log.WithError(err).Error("caravan actors disabled: invalid roster")
+		_ = rt.Close()
+		game.caravanAgents = nil
+		return
+	}
+	if game.parties != nil {
+		game.parties.CanPartyWithRuntimeActor = rt.IsContractPartner
+	}
+	if game.items != nil {
+		game.items.CaravanHire = game.caravanHireRequest
+		game.items.CaravanHireLabel = func(divisionID string, _ *enterworld.Character, npcCodename string) string {
+			return game.caravanHireLabel(npcCodename)
 		}
-		return game.peerReferences.Frames(ids)
-	})
+		game.items.CaravanTransportStepDown = true
+	}
 	log.Infof(
 		"job: AI caravan & thief agents ON (%s, %s=%s, highway=Jangan-Donwhang-Hotan)",
 		caravanai.EnvAICaravans,
@@ -103,265 +211,664 @@ func (game *gameplayPlane) wireCaravanAgents() {
 
 /*
 ================
+wireCaravanChat
+
+Connects roster, memory and escort chat commands once
+the chat runtime is registered.
+================
+*/
+func (game *gameplayPlane) wireCaravanChat() {
+	if game.caravanAgents == nil || game.chat == nil {
+		return
+	}
+	game.chat.CaravanCommand = func(divisionID, playerName string, playerJob uint8, message string) (string, bool) {
+		fields := strings.Fields(message)
+		if len(fields) == 0 {
+			return "", false
+		}
+		switch strings.ToLower(fields[0]) {
+		case "!caravans", "!caravan", "!accept", "!hire", "!memory", "!attack", "!leed", "!lead", "!dismiss", "!grandcaravan", "!caravandebug":
+		default:
+			return "", false
+		}
+		c := game.deps.CharacterByName(divisionID, playerName)
+		if c == nil {
+			return "Character unavailable.", true
+		}
+		nowMs := time.Now().UnixMilli()
+		admitted := game.deps.Update(c, "caravan command", func() bool {
+			if nowMs-c.CaravanCommandAtMs < 1000 {
+				return false
+			}
+			c.CaravanCommandAtMs = nowMs
+			playerJob = enterworld.DressedJob(c)
+			return true
+		})
+		if !admitted {
+			return "Wait a second before another caravan command.", true
+		}
+		if strings.EqualFold(fields[0], "!caravandebug") {
+			// GM only: the live state of the speaker's hires, one line each.
+			gm := false
+			game.deps.Read(divisionID, func() { gm = c.GMPrivilege })
+			if !gm {
+				return "", false
+			}
+			return game.caravanAgents.DebugHires(divisionID, playerName), true
+		}
+		if strings.EqualFold(fields[0], "!grandcaravan") {
+			// GM only: start the grand caravan muster now (testing and events).
+			gm := false
+			game.deps.Read(divisionID, func() { gm = c.GMPrivilege })
+			if !gm {
+				return "", false
+			}
+			if !game.caravanAgents.StartGrandCaravan(divisionID, nowMs) {
+				return "A grand caravan is active or needs two available Traders and six Hunters.", true
+			}
+			return "Grand caravan mustering.", true
+		}
+		return game.caravanAgents.HandlePlayerCommand(divisionID, playerName, playerJob, message, nowMs)
+	}
+}
+
+/*
+================
 caravanAgentsTick
 
-Advances the shard's AI Caravan & Thief agents on the simulation clock,
-matching each agent against entered players in the same region.
+Advances the shard's AI Caravan & Thief agents every 100ms on the
+simulation clock, matching each agent against entered players in the same
+region and pushing live World Map (M) markers to admin (GMPrivilege) sessions.
 ================
 */
 func (game *gameplayPlane) caravanAgentsTick(ticker *simulation.Ticker, nowMs int64) []simulation.DivisionFrames {
 	if game.caravanAgents == nil || !game.caravanAgents.Enabled() {
 		return nil
 	}
+	if nowMs < game.caravanNextStepMs {
+		return nil
+	}
+	game.caravanNextStepMs = nowMs + caravanStepIntervalMs
+
 	views := sessionViews(ticker.Source)
-	byRegion := make(map[uint16][]observedPlayerPose)
-	var viewers []caravanPeerViewer
+	var adminSessions []string
+	var mapPlayers []wire.BetaMapPlayer
+
 	for _, view := range views {
 		if view.DivisionID != game.divisionID {
 			continue
 		}
-		pose := view.World.LiveSpawnAt(nowMs)
-		viewers = append(viewers, caravanPeerViewer{
-			SessionID:   view.SessionID,
-			CharacterID: view.CharacterID,
-			Pose:        pose,
-		})
 		c := game.deps.CharacterByID(game.divisionID, view.CharacterID)
 		if c == nil {
 			continue
 		}
-		byRegion[pose.RegionID] = append(byRegion[pose.RegionID], observedPlayerPose{
-			name:      c.Name,
-			jobType:   c.Job.Type,
-			hpPercent: game.playerHPPercent(c),
-			pose:      pose,
+		pose := view.World.LiveSpawnAt(nowMs)
+
+		// The agents on the world map are an operator's test view: only GM
+		// sessions get them, whatever SRO_BETA_PLAYER_MAP shows players.
+		if c.GMPrivilege {
+			adminSessions = append(adminSessions, view.SessionID)
+		}
+		mapPlayers = append(mapPlayers, wire.BetaMapPlayer{
+			Gid:      simulation.PlayerObjectID(view.CharacterID),
+			RegionID: pose.RegionID,
+			X:        float32(pose.X),
+			Z:        float32(pose.Z),
+			Name:     c.Name,
 		})
 	}
+
+	// Party order decides which hired Trader leads; read here, outside the
+	// AI lock, because the party runtime calls back into the AI runtime.
+	if game.parties != nil {
+		for _, hirer := range game.caravanAgents.Hirers(game.divisionID) {
+			game.caravanAgents.SetPartyOrder(game.divisionID, hirer, game.parties.MemberNames(game.divisionID, hirer), nowMs)
+		}
+	}
+	game.pushCaravanLeads(ticker, views)
 	roster := game.caravanAgents.EnsureDivisionRoster(game.divisionID)
-	// The step never waits on a remote brain (caravanai.Runtime), so
-	// the tick's own background context is enough here.
 	ctx := context.Background()
-	for _, unit := range roster {
-		_, _, _ = game.caravanAgents.StepAgent(ctx, game.divisionID, unit.Name, observedPlayersFor(unit, byRegion[unit.RegionID]), nowMs)
+	// Take queued chat before publishing actors so hires and teleports appear before their lines.
+	game.caravanChatMu.Lock()
+	chatLines := game.caravanChatLines
+	game.caravanChatLines = nil
+	game.caravanChatMu.Unlock()
+	for i, unit := range roster {
+		nearby := make([]caravanai.ObservedPlayer, 0)
+		for _, other := range roster {
+			if other.RespawnPending || other.HP <= 0 {
+				continue
+			}
+			if allowed, known := worldgeom.RegionPlayerCombat(other.RegionID); !known || !allowed {
+				continue
+			}
+			if other.Name == unit.Name {
+				continue
+			}
+			distance := float32(caravanai.WaypointDistance(caravanai.Waypoint{RegionID: unit.RegionID, X: unit.X, Z: unit.Z}, caravanai.Waypoint{RegionID: other.RegionID, X: other.X, Z: other.Z}))
+			if distance <= 320 {
+				nearby = append(nearby, caravanai.ObservedPlayer{Name: other.Name, JobType: caravanJob(other.Role), HPPercent: caravanai.HPPercent(int64(other.HP), int64(other.MaxHP)), Distance: distance})
+			}
+		}
+		for _, view := range views {
+			if view.DivisionID != game.divisionID || view.WorldInstance != domain.DefaultWorldInstance {
+				continue
+			}
+			c := game.deps.CharacterByID(game.divisionID, view.CharacterID)
+			if c == nil {
+				continue
+			}
+			if p, ok := game.caravanPlayer(game.divisionID, c.Name); ok && p.HPPercent > 0 {
+				p.Distance = float32(caravanai.WaypointDistance(p.At, caravanai.Waypoint{RegionID: unit.RegionID, X: unit.X, Z: unit.Z}))
+				if p.Distance <= 320 {
+					nearby = append(nearby, p.ObservedPlayer)
+				}
+			}
+		}
+		mustRejoin := game.caravanAgents.EscortMustRejoin(game.divisionID, unit.Name)
+		if i < len(game.caravanActors) {
+			c := game.caravanActors[i]
+			if unit.DeadUntilMs > 0 {
+				game.items.ServerActorAcceptResurrection(game.divisionID, c.Name, nowMs)
+			}
+			if unit.Role == caravanai.RoleThief {
+				if unit.IsDead(nowMs) {
+					delete(game.caravanThiefReturning, c.Name)
+				} else {
+					liveSpawn := game.items.LiveSpawnFor(game.divisionID, c)
+					landed := caravanai.Waypoint{RegionID: liveSpawn.RegionID, X: float32(liveSpawn.X), Y: float32(liveSpawn.Y), Z: float32(liveSpawn.Z)}
+					denRegion := caravanai.TownWaypoint(caravanai.TownThiefDen).RegionID
+					game.caravanAgents.NoteThiefCargo(game.divisionID, c.Name, game.items.ServerActorHasTransportGoods(game.divisionID, c.Name))
+					if game.caravanThiefReturning[c.Name] && liveSpawn.RegionID == denRegion {
+						delete(game.caravanThiefReturning, c.Name)
+						// An unhired Thief sells at once and moves on; a hired one
+						// holds the haul for its hirer (caravanai thiefcargo.go).
+						if game.caravanAgents.ThiefLandedInDen(game.divisionID, c.Name, landed, nowMs) {
+							game.sellThiefHaul(c, "")
+							game.caravanAgents.CompleteThiefDenReturn(game.divisionID, c.Name, landed, nowMs)
+						}
+					}
+					if hirer, sell := game.caravanAgents.ThiefDenSale(game.divisionID, c.Name); sell {
+						game.sellThiefHaul(c, hirer)
+						if hirer == "" {
+							game.caravanAgents.CompleteThiefDenReturn(game.divisionID, c.Name, landed, nowMs)
+						}
+					}
+				}
+			}
+			game.keepCaravanSpeed(c, unit, nowMs)
+			if !mustRejoin {
+				game.showCaravanLoot(c, unit, nearby, nowMs)
+			}
+			if unit.Role == caravanai.RoleTrader && unit.DeadUntilMs > 0 && unit.CargoStacks > 0 &&
+				!game.items.ServerActorHasTransportGoods(game.divisionID, c.Name) {
+				game.caravanAgents.NoteCargoGone(game.divisionID, c.Name)
+			}
+			hp, _, mp, _ := game.items.GameplayVitals(game.divisionID, c)
+			cosHP, cosMaxHP, lost := game.items.ServerActorTransportVitals(game.divisionID, c.Name)
+			game.caravanAgents.ObserveVitals(game.divisionID, c.Name, hp, mp, lost, nowMs)
+			game.caravanAgents.ObserveTransportVitals(game.divisionID, c.Name, cosHP, cosMaxHP)
+		}
+		var npcGID uint32
+		var npcAt caravanai.Waypoint
+		// Idle agents stroll in town, where no monster reaches them: no scan.
+		// A Hunter with an AI or player Thief in sight goes for the Thief
+		// before any of the world's own monsters.
+		if !unit.IsDead(nowMs) && !mustRejoin && unit.State != caravanai.StateIdleInTown && unit.State != caravanai.StateRecruiting && !(unit.Role == caravanai.RoleHunter && thiefInSight(nearby)) {
+			npcGID, npcAt = game.caravanNPCThreat(unit, nowMs)
+		}
+		decision, updated, ok := game.caravanAgents.StepAgentWithWorldThreat(ctx, game.divisionID, unit.Name, nearby, npcGID != 0, nowMs)
+		if !ok || updated == nil {
+			updated = unit
+		}
+		deadNow := updated.IsDead(nowMs)
+		casting := !deadNow && game.items.ServerActorCasting(game.divisionID, updated.Name)
+		if !deadNow && npcGID != 0 && !mustRejoin && !casting {
+			engaged, stalled := game.caravanAgents.ApproachWorldThreatAt(game.divisionID, updated.Name, npcAt, nowMs)
+			if engaged != nil {
+				updated = engaged
+			}
+			if stalled {
+				game.ignoreCaravanThreat(updated.Name, npcGID, nowMs+30_000)
+				npcGID = 0
+			}
+		}
+		if i < len(game.caravanActors) {
+			c := game.caravanActors[i]
+			game.publishCaravanActor(ticker, views, unit, updated, c, nowMs)
+			if !deadNow && !casting && (updated.Role == caravanai.RoleTrader ||
+				(updated.Role == caravanai.RoleThief && game.caravanThiefReturning[c.Name])) {
+				game.publishCaravanAction(c, game.items.ServerActorRide(game.divisionID, c.Name, updated.State != caravanai.StateInCombat && updated.State != caravanai.StateParleying))
+			}
+			if !deadNow && npcGID != 0 && !mustRejoin {
+				npcDist := caravanai.WaypointDistance(caravanai.Waypoint{RegionID: updated.RegionID, X: updated.X, Z: updated.Z}, npcAt)
+				if caravanai.InCastRange(updated, npcDist) {
+					game.publishCaravanAction(c, game.caravanCast(c, npcGID, nowMs))
+				}
+			} else if !deadNow && decision.Action == caravanai.ActionAttackTarget && !mustRejoin {
+				if target := game.deps.CharacterByName(game.divisionID, decision.TargetName); target != nil {
+					alive := false
+					game.deps.Read(game.divisionID, func() { alive = enterworld.CharacterAlive(target) })
+					if alive {
+						tSpawn := game.items.LiveSpawnFor(game.divisionID, target)
+						targetDist := caravanai.WaypointDistance(
+							caravanai.Waypoint{RegionID: updated.RegionID, X: updated.X, Z: updated.Z},
+							caravanai.Waypoint{RegionID: tSpawn.RegionID, X: float32(tSpawn.X), Z: float32(tSpawn.Z)},
+						)
+						if caravanai.InCastRange(updated, targetDist) {
+							result := game.caravanCast(c, enterworld.ObjectIDForCharacter(target), nowMs)
+							game.publishCaravanAction(c, result)
+						}
+					}
+				}
+			} else if !deadNow && !casting && !mustRejoin && updated.Role == caravanai.RoleHunter {
+				if ressTarget, ressAt, ok := game.caravanAgents.ResurrectTarget(game.divisionID, updated.Name, nowMs); ok {
+					if ressSkill := game.caravanRessSkill[c.Name]; ressSkill != 0 {
+						dist := caravanai.WaypointDistance(caravanai.Waypoint{RegionID: updated.RegionID, X: updated.X, Z: updated.Z}, ressAt)
+						if dist <= caravanai.ResurrectCastRange {
+							if target := game.deps.CharacterByName(game.divisionID, ressTarget); target != nil {
+								game.publishCaravanAction(c, game.caravanCastSkill(c, ressSkill, enterworld.ObjectIDForCharacter(target), nowMs))
+							}
+						}
+					}
+				}
+			}
+		}
+		if !deadNow {
+			mapPlayers = append(mapPlayers, wire.BetaMapPlayer{Gid: uint32(caravanActorIDBase+int64(i)) + domain.PlayerGIDBase, RegionID: updated.RegionID, X: updated.X, Z: updated.Z, Name: formatCaravanMapLabel(updated)})
+		}
 	}
-	entities := game.caravanAgents.AgentEntities(game.divisionID)
-	var frames []simulation.DivisionFrames
-	if game.caravanPeers != nil {
-		frames = game.caravanPeers.frames(game.divisionID, viewers, entities)
+
+	for _, line := range chatLines {
+		action.BroadcastObservedFrames(game.hub, game.divisionID, 0, line.gid,
+			[]wire.Frame{{Opcode: chat.OpChatBroadcast, Payload: chat.AgentChatPayload(line.gid, line.text)}})
 	}
-	// Slice 4 (#3704): the lines the agents spoke this tick ride out
-	// with the presentation frames, then the buffer starts over.
-	if len(game.caravanChatLines) > 0 {
-		frames = append(frames, caravanChatFrames(game.divisionID, viewers, entities, game.caravanChatLines)...)
-		game.caravanChatLines = nil
+
+	if nowMs >= game.caravanMapAtMs && len(adminSessions) > 0 && len(mapPlayers) > 0 {
+		game.caravanMapAtMs = nowMs + 2000
+		payload := wire.EncodeBetaPlayerMap(mapPlayers)
+		frame := []simulation.Frame{{Opcode: wire.OpBetaPlayerMap, Payload: payload}}
+		for _, sessionID := range adminSessions {
+			ticker.Push.PushToSession(sessionID, frame)
+		}
 	}
-	// Slice 3e (#3704): this tick's agent-strike publications ride out
-	// with the presentation frames.
-	frames = append(frames, game.caravanStrikeFrames...)
-	game.caravanStrikeFrames = nil
-	return frames
+	return nil
 }
 
-// caravanChatLine is one line an agent spoke during the tick, waiting
-// for the tick to address it (slice 4 of #3704).
-type caravanChatLine struct {
-	agentName string
-	text      string
+func formatCaravanTownName(town caravanai.TownID) string {
+	switch town {
+	case caravanai.TownJangan:
+		return "Jangan"
+	case caravanai.TownDonwhang:
+		return "Donwhang"
+	case caravanai.TownHotan:
+		return "Hotan"
+	case caravanai.TownThiefDen:
+		return "Thief Den"
+	default:
+		return string(town)
+	}
+}
+
+func formatCaravanMapLabel(u *caravanai.AgentUnit) string {
+	if u.HiredBy != "" {
+		return fmt.Sprintf("%s (Hired by %s)", u.Name, u.HiredBy)
+	}
+	if u.RunKind == caravanai.RunGrand {
+		return fmt.Sprintf("%s (Grand caravan %s -> %s)", u.Name, formatCaravanTownName(u.OriginTown), formatCaravanTownName(u.DestTown))
+	}
+	switch u.Role {
+	case caravanai.RoleTrader:
+		if u.State == caravanai.StateIdleInTown || u.State == caravanai.StateRecruiting {
+			return fmt.Sprintf("%s (%d* %s)", u.Name, u.CargoStars, formatCaravanTownName(u.OriginTown))
+		}
+		return fmt.Sprintf("%s (%d* %s -> %s)", u.Name, u.CargoStars, formatCaravanTownName(u.OriginTown), formatCaravanTownName(u.DestTown))
+	case caravanai.RoleHunter:
+		if u.State == caravanai.StateReinforcing && u.ReinforcingTrader != "" {
+			return fmt.Sprintf("%s (Aiding %s)", u.Name, u.ReinforcingTrader)
+		}
+		if u.EscortingTrader != "" {
+			return fmt.Sprintf("%s (Escorting %s)", u.Name, u.EscortingTrader)
+		}
+		if u.AvailableForHire {
+			return fmt.Sprintf("%s (Hireable - %s)", u.Name, formatCaravanTownName(u.OriginTown))
+		}
+		return fmt.Sprintf("%s (Patrol)", u.Name)
+	default:
+		if u.AvailableForHire {
+			return fmt.Sprintf("%s (Hireable - %s)", u.Name, formatCaravanTownName(u.OriginTown))
+		}
+		return fmt.Sprintf("%s (Thief - %s)", u.Name, formatCaravanTownName(u.OriginTown))
+	}
+}
+
+// thiefInSight reports an AI or player Thief among the observed.
+func thiefInSight(nearby []caravanai.ObservedPlayer) bool {
+	for _, p := range nearby {
+		if p.JobType == domain.JobThief && p.HPPercent > 0 {
+			return true
+		}
+	}
+	return false
 }
 
 /*
 ================
-caravanChatFrames
+caravanUseItem / keepCaravanSpeed
 
-One spoken line becomes a gid-authored All-chat frame (0x3667) for
-every viewer who can see the speaking agent (the peer interest rule),
-so the line renders with the agent's name and its overhead bubble,
-exactly like a player's local chat. A line whose agent has no entity
-(the flag's roster mid-change) is dropped, never broadcast wide.
+Agents drink real potions from their bags (action.ServerActorUseItem),
+seen by everyone around like a player's; and keep a 50% speed potion
+running, which their own movement follows. A mounted Trader rides at the
+transport's speed: the potion does not move a transport, as natively.
 ================
 */
-func caravanChatFrames(division string, viewers []caravanPeerViewer, entities []caravanai.AgentEntity, lines []caravanChatLine) []simulation.DivisionFrames {
-	byName := make(map[string]caravanai.AgentEntity, len(entities))
-	for _, entity := range entities {
-		byName[entity.Name] = entity
+func (game *gameplayPlane) caravanUseItem(division, name, codename string) bool {
+	c := game.deps.CharacterByName(division, name)
+	if c == nil {
+		return false
 	}
-	var out []simulation.DivisionFrames
-	for _, line := range lines {
-		entity, ok := byName[line.agentName]
-		if !ok {
+	result := game.items.ServerActorUseItem(division, name, codename)
+	game.publishCaravanAction(c, result)
+	return action.ItemUsed(result)
+}
+
+func (game *gameplayPlane) keepCaravanSpeed(c *enterworld.Character, unit *caravanai.AgentUnit, nowMs int64) {
+	if unit.RespawnPending || unit.HP <= 0 || nowMs < game.caravanSpeedAtMs[c.Name] {
+		return
+	}
+	if game.caravanSpeedAtMs == nil {
+		game.caravanSpeedAtMs = make(map[string]int64)
+	}
+	game.caravanSpeedAtMs[c.Name] = nowMs + 2000
+	buffed := game.items.ServerActorMovementBuff(game.divisionID, c.Name)
+	if !buffed {
+		buffed = game.caravanUseItem(game.divisionID, c.Name, caravanai.SpeedPotionItem)
+		switch {
+		case !buffed && !game.caravanSpeedRefused[c.Name]:
+			if game.caravanSpeedRefused == nil {
+				game.caravanSpeedRefused = make(map[string]bool)
+			}
+			game.caravanSpeedRefused[c.Name] = true
+			log.Warnf("caravan-ai: %s could not drink %s", c.Name, caravanai.SpeedPotionItem)
+		case buffed && !game.caravanSpeedSeen:
+			game.caravanSpeedSeen = true
+			log.Infof("caravan-ai: agents keep %s running (first: %s)", caravanai.SpeedPotionItem, c.Name)
+		}
+	}
+	run, factor := game.caravanRunSpeed(c), float32(1)
+	if buffed && (c.ActiveCOS == nil || (!c.ActiveCOS.Mounted && unit.Role != caravanai.RoleThief)) {
+		// The potion's speed (the client's committed speed); a Hunter's
+		// own 75 is already that fast.
+		run, factor = max(run, simulation.RunSpeed*caravanai.SpeedPotionFactor), caravanai.SpeedPotionFactor
+	}
+	if run != unit.RunSpeed {
+		game.caravanAgents.SetRunSpeed(game.divisionID, c.Name, run, factor)
+	}
+}
+
+/*
+================
+showCaravanLoot / caravanPickUp
+
+Once a second, show the nearest eligible item within 30m. A thief takes
+trade goods first and starts the Den scroll only when it has cargo and
+there are no more nearby stacks its transport can accept.
+================
+*/
+func (game *gameplayPlane) showCaravanLoot(c *enterworld.Character, unit *caravanai.AgentUnit, nearby []caravanai.ObservedPlayer, nowMs int64) {
+	if nowMs < game.caravanLootAtMs[c.Name] {
+		return
+	}
+	if game.caravanLootAtMs == nil {
+		game.caravanLootAtMs = make(map[string]int64)
+	}
+	game.caravanLootAtMs[c.Name] = nowMs + 1000
+	trader := unit.Role == caravanai.RoleTrader
+	thief := unit.Role == caravanai.RoleThief
+	if !game.caravanAgents.LootSought(game.divisionID, c.Name, nowMs) || (trader && thiefInSight(nearby)) ||
+		(thief && game.items.ServerActorReturnPending(game.divisionID, c.Name)) {
+		game.caravanAgents.NoteLoot(game.divisionID, c.Name, 0, caravanai.Waypoint{}, nowMs)
+		return
+	}
+	here := caravanai.Waypoint{RegionID: unit.RegionID, X: unit.X, Z: unit.Z}
+	loaded := thief && game.items.ServerActorHasTransportGoods(game.divisionID, c.Name)
+	ground := game.caravanGround
+	if loaded {
+		// A return decision must see cargo dropped since the shared scan.
+		ground = game.items.GroundItems(game.divisionID)
+	} else if nowMs >= game.caravanGroundAtMs {
+		ground = game.items.GroundItems(game.divisionID)
+		game.caravanGround, game.caravanGroundAtMs = ground, nowMs+1000
+	}
+	var best caravanai.Waypoint
+	var bestGID uint32
+	var bestGoods bool
+	bestDist := caravanai.LootReach
+	seen := game.items.ServerActorLootNear(game.divisionID, c.Name, trader || loaded, ground, func(p grounditem.Point) bool {
+		return caravanai.WaypointDistance(here, caravanai.Waypoint{RegionID: p.RegionID, X: p.X, Z: p.Z}) <= caravanai.LootReach
+	})
+	refused := game.caravanLootRefused[c.Name]
+	for gid, until := range refused {
+		if nowMs >= until {
+			delete(refused, gid)
+		}
+	}
+	for _, loot := range seen {
+		if _, skip := refused[loot.Gid]; skip {
 			continue
 		}
-		payload := chat.EncodeChatBroadcastGid(chat.ChatTypeAll, simulation.PlayerObjectID(entity.CharacterID), line.text)
-		for _, viewer := range viewers {
-			if !caravanEntityVisible(viewer.Pose, entity.Pose) {
-				continue
+		at := caravanai.Waypoint{RegionID: loot.RegionID, X: loot.X, Y: loot.Y, Z: loot.Z}
+		d := caravanai.WaypointDistance(here, at)
+		if (loot.Goods && !bestGoods) || (loot.Goods == bestGoods && d <= bestDist) {
+			best, bestGID, bestDist, bestGoods = at, loot.Gid, d, loot.Goods
+		}
+	}
+	if loaded && bestGID == 0 && unit.RegionID != caravanai.TownWaypoint(caravanai.TownThiefDen).RegionID &&
+		game.caravanUseItem(game.divisionID, c.Name, "ITEM_ETC_SCROLL_RETURN_THIEFDEN_01") {
+		if game.caravanThiefReturning == nil {
+			game.caravanThiefReturning = make(map[string]bool)
+		}
+		game.caravanThiefReturning[c.Name] = true
+	}
+	if bestGID != 0 && game.caravanLootSeen[c.Name] != bestGID {
+		if game.caravanLootSeen == nil {
+			game.caravanLootSeen = make(map[string]uint32)
+		}
+		game.caravanLootSeen[c.Name] = bestGID
+		log.Debugf("caravan-ai: %s goes for ground item %d (%.0f units away)", c.Name, bestGID, bestDist)
+	}
+	game.caravanAgents.NoteLoot(game.divisionID, c.Name, bestGID, best, nowMs)
+}
+
+const caravanLootRefusedMs int64 = 60_000
+
+// caravanShopCodename is each city's specialty shop, where hired goods sell.
+var caravanShopCodename = map[caravanai.TownID]string{
+	caravanai.TownJangan:   "NPC_CH_SPECIAL",
+	caravanai.TownDonwhang: "NPC_WC_SPECIAL",
+	caravanai.TownHotan:    "NPC_KT_SPECIAL",
+}
+
+func (game *gameplayPlane) caravanPickUp(division, name string, itemGID uint32) bool {
+	c := game.deps.CharacterByName(division, name)
+	if c == nil {
+		return false
+	}
+	result := game.items.ServerActorPickup(division, name, itemGID)
+	game.publishCaravanAction(c, result)
+	picked := len(result.Broadcast) > 0
+	if picked {
+		log.Debugf("caravan-ai: %s picked up ground item %d", name, itemGID)
+	} else {
+		// Leave that item alone for a minute: retrying every second only
+		// repeats the refusal (and the log line).
+		if game.caravanLootRefused == nil {
+			game.caravanLootRefused = make(map[string]map[uint32]int64)
+		}
+		if game.caravanLootRefused[name] == nil {
+			game.caravanLootRefused[name] = make(map[uint32]int64)
+		}
+		game.caravanLootRefused[name][itemGID] = time.Now().UnixMilli() + caravanLootRefusedMs
+		log.WithField("refusal", result.DiagnosticRefusal).Warnf("caravan-ai: %s could not pick up ground item %d; leaving it for a minute", name, itemGID)
+	}
+	return picked
+}
+
+/*
+================
+caravanNotice
+================
+*/
+func (game *gameplayPlane) caravanNotice(division, player, text string) {
+	if game.presence == nil {
+		return
+	}
+	if session, ok := game.presence.SessionByName(division, player); ok && session.WorldReady() {
+		_ = session.Send(chat.OpChatBroadcast, chat.EncodeChatNotice(text))
+	}
+}
+
+/*
+================
+caravanHireLabel / caravanHireService
+
+The specialty shops (Hunters and Traders) and the Thief Den's buyer
+(Thieves) offer one hire row. It is the first row of the NPC's own menu
+(action.OpCaravanHireNpc, sent at select), not a conversation row; the
+client opens the hire window with 0x7FCF operation 0. caravanHireService
+still answers a conversation row from an older client.
+================
+*/
+const (
+	caravanHireServicePrefix = "caravan-hire:"
+	caravanThiefDenNPC       = "NPC_TD_THIEF_BUY"
+)
+
+func (game *gameplayPlane) caravanHireLabel(npcCodename string) string {
+	if game.caravanAgents == nil || !game.caravanAgents.Enabled() {
+		return ""
+	}
+	switch npcCodename {
+	case "NPC_CH_SPECIAL", "NPC_WC_SPECIAL", "NPC_KT_SPECIAL":
+		return "Hire Hunters and Traders"
+	case caravanThiefDenNPC:
+		return "Hire Thieves"
+	}
+	return ""
+}
+
+func (game *gameplayPlane) caravanHireService(character *enterworld.Character, codename string) ([]wire.Frame, bool) {
+	if _, ok := strings.CutPrefix(codename, caravanHireServicePrefix); !ok || game.caravanAgents == nil {
+		return nil, false
+	}
+	return []wire.Frame{game.caravanHireWindow(character, "")}, true
+}
+
+/*
+================
+caravanHireWindow / caravanHireRequest
+
+The hire window (port-only 0x3FCF): every agent hired where the player
+stands, available ones first, with the Trader goods choices. The request
+(0x7FCF) refreshes it or hires one agent and answers with the window again.
+================
+*/
+type caravanHireRowJSON struct {
+	Name      string `json:"name"`
+	Display   string `json:"display"`
+	Role      string `json:"role"`
+	Town      string `json:"town"`
+	Available bool   `json:"available"`
+	Status    string `json:"status"`
+	Extend    bool   `json:"extend,omitempty"`
+}
+
+type caravanHireStarsJSON struct {
+	Stars uint8  `json:"stars"`
+	Goods string `json:"goods"`
+	Total string `json:"total"`
+}
+
+type caravanHireJSON struct {
+	Version int                    `json:"version"`
+	Title   string                 `json:"title"`
+	Fee     string                 `json:"fee"`
+	Message string                 `json:"message"`
+	Rows    []caravanHireRowJSON   `json:"rows"`
+	Stars   []caravanHireStarsJSON `json:"stars"`
+}
+
+func (game *gameplayPlane) caravanHireWindow(character *enterworld.Character, message string) wire.Frame {
+	var job uint8
+	var name string
+	game.deps.Read(game.divisionID, func() { job, name = enterworld.DressedJob(character), character.Name })
+	out := caravanHireJSON{Version: 1, Title: "Caravan Hire", Fee: caravanai.GoldText(game.caravanAgents.HireFee()), Message: message, Rows: []caravanHireRowJSON{}, Stars: []caravanHireStarsJSON{}}
+	p, ok := game.caravanPlayer(game.divisionID, name)
+	place, inPlace := caravanai.TownID(""), false
+	if ok {
+		place, inPlace = game.caravanAgents.PlaceAt(p.At)
+	}
+	if !inPlace {
+		if out.Message == "" {
+			out.Message = "Caravan help is hired at a specialty shop or in the Thief Den."
+		}
+	} else {
+		roster := game.caravanAgents.HireRoster(game.divisionID, name, job, place, time.Now().UnixMilli())
+		if place == caravanai.TownThiefDen {
+			out.Title = "Thieves for Hire"
+		} else {
+			out.Title = "Hunters and Traders for Hire - " + formatCaravanTownName(place)
+			// Goods are priced like a player's own load: by a Trader of this
+			// town, whose transport and goods its hire would carry.
+			trader := ""
+			for _, row := range roster {
+				if row.Role == caravanai.RoleTrader && row.Town == place {
+					trader = row.Name
+					break
+				}
 			}
-			out = append(out, simulation.DivisionFrames{
-				DivisionID:      division,
-				Frames:          []simulation.Frame{{Opcode: chat.OpChatBroadcast, Payload: payload}},
-				OnlyCharacterID: viewer.CharacterID,
+			for s := uint8(1); s <= caravanai.MaxHireStars; s++ {
+				goods := game.caravanAgents.StarGoods(game.divisionID, trader, s)
+				out.Stars = append(out.Stars, caravanHireStarsJSON{Stars: s, Goods: caravanai.GoldText(goods), Total: caravanai.GoldText(game.caravanAgents.HireFee() + goods)})
+			}
+		}
+		for _, row := range roster {
+			out.Rows = append(out.Rows, caravanHireRowJSON{
+				Name: row.Name, Display: caravanai.DisplayName(row.Name), Role: row.Role.Title(),
+				Town: formatCaravanTownName(row.Town), Available: row.Available, Status: row.Status, Extend: row.Extend,
 			})
 		}
 	}
-	return out
+	payload, _ := json.Marshal(out)
+	return wire.Frame{Opcode: action.OpCaravanHire, Payload: payload}
 }
 
-/*
-================
-installCaravanChat
-
-Seats the caravan command intake on the chat runtime (slice 4 of
-#3704): !accept/!hire/!memory lines are answered by the caravan
-runtime and never reach the room. Called after chat registration; a
-shard without the caravan runtime keeps the native posture (the lines
-are ordinary chat).
-================
-*/
-func (game *gameplayPlane) installCaravanChat() {
-	if game.chat == nil || game.caravanAgents == nil {
-		return
-	}
-	game.chat.CaravanCommands = caravanCommandsPort(game.caravanAgents)
-}
-
-/*
-================
-caravanCommandsPort
-
-The chat runtime's caravan intake over one caravan runtime: the reply
-is authored by the named agent when there is one (the chat lane sends
-it as that agent's whisper), and a system notice otherwise (an unknown
-agent, a wrong job). The rate limit's silent answer stays silent.
-================
-*/
-func caravanCommandsPort(rt *caravanai.Runtime) func(divisionID string, sender *enterworld.Character, message string) (string, string, bool) {
-	return func(divisionID string, sender *enterworld.Character, message string) (string, string, bool) {
-		reply, handled := rt.HandlePlayerCommand(divisionID, sender.Name, sender.Job.Type, message, time.Now().UnixMilli())
-		if !handled || reply == "" {
-			return "", reply, handled
-		}
-		if fields := strings.Fields(message); len(fields) >= 2 {
-			if name, ok := rt.AgentNamed(divisionID, fields[1]); ok {
-				return name, reply, true
-			}
-		}
-		return "", reply, true
-	}
-}
-
-// observedPlayerPose is one entered player beside the pose the caravan
-// tick saw it at: the raw material of an agent's ObservedPlayer list.
-type observedPlayerPose struct {
-	name      string
-	jobType   uint8
-	hpPercent int
-	pose      simulation.Spawn
-}
-
-/*
-================
-observedPlayersFor
-
-One agent's nearby players with their real distances from where the
-agent stands (the brain's rules and the strike range read Distance;
-before slice 3e the tick never computed it).
-================
-*/
-func observedPlayersFor(unit *caravanai.AgentUnit, players []observedPlayerPose) []caravanai.ObservedPlayer {
-	if len(players) == 0 {
+func (game *gameplayPlane) caravanHireRequest(division string, character *enterworld.Character, payload []byte) []wire.Frame {
+	if game.caravanAgents == nil || division != game.divisionID {
 		return nil
 	}
-	from := worldgeom.RegionXZ{RegionID: unit.RegionID, X: float64(unit.X), Z: float64(unit.Z)}
-	out := make([]caravanai.ObservedPlayer, 0, len(players))
-	for _, p := range players {
-		out = append(out, caravanai.ObservedPlayer{
-			Name:      p.name,
-			JobType:   p.jobType,
-			HPPercent: p.hpPercent,
-			Distance:  float32(worldgeom.Distance(from, worldgeom.RegionXZ{RegionID: p.pose.RegionID, X: p.pose.X, Z: p.pose.Z})),
-		})
+	if payload[0] == 0 {
+		return []wire.Frame{game.caravanHireWindow(character, "")}
 	}
-	return out
-}
-
-/*
-================================================================================
-Nav-surface walking (the caravanai.Walker port)
-================================================================================
-*/
-
-// caravanArrivalRadius is how close a step must land to its anchor to
-// count as reaching it: the tolerance the march chord itself is proven
-// to (PlanMonsterPath's Rest lands within a few units of the goal).
-const caravanArrivalRadius = 24.0
-
-// caravanWalker walks caravan agents on the shipped nav surface with
-// the monster march: each step plans the chord to the current anchor
-// and advances along it by the step's distance budget.
-type caravanWalker struct {
-	water *movement.WaterValidator
-}
-
-/*
-================
-caravanWalker.Step
-
-Plans the march chord from -> to and steps toward the chord's Rest by
-at most maxDist. A stalled chord (no progress) holds the pose. The
-returned pose's Y is the march surface height.
-================
-*/
-func (w caravanWalker) Step(from, to caravanai.Pose, maxDist float64) (caravanai.Pose, bool) {
-	if w.water == nil {
-		return from, false
+	var job uint8
+	var name string
+	game.deps.Read(division, func() { job, name = enterworld.DressedJob(character), character.Name })
+	if payload[0] == action.CaravanHireOpExtend {
+		reply := game.caravanAgents.ExtendHire(division, name, string(payload[2:]), time.Now().UnixMilli())
+		return []wire.Frame{
+			{Opcode: chat.OpChatBroadcast, Payload: chat.EncodeChatNotice(reply)},
+			game.caravanHireWindow(character, reply),
+		}
 	}
-	// The start pose carries the march surface height (the last
-	// step's Rest, or the anchor's own Y at spawn); the march plans
-	// from the surface owner under it, so it is passed through as-is.
-	toMonster := monster.Pose{RegionID: to.RegionID, X: float64(to.X), Y: float64(to.Y), Z: float64(to.Z)}
-	path := w.water.PlanMonsterPath(
-		monster.Pose{RegionID: from.RegionID, X: float64(from.X), Y: float64(from.Y), Z: float64(from.Z)},
-		toMonster,
-	)
-	if path == nil {
-		return from, false
+	if payload[0] == action.CaravanHireOpLead {
+		reply := game.caravanAgents.SetLead(division, name, string(payload[2:]))
+		return []wire.Frame{{Opcode: chat.OpChatBroadcast, Payload: chat.EncodeChatNotice(reply)}}
 	}
-	next := stepTowardRest(from, path.Rest(), maxDist)
-	arrived := worldgeom.Distance(
-		worldgeom.RegionXZ{RegionID: next.RegionID, X: float64(next.X), Z: float64(next.Z)},
-		worldgeom.RegionXZ{RegionID: to.RegionID, X: float64(to.X), Z: float64(to.Z)},
-	) <= caravanArrivalRadius
-	return next, arrived
-}
-
-/*
-================
-stepTowardRest
-
-Advances from toward the march's Rest pose by at most maxDist world
-units (cross-region safe); Y follows the chord from the start height
-to the Rest's surface height. Zero or negative budget, or a Rest no
-farther than the budget, lands exactly on the Rest.
-================
-*/
-func stepTowardRest(from caravanai.Pose, rest monster.Pose, maxDist float64) caravanai.Pose {
-	fromXZ := worldgeom.RegionXZ{RegionID: from.RegionID, X: float64(from.X), Z: float64(from.Z)}
-	restXZ := worldgeom.RegionXZ{RegionID: rest.RegionID, X: rest.X, Z: rest.Z}
-	dist := worldgeom.Distance(fromXZ, restXZ)
-	if dist <= maxDist {
-		return caravanai.Pose{RegionID: rest.RegionID, X: float32(rest.X), Y: float32(rest.Y), Z: float32(rest.Z)}
+	reply := game.caravanAgents.HireAgentStars(division, name, job, string(payload[2:]), payload[1], time.Now().UnixMilli())
+	return []wire.Frame{
+		{Opcode: chat.OpChatBroadcast, Payload: chat.EncodeChatNotice(reply)},
+		game.caravanHireWindow(character, reply),
 	}
-	fromGrid := worldgeom.ExpandGrid(fromXZ)
-	restGrid := worldgeom.ExpandGrid(restXZ)
-	ratio := maxDist / dist
-	grid := worldgeom.GridXZ{
-		X: fromGrid.X + (restGrid.X-fromGrid.X)*ratio,
-		Z: fromGrid.Z + (restGrid.Z-fromGrid.Z)*ratio,
-	}
-	regionID := uint16(int(grid.X/worldgeom.OutdoorRegionSize) | int(grid.Z/worldgeom.OutdoorRegionSize)<<8)
-	local := worldgeom.LocalFromGrid(regionID, grid)
-	y := float64(from.Y) + (rest.Y-float64(from.Y))*ratio
-	return caravanai.Pose{RegionID: regionID, X: float32(local.X), Y: float32(y), Z: float32(local.Z)}
 }
 
 /*
@@ -374,6 +881,9 @@ agents' "cornered" and parley rules read what the player's own gauge shows.
 ================
 */
 func (game *gameplayPlane) playerHPPercent(c *enterworld.Character) int {
+	if c == nil || !enterworld.CharacterAlive(c) {
+		return 0
+	}
 	if game.items == nil {
 		return caravanai.FullHPPercent
 	}
@@ -382,603 +892,85 @@ func (game *gameplayPlane) playerHPPercent(c *enterworld.Character) int {
 }
 
 /*
-================================================================================
-Peer presentation (slice 3a): agents appear, move and leave like peers
-
-The peer-visibility leg (simulation/peer_visibility.go) is built over
-session snapshots, so agents cannot join it without pretending to be
-sessions. This sibling leg runs from the same tick hook instead: it
-keeps its own per-viewer shown sets and emits the same frames the peer
-leg emits (item references ahead of the 0x30D7 spawn row, the movement
-channel + 0xB738 goal while marching, the 0x36AB despawn on leaving),
-targeted at the one viewer through DivisionFrames.OnlyCharacterID.
-Visibility is the peer rule itself, worldgeom.InterestVisible.
-
-A trader's transport (slice 3f) rides the same leg as a second,
-COS-shaped entity (wiring_caravanai_transport.go): the band-2 spawn
-row players' transports get, a running goal re-acked as the trail
-point behind the trader drifts, and the same despawn when the
-trader dies or leaves sight.
-================================================================================
-*/
-
-// caravanPeerViewer is one entered session as the leg sees it: the
-// delivery identity and where its character stands.
-type caravanPeerViewer struct {
-	SessionID   string
-	CharacterID int64
-	Pose        simulation.Spawn
-}
-
-// caravanPeerAck is what one viewer was last told about one agent:
-// the goal it is walking to and the pose it was last placed at, so a
-// goal is re-acked only when it changes and a region jump re-shows
-// instead of acking across the map.
-type caravanPeerAck struct {
-	Target caravanai.Pose
-	Pose   caravanai.Pose
-	Moving bool
-}
-
-// caravanPeerLeg owns the (viewer, agent) presentation state. The
-// resolve and refs ports are the shard's appearance data and item
-// reference catalog; both are consulted lazily so boot order between
-// the caravan wiring and the catalog build does not matter.
-type caravanPeerLeg struct {
-	resolve          func(entity caravanai.AgentEntity) (simulation.PeerAppearance, bool)
-	resolveTransport func(entity caravanai.AgentEntity) (wire.CosSpawnBand2, bool)
-	refs             func(ids []uint32) []simulation.Frame
-
-	appearances  map[int64]*simulation.PeerAppearance
-	transportRow map[int64]*wire.CosSpawnBand2
-	shown        map[string]map[uint32]bool
-	sentRefs     map[string]map[uint32]bool
-	acked        map[string]map[uint32]caravanPeerAck
-	tacked       map[string]map[uint32]caravanPeerAck
-	heading      map[uint32]uint16
-}
-
-/*
 ================
-newCaravanPeerLeg
+pushCaravanLeads
+
+Sends each online hirer who leads its hired Traders and who may
+(action.OpCaravanLead), when that changes or the hirer reconnects; an
+empty list once it has no hired Trader. The client marks the leader on
+the party board and offers the others a lead button.
 ================
 */
-func newCaravanPeerLeg(
-	resolve func(entity caravanai.AgentEntity) (simulation.PeerAppearance, bool),
-	resolveTransport func(entity caravanai.AgentEntity) (wire.CosSpawnBand2, bool),
-	refs func(ids []uint32) []simulation.Frame,
-) *caravanPeerLeg {
-	return &caravanPeerLeg{
-		resolve:          resolve,
-		resolveTransport: resolveTransport,
-		refs:             refs,
-		appearances:      make(map[int64]*simulation.PeerAppearance),
-		transportRow:     make(map[int64]*wire.CosSpawnBand2),
-		shown:            make(map[string]map[uint32]bool),
-		sentRefs:         make(map[string]map[uint32]bool),
-		acked:            make(map[string]map[uint32]caravanPeerAck),
-		tacked:           make(map[string]map[uint32]caravanPeerAck),
-		heading:          make(map[uint32]uint16),
+func (game *gameplayPlane) pushCaravanLeads(ticker *simulation.Ticker, views []simulation.SessionView) {
+	if game.caravanLeadSent == nil {
+		game.caravanLeadSent = make(map[string]caravanLeadPush)
 	}
-}
-
-/*
-================
-caravanPeerLeg.frames
-
-One tick of presentation: show each viewer the agents it newly sees,
-keep the marching ones walking, despawn the ones it lost, and forget
-viewers whose sessions are gone. A frame batch is addressed to the
-one viewer (OnlyCharacterID); nothing here broadcasts.
-================
-*/
-func (leg *caravanPeerLeg) frames(division string, viewers []caravanPeerViewer, entities []caravanai.AgentEntity) []simulation.DivisionFrames {
-	live := make(map[string]bool, len(viewers))
-	var out []simulation.DivisionFrames
-	for _, viewer := range viewers {
-		live[viewer.SessionID] = true
-		shown := leg.shownFor(viewer.SessionID)
-		acked := leg.ackedFor(viewer.SessionID)
-		tacked := leg.tackedFor(viewer.SessionID)
-		visible := make(map[uint32]caravanai.AgentEntity, len(entities))
-		for _, entity := range entities {
-			if caravanEntityVisible(viewer.Pose, entity.Pose) {
-				visible[simulation.PlayerObjectID(entity.CharacterID)] = entity
-			}
-		}
-		// Slice 3f: a visible trader's transport is a second entity
-		// beside it, visible by its own pose (it trails the trader,
-		// so it can straddle the interest edge on its own).
-		visibleTransports := make(map[uint32]caravanai.AgentEntity, len(visible))
-		for _, entity := range visible {
-			if entity.TransportCharacterID == 0 {
-				continue
-			}
-			if caravanEntityVisible(viewer.Pose, entity.TransportPose) {
-				visibleTransports[simulation.PlayerObjectID(entity.TransportCharacterID)] = entity
-			}
-		}
-		for gid, entity := range visible {
-			if !shown[gid] {
-				if batch := leg.showBatch(viewer, entity); batch != nil {
-					batch.DivisionID = division
-					out = append(out, *batch)
-					shown[gid] = true
-				}
-				continue
-			}
-			if batch := leg.moveBatch(viewer, entity, acked[gid]); batch != nil {
-				batch.DivisionID = division
-				out = append(out, *batch)
-			}
-		}
-		for tgid, entity := range visibleTransports {
-			if !shown[tgid] {
-				if batch := leg.showTransportBatch(viewer, entity); batch != nil {
-					batch.DivisionID = division
-					out = append(out, *batch)
-					shown[tgid] = true
-				}
-				continue
-			}
-			if batch := leg.moveTransportBatch(viewer, entity, tacked[tgid]); batch != nil {
-				batch.DivisionID = division
-				out = append(out, *batch)
-			}
-		}
-		for gid := range shown {
-			if _, ok := visible[gid]; ok {
-				continue
-			}
-			if _, ok := visibleTransports[gid]; ok {
-				continue
-			}
-			out = append(out, simulation.DivisionFrames{
-				DivisionID:      division,
-				OnlyCharacterID: viewer.CharacterID,
-				Frames: []simulation.Frame{{
-					ScopeGID: gid,
-					Opcode:   wire.OpObjectDespawn,
-					Payload:  (wire.ObjectDespawn{Gid: gid}).Encode(),
-				}},
-			})
-			delete(shown, gid)
-			delete(acked, gid)
-			delete(tacked, gid)
-		}
+	type leadRow struct {
+		Name    string `json:"name"`
+		Display string `json:"display"`
 	}
-	for sessionID := range leg.shown {
-		if !live[sessionID] {
-			delete(leg.shown, sessionID)
-			delete(leg.sentRefs, sessionID)
-			delete(leg.acked, sessionID)
-			delete(leg.tacked, sessionID)
-		}
-	}
-	return out
-}
-
-/*
-================
-caravanPeerLeg.showBatch
-
-First sight of an agent: the item references the viewer has not been
-sent ride ahead of the spawn row (the #340 contract the peer leg
-keeps), then the row itself, then the march frames when the agent is
-underway. A nil batch means the appearance data did not resolve and
-the agent stays invisible rather than spawning broken.
-================
-*/
-func (leg *caravanPeerLeg) showBatch(viewer caravanPeerViewer, entity caravanai.AgentEntity) *simulation.DivisionFrames {
-	appearance, ok := leg.appearanceFor(entity)
-	if !ok {
-		return nil
-	}
-	gid := simulation.PlayerObjectID(entity.CharacterID)
-	frames := leg.refs(freshCaravanRefIDs(leg.sentFor(viewer.SessionID), appearance.ItemIDs()))
-	pose := caravanSpawnPose(entity.Pose, leg.heading[gid])
-	if entity.Moving {
-		if heading, ok := simulation.HeadingFromMovement(pose, caravanSpawnPose(entity.Target, 0)); ok {
-			leg.heading[gid] = heading
-			pose.Angle = heading
-		}
-	}
-	frames = append(frames, simulation.Frame{
-		ScopeGID: gid, ScopeVisible: true,
-		Opcode:  wire.OpSingleObjectSpawn,
-		Payload: simulation.BuildPeerSpawnRow(appearance, gid, pose),
-	})
-	batch := &simulation.DivisionFrames{OnlyCharacterID: viewer.CharacterID, Frames: frames}
-	if entity.Moving {
-		if move := leg.moveBatch(viewer, entity, caravanPeerAck{}); move != nil {
-			batch.Frames = append(batch.Frames, move.Frames...)
-		}
-	}
-	return batch
-}
-
-/*
-================
-caravanPeerLeg.moveBatch
-
-While an agent marches, its viewers hold a 0xB738 goal: the client
-walks the peer to it at the row's speeds. The goal is re-acked only
-when the anchor changes (or marching starts/stops), and a pose that
-jumped regions (the ferry hop) re-settles with a plain goal at the
-new pose instead of a cross-map ack. The movement channel byte rides
-ahead of the first goal, as the monster leg sends it.
-================
-*/
-func (leg *caravanPeerLeg) moveBatch(viewer caravanPeerViewer, entity caravanai.AgentEntity, ack caravanPeerAck) *simulation.DivisionFrames {
-	gid := simulation.PlayerObjectID(entity.CharacterID)
-	acked := leg.ackedFor(viewer.SessionID)
-	if entity.Pose.RegionID != ack.Pose.RegionID && ack.Pose != (caravanai.Pose{}) {
-		// The ferry hop (or any region jump): settle the peer where it
-		// now stands, then let the marching branch below re-goal it.
-		ack = caravanPeerAck{Pose: entity.Pose}
-		acked[gid] = ack
-	}
-	if !entity.Moving {
-		if !ack.Moving {
-			acked[gid] = caravanPeerAck{Pose: entity.Pose}
-			return nil
-		}
-		acked[gid] = caravanPeerAck{Pose: entity.Pose}
-		return &simulation.DivisionFrames{
-			OnlyCharacterID: viewer.CharacterID,
-			Frames:          []simulation.Frame{caravanGoalFrame(gid, entity.Pose, entity.Pose)},
-		}
-	}
-	if ack.Moving && ack.Target == entity.Target {
-		acked[gid] = caravanPeerAck{Target: entity.Target, Pose: entity.Pose, Moving: true}
-		return nil
-	}
-	frames := make([]simulation.Frame, 0, 2)
-	if !ack.Moving {
-		frames = append(frames, simulation.Frame{
-			Opcode:  wire.OpObjectStateRefresh,
-			Payload: (wire.ObjectStateRefresh{Gid: gid, StateType: wire.StateChannelMove, Value: wire.MoveStateWalk}).Encode(),
-		})
-	}
-	frames = append(frames, caravanGoalFrame(gid, entity.Pose, entity.Target))
-	if heading, ok := simulation.HeadingFromMovement(
-		caravanSpawnPose(entity.Pose, 0), caravanSpawnPose(entity.Target, 0)); ok {
-		leg.heading[gid] = heading
-	}
-	acked[gid] = caravanPeerAck{Target: entity.Target, Pose: entity.Pose, Moving: true}
-	return &simulation.DivisionFrames{OnlyCharacterID: viewer.CharacterID, Frames: frames}
-}
-
-/*
-================
-caravanGoalFrame
-
-The 0xB738 destination goal for one agent: walk from where it stands
-to the goal pose.
-================
-*/
-func caravanGoalFrame(gid uint32, from, to caravanai.Pose) simulation.Frame {
-	source := simulation.MovementSourceFromSpawn(caravanSpawnPose(from, 0))
-	return simulation.Frame{
-		Opcode: simulation.OpMovementAck,
-		Payload: simulation.BuildMovementAckPayload(gid, simulation.MovementRequest{
-			Mode:     simulation.MovementAckDestinationMode,
-			RegionID: to.RegionID,
-			X:        float64(to.X),
-			Y:        float64(to.Y),
-			Z:        float64(to.Z),
-		}, &source),
-	}
-}
-
-/*
-================
-caravanPeerLeg.appearanceFor
-
-The resolved appearance of one agent, built once per agent from the
-shard's shipped data. An agent whose model or gear does not resolve
-stays invisible (the resolver logs the miss) instead of spawning
-with a placeholder row.
-================
-*/
-func (leg *caravanPeerLeg) appearanceFor(entity caravanai.AgentEntity) (simulation.PeerAppearance, bool) {
-	if appearance, ok := leg.appearances[entity.CharacterID]; ok {
-		if appearance == nil {
-			return simulation.PeerAppearance{}, false
-		}
-		return *appearance, true
-	}
-	appearance, ok := leg.resolve(entity)
-	if !ok {
-		// A nil entry is a known miss: the resolver logged it, and
-		// the agent is not retried (or re-logged) every tick.
-		leg.appearances[entity.CharacterID] = nil
-		return simulation.PeerAppearance{}, false
-	}
-	leg.appearances[entity.CharacterID] = &appearance
-	return appearance, true
-}
-
-/*
-================
-caravanPeerLeg.shownFor
-================
-*/
-func (leg *caravanPeerLeg) shownFor(sessionID string) map[uint32]bool {
-	shown, ok := leg.shown[sessionID]
-	if !ok {
-		shown = make(map[uint32]bool)
-		leg.shown[sessionID] = shown
-	}
-	return shown
-}
-
-/*
-================
-caravanPeerLeg.sentFor
-================
-*/
-func (leg *caravanPeerLeg) sentFor(sessionID string) map[uint32]bool {
-	sent, ok := leg.sentRefs[sessionID]
-	if !ok {
-		sent = make(map[uint32]bool)
-		leg.sentRefs[sessionID] = sent
-	}
-	return sent
-}
-
-/*
-================
-caravanPeerLeg.ackedFor
-================
-*/
-func (leg *caravanPeerLeg) ackedFor(sessionID string) map[uint32]caravanPeerAck {
-	acked, ok := leg.acked[sessionID]
-	if !ok {
-		acked = make(map[uint32]caravanPeerAck)
-		leg.acked[sessionID] = acked
-	}
-	return acked
-}
-
-/*
-================
-freshCaravanRefIDs
-
-The demanded ids the viewer has not been sent yet, each marked sent:
-the same once-per-viewer reference contract the peer leg keeps
-(simulation's freshReferenceIDs), held here because the shown sets
-are this leg's own.
-================
-*/
-func freshCaravanRefIDs(sent map[uint32]bool, ids []uint32) []uint32 {
-	fresh := make([]uint32, 0, len(ids))
-	for _, id := range ids {
-		if id == 0 || sent[id] {
+	seen := map[string]bool{}
+	for _, view := range views {
+		if view.DivisionID != game.divisionID {
 			continue
 		}
-		sent[id] = true
-		fresh = append(fresh, id)
-	}
-	return fresh
-}
-
-/*
-================
-caravanEntityVisible
-
-Whether a viewer at pose sees an agent at pose: the peer interest
-rule (the viewer's 3x3 sector neighbourhood).
-================
-*/
-func caravanEntityVisible(viewer simulation.Spawn, entity caravanai.Pose) bool {
-	return worldgeom.InterestVisible(
-		worldgeom.RegionXZ{RegionID: viewer.RegionID, X: viewer.X, Z: viewer.Z},
-		worldgeom.RegionXZ{RegionID: entity.RegionID, X: float64(entity.X), Z: float64(entity.Z)},
-	)
-}
-
-/*
-================
-caravanSpawnPose
-
-An agent pose as a wire spawn pose.
-================
-*/
-func caravanSpawnPose(pose caravanai.Pose, angle uint16) simulation.Spawn {
-	return simulation.Spawn{
-		RegionID: pose.RegionID,
-		X:        float64(pose.X),
-		Y:        float64(pose.Y),
-		Z:        float64(pose.Z),
-		Angle:    angle,
-	}
-}
-
-/*
-================
-caravanAgentAppearance
-
-Resolves one agent's peer appearance from the shard's shipped data:
-the character model, and the worn set (job suit, then weapon) as
-equipment rows. The leg calls this once per agent (it caches misses
-too) and logs the miss; the agent simply never appears.
-================
-*/
-func (game *gameplayPlane) caravanAgentAppearance(entity caravanai.AgentEntity) (simulation.PeerAppearance, bool) {
-	model := game.deps.Roster.ModelByCodename(entity.ModelCode)
-	suit, suitOK := game.deps.Items.ItemRefByCodename(entity.SuitCode)
-	weapon, weaponOK := game.deps.Items.ItemRefByCodename(entity.WeaponCode)
-	if model == nil || !suitOK || !weaponOK {
-		log.WithFields(log.Fields{
-			"agent":  entity.Name,
-			"model":  entity.ModelCode,
-			"suit":   entity.SuitCode,
-			"weapon": entity.WeaponCode,
-		}).Warn("caravan-ai: agent appearance data did not resolve; agent stays invisible")
-		return simulation.PeerAppearance{}, false
-	}
-	return simulation.PeerAppearance{
-		RefObjID:  model.RefObjID,
-		Name:      entity.Name,
-		JobType:   entity.JobType,
-		Equipment: []wire.PlayerEquipItem{caravanEquipItem(suit), caravanEquipItem(weapon)},
-	}, true
-}
-
-/*
-================
-caravanEquipItem
-
-One worn item as a spawn-row equipment entry.
-================
-*/
-func caravanEquipItem(ref *enterworld.ItemRef) wire.PlayerEquipItem {
-	return wire.PlayerEquipItem{
-		RefObjID: ref.RefObjID,
-		TypeFlags: wire.PackTypeFlags(
-			uint8(ref.TypeIDs[0]), uint8(ref.TypeIDs[1]),
-			uint8(ref.TypeIDs[2]), uint8(ref.TypeIDs[3])),
-	}
-}
-
-//============================================================================
-
-/*
-================
-caravanAgentDirectory
-
-The caravan runtime as the action package's combat directory (slice
-3c): an object gid in the player band that names no stored character
-resolves to the agent wearing that synthetic identity, and damage
-lands through RecordPlayerAttack, the runtime's one damage door.
-================
-*/
-type caravanAgentDirectory struct {
-	game *gameplayPlane
-}
-
-/*
-================
-caravanAgentDirectory.AgentByGID
-
-The living agent whose synthetic character id maps to gid, with its
-model's body radius from the shipped roster. The dead are absent from
-the entity snapshot, so a corpse resolves to nothing.
-================
-*/
-func (dir caravanAgentDirectory) AgentByGID(division string, gid uint32) (action.AgentTarget, bool) {
-	if dir.game.caravanAgents == nil {
-		return action.AgentTarget{}, false
-	}
-	for _, entity := range dir.game.caravanAgents.AgentEntities(division) {
-		if simulation.PlayerObjectID(entity.CharacterID) != gid {
+		c := game.deps.CharacterByID(game.divisionID, view.CharacterID)
+		if c == nil {
 			continue
 		}
-		target := action.AgentTarget{
-			Name:    entity.Name,
-			JobType: entity.JobType,
-			Pose: simulation.Spawn{RegionID: entity.Pose.RegionID,
-				X: float64(entity.Pose.X), Y: float64(entity.Pose.Y), Z: float64(entity.Pose.Z)},
-			Level:        entity.Level,
-			HP:           entity.HP,
-			MaxHP:        entity.MaxHP,
-			LastAttacker: entity.LastAttacker,
-			// Slice 3e (#3704): the strike-back identity - the gid a
-			// cast frame names, the roster skill it casts, the player
-			// it is fighting (its own fight-back admission), and its
-			// weapon's shipped ranges.
-			GID:          gid,
-			SkillID:      entity.SkillID,
-			CombatTarget: entity.CombatTarget,
-		}
-		if model := dir.game.deps.Roster.ModelByCodename(entity.ModelCode); model != nil {
-			target.BodyRadius = model.BodyRadius
-		}
-		if dir.game.deps.Items != nil {
-			if weapon, ok := dir.game.deps.Items.ItemRefByCodename(entity.WeaponCode); ok && weapon.Combat != nil {
-				target.PhysicalAttackMin = float64(weapon.Combat.PhysicalAttack.Minimum.Min)
-				target.PhysicalAttackMax = float64(weapon.Combat.PhysicalAttack.Maximum.Max)
-				target.MagicalAttackMin = float64(weapon.Combat.MagicalAttack.Minimum.Min)
-				target.MagicalAttackMax = float64(weapon.Combat.MagicalAttack.Maximum.Max)
-			}
-		}
-		return target, true
-	}
-	return action.AgentTarget{}, false
-}
-
-/*
-================
-caravanAgentDirectory.ApplyAgentDamage
-
-Real damage from a player's strike, through the runtime's damage
-door: parley betrayal, robbery and death bookkeeping stay there.
-================
-*/
-func (dir caravanAgentDirectory) ApplyAgentDamage(division, agentName, attackerName string, damage int, nowMs int64) (defeated bool) {
-	if dir.game.caravanAgents == nil {
-		return false
-	}
-	_, defeated, _ = dir.game.caravanAgents.RecordPlayerAttack(division, agentName, attackerName, damage, nowMs)
-	return defeated
-}
-
-/*
-================
-caravanAgentStrike
-
-The runtime's strike hook (slice 3e): resolve the agent through the
-directory, strike its player through the action runtime's agent lane,
-and queue the publication for this tick's flush - the room's frames
-scoped on the victim, the victim's own frames addressed to it.
-================
-*/
-func (game *gameplayPlane) caravanAgentStrike(division, agentName, targetPlayerName string, nowMs int64) (defeated bool) {
-	if game.caravanAgents == nil || game.items == nil {
-		return false
-	}
-	dir := caravanAgentDirectory{game: game}
-	for _, entity := range game.caravanAgents.AgentEntities(division) {
-		if entity.Name != agentName {
+		key := strings.ToLower(c.Name)
+		leader, candidates := game.caravanAgents.LeadState(game.divisionID, c.Name)
+		last, sent := game.caravanLeadSent[key]
+		if len(candidates) == 0 && !sent {
 			continue
 		}
-		target, ok := dir.AgentByGID(division, simulation.PlayerObjectID(entity.CharacterID))
-		if !ok {
-			return false
+		seen[key] = true
+		rows := make([]leadRow, 0, len(candidates))
+		for _, name := range candidates {
+			rows = append(rows, leadRow{Name: name, Display: caravanai.DisplayName(name)})
 		}
-		result := game.items.StrikePlayerByAgent(division, target, targetPlayerName, nowMs)
-		if !result.Committed {
-			return false
+		body, _ := json.Marshal(struct {
+			Version    int       `json:"version"`
+			Leader     string    `json:"leader"`
+			Candidates []leadRow `json:"candidates"`
+		}{1, leader, rows})
+		if sent && last.session == view.SessionID && last.body == string(body) {
+			continue
 		}
-		game.caravanStrikeFrames = append(game.caravanStrikeFrames,
-			simulation.DivisionFrames{
-				DivisionID: division,
-				SourceGID:  simulation.PlayerObjectID(result.Victim.CharacterID),
-				Frames:     caravanStrikeFrames(result.Public),
-			},
-			simulation.DivisionFrames{
-				DivisionID:      division,
-				OnlyCharacterID: result.Victim.CharacterID,
-				Frames:          caravanStrikeFrames(result.Victim.Frames),
-			},
-		)
-		return result.Defeated
+		ticker.Push.PushToSession(view.SessionID, []simulation.Frame{{Opcode: action.OpCaravanLead, Payload: body}})
+		if len(candidates) == 0 {
+			delete(game.caravanLeadSent, key)
+		} else {
+			game.caravanLeadSent[key] = caravanLeadPush{session: view.SessionID, body: string(body)}
+		}
 	}
-	return false
+	for key := range game.caravanLeadSent {
+		if !seen[key] {
+			// Offline: send afresh on the next login.
+			delete(game.caravanLeadSent, key)
+		}
+	}
 }
 
 /*
 ================
-caravanStrikeFrames
+sellThiefHaul
 
-The action package's wire frames as simulation frames for the tick.
+A Thief sells the goods on its transport to the Den's buyer and lets the
+transport go. A hirer gets the sale (the Den buyer's price for each
+row, as a player Thief's sale is valued); without one the gold is the
+agent's own and leaves the world with the goods.
 ================
 */
-func caravanStrikeFrames(frames []wire.Frame) []simulation.Frame {
-	out := make([]simulation.Frame, 0, len(frames))
-	for _, f := range frames {
-		out = append(out, simulation.Frame{Opcode: f.Opcode, Payload: f.Payload, Current: f.Current, Scope: f.Scope})
+func (game *gameplayPlane) sellThiefHaul(c *enterworld.Character, hirer string) {
+	gold, _ := game.items.ServerActorCargoSale(game.divisionID, c.Name, caravanThiefDenNPC)
+	game.items.PushDivisionPeerFrames(game.divisionID, c.Name, game.items.ServerActorDismissTransport(game.divisionID, c.Name))
+	if hirer == "" {
+		return
 	}
-	return out
+	if gold > 0 && game.caravanHirePayout(game.divisionID, hirer, gold) {
+		game.caravanNotice(game.divisionID, hirer, fmt.Sprintf("%s sold the stolen goods: %s gold paid to you.", caravanai.DisplayName(c.Name), caravanai.GoldText(gold)))
+		return
+	}
+	game.caravanNotice(game.divisionID, hirer, fmt.Sprintf("%s handed the stolen goods to the Den's buyer.", caravanai.DisplayName(c.Name)))
 }

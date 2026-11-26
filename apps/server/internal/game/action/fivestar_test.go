@@ -330,7 +330,7 @@ func TestCaravanStarFramesListOnlyFiveStarTransports(t *testing.T) {
 		Rows:     []domain.InventoryRow{{Codename: good.Codename, TypeFlags: good.TypeFlags, StackCount: 160}},
 	}}
 	views := []simulation.SessionView{{SessionID: "s1", DivisionID: testDivision, CharacterID: c.ID}}
-	frames := rt.CaravanStarFrames(testDivision, views, 10_000)
+	frames := rt.CaravanStarFrames(testDivision, views, nil, 10_000)
 	if len(frames) != 1 || frames[0].Opcode != wire.OpCaravanStars {
 		t.Fatalf("frames %+v, want one caravan-star frame", frames)
 	}
@@ -339,17 +339,17 @@ func TestCaravanStarFramesListOnlyFiveStarTransports(t *testing.T) {
 		binary.LittleEndian.Uint32(payload[2:]) != 4242 {
 		t.Fatalf("payload % X, want one gid 4242", payload)
 	}
-	if frames := rt.CaravanStarFrames(testDivision, views, 10_000); frames != nil {
+	if frames := rt.CaravanStarFrames(testDivision, views, nil, 10_000); frames != nil {
 		t.Fatalf("off-pace frames %+v, want none", frames)
 	}
 	c.ActiveCOS.Container.Rows[0].StackCount = 1
-	frames = rt.CaravanStarFrames(testDivision, views, 10_000+caravanStarPushIntervalMs)
+	frames = rt.CaravanStarFrames(testDivision, views, nil, 10_000+caravanStarPushIntervalMs)
 	if len(frames) != 1 || !bytes.Equal(frames[0].Payload, []byte{0, 0}) {
 		t.Fatalf("cleared frames %+v, want an empty roster", frames)
 	}
 	rt.TradeTiers = false
 	rt.caravanStarDueMs = 0
-	if frames := rt.CaravanStarFrames(testDivision, views, 99_000); frames != nil {
+	if frames := rt.CaravanStarFrames(testDivision, views, nil, 99_000); frames != nil {
 		t.Fatalf("flag-off frames %+v, want none", frames)
 	}
 }

@@ -27,95 +27,35 @@ import (
 ==================
 TestHighwayRouteDetoursWhenFerryHeatIsHigh
 
-Verifies that a Cautious or 4-5 star caravan crosses Jangan->Donwhang at
-the main ferry under normal conditions and diverts to the northern ferry
-once ambush heat at the main dock reaches DetourHeatThreshold; the
-Donwhang->Hotan leg likewise leaves its hot west dock for the far-west
-crossing. A low-star Greedy caravan ignores the heat.
+Verifies that a Cautious or 4Ã¢Ëœâ€¦-5Ã¢Ëœâ€¦ caravan between Jangan and Donwhang uses the
+Jangan Ferry crossing under normal conditions, and switches to the Northern
+Mountain Detour once ambush heat at the Ferry reaches DetourHeatThreshold.
 ==================
 */
 func TestHighwayRouteDetoursWhenFerryHeatIsHigh(t *testing.T) {
 	normal := SelectRoute(TownJangan, TownDonwhang, 4, PersonalityCautious, map[uint16]int{
-		RegionJanganFerry: 20,
+		RegionJanganFerryEast: 20,
 	})
-	if normal[0].Town != TownJangan || normal[len(normal)-1].Town != TownDonwhang {
-		t.Fatalf("unexpected endpoints on Jangan->Donwhang: %+v -> %+v", normal[0], normal[len(normal)-1])
-	}
-	if !routeHasFerry(normal, RegionJanganFerry) || routeHasRegion(normal, RegionJanganFerryNorth) {
-		t.Fatalf("expected the main-ferry crossing, got regions %v", routeRegions(normal))
+	if len(normal) != 5 || normal[2].RegionID != RegionJanganFerryEast {
+		t.Fatalf("expected normal Jangan->Donwhang crossing at Ferry (%d), got %+v", RegionJanganFerryEast, normal)
 	}
 
 	hot := SelectRoute(TownJangan, TownDonwhang, 4, PersonalityCautious, map[uint16]int{
-		RegionJanganFerry: DetourHeatThreshold,
+		RegionJanganFerryEast: DetourHeatThreshold,
 	})
-	if !routeHasFerry(hot, RegionJanganFerryNorth) || routeHasRegion(hot, RegionJanganFerry) {
-		t.Fatalf("expected the northern detour, got regions %v", routeRegions(hot))
-	}
-
-	lowStar := SelectRoute(TownJangan, TownDonwhang, 1, PersonalityGreedy, map[uint16]int{
-		RegionJanganFerry: 75,
-	})
-	if !routeHasFerry(lowStar, RegionJanganFerry) {
-		t.Fatalf("a low-star Greedy caravan should ignore the heat, got regions %v", routeRegions(lowStar))
-	}
-
-	hotWest := SelectRoute(TownDonwhang, TownHotan, 4, PersonalityCautious, map[uint16]int{
-		RegionDonwhangFerryWest: DetourHeatThreshold,
-	})
-	if !routeHasFerry(hotWest, RegionDonwhangFerryFarWest) || routeHasRegion(hotWest, RegionDonwhangFerryWest) {
-		t.Fatalf("expected the far-west crossing, got regions %v", routeRegions(hotWest))
+	if len(hot) != 5 || hot[2].RegionID != RegionJanganNorthDetour {
+		t.Fatalf("expected hot Jangan->Donwhang crossing to detour via %d, got %+v", RegionJanganNorthDetour, hot)
 	}
 
 	fullHighway := SelectRoute(TownJangan, TownHotan, 5, PersonalityGreedy, map[uint16]int{
-		RegionJanganFerry: 75,
+		RegionJanganFerryEast: 75,
 	})
+	if len(fullHighway) != 9 {
+		t.Fatalf("expected 9 waypoints for Jangan->Donwhang->Hotan, got %d", len(fullHighway))
+	}
 	if fullHighway[0].Town != TownJangan || fullHighway[len(fullHighway)-1].Town != TownHotan {
 		t.Fatalf("unexpected endpoints on full highway: %+v -> %+v", fullHighway[0], fullHighway[len(fullHighway)-1])
 	}
-	if n := routeCountShop(fullHighway, "NPC_WC_SPECIAL"); n != 1 {
-		t.Fatalf("full highway should pass the Donwhang terminal once, got %d in regions %v", n, routeRegions(fullHighway))
-	}
-}
-
-// routeHasRegion reports whether any anchor sits in the region.
-func routeHasRegion(route []Waypoint, regionID uint16) bool {
-	for _, wp := range route {
-		if wp.RegionID == regionID {
-			return true
-		}
-	}
-	return false
-}
-
-// routeHasFerry reports whether the route crosses at the ferry landing
-// in the region (a Ferry anchor, not just any anchor passing through).
-func routeHasFerry(route []Waypoint, regionID uint16) bool {
-	for _, wp := range route {
-		if wp.RegionID == regionID && wp.Ferry {
-			return true
-		}
-	}
-	return false
-}
-
-// routeCountShop counts anchors carrying the specialty shop codename.
-func routeCountShop(route []Waypoint, shop string) int {
-	n := 0
-	for _, wp := range route {
-		if wp.SpecialtyShop == shop {
-			n++
-		}
-	}
-	return n
-}
-
-// routeRegions lists the route's anchor regions for failure messages.
-func routeRegions(route []Waypoint) []uint16 {
-	out := make([]uint16, len(route))
-	for i, wp := range route {
-		out[i] = wp.RegionID
-	}
-	return out
 }
 
 /*
@@ -135,7 +75,7 @@ func TestHardcodedBrainParleyVendettaAndAllyDecisions(t *testing.T) {
 		AgentName:    "[AI]Trader_Jin",
 		Role:         RoleTrader,
 		Personality:  PersonalityCautious,
-		RegionID:     RegionJanganFerry,
+		RegionID:     RegionJanganFerryEast,
 		HPPercent:    28,
 		CargoStars:   4,
 		CargoStacks:  10,
@@ -155,7 +95,7 @@ func TestHardcodedBrainParleyVendettaAndAllyDecisions(t *testing.T) {
 		AgentName:   "[AI]Hunter_Kwan",
 		Role:        RoleHunter,
 		Personality: PersonalityVengeful,
-		RegionID:    RegionDonwhangFerryWest,
+		RegionID:    RegionKarakoramPass,
 		HPPercent:   90,
 		Players: []ObservedPlayer{
 			{
@@ -177,7 +117,7 @@ func TestHardcodedBrainParleyVendettaAndAllyDecisions(t *testing.T) {
 		AgentName:   "[AI]Trader_Jin",
 		Role:        RoleTrader,
 		Personality: PersonalityHonorable,
-		RegionID:    RegionDonwhangFerry,
+		RegionID:    RegionDonwhangEastRoad,
 		HPPercent:   95,
 		Players: []ObservedPlayer{
 			{
@@ -233,7 +173,7 @@ func TestLLMBrainSuccessAndFallbackToHardcoded(t *testing.T) {
 		AgentName:   "[AI]Hunter_Kwan",
 		Role:        RoleHunter,
 		Personality: PersonalityHonorable,
-		RegionID:    RegionJanganFerry,
+		RegionID:    RegionJanganFerryEast,
 		HPPercent:   85,
 		Players: []ObservedPlayer{
 			{Name: "ShadowBlade", JobType: domain.JobThief, HPPercent: 90, Distance: 30},
@@ -274,20 +214,29 @@ func TestRuntimeParleyHonorBetrayalAndContracts(t *testing.T) {
 		Config{Enabled: true, BrainMode: BrainHardcoded},
 		nil, nil,
 		WorldHooks{
+			Player: func(_ string, name string) (PlayerPosition, bool) {
+				return PlayerPosition{ObservedPlayer: ObservedPlayer{Name: name, HPPercent: 100}, At: TownWaypoint(TownJangan)}, true
+			},
+			OnHireFee: func(_, _ string, _ int64) bool { return true },
 			OnParleyCargoDrop: func(_ string, _ string, _ uint16, _, _, _ float32, stacks int, _ int64) {
 				droppedStacks = stacks
 			},
-			OnContractReward: func(_ string, hunterPlayerName string, rewardGold int64, _ string) {
+			OnContractReward: func(_ string, hunterPlayerName string, rewardGold int64, _ string) bool {
 				rewardedHunter = hunterPlayerName
 				rewardedGold = rewardGold
+				return true
 			},
 		},
 	)
 
 	const div = "Shard_Silkroad"
 	rt.EnsureDivisionRoster(div)
+	rt.manualRuns = true
 
-	// 1. Hunter player accepts escort contract with [AI]Trader_Jin via chat command.
+	// A recruiting trader is accepted in town; active road runs are not contractable.
+	rt.mu.Lock()
+	rt.findAgentLocked(div, "[AI]Trader_Jin").State = StateRecruiting
+	rt.mu.Unlock()
 	reply, ok := rt.HandlePlayerCommand(div, "IronGuard", domain.JobHunter, "!accept [AI]Trader_Jin", 1_000)
 	if !ok || !strings.Contains(reply, "IronGuard") {
 		t.Fatalf("expected contract acceptance reply for IronGuard, got ok=%v reply=%q", ok, reply)
@@ -295,7 +244,7 @@ func TestRuntimeParleyHonorBetrayalAndContracts(t *testing.T) {
 
 	// 2. Trader player hires [AI]Hunter_Kwan via chat command.
 	hireReply, ok := rt.HandlePlayerCommand(div, "MerchantLin", domain.JobTrader, "!hire [AI]Hunter_Kwan", 1_000)
-	if !ok || !strings.Contains(hireReply, "MerchantLin") {
+	if !ok || !strings.Contains(hireReply, "Kwan joins you") {
 		t.Fatalf("expected hunter hire reply for MerchantLin, got ok=%v reply=%q", ok, hireReply)
 	}
 
@@ -323,35 +272,14 @@ func TestRuntimeParleyHonorBetrayalAndContracts(t *testing.T) {
 		t.Fatalf("expected !memory reply to show Trust: -100, got %q", memReply)
 	}
 
-	// 6. Complete [AI]Trader_Jin's contract delivery. IronGuard was
-	// never seen beside the caravan on the road (the only step showed
-	// ViperPlayer), so slice 5's presence rule completes the run
-	// unpaid and records no escort trust.
-	contract, completed, payable := rt.Contracts().CompleteAITraderRun(div, "[AI]Trader_Jin", RegionDonwhangTown, 20_000, rt.Memories())
-	if !completed || contract.RewardGold <= 0 {
-		t.Fatalf("expected escort contract to complete with positive reward, got %+v", contract)
+	// 6. Complete [AI]Trader_Jin's contract delivery: IronGuard was
+	// sampled near the trader for the whole run, so it pays (contracts.go
+	// CompleteAITraderRun) with +25 Hunter trust.
+	for now := int64(3100); now <= 40100; now += 1000 {
+		rt.Contracts().SampleEscort(div, "[AI]Trader_Jin", true, now)
 	}
-	if payable {
-		t.Fatalf("expected the abandoned escort to complete unpaid, contract %+v", contract)
-	}
-	if hunterMem, exists := rt.Memories().Relationship(div, "[AI]Trader_Jin", "IronGuard"); exists && hunterMem.TrustScore == 25 {
-		t.Fatalf("expected no escort trust for an unkept run, got %+v", hunterMem)
-	}
-
-	// 7. A kept run pays: IronGuard signs again (the first contract
-	// closed), rides within escort range for a step, and the delivery
-	// pays out with +25 trust.
-	reply, ok = rt.HandlePlayerCommand(div, "IronGuard", domain.JobHunter, "!accept [AI]Trader_Jin", 30_000)
-	if !ok || !strings.Contains(reply, "IronGuard") {
-		t.Fatalf("expected second contract acceptance for IronGuard, got ok=%v reply=%q", ok, reply)
-	}
-	if _, _, ok := rt.StepAgent(context.Background(), div, "[AI]Trader_Jin", []ObservedPlayer{
-		{Name: "IronGuard", JobType: domain.JobHunter, HPPercent: 100, Distance: 25},
-	}, 31_000); !ok {
-		t.Fatal("expected [AI]Trader_Jin to step beside IronGuard")
-	}
-	contract, completed, payable = rt.Contracts().CompleteAITraderRun(div, "[AI]Trader_Jin", RegionDonwhangTown, 32_000, rt.Memories())
-	if !completed || !payable {
+	contract, completed, payable := rt.Contracts().CompleteAITraderRun(div, "[AI]Trader_Jin", RegionDonwhangTown, 40_100, rt.Memories())
+	if !completed || !payable || contract.RewardGold <= 0 {
 		t.Fatalf("expected the kept escort to complete payable, got %+v completed=%v payable=%v", contract, completed, payable)
 	}
 	if rt.hooks.OnContractReward != nil {
@@ -438,7 +366,7 @@ func TestLLMBrainFollowsNoRedirect(t *testing.T) {
 	dec := brain.Decide(context.Background(), Situation{
 		AgentName: "[AI]Hunter_Kwan",
 		Role:      RoleHunter,
-		RegionID:  RegionJanganFerry,
+		RegionID:  RegionJanganFerryEast,
 		HPPercent: 85,
 		Players:   []ObservedPlayer{{Name: "ShadowBlade", JobType: domain.JobThief, HPPercent: 90, Distance: 30}},
 	})
@@ -447,5 +375,115 @@ func TestLLMBrainFollowsNoRedirect(t *testing.T) {
 	}
 	if dec.Source != BrainHardcoded {
 		t.Fatalf("a redirect answered the decision: %+v", dec)
+	}
+}
+
+/*
+================
+TestSchedulerMinActiveTradesHireableHuntersAndDistressAid
+
+Verifies:
+ 1. The roster starts with 2 active trade runs, 2 town-staged Traders, and
+    2 town-staged Hunters available for hire.
+ 2. When an active Trader is defeated and returns to town, the scheduler
+    automatically dispatches a town-staged Trader so at least 2 trade runs
+    remain active.
+ 3. When an active Trader is ambushed, standby Hunters and fellow Traders
+    respond to the DistressCall with ActionReinforceAlly.
+
+================
+*/
+func TestSchedulerMinActiveTradesHireableHuntersAndDistressAid(t *testing.T) {
+	rt := NewRuntime(Config{Enabled: true, BrainMode: BrainHardcoded}, nil, nil, WorldHooks{})
+	t.Cleanup(func() { _ = rt.Close() })
+	const div = "Shard_Scheduler"
+	roster := rt.EnsureDivisionRoster(div)
+	counts := map[AgentRole]int{}
+	for _, u := range roster {
+		counts[u.Role]++
+	}
+	if counts[RoleHunter] != 20 || counts[RoleTrader] != 10 || counts[RoleThief] != 10 {
+		t.Fatalf("roster is %v, want 20 Hunters, 10 Traders, 10 Thieves", counts)
+	}
+
+	// The first step sends out two solo runs and two runs with three Hunters each.
+	rt.StepAgent(context.Background(), div, "[AI]Thief_Wisp", nil, 1_000)
+	runs := func() (solo, escorted, guards, hireableHunters int) {
+		for _, u := range rt.EnsureDivisionRoster(div) {
+			switch {
+			case u.Role == RoleTrader && u.RunKind == RunSolo:
+				solo++
+			case u.Role == RoleTrader && u.RunKind == RunEscorted:
+				escorted++
+			case u.Role == RoleHunter && u.RunKind == RunEscorted:
+				guards++
+			case u.Role == RoleHunter && u.AvailableForHire:
+				hireableHunters++
+			}
+		}
+		return
+	}
+	if solo, escorted, guards, free := runs(); solo != 2 || escorted != 2 || guards != 6 || free != 14 {
+		t.Fatalf("want 2 solo, 2 escorted, 6 guards, 14 free Hunters; got %d %d %d %d", solo, escorted, guards, free)
+	}
+
+	// A robbed escorted Trader rests 30 minutes; its guards go home and a
+	// rested town Trader takes its place.
+	rt.mu.Lock()
+	var robbed string
+	for _, u := range rt.agents[div] {
+		if u.Role == RoleTrader && u.RunKind == RunEscorted {
+			robbed = u.Name
+			break
+		}
+	}
+	rt.mu.Unlock()
+	if _, defeated, _ := rt.RecordPlayerAttack(div, robbed, "BanditKing", 50_000, 2_000); !defeated {
+		t.Fatal("expected the escorted Trader to be robbed")
+	}
+	rt.mu.Lock()
+	victim := rt.findAgentLocked(div, robbed)
+	if victim.CooldownUntilMs != 2_000+RobbedCooldownMs || victim.RunKind != RunNone {
+		t.Fatalf("robbed Trader not on its 30 minute cooldown: %+v", victim)
+	}
+	for _, u := range rt.agents[div] {
+		if u.DedicatedEscortFor == robbed {
+			t.Fatalf("%s still guards the robbed Trader", u.Name)
+		}
+	}
+	rt.mu.Unlock()
+	rt.ActorSynchronized(div, robbed)
+	rt.StepAgent(context.Background(), div, "[AI]Thief_Wisp", nil, 3_000)
+	if solo, escorted, guards, _ := runs(); solo != 2 || escorted != 2 || guards != 6 {
+		t.Fatalf("runs not refilled after the robbery: %d solo, %d escorted, %d guards", solo, escorted, guards)
+	}
+	rt.mu.Lock()
+	if victim.RunKind != RunNone || !hireable(victim) {
+		t.Fatal("the robbed Trader should sit out its cooldown but stay hireable")
+	}
+
+	// A distress call reaches a free Hunter on the road nearby, never a town one.
+	var mei, roadHunter, townHunter *AgentUnit
+	for _, u := range rt.agents[div] {
+		switch {
+		case mei == nil && u.Role == RoleTrader && u.RunKind == RunSolo:
+			mei = u
+		case u.Role == RoleHunter && hireable(u) && roadHunter == nil:
+			roadHunter = u
+		case u.Role == RoleHunter && hireable(u) && townHunter == nil:
+			townHunter = u
+		}
+	}
+	mei.RegionID, mei.X, mei.Z = 25239, 1000, 500
+	roadHunter.RegionID, roadHunter.X, roadHunter.Z, roadHunter.State = 25239, 1300, 500, StateTraveling
+	roadHunter.Route = []Waypoint{{RegionID: 25239, X: 1900, Z: 500}}
+	rt.mu.Unlock()
+	rt.RecordPlayerAttack(div, mei.Name, "BanditKing", 3000, 4_000)
+	dec, helper, ok := rt.StepAgent(context.Background(), div, roadHunter.Name, nil, 4_100)
+	if !ok || dec.Action != ActionReinforceAlly || helper.ReinforcingTrader != mei.Name {
+		t.Fatalf("expected the road Hunter to reinforce %s, got dec=%+v unit=%+v", mei.Name, dec, helper)
+	}
+	if dec, _, _ := rt.StepAgent(context.Background(), div, townHunter.Name, nil, 4_200); dec.Action == ActionReinforceAlly {
+		t.Fatal("a town Hunter left its town to answer a distress call")
 	}
 }

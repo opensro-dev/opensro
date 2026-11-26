@@ -151,7 +151,10 @@ export function rosterPositions(
 	*/
 	const live = ( name: string, fallback: RosterPosition ): RosterPosition => {
 		const row = entities.find( e => e.name === name && (e.kind === "player" || e.kind === "local-player") );
-		return row ? { ...fallback, regionId: row.regionId, x: row.x, y: row.y, z: row.z } : fallback;
+		// A rider stands where it mounted while its transport carries it on:
+		// the transport's pose is where it is (as core.ts reads its own).
+		const at = row?.mountedOn ? entities.find( e => e.gid === row.mountedOn ) ?? row : row;
+		return at ? { ...fallback, regionId: at.regionId, x: at.x, y: at.y, z: at.z } : fallback;
 	};
 	if ( game?.academy?.member ) {
 		for ( const row of [ ...(game.academy.members ?? []) ].sort( ( a, b ) => a.id - b.id ) ) {

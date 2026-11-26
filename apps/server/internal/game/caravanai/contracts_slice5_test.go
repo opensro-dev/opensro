@@ -1,39 +1,28 @@
 /*
 ===========================================================================
 
-contracts_slice5_test.go - slice 5's abuse-proof economy rules
+contracts_slice5_test.go - the escort economy's abuse rules (#3704 slice 5)
 
-An AI-trader escort pays only when the Hunter stayed in range for the
-whole run and the trader survived it; one Hunter holds one escort at a
-time; paid escorts are capped per Hunter per day in the ledger; hiring
-an AI Hunter debits the trader's purse before it binds.
+An AI-trader escort pays only a run the Hunter was sampled beside for
+most of its length, with no observation gap, that lasted the minimum
+and whose trader lived; one Hunter holds one escort and one trader
+takes one Hunter at a time; paid escorts are capped per Hunter per UTC
+day in the escort-day ledger, which survives a restart; a hire whose
+fee cannot be paid binds nobody.
 
 ===========================================================================
 */
 package caravanai
 
 import (
-	"context"
 	"strings"
 	"testing"
 
 	"opensro.online/server/internal/domain"
 )
 
-// deliverNow completes one trader's run inside the runtime, as the
-// final anchor would, and fires the queued economy hooks.
-func deliverNow(t *testing.T, rt *Runtime, division, agentName string, nowMs int64) {
-	t.Helper()
-	rt.mu.Lock()
-	unit := rt.findAgentLocked(division, agentName)
-	if unit == nil {
-		rt.mu.Unlock()
-		t.Fatalf("no agent %s in %s", agentName, division)
-	}
-	rt.deliverAgentLocked(unit, nowMs)
-	rt.mu.Unlock()
-	rt.drainEconomy(division)
-}
+// stepMs is one runtime step, as the tick paces StepAgent.
+const stepMs = 100
 
 // fakeEscortDayStore is an in-memory EscortDayStore.
 type fakeEscortDayStore struct {
@@ -60,14 +49,28 @@ func (s *fakeEscortDayStore) SaveCaravanEscortDay(row domain.CaravanEscortDayRow
 }
 
 /*
-==================
-TestOneEscortPerHunter
+================
+sampleRun
 
-A Hunter holding an active AI-trader escort is refused a second one
-until the first completes; another Hunter is unaffected.
+Samples the escort of trader every second from fromMs to toMs, near or
+not, as StepAgent does once per step.
+================
+*/
+func sampleRun(book *ContractBook, division, trader string, near bool, fromMs, toMs int64) {
+	for now := fromMs; now <= toMs; now += 1_000 {
+		book.SampleEscort(division, trader, near, now)
+	}
+}
+
+/*
+==================
+TestOneEscortPerHunterAndPerTrader
+
+A Hunter holding an active escort is refused a second one, and a trader
+under contract is refused a second Hunter, until the run ends.
 ==================
 */
-func TestOneEscortPerHunter(t *testing.T) {
+func TestOneEscortPerHunterAndPerTrader(t *testing.T) {
 	book := NewContractBook(nil)
 	if _, bound := book.BindAITraderEscort("div", "[AI]Trader_Jin", "IronGuard", TownJangan, TownDonwhang, 3, 1_000); !bound {
 		t.Fatal("the first escort did not bind")
@@ -75,49 +78,81 @@ func TestOneEscortPerHunter(t *testing.T) {
 	if _, bound := book.BindAITraderEscort("div", "[AI]Trader_Mei", "IronGuard", TownJangan, TownHotan, 4, 2_000); bound {
 		t.Fatal("a second concurrent escort bound for one Hunter")
 	}
+	if _, bound := book.BindAITraderEscort("div", "[AI]Trader_Jin", "OtherGuard", TownJangan, TownDonwhang, 3, 2_000); bound {
+		t.Fatal("a trader under contract took a second Hunter")
+	}
 	if _, bound := book.BindAITraderEscort("div", "[AI]Trader_Mei", "OtherGuard", TownJangan, TownHotan, 4, 2_000); !bound {
-		t.Fatal("another Hunter's escort did not bind")
+		t.Fatal("another Hunter's escort of a free trader did not bind")
 	}
 	book.CompleteAITraderRun("div", "[AI]Trader_Jin", RegionDonwhangTown, 3_000, nil)
-	if _, bound := book.BindAITraderEscort("div", "[AI]Trader_Mei", "IronGuard", TownJangan, TownHotan, 4, 4_000); !bound {
-		t.Fatal("the Hunter could not sign again after completing a run")
+	if _, bound := book.BindAITraderEscort("div", "[AI]Trader_Jin", "IronGuard", TownDonwhang, TownJangan, 4, 4_000); !bound {
+		t.Fatal("the Hunter could not sign again after its run ended")
 	}
 }
 
 /*
 ==================
-TestEscortWatchAndVoidGatePayment
+TestEscortSamplingGatesPayment
 
-One step out of range, or the trader's death on the road, completes
-the run unpaid; a kept, survived run pays and records trust.
+A run pays only when it lasted escortMinRunMs, the Hunter was sampled
+near for escortNearPercent of it and no gap passed escortSampleGapMs;
+a dead trader's contract is cancelled and never completes. Only a
+payable run records the +25 escort trust.
 ==================
 */
-func TestEscortWatchAndVoidGatePayment(t *testing.T) {
+func TestEscortSamplingGatesPayment(t *testing.T) {
 	memories := NewMemoryBook(nil)
-
 	book := NewContractBook(nil)
-	book.BindAITraderEscort("div", "[AI]Trader_Jin", "IronGuard", TownJangan, TownDonwhang, 3, 1_000)
-	book.NoteEscortWatch("div", "[AI]Trader_Jin", false)
-	if _, completed, payable := book.CompleteAITraderRun("div", "[AI]Trader_Jin", RegionDonwhangTown, 2_000, memories); !completed || payable {
-		t.Fatalf("an abandoned escort completed payable (completed=%v payable=%v)", completed, payable)
-	}
-	if _, ok := memories.Relationship("div", "[AI]Trader_Jin", "IronGuard"); ok {
-		t.Fatal("an abandoned escort recorded trust")
-	}
-
-	book.BindAITraderEscort("div", "[AI]Trader_Jin", "IronGuard", TownJangan, TownDonwhang, 3, 3_000)
-	book.NoteEscortWatch("div", "[AI]Trader_Jin", true)
-	book.VoidTraderEscort("div", "[AI]Trader_Jin")
-	if _, completed, payable := book.CompleteAITraderRun("div", "[AI]Trader_Jin", RegionDonwhangTown, 4_000, memories); !completed || payable {
-		t.Fatalf("a dead trader's escort completed payable (completed=%v payable=%v)", completed, payable)
+	const trader = "[AI]Trader_Jin"
+	run := func(start int64, sample func(start int64), end int64) (completed, payable bool) {
+		t.Helper()
+		if _, bound := book.BindAITraderEscort("div", trader, "IronGuard", TownJangan, TownDonwhang, 3, start); !bound {
+			t.Fatalf("the escort at %d did not bind", start)
+		}
+		sample(start)
+		_, completed, payable = book.CompleteAITraderRun("div", trader, RegionDonwhangTown, end, memories)
+		return completed, payable
 	}
 
-	book.BindAITraderEscort("div", "[AI]Trader_Jin", "IronGuard", TownJangan, TownDonwhang, 3, 5_000)
-	book.NoteEscortWatch("div", "[AI]Trader_Jin", true)
-	if _, completed, payable := book.CompleteAITraderRun("div", "[AI]Trader_Jin", RegionDonwhangTown, 6_000, memories); !completed || !payable {
-		t.Fatalf("a kept, survived escort did not complete payable (completed=%v payable=%v)", completed, payable)
+	// Away for the whole road.
+	if completed, payable := run(0, func(s int64) { sampleRun(book, "div", trader, false, s+1_000, s+40_000) }, 40_000); !completed || payable {
+		t.Fatalf("an abandoned escort: completed=%v payable=%v", completed, payable)
 	}
-	if row, ok := memories.Relationship("div", "[AI]Trader_Jin", "IronGuard"); !ok || row.TrustScore != 25 {
+	// Near, then away for the last fifth: under the 90% share.
+	if completed, payable := run(100_000, func(s int64) {
+		sampleRun(book, "div", trader, true, s+1_000, s+32_000)
+		sampleRun(book, "div", trader, false, s+33_000, s+40_000)
+	}, 140_000); !completed || payable {
+		t.Fatalf("an escort near for 80%% of the run: completed=%v payable=%v", completed, payable)
+	}
+	// Near, but one gap past escortSampleGapMs (the Hunter went offline).
+	if completed, payable := run(200_000, func(s int64) {
+		sampleRun(book, "div", trader, true, s+1_000, s+15_000)
+		sampleRun(book, "div", trader, true, s+15_000+escortSampleGapMs+1_000, s+40_000)
+	}, 240_000); !completed || payable {
+		t.Fatalf("an escort with an observation gap: completed=%v payable=%v", completed, payable)
+	}
+	// Near all the way, but shorter than escortMinRunMs.
+	if completed, payable := run(300_000, func(s int64) { sampleRun(book, "div", trader, true, s+1_000, s+20_000) }, 320_000); !completed || payable {
+		t.Fatalf("a run shorter than the minimum: completed=%v payable=%v", completed, payable)
+	}
+	if _, ok := memories.Relationship("div", trader, "IronGuard"); ok {
+		t.Fatal("an unpaid escort recorded trust")
+	}
+	// The trader died: its respawn cancels the contract, which never completes.
+	if _, bound := book.BindAITraderEscort("div", trader, "IronGuard", TownJangan, TownDonwhang, 3, 400_000); !bound {
+		t.Fatal("the escort after the short run did not bind")
+	}
+	sampleRun(book, "div", trader, true, 401_000, 420_000)
+	book.Cancel("div", trader)
+	if _, completed, _ := book.CompleteAITraderRun("div", trader, RegionDonwhangTown, 440_000, memories); completed {
+		t.Fatal("a dead trader's cancelled escort completed")
+	}
+	// Kept and survived: pays, with trust.
+	if completed, payable := run(500_000, func(s int64) { sampleRun(book, "div", trader, true, s+1_000, s+40_000) }, 540_000); !completed || !payable {
+		t.Fatalf("a kept escort: completed=%v payable=%v", completed, payable)
+	}
+	if row, ok := memories.Relationship("div", trader, "IronGuard"); !ok || row.TrustScore != 25 {
 		t.Fatalf("a kept escort recorded trust %+v (ok=%v)", row, ok)
 	}
 }
@@ -134,8 +169,11 @@ func TestDailyEscortLedger(t *testing.T) {
 	store := newFakeEscortDayStore()
 	book := NewContractBook(store)
 	const now = int64(1_700_000_000_000)
-	book.RecordPaidEscort("div", "IronGuard", now)
-	book.RecordPaidEscort("div", "IronGuard", now)
+	for range 2 {
+		if !book.ReservePaidEscort("div", "IronGuard", now) {
+			t.Fatal("a Hunter under the cap could not reserve a paid escort")
+		}
+	}
 	if got := book.PaidEscortsToday("div", "IronGuard", now); got != 2 {
 		t.Fatalf("paid today = %d, want 2", got)
 	}
@@ -153,52 +191,162 @@ func TestDailyEscortLedger(t *testing.T) {
 
 /*
 ==================
-TestDeliveryPaysOncePerKeptRunUnderTheDailyCap
+TestPaidEscortReservationIsWrittenAtOnce
 
-End to end through the runtime: a kept run pays the Hunter once
-through OnContractReward; after MaxPaidEscortsPerDay paid runs the
-next delivery completes silently unpaid.
+A reserved slot reaches the store without waiting for Flush, so a crash
+after the payment keeps the count; the cap refuses a reservation past
+it; a released slot is written back.
 ==================
 */
-func TestDeliveryPaysOncePerKeptRunUnderTheDailyCap(t *testing.T) {
-	payments := 0
-	var lastGold int64
-	rt := NewRuntime(
-		Config{Enabled: true, BrainMode: BrainHardcoded},
-		nil, nil,
-		WorldHooks{OnContractReward: func(_ string, hunterPlayerName string, rewardGold int64, _ string) {
-			if hunterPlayerName != "IronGuard" {
-				t.Errorf("paid %q, want IronGuard", hunterPlayerName)
-			}
-			payments++
-			lastGold = rewardGold
-		}},
-	)
-	const div = "Shard_Silkroad"
-	rt.EnsureDivisionRoster(div)
+func TestPaidEscortReservationIsWrittenAtOnce(t *testing.T) {
+	store := newFakeEscortDayStore()
+	book := NewContractBook(store)
+	const now = int64(1_700_000_000_000)
+	for range MaxPaidEscortsPerDay {
+		if !book.ReservePaidEscort("div", "IronGuard", now) {
+			t.Fatal("a Hunter under the cap was refused a reservation")
+		}
+	}
+	if book.ReservePaidEscort("div", "IronGuard", now) {
+		t.Fatalf("a reservation past the cap of %d was taken", MaxPaidEscortsPerDay)
+	}
+	if got := NewContractBook(store).PaidEscortsToday("div", "IronGuard", now); got != MaxPaidEscortsPerDay {
+		t.Fatalf("a fresh book over the store sees %d without a Flush, want %d", got, MaxPaidEscortsPerDay)
+	}
+	book.ReleasePaidEscort("div", "IronGuard", now)
+	if got := NewContractBook(store).PaidEscortsToday("div", "IronGuard", now); got != MaxPaidEscortsPerDay-1 {
+		t.Fatalf("after a release the store holds %d, want %d", got, MaxPaidEscortsPerDay-1)
+	}
+	book.ReleasePaidEscort("div", "Nobody", now)
+	if got := book.PaidEscortsToday("div", "Nobody", now); got != 0 {
+		t.Fatalf("a release with nothing reserved left %d", got)
+	}
+}
 
-	runs := MaxPaidEscortsPerDay + 1
-	for run := range runs {
-		now := int64(run+1) * 100_000
-		if _, handled := rt.HandlePlayerCommand(div, "IronGuard", domain.JobHunter, "!accept [AI]Trader_Jin", now); !handled {
-			t.Fatalf("run %d: the accept was not handled", run)
+/*
+================
+deliverAndPay
+
+deliverNow, then the step's payment off the lock (payEscort), as
+StepAgent runs it. It returns the contract the delivery offered, or nil.
+================
+*/
+func deliverAndPay(t *testing.T, rt *Runtime, trader string, nowMs int64) *EscortContract {
+	t.Helper()
+	contract := deliverNow(t, rt, trader, nowMs)
+	if contract != nil {
+		rt.payEscort("division", *contract, trader, nowMs)
+	}
+	return contract
+}
+
+/*
+================
+deliverNow
+
+Completes trader's run inside the runtime, as its last waypoint would:
+the trader is set onto the final waypoint and advanced once. It
+returns the contract the delivery pays, or nil.
+================
+*/
+func deliverNow(t *testing.T, rt *Runtime, trader string, nowMs int64) *EscortContract {
+	t.Helper()
+	rt.mu.Lock()
+	defer rt.mu.Unlock()
+	unit := rt.findAgentLocked("division", trader)
+	if unit == nil || len(unit.Route) == 0 {
+		t.Fatalf("no routed agent %s", trader)
+	}
+	unit.WaypointIndex = len(unit.Route) - 1
+	// Placed a step earlier, so this step has time to cover the zero
+	// distance left and arrives.
+	unit.place(unit.Route[unit.WaypointIndex], nowMs-stepMs)
+	return rt.advanceAlongRouteLocked(unit, nowMs)
+}
+
+/*
+==================
+TestDeliveryPaysUnderTheDailyCap
+
+Through the runtime: each kept run's delivery pays the Hunter, until
+MaxPaidEscortsPerDay paid runs; then a capped Hunter is refused at
+!accept, and a run signed before the cap filled delivers unpaid.
+==================
+*/
+func TestDeliveryPaysUnderTheDailyCap(t *testing.T) {
+	players := map[string]*hirePlayer{"IronGuard": {job: domain.JobHunter, online: true}}
+	paid := map[string]int64{}
+	rt := hireRuntime(t, players, &paid)
+	doorPays, rewards := true, 0
+	rt.hooks.OnContractReward = func(_, hunter string, gold int64, _ string) bool {
+		if doorPays {
+			rewards++
 		}
-		if _, _, ok := rt.StepAgent(context.Background(), div, "[AI]Trader_Jin", []ObservedPlayer{
-			{Name: "IronGuard", JobType: domain.JobHunter, HPPercent: 100, Distance: 25},
-		}, now+1_000); !ok {
-			t.Fatalf("run %d: the trader did not step", run)
+		return doorPays
+	}
+	const trader = "[AI]Trader_Jin"
+	accept := func(now int64) string {
+		t.Helper()
+		rt.mu.Lock()
+		unit := rt.findAgentLocked("division", trader)
+		unit.State, unit.RunKind = StateRecruiting, RunNone
+		players["IronGuard"].at = position(unit)
+		rt.mu.Unlock()
+		reply, handled := rt.HandlePlayerCommand("division", "IronGuard", domain.JobHunter, "!accept "+trader, now)
+		if !handled {
+			t.Fatalf("the accept at %d was not handled", now)
 		}
-		deliverNow(t, rt, div, "[AI]Trader_Jin", now+2_000)
-		want := min(run+1, MaxPaidEscortsPerDay)
-		if payments != want {
-			t.Fatalf("after run %d: %d payments, want %d", run, payments, want)
+		return reply
+	}
+	keptRun := func(now int64) *EscortContract {
+		t.Helper()
+		sampleRun(rt.Contracts(), "division", trader, true, now+1_000, now+40_000)
+		return deliverAndPay(t, rt, trader, now+40_000)
+	}
+	// A door that refuses the gold (a dead Hunter, a full purse) gives
+	// the reserved slot back: the unpaid run costs no daily slot.
+	doorPays = false
+	if reply := accept(500_000); !strings.Contains(reply, "IronGuard") {
+		t.Fatalf("the first accept was refused: %q", reply)
+	}
+	if contract := keptRun(500_000); contract == nil {
+		t.Fatal("a kept run offered no reward")
+	}
+	if got := rt.Contracts().PaidEscortsToday("division", "IronGuard", 500_000); got != 0 || rewards != 0 {
+		t.Fatalf("a refused payment spent %d slots, paid %d", got, rewards)
+	}
+	doorPays = true
+	for run := range MaxPaidEscortsPerDay {
+		now := int64(run+1) * 1_000_000
+		if reply := accept(now); !strings.Contains(reply, "IronGuard") {
+			t.Fatalf("run %d: the accept was refused: %q", run, reply)
+		}
+		contract := keptRun(now)
+		if contract == nil || contract.HunterName != "IronGuard" || contract.RewardGold <= 0 {
+			t.Fatalf("run %d: a kept run under the cap paid %+v", run, contract)
 		}
 	}
-	if lastGold <= 0 {
-		t.Fatalf("the last payment was %d gold", lastGold)
+	if got := rt.Contracts().PaidEscortsToday("division", "IronGuard", 1_000_000); got != MaxPaidEscortsPerDay || rewards != MaxPaidEscortsPerDay {
+		t.Fatalf("paid today = %d with %d rewards, want the cap %d", got, rewards, MaxPaidEscortsPerDay)
 	}
-	if got := rt.Contracts().PaidEscortsToday(div, "IronGuard", 100_000); got != MaxPaidEscortsPerDay {
-		t.Fatalf("paid today = %d, want the cap %d", got, MaxPaidEscortsPerDay)
+	if reply := accept(10_000_000); !strings.Contains(reply, "today's") {
+		t.Fatalf("a capped Hunter was not refused at !accept: %q", reply)
+	}
+	if _, ok := rt.Contracts().ActiveContractFor("division", trader); ok {
+		t.Fatal("a capped Hunter's refused accept bound a contract")
+	}
+
+	// The next UTC day: the accept binds, then the day's ledger fills
+	// from elsewhere before delivery, and the run delivers unpaid.
+	nextDay := int64(86_400_000) + 1_000_000
+	if reply := accept(nextDay); !strings.Contains(reply, "IronGuard") {
+		t.Fatalf("the next day's accept was refused: %q", reply)
+	}
+	for range MaxPaidEscortsPerDay {
+		rt.Contracts().ReservePaidEscort("division", "IronGuard", nextDay)
+	}
+	if contract := keptRun(nextDay); contract != nil || rewards != MaxPaidEscortsPerDay {
+		t.Fatalf("a run delivered past the cap offered %+v, %d rewards", contract, rewards)
 	}
 }
 
@@ -206,44 +354,36 @@ func TestDeliveryPaysOncePerKeptRunUnderTheDailyCap(t *testing.T) {
 ==================
 TestHireFeeRefusalBindsNobody
 
-The ChargeHireFee hook is asked before a hire binds: false refuses the
-hire in the agent's words and no contract exists; true binds.
+OnHireFee is asked before a hire binds: false refuses it with the price
+and leaves the agent free; true binds it.
 ==================
 */
 func TestHireFeeRefusalBindsNobody(t *testing.T) {
-	affordable := false
-	charged := 0
-	rt := NewRuntime(
-		Config{Enabled: true, BrainMode: BrainHardcoded},
-		nil, nil,
-		WorldHooks{ChargeHireFee: func(_, _ string, feeGold int64, _ string) bool {
-			charged++
-			if feeGold != BaseHunterHireFeeGold {
-				t.Errorf("the hook was asked %d gold, want the hire fee %d", feeGold, BaseHunterHireFeeGold)
-			}
-			return affordable
-		}},
-	)
-	const div = "Shard_Silkroad"
-	rt.EnsureDivisionRoster(div)
-
-	reply, handled := rt.HandlePlayerCommand(div, "MerchantLin", domain.JobTrader, "!hire [AI]Hunter_Kwan", 1_000)
-	if !handled || !strings.Contains(reply, "cannot pay") {
-		t.Fatalf("expected a hire-fee refusal, got handled=%v reply=%q", handled, reply)
+	players := map[string]*hirePlayer{"MerchantLin": {at: TownWaypoint(TownJangan), job: domain.JobTrader, online: true}}
+	paid := map[string]int64{}
+	rt := hireRuntime(t, players, &paid)
+	affordable, asked := false, 0
+	rt.hooks.OnHireFee = func(_, _ string, fee int64) bool {
+		asked++
+		if fee < rt.HireFee() {
+			t.Errorf("the hook was asked %d gold, under the hire fee %d", fee, rt.HireFee())
+		}
+		return affordable
 	}
-	if _, ok := rt.Contracts().ActiveContractFor(div, "[AI]Hunter_Kwan"); ok {
-		t.Fatal("a refused hire bound a contract")
+	if reply := rt.HireAgent("division", "MerchantLin", domain.JobTrader, "[AI]Hunter_Kwan", 1_000); !strings.Contains(reply, "costs") {
+		t.Fatalf("expected the price refusal, got %q", reply)
 	}
-
+	rt.mu.Lock()
+	hiredBy := rt.findAgentLocked("division", "[AI]Hunter_Kwan").HiredBy
+	rt.mu.Unlock()
+	if hiredBy != "" {
+		t.Fatalf("a refused hire bound the agent to %q", hiredBy)
+	}
 	affordable = true
-	reply, handled = rt.HandlePlayerCommand(div, "MerchantLin", domain.JobTrader, "!hire [AI]Hunter_Kwan", 10_000)
-	if !handled || !strings.Contains(reply, "MerchantLin") {
-		t.Fatalf("expected an affordable hire to bind, got handled=%v reply=%q", handled, reply)
+	if reply := rt.HireAgent("division", "MerchantLin", domain.JobTrader, "[AI]Hunter_Kwan", 10_000); !strings.Contains(reply, "joins you") {
+		t.Fatalf("expected an affordable hire to bind, got %q", reply)
 	}
-	if _, ok := rt.Contracts().ActiveContractFor(div, "[AI]Hunter_Kwan"); !ok {
-		t.Fatal("an affordable hire did not bind")
-	}
-	if charged != 2 {
-		t.Fatalf("the fee hook was asked %d times, want 2", charged)
+	if asked != 2 {
+		t.Fatalf("the fee hook was asked %d times, want 2", asked)
 	}
 }

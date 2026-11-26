@@ -205,6 +205,10 @@ func (s *Store) CreateCharacter(divisionID, accountID string, c *domain.Characte
 	if id < 1 {
 		id = s.maxCharIDLocked(divisionID) + 1
 	}
+	// Transient server actors reserve identities without advancing durable character counters.
+	for row := s.characterLookup(divisionID).ids[id]; row != nil && row.RuntimeOnly; row = s.characterLookup(divisionID).ids[id] {
+		id++
+	}
 	if id < 1 || id > domain.MaxCharacterID {
 		return fmt.Errorf("character id space exhausted for division %s (next %d, maximum %d)", divisionID, id, domain.MaxCharacterID)
 	}

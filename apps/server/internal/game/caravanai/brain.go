@@ -50,6 +50,7 @@ const (
 	ActionRetreatToTown ActionKind = "RETREAT_TO_TOWN"
 	ActionRecruitEscort ActionKind = "RECRUIT_ESCORT"
 	ActionAssistAlly    ActionKind = "ASSIST_ALLY"
+	ActionReinforceAlly ActionKind = "REINFORCE_ALLY"
 )
 
 // ObservedPlayer summarizes a nearby player and the agent's remembered
@@ -68,20 +69,24 @@ type ObservedPlayer struct {
 
 // Situation is the snapshot fed into Brain.Decide on an agent's decision tick.
 type Situation struct {
-	AgentName    string
-	Role         AgentRole
-	Personality  Personality
-	RegionID     uint16
-	RegionHeat   int
-	InTown       bool
-	HPPercent    int
-	MPPercent    int
-	CargoStars   uint8
-	CargoStacks  int
-	UnderAttack  bool
-	ParleyReady  bool
-	NearbyAllies int
-	Players      []ObservedPlayer
+	AgentName          string
+	Role               AgentRole
+	Personality        Personality
+	RegionID           uint16
+	RegionHeat         int
+	InTown             bool
+	HPPercent          int
+	MPPercent          int
+	TransportHPPercent int
+	PotionDepleted     bool
+	Escorted           bool
+	CargoStars         uint8
+	CargoStacks        int
+	UnderAttack        bool
+	ParleyReady        bool
+	NearbyAllies       int
+	Distress           *DistressCall
+	Players            []ObservedPlayer
 }
 
 // Decision is the tactical action, optional target, in-character chat line,
@@ -150,8 +155,12 @@ func (h *HardcodedBrain) Decide(_ context.Context, sit Situation) Decision {
 		}
 	}
 
-	// 2. Emergency HP potion recovery when HP drops to 45% or below.
-	if sit.HPPercent > 0 && sit.HPPercent <= 45 {
+	// 2. Emergency HP potion recovery when actor or transport HP drops to 45% or below.
+	effectiveHP := sit.HPPercent
+	if sit.TransportHPPercent > 0 && (effectiveHP <= 0 || sit.TransportHPPercent < effectiveHP) {
+		effectiveHP = sit.TransportHPPercent
+	}
+	if !sit.PotionDepleted && effectiveHP > 0 && effectiveHP <= 45 {
 		return Decision{
 			Action:   ActionUsePotion,
 			Dialogue: "",
@@ -191,7 +200,7 @@ func (h *HardcodedBrain) Decide(_ context.Context, sit Situation) Decision {
 	// 5. Role-specific hostile engagement outside town.
 	if !sit.InTown {
 		if hostile := findPrimaryHostile(sit.Role, sit.Players); hostile != nil {
-			if sit.Role == RoleTrader && !sit.UnderAttack && sit.Personality == PersonalityCautious {
+			if sit.Role == RoleTrader && ((sit.Escorted && sit.CargoStacks > 0) || (!sit.UnderAttack && sit.Personality == PersonalityCautious)) {
 				return Decision{
 					Action:     ActionContinueRoute,
 					TargetName: hostile.Name,
@@ -209,7 +218,25 @@ func (h *HardcodedBrain) Decide(_ context.Context, sit Situation) Decision {
 		}
 	}
 
-	// 6. Trusted ally greeting / support.
+	// 6. Mutual aid: respond to an active caravan distress call when a
+	// fellow Trader is ambushed on the highway.
+	if sit.Distress != nil && (sit.Role == RoleHunter || sit.Role == RoleTrader) {
+		attacker := sit.Distress.AttackerName
+		if attacker == "" {
+			attacker = "bandits"
+		}
+		return Decision{
+			Action:     ActionReinforceAlly,
+			TargetName: sit.Distress.AttackerName,
+			// Short names and no region: a chat line holds 100 characters.
+			Dialogue: fmt.Sprintf("Hold on, %s! I'm coming to help against %s!",
+				DisplayName(sit.Distress.TraderName), DisplayName(attacker)),
+			MemoryNote: fmt.Sprintf("Rushed to reinforce %s in region %d", sit.Distress.TraderName, sit.Distress.RegionID),
+			Source:     BrainHardcoded,
+		}
+	}
+
+	// 7. Trusted ally greeting / support.
 	if ally := findTrustedAlly(sit.Players); ally != nil {
 		return Decision{
 			Action:     ActionAssistAlly,
@@ -229,7 +256,7 @@ func findVendettaTarget(role AgentRole, players []ObservedPlayer) *ObservedPlaye
 	var best *ObservedPlayer
 	for i := range players {
 		p := &players[i]
-		if p.TrustScore > domain.CaravanVendettaScore {
+		if p.HPPercent <= 0 || p.TrustScore > domain.CaravanVendettaScore {
 			continue
 		}
 		if role == RoleTrader && p.JobType == domain.JobHunter {
@@ -246,7 +273,7 @@ func findPrimaryHostile(role AgentRole, players []ObservedPlayer) *ObservedPlaye
 	var best *ObservedPlayer
 	for i := range players {
 		p := &players[i]
-		if !isNaturalHostile(role, p.JobType) {
+		if p.HPPercent <= 0 || !isNaturalHostile(role, p.JobType) {
 			continue
 		}
 		if best == nil || p.TrustScore < best.TrustScore || p.Distance < best.Distance {
@@ -258,7 +285,7 @@ func findPrimaryHostile(role AgentRole, players []ObservedPlayer) *ObservedPlaye
 
 func findTrustedAlly(players []ObservedPlayer) *ObservedPlayer {
 	for i := range players {
-		if players[i].TrustScore >= domain.CaravanAllyScore {
+		if players[i].HPPercent > 0 && players[i].TrustScore >= domain.CaravanAllyScore {
 			return &players[i]
 		}
 	}
@@ -285,7 +312,7 @@ func formatParleyDialogue(p Personality, thiefName string) string {
 	case PersonalityGreedy:
 		return fmt.Sprintf("Hold your blade, %s! Take 30%% of my silk stacks on the ground and let my bull pass!", who)
 	case PersonalityCautious:
-		return fmt.Sprintf("Truce, %s! I am dropping half my cargo right here—take the tribute and spare my caravan!", who)
+		return fmt.Sprintf("Truce, %s! I am dropping half my cargo right here - take the tribute and spare my caravan!", who)
 	default:
 		return fmt.Sprintf("Parley, %s! I've dropped part of my load on the road. Take the goods and give me 15 seconds to ride on!", who)
 	}
@@ -293,13 +320,13 @@ func formatParleyDialogue(p Personality, thiefName string) string {
 
 func formatVendettaCallout(p Personality, rival ObservedPlayer) string {
 	if rival.LastNote != "" && strings.Contains(strings.ToLower(rival.LastNote), "betrayed parley") {
-		return fmt.Sprintf("%s! You broke our parley truce last time—no mercy today!", rival.Name)
+		return fmt.Sprintf("%s! You broke our parley truce last time - no mercy today!", rival.Name)
 	}
 	if rival.GoldStolen > 0 {
-		return fmt.Sprintf("%s! I still remember the %d gold you stole from me—time to settle the blood debt!", rival.Name, rival.GoldStolen)
+		return fmt.Sprintf("%s! I still remember the %d gold you stole from me - time to settle the blood debt!", rival.Name, rival.GoldStolen)
 	}
 	if rival.Deaths > 0 {
-		return fmt.Sprintf("There's %s! You've ambushed me %d time(s) before—not this run!", rival.Name, rival.Deaths)
+		return fmt.Sprintf("There's %s! You've ambushed me %d time(s) before - not this run!", rival.Name, rival.Deaths)
 	}
 	return fmt.Sprintf("Our blood feud ends here, %s!", rival.Name)
 }
@@ -534,6 +561,8 @@ func validateActionKind(raw string) (ActionKind, bool) {
 		return ActionRecruitEscort, true
 	case ActionAssistAlly:
 		return ActionAssistAlly, true
+	case ActionReinforceAlly:
+		return ActionReinforceAlly, true
 	default:
 		return "", false
 	}

@@ -424,6 +424,7 @@ import {
 	potionSlot
 } from "@/engine/foundation/gameplay/sro-macro";
 import { createTradeProgress } from "./trade-progress/trade-progress";
+import { createCaravanHire } from "@/engine/foundation/gameplay/caravan-hire";
 import { createServerEvent } from "./server-event/server-event";
 import { createUniqueDamageRank } from "./unique-rank/unique-rank";
 import { createJobHonor } from "./job-honor/job-honor";
@@ -826,6 +827,7 @@ export function createGameplay(
 		contributorTitles = createContributorTitles(),
 		sroMacro = createSroMacro(),
 		tradeProgress = createTradeProgress(),
+		caravanHire = createCaravanHire(),
 		serverEvent = createServerEvent(),
 		uniqueRank = createUniqueDamageRank(),
 		jobHonor = createJobHonor(),
@@ -2131,6 +2133,7 @@ clears it when another character enters.
 		gmReplies = [];
 		tradeStars = 0;
 		tradeProgress.clear();
+		caravanHire.reset();
 		serverEvent.clear();
 		notices = [];
 		crestUploadInFlight = false;
@@ -2379,6 +2382,7 @@ next 0x3AC5 status-5 row throw "Unknown academy member status" (#2876).
 			gmReplies = [];
 			tradeStars = 0;
 			tradeProgress.clear();
+			caravanHire.reset();
 			// The server sends the gauge's rows at login only; a teleport's
 			// continued bootstrap keeps them, as the native window stays up.
 			if ( !continued ) serverEvent.clear();
@@ -2797,6 +2801,20 @@ state here before a command can claim a native wire conversation.
 			}
 			if ( command.kind === "arena-dismiss" ) {
 				inventory.dismissArena();
+				return null;
+			}
+			if ( command.kind === "caravan-hire" ) {
+				if (
+					!localGid ||
+					(command.operation !== 0 && command.operation !== 1 && command.operation !== 2 &&
+						command.operation !== 3)
+				) {
+					throw Error( "Invalid caravan hire" );
+				}
+				return sendFrame( caravanHire.request( command.operation, command.stars, command.name ) );
+			}
+			if ( command.kind === "caravan-hire-close" ) {
+				caravanHire.clear();
 				return null;
 			}
 			if ( command.kind === "local-notice" ) {
@@ -4853,6 +4871,10 @@ Packet handling must not depend on which HUD panel is currently open.
 					return true;
 				}
 				if ( tradeProgress.receive( frame ) ) {
+					dirty = true;
+					return true;
+				}
+				if ( caravanHire.receive( frame ) ) {
 					dirty = true;
 					return true;
 				}
@@ -6979,6 +7001,10 @@ The published plane when something changed since the last take, else null.
 				// Port-only (#3163): the cargo's distance to the next star,
 				// published under SRO_TRADE_TIERS (trade-progress.ts).
 				...(tradeProgress.state() ? { tradeProgress: tradeProgress.state()! } : {}),
+				// Port-only caravan hire window (caravan-hire.ts).
+				...(caravanHire.state() ? { caravanHire: caravanHire.state()! } : {}),
+				...(caravanHire.lead() ? { caravanLead: caravanHire.lead()! } : {}),
+				...(caravanHire.hireNpc() ? { caravanHireNpc: caravanHire.hireNpc()! } : {}),
 				// The v1.696 Server Mission gauge 0x34F2 sets (server-event.ts).
 				...(serverEvent.state() ? { serverEventGauge: serverEvent.state()! } : {}),
 				eligibility,

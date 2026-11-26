@@ -686,3 +686,32 @@ func TestNoteItemSaleRidesTheCommit(t *testing.T) {
 	}
 	s.Close()
 }
+
+/*
+================
+TestRuntimeActorGoldStaysOutOfTheLedger
+
+An AI caravan agent is a runtime-only actor, never saved: the operating
+float its tick sets is no holder's gold and writes no ledger row, while a
+player in the same door still does.
+================
+*/
+func TestRuntimeActorGoldStaysOutOfTheLedger(t *testing.T) {
+	t.Parallel()
+
+	s := openTest(t, t.TempDir(), newTestClock())
+	player := newLedgerCharacter(t, s, "LedgerPlayer", 1000)
+	actor := &domain.Character{RuntimeOnly: true, ID: 90_000, Name: "[AI]Trader_Jin"}
+	if err := (storeCharacterSource{s: s}).RegisterRuntimeCharacters(testDivision, []*domain.Character{actor}); err != nil {
+		t.Fatal(err)
+	}
+	before := len(ledgerRows(t, s))
+	setGoldIn(s, actor, "caravan actor tick", 1_000_000)
+	if got := ledgerRows(t, s); len(got) != before {
+		t.Fatalf("a runtime actor's float was ledgered: %+v", got[before:])
+	}
+	setGoldIn(s, player, "shop-transaction", 900)
+	if got := ledgerRows(t, s); len(got) != before+1 || got[before].charID != player.ID {
+		t.Fatalf("the player's change was not ledgered beside it: %+v", got[before:])
+	}
+}

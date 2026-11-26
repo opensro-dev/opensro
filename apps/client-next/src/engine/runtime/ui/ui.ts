@@ -99,6 +99,7 @@ import {
 	SPIRIT_SKILL_STRIP_RECT,
 	SPIRIT_SOCKET_RECT
 } from "@/engine/foundation/gameplay/spirit-skills";
+import { caravanLeadToggle } from "@/engine/foundation/gameplay/caravan-hire";
 import { ACTION_FORTRESS_RETURN } from "@/engine/foundation/gameplay/fortress-return";
 import {
 	FRIEND_LIST_LIMIT,
@@ -279,6 +280,8 @@ import { createAutoPotionInput } from "./hud/auto-potion-input";
 import { createCosHud } from "./hud/cos-hud";
 import { createMallUseHud } from "./hud/mall-use-hud";
 import { isMallUseConfirmItem } from "@/engine/foundation/gameplay/mall-use";
+import { caravanHireLeadRequest, caravanHireOpenRequest, createCaravanHireHud } from "./hud/caravan-hire-hud";
+import { caravanLeadCaption, type CaravanHirePaint, drawCaravanHire } from "./hud/caravan-hire-window";
 import { createMagicCubeHud } from "./hud/magic-cube-hud";
 import {
 	isMagicCube,
@@ -2544,6 +2547,8 @@ export function createUi( ports: UiPorts ) {
 	*/
 	function hudCopy( key: string ) {
 		if ( key === "UIIT_PORT_SOOK_ARENA" ) return "Survival Arena (5 stages, EXP/SP x5)";
+		// The caravan hire rows and answers (port-only) carry their own text.
+		if ( key.startsWith( "UIIT_PORT_CARAVAN:" ) ) return key.slice( "UIIT_PORT_CARAVAN:".length );
 		// Later-native (#3502): the two title-indicator labels are the
 		// later client's own option rows; the v1.150 system-text
 		// catalogue has no such codes, so the text is carried here in
@@ -3974,8 +3979,14 @@ export function createUi( ports: UiPorts ) {
 	================
 	*/
 	let arenaPage = 0, arenaPageKey = "", arenaHiddenID = "";
+	// The caravan hire window's filter, page and pending hire (port-only).
+	const caravanHireHud = createCaravanHireHud();
 	const arenaDiscard = { chestID: "" };
 	function activate( id: string ) {
+		if ( caravanHireHud.activate( id, view?.gameplay?.caravanHire, sendGameplay ) ) {
+			dirty = true;
+			return;
+		}
 		if ( (id.startsWith( "market-" ) || id === "system-menu-market") && activateMarket( id ) ) return;
 		if ( id === "arena-prev" || id === "arena-next" ) {
 			arenaPage = Math.max(
@@ -6859,6 +6870,15 @@ export function createUi( ports: UiPorts ) {
 			sendGameplay( { kind: "attack", gid: view.gameplay.target } );
 		} else if ( id.startsWith( "party-target:" ) ) {
 			sendGameplay( { kind: "select", gid: Number( id.slice( 13 ) ) } );
+		} else if ( id === "npc-caravan-hire" ) {
+			// The NPC menu's hire row (npc-talk.ts) opens the hire window.
+			sendGameplay( caravanHireOpenRequest() );
+		} else if ( id.startsWith( "caravan-lead:" ) ) {
+			// A toggle: the lit mark hands the lead back (a Trader's to the
+			// hirer, the hirer's to its first hired Trader).
+			const lead = view.gameplay?.caravanLead, name = id.slice( 13 );
+			const target = lead ? caravanLeadToggle( lead, name ) : name;
+			if ( target ) sendGameplay( caravanHireLeadRequest( target ) );
 		} else if ( id === "self-target" && view.gameplay?.localGid ) {
 			sendGameplay( { kind: "select", gid: view.gameplay.localGid } );
 			requestRebirthPrompt( view.gameplay.localGid );
@@ -13865,6 +13885,44 @@ export function createUi( ports: UiPorts ) {
 						);
 					}
 				}
+				/*
+				================
+				caravanLeadBadge
+
+				Port-only, not native: who leads a hirer's hired Traders is a toggle
+				on the party board (caravan-hire.ts, operation 2). Each hired
+				Trader's row and the hirer's own panel carry the native trader job
+				mark (com_job_merchant): lit on the one who leads, dimmed on the
+				others, brightening under the pointer; the tooltip says what a
+				click does. Clicking a dimmed mark hands that member the lead;
+				clicking the lit one toggles it back (to the hirer, or from the
+				hirer to the first hired Trader).
+				================
+				*/
+				const caravanLead = game?.caravanLead;
+				const caravanLeadIcon = ROOT + "interface/ifcommon/com_job_merchant.png";
+				const caravanLeadBadge = ( x: number, y: number, name: string, display: string, self = false ) => {
+					const leads = caravanLead?.leader.toLowerCase() === name.toLowerCase(),
+						id = "caravan-lead:" + name,
+						r: UiRect = [ x, y, 12, 12 ];
+					paths.push( caravanLeadIcon );
+					if ( leads ) rect( [ x - 1, y - 1, 14, 14 ], [ 1, 0.84, 0.4, 0.35 ] );
+					image(
+						r,
+						caravanLeadIcon,
+						leads ? white : hover === id ? [ 1, 1, 1, 0.85 ] : [ 0.75, 0.75, 0.75, 0.4 ]
+					);
+					const caption = caravanLeadCaption( leads, self, display );
+					controls.push( {
+						id,
+						label: caption.label,
+						helpText: caption.help,
+						kind: "button",
+						rect: r,
+						selected: leads
+					} );
+					blocks.push( r );
+				};
 				if ( hudData && game?.social?.leader ) {
 					const origin = authoredRect( hudData.root.GDR_QUICKPARTYBOARD!, 0, 0 ),
 						slot = hudData.windows.ifquickpartyslot!,
@@ -13978,6 +14036,14 @@ export function createUi( ports: UiPorts ) {
 							} );
 							blocks.push( r );
 						}
+						const leadRow = caravanLead?.candidates.find( c =>
+							c.name.toLowerCase() === row.member.name.toLowerCase()
+						);
+						// On the mastery icons' line under the MP bar, right-aligned to it.
+						if ( leadRow ) {
+							const mp = authoredRect( slot.GDR_QPS_GAUGE_MP!, x, y );
+							caravanLeadBadge( mp[0] + mp[2] - 12, y + 39, leadRow.name, leadRow.display );
+						}
 						// The member's two main masteries: roster data, so they show for a member
 						// out of view and without the buff preference.
 						for ( const entry of row.masteries ) {
@@ -14030,6 +14096,16 @@ export function createUi( ports: UiPorts ) {
 							}
 							targetBottom = Math.max( targetBottom, boardBottom );
 						}
+					}
+					// The hirer itself is not on the board: its badge sits under its
+					// own panel.
+					const self = caravanLead?.candidates[0],
+						mini = hudData.root.GDR_PLAYER_MINI_INFO,
+						mpNode = hudData.player.GDR_PMI_GAUGE_MP;
+					if ( self && mini && mpNode ) {
+						// Right under the panel's MP bar, right-aligned to it.
+						const mp = authoredRect( mpNode, mini.rect[0], mini.rect[1] );
+						caravanLeadBadge( mp[0] + mp[2] - 12, mp[1] + mp[3] + 2, self.name, "You", true );
 					}
 				}
 				// The chat is part of the native HUD a fine pointer keeps, so it
@@ -19446,6 +19522,9 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 							) :
 							null,
 						canTalk: !!(capabilities & 2),
+						...(game.caravanHireNpc && game.caravanHireNpc.gid === game.npcConversation.gid ?
+							{ caravanHireRow: game.caravanHireNpc.label } :
+							{}),
 						prompt: game.npcEventGreeting ?
 							copy( game.npcEventGreeting ) :
 							// 5D9409: EVENT_EXCHANGE_FUNCTION replaces the
@@ -30939,6 +31018,23 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 				if ( chest.phase === "recoverable" ) button( "arena-close", "Close", px + width - 74, py + 5, 62 );
 
 				endWindow( admission, "arena-chest" );
+			}
+			if ( worldVisible && game?.caravanHire ) {
+				// Port-only and modal (caravan-hire-window.ts): the hire window
+				// takes every control and the whole screen while it is open.
+				controls = drawFrame.controls = [];
+				blocks.push( full );
+				const caravanHirePaint: CaravanHirePaint = {
+					beginWindow: frame => frameDraw.beginWindow( frame ),
+					endWindow: ( frame, mark, owner ) => frameDraw.endWindow( frame, mark, owner ),
+					windowBox: ( frame, spec ) => frameDraw.windowBox( frame, spec ),
+					closeButton: ( frame, x, y, id ) => frameDraw.closeButton( frame, x, y, id ),
+					button: ( frame, spec ) => frameDraw.button( frame, spec ),
+					rect: ( frame, spec ) => frameDraw.rect( frame, spec ),
+					image: ( frame, spec ) => frameDraw.image( frame, spec ),
+					label: ( frame, spec ) => frameDraw.label( frame, spec )
+				};
+				drawCaravanHire( drawFrame, caravanHirePaint, { hire: game.caravanHire, hud: caravanHireHud } );
 			}
 			if ( worldVisible && game && withdrawal.confirming() && hud.data() ) {
 				const state = withdrawal.read( game, hud.data()?.masteryCosts ?? {}, hud.data()?.withdrawalGoldPrices );

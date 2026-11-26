@@ -59,8 +59,7 @@ func (rt *Runtime) resolvePetCombatTarget(step petCombatStep, gid uint32) (petCo
 		return petCombatTarget{}, false
 	}
 	target, found := rt.resolveCombatTarget(step.key.division, step.snapshot, gid, step.nowMs)
-	if !found || target.agent != nil {
-		// Pets do not fight caravan agents in this slice (port-only).
+	if !found {
 		return petCombatTarget{}, false
 	}
 	if !petAttackBodyAllowed(step.pet, target) {

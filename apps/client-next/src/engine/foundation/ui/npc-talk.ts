@@ -130,6 +130,9 @@ export interface NpcTalkInput {
 	readonly canPortal?: boolean;
 	readonly portalRows?: readonly { id: string; label: string; }[] | null;
 	readonly canTalk?: boolean;
+	// Port-only, not native: the caravan hire row (caravan-hire.ts), listed
+	// first so hiring needs no conversation.
+	readonly caravanHireRow?: string;
 	readonly prompt?: string;
 	readonly canRecall?: boolean;
 	// canReturnPoint is row 0x10 (capability 0x100, the Bandit Den gate):
@@ -227,6 +230,7 @@ export function npcTalkLayout( input: NpcTalkInput ) {
 		[
 			...(input.guildSoldierRows ?? input.fortressStaffRows ?? portalRows ??
 				[
+					...(input.caravanHireRow ? [ { id: "npc-caravan-hire", label: input.caravanHireRow } ] : []),
 					...((input.canTalk ?? true) ?
 						[ { id: "npc-talk", label: copy( "UIIT_STT_NPC_CHATTING_WND_TALKSTART" ) } ] :
 						[]),

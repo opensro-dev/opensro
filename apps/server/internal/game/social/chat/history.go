@@ -97,6 +97,9 @@ type Runtime struct {
 	// port-only, not native, #3358): the answer line and true when the
 	// line was the command; nil leaves "/contributor" ordinary text.
 	Contributor func(accountID, message string) (answer string, handled bool)
+	// CaravanCommand handles port-only AI caravan commands (!caravans,
+	// !memory, !accept, !hire, !attack) when SRO_AI_CARAVANS is on.
+	CaravanCommand func(divisionID, playerName string, playerJob uint8, message string) (answer string, handled bool)
 	// PlusFailNotice commits the speaker's failed-reinforcement
 	// announcement choice (the /plusfail command, plusfail.go,
 	// port-only, not native, #3682): on asks for the announcements on,
@@ -109,15 +112,17 @@ type Runtime struct {
 	// with the bot's reply lines. Nil is never asked: a whisper to the
 	// bot's name is the native cannot-find-target refusal.
 	EventBotWhisper func(divisionID string, sender *enterworld.Character, target, text string) (replies []string, handled bool)
-	// CaravanCommands is the AI caravan command intake (caravanai,
-	// port-only, not native, #3704 slice 4): it is offered every All
-	// line and claims the caravan commands (!accept/!hire/!memory),
-	// answering with a whisper authored by the named agent (speaker),
-	// a notice when no agent answers, or nothing when the reply is
-	// empty (the rate limit). Nil is never asked: the lines stay
-	// ordinary chat, the native posture for commands the original
-	// lacks.
-	CaravanCommands func(divisionID string, sender *enterworld.Character, message string) (speaker, reply string, handled bool)
+}
+
+/*
+================
+AgentChatPayload
+
+Builds a normal, local chat line for observers that know the agent's GID.
+================
+*/
+func AgentChatPayload(gid uint32, text string) []byte {
+	return EncodeChatBroadcastGid(ChatTypeAll, gid, ClampChatUnits(text, MaxChatNoticeUnits))
 }
 
 /*

@@ -61,6 +61,9 @@ barrier.
 ==================
 */
 type Runtime struct {
+	// ServerActorHit reports a player strike on a RuntimeOnly actor; fatal is
+	// the combat authority's own verdict (the actor's AI keeps a copy of HP).
+	ServerActorHit          func(division, victim, attacker string, damage int, fatal bool, nowMs int64)
 	berserkActors           sync.Map         // derived expiry index; character store owns state
 	spiritActors            sync.Map         // attached Devil's Spirit lapse index (spiritability.go)
 	battleActors            sync.Map         // battle-state expiry index (battlestate.go)
@@ -201,7 +204,14 @@ type Runtime struct {
 	// PublicationHold receives publication-gate holds at or above the
 	// slow threshold, labelled by their holder (wired to the transport
 	// metrics, transport.RecordPublicationHold).
-	PublicationHold   func(label string, elapsed time.Duration)
+	PublicationHold func(label string, elapsed time.Duration)
+	// CaravanHire answers the port-only caravan hire window's request
+	// (OpCaravanHireRequest); nil when AI caravans are off.
+	CaravanHire func(division string, c *enterworld.Character, payload []byte) []wire.Frame
+	// CaravanHireLabel names the caravan hire row an NPC offers this
+	// character ("" for none); select sends it as OpCaravanHireNpc so the
+	// client lists it first in the NPC's menu.
+	CaravanHireLabel  func(division string, c *enterworld.Character, npcCodename string) string
 	SkillObjects      skillobject.Registry
 	CanPlaceQuestTrap func(*enterworld.Character, string) ([]wire.Frame, bool)
 	CaptureQuestTrap  func(*enterworld.Character, string, string, func() bool) ([]wire.Frame, bool)
@@ -278,10 +288,6 @@ type Runtime struct {
 	// Monsters is the shared division-keyed population authority. It is nil
 	// only when the composition root's explicit monster kill switch is on.
 	Monsters *simulation.MonsterState
-	// Agents is the caravan agents' combat directory (agentstrike.go,
-	// port-only, #3704). It is nil unless the composition root wired
-	// the caravan runtime in, and every agent arm is inert while nil.
-	Agents AgentDirectory
 	// Port-only, not native: nil preserves every native admission/reward path.
 	sookArena *sookArenaRuntime
 	// roc runs the Roc worlds (roc.go); nil with SRO_ROC off.
@@ -392,6 +398,13 @@ type Runtime struct {
 	// storageAuthority owns the account warehouse (storage.go).
 	storageAuthority domain.StorageAuthority
 	petMu            sync.Mutex
+	// caravanStacks caches serverActorDesiredStacks per AI Trader (by
+	// lowercase name): the probe walks up to 140 rows through caravanTier.
+	caravanStacksMu sync.Mutex
+	caravanStacks   map[string]caravanStacksMemo
+	// caravanHadTransport: the AI Trader had a transport this life (a
+	// missing one then means it was killed, not never summoned).
+	caravanHadTransport map[string]bool
 	// petDiag throttles the attack pet fight log (petdiagnostics.go).
 	petDiag petDiagnostics
 	// petRecovery counts the pets resolved for want of a way (petrecovery.go).
@@ -670,6 +683,8 @@ type Runtime struct {
 	// TradeTiers rates caravans by cargo gold and raises Jangan route profit
 	// (tradetiers.go; port-only, not native). False is native.
 	TradeTiers bool
+	// CaravanTransportStepDown stops a moving trade transport on dismount (port-only, not native).
+	CaravanTransportStepDown bool
 	// AlexandriaHideD11Goods keeps degree-11 goods out of Alexandria's
 	// own shops (commerce/alexandriashops.go; port-only, not native).
 	// False is native: the original game sold them there (#2842).

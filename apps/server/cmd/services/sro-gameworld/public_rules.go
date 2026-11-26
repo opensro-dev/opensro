@@ -23,6 +23,7 @@ import (
 	"opensro.online/server/internal/agent/publicstats"
 	"opensro.online/server/internal/game/action"
 	"opensro.online/server/internal/game/caravan"
+	"opensro.online/server/internal/game/caravanai"
 	"opensro.online/server/internal/game/companion"
 	"opensro.online/server/internal/game/enterworld"
 	"opensro.online/server/internal/game/gmcommand"
@@ -61,6 +62,7 @@ var unlistedSettings = map[string]string{
 	progression.EnvSoOkChristmasBoxChance: "a tuning of the Christmas event rule, not a rule of its own",
 	progression.EnvSoOkChristmasGifts:     "a tuning of the Christmas event rule, not a rule of its own",
 	action.EnvGMSetSpeed:                  "a GM command, not a rule players meet",
+	caravanai.EnvHireFee:                  "the hire fee the AI caravans rule quotes, not a rule of its own",
 	action.EnvGMItemForge:                 "a GM command, not a rule players meet",
 	gmcommand.EnvGMModeration:             "GM moderation commands, not a rule players meet",
 	monster.EnvTrainingDummy:              "GM-only training targets",
@@ -134,7 +136,6 @@ var unlistedSettings = map[string]string{
 	// screens are the epic's last slice, so the setting is stated.
 	"SRO_REFERRALS":    "the website's referral page shows its own numbers from the referral route",
 	"SRO_STYRIA_CLASH": "Styria Clash: the arena ground (build) and its match engine; players cannot reach it until #3648",
-	"SRO_AI_CARAVANS":  "the AI caravans are not seen by players or paid yet; they become a rule with the escort and parley rewards (#3704)",
 	"SRO_CONSIGNMENT":  "the market pages state their own fee, duration and listing cap",
 	// Staff telemetry (#1639): name-free kill and EXP rates for the
 	// staff console; players never meet it.
@@ -214,8 +215,14 @@ func publicRules() publicstats.RulesResponse {
 	if eventbot.EnabledFromEnv() {
 		eventBotNow = "EventBot announces the schedule file's chat events, takes entries and answers by whisper, draws each round's winner and pays the file's item prize (audited, capped per account per day)."
 	}
+	caravanCfg := caravanai.ConfigFromEnv()
 	return publicstats.RulesResponse{
 		Rules: []publicstats.Rule{
+			{Flag: caravanai.EnvAICaravans, On: caravanCfg.Enabled,
+				Native: "These autonomous player-like caravan agents are a port-only addition.",
+				Now: fmt.Sprintf("AI traders, hunters and thieves use the three-town highway. Nearby Hunters can escort recruiting Traders for gold, staying close for nearly the whole run, with at most %d paid deliveries per Hunter per UTC day; hiring an AI agent costs %s gold.",
+					caravanai.MaxPaidEscortsPerDay, caravanai.GoldText(caravanCfg.HireFeeGold)),
+				Why: "Populates the trade roads with optional job encounters."},
 			{Flag: progression.EnvLevelCap, On: levelCap == progression.ExpansionLevelCap,
 				Native: "The character level cap is 90.",
 				Now:    "The character level cap is 110, using the installed v1.150 experience curve.",

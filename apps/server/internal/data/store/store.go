@@ -328,6 +328,8 @@ type Store struct {
 	nameReservations map[string]map[string]NameReservation
 
 	charDivision map[*domain.Character]string
+	// Port-only actors share the authority doors but never enter persisted rosters.
+	runtimeCharacters map[string][]*domain.Character
 	// committedDigests is the last committed record digest per
 	// character (division, id): a dirty character whose encoded bytes
 	// still hash to it is not rewritten (persistence.go). Entries are
@@ -667,6 +669,11 @@ func (s *Store) openAndLoadDB(path string) (*sql.DB, *loadedDB, error) {
 	}
 	// The referral tables (#3518) are additive the same way.
 	if err := ensureReferrals(db); err != nil {
+		db.Close()
+		return nil, nil, err
+	}
+	// The AI caravan hires in flight (port-only): additive the same way.
+	if err := ensureCaravanHires(db); err != nil {
 		db.Close()
 		return nil, nil, err
 	}

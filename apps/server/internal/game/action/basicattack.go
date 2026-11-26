@@ -423,10 +423,6 @@ func (rt *Runtime) beginBasicAttack(divisionID string, character *enterworld.Cha
 		if code := rt.playerAttackTargetRefusal(divisionID, snapshot, target.snapshot, nowMs); code != 0 {
 			return offensiveRefusal(code)
 		}
-	} else if target.agent != nil {
-		if code := rt.agentAttackRefusal(divisionID, snapshot, *target.agent, nowMs); code != 0 {
-			return offensiveRefusal(code)
-		}
 	} else if target.monster != nil {
 		if code := rt.jobMonsterTargetRefusal(snapshot, *target.monster); code != 0 {
 			return offensiveRefusal(code)

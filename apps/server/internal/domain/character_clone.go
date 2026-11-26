@@ -145,6 +145,7 @@ func cloneCharacterCompanion(source *Character) *Character {
 	}
 	clone := &Character{
 		ID: source.ID, AccountID: source.AccountID, Name: source.Name, DeletePending: source.DeletePending,
+		RuntimeOnly:   source.RuntimeOnly,
 		ModelCodename: source.ModelCodename, BroodGeneration: source.BroodGeneration,
 		NativeTeleportMode: source.NativeTeleportMode, NativeBodyStatus: source.NativeBodyStatus,
 		BattleUntilMs: source.BattleUntilMs, Job: source.Job, GMPrivilege: source.GMPrivilege, GMCapabilities: source.GMCapabilities,

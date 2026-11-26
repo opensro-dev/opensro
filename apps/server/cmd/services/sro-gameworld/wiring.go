@@ -419,6 +419,10 @@ func newGameWorldApplication(
 	if err := gameplay.register(ts.Hub, authority.loadQuests); err != nil {
 		return nil, fmt.Errorf("gameplay wiring: %w", err)
 	}
+	// The AI caravan runtime exists only once register has wired the job
+	// rules: its memory and hire flush joins the ledgers here, not in
+	// installShardLedgers (which runs before register).
+	application.ledgers.caravans = gameplay.caravanAgents
 	if err := installEnterWorldVerifier(
 		ts.Hub,
 		ownedShard.ID,
@@ -447,7 +451,6 @@ func newGameWorldApplication(
 	if err != nil {
 		return nil, fmt.Errorf("peer item references: %w", err)
 	}
-	gameplay.peerReferences = peerReferences
 	application.ticker = gameplay.newMissionTicker(peerReferences)
 	application.returnArrivals = gameplay.items.RunReturnArrivals
 	application.ticker.Commit = tickCommit(authority.store)
