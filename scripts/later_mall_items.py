@@ -41,6 +41,13 @@ Forgotten World content at all, and the Pharaoh tomb ticket's free
 entry is its own evidence job), the OptLevel upgrade scrolls
 (3/3/3/14 - a timed equipment-plus buff with no lane yet) and the
 premium quest ticket (3/3/3/15 - the ticket case is unported).
+The miscellaneous alchemy tab's four families are left out on the
+same ground: the degree-3 Destruction Rondo (3/3/11/9), the
+12th-grade Magic Proof Stones (3/3/10/8), the 11th-grade Special
+Awaken Stones (3/3/11/15) and the trade seals and statement
+(3/3/9/0, 3/3/11/12) - later_mall_goods places their goods in the
+Athanasia tab, so each lists the day its family is imported here
+with a lane to serve it.
 Their goods stay unlisted until those land.
 
 Identities come from published_ids, above every object (items) and
