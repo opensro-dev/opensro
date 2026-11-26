@@ -8,6 +8,7 @@ wiring_attendance_test.go - SRO_ATTENDANCE off opens nothing; on wires both
 package main
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
 	"testing"
@@ -55,7 +56,7 @@ func TestInstallAttendanceFollowsTheFlag(t *testing.T) {
 	if err := application.ledgers.close(); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := gameplay.attendance.Current(1); err != attendance.ErrClosed {
+	if _, err := gameplay.attendance.Current(1); !errors.Is(err, attendance.ErrClosed) {
 		t.Fatalf("ledger still open after close: %v", err)
 	}
 }

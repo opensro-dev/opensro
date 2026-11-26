@@ -8,6 +8,7 @@ attendance_test.go - the 04:00 day, the month and the check-in store
 package attendance
 
 import (
+	"errors"
 	"testing"
 	"time"
 )
@@ -141,7 +142,7 @@ func TestCheckInOncePerDay(t *testing.T) {
 	if err := service.Close(); err != nil {
 		t.Fatal(err)
 	}
-	if _, _, err := service.CheckIn(7); err != ErrClosed {
+	if _, _, err := service.CheckIn(7); !errors.Is(err, ErrClosed) {
 		t.Fatalf("closed check-in %v", err)
 	}
 
