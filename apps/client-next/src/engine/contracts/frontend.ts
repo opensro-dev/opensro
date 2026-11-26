@@ -1,3 +1,16 @@
+/*
+===========================================================================
+
+frontend.ts - the title and character-select frontend state
+
+The snapshot shapes the out-of-world frontend renders from: the
+creation selection and its dialog, the camera keys and tracks the
+intro plays, and the FrontendSnapshot the shell hands to the UI each
+frame. Types only; the machines that move this state live with the
+frontend's owners.
+
+===========================================================================
+*/
 import type { CatalogMessage } from "./message";
 import type { WorldCamera } from "./scene";
 export interface CreationSelection {
