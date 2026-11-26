@@ -80,6 +80,11 @@ type ItemRef struct {
 	// carry no set ids; only the port-only cap-110 overlay rows do, and
 	// the set owner (setgroups.go) reads this only while its flag is on.
 	SetID int64
+	// DecayTimeMs is itemdata column 13, RefObjCommon DecayTime: how long
+	// the item lies on the ground before it vanishes, in milliseconds
+	// (180000 on almost every v1.150 row, 1800000 on the trade goods).
+	// 0 when the cell is absent or not positive.
+	DecayTimeMs int64
 
 	// Equip requirement columns, typed for the server-side equip gates (the
 	// native client's full-mask CSOItem_Query_789C60 bits compare the same

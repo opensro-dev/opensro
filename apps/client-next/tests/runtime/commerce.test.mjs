@@ -26,6 +26,22 @@ test("native COS sale retains COS identity and opaque context without touching a
 	assert.equal( other[0].quantity, 40 );
 	assert.throws( () => soldInventory( inventory, 2, 11 ) );
 	assert.throws( () => soldInventory( inventory, 4, 1 ) );
+	// Magic Cube quantity is StoredItemCount (0 when empty); sale qty is bag stack 1.
+	const emptyCube = {
+		slot: 13,
+		refObjId: 35568,
+		quantity: 0,
+		plus: 0,
+		durability: 0,
+		variance: "0",
+		magic: [],
+		typeFlags: 0x9cc
+	};
+	assert.deepEqual( soldInventory( [ emptyCube, { slot: 14, quantity: 2 } ], 13, 1 ), [ {
+		slot: 14,
+		quantity: 2
+	} ] );
+	assert.throws( () => soldInventory( [ emptyCube ], 13, 2 ) );
 	for ( let n = 2; n < p.length; n++ ) assert.throws( () => saleResult( 0xb06d, p.slice( 0, n ) ) );
 	assert.throws( () => saleResult( 0xb06d, Uint8Array.of( ...p, 0 ) ) );
 	const zero = p.slice();

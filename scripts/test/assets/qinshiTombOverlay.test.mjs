@@ -25,6 +25,7 @@ import {
 	buildKnobLines,
 	computeResourceBuildFingerprint
 } from "../../build/shared/resourceBuildFingerprint.mjs";
+import { STUB_FINGERPRINT_KEYS } from "../helpers/fingerprintKeys.mjs";
 import { serverSourceRoot } from "../../build/world/paths.mjs";
 import {
 	loadQinShiTombCharacterRows,
@@ -189,9 +190,9 @@ test("flipping the tomb flag changes the resource build fingerprint", async ( t 
 	// flag-off assets after the flag turns on (lane memos hash the same
 	// knob list).
 	withTombFlag( t, "off" );
-	const off = await computeResourceBuildFingerprint();
+	const off = await computeResourceBuildFingerprint( STUB_FINGERPRINT_KEYS );
 	process.env.SRO_QINSHI_TOMB = "on";
-	const on = await computeResourceBuildFingerprint();
+	const on = await computeResourceBuildFingerprint( STUB_FINGERPRINT_KEYS );
 	assert.notEqual( on.hash, off.hash );
 });
 
@@ -207,7 +208,7 @@ test("a profile or registry flip with the env unset changes the fingerprint and 
 	const profilePath = path.join( root, "config", "shard-settings.json" );
 	const registryPath = path.join( root, "internal", "config", "shardsettings", "shardsettings.go" );
 	const read = async () => ({
-		fingerprint: (await computeResourceBuildFingerprint()).hash,
+		fingerprint: (await computeResourceBuildFingerprint( STUB_FINGERPRINT_KEYS )).hash,
 		knobs: buildKnobLines().join( "\n" )
 	});
 
@@ -247,7 +248,7 @@ test("every bake switch reads its posture from the fixture's copy of the registr
 		delete process.env[env];
 	}
 	fixtureServerRoot( t, "off", "on" );
-	const fingerprint = await computeResourceBuildFingerprint();
+	const fingerprint = await computeResourceBuildFingerprint( STUB_FINGERPRINT_KEYS );
 	assert.equal( typeof fingerprint.hash, "string" );
 	const knobs = buildKnobLines();
 	// Each listed switch joins the lane knobs once, read from its registry

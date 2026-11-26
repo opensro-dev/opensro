@@ -34,13 +34,15 @@ import (
 // live at 100000+ and NPCs at 200000+, so drops start above both.
 const GidBase uint32 = domain.GroundItemGIDBase
 
-// Ground-item lifetime: FIXTURE POLICY, *NOT* NATIVE TRUTH. The client binary
-// carries no ground-item expiry to recover - CIItem_Draw has no lifetime or
-// fade clock, and the 0x36AB handler only despawns when the SERVER says to.
-// Retail's drop lifetime lives in the server binary, which this project does
-// not have, so the duration below is INVENTED for the fixture and must never
-// be cited as reversed truth. The sweep emits the same 0x36AB despawn the
-// pickup path already uses, so the client needs no new case.
+// Ground-item lifetime. The client binary carries no ground-item expiry -
+// CIItem_Draw has no lifetime or fade clock, and the 0x36AB handler only
+// despawns when the SERVER says to. The server's clock is each item's
+// itemdata DecayTime (RefObjCommon column 13, milliseconds): 180000 on
+// almost every v1.150 row, 1800000 on the trade goods. The action sweep
+// reads it per item (ExpireItemsBy); FixtureLifetime is the fallback for a
+// row without one and equals the common 180000. The sweep emits the same
+// 0x36AB despawn the pickup path already uses, so the client needs no new
+// case.
 const (
 	FixtureLifetime = 180 * time.Second
 	SweepInterval   = 5 * time.Second
@@ -428,24 +430,41 @@ func (r *Registry) SetStackCount(divisionID string, gid uint32, count uint16) bo
 	return true
 }
 
-// ExpireItems removes and returns the division's entries whose fixture
-// lifetime has elapsed: DroppedAt is set and now-DroppedAt >= lifetime. The
-// caller emits one 0x36AB despawn per returned entry, exactly like the pickup
-// path. Entries without a timestamp never expire. Results are ordered by
-// entity id so the despawn burst is deterministic.
+// Lifetime answers how long a ground entry of one item kind lasts after
+// its DroppedAt. It runs under the registry lock, so it must not call
+// back into the registry.
+type Lifetime func(refObjID uint32) time.Duration
+
 /*
 ================
 ExpireItems
+
+ExpireItemsBy with one lifetime for every entry.
 ================
 */
 func (r *Registry) ExpireItems(divisionID string, now time.Time, lifetime time.Duration) []Item {
+	return r.ExpireItemsBy(divisionID, now, func(uint32) time.Duration { return lifetime })
+}
+
+/*
+================
+ExpireItemsBy
+
+Removes and returns the division's entries whose lifetime has elapsed:
+DroppedAt is set and now-DroppedAt >= lifetimeOf(RefObjID). The caller
+emits one 0x36AB despawn per returned entry, exactly like the pickup
+path. Entries without a timestamp never expire. Results are ordered by
+entity id so the despawn burst is deterministic.
+================
+*/
+func (r *Registry) ExpireItemsBy(divisionID string, now time.Time, lifetimeOf Lifetime) []Item {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
 	items := r.byDivision[divisionID]
 	var expired []Item
 	for gid, item := range items {
-		if item.DroppedAt.IsZero() || now.Sub(item.DroppedAt) < lifetime {
+		if item.DroppedAt.IsZero() || now.Sub(item.DroppedAt) < lifetimeOf(item.RefObjID) {
 			continue
 		}
 		expired = append(expired, item)
@@ -468,19 +487,30 @@ func (r *Registry) ExpireItems(divisionID string, now time.Time, lifetime time.D
 ================
 HasExpired
 
-The expiry peek behind ExpireItems: some entry sits at or past its
-fixture lifetime. Reads only the stored DroppedAt stamps and never
-detaches a record, so scanning the whole plane costs no copy (the
-sweep's cadence probe used to clone every drop, pet records and their
-cargo included, just to read two fields per row, #2030).
+HasExpiredBy with one lifetime for every entry.
 ================
 */
 func (r *Registry) HasExpired(divisionID string, now time.Time, lifetime time.Duration) bool {
+	return r.HasExpiredBy(divisionID, now, func(uint32) time.Duration { return lifetime })
+}
+
+/*
+================
+HasExpiredBy
+
+The expiry peek behind ExpireItemsBy: some entry sits at or past its
+lifetime. Reads only the stored DroppedAt stamps and never detaches a
+record, so scanning the whole plane costs no copy (the sweep's cadence
+probe used to clone every drop, pet records and their cargo included,
+just to read two fields per row, #2030).
+================
+*/
+func (r *Registry) HasExpiredBy(divisionID string, now time.Time, lifetimeOf Lifetime) bool {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
 	for _, item := range r.byDivision[divisionID] {
-		if !item.DroppedAt.IsZero() && now.Sub(item.DroppedAt) >= lifetime {
+		if !item.DroppedAt.IsZero() && now.Sub(item.DroppedAt) >= lifetimeOf(item.RefObjID) {
 			return true
 		}
 	}

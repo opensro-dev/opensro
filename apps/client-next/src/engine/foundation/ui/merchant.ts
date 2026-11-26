@@ -12,6 +12,7 @@ price quote, including honor-priced packages.
 import type { InventoryItem } from "@/engine/contracts/gameplay";
 import type { ShopState, ShopOffer, BuybackOffer } from "@/engine/foundation/gameplay/commerce";
 import { SHOP_CURRENCY_HONOR, SHOP_CURRENCY_NASRUN_TOKEN } from "@/engine/foundation/gameplay/commerce";
+import { isMagicCube } from "@/engine/foundation/gameplay/magic-cube";
 import type { AuthoredLayout } from "./authored-layout";
 
 /*
@@ -145,6 +146,21 @@ export function merchantSelection(
 
 /*
 ================
+merchantSaleQuantity
+
+Bag stack count for a merchant sell. A Magic Cube's InventoryItem.quantity
+is StoredItemCount (CSOItem Data), not the bag stack; the server quotes and
+commits an empty cube as Quantity 1. A non-empty cube is not sellable
+(UIIT_STT_MAGIC_CUBE_STORE_SELL_ERROR) — return 0 so the quote stays invalid.
+================
+*/
+export function merchantSaleQuantity( item: InventoryItem ): number {
+	if ( !isMagicCube( item.typeFlags ) ) return item.quantity;
+	return item.quantity === 0 ? 1 : 0;
+}
+
+/*
+================
 merchantQuote
 ================
 */
@@ -165,6 +181,8 @@ export function merchantQuote(
 	if ( !item || merchantBinding( item ) !== selection.binding ) return null;
 	const maximum = selection.kind === "buy" ?
 		("maxStack" in item ? item.purchaseLimit ?? item.maxStack : 1) :
+		selection.kind === "sell" && "typeFlags" in item ?
+		merchantSaleQuantity( item ) :
 		"quantity" in item ?
 		item.quantity :
 		1;

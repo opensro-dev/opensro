@@ -285,6 +285,43 @@ func TestBuildItemRefFortressRoleMask(t *testing.T) {
 	}
 }
 
+/*
+================
+TestBuildItemRefDecayTime
+
+RefObjCommon DecayTime rides column 13, in milliseconds (the v1.150
+trade goods row ITEM_ETC_TRADE_CH_05 carries 1800000); an empty or
+negative cell leaves DecayTimeMs 0 so the ground sweep falls back.
+================
+*/
+func TestBuildItemRefDecayTime(t *testing.T) {
+	for _, tc := range []struct {
+		cell string
+		want int64
+	}{{"1800000", 1800000}, {"180000", 180000}, {"", 0}, {"-1", 0}} {
+		fields := make([]string, 160)
+		for i := range fields {
+			fields[i] = "0"
+		}
+		fields[1] = "7570"
+		fields[2] = "ITEM_ETC_TRADE_CH_05"
+		fields[9], fields[10], fields[11], fields[12] = "3", "3", "8", "2"
+		fields[13] = tc.cell
+		fields[14] = "3"
+
+		ref := buildItemRef(fields, map[string]string{})
+		if ref == nil {
+			t.Fatal("buildItemRef returned nil")
+		}
+		if ref.DecayTimeMs != tc.want {
+			t.Fatalf("DecayTime cell %q: DecayTimeMs = %d, want %d", tc.cell, ref.DecayTimeMs, tc.want)
+		}
+		if ref.Country != 3 {
+			t.Fatalf("Country = %d, want 3 (column 14 beside DecayTime)", ref.Country)
+		}
+	}
+}
+
 // Common potion recovery values ride the v1.150 media columns consumed by
 // the native item-use path. Keep them as typed server-only fields so gameplay
 // can apply the authoritative values from the typed numeric field projection.

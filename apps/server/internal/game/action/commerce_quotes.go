@@ -17,6 +17,7 @@ import (
 	"opensro.online/server/internal/game/enterworld"
 	"opensro.online/server/internal/game/item/commerce"
 	"opensro.online/server/internal/game/item/inventory"
+	"opensro.online/server/internal/game/item/wire"
 	"opensro.online/server/internal/game/nasrun"
 	"opensro.online/server/internal/game/tunables"
 	"opensro.online/server/internal/game/world/simulation"
@@ -70,6 +71,12 @@ func (rt *Runtime) shopSaleQuotes(division string, c *enterworld.Character, npc 
 			}
 			ref, found := rt.deps.ItemReferences().ItemRefByCodename(item.Codename)
 			if !found || ref == nil || ref.RefObjID != item.RefObjID || ref.TypeFlags() != item.TypeFlags || !commerceItemSaleAdmitted(ref, item) {
+				continue
+			}
+			// Port-only (#3906): a non-empty Magic Cube cannot be sold; omit
+			// its quote so the client does not arm a confirm the server
+			// would refuse with 01:8E.
+			if rt.MagicCube && wire.IsMagicCube(item.TypeFlags) && item.Data > 0 {
 				continue
 			}
 			if rt.tradeAdmission(division, c, npc, item) != 0 {

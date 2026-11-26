@@ -14,6 +14,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { janganTombTeleportEnabled, loadJanganTombTeleportLinkRows } from "../../build/shared/janganTombTeleport.mjs";
 import { computeResourceBuildFingerprint } from "../../build/shared/resourceBuildFingerprint.mjs";
+import { STUB_FINGERPRINT_KEYS } from "../helpers/fingerprintKeys.mjs";
 
 /*
 ================
@@ -55,9 +56,9 @@ test("an unset switch takes the registry default, off", ( t ) => {
 
 test("flipping the switch changes the resource build fingerprint", async ( t ) => {
 	withEnv( t, { SRO_QINSHI_TOMB: "on", SRO_JANGAN_TOMB_TELEPORT: "off" } );
-	const off = await computeResourceBuildFingerprint();
+	const off = await computeResourceBuildFingerprint( STUB_FINGERPRINT_KEYS );
 	process.env.SRO_JANGAN_TOMB_TELEPORT = "on";
-	const on = await computeResourceBuildFingerprint();
+	const on = await computeResourceBuildFingerprint( STUB_FINGERPRINT_KEYS );
 	assert.notEqual( on.hash, off.hash );
 });
 
