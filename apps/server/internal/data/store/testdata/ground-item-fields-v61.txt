@@ -14,7 +14,6 @@ linkedStorage.rows[].codename
 linkedStorage.rows[].durability
 linkedStorage.rows[].earnedBought
 linkedStorage.rows[].forgeBound
-linkedStorage.rows[].linkedStorage
 linkedStorage.rows[].magicOptions
 linkedStorage.rows[].plus
 linkedStorage.rows[].recordId
@@ -87,7 +86,6 @@ summon.container.rows[].codename
 summon.container.rows[].durability
 summon.container.rows[].earnedBought
 summon.container.rows[].forgeBound
-summon.container.rows[].linkedStorage
 summon.container.rows[].magicOptions
 summon.container.rows[].plus
 summon.container.rows[].recordId

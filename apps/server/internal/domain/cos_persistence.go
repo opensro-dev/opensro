@@ -109,6 +109,7 @@ func cloneCOSCompanionActive(source *CharacterCOS) *CharacterCOS {
 	for i := range bag.Rows {
 		bag.Rows[i].Summon = nil
 		bag.Rows[i].MagicOptions = nil
+		bag.Rows[i].LinkedStorage = nil
 	}
 	clone.Container = &bag
 	return clone

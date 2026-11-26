@@ -304,7 +304,7 @@ with (json.go). The commit times it apart from the write
 ================
 */
 func encodeCharacter(division string, c *domain.Character, unknown unknownFields) ([]byte, error) {
-	record, err := encodeRecordFields(c, unknown)
+	record, err := encodeRecordFields(packCharacterForStore(c), unknown)
 	if err != nil {
 		// Plain-data structs do not fail to marshal; when one does, the
 		// whole commit fails LOUD instead of silently dropping a
@@ -328,7 +328,7 @@ into the statement), so the borrowed lifetime is exact.
 ================
 */
 func encodeCharacterBorrowed(scratch *jsonscratch.Scratch, division string, c *domain.Character, unknown unknownFields) ([]byte, error) {
-	record, err := scratch.Marshal(c)
+	record, err := scratch.Marshal(packCharacterForStore(c))
 	if err == nil {
 		// A row with unknown fields (json.go) leaves the scratch for
 		// its own merged copy; every other row stays borrowed.
@@ -654,7 +654,7 @@ func replaceGuildTx(tx sqlExecer, division string, guildID int64, guild domain.G
 	if _, err := tx.Exec("DELETE FROM guild_members WHERE division = ? AND guild_id = ?", division, guildID); err != nil {
 		return err
 	}
-	record, err := encodeRecordFields(guild, residues.guilds[groupResidueKey{division: division, id: guildID}])
+	record, err := encodeRecordFields(packGuildForStore(guild), residues.guilds[groupResidueKey{division: division, id: guildID}])
 	if err != nil {
 		return fmt.Errorf("marshaling guild %s/%d: %w", division, guildID, err)
 	}

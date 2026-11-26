@@ -304,6 +304,7 @@ func cloneCharacterFilteredFrom(source *Character, rows cloneRows, previous *Cha
 	default:
 		clone.MissionInventory = cloneEquipmentRows(source.MissionInventory)
 	}
+	clone.CubeStorages = stagedChild(source.CubeStorages, previousChild.CubeStorages, CloneCharacterCubeStorages)
 	clone.Buyback = stagedChild(source.Buyback, previousChild.Buyback, cloneBuybackRows)
 	clone.World = stagedChild(source.World, previousChild.World, cloneCharacterWorld)
 	if rows == rowsCast {
