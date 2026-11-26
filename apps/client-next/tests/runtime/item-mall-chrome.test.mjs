@@ -49,8 +49,10 @@ test("My info hides the money sign and the English Point row", () => {
 		settle( f, 1100 );
 		const counts = textureCounts( f );
 		assert.equal( counts.get( "mall_moneybutton.png" ), undefined, "6BDA60 hides control 5" );
-		// Silk and gift silk keep their boxes; the Point row's box (17) is hidden.
-		assert.equal( counts.get( "mall_blackbox01.png" ), 2 );
+		// Silk and Bonus Silk keep their boxes. The English client hides the
+		// Point row's box (17); the port draws it again for the Earned Silk
+		// balance that takes the Point row's place (#4133, #4481).
+		assert.equal( counts.get( "mall_blackbox01.png" ), 3 );
 	} finally {
 		f.dispose();
 	}

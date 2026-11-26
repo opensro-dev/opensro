@@ -19,6 +19,7 @@ import { test } from "node:test";
 import { defined } from "../helpers/defined.mjs";
 const { createItemMall } = await import( "../../src/engine/runtime/ui/hud/item-mall.ts" );
 const { mallCategoriesLater } = await import( "../../src/engine/foundation/ui/item-mall-layout.ts" );
+const { silkWalletHelp } = await import( "../../src/engine/foundation/ui/mall-wallet.ts" );
 const {
 	decodeRenewalMall,
 	optionalRenewalMall,
@@ -325,7 +326,13 @@ function view( mall, options = {} ) {
 	return renewalMallView( {
 		data,
 		browse,
-		balance: { silk: 700, earnedSilk: 25, giftSilk: 20, points: 5 },
+		balance: {
+			silk: 700,
+			earnedSilk: 25,
+			giftSilk: 20,
+			points: 5,
+			earnedTradable: options.earnedTradable ?? false
+		},
 		character: { name: "Hero", level: 42 },
 		origin: [ 0, 0 ],
 		strings: {
@@ -818,18 +825,19 @@ test("the native text wins and the later strings fill the keys v1.150 lacks", ()
 	assert.ok( texts.includes( "Lv. 42" ) );
 	assert.ok( texts.includes( "700" ) );
 	// Port-only (#4133): the earned balance shows beside the granted one.
-	assert.ok( texts.includes( "Earned silk" ) );
+	assert.ok( texts.includes( "Earned Silk" ) );
 	assert.ok( texts.includes( "25" ) );
 });
 
-test("the wallet rows stack Silk, Earned, Point and Gift Silk without sharing a row", () => {
-	// #4133 follow-up: the earned row stepped one authored pitch past Point,
-	// but Gift Silk sits below Point, so it landed on the Silk row.
+test("the wallet rows stack Silk, Earned Silk and Bonus Silk, and draw no Point row", () => {
+	// #4133 follow-up: four rows crowded a box drawn for three. #4480: the
+	// Point row is the English client's hidden one, so three Silk rows show.
 	const ops = view( renewalMall() );
 	const texts = ops.filter( op => op.kind === "text" );
 	const silkValue = defined( texts.find( op => op.value === "700" ) ).rect;
-	// The balances (silk 700, earned 25, points 5, gift 20) in the value column.
-	const rows = [ "700", "25", "5", "20" ].map( value =>
+	assert.ok( !texts.some( op => op.value === "5" && op.rect[0] === silkValue[0] ), "the Point balance is drawn" );
+	// The balances (silk 700, earned 25, bonus 20) in the value column.
+	const rows = [ "700", "25", "20" ].map( value =>
 		defined( texts.find( op => op.value === value && op.rect[0] === silkValue[0] ), value ).rect
 	);
 	for ( let i = 1; i < rows.length; i++ ) {
@@ -839,7 +847,7 @@ test("the wallet rows stack Silk, Earned, Point and Gift Silk without sharing a 
 		);
 	}
 	// The earned caption shares its value's row, under the Silk row.
-	const earnedCaption = defined( texts.find( op => op.value === "Earned silk" ) ).rect;
+	const earnedCaption = defined( texts.find( op => op.value === "Earned Silk" ) ).rect;
 	assert.equal( earnedCaption[1], rows[1][1] );
 	// The last row stays inside the box's background, above the buttons.
 	const bg = defined(
@@ -848,6 +856,31 @@ test("the wallet rows stack Silk, Earned, Point and Gift Silk without sharing a 
 	).rect;
 	const last = rows[rows.length - 1];
 	assert.ok( last[1] + last[3] <= bg[1] + bg[3], `the last row ends at ${last[1] + last[3]}, past ${bg[1] + bg[3]}` );
+});
+
+test("each wallet row carries hover help over its caption, value and mark (#4480)", () => {
+	const help = ops => ops.filter( op => op.kind === "help" );
+	const texts = view( renewalMall() ).filter( op => op.kind === "text" );
+	const rows = help( view( renewalMall() ) );
+	assert.deepEqual( rows.map( op => op.id ), [
+		"item-mall-renewal-wallet-silk",
+		"item-mall-renewal-wallet-earned",
+		"item-mall-renewal-wallet-bonus"
+	] );
+	assert.deepEqual(
+		rows.map( op => op.text ),
+		/** @type {const} */ ([ "silk", "earned", "bonus" ]).map( kind => silkWalletHelp( kind, false ) )
+	);
+	// Each region covers its own row's value and no other row's.
+	for ( const [index, value] of [ "700", "25", "20" ].entries() ) {
+		const at = defined( texts.find( op => op.value === value ), value ).rect;
+		const inside = rect => at[1] >= rect[1] && at[1] + at[3] <= rect[1] + rect[3] && at[0] >= rect[0];
+		assert.deepEqual( rows.map( op => inside( op.rect ) ), rows.map( ( _, i ) => i === index ), value );
+	}
+	// The earned help promises tradable goods only while the shard allows it.
+	const tradable = help( view( renewalMall(), { earnedTradable: true } ) )[1].text;
+	assert.equal( tradable, silkWalletHelp( "earned", true ) );
+	assert.notEqual( tradable, rows[1].text );
 });
 
 test("the popup buys, tries on and reserves the card it opened on", () => {
