@@ -272,7 +272,7 @@ func (rt *Runtime) acceptSkillStagePhaseAt(divisionID string, character, snapsho
 	if code := temptationTargetRefusal(skill, target); code != 0 {
 		return offensiveRefusal(code), skillCastRefused
 	}
-	if code := rt.jobMonsterTargetRefusal(snapshot, target); code != 0 {
+	if code := rt.monsterTargetRefusal(snapshot, target); code != 0 {
 		return offensiveRefusal(code), skillCastRefused
 	}
 	// Port-only, not native (SRO_STR_INT_UNIQUES): the copy's refusal reaches

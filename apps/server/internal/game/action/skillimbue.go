@@ -232,6 +232,11 @@ func (rt *Runtime) resolvePlayerImpactBehindWall(division, name string, skill en
 	if err != nil || skill.Attack.Value5 == 0 || result.Blocked {
 		return split, err
 	}
+	// A monster-shaped attacker's hit is its level-scaled amount alone;
+	// no imbue share joins it.
+	if shaped := rt.findCharacter(division, name); shaped != nil && shaped.TransformMode == 1 {
+		return split, err
+	}
 	imbue, imbueAbnormal := rt.activeWeaponImbue(division, name, nowMs)
 	if !imbue.Pinned {
 		return split, nil

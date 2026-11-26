@@ -155,7 +155,7 @@ func (rt *Runtime) TickHook() simulation.TickHook {
 		step("advanceHalloweenWaves", rt.advanceHalloweenWaves)
 		step("advanceWinterMissions", rt.advanceWinterMissions)
 		frames("drainWinterGauge", rt.drainWinterGauge)
-		step("advancePandoraBoxes", rt.advancePandoraBoxes)
+		frames("advancePandoraBoxes", rt.advancePandoraBoxes)
 		frames("advanceEventGroups", rt.advanceEventGroups)
 		frames("advanceWeather", rt.advanceWeather)
 		frames("advanceRoc", rt.advanceRoc)

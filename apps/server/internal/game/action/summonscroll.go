@@ -100,7 +100,7 @@ func (rt *Runtime) useSummonScroll(use persistentSummonUse, result *OpResult) bo
 		result.DiagnosticRefusal = "item-use: summon scroll owner unavailable"
 		return false
 	}
-	if _, ok := rt.summonEventRefusal(use, summonScrollMinLevel, summonScrollLevelLine, result); !ok {
+	if _, ok := rt.summonEventRefusal(use, summonScrollGate, result); !ok {
 		return false
 	}
 	kind, found := strongSummonKind(*c.Level, rt.monsterHeld)

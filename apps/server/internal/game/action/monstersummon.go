@@ -11,7 +11,6 @@ Share the existing authority and publication owners across skill families.
 package action
 
 import (
-	"fmt"
 	"opensro.online/server/internal/game/enterworld"
 	"opensro.online/server/internal/game/item/wire"
 	"opensro.online/server/internal/game/world/monster"
@@ -88,22 +87,38 @@ func (rt *Runtime) monsterSummon(divisionID string, instance monster.Instance, s
 	if _, ok := rt.Monsters.BeginSummon(divisionID, instance, skill.Summon, nowMs, nowMs+int64(skill.ActionCastingTimeMs), nowMs+int64(duration), ranges); !ok {
 		return result
 	}
-	token := atomic.AddUint32(&rt.castTokenCounter, 1)
 	result.Accepted = true
-	start := wire.SkillCastUntargetedFrame(wire.SkillCastSuccess{SkillId: skill.ID, CasterGid: instance.Gid, InstanceToken: token})
-	result.Frames = append(result.Frames, simulation.Frame{Opcode: start.Opcode, Payload: start.Payload, Current: start.Current})
-	key := fmt.Sprintf("@monster:%d", instance.Gid)
+	result.Frames = append(result.Frames, rt.monsterUntargetedCast(divisionID, instance.Gid, skill, duration, nowMs)...)
+	return result
+}
+
+/*
+================
+Runtime.monsterUntargetedCast
+
+A monster's untargeted cast of skill at nowMs (a summon, the Pandora
+box's opening): the start, then the release after the casting time and
+the finalize after the action's duration, each sent now when its time
+is zero and queued on the monster's control lane otherwise. Returns the
+frames due now, for the caller to publish from the monster.
+================
+*/
+func (rt *Runtime) monsterUntargetedCast(divisionID string, gid uint32, skill enterworld.SkillRow, duration uint64, nowMs int64) []simulation.Frame {
+	token := atomic.AddUint32(&rt.castTokenCounter, 1)
+	start := wire.SkillCastUntargetedFrame(wire.SkillCastSuccess{SkillId: skill.ID, CasterGid: gid, InstanceToken: token})
+	frames := []simulation.Frame{{Opcode: start.Opcode, Payload: start.Payload, Current: start.Current}}
+	key := monsterCastOwner(gid)
 	if skill.ActionCastingTimeMs == 0 {
 		release := wire.SkillCastReleaseFrame(token, 0)
-		result.Frames = append(result.Frames, simulation.Frame{Opcode: release.Opcode, Payload: release.Payload, Current: release.Current})
+		frames = append(frames, simulation.Frame{Opcode: release.Opcode, Payload: release.Payload, Current: release.Current})
 	} else {
-		rt.queueSkillFinalize(divisionID, key, instance.Gid, nowMs+int64(skill.ActionCastingTimeMs), wire.SkillCastReleaseFrame(token, 0))
+		rt.queueSkillFinalize(divisionID, key, gid, nowMs+int64(skill.ActionCastingTimeMs), wire.SkillCastReleaseFrame(token, 0))
 	}
 	if duration == 0 {
 		finalize := wire.SkillCastFinalizeFrame(token)
-		result.Frames = append(result.Frames, simulation.Frame{Opcode: finalize.Opcode, Payload: finalize.Payload, Current: finalize.Current})
+		frames = append(frames, simulation.Frame{Opcode: finalize.Opcode, Payload: finalize.Payload, Current: finalize.Current})
 	} else {
-		rt.queueSkillFinalize(divisionID, key, instance.Gid, nowMs+int64(duration), wire.SkillCastFinalizeFrame(token))
+		rt.queueSkillFinalize(divisionID, key, gid, nowMs+int64(duration), wire.SkillCastFinalizeFrame(token))
 	}
-	return result
+	return frames
 }

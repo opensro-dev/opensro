@@ -1,7 +1,7 @@
 """
 ===========================================================================
 
-winter_event_import.py - the winter event's monsters for the Christmas event
+winter_event_import.py - the Christmas event's later monsters
 
 Port-only, not native. Off unless SRO_CHRISTMAS_EVENT is "1", "on" or
 "true" when the variant builds; the server spawns these kinds behind the
@@ -18,12 +18,20 @@ hash-pinned before anything is read):
 	                             level band N (20 ... 130)
 	MOB_EV_WINTER_PRINCESS_N     "Princess Miyene", the same bands
 
+The same switch serves So-Ok's Christmas Gift, whose Pandora's Box
+(action/pandorabox.go) opens on the box monster the v1.150 tables lack:
+
+	MOB_EVENT_PANDORA            "Pandora's Box", level 1, 1000 HP,
+	                             casting MSKILL_EVENT_PANDORA_ATTACK01
+	                             as each wave lands (#4540)
+
 Their models, materials and animations are already in the variant: the
 Alexandria stage copies every VSRO Data file the native tree lacks, and
-the VSRO client ships the same three .bsr closures. What this import
-adds is their character rows (converted to the v1.150 layout in a shard
-of their own), the skills they name (the native basic attack), their
-names and their characterinfo rows. Rows above the server's level cap
+the VSRO client ships the same .bsr closures (etc/event_pandora.bsr
+too). What this import adds is their character rows (converted to the
+v1.150 layout in a shard of their own), the skills they name (the
+native basic attack, and the box's own cast), their names and their
+characterinfo rows. Rows above the server's level cap
 (cap110.MAX_LEVEL) stay out. No placement: the client authors no nest
 for any of them: the server lands the Snow Slaves while it snows and
 the White Knight and Princess on their timetable.
@@ -66,6 +74,8 @@ MARKER = ".opensro-winter-event.json"
 CHARACTER_SHARD = "characterdata_240000.txt"
 SKILL_SHARD = "skilldata_240000.txt"
 PREFIX = "MOB_EV_WINTER_"
+# So-Ok's Christmas Gift's box monster: no winter prefix, the same switch.
+PANDORA_BOX = "MOB_EVENT_PANDORA"
 # The winter event's token and its So-ok talk (the server's
 # action/christmas.go), staged beside the monsters: the snow flake's item
 # row in a shard of its own, its icon and drop model, its name and
@@ -77,7 +87,7 @@ TALK_SYMBOLS = tuple(f"SN_TALK_QEV_SERVER_EVENT_QUEST_{part}" for part in "ABCDE
 ARCHIVES = ("Data", "Media", "Particles")
 # The winter kinds' sound profiles: their effectsound objects (the base
 # codenames their characterinfo rows name), cp949 like the native table.
-SOUND_OBJECTS = ("MOB_EV_SNOWMAN", "MOB_EV_WHITEKNIGHT", "MOB_EV_PRINCESS")
+SOUND_OBJECTS = ("MOB_EV_SNOWMAN", "MOB_EV_WHITEKNIGHT", "MOB_EV_PRINCESS", PANDORA_BOX)
 SOUND_TABLE = "effectsound.txt"
 SOUND_ENCODING = "cp949"
 PIN_FILE = Path(__file__).with_name("v1696_archive_pins.json")
@@ -109,11 +119,12 @@ def flag_enabled(env=os.environ):
 # ================
 # admits
 #
-# One later character row against the import: a winter event monster
-# at or below the server's level cap.
+# One later character row against the import: a winter event monster,
+# or the Pandora's Box monster, at or below the server's level cap.
 # ================
 def admits(row):
-	return row[CHAR_CODE].startswith(PREFIX) and int(row[CHAR_LEVEL]) <= cap110.MAX_LEVEL
+	code = row[CHAR_CODE]
+	return (code.startswith(PREFIX) or code == PANDORA_BOX) and int(row[CHAR_LEVEL]) <= cap110.MAX_LEVEL
 
 
 # ================
@@ -343,30 +354,68 @@ def reap_items(output, prior):
 # its own layout (an empty first cell, cp949).
 # ================
 def add_winter_presentation(native, output, read, codes, prior):
-	text_root = output / later_world_import.TEXT_ROOT
-	later = {row[2]: row[2:] for row in later_text_table_rows(read, "characterinfo.txt")
-		if len(row) >= characters.SKILL_EFFECT_COLUMNS + 2 and row[0] in ("0", "1")}
+	later = later_characterinfo(read)
 	# The Snow Slave has no row of its own: its characterdata base
 	# (MOB_EV_SNOWMAN) is its profile, as are the sound objects.
 	wanted = set(codes) | {later[code][1] for code in codes if code in later} | set(SOUND_OBJECTS)
-	effect_path = text_root / "skilleffect.txt"
-	effect_text = tables.decode_table(effect_path.read_bytes())
-	known = cap110.characterinfo_codenames(effect_text)
-	info = [later[code][:characters.SKILL_EFFECT_KEPT] for code in sorted(wanted) if code in later and code not in known]
+	add_characterinfo(output, later, wanted)
+	sounds = add_sound_rules(native, output, read, SOUND_OBJECTS, "winter")
+	return {"characterInfo": sorted(code for code in wanted if code in later), "soundObjects": sounds}
+
+
+# ================
+# later_characterinfo
+#
+# The later client's characterinfo rows by codename, from the
+# characterinfo.txt shards (two columns, service and id, wider than the
+# native record), cut to the codename onwards.
+# ================
+def later_characterinfo(read):
+	return {row[2]: row[2:] for row in later_text_table_rows(read, "characterinfo.txt")
+		if len(row) >= characters.SKILL_EFFECT_COLUMNS + 2 and row[0] in ("0", "1")}
+
+
+# ================
+# add_characterinfo
+#
+# The characterinfo rows of codes (from later_characterinfo) joined to
+# the tree's skilleffect.txt, cut to the native record; a code the tree
+# already carries, or one in staged (rows stage_kinds just merged), is
+# left alone. Shared by the layers that stage later monsters without a
+# placement (rigid_import.py, pandora_box_import.py). Returns the codes
+# whose rows joined.
+# ================
+def add_characterinfo(output, later, codes, staged=()):
+	effect_path = output / later_world_import.TEXT_ROOT / "skilleffect.txt"
+	known = cap110.characterinfo_codenames(tables.decode_table(effect_path.read_bytes())) | set(staged)
+	info = [later[code][:characters.SKILL_EFFECT_KEPT] for code in sorted(codes) if code in later and code not in known]
 	write_atomically(effect_path, characters.skill_effect_section(effect_path.read_bytes(), info))
-	sound_path = text_root / SOUND_TABLE
+	return [row[0] for row in info]
+
+
+# ================
+# add_sound_rules
+#
+# The later effectsound rules of objects joined to the tree's table in
+# its native layout (an empty first cell, cp949), replacing any a
+# previous build added; reap_sounds removes them again from the
+# marker's soundObjects. A client without one rule for the objects
+# refuses: the kinds would play the first profile's sounds.
+# ================
+def add_sound_rules(native, output, read, objects, label):
+	sound_path = output / later_world_import.TEXT_ROOT / SOUND_TABLE
 	native_sound = Path(native) / later_world_import.TEXT_ROOT / SOUND_TABLE
 	current = (sound_path if sound_path.exists() else native_sound).read_bytes().decode(SOUND_ENCODING)
 	later_sound = read(SOUND_TABLE).decode(SOUND_ENCODING, errors="strict")
 	rules = ["\t" + "\t".join(line.split("\t")[1:]) for line in later_sound.split("\r\n")
-		if len(line.split("\t")) > 2 and line.split("\t")[1] in SOUND_OBJECTS]
+		if len(line.split("\t")) > 2 and line.split("\t")[1] in objects]
 	if not rules:
-		raise ValueError("the v1.696 client carries no winter sound rules")
-	kept = drop_sound_rules(current, SOUND_OBJECTS)
+		raise ValueError(f"the v1.696 client carries no {label} sound rules")
+	kept = drop_sound_rules(current, objects)
 	if not kept.endswith("\r\n"):
 		kept += "\r\n"
 	write_atomically(sound_path, (kept + "\r\n".join(rules) + "\r\n").encode(SOUND_ENCODING))
-	return {"characterInfo": sorted(code for code in wanted if code in later), "soundObjects": list(SOUND_OBJECTS)}
+	return list(objects)
 
 
 # ================

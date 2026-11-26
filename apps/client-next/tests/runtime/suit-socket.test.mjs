@@ -30,6 +30,9 @@ function typeFlags( tid1, tid2, tid3, tid4 ) {
 	return tid1 << 2 | tid2 << 5 | tid3 << 7 | tid4 << 11;
 }
 
+// fitsAll admits every bag item, as a body every candidate is published for.
+const fitsAll = () => true;
+
 const CAPE = typeFlags( 3, 1, 7, 5 ), THIEF_SUIT = typeFlags( 3, 1, 7, 2 ), ARMOR = typeFlags( 3, 1, 1, 3 );
 
 /*
@@ -58,7 +61,7 @@ test("a bag suit or cape is assembled with the item in the suit socket", () => {
 		{ slot: 1, refObjId: 10, typeFlags: ARMOR },
 		{ slot: 20, refObjId: 77, typeFlags: CAPE }
 	];
-	assert.deepEqual( suitSocketParts( equipment, partsFor ), [ "model:77" ] );
+	assert.deepEqual( suitSocketParts( equipment, fitsAll, partsFor ), [ "model:77" ] );
 	assert.equal( calls.length, 1 );
 	assert.deepEqual( calls[0].map( row => [ row.slot, row.refObjId ] ), [ [ 1, 10 ], [ JOB_SUIT_SLOT, 77 ] ] );
 });
@@ -69,7 +72,10 @@ test("a worn suit adds the bare socket's assembly", () => {
 		{ slot: JOB_SUIT_SLOT, refObjId: 55, typeFlags: THIEF_SUIT },
 		{ slot: 21, refObjId: 77, typeFlags: CAPE }
 	];
-	assert.deepEqual( new Set( suitSocketParts( equipment, partsFor ) ), new Set( [ "model:77", "model:bare" ] ) );
+	assert.deepEqual(
+		new Set( suitSocketParts( equipment, fitsAll, partsFor ) ),
+		new Set( [ "model:77", "model:bare" ] )
+	);
 	assert.equal( calls.length, 2 );
 	assert.equal( calls[1].some( row => row.slot === JOB_SUIT_SLOT ), false, "the bare assembly has no socket row" );
 });
@@ -81,8 +87,21 @@ test("non-suit bag items and worn rows are never candidates", () => {
 		{ slot: LAST_EQUIPMENT_SLOT, refObjId: 31, typeFlags: CAPE },
 		{ slot: 3, refObjId: 32, typeFlags: THIEF_SUIT }
 	];
-	assert.deepEqual( suitSocketParts( equipment, partsFor ), [] );
+	assert.deepEqual( suitSocketParts( equipment, fitsAll, partsFor ), [] );
 	assert.equal( calls.length, 0 );
+});
+
+test("a bag suit the wearer's body cannot wear is never a candidate", () => {
+	// A Chinese woman holding the European woman's thief suit 10310 (the
+	// thief NPC sells both races'): assembling it failed the whole appearance.
+	const { calls, partsFor } = recordingAssembly();
+	const equipment = [
+		{ slot: 20, refObjId: 10310, typeFlags: THIEF_SUIT },
+		{ slot: 21, refObjId: 77, typeFlags: CAPE }
+	];
+	const fits = row => row.refObjId !== 10310;
+	assert.deepEqual( suitSocketParts( equipment, fits, partsFor ), [ "model:77" ] );
+	assert.equal( calls.length, 1 );
 });
 
 test("the bag key follows the bag's candidates, not their slots", () => {

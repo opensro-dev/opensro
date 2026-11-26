@@ -219,7 +219,7 @@ func joinAnswer(requestID, entryID uint32, answer uint8) []byte {
 
 // chinaRow is the expected masked member row for this suite's fresh
 // China-male seeds (the party e2e's chinaMaleRow with the level
-// parameterized): model 1907 fallback, full vitals 0xAA, the China
+// parameterized): model 1907 fallback, full vitals 0xAB, the China
 // start profile spawn.
 /*
 ================
@@ -232,7 +232,7 @@ func chinaRow(gid uint32, name string, level uint8) party.MemberRow {
 		Name:          name,
 		ModelRefID:    1907,
 		Level:         level,
-		StatusNibbles: 0xAA,
+		StatusNibbles: 0xAB,
 		Region:        0x62A8,
 		PosX:          960,
 		PosY:          20,
@@ -337,6 +337,11 @@ func TestMatchJoinHandshakeEndToEndOverWire(t *testing.T) {
 		match.EncodePartyJoinNotify75BF(1, 1, match.PartyApplicant{Primary: 257, Secondary: 258, JobClass: 4}, jackRow),
 		"owner notify for jack (request 1)")
 
+	// ---- while Jack's application stands, his own registration is
+	// refused join-duplicate (one standing at a time) ----
+	sendFrame(t, jack, match.OpPartyRegisterRequest, partyRequest(0, 555, 0, 0, 1, 80, "jack party"))
+	expectExactFrame(t, jack, match.OpPartyRegisterAck, []byte{2, 0x24}, "register while join pending refusal")
+
 	// ---- Kate's request DISPLACES Jack's: Jack is acked no-reply and
 	// Mira gets the fresh notify ----
 	sendFrame(t, kate, match.OpPartyJoinRequest, u32le(1))
@@ -434,6 +439,10 @@ func TestMatchJoinHandshakeEndToEndOverWire(t *testing.T) {
 		mentor.EncodeOpenAckB2EC(gidMira, "", "", []mentor.MemberWireRow{campRow(gidMira, e2eMiraName, mentor.MemberKindMaster, 60)}),
 		"mira's 0xB2EC camp")
 	expectExactFrame(t, mira, 0x30B3, []byte{1, 0, 0, 0, 0, 0, 0, 0, 0, 0}, "mira's gold after the fee")
+	// Her party listing still stands from the formation above; the one
+	// standing rule makes her close it before the camp listing.
+	sendFrame(t, mira, match.OpPartyDeleteRequest, u32le(1))
+	expectExactFrame(t, mira, match.OpPartyDeleteAck, concat([]byte{1}, u32le(1)), "mira closes her party listing")
 	sendFrame(t, mira, match.OpMentorRegisterRequest, mentorRequest(0, 0, 2, "mira academy"))
 	expectExactFrame(t, mira, match.OpMentorRegisterAck,
 		concat([]byte{1}, u32le(3), u32le(0), []byte{2}, wideStr("mira academy"), u32le(0)),

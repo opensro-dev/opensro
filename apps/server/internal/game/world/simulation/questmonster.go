@@ -22,6 +22,60 @@ import (
 const nativeRandomMaximum = 32767
 const nativeCircleRadians = 6.2831854820251465
 
+// The v1.188 servers' three-band landing rings: a rand() % 101 roll below
+// the outer cut lands in the outer third, below the inner cut in the
+// middle third, else in the inner third. The event spawner cuts at 50 and
+// 80; the monster factory's own radius sample at 70 and 90.
+const (
+	ringRollSpan        = 101
+	ringThirds          = 3
+	eventRingOuterCut   = 50
+	eventRingInnerCut   = 80
+	factoryRingOuterCut = 70
+	factoryRingInnerCut = 90
+)
+
+/*
+================
+SpawnRing
+
+A native three-band landing ring: Radius, and the roll cuts that pick
+its outer and middle thirds. The zero ring is none.
+================
+*/
+type SpawnRing struct {
+	Radius   float64
+	OuterCut uint32
+	InnerCut uint32
+}
+
+/*
+================
+EventSpawnerRing
+
+The v1.188 event spawner's ring of radius (the Pandora waves): half
+the monsters stand in the outer third, so a wave surrounds its centre
+rather than piling on it.
+================
+*/
+func EventSpawnerRing(radius float64) SpawnRing {
+	return SpawnRing{Radius: radius, OuterCut: eventRingOuterCut, InnerCut: eventRingInnerCut}
+}
+
+/*
+================
+FactoryRing
+
+The v1.188 monster factory's radius sample (its spawn entry hands the
+radius to the banded sampler before it clamps the point to a loaded
+region): seven in ten land in the outer third. The Pandora box lands on
+one of 20 from its opener.
+================
+*/
+func FactoryRing(radius float64) SpawnRing {
+	return SpawnRing{Radius: radius, OuterCut: factoryRingOuterCut, InnerCut: factoryRingInnerCut}
+}
+
 /*
 ================
 QuestMonsterSpawn
@@ -43,6 +97,13 @@ Aggressive fills a gap of the port's tactics data: a monster whose
 tactics carry no controls attacks on sight (with eventAggressiveSight
 when no sight range is named) instead of standing passive; tactics that
 carry controls keep their own hostility, as natively.
+Ring, when set, replaces RadiusMin and RadiusSpan with a native
+three-band ring (SpawnRing), and a point the ground refuses lands on
+Position instead, as the event spawner's does (the Pandora waves and
+box, action/pandorabox.go; inference for the factory ring: the native
+factory clamps its point into a loaded region rather than refuse it, and
+the centre is the nearest such point the port knows). BodyStatus is the
+body mode the monster spawns in (monster.Instance BodyStatus).
 ================
 */
 type QuestMonsterSpawn struct {
@@ -54,12 +115,15 @@ type QuestMonsterSpawn struct {
 	NowMs         int64
 	RadiusMin     float64
 	RadiusSpan    float64
-	LifetimeMs    int64
-	TacticsFrom   *monster.NestRow
-	Rarity        uint8
-	HasRarity     bool
-	Aggressive    bool
-	TacticsGrade  uint8
+	// Ring is a native three-band landing ring (see the banner).
+	Ring         SpawnRing
+	BodyStatus   uint8
+	LifetimeMs   int64
+	TacticsFrom  *monster.NestRow
+	Rarity       uint8
+	HasRarity    bool
+	Aggressive   bool
+	TacticsGrade uint8
 	// AvoidClosedObjects redraws the landing point (up to questSpawnAttempts times) while it is
 	// inside a closed object, so the monster can be hit (port-only, not native: the retail
 	// scripts take their first draw). Ignored until SetSpawnClosedObjectCheck is wired.
@@ -107,7 +171,28 @@ temple_sanctum.go).
 ================
 */
 func (request QuestMonsterSpawn) atNamedPoint() bool {
-	return request.FixedPosition && request.RadiusMin == 0 && request.RadiusSpan == 0
+	return request.FixedPosition && request.RadiusMin == 0 && request.RadiusSpan == 0 && request.Ring.Radius == 0
+}
+
+/*
+================
+SpawnRing.distance
+
+The landing distance: band is the rand() roll that picks the outer,
+middle or inner third by the ring's cuts; fraction is the uniform draw
+that places the point inside that third. float32 steps as natively.
+================
+*/
+func (ring SpawnRing) distance(band, fraction uint32) float64 {
+	third := float64(float32(ring.Radius / ringThirds))
+	base := third
+	switch roll := band % ringRollSpan; {
+	case roll < ring.OuterCut:
+		base = third + third
+	case roll >= ring.InnerCut:
+		base = 0
+	}
+	return float64(float32(float64(float32(float64(fraction)/nativeRandomMaximum))*third + base))
 }
 
 /*
@@ -140,13 +225,25 @@ func (s *MonsterState) SpawnQuestMonsterGID(request QuestMonsterSpawn) (uint32, 
 	for attempt := 1; ; attempt++ {
 		angleFraction := float32(float64(s.randomWord()) / nativeRandomMaximum)
 		angle = float64(float32(float64(angleFraction) * nativeCircleRadians))
-		radiusFraction := float32(float64(s.randomWord()) / nativeRandomMaximum)
-		radius := float64(float32(float64(radiusFraction)*request.RadiusSpan + request.RadiusMin))
+		var radius float64
+		if request.Ring.Radius > 0 {
+			radius = request.Ring.distance(s.randomWord(), s.randomWord())
+		} else {
+			radiusFraction := float32(float64(s.randomWord()) / nativeRandomMaximum)
+			radius = float64(float32(float64(radiusFraction)*request.RadiusSpan + request.RadiusMin))
+		}
 		spawn = normalizeGeneratedMonsterSpawn(monster.SpawnPoint{
 			RefObjID: ref.RefObjID, RegionID: center.RegionID,
 			X: center.X + math.Cos(angle)*radius, Y: center.Y, Z: center.Z + math.Sin(angle)*radius,
 		})
 		grounded, valid := s.resolveSpawnGround(spawn, center.Y)
+		if !valid && request.Ring.Radius > 0 {
+			// A ring lands a refused point on its centre.
+			spawn = normalizeGeneratedMonsterSpawn(monster.SpawnPoint{
+				RefObjID: ref.RefObjID, RegionID: center.RegionID, X: center.X, Y: center.Y, Z: center.Z,
+			})
+			grounded, valid = s.resolveSpawnGround(spawn, center.Y)
+		}
 		if !valid {
 			return 0, false
 		}
@@ -160,6 +257,7 @@ func (s *MonsterState) SpawnQuestMonsterGID(request QuestMonsterSpawn) (uint32, 
 	actor := monster.Instance{
 		Gid: monster.GidBase + s.counter, Ref: ref, Spawn: spawn, NestDetached: true,
 		SpawnHeading: uint16(angle), Nest: monster.NestRow{SpawnPoint: spawn, PolicyPinned: true},
+		BodyStatus: request.BodyStatus,
 	}
 	if tactics, found := monster.ResolveSummonTactics(ref, request.TacticsGrade, s.random); found {
 		actor.Nest.NativeTacticsFlags = tactics.NativeFlags
@@ -245,4 +343,59 @@ func (s *MonsterState) QuestMonsterAlive(division string, gid uint32) bool {
 		return false
 	}
 	return state.instances.get(gid).CurrentHP > 0
+}
+
+/*
+================
+ConsumeMonsterHP
+
+The native resource cost on a monster (the v1.188 character's consume
+door, which the Pandora job drains its box through): cost takes HP, but
+a cost that would reach zero leaves 1, so a cost never kills. The HP
+moves under the combat cause (4), so the monster's vitals publish on the
+next pass as a hit's do. Returns the HP left; false when gid stands in
+no population or is dead.
+================
+*/
+func (s *MonsterState) ConsumeMonsterHP(division string, gid, cost uint32) (uint32, bool) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	state, slot := s.locateObject(division, gid)
+	if state == nil {
+		return 0, false
+	}
+	row := state.instances.slotValue(gid, &slot)
+	if row.CurrentHP == 0 {
+		return 0, false
+	}
+	if cost >= row.CurrentHP {
+		cost = row.CurrentHP - 1
+	}
+	if cost == 0 {
+		return row.CurrentHP, true
+	}
+	row.CurrentHP -= cost
+	state.instances.set(gid, row)
+	s.noteVitalsLocked(division, gid, VitalsSourceCombatDamage)
+	return row.CurrentHP, true
+}
+
+/*
+================
+ExpireQuestMonster
+
+Ends a quest or event monster's life at nowMs: its removal timer falls
+due, so the next lifetime pass removes it as a timed-out monster leaves
+(no death, no loot) and the interest pass tells its viewers. The Pandora
+box leaves this way when its event ends.
+================
+*/
+func (s *MonsterState) ExpireQuestMonster(division string, gid uint32, nowMs int64) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	state := s.populationForObject(division, gid)
+	if state == nil || !state.instances.contains(gid) {
+		return
+	}
+	armQuestLifetimeLocked(state, gid, nowMs, true)
 }

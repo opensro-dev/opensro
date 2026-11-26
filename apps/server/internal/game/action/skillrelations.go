@@ -210,16 +210,21 @@ const (
 
 /*
 ================
-jobMonsterTargetRefusal
+monsterTargetRefusal
 
-The attack-target validation's monster branch: a job bandit
-refuses its own side. A thief bandit may be struck only by a trader or
-a hunter, a hunter bandit only by a thief, and a player outside job
-mode (no suit answers state 4) by neither. The refusal is the generic
-0x3006 the validation answers with.
+The attack-target validation's monster branch. Body modes come first,
+as for a player target (playerAttackRefusal): a monster in body modes
+2 through 4 (the Pandora box stands untouchable, mode 2) refuses with
+0x3020. Then a job bandit refuses its own side: a thief bandit may be
+struck only by a trader or a hunter, a hunter bandit only by a thief,
+and a player outside job mode (no suit answers state 4) by neither,
+with the generic 0x3006 the validation answers.
 ================
 */
-func (rt *Runtime) jobMonsterTargetRefusal(attacker *enterworld.Character, target monster.Instance) uint16 {
+func (rt *Runtime) monsterTargetRefusal(attacker *enterworld.Character, target monster.Instance) uint16 {
+	if monsterBodyProtected(target) {
+		return 0x3020
+	}
 	job, _ := rt.playerRelationEquipment(attacker)
 	if job == 0 {
 		job = enterworld.NoJobClass
@@ -228,6 +233,18 @@ func (rt *Runtime) jobMonsterTargetRefusal(attacker *enterworld.Character, targe
 		return 0x3006
 	}
 	return 0
+}
+
+/*
+================
+monsterBodyProtected
+
+Whether a monster's body mode refuses every attack (modes 2 through 4,
+as for a player target).
+================
+*/
+func monsterBodyProtected(target monster.Instance) bool {
+	return target.BodyStatus >= mercenaryBodyProtectedFirst && target.BodyStatus <= mercenaryBodyProtectedLast
 }
 
 /*

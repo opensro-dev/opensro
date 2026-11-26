@@ -44,6 +44,13 @@ import { createReportArchive, createDiagnosticUpload, diagnosticUploadBudget, di
 import { fitTrack } from "./transcode";
 import { createJournal, JOURNAL_WINDOW_MS, refusalReason, timelineEvents } from "./journal";
 import { createAssetHistory } from "./asset-history";
+import {
+	beatPageLifetime,
+	endPageLifetime,
+	startPageLifetime,
+	takePreviousPage,
+	type PreviousPage
+} from "./page-lifetime";
 import { diagnosticActors, diagnosticCompanions, type DiagnosticState } from "./diagnostic-state";
 
 export {
@@ -106,6 +113,8 @@ export interface BugReportOptions {
 	readonly session?: BugReportSessionLane;
 	/** The WebGPU adapter's facts, read by the device owner (foundation/rendering/gpu-facts.ts). */
 	readonly gpu?: () => import("@/engine/foundation/rendering/gpu-facts").GpuFacts | null;
+	/** The page's live GPU allocation totals, read by the device owner (#4545). */
+	readonly gpuAllocations?: () => import("@/engine/foundation/rendering/gpu-allocations").GpuAllocationTotals | null;
 	/** Game context at the moment the window opens (character, place…). */
 	readonly context: () => readonly BugReportField[];
 	/** The game's sound for the replay, or null until there is any. */
@@ -151,6 +160,12 @@ export function createBugReport( options: BugReportOptions ): BugReportOwner {
 		read: () => options.assets?.(),
 		phase: () => options.state().session?.phase ?? null
 	} );
+	// The previous page's death certificate (#4545, page-lifetime.ts):
+	// read once here, at boot, before this page's own world entry can
+	// overwrite the marker; environment() carries it on every report.
+	const previousPage: PreviousPage | null = takePreviousPage( Date.now() );
+	// True once this page's world entry started its own marker.
+	let pageLifetimeStarted = false;
 	let movementOriginMs: number | undefined;
 	/*
 	================
@@ -680,6 +695,8 @@ export function createBugReport( options: BugReportOptions ): BugReportOwner {
 				null,
 			replay: { phase: recording.phase(), droppedFrames: recorder.dropped(), lastError: recorder.lastError() },
 			gpu: options.gpu?.() ?? null,
+			gpuAllocations: options.gpuAllocations?.() ?? null,
+			previousPage,
 			preferences,
 			resources
 		};
@@ -736,10 +753,40 @@ export function createBugReport( options: BugReportOptions ): BugReportOwner {
 		}
 		const now = performance.now();
 		if ( now >= retryAtMs ) loadSettings();
+		watchPageLifetime();
 		if ( now - lastSampleMs >= SAMPLE_MS ) {
 			lastSampleMs = now;
 			journal.record( "sample", sample() );
 		}
+	}
+
+	/*
+	================
+	watchPageLifetime
+
+	The start of world entry starts this page's lifetime marker (#4545):
+	from then on the heartbeat in page-lifetime.ts keeps the tab's
+	evidence until the page hides cleanly (dispose ends it) or dies (the
+	next boot reads it). It starts at entering-world, not world: loading
+	the world is the page's memory peak, and a page killed there (a
+	reload that "took more than one minute") must leave a marker too;
+	lastPhase tells the two apart. chat runs on every HUD assembly, so
+	the first assembly that sees the phase is within a frame of it.
+	================
+	*/
+	function watchPageLifetime(): void {
+		if ( !pageLifetimeStarted ) {
+			const phase = options.state().session?.phase;
+			if ( phase !== "entering-world" && phase !== "world" ) return;
+			pageLifetimeStarted = true;
+			startPageLifetime( () => ({
+				entities: options.state().entities,
+				phase: options.state().session?.phase ?? "unknown",
+				gpu: options.gpuAllocations?.() ?? null
+			}) );
+			return;
+		}
+		beatPageLifetime( Date.now() );
 	}
 
 	/*
@@ -819,6 +866,10 @@ export function createBugReport( options: BugReportOptions ): BugReportOwner {
 		dispose() {
 			disposed = true;
 			lifetime.abort();
+			// A clean end (the platform's pagehide reaches here through
+			// the runtime's dispose): take the lifetime marker away so
+			// the next boot reports no death (#4545).
+			endPageLifetime();
 			journal.dispose();
 			recording.dispose();
 			dialog.dispose();

@@ -9,7 +9,9 @@ scraps, items and summoned creature are all there, and a rental only
 when its refrentitem term resolves to a period naming the scrap's own
 item (its row is then written with the good); it keeps its later price,
 drops the payments v1.150 never knew, and takes the tab's next slot and
-a free package identity.
+a free package identity. A good in the later miscellaneous alchemy tab
+the tree lacks lists in the Athanasia tab instead (never its
+second-currency copy).
 
 ===========================================================================
 """
@@ -110,6 +112,31 @@ class LaterMallGoodsTest(unittest.TestCase):
 		self.assertEqual(sorted(summary["unlisted"]), sorted([
 			"item not in the tree", "creature not in the tree", "rent term without a row", "no tab MALL_PREMIUM_NASRUN",
 			"second-currency shop PRE_MALL_ARCHEMY_ATHANASIA"]))
+
+	# ================
+	# test_a_miscellaneous_alchemy_good_lists_in_the_athanasia_tab
+	#
+	# MALL_ARCHEMY_ETC has no v1.150 tab (the owner's 2026-11-25 rule:
+	# no new tab is carried for one tab's goods), so a good whose items
+	# stand in the tree lists in MALL_ARCHEMY_ATHANASIA, the last tab
+	# of the same alchemy group, after that tab's own goods; a good
+	# whose item is absent stays out on the item, and the tab's
+	# second-currency copy stays out on its shop.
+	# ================
+	def test_a_miscellaneous_alchemy_good_lists_in_the_athanasia_tab(self):
+		current = empty()
+		later_good(current, "MALL_ARCHEMY_ATHANASIA", "ITEM_ETC_ARCHEMY_MAGICSTONE_ATHANASIA_09", 8, "51", 20112)
+		later = empty()
+		package = later_good(later, "MALL_ARCHEMY_ETC", "ITEM_ETC_ARCHEMY_RONDO_03", 0, "28", 51530)
+		later_good(later, "MALL_ARCHEMY_ETC", "ITEM_MALL_GOOD_LUCK_CHARM_12_RARE", 1, "999", 51531)
+		later_good(later, "PRE_MALL_ARCHEMY_ETC", "ITEM_PRE_MALL_GOOD_LUCK_CHARM_12_RARE", 0, "999", 51532)
+		rows, summary = goods.goods_rows(later, tree_of({"ITEM_ETC_ARCHEMY_RONDO_03"}, current=current))
+		self.assertEqual(summary["packages"], [package])
+		self.assertEqual(summary["remapped"], {package: "MALL_ARCHEMY_ATHANASIA"})
+		self.assertEqual(rows["refshopgoods.txt"][0][2:5], ["MALL_ARCHEMY_ATHANASIA", package, "9"])
+		self.assertEqual([(row[3], row[4]) for row in rows["refpricepolicyofitem.txt"]], [("2", "28")])
+		self.assertEqual(sorted(summary["unlisted"]), sorted([
+			"item not in the tree", "second-currency shop PRE_MALL_ARCHEMY_ETC"]))
 
 	# ================
 	# test_a_spirit_lists_in_its_carried_tab_at_its_later_price

@@ -284,6 +284,8 @@ export interface Renderer extends Disposable {
 	gpuTiming(): GpuTimingStats & { readonly enabled: boolean; };
 	/** The device owner's queue-work totals so far (gpu-work counters, #4392). */
 	gpuWork(): import("@/engine/foundation/rendering/gpu-work").GpuWorkTotals;
+	/** The page's live GPU allocation totals so far (#4545, bug reports). */
+	gpuAllocations(): import("@/engine/foundation/rendering/gpu-allocations").GpuAllocationTotals;
 	/** The current device's adapter facts for bug reports, null before one. */
 	adapterFacts(): import("@/engine/foundation/rendering/gpu-facts").GpuFacts | null;
 	videoOptions( value: import("@/engine/foundation/rendering/video-options").VideoOptions ): void;

@@ -11,6 +11,7 @@ stale admission must not allocate identities or leak actors into another world.
 package simulation
 
 import (
+	"math"
 	"testing"
 	"time"
 
@@ -222,6 +223,42 @@ func TestQuestMonsterRarityOverride(t *testing.T) {
 	for _, actor := range state.MaterializedInstances("quest") {
 		if actor.CurrentHP != actor.EffectiveMaxHP() || (actor.Rarity() == 7 && actor.CurrentHP != 7059*30) {
 			t.Fatalf("grade %d spawned at %d of %d HP, want full", actor.Rarity(), actor.CurrentHP, actor.EffectiveMaxHP())
+		}
+	}
+}
+
+/*
+================
+TestSpawnRingsPickTheirThirdByTheRoll
+
+The v1.188 rings on a radius of 51: the event spawner's roll (rand() %
+101) below 50 lands in the outer third, 50 to 79 in the middle, 80 to 100
+in the inner third; the factory's cuts are 70 and 90. The fraction
+places the point inside its third.
+================
+*/
+func TestSpawnRingsPickTheirThirdByTheRoll(t *testing.T) {
+	const radius = 51
+	cases := []struct {
+		ring           SpawnRing
+		band, fraction uint32
+		want           float64
+	}{
+		{ring: EventSpawnerRing(radius), band: 0, fraction: 0, want: 34},
+		{ring: EventSpawnerRing(radius), band: 49, fraction: nativeRandomMaximum, want: 51},
+		{ring: EventSpawnerRing(radius), band: 50, fraction: 0, want: 17},
+		{ring: EventSpawnerRing(radius), band: 79, fraction: 0, want: 17},
+		{ring: EventSpawnerRing(radius), band: 80, fraction: 0, want: 0},
+		{ring: EventSpawnerRing(radius), band: 100, fraction: nativeRandomMaximum, want: 17},
+		{ring: EventSpawnerRing(radius), band: 101, fraction: 0, want: 34},
+		{ring: FactoryRing(radius), band: 69, fraction: 0, want: 34},
+		{ring: FactoryRing(radius), band: 70, fraction: 0, want: 17},
+		{ring: FactoryRing(radius), band: 89, fraction: nativeRandomMaximum, want: 34},
+		{ring: FactoryRing(radius), band: 90, fraction: 0, want: 0},
+	}
+	for _, c := range cases {
+		if got := c.ring.distance(c.band, c.fraction); math.Abs(got-c.want) > 1e-4 {
+			t.Errorf("cuts %d/%d band %d fraction %d: %f, want %f", c.ring.OuterCut, c.ring.InnerCut, c.band, c.fraction, got, c.want)
 		}
 	}
 }

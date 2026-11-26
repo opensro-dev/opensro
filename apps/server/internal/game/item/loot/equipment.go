@@ -340,7 +340,9 @@ func SpecialEquipmentGroup(level uint8) (int, bool) {
 
 // SelectEquipment implements the server's assigned-item selection:
 // weighted assignment, required-level fallback preserving the native type,
-// then inclusive absolute admission.
+// then inclusive absolute admission. A fallback that steps past the last
+// class keeps the last drawn piece even though it is still too high; the
+// absolute admission decides for it like for any other survivor.
 // Missing version-specific content is never replaced by an invented item ID.
 /*
 ================
@@ -366,6 +368,8 @@ func (c equipmentCatalog) selectEquipment(country uint8, group int, rare bool, l
 	}
 	typeKey := ""
 	step := equipmentClassStep(rare)
+	var last equipmentRef
+	drew := false
 	for ; group >= 0; group -= step {
 		b := c.buckets[equipmentKey{country, group, rare}]
 		if b == nil || (b.expansionOnly && level <= nativeMonsterLevelCap) {
@@ -391,6 +395,7 @@ func (c equipmentCatalog) selectEquipment(country uint8, group int, rare bool, l
 			}
 			chosen = b.refs[alternatives[r%uint32(len(alternatives))]]
 		}
+		last, drew = chosen, true
 		if chosen.Level > level {
 			typeKey = chosen.Type
 			continue
@@ -398,5 +403,11 @@ func (c equipmentCatalog) selectEquipment(country uint8, group int, rare bool, l
 		r, err := roll()
 		return chosen, err == nil && r%100 <= chosen.Absolute
 	}
-	return equipmentRef{}, false
+	if !drew {
+		return equipmentRef{}, false
+	}
+	// Past the last class: the last drawn piece is kept even though it
+	// is too high, and the absolute admission still decides.
+	r, err := roll()
+	return last, err == nil && r%100 <= last.Absolute
 }

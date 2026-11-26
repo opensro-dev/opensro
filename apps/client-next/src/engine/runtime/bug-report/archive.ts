@@ -111,7 +111,9 @@ const SHARED_ENVIRONMENT_FIELDS = [
 	"canvas",
 	"network",
 	"replay",
-	"gpu"
+	"gpu",
+	"gpuAllocations",
+	"previousPage"
 ] as const;
 const SHARED_MOVEMENT_FIELDS = [
 	"version",
@@ -320,7 +322,19 @@ const TECHNICAL_FIELDS = new Set( [
 	"worldSequence",
 	"walkSpeed",
 	"runSpeed",
-	"animationRate"
+	"animationRate",
+	// The previous page's death certificate (#4545, page-lifetime.ts),
+	// with the GPU totals it died holding (gpu-allocations.ts).
+	"died",
+	"uptimeS",
+	"lastEntities",
+	"lastPhase",
+	"lastGpu",
+	"buffers",
+	"bufferBytes",
+	"textures",
+	"textureBytes",
+	"secondsSinceLastBeat"
 ] );
 const TECHNICAL_STRINGS: Readonly<Record<string, readonly string[]>> = {
 	kind: [
@@ -349,6 +363,22 @@ const TECHNICAL_STRINGS: Readonly<Record<string, readonly string[]>> = {
 	reason: [ "spawn", "input", "correction", "receipt", "native", "cast", "displacement", "death", "clear" ],
 	source: [ "native", "receipt", "server", "prediction", "cast", "pickup", "native-stop", "native-source" ],
 	phase: [ "starting", "title", "connecting", "login", "character", "loading-world", "world", "disconnected" ],
+	// The dead page's last session phase (#4545): the session contract's
+	// vocabulary (contracts/session.ts), not the journal sample's above.
+	lastPhase: [
+		"signed-out",
+		"listing-servers",
+		"loading-roster",
+		"authenticating",
+		"character-select",
+		"failed",
+		"connecting",
+		"entering-world",
+		"world",
+		"reconnecting",
+		"disconnected",
+		"unknown"
+	],
 	targetKind: [ "player", "monster", "npc", "item", "pet" ],
 	type: [ "slow-2g", "2g", "3g", "4g" ],
 	key: [
@@ -424,8 +454,9 @@ movement.json     up to two minutes of movement commands, server receipts, corre
                   and frame hitches; clock domains are explicit in the header/events.
 state.json        the game's state when the report was sent (large catalogs omitted).
 environment.json  browser, screen, CPU, memory, network, the WebGPU adapter's features,
-                  limits, vendor and architecture, the player's options, and every
-                  resource loaded during the last minute (time, size, status).
+                  limits, vendor and architecture, the page's GPU allocation totals,
+                  the player's options, and every resource loaded during the last
+                  minute (time, size, status).
 assets.json       the asset queue every 5 s for the last six minutes (#1975): free
                   request slots and each open load's path, state and age, with the
                   session phase; it says why a loading screen stalled.

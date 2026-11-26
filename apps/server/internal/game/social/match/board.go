@@ -124,10 +124,37 @@ func (b *Board) allocID() uint32 {
 	return id
 }
 
+// HasRegistration reports whether the owner already holds a live
+// registration on either board. One character holds at most one
+// registration across the party and mentor boards: while one is live a
+// fresh registration is refused (the client modifies through 0x73DC
+// instead), which the register handlers answer with
+// partyMatchErrStandingHeld.
+/*
+================
+HasRegistration
+================
+*/
+func (b *Board) HasRegistration(ownerKey string) bool {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	for _, existing := range b.party {
+		if existing.ownerKey == ownerKey {
+			return true
+		}
+	}
+	for _, existing := range b.mentor {
+		if existing.ownerKey == ownerKey {
+			return true
+		}
+	}
+	return false
+}
+
 // RegisterParty inserts a party-match registration for ownerKey,
 // assigning the entry id. It refuses (ok=false) when the owner already
-// holds one - the client modifies through 0x73DC instead, and the
-// refusal stays silent because the flag-2 error codes are unpinned.
+// holds one - the client modifies through 0x73DC instead. The handlers
+// pre-check HasRegistration, so this refusal is the race backstop.
 /*
 ================
 RegisterParty

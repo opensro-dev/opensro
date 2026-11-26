@@ -236,6 +236,7 @@ func LoadTemplate(textdataDir string) Template {
 			nest.HasChampionTactics = evidence.HasChampion
 			nest.ChampionTactics = evidence.Champion
 			nest.InitialDir = evidence.InitialDir
+			nest.SpawnType = evidence.SpawnType
 			if controls, ok := populationTacticsControls[evidenceKey(ref.Codename, point.RegionID, point.X, point.Y, point.Z)]; ok {
 				nest.Controls, nest.HasControls = controls.Normal, true
 				if nest.HasChampionTactics && controls.HasChampion {
@@ -534,6 +535,12 @@ type Instance struct {
 	// client; the reference server's structure state word): bit 0
 	// destroyed.
 	StructureState uint16
+	// BodyStatus is the native body mode the spawn row carries (the
+	// client reads it into +0x460 and applies it at spawn, client
+	// CICMonster_ApplyInitialSpawnState 0x4F3B8B): 2 is untouchable, which
+	// the attack check refuses (action monsterTargetRefusal). Zero for
+	// every monster but an event box (Pandora's Box) the event sets.
+	BodyStatus uint8
 	// CurrentHP is mutable instance state. Ref.MaxHP is only the static
 	// RefObjChar base; EffectiveMaxHP applies the client-pinned rarity and
 	// party-monster multipliers used by the target-status plane.
