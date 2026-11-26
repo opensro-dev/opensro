@@ -256,7 +256,7 @@ export function startRuntime(
 		*/
 		function reportAssetIncident(
 			code: string,
-			failure: { error: string; path?: string; transient: boolean; attempts: number; } | undefined
+			failure: { error: string; path?: string; transient: boolean; attempts: number; stack?: string; } | undefined
 		) {
 			if ( !failure ) return;
 			sessionCommand( {
@@ -265,7 +265,8 @@ export function startRuntime(
 				code,
 				message: `asset=${
 					failure.path ?? "-"
-				} transient=${failure.transient} attempts=${failure.attempts} error=${failure.error}`
+				} transient=${failure.transient} attempts=${failure.attempts} error=${failure.error}`,
+				...(failure.stack ? { stack: failure.stack } : {})
 			} );
 		}
 		// What one owner knows about its standing failure beyond the
@@ -1564,10 +1565,12 @@ export function startRuntime(
 								` degraded=${facts.degradedPipelines.join( "+" )}` :
 								"") :
 							"unknown";
+						const stack = renderer.errorStack();
 						reportAssetIncident( "renderer_failed", {
 							error: `${renderer.error() ?? "renderer failed"} | adapter: ${adapter}`,
 							transient: false,
-							attempts: 0
+							attempts: 0,
+							...(stack ? { stack } : {})
 						} );
 					} catch {
 						// The session may already be gone; dispose proceeds.

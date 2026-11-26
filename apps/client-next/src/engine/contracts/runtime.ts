@@ -402,6 +402,8 @@ export interface Renderer extends Disposable {
 	frame( viewport: Viewport, timeSeconds?: number, frameId?: number, probe?: RenderFrameProbe ): void | Promise<void>;
 	phase(): RuntimePhase;
 	error(): string | null;
+	/** The failure's stack when a frame threw it, else null (renderer_failed carries it, #4504). */
+	errorStack(): string | null;
 }
 
 /*
