@@ -122,6 +122,10 @@ type gmLaneOwner struct {
 	desk *gmcommand.Moderation
 }
 
+// The lane finds /WEATHER on the runtime the owner embeds; a rename there
+// must break the build, not silently refuse every /WEATHER.
+var _ gmcommand.WeatherControl = gmLaneOwner{}
+
 /*
 ================
 GMModeration

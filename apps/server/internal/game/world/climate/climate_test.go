@@ -313,3 +313,87 @@ func TestSpellEndsAtInitialWeather(t *testing.T) {
 		t.Fatalf("return step %d, want 28", s.step)
 	}
 }
+
+/*
+================
+TestForceHoldsThenReturns
+
+A GM's spell fades in, blocks the periodic roll while it runs, and
+returns the climate to its initial weather when it ends.
+================
+*/
+func TestForceHoldsThenReturns(t *testing.T) {
+	row := rainy
+	// A 210 s period: the first roll falls inside the 300 s spell, the
+	// second (at 420 s) after its end.
+	row.Division = 60
+	s := NewState(row, 0, draws(t))
+	const spellMs = 300_000
+	if got := s.Force(0, Weather{Snow, 0}, spellMs); got != (Weather{Snow, 40}) {
+		t.Fatalf("forced weather %+v, want the row's snow base", got)
+	}
+	now := int64(0)
+	for i := 0; i < 100 && s.Current() != (Weather{Snow, 40}); i++ {
+		now += stepIntervalMs
+		s.Update(now)
+	}
+	if s.Current() != (Weather{Snow, 40}) {
+		t.Fatalf("spell never arrived: %+v", s.Current())
+	}
+	// A roll falls due inside the spell: it must not replace it (no draw is
+	// forced, so a roll that drew would fail the test).
+	s.Update(s.period + 1)
+	if s.target != (Weather{Snow, 40}) {
+		t.Fatalf("a roll replaced the forced spell: %+v", s.target)
+	}
+	s.Update(spellMs + 1)
+	if s.target != (Weather{Clear, 180}) {
+		t.Fatalf("spell over, target %+v, want the initial weather", s.target)
+	}
+}
+
+/*
+================
+TestForceMovesAStaticClimate
+
+A ChangeWeather 0 climate never moves by itself, but a GM's spell runs on
+it and fades home; home and idle, it is still again.
+================
+*/
+func TestForceMovesAStaticClimate(t *testing.T) {
+	row := rainy
+	row.ChangeWeather = 0
+	s := NewState(row, 0, draws(t))
+	s.Force(0, Weather{Rain, 90}, MinForceDurationMs)
+	if !s.Update(stepIntervalMs) {
+		t.Fatal("a forced static climate did not start fading")
+	}
+	now := int64(stepIntervalMs)
+	for i := 0; i < 200 && !(s.Current() == (Weather{Clear, 180}) && s.eventDuration == 0); i++ {
+		now += stepIntervalMs
+		s.Update(now)
+	}
+	if s.Current() != (Weather{Clear, 180}) || s.eventDuration != 0 {
+		t.Fatalf("static climate did not come home: %+v", s.Current())
+	}
+	if s.Update(now + stepIntervalMs) {
+		t.Fatal("a static climate home again still changed")
+	}
+}
+
+/*
+================
+TestForceClampsDuration
+================
+*/
+func TestForceClampsDuration(t *testing.T) {
+	s := NewState(rainy, 0, draws(t))
+	s.Force(0, Weather{Rain, 10}, 1)
+	if s.eventDuration != MinForceDurationMs {
+		t.Fatalf("short spell lasts %d", s.eventDuration)
+	}
+	s.Force(0, Weather{Rain, 10}, 1<<40)
+	if s.eventDuration != MaxForceDurationMs {
+		t.Fatalf("long spell lasts %d", s.eventDuration)
+	}
+}

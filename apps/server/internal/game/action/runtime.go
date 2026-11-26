@@ -93,6 +93,8 @@ type Runtime struct {
 	logoutBlocks sync.Map
 	// GMSetSpeed admits /SETSPEED (port-only, SRO_GM_SETSPEED; off is native).
 	GMSetSpeed bool
+	// GMWeather admits /WEATHER (port-only, SRO_GM_WEATHER; off is native).
+	GMWeather bool
 	// GMItemForge admits /FORGE (port-only, SRO_GM_ITEM_FORGE, issue #1980;
 	// off is native: a retired client command the server does not honor).
 	GMItemForge bool

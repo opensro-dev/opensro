@@ -25,6 +25,8 @@ A crossing into a region without a climate sends the zero weather (kind
 word starts at zero (the v1.188 region constructor) and every crossing
 sends the new region's word (the PR's native-claims table cites both). A scene that
 starts in one sends nothing, since the client already reset its weather.
+A GM's /WEATHER (SetWeatherGM; port-only, not native) puts a spell on the
+GM's climate; its fade reaches players through the same tick delivery.
 The Christmas snow needs no
 case here: while event group 1 is on, the client draws its own snow
 whatever 0x3BDE says.
@@ -34,6 +36,9 @@ whatever 0x3BDE says.
 package action
 
 import (
+	"fmt"
+	"os"
+	"strings"
 	"sync"
 
 	"opensro.online/server/internal/game/enterworld"
@@ -235,4 +240,77 @@ func (rt *Runtime) appendWeatherFrame(out []simulation.DivisionFrames, division,
 	}
 	return append(out, simulation.DivisionFrames{DivisionID: division, OnlyCharacterID: c.ID,
 		Frames: []simulation.Frame{{Opcode: weatherOpcode, Payload: WeatherPayload(weather)}}})
+}
+
+//============================================================================
+
+// EnvGMWeather admits a GM's /WEATHER (port-only, not native; owner
+// 2026-11-26: off by default, on for the shard): "on", "1" or "true".
+// Off, the command answers why and sets nothing, as natively there is no
+// such command.
+const EnvGMWeather = "SRO_GM_WEATHER"
+
+/*
+================
+GMWeatherFromEnv
+================
+*/
+func GMWeatherFromEnv() bool {
+	switch strings.ToLower(strings.TrimSpace(os.Getenv(EnvGMWeather))) {
+	case "on", "1", "true":
+		return true
+	}
+	return false
+}
+
+// gmWeatherDefaultMinutes is a /WEATHER spell's length when none was typed.
+const gmWeatherDefaultMinutes = 10
+
+// gmWeatherNames are /WEATHER's kinds as the GM's reply prints them.
+var gmWeatherNames = map[uint8]string{climate.Clear: "clear", climate.Rain: "rain", climate.Snow: "snow"}
+
+/*
+================
+Runtime.SetWeatherGM
+
+A GM's /WEATHER (port-only, not native; gmcommand SubWeather): a weather
+spell on the climate of the region the GM stands in, for minutes. The
+climate fades to it the native way and its players are told on each
+step by advanceWeather, as for a rolled spell; when the spell ends the
+climate goes back to its own cycle. The reply text says what was set,
+or why nothing was: the command is off (SRO_GM_WEATHER), the cycle is
+off (SRO_WEATHER), the GM's region has no climate, or the kind is not one
+the client draws.
+================
+*/
+func (rt *Runtime) SetWeatherGM(division, name string, kind, amount uint8, minutes uint16) (string, bool) {
+	if rt == nil || !rt.GMWeather {
+		return "/WEATHER is off on this shard (" + EnvGMWeather + ")", false
+	}
+	kindName, known := gmWeatherNames[kind]
+	if !known {
+		return "type /WEATHER clear|rain|snow [amount] [minutes]", false
+	}
+	c := rt.findCharacter(division, name)
+	if c == nil {
+		return "GM not in the world", false
+	}
+	region := rt.LiveRegionFor(division, c)
+	index, ok := climate.RegionClimate(region)
+	if !ok {
+		return fmt.Sprintf("region 0x%04X has no weather", region), false
+	}
+	rt.weather.mu.Lock()
+	defer rt.weather.mu.Unlock()
+	if rt.weather.world == nil {
+		return "the weather cycle is off (SRO_WEATHER)", false
+	}
+	if minutes == 0 {
+		minutes = gmWeatherDefaultMinutes
+	}
+	// Clamp here, in whole minutes, so the reply prints the length the
+	// climate will actually hold (Force clamps the same bounds).
+	durationMs := min(max(int64(minutes)*msPerMinute, climate.MinForceDurationMs), climate.MaxForceDurationMs)
+	set := rt.weather.world.Force(index, rt.Now().UnixMilli(), climate.Weather{Kind: kind, Amount: amount}, durationMs)
+	return fmt.Sprintf("%s %d for %d min on climate %d", kindName, set.Amount, durationMs/msPerMinute, climate.RowAt(index).ID), true
 }

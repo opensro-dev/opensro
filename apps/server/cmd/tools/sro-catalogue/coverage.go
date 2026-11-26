@@ -206,6 +206,7 @@ var catalogueExempt = map[string]string{
 	"SRO_HUNTING_GUIDE":                        "hunting areas drawn on the world map from the monster data at runtime; monsters.json publishes the same monsters either way",
 	"SRO_GM_SETSPEED":                          "a GM command; no catalogue file carries it",
 	"SRO_GM_ITEM_FORGE":                        "a GM command; no catalogue file carries it",
+	"SRO_GM_WEATHER":                           "a GM command; no catalogue file carries it",
 	"SRO_GM_MODERATION":                        "GM commands; no catalogue file carries it",
 	"SRO_EARNED_SILK_TRADABLE":                 "whether a mall purchase paid wholly from earned silk trades at runtime; no catalogue file carries it",
 	"SRO_GM_TRAINING_DUMMY":                    "GM-only training targets; the catalogue publishes the shipped population, not GM summons",
