@@ -55,11 +55,33 @@ var (
 	AccumulationTiers = [...]int{5, 10, 15, 21, 27}
 )
 
+// RewardCodename is the placeholder reward for every tier (#3255):
+// a degree-9 Seal of Sun Chinese Glaive. Per-tier rewards replace this
+// once the owner names them.
+const RewardCodename = "ITEM_CH_TBLADE_09_C_RARE"
+
 // retainedMonths bounds the stored months; older rows are pruned at Open.
 const retainedMonths = 13
 
-// ErrClosed is returned by a ledger that has been closed.
-var ErrClosed = errors.New("attendance: closed")
+var (
+	// ErrClosed is returned by a ledger that has been closed.
+	ErrClosed = errors.New("attendance: closed")
+	// ErrBadTier is a claim for an unknown tier index.
+	ErrBadTier = errors.New("attendance: bad tier")
+	// ErrNotEarned is a claim whose days are not yet reached.
+	ErrNotEarned = errors.New("attendance: not earned")
+	// ErrAlreadyClaimed is a claim for a tier already received this month.
+	ErrAlreadyClaimed = errors.New("attendance: already claimed")
+)
+
+/*
+================
+RewardFor
+
+The reward codename of one tier. Every tier pays RewardCodename for now.
+================
+*/
+func RewardFor(_ int) string { return RewardCodename }
 
 /*
 ================
@@ -327,6 +349,130 @@ func (s *Service) Now() time.Time {
 		return time.Now()
 	}
 	return s.now()
+}
+
+/*
+================
+Service::ClaimContinuity
+
+Marks continuity tier tierIndex claimed for this month when the
+character has reached it and has not claimed it yet.
+================
+*/
+func (s *Service) ClaimContinuity(characterID int64, tierIndex int) (Month, error) {
+	return s.claim(characterID, tierIndex, true)
+}
+
+/*
+================
+Service::ClaimAccumulation
+
+Marks accumulation tier tierIndex claimed for this month when the
+character has reached it and has not claimed it yet.
+================
+*/
+func (s *Service) ClaimAccumulation(characterID int64, tierIndex int) (Month, error) {
+	return s.claim(characterID, tierIndex, false)
+}
+
+/*
+================
+Service::UnclaimContinuity
+
+Clears a continuity claim bit (used to roll back a failed item grant).
+================
+*/
+func (s *Service) UnclaimContinuity(characterID int64, tierIndex int) error {
+	return s.unclaim(characterID, tierIndex, true)
+}
+
+/*
+================
+Service::UnclaimAccumulation
+
+Clears an accumulation claim bit (used to roll back a failed item grant).
+================
+*/
+func (s *Service) UnclaimAccumulation(characterID int64, tierIndex int) error {
+	return s.unclaim(characterID, tierIndex, false)
+}
+
+func (s *Service) claim(characterID int64, tierIndex int, continuity bool) (Month, error) {
+	tiers := AccumulationTiers[:]
+	if continuity {
+		tiers = ContinuityTiers[:]
+	}
+	if characterID <= 0 || tierIndex < 0 || tierIndex >= len(tiers) {
+		return Month{}, ErrBadTier
+	}
+	key, _ := Today(s.now())
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	m, err := s.loadLocked(characterID, key)
+	if err != nil {
+		return Month{}, err
+	}
+	reached := m.Accumulation()
+	claimed := m.AccumulationClaimed
+	column := "accumulation_claimed"
+	if continuity {
+		reached, claimed, column = m.Continuity(), m.ContinuityClaimed, "continuity_claimed"
+	}
+	if reached < tiers[tierIndex] {
+		return m, ErrNotEarned
+	}
+	bit := uint8(1) << tierIndex
+	if claimed&bit != 0 {
+		return m, ErrAlreadyClaimed
+	}
+	next := claimed | bit
+	if _, err := s.db.Exec(`INSERT INTO attendance_months (character_id, month_key, `+column+`)
+VALUES (?, ?, ?)
+ON CONFLICT (character_id, month_key) DO UPDATE SET `+column+` = excluded.`+column,
+		characterID, key, next); err != nil {
+		return Month{}, fmt.Errorf("attendance: %w", err)
+	}
+	if continuity {
+		m.ContinuityClaimed = next
+	} else {
+		m.AccumulationClaimed = next
+	}
+	s.cache[characterID] = m
+	return m, nil
+}
+
+func (s *Service) unclaim(characterID int64, tierIndex int, continuity bool) error {
+	tiers := AccumulationTiers[:]
+	if continuity {
+		tiers = ContinuityTiers[:]
+	}
+	if characterID <= 0 || tierIndex < 0 || tierIndex >= len(tiers) {
+		return ErrBadTier
+	}
+	key, _ := Today(s.now())
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	m, err := s.loadLocked(characterID, key)
+	if err != nil {
+		return err
+	}
+	bit := uint8(1) << tierIndex
+	column := "accumulation_claimed"
+	next := m.AccumulationClaimed &^ bit
+	if continuity {
+		column, next = "continuity_claimed", m.ContinuityClaimed&^bit
+	}
+	if _, err := s.db.Exec(`UPDATE attendance_months SET `+column+` = ? WHERE character_id = ? AND month_key = ?`,
+		next, characterID, key); err != nil {
+		return fmt.Errorf("attendance: %w", err)
+	}
+	if continuity {
+		m.ContinuityClaimed = next
+	} else {
+		m.AccumulationClaimed = next
+	}
+	s.cache[characterID] = m
+	return nil
 }
 
 /*

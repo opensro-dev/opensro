@@ -1,15 +1,15 @@
 /*
 ===========================================================================
 
-attendance.go - the attendance calendar's switch and check-in (#3255)
+attendance.go - the attendance calendar's switch and request (#3255)
 
 Port-only, not native: neither original has an attendance calendar. The
 ledger is platform/attendance and the snapshot feed game/attendancefeed.
-This file names the switch and answers the check-in request (0x7FD2):
-with the flag off the request is ignored; with it on, wiring installs
-AttendanceCheckIn, which marks today and answers with the month
-snapshot (0x3FD2). A client that predates 0x7FD2 never sends it, so no
-release-protocol bump carries it.
+This file names the switch and answers the request (0x7FD2): with the
+flag off the request is ignored; with it on, wiring installs
+AttendanceRequest, which checks in or claims a tier and answers with
+the month snapshot (0x3FD2). A client that predates 0x7FD2 never sends
+it, so no release-protocol bump carries it.
 
 ===========================================================================
 */
@@ -44,22 +44,22 @@ func AttendanceFromEnv() bool {
 ================
 HandleAttendanceCheckIn
 
-Answers 0x7FD2. Off (AttendanceCheckIn nil) is native: silent. On, the
-installed sink marks today and returns the month snapshot; a refused
-request (malformed body or a ledger error) stays silent.
+Answers 0x7FD2. Off (AttendanceRequest nil) is native: silent. On, the
+installed sink checks in or claims and returns the month snapshot; a
+refused request stays silent.
 ================
 */
-func (rt *Runtime) HandleAttendanceCheckIn(_ string, c *enterworld.Character, payload []byte) OpResult {
-	if rt.AttendanceCheckIn == nil || c == nil {
+func (rt *Runtime) HandleAttendanceCheckIn(division string, c *enterworld.Character, payload []byte) OpResult {
+	if rt.AttendanceRequest == nil || c == nil {
 		return OpResult{}
 	}
-	frames := rt.AttendanceCheckIn(c.ID, payload)
+	frames := rt.AttendanceRequest(division, c, payload)
 	if frames == nil {
-		return OpResult{DiagnosticRefusal: "attendance check-in refused"}
+		return OpResult{DiagnosticRefusal: "attendance request refused"}
 	}
 	return OpResult{Frames: frames}
 }
 
-// AttendanceCheckInFunc marks today for a character and returns the
-// month snapshot frames, or nil when the request is refused.
-type AttendanceCheckInFunc func(characterID int64, payload []byte) []wire.Frame
+// AttendanceRequestFunc answers one 0x7FD2: check-in or claim. Nil
+// frames refuse the request silently.
+type AttendanceRequestFunc func(division string, c *enterworld.Character, payload []byte) []wire.Frame

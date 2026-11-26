@@ -101,11 +101,19 @@ func Snapshot(month attendance.Month, now time.Time) []byte {
 		Checked:             month.Checked,
 		ContinuityClaimed:   month.ContinuityClaimed,
 		AccumulationClaimed: month.AccumulationClaimed,
-		ContinuityTiers:     attendance.ContinuityTiers[:],
-		AccumulationTiers:   attendance.AccumulationTiers[:],
+		ContinuityTiers:     attendanceTiers(attendance.ContinuityTiers[:]),
+		AccumulationTiers:   attendanceTiers(attendance.AccumulationTiers[:]),
 		NextResetMs:         attendance.NextReset(now).UnixMilli(),
 		ServerNowMs:         now.UnixMilli(),
 	})
+}
+
+func attendanceTiers(days []int) []wire.AttendanceTier {
+	out := make([]wire.AttendanceTier, len(days))
+	for i, d := range days {
+		out[i] = wire.AttendanceTier{Days: d, Reward: attendance.RewardFor(i)}
+	}
+	return out
 }
 
 /*

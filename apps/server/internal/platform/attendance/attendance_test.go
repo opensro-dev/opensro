@@ -193,3 +193,54 @@ func TestNewMonthStartsEmpty(t *testing.T) {
 		t.Fatalf("after retention %d rows, want only 202612", rows)
 	}
 }
+
+/*
+================
+TestClaimTiersOnce
+
+A claim needs the days, pays once, and Unclaim clears the bit for a
+failed grant rollback. Continuity and accumulation are separate tracks.
+================
+*/
+func TestClaimTiersOnce(t *testing.T) {
+	c := &clock{at: utc(2026, 11, 10, 12, 0)}
+	service := openAt(t, t.TempDir(), c)
+	for day := 1; day <= 5; day++ {
+		c.at = utc(2026, 11, day, 12, 0)
+		if _, _, err := service.CheckIn(7); err != nil {
+			t.Fatal(err)
+		}
+	}
+	c.at = utc(2026, 11, 10, 12, 0)
+	m, err := service.ClaimContinuity(7, 0)
+	if err != nil || m.ContinuityClaimed&1 == 0 || m.Continuity() != 5 {
+		t.Fatalf("continuity claim %+v, %v", m, err)
+	}
+	if _, err := service.ClaimContinuity(7, 0); !errors.Is(err, ErrAlreadyClaimed) {
+		t.Fatalf("repeat continuity %v", err)
+	}
+	if _, err := service.ClaimContinuity(7, 1); !errors.Is(err, ErrNotEarned) {
+		t.Fatalf("uneared continuity tier 1 %v", err)
+	}
+	if _, err := service.ClaimContinuity(7, 99); !errors.Is(err, ErrBadTier) {
+		t.Fatalf("bad continuity tier %v", err)
+	}
+
+	m, err = service.ClaimAccumulation(7, 0)
+	if err != nil || m.AccumulationClaimed&1 == 0 {
+		t.Fatalf("accumulation claim %+v, %v", m, err)
+	}
+	if _, err := service.ClaimAccumulation(7, 0); !errors.Is(err, ErrAlreadyClaimed) {
+		t.Fatalf("repeat accumulation %v", err)
+	}
+	if err := service.UnclaimAccumulation(7, 0); err != nil {
+		t.Fatal(err)
+	}
+	m, err = service.Current(7)
+	if err != nil || m.AccumulationClaimed&1 != 0 || m.ContinuityClaimed&1 == 0 {
+		t.Fatalf("after unclaim %+v, %v", m, err)
+	}
+	if RewardFor(0) != RewardCodename || RewardFor(4) != "ITEM_CH_TBLADE_09_C_RARE" {
+		t.Fatalf("reward %q", RewardFor(0))
+	}
+}

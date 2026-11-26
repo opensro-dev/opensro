@@ -190,13 +190,17 @@ const (
 	// a free grant (freeGrantDoors): a ticket is entry currency,
 	// not a win, and must never count toward the daily win cap.
 	GrantEventBotTicket = "eventbot-ticket"
+	// GrantAttendanceReward is a claimed attendance-calendar tier
+	// (platform/attendance, port-only #3255): an audited free grant.
+	GrantAttendanceReward = "attendance-reward"
 )
 
 // freeGrantDoors are the item doors whose gains count as free grants.
 var freeGrantDoors = map[string]bool{
-	GrantStarterKit:     true,
-	GrantStarterRefill:  true,
-	GrantEventBotReward: true,
+	GrantStarterKit:       true,
+	GrantStarterRefill:    true,
+	GrantEventBotReward:   true,
+	GrantAttendanceReward: true,
 }
 
 /*

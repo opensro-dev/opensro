@@ -6,9 +6,9 @@ wiring_attendance.go - the attendance ledger and calendar feed (#3255)
 Port-only, not native (SRO_ATTENDANCE, off by default). On, the ledger
 (platform/attendance) opens beside the shard's authority state, the
 calendar feed (game/attendancefeed) keeps every entered session told of
-its character's month (0x3FD2), the action runtime answers the check-in
-request (0x7FD2) with that month's snapshot, and the application closes
-the ledger at shutdown. Off, nothing opens, no tick hook is installed,
+its character's month (0x3FD2), the action runtime answers the request
+(0x7FD2) for check-in and tier claims, and the application closes the
+ledger at shutdown. Off, nothing opens, no tick hook is installed,
 0x7FD2 is ignored and no frame is sent.
 
 ===========================================================================
@@ -22,8 +22,11 @@ import (
 
 	log "github.com/sirupsen/logrus"
 	"opensro.online/server/internal/data/store"
+	"opensro.online/server/internal/domain"
 	"opensro.online/server/internal/game/action"
 	"opensro.online/server/internal/game/attendancefeed"
+	"opensro.online/server/internal/game/enterworld"
+	"opensro.online/server/internal/game/item/inventory"
 	"opensro.online/server/internal/game/item/wire"
 	"opensro.online/server/internal/game/world/simulation"
 	"opensro.online/server/internal/platform/attendance"
@@ -52,7 +55,7 @@ func installAttendance(application *gameWorldApplication, gameplay *gameplayPlan
 		Month: service.Current,
 		Now:   service.Now,
 	})
-	gameplay.items.AttendanceCheckIn = attendanceCheckIn(service)
+	gameplay.items.AttendanceRequest = attendanceRequest(gameplay.items, gameplay.deps, service)
 	log.Infof("attendance: monthly calendar on (%s, port-only, not native); ledger in %s",
 		action.EnvAttendance, filepath.Join(dir, attendance.FileName))
 	return nil
@@ -60,27 +63,82 @@ func installAttendance(application *gameWorldApplication, gameplay *gameplayPlan
 
 /*
 ================
-attendanceCheckIn
+attendanceRequest
 
-Marks today for the character and answers with the month snapshot.
-Slice 2: only an empty body is accepted (later claim ops will share
-0x7FD2). A ledger error refuses; an already-checked day still returns
-the current month so the client sees today's bit set. The calendar
-feed's next poll also sees the change.
+Answers 0x7FD2: check-in (empty or op 0) or a continuity/accumulation
+claim (op 1/2 + tier index). A claim marks the tier, grants the reward
+item, and rolls the mark back if the grant refuses. Every answer is the
+month snapshot (claims also carry the inventory receipts).
 ================
 */
-func attendanceCheckIn(service *attendance.Service) action.AttendanceCheckInFunc {
-	return func(characterID int64, payload []byte) []wire.Frame {
-		if len(payload) != 0 {
+func attendanceRequest(items *action.Runtime, deps *enterworld.Deps, service *attendance.Service) action.AttendanceRequestFunc {
+	return func(division string, c *enterworld.Character, payload []byte) []wire.Frame {
+		if c == nil || service == nil {
 			return nil
 		}
-		month, _, err := service.CheckIn(characterID)
-		if err != nil {
+		switch {
+		case len(payload) == 0 || (len(payload) == 1 && payload[0] == wire.AttendanceOpCheckIn):
+			month, _, err := service.CheckIn(c.ID)
+			if err != nil {
+				return nil
+			}
+			return attendanceSnapshotFrames(month, service.Now())
+		case len(payload) == 2 && (payload[0] == wire.AttendanceOpClaimContinuity || payload[0] == wire.AttendanceOpClaimAccumulation):
+			return attendanceClaim(items, deps, service, division, c, payload[0] == wire.AttendanceOpClaimContinuity, int(payload[1]))
+		default:
 			return nil
 		}
-		return []wire.Frame{{Opcode: wire.OpAttendanceSnapshot,
-			Payload: attendancefeed.Snapshot(month, service.Now())}}
 	}
+}
+
+func attendanceClaim(items *action.Runtime, deps *enterworld.Deps, service *attendance.Service, division string, c *enterworld.Character, continuity bool, tierIndex int) []wire.Frame {
+	if items == nil || deps == nil {
+		return nil
+	}
+	if items.Stalls != nil && items.Stalls.Keeping(division, c.Name) ||
+		items.Exchanges != nil && items.Exchanges.Trading(division, c.Name) {
+		return nil
+	}
+	var month attendance.Month
+	var err error
+	if continuity {
+		month, err = service.ClaimContinuity(c.ID, tierIndex)
+	} else {
+		month, err = service.ClaimAccumulation(c.ID, tierIndex)
+	}
+	if err != nil {
+		return nil
+	}
+	reward := attendance.RewardFor(tierIndex)
+	var frames []wire.Frame
+	var planErr error
+	if !deps.Update(c, domain.GrantAttendanceReward, func() bool {
+		rows, receipts, err := items.PlanQuestInventory(c, nil,
+			[]inventory.ItemAmount{{Codename: reward, Count: 1}})
+		if err != nil {
+			planErr = err
+			return false
+		}
+		c.MissionInventory = rows
+		frames = receipts
+		return true
+	}) {
+		if continuity {
+			_ = service.UnclaimContinuity(c.ID, tierIndex)
+		} else {
+			_ = service.UnclaimAccumulation(c.ID, tierIndex)
+		}
+		if planErr != nil {
+			log.Infof("attendance: reward %s for %s refused: %v", reward, c.Name, planErr)
+		}
+		return nil
+	}
+	return append(frames, attendanceSnapshotFrames(month, service.Now())...)
+}
+
+func attendanceSnapshotFrames(month attendance.Month, now time.Time) []wire.Frame {
+	return []wire.Frame{{Opcode: wire.OpAttendanceSnapshot,
+		Payload: attendancefeed.Snapshot(month, now)}}
 }
 
 /*

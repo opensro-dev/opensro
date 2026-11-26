@@ -17,6 +17,7 @@ import (
 
 	"opensro.online/server/internal/data/store"
 	"opensro.online/server/internal/game/action"
+	"opensro.online/server/internal/game/enterworld"
 	"opensro.online/server/internal/game/item/wire"
 	"opensro.online/server/internal/platform/attendance"
 )
@@ -26,8 +27,8 @@ import (
 TestInstallAttendanceFollowsTheFlag
 
 Off (the native default): no ledger, no feed, no database file, no
-check-in sink. On: the ledger opens in the shard's authority directory,
-the feed and the check-in sink are built over it, and the shard's
+request sink. On: the ledger opens in the shard's authority directory,
+the feed and the request sink are built over it, and the shard's
 ledger close closes it.
 ================
 */
@@ -40,7 +41,7 @@ func TestInstallAttendanceFollowsTheFlag(t *testing.T) {
 	if err := installAttendance(application, gameplay, "shard-a"); err != nil {
 		t.Fatal(err)
 	}
-	if application.ledgers.attendance != nil || gameplay.attendance != nil || gameplay.attendanceFeed != nil || gameplay.items.AttendanceCheckIn != nil {
+	if application.ledgers.attendance != nil || gameplay.attendance != nil || gameplay.attendanceFeed != nil || gameplay.items.AttendanceRequest != nil {
 		t.Fatal("flag off wired the attendance ledger")
 	}
 	if _, err := os.Stat(filepath.Join(dir, attendance.FileName)); !os.IsNotExist(err) {
@@ -51,8 +52,8 @@ func TestInstallAttendanceFollowsTheFlag(t *testing.T) {
 	if err := installAttendance(application, gameplay, "shard-a"); err != nil {
 		t.Fatal(err)
 	}
-	if application.ledgers.attendance == nil || gameplay.attendance != application.ledgers.attendance || gameplay.attendanceFeed == nil || gameplay.items.AttendanceCheckIn == nil {
-		t.Fatal("flag on did not wire the ledger, the feed and the check-in")
+	if application.ledgers.attendance == nil || gameplay.attendance != application.ledgers.attendance || gameplay.attendanceFeed == nil || gameplay.items.AttendanceRequest == nil {
+		t.Fatal("flag on did not wire the ledger, the feed and the request")
 	}
 	if _, err := os.Stat(filepath.Join(dir, attendance.FileName)); err != nil {
 		t.Fatal(err)
@@ -69,9 +70,9 @@ func TestInstallAttendanceFollowsTheFlag(t *testing.T) {
 ================
 TestAttendanceCheckInMarksToday
 
-An empty body marks today and answers with the month snapshot; a second
-check-in the same day still answers with today's bit set; a non-empty
-body is refused.
+An empty body (or op 0) marks today and answers with the month
+snapshot; a second check-in the same day still answers with today's bit
+set; a bad body is refused.
 ================
 */
 func TestAttendanceCheckInMarksToday(t *testing.T) {
@@ -81,12 +82,13 @@ func TestAttendanceCheckInMarksToday(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = service.Close() })
-	checkIn := attendanceCheckIn(service)
+	request := attendanceRequest(nil, nil, service)
+	character := &enterworld.Character{ID: 7, Name: "Tester"}
 
-	if frames := checkIn(7, []byte{1}); frames != nil {
-		t.Fatalf("non-empty body answered %+v", frames)
+	if frames := request("", character, []byte{9}); frames != nil {
+		t.Fatalf("bad body answered %+v", frames)
 	}
-	frames := checkIn(7, nil)
+	frames := request("", character, nil)
 	if len(frames) != 1 || frames[0].Opcode != wire.OpAttendanceSnapshot {
 		t.Fatalf("first check-in %+v", frames)
 	}
@@ -97,8 +99,11 @@ func TestAttendanceCheckInMarksToday(t *testing.T) {
 	if body[4] != 26 || binary.LittleEndian.Uint32(body[6:]) != 1<<25 {
 		t.Fatalf("today/checked % x", body[4:10])
 	}
-	again := checkIn(7, nil)
+	again := request("", character, []byte{wire.AttendanceOpCheckIn})
 	if len(again) != 1 || binary.LittleEndian.Uint32(again[0].Payload[6:]) != 1<<25 {
 		t.Fatalf("same-day check-in %+v", again)
+	}
+	if frames := request("", character, []byte{wire.AttendanceOpClaimContinuity, 0}); frames != nil {
+		t.Fatalf("uneared claim without days answered %+v", frames)
 	}
 }

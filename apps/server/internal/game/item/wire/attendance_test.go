@@ -9,7 +9,7 @@ import (
 ================
 TestEncodeAttendanceSnapshotLayout
 
-The body byte for byte, the server clock last.
+The body byte for byte, the server clock last, rewards after each tier.
 ================
 */
 func TestEncodeAttendanceSnapshotLayout(t *testing.T) {
@@ -20,8 +20,8 @@ func TestEncodeAttendanceSnapshotLayout(t *testing.T) {
 		Checked:             0x0300_0001,
 		ContinuityClaimed:   0b01,
 		AccumulationClaimed: 0b10,
-		ContinuityTiers:     []int{3, 8},
-		AccumulationTiers:   []int{5, 300},
+		ContinuityTiers:     []AttendanceTier{{Days: 3, Reward: "A"}, {Days: 8, Reward: ""}},
+		AccumulationTiers:   []AttendanceTier{{Days: 5, Reward: "BC"}, {Days: 300, Reward: ""}},
 		NextResetMs:         0x0102,
 		ServerNowMs:         0x0a0b,
 	})
@@ -30,8 +30,8 @@ func TestEncodeAttendanceSnapshotLayout(t *testing.T) {
 		26, 30,
 		0x01, 0x00, 0x00, 0x03,
 		0b01, 0b10,
-		2, 3, 8,
-		2, 5, 0xff,
+		2, 3, 1, 0, 'A', 8, 0, 0,
+		2, 5, 2, 0, 'B', 'C', 0xff, 0, 0,
 		0x02, 0x01, 0, 0, 0, 0, 0, 0,
 		0x0b, 0x0a, 0, 0, 0, 0, 0, 0,
 	}
@@ -47,7 +47,7 @@ func TestEncodeAttendanceSnapshotLayout(t *testing.T) {
 ================
 TestEncodeAttendanceSnapshotEmpty
 
-A month with nothing checked still carries its calendar and tiers.
+A month with nothing checked still carries its calendar and empty tiers.
 ================
 */
 func TestEncodeAttendanceSnapshotEmpty(t *testing.T) {
