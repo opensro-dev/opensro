@@ -16,6 +16,7 @@ import (
 
 	"opensro.online/server/internal/agent/publicstats"
 	"opensro.online/server/internal/domain"
+	"opensro.online/server/internal/game/item/wire"
 )
 
 /*
@@ -148,6 +149,28 @@ func (f *fakeServiceStore) MarketWallet(string) (domain.MallBalance, error) {
 
 /*
 ================
+judgesTheTradeRule
+
+A sale door hands the store the listing's own trade rule (#4491): it
+refuses a row the exchange would and admits one it would pass, so a
+listing admitted before the rule tightened is judged again at the sale.
+================
+*/
+func judgesTheTradeRule(t *testing.T, door string, admit func(domain.InventoryRow) error) {
+	t.Helper()
+	if admit == nil {
+		t.Fatalf("%s hands the store no trade rule", door)
+	}
+	if err := admit(domain.InventoryRow{Codename: "ITEM_CH_SWORD_01_A", ForgeBound: true}); !errors.Is(err, domain.ErrMarketNotTradeable) {
+		t.Fatalf("%s admits a bound row: %v", door, err)
+	}
+	if err := admit(domain.InventoryRow{Codename: "ITEM_CH_SWORD_01_A"}); err != nil {
+		t.Fatalf("%s refuses a tradeable row: %v", door, err)
+	}
+}
+
+/*
+================
 testService
 
 Two items: a degree-1 sword (weapon) and an HP potion (consumable). The
@@ -197,6 +220,7 @@ func TestCategoryFollowsTheTypeIDs(t *testing.T) {
 		{3, 1, 12, 1}: "accessory",
 		{3, 1, 13, 1}: "avatar",
 		{3, 2, 1, 1}:  "pet",
+		{3, 2, 3, 1}:  "other",
 		{3, 3, 1, 1}:  "consumable",
 		{3, 1, 7, 1}:  "other",
 		{1, 1, 1, 1}:  "other",
@@ -386,6 +410,7 @@ func TestGoldBuyNeedsAnOfflineCharacterOfTheAccount(t *testing.T) {
 	if payer := store.bought[0].Payer; payer == nil || payer.Name != "Lulu" {
 		t.Fatalf("payer = %+v", payer)
 	}
+	judgesTheTradeRule(t, "the website buy", store.bought[0].Admit)
 	if _, err := s.Buy("alpha", publicstats.MarketBuyBody{Listing: 2, Version: 1}); err != nil || store.bought[1].Payer != nil {
 		t.Fatalf("a Silk buy = %v, payer %+v", err, store.bought[1].Payer)
 	}
@@ -438,6 +463,19 @@ func TestGameDoorsActForTheOnlineCharacter(t *testing.T) {
 	if _, err := s.GameList(kekw, 14, domain.MarketGold, 500, false); !errors.Is(err, domain.ErrMarketNotTradeable) {
 		t.Fatalf("a forge-bound listing: %v", err)
 	}
+	store.storage.Rows = append(store.storage.Rows, domain.InventoryRow{
+		Slot: 15, Codename: "ITEM_PRE_MALL_MAGIC_CUBE_WEAPON_10",
+		TypeFlags: wire.PackTypeFlags(3, 2, 3, 1), Data: 3,
+	}, domain.InventoryRow{
+		Slot: 16, Codename: "ITEM_PRE_MALL_MAGIC_CUBE_WEAPON_10",
+		TypeFlags: wire.PackTypeFlags(3, 2, 3, 1), Data: 0,
+	})
+	if _, err := s.GameList(kekw, 15, domain.MarketGold, 500, false); !errors.Is(err, domain.ErrMarketMagicCube) {
+		t.Fatalf("a non-empty Magic Cube listed: %v", err)
+	}
+	if _, err := s.GameList(kekw, 16, domain.MarketGold, 500, false); err != nil {
+		t.Fatalf("an empty Magic Cube refused: %v", err)
+	}
 
 	if _, err := s.GameBuy(kekw, 1, 4, domain.MarketToBag, 20); err != nil {
 		t.Fatal(err)
@@ -450,6 +488,7 @@ func TestGameDoorsActForTheOnlineCharacter(t *testing.T) {
 		store.bought[1].Receiver != nil {
 		t.Fatalf("a game Silk buy = %v, %+v", err, store.bought[1])
 	}
+	judgesTheTradeRule(t, "the game buy", store.bought[0].Admit)
 	if _, err := s.GameBuy(kekw, 3, 1, domain.MarketToWarehouse, -1); !errors.Is(err, domain.ErrMarketNotFound) || len(store.bought) != 2 {
 		t.Fatalf("another shard's listing: %v", err)
 	}
@@ -529,6 +568,10 @@ func TestGamePageIsTheCharacters(t *testing.T) {
 	if _, err := s.GameAccept(second, 10, first, 20); !errors.Is(err, domain.ErrMarketOfferGone) || len(store.accepted) != 0 {
 		t.Fatalf("second accepts an offer on first's listing: %v", err)
 	}
+	if _, err := s.GameAccept(first, 10, second, 20); err != nil || len(store.accepted) != 1 {
+		t.Fatalf("first accepts an offer on its own listing: %v, %+v", err, store.accepted)
+	}
+	judgesTheTradeRule(t, "the game accept", store.accepted[0].Admit)
 	if _, err := s.GameReject(second, 10); !errors.Is(err, domain.ErrMarketOfferGone) {
 		t.Fatalf("second rejects an offer on first's listing: %v", err)
 	}
@@ -698,4 +741,5 @@ func TestWebsiteOffersNeedAnOfflineCharacter(t *testing.T) {
 		store.accepted[0].Buyer.Name != "Lulu" || store.accepted[0].SellerAccount != "beta" {
 		t.Fatalf("an offline buyer's accept = %v, %+v", err, store.accepted)
 	}
+	judgesTheTradeRule(t, "the website accept", store.accepted[0].Admit)
 }

@@ -16,6 +16,7 @@ import {
 	REINFORCE_TARGET_CANT_BE_REINFORCED,
 	reinforcePageNotice
 } from "@/engine/foundation/gameplay/alchemy-notices";
+import { isMagicCube } from "@/engine/foundation/gameplay/magic-cube";
 
 // 0x005504C0: the fortress hammer (TypeID 3/1/6/16), equipment the
 // Reinforce page names as unreinforceable rather than as missing.
@@ -202,7 +203,13 @@ export function alchemySelection(
 		if ( flags === 0x0dec || flags === 0x3dec ) mode = "magic";
 		else if ( flags === 0x15ec ) mode = "attribute";
 		else if ( flags === 0x0d6c ) mode = "reinforce";
-		else if ( flags !== 0x156c || mode !== "reinforce" ) return null;
+		else if ( isMagicCube( flags ) ) {
+			// Port-only, not native (#3906): the v1.188 reference server admits
+			// a non-empty Magic Cube in the reinforce elixir slot and refuses an
+			// empty cube with 0x5407.
+			if ( item.quantity < 1 ) return { mode, slots: [ ...slots ], refusal: reinforcePageNotice( 7 )?.key ?? "" };
+			mode = "reinforce";
+		} else if ( flags !== 0x156c || mode !== "reinforce" ) return null;
 		if ( slots.length > 1 && flags !== 0x156c ) return { mode, slots: [ slots[0]!, item.slot ] };
 	} else if (
 		mode === "compound" && flags !== 0x25ec && flags !== 0x35ec ||

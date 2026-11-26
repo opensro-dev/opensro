@@ -83,7 +83,7 @@ func TestLoadMallRentTermsReachTheContents(t *testing.T) {
 		VarianceIntMin1c0: &durability}}
 	dir := t.TempDir()
 	tables := rentScrapFixture("RENT_ITEM_TEST")
-	tables["refrentitem"] = [][]string{rentTermRow("RENT_ITEM_TEST", "1440")}
+	tables["refrentitem"] = [][]string{rentTermRow("RENT_ITEM_TEST", 4242, "1440")}
 	// The loader requires these two tables to exist; empty is fine.
 	tables["refconditiontosellpackageitem"] = nil
 	tables["refrewardpolicytosellpackageitem"] = nil

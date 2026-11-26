@@ -295,19 +295,11 @@ func containerHoldsBoundRow(snapshot *enterworld.Character, row inventory.Item) 
 	if pet == nil {
 		return false
 	}
-	containers := []*domain.COSContainer{pet.Container}
-	if active := snapshot.ActiveCOS; active != nil && active.GID == pet.GID {
-		containers = append(containers, active.Container)
+	if cosContainerHoldsBoundRow(pet.Container) {
+		return true
 	}
-	for _, container := range containers {
-		if container == nil {
-			continue
-		}
-		for _, held := range container.Rows {
-			if held.ForgeBound {
-				return true
-			}
-		}
+	if active := snapshot.ActiveCOS; active != nil && active.GID == pet.GID {
+		return cosContainerHoldsBoundRow(active.Container)
 	}
 	return false
 }
@@ -349,13 +341,35 @@ func (rt *Runtime) applyGuildStorageMove(division string, c *enterworld.Characte
 			}
 		}
 	}
+	// Port-only (#4491): the same judgment on the way out. A pet that
+	// entered the chest before the deposit gate existed still carries
+	// its bound rows, and a withdraw would hand them to whichever
+	// member takes the pet. The chest row's record is dormant - a pet
+	// in the chest is nobody's live companion - so it decides alone.
+	// Refusing removes nothing: the row stays the guild's until an
+	// operator empties the pet, where a sweep would have to destroy
+	// the bound rows outright. The refusal runs inside the move's own
+	// commit, under the store lock, so no chest move between a check
+	// and the withdraw can slip a loaded pet into the slot.
+	mutate := rt.storageMutation(personal, q)
+	if personal == wire.MoveTypeStorageWithdraw {
+		withdraw := mutate
+		mutate = func(next *domain.Character, room *domain.AccountStorage) error {
+			for _, row := range room.Rows {
+				if row.Slot == int64(q.SourceSlot) && row.Summon != nil && cosContainerHoldsBoundRow(row.Summon.Container) {
+					return storageRefusal(errCodeInvalidStorageTarget)
+				}
+			}
+			return withdraw(next, room)
+		}
+	}
 	if code := rt.guildStorageHoldCode(division, c, gid, !goldMove); code != 0 {
 		return failureResult(code)
 	}
 	if store == nil {
 		return failureResult(wire.ErrCodeInvalidRequest)
 	}
-	_, refusal, err := store.TransactGuildStorageAs(division, c.ID, rt.storageMutation(personal, q))
+	_, refusal, err := store.TransactGuildStorageAs(division, c.ID, mutate)
 	var moveRefusal storageRefusal
 	switch {
 	case errors.As(err, &moveRefusal):

@@ -140,6 +140,12 @@ export function startRuntime(
 		// One asset_offline per outage window; the window's other fetch
 		// failures are the same outage, never asset failures (#2559).
 		const OFFLINE_REPORT_GAP_MS = 5000;
+		// The Interface source's standing error is an image retry in
+		// progress, whose backoff ladder tops out at 30 s (the image
+		// owner's own cap): its report is held until one failure has
+		// stood that long without recovering, so a retry the owner
+		// heals inside its ladder files nothing (#4508).
+		const INTERFACE_FAILURE_STANDING_MS = 30_000;
 		// When the current fetch-failure streak armed its offline
 		// report and when its latest failure arrived (#2869): a burst
 		// only arms the report, and fetch failures still arriving a
@@ -256,7 +262,7 @@ export function startRuntime(
 		*/
 		function reportAssetIncident(
 			code: string,
-			failure: { error: string; path?: string; transient: boolean; attempts: number; } | undefined
+			failure: { error: string; path?: string; transient: boolean; attempts: number; stack?: string; } | undefined
 		) {
 			if ( !failure ) return;
 			sessionCommand( {
@@ -265,7 +271,8 @@ export function startRuntime(
 				code,
 				message: `asset=${
 					failure.path ?? "-"
-				} transient=${failure.transient} attempts=${failure.attempts} error=${failure.error}`
+				} transient=${failure.transient} attempts=${failure.attempts} error=${failure.error}`,
+				...(failure.stack ? { stack: failure.stack } : {})
 			} );
 		}
 		// What one owner knows about its standing failure beyond the
@@ -1564,10 +1571,12 @@ export function startRuntime(
 								` degraded=${facts.degradedPipelines.join( "+" )}` :
 								"") :
 							"unknown";
+						const stack = renderer.errorStack();
 						reportAssetIncident( "renderer_failed", {
 							error: `${renderer.error() ?? "renderer failed"} | adapter: ${adapter}`,
 							transient: false,
-							attempts: 0
+							attempts: 0,
+							...(stack ? { stack } : {})
 						} );
 					} catch {
 						// The session may already be gone; dispose proceeds.
@@ -1647,7 +1656,7 @@ export function startRuntime(
 					runtimeErrors.update( "Navigation", navigation.reconnecting() ? null : navigation.error() );
 					runtimeErrors.update( "World", world.reconnecting() ? null : world.error() );
 					runtimeErrors.update( "Audio", audio.error() );
-					runtimeErrors.update( "Interface", ui.resourceError() );
+					runtimeErrors.updateHeld( "Interface", ui.resourceError(), now, INTERFACE_FAILURE_STANDING_MS );
 					const assetHealth = assets.health();
 					runtimeErrors.update( "Assets", assetHealth.phase === "failed" ? assetHealth.error : null );
 					runtimeErrors.update( "Frontend", frontendState.error );

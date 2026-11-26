@@ -135,7 +135,8 @@ test("skill upgrade, rejection and absolute point updates preserve authoritative
 
 const { decodeInventoryItem } = await import( "../../src/engine/foundation/gameplay/inventory-item.ts" );
 test("summon rentals and transformation items preserve signed time and consume exact boundaries", () => {
-	const refs = new Map( [ [ 8, 0xcc ], [ 9, 0x14c ] ] ), objects = new Map( [ [ 102, 0x21c6 ] ] );
+	// 0xcc = TID 3.2.1.0 summoner, 0x14c = TID 3.2.2.0 capsule, 0x9cc = TID 3.2.3.1 Magic Cube.
+	const refs = new Map( [ [ 8, 0xcc ], [ 9, 0x14c ], [ 24663, 0x9cc ] ] ), objects = new Map( [ [ 102, 0x21c6 ] ] );
 	const variants = [
 		Buffer.concat( [ u32( 8 ), byte( 1 ) ] ),
 		Buffer.concat( [
@@ -155,7 +156,8 @@ test("summon rentals and transformation items preserve signed time and consume e
 			u32( 6 ),
 			byte( 7 )
 		] ),
-		Buffer.concat( [ u32( 9 ), u32( 102 ) ] )
+		Buffer.concat( [ u32( 9 ), u32( 102 ) ] ),
+		Buffer.concat( [ u32( 24663 ), u32( 7 ) ] )
 	];
 	for ( const p of variants ) {
 		assert.equal( decodeInventoryItem( Buffer.concat( [ p, byte( 211 ) ] ), 0, refs, objects ).next, p.length );
@@ -168,6 +170,7 @@ test("summon rentals and transformation items preserve signed time and consume e
 	assert.equal( defined( pet ).rentals[0].seconds, -1 );
 	assert.equal( defined( pet ).rentals[1].tag, 6 );
 	assert.equal( defined( decodeInventoryItem( variants[2], 0, refs, objects ).item ).transformRefObjId, 102 );
+	assert.equal( defined( decodeInventoryItem( variants[3], 0, refs, objects ).item ).quantity, 7 );
 });
 
 test("native zero item reference clears a slot without consulting reference metadata", () => {

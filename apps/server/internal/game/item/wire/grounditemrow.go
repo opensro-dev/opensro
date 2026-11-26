@@ -66,6 +66,15 @@ func IsCosSummoner(typeFlags uint16) bool {
 	return isItemClass(typeFlags) && typeFlags&0x60 == 0x40 && typeFlags&0x780 == 0x80
 }
 
+// IsMagicCube is TID 3.2.3, the mall Magic Cube (v1.696 ITEM_PRE_MALL_MAGIC_CUBE_*,
+// v1.188 CGMagicCubeStorageOP). Its CSOItem body is the RefObjID and a u32
+// StoredItemCount (DaxterSoul CHARACTER_DATA MAGIC_CUBE Quantity; client
+// CSOItem_Deserialize band 0x40 group 0x180). The count is the number of
+// elixirs held in the cube's linked storage, not a stack.
+func IsMagicCube(typeFlags uint16) bool {
+	return isItemClass(typeFlags) && typeFlags&0x60 == 0x40 && typeFlags&0x780 == 0x180
+}
+
 // cosSummonerNoRecord is the native byte for a summoner without a pet.
 const cosSummonerNoRecord = 1
 

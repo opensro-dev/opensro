@@ -54,7 +54,7 @@ test("a fetch burst arms asset_offline, a sustained streak files it, silence bur
 	globalThis.requestAnimationFrame = () => 1;
 	globalThis.cancelAnimationFrame = () => {};
 	// The owner surface the frame reads on its way to the report block.
-	let characterError = null, rendererError = null;
+	let characterError = null, rendererError = null, frontendError = null;
 	owners.simulation.session = command => {
 		commands.push( command );
 	};
@@ -119,6 +119,7 @@ test("a fetch burst arms asset_offline, a sustained streak files it, silence bur
 		diagnosticsActive: () => false
 	} );
 	owners.assets.progress = () => null;
+	owners.frontend.step = () => ({ phase: "loading-title", error: frontendError });
 	Object.assign( owners.audio, {
 		enqueue() {},
 		ready: () => true,
@@ -155,10 +156,16 @@ test("a fetch burst arms asset_offline, a sustained streak files it, silence bur
 		// connection, not three broken assets (#2559): the first two
 		// file as asset failures, and the third completes the burst -
 		// but a burst that recovers inside the retry owners' backoff
-		// files no asset_offline (#2869): the burst only arms it.
+		// files no asset_offline (#2869): the burst only arms it. The
+		// Interface leg of the burst is Frontend here: a UI image
+		// failure is held until it has stood its retry ladder
+		// (#4508), so it no longer counts toward a burst at onset -
+		// the standing UI error below proves it neither files nor
+		// arms while held.
 		characterError = "TypeError: Failed to fetch";
 		owners.audio.error = () => "TypeError: Failed to fetch";
 		owners.audio.failure = () => ({ path: "/assets/audio/burst.ogg", message: "TypeError: Failed to fetch" });
+		frontendError = "TypeError: Failed to fetch";
 		owners.ui.resourceError = () =>
 			"UI image unavailable; retrying: /assets/ui/burst.ddj: TypeError: Failed to fetch";
 		owners.ui.resourceFailure = () => ({
@@ -190,6 +197,7 @@ test("a fetch burst arms asset_offline, a sustained streak files it, silence bur
 		assert.equal( offlineCount(), 0 );
 		characterError = "TypeError: Failed to fetch (sustained)";
 		owners.audio.error = () => "TypeError: Failed to fetch (sustained)";
+		frontendError = "TypeError: Failed to fetch (sustained)";
 		owners.audio.failure = () => ({
 			path: "/assets/audio/burst2.ogg",
 			message: "TypeError: Failed to fetch (sustained)"
@@ -215,6 +223,7 @@ test("a fetch burst arms asset_offline, a sustained streak files it, silence bur
 		for ( let i = 2; i <= 5; i++ ) {
 			characterError = `TypeError: Failed to fetch (sustained ${i})`;
 			owners.audio.error = () => `TypeError: Failed to fetch (sustained ${i})`;
+			frontendError = `TypeError: Failed to fetch (sustained ${i})`;
 			owners.ui.resourceError = () =>
 				`UI image unavailable; retrying: /assets/ui/burst2.ddj: TypeError: Failed to fetch (sustained ${i})`;
 			const keepAliveStart = assetReports().length;
@@ -223,6 +232,7 @@ test("a fetch burst arms asset_offline, a sustained streak files it, silence bur
 		}
 		characterError = "TypeError: Failed to fetch (sustained 6)";
 		owners.audio.error = () => "TypeError: Failed to fetch (sustained 6)";
+		frontendError = "TypeError: Failed to fetch (sustained 6)";
 		owners.ui.resourceError = () =>
 			"UI image unavailable; retrying: /assets/ui/burst2.ddj: TypeError: Failed to fetch (sustained 6)";
 		const filingStart = assetReports().length;
@@ -237,10 +247,12 @@ test("a fetch burst arms asset_offline, a sustained streak files it, silence bur
 		// arm an earlier streak left must not survive the silence.
 		characterError = null;
 		owners.audio.error = () => null;
+		frontendError = null;
 		owners.ui.resourceError = () => null;
 		for ( let i = 0; i < 6; i++ ) await frame();
 		characterError = "TypeError: Failed to fetch (blink)";
 		owners.audio.error = () => "TypeError: Failed to fetch (blink)";
+		frontendError = "TypeError: Failed to fetch (blink)";
 		owners.ui.resourceError = () =>
 			"UI image unavailable; retrying: /assets/ui/burst3.ddj: TypeError: Failed to fetch (blink)";
 		const blinkStart = assetReports().length;

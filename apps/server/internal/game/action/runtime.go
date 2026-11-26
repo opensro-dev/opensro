@@ -768,6 +768,10 @@ type Runtime struct {
 	// (SRO_NASRUN; nasrun_tokens.go; port-only, not native). False is
 	// native: no kill pays a token.
 	NasrunTokens bool
+	// MagicCube admits deposit/withdraw and the non-empty sell /
+	// consignment refusals (SRO_MAGIC_CUBE; game/magiccube; port-only,
+	// not native, #3906). False is native: no Magic Cube ops.
+	MagicCube bool
 	// PetInventoryPages raises grab pet and transport bags to their
 	// configured pages, each kind on its own (companion inventorypages.go;
 	// port-only, not native; owner 2026-11-07). Zero is native.

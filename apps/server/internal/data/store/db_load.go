@@ -312,11 +312,12 @@ func loadDB(db *sql.DB, current int, currentLayout int, headroom int) (*loadedDB
 		if err := guildRows.Scan(&division, &guildID, &record); err != nil {
 			return nil, err
 		}
-		guild := domain.GuildRecord{}
-		unknown, err := decodeRecordFields([]byte(record), &guild)
+		stored := guildRecordStored{}
+		unknown, err := decodeRecordFields([]byte(record), &stored)
 		if err != nil {
 			return nil, fmt.Errorf("division %s guild %d record: %w", division, guildID, err)
 		}
+		guild := unpackGuildRecord(stored)
 		keepResidue(&out.residues.guilds, groupResidueKey{division: division, id: guildID}, unknown)
 		if guild.ID != guildID {
 			return nil, fmt.Errorf("division %s guild table id %d disagrees with record id %d", division, guildID, guild.ID)

@@ -197,6 +197,7 @@ func (door storeGuildDoor) TransactGuildStorageAs(divisionID string, actorID int
 	for i := range storage.Rows {
 		storage.Rows[i].Summon = domain.CloneCOS(current.Rows[i].Summon)
 		storage.Rows[i].MagicOptions = append([]uint64(nil), current.Rows[i].MagicOptions...)
+		storage.Rows[i].LinkedStorage = domain.CloneCOSContainer(current.Rows[i].LinkedStorage)
 	}
 	if mutate == nil {
 		return current, domain.GuildRefusalNone, nil

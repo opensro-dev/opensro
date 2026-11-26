@@ -142,7 +142,7 @@ export function createRenderer(
 	let pickView: Float32Array | null = null, pickOrigin = 0, pickWidth = 1, pickHeight = 1;
 	let preview: import("@/engine/contracts/scene").WorldCamera | null = null;
 	let gates: readonly import("@/engine/contracts/world").EntityState[] = [];
-	let disposed = false, failure: string | null = null;
+	let disposed = false, failure: string | null = null, failureStack: string | null = null;
 	// A memory refusal the frame met (a readback the GPU could not stage,
 	// a target it could not allocate) is the device's to cure: hand it
 	// down so the paced replacement runs instead of ending here (#2866).
@@ -152,6 +152,9 @@ export function createRenderer(
 			return;
 		}
 		failure = String( error );
+		// The text alone left live "Invalid animation layer" and "Buffer
+		// unmapped" failures with nothing to find their throw by (#4504).
+		failureStack = error instanceof Error && typeof error.stack === "string" ? error.stack : null;
 	};
 	// Port-only (the 3D viewer): the studio light written over the frame
 	// environment, or null for the environment's own.
@@ -603,6 +606,7 @@ export function createRenderer(
 				"starting" :
 				device.phase(),
 		error: () => failure ?? device.error(),
+		errorStack: () => failure ? failureStack : null,
 		/*
 		================
 		frame

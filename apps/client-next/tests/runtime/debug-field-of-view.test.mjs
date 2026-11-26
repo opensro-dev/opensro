@@ -173,6 +173,7 @@ function fieldOfViewWorldFixture( t ) {
 		frame: unexpectedCameraWork,
 		phase: unexpectedCameraWork,
 		error: unexpectedCameraWork,
+		errorStack: unexpectedCameraWork,
 		/*
 		================
 		cancelWorldUpdate
