@@ -231,7 +231,7 @@ func TestQuestMonsterRarityOverride(t *testing.T) {
 ================
 TestDaemonRingPicksItsThirdByTheRoll
 
-The v1.188 event spawner's ring (0x60ef40): rand() % 101 below 50 lands
+The v1.188 event spawner's ring: rand() % 101 below 50 lands
 in the outer third, 50 to 79 in the middle third, 80 to 100 in the inner
 third; the fraction places the point inside its third.
 ================

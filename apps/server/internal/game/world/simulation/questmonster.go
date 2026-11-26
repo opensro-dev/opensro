@@ -22,7 +22,7 @@ import (
 const nativeRandomMaximum = 32767
 const nativeCircleRadians = 6.2831854820251465
 
-// The v1.188 event spawner's ring bands (0x60ef40): rand() % 101 below
+// The v1.188 event spawner's ring bands: rand() % 101 below
 // 50 lands in the outer third, below 80 in the middle third, else in the
 // inner third.
 const (
@@ -130,8 +130,8 @@ func (request QuestMonsterSpawn) atNamedPoint() bool {
 ================
 daemonRingRadius
 
-The v1.188 event spawner's landing distance on a ring of radius
-(0x60ef40): band is its rand() roll, which picks the outer, middle or
+The v1.188 event spawner's landing distance on a ring of radius:
+band is its rand() roll, which picks the outer, middle or
 inner third (daemonRingOuterRolls, daemonRingInnerFrom); fraction is the
 uniform draw that places the point inside that third. Half the monsters
 stand in the outer third, so a wave surrounds its centre rather than

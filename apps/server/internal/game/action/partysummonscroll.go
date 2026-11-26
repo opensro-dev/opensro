@@ -175,7 +175,7 @@ summonEventGate
 
 One item's lines for the summon event's refusals: a town region answers
 townLine, a user below minLevel levelLine. The v1.188 server picks the
-town line by event (0x933b90): the scrolls answer
+town line by event: the scrolls answer
 SN_TALK_QEV_CH_EVENT_0818_01, Pandora's Box
 SN_TALK_QEV_CH_EVENT_KISAENG_060517_N.
 ================

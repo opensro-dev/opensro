@@ -8,30 +8,28 @@ Port-only, not native to v1.150: the item ships in the v1.150 data
 survival arena drops it as a ground prop (sookarena_powerups.go), but no
 v1.150 server opens it from the bag. The rules are the v1.188 server's
 (its Pandora's Box quest event, traced 2026-11-16 and read again
-2026-11-26 for #4540; addresses in the v1.188 server binary):
+2026-11-26 for #4540; the PR's native-claims table holds the evidence):
 
-  - The refusals are the summon scroll's, in its order (0x933b90): a
+  - The refusals are the summon scroll's, in its order: a
     town region ("You cannot use Pandora's Box.", the v1.150 text's
     SN_TALK_QEV_CH_EVENT_KISAENG_060517_N), a user below level 30, the
     battle arena; none spends the box. An opened box answers
     SN_TALK_QEV_CH_EVENT_KISAENG_060517_M.
   - The box opens at the user's position and runs a job ticking every
-    5 s for 240 ticks (0x875bb0). The first tick runs as the job
-    registers and only sets the box up (0x611eb0, 0x60f070), so the
-    first wave lands 5 s after the opening and the last tick falls
-    239 ticks (1195 s) after it.
+    5 s for 240 ticks. The first tick runs as the job registers and
+    only sets the box up, so the first wave lands 5 s after the
+    opening and the last tick falls 239 ticks (1195 s) after it.
   - Wave k (0..9) is four monsters of the strong table's kind at level
-    min(user level, 110) - 9 + k (0x8758f0), at grade 7, on the event
-    spawner's ring of 50 around the box (0x60ef40: half in the outer
-    third, simulation.QuestMonsterSpawn.DaemonRingRadius). The next wave
+    min(user level, 110) - 9 + k, at grade 7, on the event spawner's
+    ring of 50 around the box (half in the outer third,
+    simulation.QuestMonsterSpawn.DaemonRingRadius). The next wave
     lands only once every monster of the last is dead, checked on the
-    job's tick (the live count at 0x60f070). A wave none of whose
+    job's tick (the spawner's live count). A wave none of whose
     monsters could land still counts: the counter advances and the next
     tick brings the next wave.
-  - A grade-7 monster leaves after 300 s (0x4c10c0, 0x4c1700); when one
-    does, the event ends (the box dies with it and the job ends,
-    0x4c21e0). So does the tenth wave's clearing, and the job's last
-    tick.
+  - A grade-7 monster leaves after 300 s; when one does, the event
+    ends (the box dies with it and the job ends). So does the tenth
+    wave's clearing, and the job's last tick.
   - No owner: anyone may fight the waves; their kills pay ordinary loot
     and experience (the special drop handler returns for this event).
 
