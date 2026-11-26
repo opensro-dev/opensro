@@ -253,7 +253,6 @@ apps/client-next/tests/runtime/character-info.test.mjs
 apps/client-next/tests/runtime/snapshot-age.test.mjs
 apps/client-next/tests/runtime/ui-cleanup.test.mjs
 apps/client-next/tools/beta/archive.mjs
-apps/client-next/tools/beta/compression.mjs
 apps/client-next/tools/beta/serve.mjs
 apps/client-next/tools/beta/verify.mjs
 apps/client-next/tools/dev/edge.mjs
