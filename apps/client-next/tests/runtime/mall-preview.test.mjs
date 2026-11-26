@@ -483,6 +483,19 @@ test("closing the preview retires the portrait lane's rows at once", () => {
 	assert.equal( defined( reopened[0] ).time, 0 );
 });
 
+test("a worn avatar the dress table cannot place is left off the mannequin (#4502)", () => {
+	// A Devil's Spirit (51680) reaches the mannequin in the wearer's
+	// avatars: it sits in the avatar block but has no worn model, so the
+	// dress table gives it no avatar slot. The world actor drops the same
+	// class (#4406); the mannequin must not throw for it.
+	const f = fixture();
+	f.owner.request( [] );
+	const frame = { ...f.frame, avatars: [ { refObjId: 1 }, { refObjId: 51680 } ] };
+	const actors = f.owner.step( frame, f.resources, f.renderer );
+	assert.equal( actors.length, 1 );
+	assert.ok( f.assemblies.at( -1 ).parts.some( p => p.model === "garment-1" ) );
+});
+
 test("body replacement clears incompatible local try-on before the next UI publication", () => {
 	const f = fixture();
 	f.owner.request( [ 2, 3 ] );

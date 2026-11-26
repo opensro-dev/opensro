@@ -153,7 +153,11 @@ export function createMallPreview() {
 			const avatars = new Map<number, { refObjId: number; }>();
 			for ( const item of frame.avatars ) {
 				const slot = frame.dress.equipment?.[String( item.refObjId )]?.avatarSlot;
-				if ( slot === undefined ) throw Error( "Missing mannequin avatar slot " + item.refObjId );
+				// An avatar the dress table cannot place has no worn model:
+				// a Devil's Spirit sits in the avatar block, and throwing for
+				// it killed the try-on for its wearers (#4502). It is left
+				// off, as the world actor leaves it off (#4406).
+				if ( slot === undefined ) continue;
 				avatars.set( slot, item );
 			}
 			for ( const id of request ) {
