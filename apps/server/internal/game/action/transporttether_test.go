@@ -14,6 +14,7 @@ package action
 import (
 	"testing"
 
+	"opensro.online/server/internal/game/item/wire"
 	"opensro.online/server/internal/game/world/simulation"
 )
 
@@ -77,5 +78,48 @@ func TestRelocatedTraderLeavesTheOldAnchor(t *testing.T) {
 	tether, held := rt.Worlds.TetherOf(key)
 	if !held || tether.Anchor.RegionID != town.RegionID || simulation.WorldDistance2D(tether.Anchor, town) > 1 {
 		t.Fatalf("after relocation the tether is %+v held %v, want the transport at the destination %+v", tether, held, town)
+	}
+}
+
+/*
+================
+TestTownReviveLeavesTheParkedTransport
+
+A trader who dies beside a parked transport and revives at the town's
+appointed point comes back alone (relocateRevivingPets): the transport
+keeps its pose in the field, and the next tick tethers the revived
+trader to it there, not in town. The transport goes empty: the
+fixture's goods have no item reference for the re-entry to encode, and
+the relocation never touches the cargo.
+================
+*/
+func TestTownReviveLeavesTheParkedTransport(t *testing.T) {
+	rt, clock, c := caravanFixture(t)
+	key := simulation.WorldKey(testDivision, c.Name)
+	parked := simulation.Spawn{RegionID: caravanBattlefield, X: 960, Y: 20, Z: 960}
+	c.ActiveCOS.Mounted = false
+	c.ActiveCOS.Container.Rows = nil
+	rt.rememberTransportCOS(testDivision, c, parked)
+	rt.advancePets(clock.Now().UnixMilli())
+	c.World.RebirthPoint = worldSpawnFromMission(simulation.ChinaStartProfile())
+
+	zero := int64(0)
+	c.CurrentHP = &zero
+	rt.settlePlayerDeathInDoor(testDivision, c, deathKiller{}, clock.Now().UnixMilli())
+	if out := rt.HandleLocalRebirth(testDivision, c, []byte{wire.RebirthAtSpecifiedPoint}); len(out.Frames) == 0 {
+		t.Fatalf("the town revive did not run: %+v", out)
+	}
+	if c.ActiveCOS == nil || !c.ActiveCOS.Summoned {
+		t.Fatalf("the transport left the world with its trader's revive: %+v", c.ActiveCOS)
+	}
+	pose := rt.companionLiveSpawn(testDivision, c, c.ActiveCOS, clock.Now().UnixMilli())
+	if pose.RegionID != parked.RegionID || simulation.WorldDistance2D(pose, parked) > 1 {
+		t.Fatalf("the parked transport moved to %+v on its trader's town revive, want it at %+v", pose, parked)
+	}
+
+	rt.advancePets(clock.Now().UnixMilli())
+	tether, held := rt.Worlds.TetherOf(key)
+	if !held || tether.Anchor.RegionID != parked.RegionID || simulation.WorldDistance2D(tether.Anchor, parked) > 1 {
+		t.Fatalf("after the revive the tether is %+v held %v, want the transport where it stood %+v", tether, held, parked)
 	}
 }
