@@ -18,7 +18,12 @@ camera is the native one.
   clips through a wall or the ground), but the release back out eases.
 - Discontinuities (a teleport, a region or dungeon change, a mount, a
   frame gap) snap, because easing across them would fly through the
-  world.
+  world. A teleport is caught by either axis: a height jump, or a
+  sideways jump of the follow target in one frame. A wizard's teleport
+  moves far sideways but often only a little up or down; easing that
+  height left the target under the new ground, the collision pulled the
+  camera in to the feet and the release eased it back out over a quarter
+  of a second (BR-261126-2312-EE74).
 
 Pure functions over one plain state record; the renderer owns the record.
 
@@ -37,6 +42,12 @@ export const CAMERA_HEIGHT_SNAP_UNITS = 40;
 // A frame gap longer than this (a hidden tab, a long stall) snaps instead
 // of springing across it.
 export const CAMERA_SMOOTH_MAX_STEP_SECONDS = 0.25;
+// A sideways move of the follow target larger than this in one frame is a
+// teleport, not a walk: snap. Running covers under 2 units a frame at
+// 60 Hz; the widest legitimate step is a fast mount across the longest
+// eased gap (CAMERA_SMOOTH_MAX_STEP_SECONDS), well under this. A snap is
+// the native camera, so a rare false snap costs nothing.
+export const CAMERA_POSITION_SNAP_UNITS = 40;
 
 /*
 ================
@@ -56,6 +67,25 @@ export interface CameraSmoothing {
 	space: number | null;
 	mounted: boolean;
 	seconds: number | null;
+	// The follow target's last horizontal position, in the space above.
+	x: number | null;
+	z: number | null;
+}
+
+/*
+================
+CameraSmoothingFrame
+
+One frame's inputs to beginCameraSmoothingFrame: the clock, the coordinate
+space, the mount state and the follow target's horizontal position.
+================
+*/
+export interface CameraSmoothingFrame {
+	seconds: number;
+	space: number;
+	mounted: boolean;
+	x: number;
+	z: number;
 }
 
 /*
@@ -71,7 +101,9 @@ export function createCameraSmoothing(): CameraSmoothing {
 		distanceVelocity: 0,
 		space: null,
 		mounted: false,
-		seconds: null
+		seconds: null,
+		x: null,
+		z: null
 	};
 }
 
@@ -89,6 +121,8 @@ export function resetCameraSmoothing( state: CameraSmoothing ) {
 	state.distanceVelocity = 0;
 	state.space = null;
 	state.seconds = null;
+	state.x = null;
+	state.z = null;
 }
 
 /*
@@ -127,19 +161,20 @@ Advances the clock and drops the history across a discontinuity. Returns
 the frame's step in seconds, 0 when this frame snaps.
 ================
 */
-export function beginCameraSmoothingFrame(
-	state: CameraSmoothing,
-	seconds: number,
-	space: number,
-	mounted: boolean
-): number {
-	const dt = state.seconds === null ? 0 : seconds - state.seconds;
+export function beginCameraSmoothingFrame( state: CameraSmoothing, frame: CameraSmoothingFrame ): number {
+	const dt = state.seconds === null ? 0 : frame.seconds - state.seconds;
+	const moved = state.x === null || state.z === null ?
+		0 :
+		Math.hypot( frame.x - state.x, frame.z - state.z );
 	const snap = state.seconds === null || !(dt >= 0) || dt > CAMERA_SMOOTH_MAX_STEP_SECONDS ||
-		state.space !== space || state.mounted !== mounted;
+		state.space !== frame.space || state.mounted !== frame.mounted ||
+		!(moved <= CAMERA_POSITION_SNAP_UNITS);
 	if ( snap ) resetCameraSmoothing( state );
-	state.seconds = seconds;
-	state.space = space;
-	state.mounted = mounted;
+	state.seconds = frame.seconds;
+	state.space = frame.space;
+	state.mounted = frame.mounted;
+	state.x = frame.x;
+	state.z = frame.z;
 	return snap ? 0 : dt;
 }
 
