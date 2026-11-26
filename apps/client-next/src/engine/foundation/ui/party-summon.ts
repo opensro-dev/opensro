@@ -16,6 +16,15 @@ The member's invitation box is the shared CIFMessageBox proposal
 geometry (partyProposalLayout) with the summon question
 UIIT_STT_PARTY_SUMMON_CONFIRM_BOX naming the leader.
 
+Inferred, not read (#4403): the v1.696 client (sha256 8af7afc2...)
+never names that row: a byte scan finds no UTF-16 or ASCII copy of
+the key, and every PARTY_SUMMON string it does hold belongs to the
+leader's window (title 0xB88F36, controls 0xE251F4 / 0xE2525B) or its
+error router (0xBEE21C..0xBEE2AF). The row itself is native textdata
+("[%s] invites you to the world unknown. Would you like to comply?"),
+so the member is asked with it, in the proposal frame the party
+invitation already uses; the original's own box for it is unread.
+
 ===========================================================================
 */
 import type { UiRect } from "@/engine/contracts/ui";
