@@ -231,7 +231,12 @@ type MarketBuyRequest struct {
 	To           string
 	Receiver     *Character
 	BagSlot      int64
-	Rules        MarketRules
+	// Admit is the listing's trade rule (MarketListRequest.Admit), judged
+	// again at the sale: a row admitted before the rule tightened (#4491,
+	// a pet loaded with bound rows) never changes hands on that stale
+	// admission. The seller can still take it back.
+	Admit func(InventoryRow) error
+	Rules MarketRules
 }
 
 /*
@@ -282,7 +287,9 @@ type MarketAcceptRequest struct {
 	SellerAccount string
 	Buyer         *Character
 	BagSlot       int64
-	Rules         MarketRules
+	// Admit is the trade rule judged again at the sale (MarketBuyRequest).
+	Admit func(InventoryRow) error
+	Rules MarketRules
 }
 
 /*
