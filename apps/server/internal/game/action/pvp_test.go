@@ -744,3 +744,39 @@ func TestAreaStrikesSpareNeutralPlayers(t *testing.T) {
 		t.Fatal("a monster area selected the neutral player standing in it")
 	}
 }
+
+/*
+================
+TestPlayerAttackRefusalBodyModes
+
+The native attackable check's body modes, ahead of the relation chain:
+an untouchable caster (mode 2) may not attack, and a target in modes
+2..4 (the untouchable grace, a GM's invincible or invisible mode)
+refuses with 0x3020. A target in mode 1 (berserk) is not protected and
+reaches the ordinary verdict.
+================
+*/
+func TestPlayerAttackRefusalBodyModes(t *testing.T) {
+	rt, clock, a, v := newPvpPair(t)
+	now := clock.NowMs()
+	level := testInt64(playerCombatMinimumLevel)
+	a.Level, v.Level = level, level
+
+	a.NativeBodyStatus = untouchableBodyStatus
+	if code := rt.playerAttackRefusal(testDivision, a, v, now, 0); code != 0x3020 {
+		t.Fatalf("an untouchable caster answered %#x, want 0x3020", code)
+	}
+	a.NativeBodyStatus = 0
+
+	for _, body := range []uint8{2, 3, 4} {
+		v.NativeBodyStatus = body
+		if code := rt.playerAttackRefusal(testDivision, a, v, now, 0); code != 0x3020 {
+			t.Fatalf("a target in body mode %d answered %#x, want 0x3020", body, code)
+		}
+	}
+	v.NativeBodyStatus = 1
+	if code := rt.playerAttackRefusal(testDivision, a, v, now, 0); code != 0 {
+		t.Fatalf("a berserk target answered %#x, want the ordinary verdict 0", code)
+	}
+	v.NativeBodyStatus = 0
+}

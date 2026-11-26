@@ -253,11 +253,21 @@ natively. Without them, every area aimed at a monster struck the white
 players standing in it, made the caster a PK and, because each strike renews
 the client's twenty-second no-Alt window on that player, kept that player
 open to attack indefinitely.
+
+Body modes are judged before the relation chain, as in the reference
+server's attackable check: an untouchable attacker (body mode 2) may not
+attack, and a target in body modes 2 through 4 (the untouchable grace, a
+GM's invincible or invisible mode) refuses with 0x3020. The COS lanes
+judge the same band in cosTargetRefusal and petAttackBodyAllowed.
 ================
 */
 func (rt *Runtime) playerAttackRefusal(division string, caster, target *enterworld.Character, now int64, flags uint8) uint16 {
 	if caster.ID == target.ID {
 		return 0x3006
+	}
+	if caster.NativeBodyStatus == untouchableBodyStatus ||
+		target.NativeBodyStatus >= mercenaryBodyProtectedFirst && target.NativeBodyStatus <= mercenaryBodyProtectedLast {
+		return 0x3020
 	}
 	for _, actor := range []*enterworld.Character{caster, target} {
 		at := rt.liveSpawn(simulation.WorldKey(division, actor.Name), actor, now)
