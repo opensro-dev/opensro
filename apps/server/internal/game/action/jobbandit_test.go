@@ -87,7 +87,7 @@ func TestJobBanditAttackRefusal(t *testing.T) {
 		if tc.job != 0 {
 			dressJobSuit(t, rt, c, tc.job)
 		}
-		if got := rt.jobMonsterTargetRefusal(c, tc.target); got != tc.want {
+		if got := rt.monsterTargetRefusal(c, tc.target); got != tc.want {
 			t.Errorf("%s: refusal %#x, want %#x", tc.name, got, tc.want)
 		}
 	}

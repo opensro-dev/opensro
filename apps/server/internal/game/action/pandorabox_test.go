@@ -26,15 +26,17 @@ import (
 ================
 pandoraTestRuntime
 
-A division holding only the Yeti (the level-59 row) at its field nest,
-an opened box at the fixture's ground, and a clock the test moves. Every
-wave of a level-59 opener resolves to the Yeti.
+A division holding the Yeti (the level-59 row) at its field nest and the
+box monster's row (no nest), an opened box at the fixture's ground with
+no box monster landed, and a clock the test moves. Every wave of a
+level-59 opener resolves to the Yeti.
 ================
 */
 func pandoraTestRuntime(t *testing.T) (*Runtime, *pandoraEvent, *time.Time, *[]string) {
 	t.Helper()
 	refs := map[uint32]monster.MonsterRef{
 		1: {RefObjID: 1, Codename: "MOB_KK_YETI", Name: "Yeti", TidWord: 0xc6, Level: 59, MaxHP: 7059, WalkSpeed: 8, RunSpeed: 20},
+		2: {RefObjID: 2, Codename: pandoraBoxMonster, Name: "Pandora's Box", TidWord: 0xc6, Level: 1, MaxHP: pandoraTestBoxHP},
 	}
 	nests := []monster.NestRow{{SpawnPoint: monster.SpawnPoint{RefObjID: 1, RegionID: waveTestRegion, X: 900, Y: 85, Z: 900}, SightRange: 77}}
 	state := simulation.NewMonsterState(monster.TemplateFromParts(refs, nests))
@@ -131,12 +133,12 @@ tick; the tenth cleared closes the box and the opener hears every step.
 func TestPandoraBoxRunsTenWavesThenCloses(t *testing.T) {
 	rt, event, clock, told := pandoraTestRuntime(t)
 	rt.pandora.events = []*pandoraEvent{event}
-	rt.advancePandoraBoxes()
+	rt.advancePandoraBoxes(rt.Now().UnixMilli())
 	if event.wave != 0 || len(event.gids) != 0 {
 		t.Fatal("a wave landed on the opening's own tick")
 	}
 	*clock = clock.Add(pandoraTickMs * time.Millisecond)
-	rt.advancePandoraBoxes()
+	rt.advancePandoraBoxes(rt.Now().UnixMilli())
 	if len(event.gids) != pandoraWaveSize || event.wave != 1 {
 		t.Fatalf("first wave: %d monsters, wave %d", len(event.gids), event.wave)
 	}
@@ -153,21 +155,21 @@ func TestPandoraBoxRunsTenWavesThenCloses(t *testing.T) {
 		}
 	}
 	*clock = clock.Add(pandoraTickMs * time.Millisecond)
-	rt.advancePandoraBoxes()
+	rt.advancePandoraBoxes(rt.Now().UnixMilli())
 	if event.wave != 1 || len(rt.pandora.events) != 1 {
 		t.Fatal("a standing wave let the next one land")
 	}
 	for wave := 1; wave < pandoraWaves; wave++ {
 		killPandoraWave(t, rt, event, *clock)
 		*clock = clock.Add(pandoraTickMs * time.Millisecond)
-		rt.advancePandoraBoxes()
+		rt.advancePandoraBoxes(rt.Now().UnixMilli())
 		if event.wave != wave+1 || len(event.gids) != pandoraWaveSize {
 			t.Fatalf("after clearing wave %d: wave %d, %d monsters", wave, event.wave, len(event.gids))
 		}
 	}
 	killPandoraWave(t, rt, event, *clock)
 	*clock = clock.Add(pandoraTickMs * time.Millisecond)
-	rt.advancePandoraBoxes()
+	rt.advancePandoraBoxes(rt.Now().UnixMilli())
 	if len(rt.pandora.events) != 0 {
 		t.Fatal("the box stayed open after its tenth wave")
 	}
@@ -192,13 +194,13 @@ func TestPandoraWaveThatCannotLandStillCounts(t *testing.T) {
 	rt.pandora.events = []*pandoraEvent{event}
 	for wave := 1; wave <= pandoraWaves; wave++ {
 		*clock = clock.Add(pandoraTickMs * time.Millisecond)
-		rt.advancePandoraBoxes()
+		rt.advancePandoraBoxes(rt.Now().UnixMilli())
 		if event.wave != wave || len(event.gids) != 0 {
 			t.Fatalf("tick %d: wave %d with %d monsters", wave, event.wave, len(event.gids))
 		}
 	}
 	*clock = clock.Add(pandoraTickMs * time.Millisecond)
-	rt.advancePandoraBoxes()
+	rt.advancePandoraBoxes(rt.Now().UnixMilli())
 	if len(rt.pandora.events) != 0 || len(*told) != pandoraWaves+1 {
 		t.Fatalf("after ten empty waves: %d boxes open, %d lines", len(rt.pandora.events), len(*told))
 	}
@@ -216,9 +218,9 @@ func TestPandoraBoxClosesWhenAWaveIsNotClearedOrTimeRunsOut(t *testing.T) {
 	rt, event, clock, _ := pandoraTestRuntime(t)
 	rt.pandora.events = []*pandoraEvent{event}
 	*clock = clock.Add(pandoraTickMs * time.Millisecond)
-	rt.advancePandoraBoxes()
+	rt.advancePandoraBoxes(rt.Now().UnixMilli())
 	*clock = clock.Add(partySummonLifetimeMs*time.Millisecond - pandoraTickMs*time.Millisecond)
-	rt.advancePandoraBoxes()
+	rt.advancePandoraBoxes(rt.Now().UnixMilli())
 	if len(rt.pandora.events) != 0 {
 		t.Fatal("a wave standing at its 300 s kept the box open")
 	}
@@ -229,12 +231,12 @@ func TestPandoraBoxClosesWhenAWaveIsNotClearedOrTimeRunsOut(t *testing.T) {
 	opened := *clock
 	rt.pandora.events = []*pandoraEvent{event}
 	*clock = opened.Add((pandoraTicks - 2) * pandoraTickMs * time.Millisecond)
-	rt.advancePandoraBoxes()
+	rt.advancePandoraBoxes(rt.Now().UnixMilli())
 	if len(rt.pandora.events) != 1 {
 		t.Fatal("the box closed before the job's last tick")
 	}
 	*clock = opened.Add((pandoraTicks - 1) * pandoraTickMs * time.Millisecond)
-	rt.advancePandoraBoxes()
+	rt.advancePandoraBoxes(rt.Now().UnixMilli())
 	if len(rt.pandora.events) != 0 {
 		t.Fatal("the job's last tick kept the box open")
 	}
