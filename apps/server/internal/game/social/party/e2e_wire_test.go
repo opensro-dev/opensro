@@ -441,7 +441,7 @@ func chinaMaleRow(gid uint32, name string) party.MemberRow {
 		Name:          name,
 		ModelRefID:    1907,
 		Level:         5,
-		StatusNibbles: 0xAA,
+		StatusNibbles: 0xAB,
 		War:           domain.DefaultWorldInstance,
 		// Live rows always carry the mastery pair (reference server); these seed
 		// characters train none, so the pair is (0, 0).

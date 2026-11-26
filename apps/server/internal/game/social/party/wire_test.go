@@ -274,12 +274,19 @@ func TestVitalStatusNibbles(t *testing.T) {
 		curMP, maxMP int64
 		want         uint8
 	}{
-		{name: "full vitals", curHP: 200, maxHP: 200, curMP: 200, maxMP: 200, want: 0xAA},
-		{name: "half hp full mp", curHP: 100, maxHP: 200, curMP: 200, maxMP: 200, want: 0xA5},
+		{name: "full vitals", curHP: 200, maxHP: 200, curMP: 200, maxMP: 200, want: 0xAB},
+		{name: "half hp full mp", curHP: 100, maxHP: 200, curMP: 200, maxMP: 200, want: 0xA6},
 		{name: "dead", curHP: 0, maxHP: 200, curMP: 0, maxMP: 200, want: 0x00},
-		{name: "living floor never zero", curHP: 1, maxHP: 200, curMP: 1, maxMP: 200, want: 0x11},
-		{name: "over max clamps", curHP: 999, maxHP: 200, curMP: 999, maxMP: 200, want: 0xAA},
+		{name: "living hp floor only", curHP: 1, maxHP: 200, curMP: 1, maxMP: 200, want: 0x01},
+		{name: "over max clamps", curHP: 999, maxHP: 200, curMP: 999, maxMP: 200, want: 0xAB},
 		{name: "zero denominators", curHP: 10, maxHP: 0, curMP: 10, maxMP: 0, want: 0x00},
+		// Nine tenths of HP already read full on the client's /10
+		// gauge; just under shows nine. An exact tenth boundary takes
+		// the float32 rounding of the reference server's fraction.
+		{name: "hp nine tenths full", curHP: 95, maxHP: 100, curMP: 0, maxMP: 100, want: 0x0A},
+		{name: "hp under nine tenths", curHP: 89, maxHP: 100, curMP: 0, maxMP: 100, want: 0x09},
+		{name: "hp exact tenth boundary", curHP: 900, maxHP: 1000, curMP: 0, maxMP: 1000, want: 0x09},
+		{name: "mp almost empty shows empty", curHP: 0, maxHP: 100, curMP: 9, maxMP: 100, want: 0x00},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
