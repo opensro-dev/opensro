@@ -17,6 +17,7 @@ import os from "node:os";
 import path from "node:path";
 import { test } from "node:test";
 import { computeResourceBuildFingerprint } from "../../build/shared/resourceBuildFingerprint.mjs";
+import { STUB_FINGERPRINT_KEYS } from "../helpers/fingerprintKeys.mjs";
 import { closedSkytempleIds, skytempleEnabled } from "../../build/shared/skytemple.mjs";
 
 /*
@@ -107,8 +108,8 @@ test("closed, only the Sky Temple field gates leave the bake; open, none do", ()
 
 test("flipping the switch changes the resource build fingerprint", async ( t ) => {
 	withEnv( t, { SRO_SKYTEMPLE: "off" } );
-	const off = await computeResourceBuildFingerprint();
+	const off = await computeResourceBuildFingerprint( STUB_FINGERPRINT_KEYS );
 	process.env.SRO_SKYTEMPLE = "on";
-	const on = await computeResourceBuildFingerprint();
+	const on = await computeResourceBuildFingerprint( STUB_FINGERPRINT_KEYS );
 	assert.notEqual( on.hash, off.hash );
 });

@@ -15,7 +15,8 @@ import fs from "node:fs";
 import path from "node:path";
 import test from "node:test";
 import { pathToFileURL } from "node:url";
-import { computeResourceBuildFingerprint } from "../../build/shared/resourceBuildFingerprint.mjs";
+import { computeResourceBuildFingerprint, movedRoots } from "../../build/shared/resourceBuildFingerprint.mjs";
+import { STUB_FINGERPRINT_KEYS } from "../helpers/fingerprintKeys.mjs";
 
 const rebuildRoot = path.resolve( "." );
 
@@ -44,7 +45,7 @@ test("native animation registry is pipeline-owned and fingerprinted with the bui
 });
 
 test("resource fingerprint reports every ownership root independently", async () => {
-	const fingerprint = await computeResourceBuildFingerprint();
+	const fingerprint = await computeResourceBuildFingerprint( STUB_FINGERPRINT_KEYS );
 	const labels = fingerprint.roots.map( ( root ) => root.label );
 
 	assert.equal( new Set( labels ).size, labels.length, "fingerprint root labels must be unique" );
@@ -52,13 +53,12 @@ test("resource fingerprint reports every ownership root independently", async ()
 		labels.filter( ( label ) => !label.startsWith( "code:" ) ),
 		[
 			"survival-art",
+			"pet-art",
 			"extracted",
 			"client-executable",
 			"particle-archive",
-			"server-go-mod",
-			"server-go-sum",
-			"server-roster-exporter",
-			"server-roster-policy",
+			"server-exports",
+			"server-monster-data",
 			"server-enterworld",
 			"server-action-data",
 			"server-pet-design",
@@ -81,7 +81,7 @@ test("resource fingerprint reports every ownership root independently", async ()
 });
 
 test("resource fingerprint covers the code the build runs outside scripts/build", async () => {
-	const labels = (await computeResourceBuildFingerprint()).roots.map( ( root ) => root.label );
+	const labels = (await computeResourceBuildFingerprint( STUB_FINGERPRINT_KEYS )).roots.map( ( root ) => root.label );
 	// A converter change once matched the old fingerprint and skipped the build.
 	for (
 		const file of [
@@ -97,8 +97,22 @@ test("resource fingerprint covers the code the build runs outside scripts/build"
 	}
 });
 
+test("the server's exports, not its Go sources, key the resource fingerprint", async () => {
+	// A server change that leaves every export's bytes alone keeps the
+	// fingerprint; one that moves an export misses it (#4337).
+	const same = await computeResourceBuildFingerprint( STUB_FINGERPRINT_KEYS );
+	const again = await computeResourceBuildFingerprint( STUB_FINGERPRINT_KEYS );
+	const moved = await computeResourceBuildFingerprint( { serverExports: () => "a moved roster" } );
+	assert.equal( again.hash, same.hash );
+	assert.notEqual( moved.hash, same.hash );
+	assert.deepEqual(
+		movedRoots( same, moved ).filter( ( label ) => !label.startsWith( "code:" ) ),
+		[ "server-exports" ]
+	);
+});
+
 test("a pack-layout baseline changes the resource fingerprint", async ( t ) => {
-	const before = await computeResourceBuildFingerprint();
+	const before = await computeResourceBuildFingerprint( STUB_FINGERPRINT_KEYS );
 	const saved = process.env.SRO_ASSET_PACK_BASELINE;
 	t.after( () => {
 		if ( saved === undefined ) delete process.env.SRO_ASSET_PACK_BASELINE;
@@ -106,7 +120,7 @@ test("a pack-layout baseline changes the resource fingerprint", async ( t ) => {
 	} );
 	// The release builds against the live manifest; an up-to-date tree must not skip that.
 	process.env.SRO_ASSET_PACK_BASELINE = path.join( rebuildRoot, "package.json" );
-	const after = await computeResourceBuildFingerprint();
+	const after = await computeResourceBuildFingerprint( STUB_FINGERPRINT_KEYS );
 	assert.notEqual( after.hash, before.hash );
 	assert.ok( after.roots.some( ( root ) => root.label === "pack-baseline" ) );
 });

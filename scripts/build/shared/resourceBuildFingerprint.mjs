@@ -17,12 +17,15 @@ The fingerprint is (path, size, mtimeMs) over:
 - SRO_ASSET_PACK_BASELINE's file  the layout baseline a release builds against
 - <rebuild>/.generated/client-public       the published browser projection
 - external source/codegen files read or written by character asset builders
+- what the build reads of the Go server: the sro-evidence exports' bytes
+  (serverExportsKey), the overlay data folders and the pet design
 plus the env knobs that change what the build produces. It is recorded only
 AFTER a successful build, so it always describes real on-disk state; any
 external touch (content, timestamp, add, delete) misses and forces a full
-build. Per-root hashes are persisted with the aggregate so an unexpected
-miss identifies the mutated ownership boundary instead of leaving one opaque
-~120k-file digest. False rebuilds are therefore possible (a pure touch),
+build. Per-root hashes (and, for a directory root, per-folder hashes two
+levels down) are persisted with the aggregate, and a miss prints what moved
+(movedRoots): "fingerprint miss over 243133 files" alone left a release's
+seven-minute rebuild unexplained (#4337). False rebuilds are therefore possible (a pure touch),
 silent stale skips are not - short of an actor rewriting bytes while faking
 the old mtime, which no build tool here does.
 
@@ -40,6 +43,7 @@ import { createHash } from "node:crypto";
 import { readdir, stat } from "node:fs/promises";
 import path from "node:path";
 import { buildStatePath } from "../../lib/generatedRoot.mjs";
+import { serverExportsKey } from "../char/npcModelRoster.mjs";
 import { codeClosure } from "./codeStamp.mjs";
 import { openFileHashCache } from "./fileHashCache.mjs";
 import { crossCityTeleportEnabled } from "./crossCityTeleport.mjs";
@@ -60,13 +64,19 @@ const serverSourceRoot = path.resolve(
 // shared tree finds the last build's fingerprint (generatedRoot.mjs).
 const statePath = buildStatePath( "resource-build-fingerprint.json" );
 
+// v12: the server exports' bytes replace the Go sources behind them (#4337).
 // v11: source roots hash by content; rebuild-assets is the image conversion only.
 // v10: the effective tomb posture joined the knobs (#2024 follow-up).
 // v9: the pet design joined; it moved from scripts/build into the server (#1631).
 // v8: the Qin-Shi tomb overlay knob and the enterworld roots joined.
 // v7: the code closure and the pack-layout baseline joined the roots.
-const FINGERPRINT_VERSION = 11;
+const FINGERPRINT_VERSION = 12;
 const DIRECTORY_CONCURRENCY = 32;
+// How deep a directory root's recorded folder hashes go: two levels name
+// "public/assets/images" rather than "public", without one row per file.
+const MOVED_FOLDER_DEPTH = 2;
+// How many moved roots a miss names before it counts the rest.
+const MOVED_ROOTS_SHOWN = 12;
 // The content hashes of the source roots: their own cache, so the lanes
 // keying themselves at once never race the pack builder's.
 const SOURCE_HASH_CACHE_PATH = buildStatePath( "source-hash-cache.json" );
@@ -182,22 +192,24 @@ const FINGERPRINT_ROOTS = [
 	{ label: "client-executable", absolutePath: path.join( gameRoot, "SRO_Client.exe" ) },
 	// The effects builder checks the archive itself against its evidence.
 	{ label: "particle-archive", absolutePath: path.join( gameRoot, "Particles.pk2" ) },
-	{ label: "server-go-mod", absolutePath: path.join( serverSourceRoot, "go.mod" ), source: true },
-	{ label: "server-go-sum", absolutePath: path.join( serverSourceRoot, "go.sum" ), source: true },
 	{
-		label: "server-roster-exporter",
-		absolutePath: path.join( serverSourceRoot, "cmd", "tools", "sro-evidence" ),
-		source: true
+		// The sro-evidence exports (rosters, unique nests) as bytes, not the
+		// Go sources behind them: keyed on all of internal/game/world, any
+		// server change there rebuilt every step, though no export moved
+		// (r204m2: about seven minutes, #4337).
+		label: "server-exports",
+		key: "serverExports"
 	},
 	{
-		label: "server-roster-policy",
-		absolutePath: path.join( serverSourceRoot, "internal", "game", "world" ),
+		// The monster overlay TSV the character bake reads with SRO_QINSHI_TOMB on.
+		label: "server-monster-data",
+		absolutePath: path.join( serverSourceRoot, "internal", "game", "world", "monster", "data" ),
 		source: true
 	},
 	{
 		// The skill overlay TSV the skill bake reads with SRO_QINSHI_TOMB on.
 		label: "server-enterworld",
-		absolutePath: path.join( serverSourceRoot, "internal", "game", "enterworld" ),
+		absolutePath: path.join( serverSourceRoot, "internal", "game", "enterworld", "data" ),
 		source: true
 	},
 	{
@@ -271,14 +283,15 @@ export async function hashRoots( roots, hashes = undefined ) {
 folderHashes
 
 A directory root's sorted fingerprint lines ("<label>/<path>|size|stamp"),
-hashed per top folder or file inside it, as "<label>/<name>".
+hashed per folder or file depth levels inside it (one by default), as
+"<label>/<name>"; a file above that depth is its own entry.
 ================
 */
-export function folderHashes( label, lines ) {
+export function folderHashes( label, lines, depth = 1 ) {
 	const folders = new Map(), prefix = label + "/";
 	for ( const line of lines ) {
 		if ( !line.startsWith( prefix ) ) continue;
-		const name = line.slice( prefix.length ).split( /[/|]/, 1 )[0];
+		const name = line.slice( prefix.length ).split( "|", 1 )[0].split( "/" ).slice( 0, depth ).join( "/" );
 		if ( !folders.has( name ) ) folders.set( name, [] );
 		folders.get( name ).push( line );
 	}
@@ -316,9 +329,13 @@ export async function dataRootsHash() {
 /*
 ================
 computeResourceBuildFingerprint
+
+keys names the functions behind the key roots (a root hashed from a
+function's output rather than from files); tests pass their own so no
+Go tool runs.
 ================
 */
-export async function computeResourceBuildFingerprint() {
+export async function computeResourceBuildFingerprint( keys = { serverExports: serverExportsKey } ) {
 	const startedAt = performance.now();
 	const lines = [];
 	const roots = [];
@@ -326,13 +343,16 @@ export async function computeResourceBuildFingerprint() {
 
 	for ( const root of [ ...FINGERPRINT_ROOTS, ...(await dynamicRoots()) ] ) {
 		const rootLines = [];
-		await collectRoot( root, rootLines, hashes );
+		if ( root.key ) rootLines.push( `${root.label}|key|${await keys[root.key]()}` );
+		else await collectRoot( root, rootLines, hashes );
 		rootLines.sort();
 		lines.push( ...rootLines );
+		const folders = folderHashes( root.label, rootLines, MOVED_FOLDER_DEPTH );
 		roots.push( {
 			label: root.label,
 			hash: hashFingerprintLines( rootLines ),
-			fileCount: rootLines.length
+			fileCount: rootLines.length,
+			...(Object.keys( folders ).length > 0 ? { folders } : {})
 		} );
 	}
 
@@ -341,7 +361,8 @@ export async function computeResourceBuildFingerprint() {
 
 	const hash = createHash( "sha256" );
 	hash.update( `v${FINGERPRINT_VERSION}\n` );
-	for ( const line of buildKnobLines() ) {
+	const knobLines = buildKnobLines();
+	for ( const line of knobLines ) {
 		hash.update( `${line}\n` );
 	}
 	for ( const line of lines ) {
@@ -352,9 +373,70 @@ export async function computeResourceBuildFingerprint() {
 	return {
 		hash: hash.digest( "hex" ),
 		fileCount: lines.length,
+		knobs: hashFingerprintLines( knobLines ),
 		roots,
 		elapsedMs: Math.round( performance.now() - startedAt )
 	};
+}
+
+/*
+================
+movedRoots
+
+What a miss moved, against the recorded fingerprint: the build settings
+(the env knobs and postures), each root that changed, appeared or went,
+and for a changed directory root the recorded folders that moved instead
+of the whole root. A record written before a field existed simply names
+less (no knobs, the root without its folders); the aggregate hash is
+unchanged, so such a record still skips a no-op build.
+================
+*/
+export function movedRoots( recorded, current ) {
+	const moved = [];
+	if ( recorded.knobs !== undefined && recorded.knobs !== current.knobs ) moved.push( "build settings" );
+	const before = new Map( (recorded.roots ?? []).map( ( root ) => [ root.label, root ] ) );
+	for ( const root of current.roots ) {
+		const old = before.get( root.label );
+		before.delete( root.label );
+		if ( old === undefined ) {
+			moved.push( `${root.label} (new)` );
+			continue;
+		}
+		if ( old.hash === root.hash ) continue;
+		const folders = movedFolders( old.folders, root.folders );
+		moved.push( ...(folders.length > 0 ? folders : [ root.label ]) );
+	}
+	for ( const label of before.keys() ) moved.push( `${label} (gone)` );
+	return moved;
+}
+
+/*
+================
+movedFolders
+
+The folder names whose hash differs between two recorded folder maps,
+either side's extra names included; none when either map is missing.
+================
+*/
+function movedFolders( before, after ) {
+	if ( before === undefined || after === undefined ) return [];
+	const names = new Set( [ ...Object.keys( before ), ...Object.keys( after ) ] );
+	return [ ...names ].filter( ( name ) => before[name] !== after[name] ).sort();
+}
+
+/*
+================
+describeMovedRoots
+
+movedRoots as one log phrase, the first MOVED_ROOTS_SHOWN named and the
+rest counted.
+================
+*/
+export function describeMovedRoots( moved ) {
+	if ( moved.length === 0 ) return "nothing recorded moved";
+	const shown = moved.slice( 0, MOVED_ROOTS_SHOWN ).join( ", " );
+	const rest = moved.length - MOVED_ROOTS_SHOWN;
+	return rest > 0 ? `${shown} and ${rest} more` : shown;
 }
 
 /*
@@ -408,6 +490,7 @@ export async function writeRecordedFingerprint( fingerprint ) {
 				version: FINGERPRINT_VERSION,
 				hash: fingerprint.hash,
 				fileCount: fingerprint.fileCount,
+				knobs: fingerprint.knobs,
 				roots: fingerprint.roots,
 				recordedAt: new Date().toISOString()
 			},
