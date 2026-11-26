@@ -335,3 +335,49 @@ func TestFollowingTransportTakesItsTradersWayPastAWall(t *testing.T) {
 		t.Fatalf("the transport stands at %+v, %.0f from its trader", at, simulation.WorldDistance2D(at, trader))
 	}
 }
+
+// transportInFlightStep bounds the one tick of walking a transport may finish
+// after its trader jumps: a run of under 300 units per second for 500 ms.
+const transportInFlightStep = 150.0
+
+/*
+================
+TestFollowingTransportParksWhenItsTraderJumpsAway
+
+A trader that lands far from its following transport (a town revive that
+leaves the transport behind, #4543) did not walk there: the transport parks
+where it stands and tethers the trader, so it neither walks the trail
+across the map nor warps to town. Once the trader walks back within reach,
+it follows again.
+================
+*/
+func TestFollowingTransportParksWhenItsTraderJumpsAway(t *testing.T) {
+	rt, clock, c := caravanFixture(t)
+	rt.TransportFollow, rt.TransportFollowTether = true, true
+	_, trader := dismountedTransportApart(rt, c)
+	advanceTransportTicks(rt, clock, 4)
+	stood := rt.cosLiveSpawn(testDivision, c, clock.NowMs())
+	far := simulation.Spawn{RegionID: trader.RegionID, X: stood.X + 3*transportFollowReach/2, Y: trader.Y, Z: stood.Z}
+	rideCaravanTo(rt, c, far)
+	// The first tick ends the step already under way; nothing after it
+	// moves the transport.
+	advanceTransportTicks(rt, clock, 1)
+	parked := rt.cosLiveSpawn(testDivision, c, clock.NowMs())
+	if moved := simulation.WorldDistance2D(stood, parked); moved > transportInFlightStep {
+		t.Fatalf("the transport walked %.0f units after its trader jumped %.0f away, want it parked", moved, simulation.WorldDistance2D(stood, far))
+	}
+	tether, held := rt.Worlds.TetherOf(simulation.WorldKey(testDivision, c.Name))
+	if !held || simulation.WorldDistance2D(tether.Anchor, parked) > 1 {
+		t.Fatalf("tether = %+v held %v, want the trade tether at the parked transport %+v", tether, held, parked)
+	}
+	advanceTransportTicks(rt, clock, 6)
+	if still := rt.cosLiveSpawn(testDivision, c, clock.NowMs()); simulation.WorldDistance2D(parked, still) > 0.01 {
+		t.Fatalf("the parked transport moved from %+v to %+v", parked, still)
+	}
+	near := simulation.Spawn{RegionID: trader.RegionID, X: parked.X + 400, Y: trader.Y, Z: parked.Z}
+	rideCaravanTo(rt, c, near)
+	advanceTransportTicks(rt, clock, 6)
+	if after := rt.cosLiveSpawn(testDivision, c, clock.NowMs()); simulation.WorldDistance2D(after, near) >= simulation.WorldDistance2D(parked, near) {
+		t.Fatalf("with its trader back in reach the transport stayed at %+v, want it following toward %+v", after, near)
+	}
+}
