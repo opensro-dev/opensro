@@ -619,7 +619,8 @@ export interface InventoryItem {
 	// them - the mall-use gate reads canUse (token 24).
 	readonly nativeFields?: ItemFieldValues;
 	// Port-only (#3906): a Magic Cube's linked elixir rows. Absent on
-	// every other item. Quantity on the cube itself is StoredItemCount.
+	// every other item. Quantity on the cube itself is StoredItemCount
+	// (not the bag stack); merchant sale uses merchantSaleQuantity.
 	readonly linkedStorage?: {
 		readonly capacity: number;
 		readonly rows: readonly InventoryItem[];

@@ -2553,7 +2553,7 @@
 				},
 				"openShopSale": {
 					"reads": 0,
-					"writes": 1
+					"writes": 2
 				},
 				"openStallPrompt": {
 					"reads": 0,

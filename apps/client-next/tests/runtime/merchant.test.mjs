@@ -15,7 +15,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import fc from "fast-check";
 
-const { merchantSelection, merchantQuote, merchantPage, merchantCommand } = await import(
+const { merchantSelection, merchantQuote, merchantPage, merchantCommand, merchantSaleQuantity } = await import(
 	sourceFileUrl( "src/engine/foundation/ui/merchant.ts" ).href
 );
 const offer = ( tab, slot, price = "60" ) => ({ tab, slot, refObjId: 100 + slot, name: "Item", price, maxStack: 50 });
@@ -109,6 +109,43 @@ test("sale requires the authoritative quote and cannot confirm a replaced invent
 			magic: [ "123" ]
 		} ]
 	) assert.equal( merchantQuote( selection, shop, [ item ], "1", "0" ), null );
+});
+test("empty Magic Cube sells as bag stack 1 (quantity is StoredItemCount)", () => {
+	// TID 3/2/3: InventoryItem.quantity is StoredItemCount; an empty cube
+	// carries 0 there, but the server quotes and commits Quantity 1.
+	const cube = {
+		slot: 13,
+		refObjId: 35568,
+		name: "Magic Cube",
+		quantity: 0,
+		plus: 0,
+		durability: 0,
+		variance: "0",
+		magic: [],
+		typeFlags: 0x9cc
+	};
+	assert.equal( merchantSaleQuantity( cube ), 1 );
+	assert.equal( merchantSaleQuantity( { ...cube, quantity: 7 } ), 0, "non-empty is not sellable" );
+	assert.equal( merchantSaleQuantity( inventory[0] ), 4 );
+	const shop = {
+		...fixture(),
+		saleQuotes: [ { slot: 13, refObjId: 35568, quantity: 1, price: "0" } ]
+	};
+	const selection = merchantSelection( "sell", 13, shop, [ cube ] );
+	assert.ok( selection );
+	shop.saleQuotes = [ ...shop.saleQuotes ];
+	const quote = merchantQuote( selection, shop, [ cube ], "1", "0" );
+	assert.equal( quote?.maximum, 1 );
+	assert.equal( quote?.valid, true );
+	assert.equal( quote?.total, 0n );
+	assert.deepEqual( merchantCommand( selection, quote.quantity ), {
+		kind: "shop-sell",
+		slot: 13,
+		quantity: 1
+	} );
+	const holding = merchantSelection( "sell", 13, shop, [ { ...cube, quantity: 3 } ] );
+	shop.saleQuotes = [ ...shop.saleQuotes ];
+	assert.equal( merchantQuote( holding, shop, [ { ...cube, quantity: 3 } ], "1", "0" )?.valid, false );
 });
 test("buyback identity survives ordinal shifts but rejects eviction, repricing and merchant replacement", () => {
 	const shop = fixture(), selection = merchantSelection( "buyback", 1, shop, inventory );

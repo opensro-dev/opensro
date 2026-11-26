@@ -64,3 +64,48 @@ func TestMagicCubeSaleRefusesWhileNonEmpty(t *testing.T) {
 		}
 	}
 }
+
+/*
+================
+TestMagicCubeSaleQuoteOnlyWhenEmpty
+
+The merchant's sale quotes list an empty cube and omit one holding
+items, so the client never arms a confirm that the commit refuses with
+0x8E. The cube's row admits the sale (canSell 1, sell price 0), so only
+StoredItemCount decides.
+================
+*/
+func TestMagicCubeSaleQuoteOnlyWhenEmpty(t *testing.T) {
+	const (
+		cubeCodename = "ITEM_PRE_MALL_MAGIC_CUBE_WEAPON_10"
+		cubeSlot     = 13
+	)
+	for _, tc := range []struct {
+		name   string
+		data   uint32
+		quoted bool
+	}{
+		{"empty", 0, true},
+		{"holding", 3, false},
+	} {
+		rt, c := merchantFixture(t)
+		rt.MagicCube = true
+		ref := &enterworld.ItemRef{
+			RefObjID: 35568, Codename: cubeCodename, TypeIDs: [4]int64{3, 2, 3, 1},
+			NativeFields: enterworld.NewNativeFields(map[string]float64{"canSell": 1, "sellPrice": 0}),
+		}
+		rt.deps.ItemReferences().(staticItemSource)[cubeCodename] = ref
+		c.MissionInventory = append(c.MissionInventory, enterworld.InventoryRow{
+			Slot: cubeSlot, RefObjID: ref.RefObjID, Codename: cubeCodename,
+			TypeFlags: ref.TypeFlags(), StackCount: 1, Data: tc.data,
+			LinkedStorage: &domain.COSContainer{Capacity: 10},
+		})
+		quoted := false
+		for _, quote := range rt.shopSaleQuotes(testDivision, c, rt.NpcRoster[0]) {
+			quoted = quoted || quote.Slot == cubeSlot
+		}
+		if quoted != tc.quoted {
+			t.Fatalf("%s cube: quoted %v, want %v", tc.name, quoted, tc.quoted)
+		}
+	}
+}

@@ -1963,7 +1963,9 @@ trade
 			if ( buy && !shop.offers.some( o => o.tab === tab && o.slot === n ) ) throw Error( "Unknown shop offer" );
 			if ( !buy ) {
 				const item = slots.get( n );
-				if ( !item || n < (equipmentSlotCount ?? 13) || quantity > item.quantity ) {
+				// Magic Cube quantity is StoredItemCount; the bag row is one cube.
+				const held = item && isMagicCube( item.typeFlags ) ? 1 : item?.quantity ?? 0;
+				if ( !item || n < (equipmentSlotCount ?? 13) || quantity > held ) {
 					throw Error( "Sale is unavailable" );
 				}
 			}
