@@ -207,6 +207,48 @@ test("the v1 cache is deleted LEGACY_KEEP_MS after its first open", async t => {
 	assert.equal( stores.has( LEGACY ), false );
 });
 
+test("a v1 cache that cannot be opened is an open failure, and the store still works", async t => {
+	const { named } = namedStorage( t );
+	await legacyWith( named, new Set(), "0a" );
+	const backend = globalThis.caches;
+	const realOpen = backend.open;
+	backend.open = async name => {
+		if ( name === LEGACY ) throw new DOMException( "backend gone", "UnknownError" );
+		return realOpen( name );
+	};
+	const store = createPersistentAssets();
+	assert.equal( await store.read( ORIGIN, "0a", BYTES.length ), null, "the v1 entry was served anyway" );
+	const stats = store.stats();
+	assert.equal( stats.failures.open, 1 );
+	assert.equal( stats.lastFailure?.operation, "open" );
+	assert.equal( stats.lastFailure?.reason, "unavailable" );
+	await store.write( ORIGIN, "0a", BYTES );
+	assert.deepEqual( await store.read( ORIGIN, "0a", BYTES.length ), BYTES, "the store needs its v1 cache" );
+});
+
+test("the v1 deadline survives its marker leaving the v1 cache", async t => {
+	const { stores, deleted, refuseKeys, named } = namedStorage( t );
+	t.mock.timers.enable( { apis: [ "Date" ], now: 1000 } );
+	const legacy = await legacyWith( named, refuseKeys, "0a" );
+	// The marker an earlier release stored in the v1 cache itself, half its
+	// window already gone when this store first opens.
+	const expires = String( 1000 + LEGACY_KEEP_MS / 2 );
+	await legacy.put(
+		"/assets/.verified/legacy-expiry",
+		new Response( null, { headers: { "x-sro-expires": expires } } )
+	);
+	assert.deepEqual( await createPersistentAssets().read( ORIGIN, "0a", BYTES.length ), BYTES );
+	// An older release still writing to the v1 cache evicts the marker.
+	legacy.rows.delete( "/assets/.verified/legacy-expiry" );
+	t.mock.timers.setTime( 1000 + LEGACY_KEEP_MS / 4 );
+	assert.deepEqual( await createPersistentAssets().read( ORIGIN, "0a", BYTES.length ), BYTES );
+	assert.equal( legacy.rows.has( "/assets/.verified/legacy-expiry" ), false, "the marker was rewritten" );
+	t.mock.timers.setTime( 1000 + LEGACY_KEEP_MS / 2 );
+	assert.equal( await createPersistentAssets().read( ORIGIN, "0a", BYTES.length ), null );
+	assert.deepEqual( deleted, [ LEGACY ] );
+	assert.equal( stores.has( LEGACY ), false );
+});
+
 test("a write refused for quota drops the v1 cache before any stored entry", async t => {
 	const { stores, deleted, refuseKeys, refusePuts, named } = namedStorage( t );
 	const store = createPersistentAssets();
