@@ -24,9 +24,10 @@ import (
 ================
 TestAreaSelectionKeepsItsCountWithARefusedCopy
 
-Two ordinary monsters and one STR copy stand in reach, and the skill takes
-two targets. A magical caster must get both ordinary monsters: if the copy
-were still counted at selection, it would take one slot and leave only one.
+Two ordinary monsters and one STR copy stand in reach, with the copy's gid
+between theirs, and the skill takes two targets. A magical caster must get
+both ordinary monsters: a selector that still counted the copy would take
+the second slot and leave only one.
 ================
 */
 func TestAreaSelectionKeepsItsCountWithARefusedCopy(t *testing.T) {
@@ -39,15 +40,18 @@ func TestAreaSelectionKeepsItsCountWithARefusedCopy(t *testing.T) {
 	copyRef.UniqueBuild = monster.UniqueBuildSTR
 
 	var nests []monster.NestRow
-	for _, dx := range []float64{0, 5} {
-		spawn := primary.Spawn
-		spawn.X += dx
-		nests = append(nests, monster.NestRow{SpawnPoint: spawn, RetailEvidence: true, MaxCount: 1})
-	}
+	// The copy's nest sits between the two ordinary ones, so its gid does
+	// too: a selector that still counted it would take the second slot and
+	// leave one ordinary monster, which is what this test catches.
+	ordinary := primary.Spawn
+	nests = append(nests, monster.NestRow{SpawnPoint: ordinary, RetailEvidence: true, MaxCount: 1})
 	copySpawn := primary.Spawn
 	copySpawn.X += 8
 	copySpawn.RefObjID = copyRef.RefObjID
 	nests = append(nests, monster.NestRow{SpawnPoint: copySpawn, RetailEvidence: true, MaxCount: 1})
+	second := primary.Spawn
+	second.X += 5
+	nests = append(nests, monster.NestRow{SpawnPoint: second, RetailEvidence: true, MaxCount: 1})
 
 	rt.Monsters = simulation.NewMonsterState(monster.TemplateFromParts(
 		map[uint32]monster.MonsterRef{base.RefObjID: base, copyRef.RefObjID: copyRef}, nests))
