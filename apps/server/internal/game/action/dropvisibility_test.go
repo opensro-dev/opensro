@@ -116,6 +116,43 @@ func TestGroundDropStoreLifecycleImmediatelyVisible(t *testing.T) {
 	}
 }
 
+/*
+================
+TestTradeGoodsLieOnTheGroundThirtyMinutes
+
+A drop lasts its itemdata DecayTime: trade goods carry 1800000 ms, so
+the sweep that reaps an ordinary 3-minute drop leaves them, and they go
+on the first sweep at or after 30 minutes. A kind with no DecayTime
+keeps the 3-minute fallback.
+================
+*/
+func TestTradeGoodsLieOnTheGroundThirtyMinutes(t *testing.T) {
+	const goodsLifetime = 30 * time.Minute
+	items := testItems()
+	items["ITEM_ETC_TRADE_CH_05"] = &enterworld.ItemRef{
+		RefObjID: 7570, Codename: "ITEM_ETC_TRADE_CH_05", TypeIDs: [4]int64{3, 3, 8, 2},
+		DecayTimeMs: goodsLifetime.Milliseconds(),
+	}
+	rt, clock := newTestRuntime(testCharacter(), items)
+	goods := rt.Ground.Add(testDivision, grounditem.Item{RefObjID: 7570, Codename: "ITEM_ETC_TRADE_CH_05", DroppedAt: clock.At(0)})
+	sword := rt.Ground.Add(testDivision, grounditem.Item{RefObjID: 11459, Codename: "ITEM_CH_SWORD_01_A_RARE", DroppedAt: clock.At(0)})
+
+	swept := rt.TickHook()(clock.At(grounditem.FixtureLifetime).UnixMilli())
+	if len(swept) != 1 || swept[0].SourceGID != sword.Gid {
+		t.Fatalf("the 3-minute sweep = %+v, want only the sword (gid %d) reaped", swept, sword.Gid)
+	}
+	if frames := rt.TickHook()(clock.At(goodsLifetime - time.Millisecond).UnixMilli()); len(frames) != 0 {
+		t.Fatalf("goods reaped 1ms before 30 minutes: %+v", frames)
+	}
+	swept = rt.TickHook()(clock.At(goodsLifetime + grounditem.SweepInterval).UnixMilli())
+	if len(swept) != 1 || swept[0].SourceGID != goods.Gid {
+		t.Fatalf("the sweep past 30 minutes = %+v, want the goods (gid %d) reaped", swept, goods.Gid)
+	}
+	if rt.Ground.Count(testDivision) != 0 {
+		t.Fatal("the reaped goods survived in the store")
+	}
+}
+
 // The Go TTL is Node's: missionGroundItemFixtureLifetimeMs = 180_000 applied
 // on the same inclusive boundary (server.mjs sweep keeps now-droppedAtMs <
 // lifetime, reaps >=). A handler drop lives the FULL lifetime and reaps on
