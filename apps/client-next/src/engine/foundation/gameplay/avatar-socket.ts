@@ -55,6 +55,23 @@ export function isSpiritItem( typeFlags: number ): boolean {
 
 /*
 ================
+dressedAvatars
+
+The worn avatars a body is dressed in: a worn Devil's Spirit sits in the
+avatar block but has no worn model (it shows through its lent skills'
+effects, #4384), so every dresser drops it here, the world actor and
+the Item Mall try-on alike. The try-on once took it and threw "Missing
+mannequin avatar slot" for any Spirit wearer; the world actor's own
+copy of the rule had let 45 live "Equipment visual socket mismatch
+51680" faults through before #4406.
+================
+*/
+export function dressedAvatars<T extends { readonly typeFlags: number; }>( avatars: readonly T[] ): T[] {
+	return avatars.filter( item => !isSpiritItem( item.typeFlags ) );
+}
+
+/*
+================
 isDormantSpirit
 
 A Spirit that has never been used: its data word (the bag row's
