@@ -267,6 +267,42 @@ func TestTransformedPlayerStrikesWithTheMonsterSkill(t *testing.T) {
 	}
 }
 
+/*
+==================
+TestTransformedPlayerHitIsLevelScaled
+
+A monster-shaped player's hit is the level-scaled amount (5L plus a
+draw below 5L) per impact, never the copied skill's formula: at level
+1 with every draw 137, each of the strike's two impacts deals
+5 + 137 % 5 = 7.
+==================
+*/
+func TestTransformedPlayerHitIsLevelScaled(t *testing.T) {
+	rt, _, c, target := maskFixture(t, 1, maskMonsterRef)
+	rt.CombatRoll = func() (uint32, error) { return 137, nil }
+	if r := useMask(rt, c); len(r.Frames) == 0 || r.Frames[0].Payload[0] != 1 {
+		t.Fatalf("mask use refused: %+v", r)
+	}
+	if c.TransformMode != 1 {
+		t.Fatalf("transform mode = %d, want 1", c.TransformMode)
+	}
+	before, ok := rt.Monsters.Get(testDivision, target.Gid)
+	if !ok {
+		t.Fatal("target missing")
+	}
+	r := rt.HandleTargetInteract(testDivision, c, wire.BasicAttackEngage{TargetGid: target.Gid}.Encode())
+	if r.DiagnosticRefusal != "" {
+		t.Fatal(r.DiagnosticRefusal)
+	}
+	after, ok := rt.Monsters.Get(testDivision, target.Gid)
+	if !ok {
+		t.Fatal("target missing")
+	}
+	if got, want := before.CurrentHP-after.CurrentHP, uint32(14); got != want {
+		t.Fatalf("transformed strike dealt %d, want %d (two impacts of 7)", got, want)
+	}
+}
+
 // The transform is runtime state; the character record never stores it.
 func TestTransformIsNotPersisted(t *testing.T) {
 	c := domain.Character{TransformRefObjID: maskMonsterRef}
