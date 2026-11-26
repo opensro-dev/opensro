@@ -37,10 +37,6 @@ Mercenary contract records and ContractBook
 */
 
 const (
-	// BaseHunterHireFeeGold is the base gold fee for a real Trader player to
-	// hire an AI Hunter escort for one town-to-town leg.
-	BaseHunterHireFeeGold int64 = 1_500_000
-
 	// BaseAITraderEscortRewardPerStar is multiplied by the AI Trader's cargo
 	// star rating (3★-5★) to compute the bonus gold paid to a real Hunter
 	// player upon safe arrival at the destination specialty shop.
@@ -88,7 +84,6 @@ type EscortContract struct {
 	ToTown       TownID
 	CargoStars   uint8
 	RewardGold   int64
-	UpfrontFee   int64
 	StartedAtMs  int64
 	Active       bool
 	LastSampleMs int64
@@ -195,37 +190,6 @@ func (c *ContractBook) BindAITraderEscort(
 	contract.LastSampleMs = nowMs
 	c.contracts[contractKey(division, aiTraderName)] = contract
 	return contract, true
-}
-
-/*
-==================
-HireAIHunter
-
-HireAIHunter binds an AI Hunter (aiHunterName) to escort a real Trader player
-(playerTraderName) on their caravan run.
-==================
-*/
-func (c *ContractBook) HireAIHunter(
-	division, playerTraderName, aiHunterName string,
-	fromTown, toTown TownID,
-	nowMs int64,
-) EscortContract {
-	contract := EscortContract{
-		Division:    strings.TrimSpace(division),
-		TraderName:  strings.TrimSpace(playerTraderName),
-		TraderIsAI:  false,
-		HunterName:  strings.TrimSpace(aiHunterName),
-		HunterIsAI:  true,
-		FromTown:    fromTown,
-		ToTown:      toTown,
-		UpfrontFee:  BaseHunterHireFeeGold,
-		StartedAtMs: nowMs,
-		Active:      true,
-	}
-	c.mu.Lock()
-	c.contracts[contractKey(division, aiHunterName)] = contract
-	c.mu.Unlock()
-	return contract
 }
 
 /*
@@ -351,22 +315,6 @@ func (c *ContractBook) Cancel(division, agent string) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	delete(c.contracts, contractKey(division, agent))
-}
-
-/*
-================
-HasHiredHunter
-================
-*/
-func (c *ContractBook) HasHiredHunter(division, player string) bool {
-	c.mu.RLock()
-	defer c.mu.RUnlock()
-	for _, contract := range c.contracts {
-		if contract.Division == division && contract.Active && contract.HunterIsAI && strings.EqualFold(contract.TraderName, player) {
-			return true
-		}
-	}
-	return false
 }
 
 /*

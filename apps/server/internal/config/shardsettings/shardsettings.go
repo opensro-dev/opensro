@@ -245,6 +245,11 @@ var Settings = []Setting{
 	// (caravanai.LoopbackURL). Not a catalogue setting: the catalogue
 	// publishes no agent state. "off" is native.
 	{Env: "SRO_AI_CARAVANS", NomadVar: "ai_caravans", Default: "off"},
+	// Port-only, not native: the gold one AI agent's hire (and each
+	// hour's extension) costs under SRO_AI_CARAVANS; a whole
+	// 1..100000000 (caravanai.ParseHireFee). Owner, 2026-11-26: a shard
+	// setting, 1500000 by default. It bites only while the agents run.
+	{Env: "SRO_CARAVAN_HIRE_FEE", NomadVar: "caravan_hire_fee", Default: "1500000"},
 	// Port-only, not native: the Constantinople fortress area from the
 	// v1.696 client (enterworld/fortressdata.go, #3275). Build and
 	// server read the same switch; off leaves every imported row out of

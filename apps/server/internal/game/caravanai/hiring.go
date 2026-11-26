@@ -37,7 +37,7 @@ func (r *Runtime) HireOffers(division string, playerJob uint8) []HireOffer {
 		if !CanHire(playerJob, u.Role) || !hireable(u) {
 			continue
 		}
-		offer := HireOffer{Name: u.Name, Role: u.Role, Town: u.OriginTown, Fee: HireFeeGold}
+		offer := HireOffer{Name: u.Name, Role: u.Role, Town: u.OriginTown, Fee: r.HireFee()}
 		if u.Role == RoleTrader {
 			offer.Goods = hiredGoodsCost(u)
 		}
@@ -142,10 +142,10 @@ func (r *Runtime) HireAgentStars(division, player string, playerJob uint8, agent
 		goods = r.StarGoods(division, name, stars)
 	}
 
-	price := HireFeeGold + goods
+	price := r.HireFee() + goods
 	if r.hooks.OnHireFee == nil || !r.hooks.OnHireFee(division, player, price) {
 		if goods > 0 {
-			return fmt.Sprintf("Hiring %s costs %s gold: %s for the hire and %s for the goods.", short, GoldText(price), GoldText(HireFeeGold), GoldText(goods))
+			return fmt.Sprintf("Hiring %s costs %s gold: %s for the hire and %s for the goods.", short, GoldText(price), GoldText(r.HireFee()), GoldText(goods))
 		}
 		return fmt.Sprintf("Hiring %s costs %s gold.", short, GoldText(price))
 	}
@@ -919,15 +919,15 @@ func (r *Runtime) ExtendHire(division, player, agentName string, nowMs int64) st
 		return fmt.Sprintf("%s is already hired for the next %d minutes.", short, (unit.HiredAtMs+HireDurationMs-nowMs)/60_000)
 	}
 	r.mu.Unlock()
-	if r.hooks.OnHireFee == nil || !r.hooks.OnHireFee(division, player, HireFeeGold) {
-		return fmt.Sprintf("Extending %s's hire costs %s gold.", short, GoldText(HireFeeGold))
+	if r.hooks.OnHireFee == nil || !r.hooks.OnHireFee(division, player, r.HireFee()) {
+		return fmt.Sprintf("Extending %s's hire costs %s gold.", short, GoldText(r.HireFee()))
 	}
 	r.mu.Lock()
 	unit = r.findAgentLocked(division, agentName)
 	if unit == nil || !strings.EqualFold(unit.HiredBy, player) {
 		r.mu.Unlock()
 		if r.hooks.OnHirePayout != nil {
-			r.hooks.OnHirePayout(division, player, HireFeeGold)
+			r.hooks.OnHirePayout(division, player, r.HireFee())
 		}
 		return fmt.Sprintf("%s's hire already ended; your gold is returned.", short)
 	}
@@ -937,5 +937,5 @@ func (r *Runtime) ExtendHire(division, player, agentName string, nowMs int64) st
 	unit.expiryWarned = false
 	left := (unit.HiredAtMs + HireDurationMs - nowMs) / 60_000
 	r.mu.Unlock()
-	return fmt.Sprintf("%s's hire is extended: %d minutes left. Paid %s gold.", short, left, GoldText(HireFeeGold))
+	return fmt.Sprintf("%s's hire is extended: %d minutes left. Paid %s gold.", short, left, GoldText(r.HireFee()))
 }

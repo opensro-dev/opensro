@@ -106,6 +106,10 @@ func (game *gameplayPlane) wireCaravanAgents() {
 		// The LLM brain may only reach a model on this host (config.go).
 		log.Warnf("job: %s is not a loopback URL; AI caravan agents use the hardcoded brain", caravanai.EnvAgentLLMURL)
 	}
+	if cfg.RefusedHireFee != "" {
+		log.Warnf("job: %s=%q is not a whole 1..%d; AI caravan hires cost the default %d gold",
+			caravanai.EnvHireFee, cfg.RefusedHireFee, caravanai.MaxHireFeeGold, caravanai.DefaultHireFeeGold)
+	}
 	var memStore caravanai.MemoryStore
 	if s, ok := game.deps.Characters.(caravanai.MemoryStore); ok {
 		memStore = s
@@ -795,7 +799,7 @@ func (game *gameplayPlane) caravanHireWindow(character *enterworld.Character, me
 	var job uint8
 	var name string
 	game.deps.Read(game.divisionID, func() { job, name = enterworld.DressedJob(character), character.Name })
-	out := caravanHireJSON{Version: 1, Title: "Caravan Hire", Fee: caravanai.GoldText(caravanai.HireFeeGold), Message: message, Rows: []caravanHireRowJSON{}, Stars: []caravanHireStarsJSON{}}
+	out := caravanHireJSON{Version: 1, Title: "Caravan Hire", Fee: caravanai.GoldText(game.caravanAgents.HireFee()), Message: message, Rows: []caravanHireRowJSON{}, Stars: []caravanHireStarsJSON{}}
 	p, ok := game.caravanPlayer(game.divisionID, name)
 	place, inPlace := caravanai.TownID(""), false
 	if ok {
@@ -822,7 +826,7 @@ func (game *gameplayPlane) caravanHireWindow(character *enterworld.Character, me
 			}
 			for s := uint8(1); s <= caravanai.MaxHireStars; s++ {
 				goods := game.caravanAgents.StarGoods(game.divisionID, trader, s)
-				out.Stars = append(out.Stars, caravanHireStarsJSON{Stars: s, Goods: caravanai.GoldText(goods), Total: caravanai.GoldText(caravanai.HireFeeGold + goods)})
+				out.Stars = append(out.Stars, caravanHireStarsJSON{Stars: s, Goods: caravanai.GoldText(goods), Total: caravanai.GoldText(game.caravanAgents.HireFee() + goods)})
 			}
 		}
 		for _, row := range roster {

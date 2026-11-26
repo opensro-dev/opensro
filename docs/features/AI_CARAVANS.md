@@ -27,7 +27,7 @@ proximity, admission, and the native fare. Escorts board their trader's link and
 on the far bank. Route variants include the Dead Ravine, Central-Tarim, Highland Oasis, and Tiger Mountain.
 
 Escort commands require the correct worn job suit, a living nearby player and an available recruiter
-in town. `!hire <hunter>` charges 1,500,000 gold once. `!accept <trader>` requires a Hunter to remain within
+in town. `!hire <hunter>` charges the shard's hire fee once (`SRO_CARAVAN_HIRE_FEE`, a whole 1..100,000,000 gold, default 1,500,000 by owner decision on 2026-11-26; an invalid value keeps the default and the GameWorld log says so). `!accept <trader>` requires a Hunter to remain within
 320 units for at least 90% of a surviving run (minimum 30 seconds; observation gaps invalidate it).
 Rewards are limited to three per Hunter per UTC day, counted in the `caravan_escort_days` ledger
 (store layout 17), so the cap survives a GameWorld restart; no character record changes.

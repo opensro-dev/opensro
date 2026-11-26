@@ -62,6 +62,7 @@ var unlistedSettings = map[string]string{
 	progression.EnvSoOkChristmasBoxChance: "a tuning of the Christmas event rule, not a rule of its own",
 	progression.EnvSoOkChristmasGifts:     "a tuning of the Christmas event rule, not a rule of its own",
 	action.EnvGMSetSpeed:                  "a GM command, not a rule players meet",
+	caravanai.EnvHireFee:                  "the hire fee the AI caravans rule quotes, not a rule of its own",
 	action.EnvGMItemForge:                 "a GM command, not a rule players meet",
 	gmcommand.EnvGMModeration:             "GM moderation commands, not a rule players meet",
 	monster.EnvTrainingDummy:              "GM-only training targets",
@@ -213,12 +214,14 @@ func publicRules() publicstats.RulesResponse {
 	if eventbot.EnabledFromEnv() {
 		eventBotNow = "EventBot announces the schedule file's chat events, takes entries and answers by whisper, draws each round's winner and pays the file's item prize (audited, capped per account per day)."
 	}
+	caravanCfg := caravanai.ConfigFromEnv()
 	return publicstats.RulesResponse{
 		Rules: []publicstats.Rule{
-			{Flag: caravanai.EnvAICaravans, On: caravanai.ConfigFromEnv().Enabled,
+			{Flag: caravanai.EnvAICaravans, On: caravanCfg.Enabled,
 				Native: "These autonomous player-like caravan agents are a port-only addition.",
-				Now:    "AI traders, hunters and thieves use the three-town highway. Nearby Hunters can escort recruiting Traders for gold, with continuous proximity required and at most three paid deliveries per character per UTC day; hiring an AI Hunter costs 15000 gold.",
-				Why:    "Populates the trade roads with optional job encounters."},
+				Now: fmt.Sprintf("AI traders, hunters and thieves use the three-town highway. Nearby Hunters can escort recruiting Traders for gold, staying close for nearly the whole run, with at most %d paid deliveries per Hunter per UTC day; hiring an AI agent costs %s gold.",
+					caravanai.MaxPaidEscortsPerDay, caravanai.GoldText(caravanCfg.HireFeeGold)),
+				Why: "Populates the trade roads with optional job encounters."},
 			{Flag: progression.EnvLevelCap, On: levelCap == progression.ExpansionLevelCap,
 				Native: "The character level cap is 90.",
 				Now:    "The character level cap is 110, using the installed v1.150 experience curve.",

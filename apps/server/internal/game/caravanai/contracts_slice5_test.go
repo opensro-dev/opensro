@@ -291,8 +291,8 @@ func TestHireFeeRefusalBindsNobody(t *testing.T) {
 	affordable, asked := false, 0
 	rt.hooks.OnHireFee = func(_, _ string, fee int64) bool {
 		asked++
-		if fee < HireFeeGold {
-			t.Errorf("the hook was asked %d gold, under the hire fee %d", fee, HireFeeGold)
+		if fee < rt.HireFee() {
+			t.Errorf("the hook was asked %d gold, under the hire fee %d", fee, rt.HireFee())
 		}
 		return affordable
 	}

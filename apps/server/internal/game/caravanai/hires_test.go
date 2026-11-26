@@ -125,7 +125,7 @@ func TestHireRosterMarksWhoIsAvailableHere(t *testing.T) {
 	if reply := rt.HireAgentStars("division", "Boss", domain.JobTrader, "[AI]Trader_Jin", 5, 1000); !strings.Contains(reply, "joins you") {
 		t.Fatalf("hire refused: %s", reply)
 	}
-	if want := -(HireFeeGold + GoodsForStars(5)); paid["Boss"] != want {
+	if want := -(rt.HireFee() + GoodsForStars(5)); paid["Boss"] != want {
 		t.Fatalf("5-star hire charged %d, want %d", paid["Boss"], want)
 	}
 	rows := rt.HireRoster("division", "Boss", domain.JobTrader, TownJangan, 1000)

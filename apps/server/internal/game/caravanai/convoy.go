@@ -40,7 +40,6 @@ const (
 	EscortTeleportDistance  float64 = 150 * UnitsPerMeter
 	escortFerryWaitDistance         = 20 * UnitsPerMeter
 
-	HireFeeGold int64 = BaseHunterHireFeeGold
 	// HireLeaderMissingMs ends a hire whose hirer stays offline or out of
 	// the main world this long.
 	HireLeaderMissingMs int64 = 2 * 60_000

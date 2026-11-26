@@ -203,8 +203,8 @@ func TestHireRulesFeesGoodsAndAvailability(t *testing.T) {
 	if reply := rt.HireAgent("division", "Hunter", domain.JobHunter, "[AI]Trader_Jin", 1000); !strings.Contains(reply, "joins you") {
 		t.Fatalf("a Hunter could not hire a Trader: %s", reply)
 	}
-	if paid["Hunter"] != -(HireFeeGold + goods) {
-		t.Fatalf("hiring a Trader charged %d, want fee %d + goods %d", -paid["Hunter"], HireFeeGold, goods)
+	if paid["Hunter"] != -(rt.HireFee() + goods) {
+		t.Fatalf("hiring a Trader charged %d, want fee %d + goods %d", -paid["Hunter"], rt.HireFee(), goods)
 	}
 	for _, offer := range rt.HireOffers("division", domain.JobTrader) {
 		if offer.Name == "[AI]Trader_Jin" {
@@ -347,7 +347,7 @@ func TestHandsOffHireEndsWhenTheTradersSellOrThePartyGoes(t *testing.T) {
 		t.Fatalf("the Trader left the town it sold in: %v", at)
 	}
 	sale := cost * int64(100+HiredGoodsMarginPerStarPct*int(stars)) / 100
-	if paid["Boss"] != -(2*HireFeeGold+cost)+sale {
+	if paid["Boss"] != -(2*rt.HireFee()+cost)+sale {
 		t.Fatalf("finished run paid %d, want the sale %d after fees and goods", paid["Boss"], sale)
 	}
 
@@ -383,8 +383,8 @@ func TestHandsOffHireEndsWhenTheTradersSellOrThePartyGoes(t *testing.T) {
 	if unit := step("[AI]Trader_Mei", 43_000); unit.HiredBy != "" {
 		t.Fatal("the hire outlived the disbanded party")
 	}
-	if paid["Boss"] != -HireFeeGold {
-		t.Fatalf("a disbanded hire returned %d, want only the fee kept", paid["Boss"]+HireFeeGold)
+	if paid["Boss"] != -rt.HireFee() {
+		t.Fatalf("a disbanded hire returned %d, want only the fee kept", paid["Boss"]+rt.HireFee())
 	}
 
 	// The hirer logs off: the agent waits, then goes home after two minutes.
