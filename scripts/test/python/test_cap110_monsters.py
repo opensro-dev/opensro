@@ -750,7 +750,9 @@ class Cap110MonstersTest(unittest.TestCase):
 		radii, generate = {}, {}
 		for line in evidence.read_text(encoding="utf-8").splitlines():
 			columns = line.split("\t")
-			if line.startswith("#") or len(columns) != 22 or columns[11] != "1":
+			# 22 columns, or 23 since the nest spawn kind joined the table
+			# (#4567); the Go loader (population_evidence.go) takes both.
+			if line.startswith("#") or len(columns) not in (22, 23) or columns[11] != "1":
 				continue
 			radii[float(columns[5])] = radii.get(float(columns[5]), 0) + 1
 			generate[float(columns[6])] = generate.get(float(columns[6]), 0) + 1
