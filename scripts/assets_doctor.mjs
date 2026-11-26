@@ -31,6 +31,7 @@ import {
 	readPreparationManifest
 } from "./build/shared/clientInputs.mjs";
 import { sha256File } from "./build/shared/hash.mjs";
+import { PORTABLE_OPT_IN, portableAllowed } from "./build/shared/nativeMipGenerator.mjs";
 import { resolveVsroRoot } from "./build/shared/laterClientRoot.mjs";
 import { runPython } from "./build/shared/pythonRun.mjs";
 
@@ -138,7 +139,19 @@ function checkTools( report ) {
 	}
 	const runtime = path.join( process.env.WINDIR ?? "C:\\Windows", "SysWOW64", D3DX_RUNTIME );
 	if ( existsSync( runtime ) ) report.pass( "DirectX runtime", runtime );
-	else report.fail( "DirectX runtime", `${D3DX_RUNTIME} is missing; install the DirectX End-User Runtime` );
+	else if ( portableAllowed() ) {
+		// The build accepts this host: the portable mips are equivalent, not
+		// byte-identical, so a release build still needs the runtime.
+		report.warn(
+			"DirectX runtime",
+			`${D3DX_RUNTIME} is missing; ${PORTABLE_OPT_IN}=1 builds portable mips (not byte-identical)`
+		);
+	} else {
+		report.fail(
+			"DirectX runtime",
+			`${D3DX_RUNTIME} is missing; install the DirectX End-User Runtime, or set ${PORTABLE_OPT_IN}=1 for a local build`
+		);
+	}
 }
 
 /*

@@ -49,8 +49,14 @@ func (game *gameplayPlane) newMissionTicker(peerReferences *action.PeerReference
 	// from broadcasting movements for objects production never spawned.
 	var ticker *simulation.Ticker
 	// A slow action tick names its sub-step on /transport/metrics slow_hooks.
-	game.items.Steps.Slow = func(name string, elapsed time.Duration) {
-		game.hub.RecordSlowStep("action.TickHook/"+name, elapsed)
+	// A plane without a hub (the wiring tests) leaves this and the
+	// publication-hold sinks below nil, which drops the report: a sink bound
+	// to a nil hub panicked the first time a step or a hold crossed the slow
+	// threshold on a loaded machine.
+	if game.hub != nil {
+		game.items.Steps.Slow = func(name string, elapsed time.Duration) {
+			game.hub.RecordSlowStep("action.TickHook/"+name, elapsed)
+		}
 	}
 	// Each action step is also a zone on the tick's timeline (#2301);
 	// the ticker is composed below, so the seam resolves it per step.
@@ -71,9 +77,11 @@ func (game *gameplayPlane) newMissionTicker(peerReferences *action.PeerReference
 	}
 	// A slow publication-gate hold names its holder there too
 	// (publication_holds), so a waiting step is not mistaken for the stall.
-	game.items.PublicationHold = game.hub.RecordPublicationHold
 	// The re-entry rebuild those holds wait on names its own parts (#2802).
-	game.deps.PublicationHold = game.hub.RecordPublicationHold
+	if game.hub != nil {
+		game.items.PublicationHold = game.hub.RecordPublicationHold
+		game.deps.PublicationHold = game.hub.RecordPublicationHold
+	}
 	// Every hook carries the name slow-hook reports print (#2294): the
 	// closures below would otherwise report as newMissionTicker.funcN.
 	hooks := []simulation.NamedTickHook{
