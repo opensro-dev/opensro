@@ -743,6 +743,20 @@ func TestCaravanPartyAndMovementPolish(t *testing.T) {
 	_, hirerConn := bindSession("acct-hirer", hirer)
 	_, otherConn := bindSession("acct-other", other)
 
+	// Agents take only suited players as prey, when observing and at the blow.
+	if _, ok := game.caravanPrey(other.Name); !ok || !game.caravanStrikeable(other) {
+		t.Fatal("a suited, living player is not prey")
+	}
+	var suit []domain.InventoryRow
+	deps.MutateCharacter(other, "take off suit", func() { suit, other.MissionInventory = other.MissionInventory, nil })
+	if _, ok := game.caravanPrey(other.Name); ok {
+		t.Fatal("an agent observed a player out of a job suit as prey")
+	}
+	if game.caravanStrikeable(other) {
+		t.Fatal("an agent may strike a player out of a job suit")
+	}
+	deps.MutateCharacter(other, "put on suit", func() { other.MissionInventory = suit })
+
 	waitForOpcode := func(conn *wiringPublicationConn, opcode uint16) transport.Frame {
 		t.Helper()
 		deadline := time.After(2 * time.Second)

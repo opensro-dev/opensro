@@ -360,8 +360,7 @@ func (game *gameplayPlane) caravanAgentsTick(ticker *simulation.Ticker, nowMs in
 			if c == nil {
 				continue
 			}
-			// A player out of a job suit is no party to the job war: agents never see him as prey.
-			if p, ok := game.caravanPlayer(game.divisionID, c.Name); ok && p.HPPercent > 0 && p.JobType != domain.JobNone {
+			if p, ok := game.caravanPrey(c.Name); ok {
 				p.Distance = float32(caravanai.WaypointDistance(p.At, caravanai.Waypoint{RegionID: unit.RegionID, X: unit.X, Z: unit.Z}))
 				if p.Distance <= 320 {
 					nearby = append(nearby, p.ObservedPlayer)
@@ -451,11 +450,7 @@ func (game *gameplayPlane) caravanAgentsTick(ticker *simulation.Ticker, nowMs in
 				}
 			} else if !deadNow && decision.Action == caravanai.ActionAttackTarget && !mustRejoin {
 				if target := game.deps.CharacterByName(game.divisionID, decision.TargetName); target != nil {
-					alive := false
-					game.deps.Read(game.divisionID, func() {
-						alive = enterworld.CharacterAlive(target) && enterworld.DressedJob(target) != domain.JobNone
-					})
-					if alive {
+					if game.caravanStrikeable(target) {
 						tSpawn := game.items.LiveSpawnFor(game.divisionID, target)
 						targetDist := caravanai.WaypointDistance(
 							caravanai.Waypoint{RegionID: updated.RegionID, X: updated.X, Z: updated.Z},
