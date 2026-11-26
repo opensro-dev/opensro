@@ -518,6 +518,62 @@ test("ordinary riding horse uses its private record without a public owner tail"
 	gameplay.dispose();
 });
 
+/*
+================
+an arrival spawn burst proposes only drops the pet may take
+
+BR-261126-1224-8083, the town-arrival shape: entering an area
+republishes every ground item around the pet in one burst, and the
+reporter read the result as his bag scrolls wandering into the pet.
+The loop's whole vocabulary is the native tag-8 request (77DFA0): it
+owns no frame that could move a bag item, so a burst can only ever
+ask for ground drops. With pickup enabled and categories on but
+"other players' items" off (0x87), of three Reverse Return Scroll
+heaps - public, a stranger's, the owner's - only the owner's is
+proposed; a public heap waits for the 0x40 bit. With pickup off
+(7, the mode a freshly summoned pet carries) the same burst
+proposes nothing at all.
+================
+*/
+test("an arrival spawn burst proposes only drops the pet may take", () => {
+	const scroll = 0x19ec; // ITEM_MALL_REVERSE_RETURN_SCROLL (3/3/3/3)
+	const f = fixture();
+	const sent = [];
+	const gameplay = createGameplay( frame => sent.push( frame ), undefined, undefined, f.frame.read );
+	gameplay.bootstrap( {
+		inventorySlotCount: 45,
+		equipmentSlotCount: 13,
+		refObjSnapshot: [ { kind: "cos", refObjId: 9, tidWord: 0x21c6 } ]
+	} );
+	gameplay.worldReady();
+	gameplay.seed( f.frame.local );
+	const record = new Uint8Array( 29 );
+	const view = new DataView( record.buffer );
+	view.setUint32( 0, 2, true );
+	view.setUint32( 4, 9, true );
+	view.setUint32( 8, 100, true );
+	view.setUint32( 16, 0x87, true );
+	record[22] = 28;
+	gameplay.receive( { opcode: 0x3158, payload: record }, 0 );
+	// The arrival burst: three scroll heaps at once.
+	gameplay.entityLifecycle( { kind: "spawn", entity: f.drop( 20, 3, scroll, 0 ) } );
+	gameplay.entityLifecycle( { kind: "spawn", entity: f.drop( 21, 5, scroll, 99 ) } );
+	gameplay.entityLifecycle( { kind: "spawn", entity: f.drop( 22, 10, scroll, 1 ) } );
+	gameplay.step( 0, f.frame.local );
+	assert.deepEqual( sent, [ cosPickupRequest( 2, 22 ) ] );
+	gameplay.receive( { opcode: 0xb69e, payload: Uint8Array.of( 1, 8, 2, 0, 0, 0, 22, 0, 0, 0 ) }, 1 );
+	gameplay.step( 2, f.frame.local );
+	// The public and stranger heaps stay unproposed, and every frame
+	// the loop ever sent is a COS command, never an item move.
+	assert.equal( sent.length, 1 );
+	assert.ok( sent.every( frame => frame.opcode === 0x769e ) );
+	gameplay.dispose();
+
+	const off = fixture( 7 );
+	off.drop( 20, 3, scroll, 1 );
+	assert.deepEqual( off.owner.step( off.frame ), [] );
+});
+
 test("a refused target stays retired through a republication until it despawns", () => {
 	const f = fixture();
 	const entity = f.drop( 901, 10 );
