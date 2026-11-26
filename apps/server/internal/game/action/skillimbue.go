@@ -145,7 +145,7 @@ func (rt *Runtime) instantSelfEffectCost(division string, c *enterworld.Characte
 		// An unparsed row or a cooling skill answers before the weapon.
 		return cost, code
 	}
-	if refusal := skillEquipmentRefusal(c, rt.statCatalogs().Items, skill); refusal != 0 {
+	if refusal := skillEquipmentRefusal(c, rt.statCatalogs().Items, skill, rt.guildFortressRole(division, c)); refusal != 0 {
 		return 0, refusal
 	}
 	return cost, code
@@ -235,6 +235,11 @@ func (rt *Runtime) resolvePlayerImpactBehindWall(division, name string, skill en
 	// A monster-shaped attacker's hit is its level-scaled amount alone;
 	// no imbue share joins it.
 	if shaped := rt.findCharacter(division, name); shaped != nil && shaped.TransformMode == 1 {
+		return split, err
+	}
+	// A fortress weapon's hit is its hit group's amount alone; no
+	// imbue share joins it.
+	if rt.fortressArmed(division, name) {
 		return split, err
 	}
 	imbue, imbueAbnormal := rt.activeWeaponImbue(division, name, nowMs)
