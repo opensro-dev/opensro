@@ -42,6 +42,10 @@ type Stats struct {
 	// OneDamageHits is the defending monster's port-only rule: every hit
 	// lands for exactly 1 (OneDamageCap, monster.MonsterRef.OneDamageHits).
 	OneDamageHits bool
+	// Structure is the defending fortress structure: the hit-outcome
+	// routine's target-side group replaces the lane formula for hits on
+	// it (StructureHitDamage, monster.MonsterRef.Structure).
+	Structure bool
 	// Native B2..B5 final lane factors. Zero is the native no-modifier sentinel.
 	PhysicalOutgoing, MagicalOutgoing, PhysicalIncoming, MagicalIncoming float32
 	// Native AE..B1 received-damage factors by lane and attack kind (odar,
@@ -514,6 +518,7 @@ func MonsterStats(ref monster.MonsterRef) (Stats, error) {
 	}
 	return Stats{
 		OneDamageHits:   ref.OneDamageHits,
+		Structure:       ref.Structure,
 		Level:           ref.Level,
 		MaxLevel:        ref.Level,
 		PhysicalDefense: ref.PhysicalDefense,
