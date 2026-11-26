@@ -22,8 +22,10 @@ package match_test
 //	modify           -> 0xB3DC ack + the listing updates in place;
 //	delete           -> 0xB535 {id} + the row disappears;
 //	mentor cycle     -> 0xB55D / 0xB701 / 0xB70B twins, byte-exact;
-//	duplicate reg    -> SILENT refusal (flag-2 codes unpinned; the
-//	                    game-ready barrier proves nothing rode);
+//	duplicate reg    -> 0xB6FF {2, 0x24} (the precheck's standing
+//	                    refusal, JOIN_ERROR_DUPLE), and the same code
+//	                    refuses a register on the other board while
+//	                    one registration is live;
 //	unwired joins    -> 0x75BF/0x7592 answer the pinned 0xB5BF/0xB592
 //	                    {01 00} refused ack when the party/mentor seams
 //	                    are not assigned (this suite wires neither -
@@ -413,10 +415,16 @@ func TestMatchLaneEndToEndOverWire(t *testing.T) {
 	)
 	expectExactFrame(t, alice, match.OpPartyListingPage, aliceListing, "alice party listing")
 
-	// ---- duplicate register: native category-2 unknown error ----
-	sendFrame(t, hero, match.OpPartyRegisterRequest, partyRequest(0, 9999, 0, 0, 0, 0, "dup"))
-	expectExactFrame(t, hero, match.OpPartyRegisterAck, []byte{2, 2}, "duplicate register refusal")
+	// ---- duplicate register: the record-again refusal ----
+	sendFrame(t, hero, match.OpPartyRegisterRequest, partyRequest(0, 9999, 0, 0, 1, 80, "dup"))
+	expectExactFrame(t, hero, match.OpPartyRegisterAck, []byte{2, 0x24}, "duplicate register refusal")
 	gameReadyBarrier(t, hero, "post-duplicate-register")
+
+	// ---- one standing at a time: a live party registration also
+	// refuses a mentor registration ----
+	sendFrame(t, hero, match.OpMentorRegisterRequest, mentorRequest(0, 7, 1, "hero camp"))
+	expectExactFrame(t, hero, match.OpMentorRegisterAck, []byte{2, 0x24}, "cross-board register refusal")
+	gameReadyBarrier(t, hero, "post-cross-board-register")
 
 	// ---- modify: 0xB3DC ack + the listing updates in place ----
 	sendFrame(t, hero, match.OpPartyModifyRequest, partyRequest(1, 1001, 1, 0, 40, 90, "hero party v2"))
@@ -452,9 +460,19 @@ func TestMatchLaneEndToEndOverWire(t *testing.T) {
 	heroMentorAck := concat([]byte{1}, u32le(3), u32le(7), []byte{1}, wideStr("hero camp"), u32le(0))
 	expectExactFrame(t, hero, match.OpMentorRegisterAck, heroMentorAck, "mentor register ack")
 
+	// Alice still holds her party row: she must release it before the
+	// mentor board takes her (one standing at a time).
+	sendFrame(t, alice, match.OpPartyDeleteRequest, u32le(2))
+	expectExactFrame(t, alice, match.OpPartyDeleteAck, concat([]byte{1}, u32le(2)), "alice party delete ack")
+
 	sendFrame(t, alice, match.OpMentorRegisterRequest, mentorRequest(0, 8, 2, "alice camp"))
 	aliceMentorAck := concat([]byte{1}, u32le(4), u32le(8), []byte{2}, wideStr("alice camp"), u32le(0))
 	expectExactFrame(t, alice, match.OpMentorRegisterAck, aliceMentorAck, "alice mentor register ack")
+
+	// A second mentor registration while one is live: record-again.
+	sendFrame(t, alice, match.OpMentorRegisterRequest, mentorRequest(0, 8, 2, "alice camp again"))
+	expectExactFrame(t, alice, match.OpMentorRegisterAck, []byte{2, 0x24}, "duplicate mentor register refusal")
+	gameReadyBarrier(t, alice, "post-duplicate-mentor-register")
 
 	sendFrame(t, hero, match.OpMentorPageRequest, []byte{1})
 	mentorListing := concat(

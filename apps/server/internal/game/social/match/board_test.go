@@ -53,6 +53,28 @@ func TestPartyRegisterAppearsInListingWithOwnRowFirst(t *testing.T) {
 	}
 }
 
+func TestHasRegistrationSpansBothBoards(t *testing.T) {
+	board := NewBoard()
+	if board.HasRegistration(ownerOf("Hero")) {
+		t.Fatal("empty board reports a registration")
+	}
+	if _, ok := board.RegisterMentor(boardDivision, ownerOf("Hero"), MentorEntry{Requester: "Hero"}); !ok {
+		t.Fatal("mentor register refused")
+	}
+	if !board.HasRegistration(ownerOf("Hero")) {
+		t.Fatal("a mentor registration does not read as a standing")
+	}
+	if board.HasRegistration(ownerOf("Alice")) {
+		t.Fatal("another owner reads as registered")
+	}
+	if !board.DeleteMentor(ownerOf("Hero"), 1) {
+		t.Fatal("mentor delete refused")
+	}
+	if board.HasRegistration(ownerOf("Hero")) {
+		t.Fatal("a deleted registration still reads as a standing")
+	}
+}
+
 func TestPartyRegisterRefusesADuplicateOwner(t *testing.T) {
 	board := NewBoard()
 	if _, ok := board.RegisterParty(boardDivision, ownerOf("Hero"), PartyEntry{MasterName: "Hero"}); !ok {
