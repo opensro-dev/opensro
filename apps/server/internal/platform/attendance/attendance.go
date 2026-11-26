@@ -317,6 +317,20 @@ ON CONFLICT (character_id, month_key) DO UPDATE SET checked_bits = checked_bits 
 
 /*
 ================
+Service::Now
+
+The ledger's clock.
+================
+*/
+func (s *Service) Now() time.Time {
+	if s == nil || s.now == nil {
+		return time.Now()
+	}
+	return s.now()
+}
+
+/*
+================
 Service::Close
 
 Closes the store; later calls return ErrClosed.

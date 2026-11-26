@@ -6,12 +6,14 @@ attendance.go - the attendance calendar snapshot (port-only, not native)
 #3255: with SRO_ATTENDANCE on, every entered session is kept told of its
 character's attendance month for the client's calendar window: one
 snapshot (0x3FD2) on first sight and whenever the month changes - a
-check-in, a claim, the 04:00 UTC day turn. 0x3FD2 is a port-only opcode:
-no v1.150 client or v1.188 server uses it (0x3FC0..0x3FD1 are the band's
-other port-only allocations, server wire and client dispatch searched),
-and a client that predates it drops the unknown opcode, so no
-release-protocol bump carries it. With the flag off nothing is ever
-sent.
+check-in, a claim, the 04:00 UTC day turn. The client marks today with
+0x7FD2 (empty body for now; later claim ops will share the opcode).
+0x3FD2/0x7FD2 are port-only: no v1.150 client or v1.188 server uses
+them (0x3FC0..0x3FD1 and 0x7FCA/0x7FCF are the band's other port-only
+allocations, server wire and client dispatch searched). A client that
+predates them drops 0x3FD2 and never sends 0x7FD2, so no release-
+protocol bump carries them. With the flag off nothing is ever sent
+and 0x7FD2 is ignored.
 
 Body, little-endian:
 
@@ -40,6 +42,10 @@ import "encoding/binary"
 
 // OpAttendanceSnapshot is the port-only S->C attendance calendar snapshot.
 const OpAttendanceSnapshot uint16 = 0x3FD2
+
+// OpAttendanceCheckIn is the port-only C->S attendance request.
+// Slice 2: an empty body checks in today. Later slices add claim ops.
+const OpAttendanceCheckIn uint16 = 0x7FD2
 
 // AttendanceClockBytes is the trailing serverNowMs a changed-bytes check skips.
 const AttendanceClockBytes = 8

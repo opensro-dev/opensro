@@ -210,6 +210,9 @@ type Runtime struct {
 	// CaravanHire answers the port-only caravan hire window's request
 	// (OpCaravanHireRequest); nil when AI caravans are off.
 	CaravanHire func(division string, c *enterworld.Character, payload []byte) []wire.Frame
+	// AttendanceCheckIn answers the port-only attendance check-in
+	// (wire.OpAttendanceCheckIn); nil when SRO_ATTENDANCE is off.
+	AttendanceCheckIn AttendanceCheckInFunc
 	// CaravanHireLabel names the caravan hire row an NPC offers this
 	// character ("" for none); select sends it as OpCaravanHireNpc so the
 	// client lists it first in the NPC's menu.

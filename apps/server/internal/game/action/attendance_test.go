@@ -1,6 +1,11 @@
 package action
 
-import "testing"
+import (
+	"testing"
+
+	"opensro.online/server/internal/game/enterworld"
+	"opensro.online/server/internal/game/item/wire"
+)
 
 /*
 ================
@@ -18,5 +23,42 @@ func TestAttendanceFromEnv(t *testing.T) {
 		if got := AttendanceFromEnv(); got != want {
 			t.Fatalf("%s=%q: %v, want %v", EnvAttendance, value, got, want)
 		}
+	}
+}
+
+/*
+================
+TestHandleAttendanceCheckIn
+
+Off (nil sink) is silent. On, the sink's frames go out; a nil return
+from the sink is a silent refusal; a nil character is ignored.
+================
+*/
+func TestHandleAttendanceCheckIn(t *testing.T) {
+	rt := &Runtime{}
+	if got := rt.HandleAttendanceCheckIn("", &enterworld.Character{ID: 1}, nil); len(got.Frames) != 0 || got.DiagnosticRefusal != "" {
+		t.Fatalf("flag off answered %+v", got)
+	}
+
+	var sawID int64
+	var sawPayload []byte
+	rt.AttendanceCheckIn = func(characterID int64, payload []byte) []wire.Frame {
+		sawID, sawPayload = characterID, payload
+		return []wire.Frame{{Opcode: wire.OpAttendanceSnapshot, Payload: []byte{1, 2, 3}}}
+	}
+	got := rt.HandleAttendanceCheckIn("div", &enterworld.Character{ID: 7}, []byte{9})
+	if sawID != 7 || len(sawPayload) != 1 || sawPayload[0] != 9 {
+		t.Fatalf("sink saw id=%d payload=%v", sawID, sawPayload)
+	}
+	if len(got.Frames) != 1 || got.Frames[0].Opcode != wire.OpAttendanceSnapshot {
+		t.Fatalf("success frames %+v", got.Frames)
+	}
+
+	rt.AttendanceCheckIn = func(int64, []byte) []wire.Frame { return nil }
+	if got := rt.HandleAttendanceCheckIn("", &enterworld.Character{ID: 1}, nil); len(got.Frames) != 0 || got.DiagnosticRefusal == "" {
+		t.Fatalf("refused sink %+v", got)
+	}
+	if got := rt.HandleAttendanceCheckIn("", nil, nil); len(got.Frames) != 0 {
+		t.Fatalf("nil character answered %+v", got)
 	}
 }
