@@ -16,6 +16,7 @@ import (
 	"testing"
 
 	"opensro.online/server/internal/domain"
+	"opensro.online/server/internal/game/combat"
 	"opensro.online/server/internal/game/enterworld"
 	"opensro.online/server/internal/game/item/statuseffect"
 	"opensro.online/server/internal/game/item/wire"
@@ -264,6 +265,117 @@ func TestTransformedPlayerStrikesWithTheMonsterSkill(t *testing.T) {
 		if !ok || !bytes.Contains(cast.Payload, id) {
 			t.Fatalf("transformed %v: cast %+v does not use skill %d (%s)", transformed, r.Frames, want, r.DiagnosticRefusal)
 		}
+	}
+}
+
+/*
+==================
+TestTransformedPlayerHitIsLevelScaled
+
+A monster-shaped player's hit is the level-scaled amount (5L plus a
+draw below 5L) per impact, never the copied skill's formula: at level
+1 with every draw 137, each of the strike's two impacts deals
+5 + 137 % 5 = 7.
+==================
+*/
+func TestTransformedPlayerHitIsLevelScaled(t *testing.T) {
+	rt, _, c, target := maskFixture(t, 1, maskMonsterRef)
+	rt.CombatRoll = func() (uint32, error) { return 137, nil }
+	if r := useMask(rt, c); len(r.Frames) == 0 || r.Frames[0].Payload[0] != 1 {
+		t.Fatalf("mask use refused: %+v", r)
+	}
+	if c.TransformMode != 1 {
+		t.Fatalf("transform mode = %d, want 1", c.TransformMode)
+	}
+	before, ok := rt.Monsters.Get(testDivision, target.Gid)
+	if !ok {
+		t.Fatal("target missing")
+	}
+	r := rt.HandleTargetInteract(testDivision, c, wire.BasicAttackEngage{TargetGid: target.Gid}.Encode())
+	if r.DiagnosticRefusal != "" {
+		t.Fatal(r.DiagnosticRefusal)
+	}
+	after, ok := rt.Monsters.Get(testDivision, target.Gid)
+	if !ok {
+		t.Fatal("target missing")
+	}
+	if got, want := before.CurrentHP-after.CurrentHP, uint32(14); got != want {
+		t.Fatalf("transformed strike dealt %d, want %d (two impacts of 7)", got, want)
+	}
+}
+
+/*
+==================
+TestTransformedPlayerBlockedHitTakesNoDamageDraw
+
+The block roll comes first for a monster-shaped hit too: against a
+defender whose block chance is certain, the hit is a bare blocked
+record and the level-scaled damage is never drawn.
+==================
+*/
+func TestTransformedPlayerBlockedHitTakesNoDamageDraw(t *testing.T) {
+	rt, _, c, _ := maskFixture(t, 1, maskMonsterRef)
+	if r := useMask(rt, c); len(r.Frames) == 0 || r.Frames[0].Payload[0] != 1 {
+		t.Fatalf("mask use refused: %+v", r)
+	}
+	skill := enterworld.SkillRow{ID: maskMonsterSkill, Attack: enterworld.SkillAttack{Present: true, Flags: 5}}
+	draws := 0
+	rt.CombatRoll = func() (uint32, error) { draws++; return 137, nil }
+	out, err := rt.resolveCombatRequest(combatRequest{
+		actor:    criticalActor{division: testDivision, character: c.Name},
+		skill:    skill,
+		attacker: combat.Stats{Level: 1},
+		defender: combat.Stats{BlockRate: 100},
+		lanes:    skill.Attack.Flags & 0xc,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !out.Defender.Blocked || out.Defender.Damage != 0 {
+		t.Fatalf("blocked shaped hit = %+v, want a blocked record with no damage", out.Defender)
+	}
+	if draws != 0 {
+		t.Fatalf("blocked shaped hit consumed %d draws, want 0 (the damage draw never happens)", draws)
+	}
+}
+
+/*
+==================
+TestTransformedPlayerImpactAddsNoImbueShare
+
+A monster-shaped attacker holding a live imbue (lit before the mask)
+still deals only the level-scaled amount: no imbue share joins the hit,
+and a standing wall absorbs nothing from a lane-less hit.
+==================
+*/
+func TestTransformedPlayerImpactAddsNoImbueShare(t *testing.T) {
+	rt, _, c, _ := newCombatTestRuntime(t, 100000)
+	row := installFireImbue(t, rt, c)
+	if result := rt.HandleTargetInteract(testDivision, c, wire.SkillAction{ActionId: row.ID}.Encode()); result.DiagnosticRefusal != "" {
+		t.Fatal(result.DiagnosticRefusal)
+	}
+	if imbue, _ := rt.activeWeaponImbue(testDivision, c.Name, rt.Now().UnixMilli()); !imbue.Pinned {
+		t.Fatal("imbue not live")
+	}
+	c.TransformMode = 1
+	rt.CombatRoll = func() (uint32, error) { return 137, nil }
+	// Value5 100 so an imbue share of even 1 would survive the integer
+	// division and move the total.
+	skill := enterworld.SkillRow{ID: 9002, Attack: enterworld.SkillAttack{
+		Present: true, Flags: 5, Percent: 100, Min: 10, Max: 20, Value5: 100, ImpactCount: 1,
+	}}
+	attacker := combat.Stats{Level: 1,
+		PhysicalAttackMin: 500, PhysicalAttackMax: 600, MagicalAttackMin: 500, MagicalAttackMax: 600}
+	wall := &enterworld.SkillWall{Mask: 0xc, Pool: 1000}
+	out, err := rt.resolvePlayerImpactBehindWall(testDivision, c.Name, skill, attacker, combat.Stats{}, rt.Now().UnixMilli(), false, wall)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if out.Defender.Damage != 7 {
+		t.Fatalf("shaped hit behind a wall dealt %d, want the level-scaled 7 alone", out.Defender.Damage)
+	}
+	if out.Absorbed != 0 {
+		t.Fatalf("wall absorbed %d from a lane-less hit, want 0", out.Absorbed)
 	}
 }
 

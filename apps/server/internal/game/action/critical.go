@@ -96,8 +96,17 @@ func (rt *Runtime) resolveCombatRequest(request combatRequest) (combat.WallOutco
 	actor.character = strings.ToLower(actor.character)
 	key := skill.ID & 0xffffff // key is 0x43000000 | skill ID.
 	previous := rt.criticals.actors[actor][key]
+	// A player in a monster's shape (transform mode 1) is the hit-outcome
+	// routine's own hit group: no critical is rolled for it and its damage
+	// never touches the lanes (the transformed branch below).
+	transformed := false
+	if actor.monster == 0 && actor.character != "" {
+		if shaped := rt.findCharacter(actor.division, actor.character); shaped != nil && shaped.TransformMode == 1 {
+			transformed = true
+		}
+	}
 	critical, next := false, previous
-	if request.lanes&4 != 0 {
+	if request.lanes&4 != 0 && !transformed {
 		rate, err := combat.EffectiveCriticalRate(attacker.CriticalRate, skill.CriticalModifier)
 		if err != nil {
 			return combat.WallOutcome{}, err
@@ -112,7 +121,7 @@ func (rt *Runtime) resolveCombatRequest(request combatRequest) (combat.WallOutco
 	// In the reference server's hit-outcome routine, MATTR_AVATAR_MDIA rolls
 	// after critical and before the damage lanes so the random stream order matches.
 	ignoreDefense := false
-	if actor.monster == 0 {
+	if actor.monster == 0 && !transformed {
 		if chance := combat.IgnoreDefenseChance(attacker, defender); chance > 0 {
 			mdiaKey := ignoreDefenseProbabilityPrefix | skill.ID&0xffffff
 			procced, mdiaNext, err := combat.CriticalOutcome(chance, rt.criticals.actors[actor][mdiaKey], rt.CombatRoll)
@@ -123,8 +132,44 @@ func (rt *Runtime) resolveCombatRequest(request combatRequest) (combat.WallOutco
 			ignoreDefense = procced
 		}
 	}
+	// rollBlock rolls the target's block chance on the attacker's history
+	// (key 0x42000000 | skill); the caller decides what a blocked record
+	// drops.
+	rollBlock := func() (bool, error) {
+		chance := combat.BlockChance(attacker, defender, skill.Attack.Flags, skill.Ck)
+		blockKey := 0x42000000 | skill.ID&0xffffff
+		blocked, blockNext, err := combat.CriticalOutcome(float64(chance), rt.criticals.actors[actor][blockKey], rt.CombatRoll)
+		if err != nil {
+			return false, err
+		}
+		rt.rememberProbability(actor, blockKey, blockNext)
+		return blocked, nil
+	}
+
 	var out combat.WallOutcome
 	var err error
+	if transformed {
+		// The block roll comes first, as for any hit; a blocked
+		// monster-shaped hit is a bare type-2 record and consumes no
+		// damage draw. The hit has no lanes, so a standing wall never
+		// splits it and its lane accumulators stay zero.
+		blocked := false
+		if skill.Attack.Present {
+			var blockErr error
+			blocked, blockErr = rollBlock()
+			if blockErr != nil {
+				return combat.WallOutcome{}, blockErr
+			}
+		}
+		if blocked {
+			return combat.WallOutcome{Defender: combat.Result{ResultFlags: 1, Blocked: true}}, nil
+		}
+		damage, damageErr := combat.LevelScaledDamage(attacker.Level, rt.CombatRoll)
+		if damageErr != nil {
+			return combat.WallOutcome{}, damageErr
+		}
+		return combat.WallOutcome{Defender: combat.Result{Damage: damage, ResultFlags: 1}}, nil
+	}
 	calculation := combat.AttackCalculation{
 		Attack: skill.Attack, OriginalFlags: skill.Attack.Flags, Lanes: request.lanes,
 		Player: actor.monster == 0, Critical: critical, IgnoreDefense: ignoreDefense,
@@ -141,13 +186,10 @@ func (rt *Runtime) resolveCombatRequest(request combatRequest) (combat.WallOutco
 	// skill rolls the target's block chance on the attacker's history
 	// (key 0x42000000 | skill); a block drops the defender's damage.
 	if skill.Attack.Present {
-		chance := combat.BlockChance(attacker, defender, skill.Attack.Flags, skill.Ck)
-		blockKey := 0x42000000 | skill.ID&0xffffff
-		blocked, blockNext, err := combat.CriticalOutcome(float64(chance), rt.criticals.actors[actor][blockKey], rt.CombatRoll)
-		if err != nil {
-			return combat.WallOutcome{}, err
+		blocked, blockErr := rollBlock()
+		if blockErr != nil {
+			return combat.WallOutcome{}, blockErr
 		}
-		rt.rememberProbability(actor, blockKey, blockNext)
 		if blocked {
 			out.Defender = combat.Result{ResultFlags: out.Defender.ResultFlags, Blocked: true}
 		} else if skill.CkChance != 0 {
