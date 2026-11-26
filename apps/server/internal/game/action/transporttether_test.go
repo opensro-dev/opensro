@@ -147,6 +147,29 @@ func TestTravelledTransportArrivesAtTheDestination(t *testing.T) {
 
 /*
 ================
+TestRiddenTransportGetsNoOwnerArrival
+
+A trader riding the transport through the gate arrives on it: the
+re-entry places the rider on the mount, so the owner is sent no
+arrival spawn that would replace the mount under them.
+================
+*/
+func TestRiddenTransportGetsNoOwnerArrival(t *testing.T) {
+	rt, clock, c := caravanFixture(t)
+	if !c.ActiveCOS.Mounted {
+		t.Fatal("the fixture's trader should ride the transport")
+	}
+	rt.advancePets(clock.Now().UnixMilli())
+	clock.Advance(2 * time.Second)
+	hotan := simulation.Spawn{RegionID: 0x5c87, X: 1169, Y: 244, Z: 223}
+	rt.relocateReturningPet(testDivision, c, hotan)
+	if states := arrivalSpawnStates(t, rt.petArrivalFrames(testDivision, c)); len(states) != 0 {
+		t.Fatalf("the ridden transport was sent an owner arrival: %v", states)
+	}
+}
+
+/*
+================
 TestTownReviveLeavesTheParkedTransport
 
 A trader who dies beside a parked transport and revives at the town's
