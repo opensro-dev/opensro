@@ -17,6 +17,7 @@ import assert from "node:assert/strict";
 
 const {
 	CAMERA_HEIGHT_SNAP_UNITS,
+	CAMERA_POSITION_SNAP_UNITS,
 	CAMERA_SMOOTH_MAX_STEP_SECONDS,
 	beginCameraSmoothingFrame,
 	createCameraSmoothing,
@@ -38,7 +39,13 @@ the eased heights.
 function run( heights, { frame = FRAME, space = 0x6a62, mounted = false } = {} ) {
 	const state = createCameraSmoothing(), out = [];
 	heights.forEach( ( height, i ) => {
-		const dt = beginCameraSmoothingFrame( state, i * frame, space, mounted );
+		const dt = beginCameraSmoothingFrame( state, {
+			seconds: i * frame,
+			space: space,
+			mounted: mounted,
+			x: 0,
+			z: 0
+		} );
 		out.push( smoothCameraHeight( state, height, dt ) );
 	} );
 	return out;
@@ -98,15 +105,31 @@ test("a teleport, a region or dungeon change, a mount and a long frame gap snap"
 	assert.equal( jump[2], 10 + CAMERA_HEIGHT_SNAP_UNITS + 1, "a large jump snaps" );
 
 	const state = createCameraSmoothing();
-	smoothCameraHeight( state, 10, beginCameraSmoothingFrame( state, 0, 1, false ) );
-	smoothCameraHeight( state, 10, beginCameraSmoothingFrame( state, FRAME, 1, false ) );
+	smoothCameraHeight(
+		state,
+		10,
+		beginCameraSmoothingFrame( state, { seconds: 0, space: 1, mounted: false, x: 0, z: 0 } )
+	);
+	smoothCameraHeight(
+		state,
+		10,
+		beginCameraSmoothingFrame( state, { seconds: FRAME, space: 1, mounted: false, x: 0, z: 0 } )
+	);
 	assert.equal(
-		smoothCameraHeight( state, 12, beginCameraSmoothingFrame( state, 2 * FRAME, 2, false ) ),
+		smoothCameraHeight(
+			state,
+			12,
+			beginCameraSmoothingFrame( state, { seconds: 2 * FRAME, space: 2, mounted: false, x: 0, z: 0 } )
+		),
 		12,
 		"new space"
 	);
 	assert.equal(
-		smoothCameraHeight( state, 14, beginCameraSmoothingFrame( state, 3 * FRAME, 2, true ) ),
+		smoothCameraHeight(
+			state,
+			14,
+			beginCameraSmoothingFrame( state, { seconds: 3 * FRAME, space: 2, mounted: true, x: 0, z: 0 } )
+		),
 		14,
 		"mounted"
 	);
@@ -114,16 +137,57 @@ test("a teleport, a region or dungeon change, a mount and a long frame gap snap"
 		smoothCameraHeight(
 			state,
 			16,
-			beginCameraSmoothingFrame( state, 3 * FRAME + CAMERA_SMOOTH_MAX_STEP_SECONDS + 0.01, 2, true )
+			beginCameraSmoothingFrame( state, {
+				seconds: 3 * FRAME + CAMERA_SMOOTH_MAX_STEP_SECONDS + 0.01,
+				space: 2,
+				mounted: true,
+				x: 0,
+				z: 0
+			} )
 		),
 		16,
 		"a long gap"
 	);
 	assert.equal(
-		smoothCameraHeight( state, 18, beginCameraSmoothingFrame( state, 0, 2, true ) ),
+		smoothCameraHeight(
+			state,
+			18,
+			beginCameraSmoothingFrame( state, { seconds: 0, space: 2, mounted: true, x: 0, z: 0 } )
+		),
 		18,
 		"time went back"
 	);
+});
+
+/*
+================
+sidewaysTeleport
+
+BR-261126-2312-EE74: a wizard's teleport moved the target far sideways but
+only about 21 units up, under the height snap. The eased height stayed
+under the new ground, the collision pulled the camera in to the feet, and
+the release eased it back out. A sideways jump now snaps both, while a
+run at any speed keeps easing.
+================
+*/
+test("a sideways teleport with a small height change snaps height and distance; running does not", () => {
+	const state = createCameraSmoothing();
+	const frame = ( i, x ) =>
+		beginCameraSmoothingFrame( state, { seconds: i * FRAME, space: 1, mounted: false, x, z: 0 } );
+	smoothCameraHeight( state, 732, frame( 0, 1323 ) );
+	smoothCameraDistance( state, 150, frame( 0, 1323 ) );
+	// Run at 300 units a second, three times a normal run: never a snap.
+	for ( let i = 1; i <= 30; i++ ) {
+		const dt = frame( i, 1323 + i * 5 );
+		assert.ok( dt > 0, `frame ${i} snapped while running` );
+		smoothCameraHeight( state, 732, dt );
+	}
+	// The teleport: far sideways, 21 up.
+	const dt = frame( 31, 1189 );
+	assert.equal( dt, 0, "the sideways jump snaps" );
+	assert.ok( 1323 + 30 * 5 - 1189 > CAMERA_POSITION_SNAP_UNITS );
+	assert.equal( smoothCameraHeight( state, 753, dt ), 753, "the height lands on the new ground at once" );
+	assert.equal( smoothCameraDistance( state, 150, dt ), 150, "the distance takes the new spot as is" );
 });
 
 /*
@@ -147,7 +211,7 @@ distance
 */
 test("an obstruction pulls the camera in at once; its release eases back out without overshoot", () => {
 	const state = createCameraSmoothing();
-	const frame = i => beginCameraSmoothingFrame( state, i * FRAME, 0, false );
+	const frame = i => beginCameraSmoothingFrame( state, { seconds: i * FRAME, space: 0, mounted: false, x: 0, z: 0 } );
 	assert.equal( smoothCameraDistance( state, 150, frame( 0 ) ), 150 );
 	assert.equal( smoothCameraDistance( state, 150, frame( 1 ) ), 150 );
 	assert.equal( smoothCameraDistance( state, 60, frame( 2 ) ), 60, "pull-in is immediate" );
