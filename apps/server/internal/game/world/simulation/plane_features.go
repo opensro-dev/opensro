@@ -75,6 +75,12 @@ type PlaneFeatures struct {
 	// port gap kept as it is here; turning it on is a behaviour change for
 	// its own PR (#1764).
 	HelpCallSight bool
+	// MonsterSummonScrolls: a scroll that calls one monster beside its
+	// user (action/monstersummonscroll.go). Native: the reference
+	// server's expendable handler refuses every such scroll in a dungeon
+	// region except the anti-bot stone, with the client's
+	// UIIT_MSG_COS_CREATE_DUNGEON; the stone row opts out of this field.
+	MonsterSummonScrolls bool
 }
 
 /*
@@ -90,7 +96,8 @@ func featuresFor(kind PlaneKind) PlaneFeatures {
 		return PlaneFeatures{Dormancy: true, DormancyByBlock: true}
 	}
 	return PlaneFeatures{QuestMonsterSpawns: true, CaravanBandits: true, UniqueReturnAnchors: true, Dormancy: true,
-		SpawnTerrainLift: true, SpawnStrandedRescue: true, QuestGatherAreas: true, HelpCallSight: true}
+		SpawnTerrainLift: true, SpawnStrandedRescue: true, QuestGatherAreas: true, HelpCallSight: true,
+		MonsterSummonScrolls: true}
 }
 
 /*

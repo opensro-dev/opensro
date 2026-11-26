@@ -248,6 +248,18 @@ func TestDungeonAdmitsOnlyTheAutoMobStone(t *testing.T) {
 	if summonScrollRowLeft(c, AutoMobStoneItem) != 1 {
 		t.Fatal("the stone was not spent")
 	}
+	// The cave floor refuses the outdoor ring, so the monster lands on the
+	// user's own point instead of being lost with the spent stone.
+	actors := detachedActors(rt)
+	if len(actors) != 1 || actors[0].Ref.Codename != AutoMobMonster || actors[0].Spawn.RegionID != scrollTestDungeon {
+		t.Fatalf("landed %+v, want one %s in region %#x", actors, AutoMobMonster, scrollTestDungeon)
+	}
+	failed := exchangeBanner(partySummonFailedLine)
+	for _, frame := range result.Frames {
+		if frame.Opcode == failed.Opcode && string(frame.Payload) == string(failed.Payload) {
+			t.Fatal("the dungeon use answered the failed-summon banner")
+		}
+	}
 }
 
 /*

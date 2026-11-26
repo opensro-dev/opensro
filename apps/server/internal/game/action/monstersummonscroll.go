@@ -24,17 +24,23 @@ The native rules, from that handler (traced 2026-11-23 and 2026-11-26):
     factory, on a ring of 0 to 70 units, with no lifetime: the monster
     stays until it is killed. The table below mirrors the shipped rows,
     as the mall scrolls carry their counts in code.
-  - In a dungeon region (region id bit 0x8000) only ITEM_ETC_AUTOMOB may
-    be used; every other scroll answers 0x1879, whose low byte is the
-    client's UIIT_MSG_COS_CREATE_DUNGEON (the compare at 0x49bdfb).
-    INFERENCE: that compare is also guarded by a per-user pointer
-    (user+0x128) this trace did not name; the port reads the guard as
-    "the user stands in a dungeon", the only case the region bit names.
-  - The handler's own gate is a per-user counter (0x4eb3f0): refused
-    with 0x185B while it is nonzero, else armed to 60. The per-user timer
-    step (0x52aa90) counts it down. INFERENCE: that step runs once a
-    second, as the other per-user state timers it walks do, so the gate
-    is 60 s.
+  - In a dungeon region only ITEM_ETC_AUTOMOB may be used; every other
+    scroll answers 0x1879, whose low byte is the client's
+    UIIT_MSG_COS_CREATE_DUNGEON. The port asks the plane owner
+    (simulation.FeaturesAt(region).MonsterSummonScrolls) instead of
+    testing the region bit. INFERENCE: the handler's dungeon compare is
+    also guarded by a per-user pointer this trace did not name; the port
+    reads the guard as "the user stands in a dungeon", the only case the
+    region test names.
+  - The handler's own gate is a per-user counter: refused with 0x185B
+    while it is nonzero, else armed to 60, and counted down by the
+    per-user timer step. INFERENCE: that step runs once a second, as the
+    other per-user state timers it walks do, so the gate is 60 s.
+  - INFERENCE: a cave floor has no form of the outdoor ring sample (the
+    plane owner refuses it, PlaneFeatures.QuestMonsterSpawns), so the
+    stone used in a dungeon lands its monster on the user's own point,
+    grounded as a cave nest's respawn is. The native ring is 0 to 70
+    units, so the point is one the native sample can draw.
   - The Rigid rows also carry a COOLTIME parameter of 600000 ms (category
     word 0xF1). Where that keyword becomes a timer does not live in the
     game-server binary, so the port mirrors it as the Rigid family's
@@ -55,7 +61,6 @@ package action
 import (
 	"opensro.online/server/internal/game/enterworld"
 	"opensro.online/server/internal/game/item/wire"
-	"opensro.online/server/internal/game/world"
 	"opensro.online/server/internal/game/world/simulation"
 )
 
@@ -66,7 +71,7 @@ const (
 )
 
 // monsterScrollGateMs is the handler's own per-user gate: the counter
-// armed to 60 at 0x4eb3f0, one step a second.
+// armed to 60, one step a second.
 const monsterScrollGateMs = 60_000
 
 // rigidSummonCooldownMs is the Rigid family's cooltime: 600 s, those
@@ -158,7 +163,8 @@ func (rt *Runtime) useMonsterSummonScroll(use persistentSummonUse, result *OpRes
 	if !ok {
 		return false
 	}
-	if world.IsDungeonRegion(at.RegionID) && !scroll.inDungeons {
+	plane := simulation.FeaturesAt(at.RegionID)
+	if !plane.MonsterSummonScrolls && !scroll.inDungeons {
 		*result = itemUseFailure(wire.ErrCodeSummonInDungeon)
 		return false
 	}
@@ -169,10 +175,15 @@ func (rt *Runtime) useMonsterSummonScroll(use persistentSummonUse, result *OpRes
 		*result = itemUseFailure(wire.ErrCodeItemReuseDelay)
 		return false
 	}
-	landed := rt.SpawnQuestMonster(use.division, c, simulation.QuestMonsterSpawn{
+	spawn := simulation.QuestMonsterSpawn{
 		Codename: scroll.monster, RadiusMin: monsterScrollRadiusMin, RadiusSpan: monsterScrollRadiusSpan,
 		AnnounceUnique: scroll.announce,
-	})
+	}
+	if !plane.QuestMonsterSpawns {
+		// A cave floor: the user's own point, no ring (file header).
+		spawn.Position, spawn.FixedPosition, spawn.RadiusMin, spawn.RadiusSpan = at, true, 0, 0
+	}
+	landed := rt.SpawnQuestMonster(use.division, c, spawn)
 	remaining := rt.consumeItemUseRow(c, use.row)
 	rt.monsterScrollReady[c.Name] = use.nowMs + scroll.gateMs
 	*result = OpResult{Frames: []wire.Frame{{Opcode: wire.OpItemUseResponse, Payload: wire.EncodeItemUseSuccess(use.request.Slot, remaining, use.request.TypeWord)}}}
