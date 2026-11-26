@@ -29,11 +29,12 @@ The talk lines follow the later client's fixed roles (read off the
 texts): _01 offer, _02 accept, _03 deny, _04 not-achieved, _05 the end
 NPC's completion line, _06 the achieved-now banner (hunts only; a talk
 quest completes at the same conversation). A quest whose _01 or _05
-line the later client never shipped is NOT authored here: the loader's
-dialog contract needs both, and inventing a line or a fallback is a
-design decision, recorded on #4134. That holds back the QNO_AR_001 to
-004 chain, QNO_AR_019, QNO_AR_026 and the hunts QNO_AR_010 and
-QNO_AR_027. The collects and deliveries (ITEM_QNO_AR_* quest items)
+line the later client shipped without English is authored only once
+that line is recovered or translated under the quest-table import's
+QUEST_ENGLISH contract (scripts/arabia_quest_tables.py): the
+QNO_AR_001 to 004 chain, QNO_AR_019, QNO_AR_026 and the hunts
+QNO_AR_010 and QNO_AR_027 waited for that call (owner, 2026-11-26,
+#4134) and are in. The collects and deliveries (ITEM_QNO_AR_* quest items)
 live in arabia_quests_collect.go. QNO_AR_059 (its hunt names a kind
 no source carries) and QNO_AR_066/068 (target kinds no source places)
 stay out, recorded on #4134.
@@ -108,17 +109,25 @@ func arabiaKill(code string, completions uint32, npc string, reward arabiaReward
 ================
 arabiaSpecs
 
-The 29 quests, in codename order: 9 talks and 20 hunts.
+The 37 quests, in codename order: 15 talks and 22 hunts.
 ================
 */
 func arabiaSpecs() []QuestSpec {
 	return []QuestSpec{
 
+		arabiaTalk("QNO_AR_001", 1, "NPC_AR_SHARIAL", "NPC_AR_SHEHERAZADE", arabiaReward{47050, 34546860, 671}),
+		arabiaTalk("QNO_AR_002", 1, "NPC_AR_SHEHERAZADE", "NPC_AR_ABSHAD", arabiaReward{47050, 34546860, 671}),
+		arabiaTalk("QNO_AR_003", 1, "NPC_AR_ABSHAD", "NPC_AR_MAHMUD", arabiaReward{47050, 34546860, 671}),
+		arabiaTalk("QNO_AR_004", 1, "NPC_AR_MAHMUD", "NPC_AR_SOLDIER_1", arabiaReward{47050, 34546860, 671}),
 		arabiaTalk("QNO_AR_005", 1, "NPC_AR_SOLDIER_1", "NPC_AR_FARMER1", arabiaReward{47050, 34546860, 671}),
 		arabiaKill("QNO_AR_008", 2, "NPC_AR_FARMER1", arabiaReward{366990, 165824929, 3222}, arabiaHunt{symbol: "SN_CON_QNO_AR_008_1", monsters: []string{"MOB_AR_BARUSWOLF_ADONIS1_CLONE"}, count: 390}, arabiaHunt{symbol: "SN_CON_QNO_AR_008_2", monsters: []string{"MOB_AR_BARUSWOLF_ADONIS2_CLONE"}, count: 390}),
 		arabiaKill("QNO_AR_009", 2, "NPC_AR_FARMER3", arabiaReward{185848, 82912465, 1611}, arabiaHunt{symbol: "SN_CON_QNO_AR_009_1", monsters: []string{"MOB_AR_UNEG"}, count: 395}),
+		arabiaKill("QNO_AR_010", 2, "NPC_AR_FARMER2", arabiaReward{366990, 165824929, 3222}, arabiaHunt{symbol: "SN_CON_QNO_AR_010_1", monsters: []string{"MOB_AR_MANGYANG_PLUNDER1_CLONE"}, count: 390}, arabiaHunt{symbol: "SN_CON_QNO_AR_010_2", monsters: []string{"MOB_AR_MANGYANG_PLUNDER2_CLONE"}, count: 390}),
+		arabiaTalk("QNO_AR_019", 1, "NPC_AR_FARMER1", "NPC_AR_SPECIAL_SOLDIER_1", arabiaReward{47050, 34546860, 671}),
 		arabiaKill("QNO_AR_020", 2, "NPC_AR_SPECIAL_SOLDIER_1", arabiaReward{232260, 135250958, 2887}, arabiaHunt{symbol: "SN_CON_QNO_AR_020_1", monsters: []string{"MOB_AR_BLOOD_HYENA_FASTWOLF"}, count: 490}),
 		arabiaKill("QNO_AR_021", 2, "NPC_AR_SPECIAL_SOLDIER_1", arabiaReward{232260, 135250958, 2887}, arabiaHunt{symbol: "SN_CON_QNO_AR_021_1", monsters: []string{"MOB_AR_WENEG"}, count: 490}),
+		arabiaTalk("QNO_AR_026", 1, "NPC_AR_SPECIAL_SOLDIER_1", "NPC_AR_SPECIAL_SOLDIER_4", arabiaReward{47400, 105195190, 2246}),
+		arabiaKill("QNO_AR_027", 2, "NPC_AR_SPECIAL_SOLDIER_4", arabiaReward{232260, 135250958, 2887}, arabiaHunt{symbol: "SN_CON_QNO_AR_027_1", monsters: []string{"MOB_AR_MUJIGI_KOOLD"}, count: 490}),
 		arabiaKill("QNO_AR_028", 2, "NPC_AR_SPECIAL_SOLDIER_4", arabiaReward{232260, 135250958, 2887}, arabiaHunt{symbol: "SN_CON_QNO_AR_028_1", monsters: []string{"MOB_AR_BASTET_MAD"}, count: 490}),
 		arabiaKill("QNO_AR_029", 1, "NPC_AR_SPECIAL_SOLDIER_4", arabiaReward{478000, 220945965, 5151}, arabiaHunt{symbol: "SN_CON_QNO_AR_029_1", monsters: []string{"MOB_AR_BLACKROBBERARCHER_MAD"}, count: 500}, arabiaHunt{symbol: "SN_CON_QNO_AR_029_2", monsters: []string{"MOB_AR_BLACKROBBER_MAD"}, count: 500}),
 		arabiaKill("QNO_AR_030", 1, "NPC_AR_SPECIAL_SOLDIER_4", arabiaReward{239000, 110472983, 2575}, arabiaHunt{symbol: "SN_CON_QNO_AR_030_1", monsters: []string{"MOB_AR_BLOOD_HYENA_WILDWOLF"}, count: 500}),

@@ -153,6 +153,71 @@ class ArabiaQuestTablesTest(unittest.TestCase):
 				quest_tables.complete_english([row("SN_TALK_QNO_AR_099_01", "원문", "")])
 
 	# ================
+	# test_stub_rows_are_carried_and_completed
+	#
+	# A stub row of the archive (key and Korean only, 4 columns) used
+	# to leave by the length filters, and the stubbed quest with it.
+	# It now projects to a blank-English row, and complete_english
+	# fills it under the same contract as any authored line. A stub
+	# naming no Arabia quest keeps the old path, untouched.
+	# ================
+	def test_stub_rows_are_carried_and_completed(self):
+		families = {name: table("") for name in quest_tables.TEXT_FAMILIES}
+		families["textquest_queststring"] = table("1\t10843\tSN_TALK_QNO_AR_001_01\t한국어 원문",
+			"1\t2\tSN_TALK_QNO_OK_01\t짧은 행")
+
+		def read(name):
+			return families[name.removesuffix(".txt")]
+
+		rows = quest_tables.later_text_rows(read)
+		stub = [row for row in rows[0] if len(row) > 1 and row[1] == "SN_TALK_QNO_AR_001_01"]
+		self.assertEqual(len(stub), 1)
+		self.assertEqual(stub[0][2], "한국어 원문")
+		self.assertEqual(stub[0][8], "")
+		self.assertIn(["1", "2", "SN_TALK_QNO_OK_01", "짧은 행"], rows[0])
+		with mock.patch.dict(quest_tables.QUEST_ENGLISH, {"SN_TALK_QNO_AR_001_01": ("한국어 원문", "Authored line")}):
+			filled = quest_tables.complete_english(rows[0])
+			self.assertEqual([row[8] for row in filled if len(row) > 1 and row[1] == "SN_TALK_QNO_AR_001_01"],
+				["Authored line"])
+
+	# ================
+	# test_odd_length_quest_rows_keep_their_english
+	#
+	# SN_TALK_QNO_AR_026_03 ships 15 columns and SN_PAYCON_QNO_AR_002
+	# 18; both put their English at the usual cell once the row is
+	# padded or cut to the 17 the projection reads. A short row naming
+	# no quest is left as it was.
+	# ================
+	def test_odd_length_quest_rows_keep_their_english(self):
+		short = ["1", "11002", "SN_TALK_QNO_AR_026_03", "원문"] + ["0"] * 5 + ["Shipped line"] + ["0"] * 5
+		long = ["1", "1389", "SN_PAYCON_QNO_AR_002", "원문"] + ["0"] * 5 + ["Shipped body"] + ["0"] * 7 + ["extra"]
+		self.assertEqual((len(short), len(long)), (15, 18))
+		for raw in (short, long):
+			got = quest_tables.project_later_row(raw)
+			self.assertEqual(got[1], raw[2])
+			self.assertEqual(got[8], raw[9])
+		plain = ["1", "2", "SN_OTHER", "짧은"]
+		self.assertEqual(quest_tables.project_later_row(plain), plain)
+
+	# ================
+	# test_the_recovered_talk_lines_are_carried
+	#
+	# The twelve quests' thirteen lines (owner, 2026-11-26): each names
+	# the Korean it translates and an English line the build's rule
+	# accepts as text.
+	# ================
+	def test_the_recovered_talk_lines_are_carried(self):
+		wants = ["SN_TALK_QNO_AR_001_01", "SN_TALK_QNO_AR_001_05", "SN_TALK_QNO_AR_002_01", "SN_TALK_QNO_AR_002_02",
+			"SN_TALK_QNO_AR_003_01", "SN_TALK_QNO_AR_004_01", "SN_TALK_QNO_AR_010_05", "SN_TALK_QNO_AR_012_01",
+			"SN_TALK_QNO_AR_014_05", "SN_TALK_QNO_AR_018_06", "SN_TALK_QNO_AR_019_05", "SN_TALK_QNO_AR_026_05",
+			"SN_TALK_QNO_AR_027_01"]
+		talk = {k: v for k, v in quest_tables.QUEST_ENGLISH.items() if k.startswith("SN_TALK_QNO_AR_")}
+		self.assertEqual(sorted(talk), sorted(wants))
+		for key, (korean, english) in talk.items():
+			self.assertTrue(korean.strip(), key)
+			self.assertFalse(characters.is_placeholder_text(english), key)
+
+	# ================
 	# test_a_placeholder_english_is_missing_english
 	#
 	# r204 (2026-11-24): v1.696 ships 38 SN_PAY_QNO_AR_* titles with "0"
