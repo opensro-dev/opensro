@@ -103,14 +103,16 @@ func (slots *ApproachSlots) AssignOwnerFollow(gid uint32, remembered int, live, 
 NativeOwnerFollowRunFactor
 
 The native speed update adjusts parameter 18's source-zero
-percentage against authored run speed. The caller supplies the
-owner's current channel speed and run speed.
+percentage against authored run speed: below the catch-up distance
+the owner's current speed, at and beyond it the owner's run speed,
+raised by the catch-up factor while the owner runs (#4490 U11-11).
+The caller supplies both speeds.
 ================
 */
 func NativeOwnerFollowRunFactor(in OwnerFollowSpeed) float32 {
-	speed := in.OwnerRun
+	speed := in.OwnerCurrent
 	if in.Distance >= ownerFollowCatchUpDistance {
-		speed = in.OwnerCurrent
+		speed = in.OwnerRun
 		if in.OwnerRunning {
 			speed = float32(float64(speed) * ownerFollowCatchUpFactor)
 		}
