@@ -2,9 +2,29 @@ import { readFile, writeFile, mkdir } from "node:fs/promises";
 import path from "node:path";
 import { gzipSync } from "node:zlib";
 import { sha, inspect } from "./policy.mjs";
-// Compression is entirely build-time. Only already inspected application files
-// and the mutable publication index receive HTTP variants here. Pack-member
-// transports remain owned by the asset publication pipeline.
+/*
+===========================================================================
+
+compression.mjs - build-time HTTP variants for the beta publication
+
+Compression is entirely build-time. Only already inspected
+application files and the mutable publication index receive HTTP
+variants here; pack-member transports remain owned by the asset
+publication pipeline.
+
+===========================================================================
+*/
+/*
+================
+compressRoutes
+
+Write the gzipped variant of every application route the manifest
+does not already carry one for, and record each variant in the
+manifest. Variants are content-named under encoded/, and the write
+is exclusive ('wx'): a name collision fails the build instead of
+overwriting a published file.
+================
+*/
 export async function compressRoutes( root, manifest ) {
 	for (
 		const route of manifest.routes.filter( r =>
