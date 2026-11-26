@@ -566,10 +566,10 @@ func (r *Runtime) SessionClosed(s *transport.Session) {
 // precheck and its purpose test (0x2C0A, 0x2C1D,
 // 0x2C23); the v1.150 client shows them as UIIT_MSG_PARTYERR_* /
 // UIIT_MSG_PARTYMATCH_RECORD_ERROR_* through the 0x200 notice table.
-// StandingHeld is the register precheck's standing refusal (0x2C24),
-// which the v1.150 client shows as UIIT_MSG_PARTYMATCH_JOIN_ERROR_DUPLE
-// (category-2 table 0x68B8E8): a registration already held or a join
-// application outstanding, refused ahead of the form checks.
+// StandingHeld is the register precheck's standing refusal (0x2C24): a
+// registration already held or a join application outstanding, refused
+// ahead of the form checks. The v1.150 client's category-2 table 0x68B8E8
+// shows it as UIIT_MSG_PARTYMATCH_JOIN_ERROR_DUPLE.
 const (
 	partyMatchErrUnknown        uint8 = 0x02
 	partyMatchErrCreatorLevel   uint8 = 0x0A
