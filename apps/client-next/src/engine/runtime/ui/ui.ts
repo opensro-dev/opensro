@@ -3414,11 +3414,10 @@ export function createUi( ports: UiPorts ) {
 		if ( !choice || choice.binding !== merchantBinding( item ) ) return;
 		// Magic Cube quantity is StoredItemCount; only an empty cube sells (bag stack 1).
 		if ( isMagicCube( item.typeFlags ) && item.quantity > 0 ) {
-			hudMessages.append(
-				hudCopy( "UIIT_STT_MAGIC_CUBE_STORE_SELL_ERROR" ) ||
-					MAGIC_CUBE_COPY.UIIT_STT_MAGIC_CUBE_STORE_SELL_ERROR,
-				0xffff7070
-			);
+			const notice = hudCopy( "UIIT_STT_MAGIC_CUBE_STORE_SELL_ERROR" ) ||
+				MAGIC_CUBE_COPY.UIIT_STT_MAGIC_CUBE_STORE_SELL_ERROR ||
+				"You cannot sell the Magic Cube with items still in it";
+			hudMessages.append( notice, 0xffff7070 );
 			dirty = true;
 			return;
 		}
