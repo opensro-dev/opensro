@@ -425,19 +425,14 @@ function validateRegionBundle( data, task, bundle, lookups ) {
 	assert.equal( bundle.objects.resourceIndexPublicPath, data.objectIndexPublicPath );
 	assert.equal( bundle.objects.resources, undefined );
 
-	assert.equal( bundle.terrain.sectors.length, 1 );
-	assert.equal(
-		packRegion( bundle.terrain.sectors[0].sectorX, bundle.terrain.sectors[0].sectorY ),
-		expectedRegionId
-	);
-	assert.equal( bundle.terrainTextures.sectors.length, 1 );
-	assert.equal(
-		packRegion(
-			bundle.terrainTextures.sectors[0].sectorX,
-			bundle.terrainTextures.sectors[0].sectorY
-		),
-		expectedRegionId
-	);
+	// The one owned sector travels once, in the top-level blocks of the
+	// source frame checked above; a sector list would repeat them.
+	assert.equal( bundle.terrain.sectorCount, 1 );
+	assert.equal( bundle.terrain.sectors, undefined );
+	assert.equal( bundle.terrain.blocks.length, bundle.terrain.blockCount );
+	assert.equal( bundle.terrainTextures.sectorCount, 1 );
+	assert.equal( bundle.terrainTextures.sectors, undefined );
+	assert.equal( bundle.terrainTextures.blocks.length, bundle.terrainTextures.blockCount );
 	assert.equal( bundle.navmesh.regions.length, 1 );
 	assert.equal( bundle.navmesh.regions[0].regionId & 0xffff, expectedRegionId );
 	assert.equal( bundle.objects.sectors.length, 1 );
@@ -468,9 +463,8 @@ function validateRegionBundle( data, task, bundle, lookups ) {
 	}
 
 	const images = [];
-	const textureSector = bundle.terrainTextures.sectors[0];
-	if ( textureSector.lightmapPublicPath ) {
-		images.push( textureSector.lightmapPublicPath );
+	if ( bundle.terrainTextures.lightmapPublicPath ) {
+		images.push( bundle.terrainTextures.lightmapPublicPath );
 	}
 	for ( const tile of bundle.terrainTextures.tileCatalog.referencedTiles ) {
 		if ( tile.imagePublicPath ) {
