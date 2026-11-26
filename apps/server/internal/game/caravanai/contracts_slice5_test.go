@@ -169,8 +169,11 @@ func TestDailyEscortLedger(t *testing.T) {
 	store := newFakeEscortDayStore()
 	book := NewContractBook(store)
 	const now = int64(1_700_000_000_000)
-	book.RecordPaidEscort("div", "IronGuard", now)
-	book.RecordPaidEscort("div", "IronGuard", now)
+	for range 2 {
+		if !book.ReservePaidEscort("div", "IronGuard", now) {
+			t.Fatal("a Hunter under the cap could not reserve a paid escort")
+		}
+	}
 	if got := book.PaidEscortsToday("div", "IronGuard", now); got != 2 {
 		t.Fatalf("paid today = %d, want 2", got)
 	}
@@ -184,6 +187,57 @@ func TestDailyEscortLedger(t *testing.T) {
 	if got := fresh.PaidEscortsToday("div", "IronGuard", now); got != 2 {
 		t.Fatalf("paid today after reload = %d, want 2", got)
 	}
+}
+
+/*
+==================
+TestPaidEscortReservationIsWrittenAtOnce
+
+A reserved slot reaches the store without waiting for Flush, so a crash
+after the payment keeps the count; the cap refuses a reservation past
+it; a released slot is written back.
+==================
+*/
+func TestPaidEscortReservationIsWrittenAtOnce(t *testing.T) {
+	store := newFakeEscortDayStore()
+	book := NewContractBook(store)
+	const now = int64(1_700_000_000_000)
+	for range MaxPaidEscortsPerDay {
+		if !book.ReservePaidEscort("div", "IronGuard", now) {
+			t.Fatal("a Hunter under the cap was refused a reservation")
+		}
+	}
+	if book.ReservePaidEscort("div", "IronGuard", now) {
+		t.Fatalf("a reservation past the cap of %d was taken", MaxPaidEscortsPerDay)
+	}
+	if got := NewContractBook(store).PaidEscortsToday("div", "IronGuard", now); got != MaxPaidEscortsPerDay {
+		t.Fatalf("a fresh book over the store sees %d without a Flush, want %d", got, MaxPaidEscortsPerDay)
+	}
+	book.ReleasePaidEscort("div", "IronGuard", now)
+	if got := NewContractBook(store).PaidEscortsToday("div", "IronGuard", now); got != MaxPaidEscortsPerDay-1 {
+		t.Fatalf("after a release the store holds %d, want %d", got, MaxPaidEscortsPerDay-1)
+	}
+	book.ReleasePaidEscort("div", "Nobody", now)
+	if got := book.PaidEscortsToday("div", "Nobody", now); got != 0 {
+		t.Fatalf("a release with nothing reserved left %d", got)
+	}
+}
+
+/*
+================
+deliverAndPay
+
+deliverNow, then the step's payment off the lock (payEscort), as
+StepAgent runs it. It returns the contract the delivery offered, or nil.
+================
+*/
+func deliverAndPay(t *testing.T, rt *Runtime, trader string, nowMs int64) *EscortContract {
+	t.Helper()
+	contract := deliverNow(t, rt, trader, nowMs)
+	if contract != nil {
+		rt.payEscort("division", *contract, trader, nowMs)
+	}
+	return contract
 }
 
 /*
@@ -223,6 +277,13 @@ func TestDeliveryPaysUnderTheDailyCap(t *testing.T) {
 	players := map[string]*hirePlayer{"IronGuard": {job: domain.JobHunter, online: true}}
 	paid := map[string]int64{}
 	rt := hireRuntime(t, players, &paid)
+	doorPays, rewards := true, 0
+	rt.hooks.OnContractReward = func(_, hunter string, gold int64, _ string) bool {
+		if doorPays {
+			rewards++
+		}
+		return doorPays
+	}
 	const trader = "[AI]Trader_Jin"
 	accept := func(now int64) string {
 		t.Helper()
@@ -240,8 +301,21 @@ func TestDeliveryPaysUnderTheDailyCap(t *testing.T) {
 	keptRun := func(now int64) *EscortContract {
 		t.Helper()
 		sampleRun(rt.Contracts(), "division", trader, true, now+1_000, now+40_000)
-		return deliverNow(t, rt, trader, now+40_000)
+		return deliverAndPay(t, rt, trader, now+40_000)
 	}
+	// A door that refuses the gold (a dead Hunter, a full purse) gives
+	// the reserved slot back: the unpaid run costs no daily slot.
+	doorPays = false
+	if reply := accept(500_000); !strings.Contains(reply, "IronGuard") {
+		t.Fatalf("the first accept was refused: %q", reply)
+	}
+	if contract := keptRun(500_000); contract == nil {
+		t.Fatal("a kept run offered no reward")
+	}
+	if got := rt.Contracts().PaidEscortsToday("division", "IronGuard", 500_000); got != 0 || rewards != 0 {
+		t.Fatalf("a refused payment spent %d slots, paid %d", got, rewards)
+	}
+	doorPays = true
 	for run := range MaxPaidEscortsPerDay {
 		now := int64(run+1) * 1_000_000
 		if reply := accept(now); !strings.Contains(reply, "IronGuard") {
@@ -252,8 +326,8 @@ func TestDeliveryPaysUnderTheDailyCap(t *testing.T) {
 			t.Fatalf("run %d: a kept run under the cap paid %+v", run, contract)
 		}
 	}
-	if got := rt.Contracts().PaidEscortsToday("division", "IronGuard", 1_000_000); got != MaxPaidEscortsPerDay {
-		t.Fatalf("paid today = %d, want the cap %d", got, MaxPaidEscortsPerDay)
+	if got := rt.Contracts().PaidEscortsToday("division", "IronGuard", 1_000_000); got != MaxPaidEscortsPerDay || rewards != MaxPaidEscortsPerDay {
+		t.Fatalf("paid today = %d with %d rewards, want the cap %d", got, rewards, MaxPaidEscortsPerDay)
 	}
 	if reply := accept(10_000_000); !strings.Contains(reply, "today's") {
 		t.Fatalf("a capped Hunter was not refused at !accept: %q", reply)
@@ -269,10 +343,10 @@ func TestDeliveryPaysUnderTheDailyCap(t *testing.T) {
 		t.Fatalf("the next day's accept was refused: %q", reply)
 	}
 	for range MaxPaidEscortsPerDay {
-		rt.Contracts().RecordPaidEscort("division", "IronGuard", nextDay)
+		rt.Contracts().ReservePaidEscort("division", "IronGuard", nextDay)
 	}
-	if contract := keptRun(nextDay); contract != nil {
-		t.Fatalf("a run delivered past the cap paid %+v", *contract)
+	if contract := keptRun(nextDay); contract != nil || rewards != MaxPaidEscortsPerDay {
+		t.Fatalf("a run delivered past the cap offered %+v, %d rewards", contract, rewards)
 	}
 }
 

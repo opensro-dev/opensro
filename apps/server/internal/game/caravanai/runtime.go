@@ -173,8 +173,11 @@ type WorldHooks struct {
 	OnAgentChat       func(division, agentName string, regionID uint16, message string)
 	OnParleyCargoDrop func(division, agentName string, regionID uint16, x, y, z float32, stacks int, stackGoldValue int64)
 	OnContractFormed  func(division, playerName, agentName string)
-	OnContractReward  func(division, hunterPlayerName string, rewardGold int64, traderAgentName string)
-	OnHireFee         func(division, playerName string, fee int64) bool
+	// OnContractReward moves a delivered escort's gold to the Hunter and
+	// reports whether it moved; a refused payment costs no daily slot
+	// (payEscort).
+	OnContractReward func(division, hunterPlayerName string, rewardGold int64, traderAgentName string) bool
+	OnHireFee        func(division, playerName string, fee int64) bool
 	// StarGoods prices goods that rate stars on the agent's transport, as a
 	// player's own load is rated (0 keeps GoodsForStars). CargoSale is what
 	// the agent's goods sell for at town's shop. Both run outside the lock.
@@ -643,9 +646,8 @@ func (r *Runtime) StepAgentWithWorldThreat(
 	if effects.drop > 0 && r.hooks.OnParleyCargoDrop != nil {
 		r.hooks.OnParleyCargoDrop(division, snapshot.Name, snapshot.RegionID, snapshot.X, snapshot.Y, snapshot.Z, effects.drop, snapshot.StackValueGold)
 	}
-	if effects.reward != nil && r.hooks.OnContractReward != nil {
-		contract := effects.reward
-		r.hooks.OnContractReward(division, contract.HunterName, contract.RewardGold, snapshot.Name)
+	if effects.reward != nil {
+		r.payEscort(division, *effects.reward, snapshot.Name, nowMs)
 	}
 	if effects.pickup != 0 && r.hooks.PickUp != nil {
 		r.hooks.PickUp(division, snapshot.Name, effects.pickup)
@@ -950,12 +952,11 @@ func (r *Runtime) advanceAlongRouteLocked(unit *AgentUnit, nowMs int64) *EscortC
 	unit.State = StateDelivering
 	if unit.Role == RoleTrader {
 		// Delivery pays only a payable run (contracts.go) under the
-		// Hunter's daily cap; the gold moves from the step's effects,
-		// off the lock.
+		// Hunter's daily cap; the slot and the gold move from the step's
+		// effects, off the lock (payEscort).
 		if contract, done, payable := r.contracts.CompleteAITraderRun(unit.Division, unit.Name, unit.RegionID, nowMs, r.memories); done && payable &&
 			!contract.HunterIsAI && contract.HunterName != "" && contract.RewardGold > 0 &&
 			r.contracts.PaidEscortsToday(unit.Division, contract.HunterName, nowMs) < MaxPaidEscortsPerDay {
-			r.contracts.RecordPaidEscort(unit.Division, contract.HunterName, nowMs)
 			completed = &contract
 		}
 		r.finishRunLocked(unit, nowMs)

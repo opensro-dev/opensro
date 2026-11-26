@@ -9,7 +9,9 @@ in the escort-day ledger); the gold moves here, through the character's
 own mutation door, so the store's economy ledger records each change
 under its door (domain.economyDoorReasons: caravan-hire, caravan-escort,
 caravan-hire-payout). Every door refuses a character pending deletion
-and a balance it would carry past wire.MaxGold, and changes nothing then.
+and a balance it would carry past wire.MaxGold, and changes nothing then;
+only the hire payout, the player's own gold, then fills the purse to the
+cap.
 
 ===========================================================================
 */
@@ -80,35 +82,65 @@ func (game *gameplayPlane) caravanHireFee(division, player string, fee int64) bo
 caravanHirePayout
 
 A hired Trader's sale or returned goods cost, or a refused hire's fee:
-the player's own gold coming back, so no daily cap. A refusal (a balance
-already near MaxGold) is logged with the amount, never clamped away.
+the player's own gold coming back, so no daily cap. When the purse cannot
+hold all of it, it is filled to wire.MaxGold and only the excess is lost,
+logged with its amount (the goods are already sold, so there is nothing
+to refuse); the door re-checks the bound, so a balance that moved
+meanwhile refuses the fill instead of passing the cap.
 ================
 */
 func (game *gameplayPlane) caravanHirePayout(division, player string, gold int64) bool {
 	if gold <= 0 {
 		return false
 	}
-	if !game.caravanGoldDoor(division, player, "caravan-hire-payout", gold, nil) {
-		log.WithFields(log.Fields{"player": player, "gold": gold}).Warn("caravan hire payout refused: no loaded character, or the balance cannot hold it")
-		return false
+	if game.caravanGoldDoor(division, player, "caravan-hire-payout", gold, nil) {
+		return true
 	}
-	return true
+	room := int64(wire.MaxGold) - game.caravanGold(division, player)
+	if room > 0 && room < gold && game.caravanGoldDoor(division, player, "caravan-hire-payout", room, nil) {
+		log.WithFields(log.Fields{"player": player, "gold": gold, "lost": gold - room}).Warn("caravan hire payout filled the purse to its cap; the excess is lost")
+		return true
+	}
+	log.WithFields(log.Fields{"player": player, "gold": gold}).Warn("caravan hire payout refused: no loaded character, or the purse is full")
+	return false
+}
+
+/*
+================
+caravanGold
+
+The character's balance, 0 when it is unknown.
+================
+*/
+func (game *gameplayPlane) caravanGold(division, name string) int64 {
+	c := game.deps.CharacterByName(division, name)
+	if c == nil {
+		return 0
+	}
+	var balance int64
+	game.deps.Read(division, func() {
+		if c.Gold != nil {
+			balance = *c.Gold
+		}
+	})
+	return balance
 }
 
 /*
 ================
 caravanEscortReward
 
-Pays a completed escort's reward to a living Hunter. The runtime has
-already counted it against the Hunter's daily cap (caravanai
-advanceAlongRouteLocked), so this only moves the gold.
+Pays a completed escort's reward to a living Hunter and reports whether
+the gold moved. The runtime reserved the Hunter's daily slot first and
+gives it back on false (caravanai payEscort), so a refused payment costs
+no slot.
 ================
 */
-func (game *gameplayPlane) caravanEscortReward(division, player string, reward int64, _ string) {
+func (game *gameplayPlane) caravanEscortReward(division, player string, reward int64, _ string) bool {
 	if reward <= 0 {
-		return
+		return false
 	}
-	game.caravanGoldDoor(division, player, "caravan-escort", reward, func(c *enterworld.Character) bool {
+	return game.caravanGoldDoor(division, player, "caravan-escort", reward, func(c *enterworld.Character) bool {
 		return enterworld.DressedJob(c) == domain.JobHunter && enterworld.CharacterAlive(c)
 	})
 }

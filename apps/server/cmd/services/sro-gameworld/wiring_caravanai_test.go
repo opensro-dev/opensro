@@ -134,18 +134,24 @@ func TestCaravanShippedActors(t *testing.T) {
 		t.Fatal(err)
 	}
 	// The daily cap is the runtime's (contracts_slice5_test.go); the door
-	// pays a dressed, living Hunter and refuses a balance past MaxGold.
-	game.caravanEscortReward(game.divisionID, hunter.Name, 1000, "trader")
-	if *hunter.Gold != 1100 {
-		t.Fatalf("escort reward: gold=%d, want 1100", *hunter.Gold)
+	// pays a dressed, living Hunter, reports it, and refuses a balance
+	// past MaxGold (so the runtime gives the reserved slot back).
+	if !game.caravanEscortReward(game.divisionID, hunter.Name, 1000, "trader") || *hunter.Gold != 1100 {
+		t.Fatalf("escort reward: gold=%d, want 1100 and a reported payment", *hunter.Gold)
 	}
 	full := int64(wire.MaxGold) - 10
 	if !game.deps.Update(hunter, "test-fill", func() bool { hunter.Gold = &full; return true }) {
 		t.Fatal("could not fill the purse")
 	}
-	game.caravanEscortReward(game.divisionID, hunter.Name, 1000, "trader")
-	if game.caravanHirePayout(game.divisionID, hunter.Name, 1000) || *hunter.Gold != full {
-		t.Fatalf("a credit past MaxGold moved gold: %d, want %d", *hunter.Gold, full)
+	if game.caravanEscortReward(game.divisionID, hunter.Name, 1000, "trader") || *hunter.Gold != full {
+		t.Fatalf("an escort reward past MaxGold moved gold or reported paid: %d, want %d", *hunter.Gold, full)
+	}
+	// The hirer's own sale fills the purse to the cap; only the excess is lost.
+	if !game.caravanHirePayout(game.divisionID, hunter.Name, 1000) || *hunter.Gold != int64(wire.MaxGold) {
+		t.Fatalf("a payout past MaxGold: gold=%d, want the purse filled to %d", *hunter.Gold, wire.MaxGold)
+	}
+	if game.caravanHirePayout(game.divisionID, hunter.Name, 1000) || *hunter.Gold != int64(wire.MaxGold) {
+		t.Fatalf("a payout into a full purse moved gold: %d", *hunter.Gold)
 	}
 	initial := game.caravanAgents.EnsureDivisionRoster(game.divisionID)[0]
 

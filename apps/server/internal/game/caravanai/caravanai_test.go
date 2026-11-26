@@ -221,9 +221,10 @@ func TestRuntimeParleyHonorBetrayalAndContracts(t *testing.T) {
 			OnParleyCargoDrop: func(_ string, _ string, _ uint16, _, _, _ float32, stacks int, _ int64) {
 				droppedStacks = stacks
 			},
-			OnContractReward: func(_ string, hunterPlayerName string, rewardGold int64, _ string) {
+			OnContractReward: func(_ string, hunterPlayerName string, rewardGold int64, _ string) bool {
 				rewardedHunter = hunterPlayerName
 				rewardedGold = rewardGold
+				return true
 			},
 		},
 	)

@@ -382,13 +382,68 @@ func (c *ContractBook) PaidEscortsToday(division, hunterName string, nowMs int64
 
 /*
 ==================
-RecordPaidEscort
+payEscort
 
-Counts one paid escort reward against the Hunter's day and marks the
-row for the next Flush.
+Pays one delivered escort, off the runtime's lock. The ledger reserves
+the Hunter's daily slot first and writes it at once
+(ContractBook.ReservePaidEscort); the character door then moves the
+gold, and a door that refuses gives the slot back. A full day pays
+nothing.
 ==================
 */
-func (c *ContractBook) RecordPaidEscort(division, hunterName string, nowMs int64) {
+func (r *Runtime) payEscort(division string, contract EscortContract, traderName string, nowMs int64) {
+	if r.hooks.OnContractReward == nil || !r.contracts.ReservePaidEscort(division, contract.HunterName, nowMs) {
+		return
+	}
+	if !r.hooks.OnContractReward(division, contract.HunterName, contract.RewardGold, traderName) {
+		r.contracts.ReleasePaidEscort(division, contract.HunterName, nowMs)
+	}
+}
+
+/*
+==================
+ReservePaidEscort
+
+Counts one paid escort against the Hunter's day before its gold moves,
+when the day still has room (false when the cap is reached; the check
+and the count are one step under the book's lock), and writes the row at
+once instead of waiting for the flush loop. A crash after the gold then
+never leaves the count behind: the worst a crash can do is spend a slot
+the payment never reached, never pay a fourth escort.
+==================
+*/
+func (c *ContractBook) ReservePaidEscort(division, hunterName string, nowMs int64) bool {
+	key, row, ok := c.adjustPaidEscort(division, hunterName, nowMs, 1)
+	if ok {
+		c.persistDay(key, row)
+	}
+	return ok
+}
+
+/*
+==================
+ReleasePaidEscort
+
+Gives back a reservation whose gold the character door refused (the
+Hunter died, left the suit, or the purse is full): an unpaid delivery
+costs no daily slot.
+==================
+*/
+func (c *ContractBook) ReleasePaidEscort(division, hunterName string, nowMs int64) {
+	if key, row, ok := c.adjustPaidEscort(division, hunterName, nowMs, -1); ok {
+		c.persistDay(key, row)
+	}
+}
+
+/*
+==================
+adjustPaidEscort
+
+Moves the Hunter's count for the day by delta under the lock, refusing a
+count past MaxPaidEscortsPerDay or below zero, and marks the row dirty.
+==================
+*/
+func (c *ContractBook) adjustPaidEscort(division, hunterName string, nowMs int64, delta int) (paidEscortKey, domain.CaravanEscortDayRow, bool) {
 	key := paidEscortKey{
 		division: strings.TrimSpace(division),
 		hunter:   strings.ToLower(strings.TrimSpace(hunterName)),
@@ -397,12 +452,33 @@ func (c *ContractBook) RecordPaidEscort(division, hunterName string, nowMs int64
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	c.ensureDayLoadedLocked(division)
-	c.paid[key]++
-	c.dirtyDays[key] = domain.CaravanEscortDayRow{
-		Division:   key.division,
-		HunterName: hunterName,
-		Day:        key.day,
-		PaidCount:  c.paid[key],
+	count := c.paid[key] + delta
+	if count < 0 || count > MaxPaidEscortsPerDay {
+		return key, domain.CaravanEscortDayRow{}, false
+	}
+	c.paid[key] = count
+	row := domain.CaravanEscortDayRow{Division: key.division, HunterName: hunterName, Day: key.day, PaidCount: count}
+	c.dirtyDays[key] = row
+	return key, row, true
+}
+
+/*
+==================
+persistDay
+
+Writes one ledger row now. A failed write stays dirty for the flush
+loop's retry; a written one leaves the dirty set unless a newer value
+arrived meanwhile.
+==================
+*/
+func (c *ContractBook) persistDay(key paidEscortKey, row domain.CaravanEscortDayRow) {
+	if c.days == nil || c.days.SaveCaravanEscortDay(row) != nil {
+		return
+	}
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if dirty, ok := c.dirtyDays[key]; ok && dirty == row {
+		delete(c.dirtyDays, key)
 	}
 }
 
