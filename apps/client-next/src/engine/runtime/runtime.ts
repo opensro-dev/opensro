@@ -216,8 +216,9 @@ export function startRuntime(
 				if ( frontend.start() ) {
 					// The lines the browser kept for this character go
 					// ahead of the entry (chat-history.ts; port-only, not
-					// native - default by owner decision 2026-11-26), so
-					// the worker can spend them at its bootstrap.
+					// native - the platform offers them only while the
+					// "Keep chat history" row is on, #4513), so the
+					// worker can spend them at its bootstrap.
 					simulation.session( {
 						kind: "chat-history",
 						name: command.character,
@@ -1195,11 +1196,12 @@ export function startRuntime(
 							}
 						}
 						simulation.ackWorld( batch.sequence );
-						// Port-only (chat-history.ts; default by owner decision
-						// 2026-11-26): the presented log is the browser's
-						// record of the conversation. Write it when its tail
-						// moved; an empty log writes nothing, so a departure
-						// never erases the record a reload will restore.
+						// Port-only (chat-history.ts; the platform writes
+						// only while the "Keep chat history" row is on,
+						// #4513): the presented log is the browser's record
+						// of the conversation. Write it when its tail moved;
+						// an empty log writes nothing, so a departure never
+						// erases the record a reload will restore.
 						const chatLines = presentation.gameplay()?.chat?.lines;
 						if (
 							sessionState?.phase === "world" && sessionState.character &&

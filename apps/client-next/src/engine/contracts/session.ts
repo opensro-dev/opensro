@@ -52,8 +52,9 @@ export type SessionCommand =
 	| WorldExitCommand
 	| { readonly kind: "chat-blocks"; readonly value: readonly string[]; }
 	// The lines the browser kept for the entering character (chat-history.ts;
-	// port-only, not native - default by owner decision 2026-11-26), offered
-	// ahead of enter-world; the worker never touches storage itself.
+	// port-only, not native - only while the Experimental row "Keep chat
+	// history" is on, #4513), offered ahead of enter-world; the worker
+	// never touches storage itself.
 	| {
 		readonly kind: "chat-history";
 		readonly name: string;

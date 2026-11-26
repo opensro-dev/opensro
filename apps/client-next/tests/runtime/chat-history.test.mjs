@@ -3,8 +3,10 @@
 
 chat-history.test.mjs - the chat log the browser keeps across a reload
 
-Port-only, not native (default by owner decision 2026-11-26): the chat
-window keeps the last 100 lines per character across a page reload. The
+Port-only, not native (#4513): while the Experimental row "Keep chat
+history" is on, the chat window keeps the last 100 lines per character
+across a page reload; off (the default) the page offers and writes
+nothing. The
 worker never touches storage: the page offers a character's kept lines
 ahead of its entry (chatHistory), the chat owner spends them onto an
 empty log at bootstrap, and the page writes the presented log down

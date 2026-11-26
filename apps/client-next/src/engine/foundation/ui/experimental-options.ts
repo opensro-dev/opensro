@@ -40,6 +40,11 @@ export interface ExperimentalOptions {
 	// size; a missing or invalid stored value restores it.
 	readonly uiScale: number;
 	readonly chatTimestamps: boolean;
+	// Port-only, not native (#4513): the chat window remembers the last
+	// 100 lines of each character across a page reload (chat-history.ts).
+	// Off unless turned on; off, a fresh page starts with the original's
+	// empty log and nothing is written down.
+	readonly keepChatHistory: boolean;
 	// Port-only, not native (#1976): a fifth chat tab, Event, holding the
 	// shard's channel-7 event notices (seal drops, plus results, item
 	// breaks, job kills) that otherwise land in All. On unless turned off
@@ -485,6 +490,7 @@ export function experimentalOptions( value: unknown = null ): ExperimentalOption
 		phoneRenderCap: record.phoneRenderCap !== false,
 		uiScale: uiScaleStop( record.uiScale ) ?? UI_SCALE_DEFAULT,
 		chatTimestamps: enabled( "chatTimestamps" ),
+		keepChatHistory: enabled( "keepChatHistory" ),
 		eventChatTab: record.eventChatTab !== false,
 		safeLoadingScreen: enabled( "safeLoadingScreen" ),
 		monsterGuide: enabled( "monsterGuide" ),

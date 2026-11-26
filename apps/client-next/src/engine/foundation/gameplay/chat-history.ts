@@ -3,10 +3,13 @@
 
 chat-history.ts - the chat log the browser keeps across a reload
 
-Port-only, not native (default by owner decision 2026-11-26): the chat
-window remembers the last CHAT_HISTORY_KEPT lines of each character, so a
-page reload no longer wipes the conversation. The page stores one book
-(scope to lines) in its local storage; the worker never touches storage.
+Port-only, not native (#4513): while the Experimental row "Keep chat
+history" is on, the chat window remembers the last CHAT_HISTORY_KEPT
+lines of each character, so a page reload no longer wipes the
+conversation. The row is off by default and off is the original: a
+fresh page starts with an empty log and nothing is stored. The page
+stores one book (scope to lines) in its local storage; the worker
+never touches storage.
 A scope names one character on one shard (the world's division), because
 names are unique within a shard, not across shards.
 

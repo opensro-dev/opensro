@@ -221,8 +221,9 @@ export interface Platform extends Disposable {
 	saveAudioOptions( value: import("@/engine/foundation/audio/options").AudioOptions ): void;
 	saveChatBlocks( value: readonly string[] ): void;
 	// The chat lines the browser keeps per character across a reload
-	// (chat-history.ts; port-only, not native - default by owner decision
-	// 2026-11-26): one scope's record, and one scope's save.
+	// (chat-history.ts; port-only, not native - only while the
+	// Experimental row "Keep chat history" is on, #4513): one scope's
+	// record, and one scope's save.
 	chatHistory(
 		scope: string
 	): readonly import("@/engine/foundation/gameplay/chat-history").StoredChatLine[];

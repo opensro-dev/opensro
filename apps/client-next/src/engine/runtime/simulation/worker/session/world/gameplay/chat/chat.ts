@@ -9,8 +9,8 @@ lines a player was away for stay to be read. A forgetting disconnect
 suspends it and hands the decision to the entry that follows (#4513).
 Character changes, a departure to character select and session disposal
 clear it. The last 100 lines also survive a page reload per character
-(restore, chat-history.ts; port-only, not native - default by owner
-decision 2026-11-26). A server-authored public
+while the Experimental row "Keep chat history" is on (restore,
+chat-history.ts; port-only, not native, off by default - #4513). A server-authored public
 echo determines the beta channel; its later native receipt only releases the
 outstanding request.
 
@@ -371,7 +371,8 @@ options
 restore
 
 Offer the lines the browser kept for a character (chat-history.ts;
-port-only, not native - default by owner decision 2026-11-26) before
+port-only, not native - the page offers lines only while the
+"Keep chat history" row is on, #4513) before
 it enters. bootstrap spends the offer once, only for that character
 and only onto an empty log, so an in-session re-entry that kept its
 lines never hears them twice and another character reads nothing.

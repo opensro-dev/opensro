@@ -217,11 +217,14 @@ export function createPlatform(
 		if ( event.key !== null && event.key !== uniqueNotifyKey ) return;
 		uniqueNotify = storedUniqueNotifyBook();
 	}, { signal: lifetime.signal } );
-	// Port-only (chat-history.ts; default by owner decision 2026-11-26):
-	// the chat lines the browser keeps per character across a reload,
-	// scope to lines. The worker never touches storage: the runtime
-	// saves the presented log here and offers a character's record back
-	// ahead of its entry. A corrupt record restores as empty.
+	// Port-only (chat-history.ts; #4513): the chat lines the browser
+	// keeps per character across a reload, scope to lines, read and
+	// written only while the Experimental row "Keep chat history" is on
+	// (off by default; off is the original's empty log on a fresh
+	// page). The worker never touches storage: the runtime saves the
+	// presented log here and offers a character's record back ahead of
+	// its entry. A corrupt record restores as empty, and a record
+	// written while the row was on waits inert while it is off.
 	const chatHistoryKey = "sro:v1150:chat-history:1";
 	let chatHistory: Readonly<Record<string, readonly StoredChatLine[]>> = {};
 	try {
@@ -941,11 +944,14 @@ export function createPlatform(
 		chatHistory
 
 		The lines the browser kept for one scope (chat-history.ts),
-		re-read so another tab's saves are honoured.
+		re-read so another tab's saves are honoured. Nothing is kept
+		while the "Keep chat history" row is off (#4513), so the
+		runtime's offer ahead of an entry is empty and the fresh page
+		starts with the original's empty log.
 		================
 		*/
 		chatHistory( scope: string ) {
-			return storedChatHistoryBook()[scope] ?? [];
+			return experimental.keepChatHistory ? storedChatHistoryBook()[scope] ?? [] : [];
 		},
 		/*
 		================
@@ -953,10 +959,12 @@ export function createPlatform(
 
 		One scope's presented log joins the stored book; the save
 		re-reads first (#4433), so it never erases another scope or
-		another tab's newer record.
+		another tab's newer record. While the "Keep chat history"
+		row is off nothing is written (#4513).
 		================
 		*/
 		saveChatHistory( scope: string, lines: readonly import("@/engine/contracts/gameplay").ChatLine[] ) {
+			if ( !experimental.keepChatHistory ) return;
 			chatHistory = chatHistorySavedBook( storedChatHistoryBook(), scope, storedChatLines( lines ) );
 			try {
 				localStorage.setItem( chatHistoryKey, JSON.stringify( chatHistory ) );

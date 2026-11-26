@@ -63,6 +63,13 @@ test("only an explicit boolean enables chat timestamps", () => {
 	assert.equal( experimentalOptions( { chatTimestamps: true, developerDiagnostics: false } ).chatTimestamps, true );
 });
 
+test("only an explicit boolean keeps chat history (#4513)", () => {
+	for ( const value of [ undefined, null, [], {}, true, { keepChatHistory: "true" }, { keepChatHistory: 1 } ] ) {
+		assert.equal( experimentalOptions( value ).keepChatHistory, false );
+	}
+	assert.equal( experimentalOptions( { keepChatHistory: true } ).keepChatHistory, true );
+});
+
 /*
 ================
 Video stages

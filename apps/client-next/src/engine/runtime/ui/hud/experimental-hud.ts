@@ -280,6 +280,14 @@ export const EXPERIMENTAL_TABS: readonly ExperimentalTab[] = [
 						description: "Show message time on hover."
 					},
 					{
+						// Port-only, not native (#4513): off is the
+						// original's empty log on a fresh page.
+						key: "keepChatHistory",
+						id: "experimental-keep-chat-history",
+						label: "Keep chat history",
+						description: "Remember the last 100 lines per character across a reload."
+					},
+					{
 						key: "eventChatTab",
 						id: "experimental-event-chat-tab",
 						label: "Event chat tab",
