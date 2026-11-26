@@ -11,7 +11,9 @@ import (
 	"bytes"
 	"strings"
 	"testing"
+	"time"
 
+	"opensro.online/server/internal/domain"
 	"opensro.online/server/internal/game/enterworld"
 	"opensro.online/server/internal/game/item/stall"
 	"opensro.online/server/internal/game/item/wire"
@@ -63,10 +65,10 @@ func stallEdit(kind uint8, body ...byte) []byte {
 ================
 TestStallSellsToAVisitor
 
-The owner opens, puts 5 of 20 potions up for 300 gold and opens for
-business; a visitor sees the offer and buys it: 5 potions land in the
-visitor's first empty bag slot, 15 stay with the owner and 300 gold
-changes hands.
+The owner opens, puts the whole 20-potion stack up for 300 gold and
+opens for business; a visitor sees the offer and buys it: all 20
+potions land in the visitor's first empty bag slot, the owner's slot
+is empty and 300 gold changes hands.
 ================
 */
 func TestStallSellsToAVisitor(t *testing.T) {
@@ -75,7 +77,7 @@ func TestStallSellsToAVisitor(t *testing.T) {
 	if out := rt.HandleStallCreate(testDivision, owner, title); !bytes.Equal(out.Frames[0].Payload, []byte{1}) {
 		t.Fatalf("create %+v", out.Frames)
 	}
-	add := stallEdit(wire.StallEditAdd, 0, 13, 5, 0, 0x2c, 1, 0, 0, 0, 0, 0, 0, 0)
+	add := stallEdit(wire.StallEditAdd, 0, 13, 20, 0, 0x2c, 1, 0, 0, 0, 0, 0, 0, 0)
 	if out := rt.HandleStallEdit(testDivision, owner, add); len(out.Frames) != 1 || out.Frames[0].Payload[0] != 1 {
 		t.Fatalf("add %+v", out.Frames)
 	}
@@ -113,11 +115,11 @@ func TestStallSellsToAVisitor(t *testing.T) {
 	if goldOf(buyer) != 4700 || goldOf(owner) != 5300 {
 		t.Fatalf("gold %d / %d", goldOf(buyer), goldOf(owner))
 	}
-	if len(buyer.MissionInventory) != 1 || buyer.MissionInventory[0].Slot != 13 || buyer.MissionInventory[0].StackCount != 5 {
+	if len(buyer.MissionInventory) != 1 || buyer.MissionInventory[0].Slot != 13 || buyer.MissionInventory[0].StackCount != 20 {
 		t.Fatalf("buyer bag %+v", buyer.MissionInventory)
 	}
 	for _, row := range owner.MissionInventory {
-		if row.Slot == 13 && row.StackCount != 15 {
+		if row.Slot == 13 {
 			t.Fatalf("owner kept %d potions", row.StackCount)
 		}
 	}
@@ -129,14 +131,149 @@ func TestStallSellsToAVisitor(t *testing.T) {
 
 /*
 ================
+TestStallAddRefusals
+
+#4490 U18-08: the add's native refusal bytes. A stall slot of 10 or
+more, a count that is not the bag stack's whole quantity, a bag item
+already offered in this stall, one with no trade permission, a
+summoned pet's item, an item inside its rental period and one with
+no stall-network group each answer their own byte; a reprice under
+the whole quantity answers the count byte too.
+================
+*/
+func TestStallAddRefusals(t *testing.T) {
+	// The test's clock, so a rental period can sit either side of now.
+	const stallTestNowUnix = 1_800_000_000
+
+	add := func(slot, bagSlot uint8, count uint16) []byte {
+		return stallEdit(wire.StallEditAdd, slot, bagSlot, byte(count), byte(count>>8), 0x2c, 1, 0, 0, 0, 0, 0, 0, 0)
+	}
+	create := func(t *testing.T) (*Runtime, *enterworld.Character) {
+		t.Helper()
+		rt, owner, _, _ := stallFixture(t)
+		rt.Now = func() time.Time { return time.Unix(stallTestNowUnix, 0) }
+		rt.HandleStallCreate(testDivision, owner, wire.NewWriter(16).WStr("Potions").Payload())
+		return rt, owner
+	}
+	refused := func(t *testing.T, rt *Runtime, owner *enterworld.Character, payload []byte, code uint8) {
+		t.Helper()
+		out := rt.HandleStallEdit(testDivision, owner, payload)
+		if len(out.Frames) != 1 || !bytes.Equal(out.Frames[0].Payload, []byte{2, code}) {
+			t.Fatalf("edit answered %+v, want the refusal [2 %#x]", out.Frames, code)
+		}
+	}
+
+	for _, tc := range []struct {
+		name    string
+		payload []byte
+		code    uint8
+	}{
+		{"stall slot ten", add(10, 13, 20), wire.StallErrBadSlot},
+		{"stall slot max", add(255, 13, 20), wire.StallErrBadSlot},
+		{"partial count", add(0, 13, 5), wire.StallErrBadCount},
+		{"zero count", add(0, 13, 0), wire.StallErrBadCount},
+		{"padded count", add(0, 13, 21), wire.StallErrBadCount},
+		{"empty bag slot", add(0, 30, 1), wire.StallErrBadBagSlot},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			rt, owner := create(t)
+			refused(t, rt, owner, tc.payload, tc.code)
+		})
+	}
+
+	t.Run("already offered", func(t *testing.T) {
+		rt, owner := create(t)
+		if out := rt.HandleStallEdit(testDivision, owner, add(0, 13, 20)); out.Frames[0].Payload[0] != 1 {
+			t.Fatalf("first add %+v", out.Frames)
+		}
+		refused(t, rt, owner, add(1, 13, 20), wire.StallErrAlreadyOffered)
+	})
+
+	t.Run("not tradeable", func(t *testing.T) {
+		rt, owner := create(t)
+		items := rt.deps.(*enterworld.Deps).Items.(staticItemSource)
+		potion := *items["ITEM_ETC_HP_POTION_01"]
+		potion.NativeFields = potion.NativeFields.With("canTrade", 0)
+		items["ITEM_ETC_HP_POTION_01"] = &potion
+		refused(t, rt, owner, add(0, 13, 20), wire.StallErrNotTradeable)
+	})
+
+	t.Run("summoned pet item", func(t *testing.T) {
+		rt, owner := create(t)
+		for i := range owner.MissionInventory {
+			if owner.MissionInventory[i].Slot == 13 {
+				owner.MissionInventory[i].Summon = &domain.CharacterCOS{Summoned: true}
+			}
+		}
+		refused(t, rt, owner, add(0, 13, 20), wire.StallErrSummonedPet)
+	})
+
+	t.Run("rental period", func(t *testing.T) {
+		rt, owner := create(t)
+		for i := range owner.MissionInventory {
+			if owner.MissionInventory[i].Slot == 13 {
+				owner.MissionInventory[i].RentExpiresUnix = stallTestNowUnix + 3600
+			}
+		}
+		refused(t, rt, owner, add(0, 13, 20), wire.StallErrPeriodRunning)
+	})
+
+	// Natively only a running period refuses: a rental that ran out
+	// during the session falls through to the trade judgment.
+	t.Run("rental period over", func(t *testing.T) {
+		rt, owner := create(t)
+		for i := range owner.MissionInventory {
+			if owner.MissionInventory[i].Slot == 13 {
+				owner.MissionInventory[i].RentExpiresUnix = stallTestNowUnix - 1
+			}
+		}
+		if out := rt.HandleStallEdit(testDivision, owner, add(0, 13, 20)); len(out.Frames) != 1 || out.Frames[0].Payload[0] != 1 {
+			t.Fatalf("an expired rental answered %+v, want the add accepted", out.Frames)
+		}
+	})
+
+	// The native order: an already-offered item is refused before its
+	// count is read, and the count before the price.
+	t.Run("already offered before the count", func(t *testing.T) {
+		rt, owner := create(t)
+		if out := rt.HandleStallEdit(testDivision, owner, add(0, 13, 20)); out.Frames[0].Payload[0] != 1 {
+			t.Fatalf("first add %+v", out.Frames)
+		}
+		refused(t, rt, owner, add(1, 13, 5), wire.StallErrAlreadyOffered)
+	})
+	t.Run("count before the price", func(t *testing.T) {
+		rt, owner := create(t)
+		over := stallAddOfferAt(0, 13, rt.stallPriceLimit()+1, rt.RaisedGoldCaps)
+		over[4] = 5 // the u16 count's low byte: a partial stack
+		refused(t, rt, owner, over, wire.StallErrBadCount)
+	})
+
+	t.Run("no network group", func(t *testing.T) {
+		rt, owner := create(t)
+		rt.StallCategories = nil
+		refused(t, rt, owner, add(0, 13, 20), wire.StallErrNoNetworkGroup)
+	})
+
+	t.Run("modify under the whole quantity", func(t *testing.T) {
+		rt, owner := create(t)
+		if out := rt.HandleStallEdit(testDivision, owner, add(0, 13, 20)); out.Frames[0].Payload[0] != 1 {
+			t.Fatalf("add %+v", out.Frames)
+		}
+		modify := stallEdit(wire.StallEditModify, 0, 5, 0, 0x2c, 1, 0, 0, 0)
+		refused(t, rt, owner, modify, wire.StallErrBadCount)
+	})
+}
+
+/*
+================
 stallAddOfferAt
 
-An 0x71A8 kind 2 add of five potions at one unit price; wide writes the
-port-only u64 price, false the native u32.
+An 0x71A8 kind 2 add of the whole twenty-potion stack at one price;
+wide writes the port-only u64 price, false the native u32.
 ================
 */
 func stallAddOfferAt(slot, bagSlot uint8, price uint64, wide bool) []byte {
-	w := wire.NewWriter(24).U8(wire.StallEditAdd).U8(slot).U8(bagSlot).U16(5)
+	w := wire.NewWriter(24).U8(wire.StallEditAdd).U8(slot).U8(bagSlot).U16(20)
 	if wide {
 		w.U64(price)
 	} else {
@@ -165,7 +302,7 @@ port-only u64 price, false the native u32.
 ================
 */
 func stallModifyOffer(price uint64, wide bool) []byte {
-	w := wire.NewWriter(16).U8(wire.StallEditModify).U8(0).U16(5)
+	w := wire.NewWriter(16).U8(wire.StallEditModify).U8(0).U16(20)
 	if wide {
 		w.U64(price)
 	} else {
@@ -322,7 +459,7 @@ func TestStallTenBillionSalePaysCommission(t *testing.T) {
 	setGold(owner, 0)
 	s, _ := rt.Stalls.Get(testDivision, owner.Name)
 	gid := enterworld.ObjectIDForCharacter(owner)
-	buy := wire.NewWriter(24).U32(gid).U8(0).U64(RaisedStallPriceLimit).U16(5).U8(0).U64(s.Slots[0].Serial).Payload()
+	buy := wire.NewWriter(24).U32(gid).U8(0).U64(RaisedStallPriceLimit).U16(20).U8(0).U64(s.Slots[0].Serial).Payload()
 	if out := rt.HandleStallNetworkBuy(testDivision, buyer, buy); !bytes.Equal(out.Frames[0].Payload, []byte{1}) {
 		t.Fatalf("network buy %+v", out.Frames)
 	}
@@ -411,7 +548,7 @@ func TestStallNetworkDegreeIsTheItemsDegree(t *testing.T) {
 	stone.NativeFields = stone.NativeFields.With("itemClass", 3)
 	items["ITEM_ETC_HP_POTION_01"] = &stone
 	rt.HandleStallCreate(testDivision, owner, wire.NewWriter(16).WStr("Stones").Payload())
-	rt.HandleStallEdit(testDivision, owner, stallEdit(wire.StallEditAdd, 0, 13, 5, 0, 0x2c, 1, 0, 0, 0, 0, 0, 0, 0))
+	rt.HandleStallEdit(testDivision, owner, stallEdit(wire.StallEditAdd, 0, 13, 20, 0, 0x2c, 1, 0, 0, 0, 0, 0, 0, 0))
 	rt.HandleStallEdit(testDivision, owner, stallEdit(wire.StallEditOpen, 1, 1))
 	for _, c := range []struct {
 		degree, rows byte

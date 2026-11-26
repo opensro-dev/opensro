@@ -63,6 +63,12 @@ const (
 	ExchangeErrCancelledByPeer uint8 = 0x2C
 	ExchangeErrPartnerSpace    uint8 = 0x36
 	ExchangeErrCannotTrade     uint8 = 0x3A
+	// #4490 U18-01: the refusal for a summoned pet's item, whose
+	// native word form is 0x18B6; the exchange's one-byte result
+	// space carries its low byte. A pet and what it carries never
+	// change hands, and the refusal names the pet instead of the
+	// generic cannot-trade byte.
+	ExchangeErrSummonedPet uint8 = 0xB6
 )
 
 /*

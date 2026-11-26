@@ -69,7 +69,7 @@ func TestBoundItemRefusedAtTradeStallAndGuildWarehouse(t *testing.T) {
 		if _, code := rt.exchangeOfferable(c, 20); bound && code != wire.ExchangeErrCannotTrade || !bound && code != 0 {
 			t.Fatalf("bound=%v exchange code = %#x", bound, code)
 		}
-		if _, code := rt.stallOfferable(testDivision, c, 20); bound && code != wire.StallErrInvalidOp || !bound && code != 0 {
+		if _, code := rt.stallOfferable(testDivision, c, 20); bound && code != wire.StallErrNotTradeable || !bound && code != 0 {
 			t.Fatalf("bound=%v stall code = %#x", bound, code)
 		}
 		res := rt.applyGuildStorageMove(testDivision, c, wire.ItemMoveRequest{

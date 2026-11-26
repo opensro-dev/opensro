@@ -157,7 +157,7 @@ func TestStallBuyRecordsBothLegs(t *testing.T) {
 	if out := rt.HandleStallCreate(testDivision, owner, title); !bytes.Equal(out.Frames[0].Payload, []byte{1}) {
 		t.Fatalf("create %+v", out.Frames)
 	}
-	rt.HandleStallEdit(testDivision, owner, stallEdit(wire.StallEditAdd, 0, 13, 5, 0, 0x2c, 1, 0, 0, 0, 0, 0, 0, 0))
+	rt.HandleStallEdit(testDivision, owner, stallEdit(wire.StallEditAdd, 0, 13, 20, 0, 0x2c, 1, 0, 0, 0, 0, 0, 0, 0))
 	rt.HandleStallEdit(testDivision, owner, stallEdit(wire.StallEditOpen, 1, 1))
 	rt.HandleStallVisit(testDivision, buyer, wire.NewWriter(4).U32(enterworld.ObjectIDForCharacter(owner)).Payload())
 	if out := rt.HandleStallBuy(testDivision, buyer, []byte{0}); !bytes.Equal(out.Frames[0].Payload, []byte{1, 0}) {
@@ -174,12 +174,12 @@ func TestStallBuyRecordsBothLegs(t *testing.T) {
 	seller, purchaser := sold[0].Record, bought[0].Record
 	if seller.Kind != domain.TradeKindStallSell || seller.GoldReceived != 300 || seller.GoldPaid != 0 ||
 		seller.Commission != 0 || len(seller.ItemsGiven) != 1 ||
-		seller.ItemsGiven[0] != (domain.TradeItem{RefObjID: 3630, Quantity: 5}) || len(seller.ItemsReceived) != 0 {
+		seller.ItemsGiven[0] != (domain.TradeItem{RefObjID: 3630, Quantity: 20}) || len(seller.ItemsReceived) != 0 {
 		t.Fatalf("the owner's row = %+v", seller)
 	}
 	if purchaser.Kind != domain.TradeKindStallBuy || purchaser.GoldPaid != 300 || purchaser.GoldReceived != 0 ||
 		purchaser.Commission != 0 || len(purchaser.ItemsReceived) != 1 ||
-		purchaser.ItemsReceived[0] != (domain.TradeItem{RefObjID: 3630, Quantity: 5}) || len(purchaser.ItemsGiven) != 0 {
+		purchaser.ItemsReceived[0] != (domain.TradeItem{RefObjID: 3630, Quantity: 20}) || len(purchaser.ItemsGiven) != 0 {
 		t.Fatalf("the buyer's row = %+v", purchaser)
 	}
 	if purchaser.OtherName != owner.Name || seller.OtherName != buyer.Name {
