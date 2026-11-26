@@ -27,14 +27,12 @@ export const MAGIC_CUBE_MOVE_PUSH = 0x27;
 export const MAGIC_CUBE_MOVE_POP = 0x28;
 export const MAGIC_CUBE_MOVE_CONSUME = 0x29;
 
-const MAGIC_CUBE_DESC = "Stores matching elixirs. Empty it before selling or listing on the market.";
-
 // Port-only (#3906): v1.150 ships no Magic Cube text rows. These fallback
 // strings match the v1.696 Media.pk2 English rows for UI notices and all
 // sixteen Item Mall packages so titles, tooltips and search resolve even
 // before client textdataname.en.json is rebuilt with SRO_MAGIC_CUBE=on.
 // A shipped / rebuilt catalog entry always wins over this table.
-export const MAGIC_CUBE_COPY: Readonly<Record<string, string>> = Object.freeze( {
+export const MAGIC_CUBE_COPY: Readonly<Record<string, string>> = {
 	UIIT_MSG_MAGIC_CUBE_USE: "Will you use the Magic Cube?",
 	UIIT_STT_MAGIC_CUBE_INVENTORY_FULL: "Insufficient space. You cannot put any more items in the Magic Cube.",
 	UIIT_STT_MAGIC_CUBE_STORE_SELL_ERROR: "You cannot sell the Magic Cube with items still in it",
@@ -54,23 +52,38 @@ export const MAGIC_CUBE_COPY: Readonly<Record<string, string>> = Object.freeze( 
 	SN_ITEM_MALL_MAGIC_CUBE_ARMOR_30: "Magic Cube (Protector) - 30 slots",
 	SN_ITEM_MALL_MAGIC_CUBE_ACCESSARY_30: "Magic Cube (Accessory) - 30 slots",
 	SN_ITEM_MALL_MAGIC_CUBE_SHIELD_30: "Magic Cube (Shield) - 30 slots",
-	SN_ITEM_MALL_MAGIC_CUBE_WEAPON_TT_DESC: MAGIC_CUBE_DESC,
-	SN_ITEM_MALL_MAGIC_CUBE_ARMOR_TT_DESC: MAGIC_CUBE_DESC,
-	SN_ITEM_MALL_MAGIC_CUBE_ACCESSARY_TT_DESC: MAGIC_CUBE_DESC,
-	SN_ITEM_MALL_MAGIC_CUBE_SHIELD_TT_DESC: MAGIC_CUBE_DESC,
-	SN_ITEM_MALL_MAGIC_CUBE_WEAPON_10_TT_DESC: MAGIC_CUBE_DESC,
-	SN_ITEM_MALL_MAGIC_CUBE_ARMOR_10_TT_DESC: MAGIC_CUBE_DESC,
-	SN_ITEM_MALL_MAGIC_CUBE_ACCESSARY_10_TT_DESC: MAGIC_CUBE_DESC,
-	SN_ITEM_MALL_MAGIC_CUBE_SHIELD_10_TT_DESC: MAGIC_CUBE_DESC,
-	SN_ITEM_MALL_MAGIC_CUBE_WEAPON_20_TT_DESC: MAGIC_CUBE_DESC,
-	SN_ITEM_MALL_MAGIC_CUBE_ARMOR_20_TT_DESC: MAGIC_CUBE_DESC,
-	SN_ITEM_MALL_MAGIC_CUBE_ACCESSARY_20_TT_DESC: MAGIC_CUBE_DESC,
-	SN_ITEM_MALL_MAGIC_CUBE_SHIELD_20_TT_DESC: MAGIC_CUBE_DESC,
-	SN_ITEM_MALL_MAGIC_CUBE_WEAPON_30_TT_DESC: MAGIC_CUBE_DESC,
-	SN_ITEM_MALL_MAGIC_CUBE_ARMOR_30_TT_DESC: MAGIC_CUBE_DESC,
-	SN_ITEM_MALL_MAGIC_CUBE_ACCESSARY_30_TT_DESC: MAGIC_CUBE_DESC,
-	SN_ITEM_MALL_MAGIC_CUBE_SHIELD_30_TT_DESC: MAGIC_CUBE_DESC
-} );
+	SN_ITEM_MALL_MAGIC_CUBE_WEAPON_TT_DESC:
+		"Stores matching elixirs. Empty it before selling or listing on the market.",
+	SN_ITEM_MALL_MAGIC_CUBE_ARMOR_TT_DESC: "Stores matching elixirs. Empty it before selling or listing on the market.",
+	SN_ITEM_MALL_MAGIC_CUBE_ACCESSARY_TT_DESC:
+		"Stores matching elixirs. Empty it before selling or listing on the market.",
+	SN_ITEM_MALL_MAGIC_CUBE_SHIELD_TT_DESC:
+		"Stores matching elixirs. Empty it before selling or listing on the market.",
+	SN_ITEM_MALL_MAGIC_CUBE_WEAPON_10_TT_DESC:
+		"Stores matching elixirs. Empty it before selling or listing on the market.",
+	SN_ITEM_MALL_MAGIC_CUBE_ARMOR_10_TT_DESC:
+		"Stores matching elixirs. Empty it before selling or listing on the market.",
+	SN_ITEM_MALL_MAGIC_CUBE_ACCESSARY_10_TT_DESC:
+		"Stores matching elixirs. Empty it before selling or listing on the market.",
+	SN_ITEM_MALL_MAGIC_CUBE_SHIELD_10_TT_DESC:
+		"Stores matching elixirs. Empty it before selling or listing on the market.",
+	SN_ITEM_MALL_MAGIC_CUBE_WEAPON_20_TT_DESC:
+		"Stores matching elixirs. Empty it before selling or listing on the market.",
+	SN_ITEM_MALL_MAGIC_CUBE_ARMOR_20_TT_DESC:
+		"Stores matching elixirs. Empty it before selling or listing on the market.",
+	SN_ITEM_MALL_MAGIC_CUBE_ACCESSARY_20_TT_DESC:
+		"Stores matching elixirs. Empty it before selling or listing on the market.",
+	SN_ITEM_MALL_MAGIC_CUBE_SHIELD_20_TT_DESC:
+		"Stores matching elixirs. Empty it before selling or listing on the market.",
+	SN_ITEM_MALL_MAGIC_CUBE_WEAPON_30_TT_DESC:
+		"Stores matching elixirs. Empty it before selling or listing on the market.",
+	SN_ITEM_MALL_MAGIC_CUBE_ARMOR_30_TT_DESC:
+		"Stores matching elixirs. Empty it before selling or listing on the market.",
+	SN_ITEM_MALL_MAGIC_CUBE_ACCESSARY_30_TT_DESC:
+		"Stores matching elixirs. Empty it before selling or listing on the market.",
+	SN_ITEM_MALL_MAGIC_CUBE_SHIELD_30_TT_DESC:
+		"Stores matching elixirs. Empty it before selling or listing on the market."
+} as const;
 
 /*
 ================

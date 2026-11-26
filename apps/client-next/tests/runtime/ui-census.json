@@ -11,7 +11,7 @@
 					"reads": 2,
 					"writes": 1
 				},
-				"step#anon34": {
+				"step#anon36": {
 					"reads": 1,
 					"writes": 0
 				}
@@ -334,8 +334,8 @@
 					"writes": 1
 				},
 				"step": {
-					"reads": 0,
-					"writes": 1
+					"reads": 2,
+					"writes": 2
 				}
 			},
 			"name": "alchemySlots",
@@ -495,7 +495,7 @@
 					"reads": 5,
 					"writes": 1
 				},
-				"step#anon34": {
+				"step#anon36": {
 					"reads": 1,
 					"writes": 0
 				}
@@ -539,7 +539,7 @@
 					"reads": 4,
 					"writes": 1
 				},
-				"step#anon34": {
+				"step#anon36": {
 					"reads": 1,
 					"writes": 0
 				}
@@ -875,23 +875,23 @@
 					"reads": 53,
 					"writes": 49
 				},
-				"step#anon34": {
+				"step#anon36": {
 					"reads": 4,
 					"writes": 0
 				},
-				"step#anon39": {
+				"step#anon41": {
 					"reads": 1,
 					"writes": 0
 				},
-				"step#anon51": {
+				"step#anon53": {
 					"reads": 1,
 					"writes": 0
 				},
-				"step#anon52": {
+				"step#anon54": {
 					"reads": 1,
 					"writes": 0
 				},
-				"step#anon59": {
+				"step#anon61": {
 					"reads": 1,
 					"writes": 0
 				}
@@ -945,7 +945,7 @@
 					"reads": 3,
 					"writes": 1
 				},
-				"step#anon18": {
+				"step#anon20": {
 					"reads": 2,
 					"writes": 0
 				}
@@ -1021,7 +1021,7 @@
 					"reads": 6,
 					"writes": 3
 				},
-				"step#anon42": {
+				"step#anon44": {
 					"reads": 1,
 					"writes": 0
 				}
@@ -1092,7 +1092,7 @@
 					"writes": 2
 				},
 				"step": {
-					"reads": 9,
+					"reads": 11,
 					"writes": 1
 				}
 			},
@@ -1145,7 +1145,7 @@
 		},
 		{
 			"buckets": {
-				"step#anon39": {
+				"step#anon41": {
 					"reads": 3,
 					"writes": 0
 				}
@@ -1201,7 +1201,7 @@
 					"reads": 1,
 					"writes": 1
 				},
-				"step#anon42": {
+				"step#anon44": {
 					"reads": 1,
 					"writes": 0
 				}
@@ -1237,7 +1237,7 @@
 					"reads": 3,
 					"writes": 1
 				},
-				"step#anon42": {
+				"step#anon44": {
 					"reads": 1,
 					"writes": 0
 				}
@@ -1255,7 +1255,7 @@
 					"reads": 1,
 					"writes": 1
 				},
-				"step#anon42": {
+				"step#anon44": {
 					"reads": 1,
 					"writes": 0
 				}
@@ -1319,7 +1319,7 @@
 					"reads": 1,
 					"writes": 1
 				},
-				"step#anon42": {
+				"step#anon44": {
 					"reads": 1,
 					"writes": 0
 				}
@@ -1449,7 +1449,7 @@
 					"reads": 1,
 					"writes": 8
 				},
-				"step#anon42": {
+				"step#anon44": {
 					"reads": 1,
 					"writes": 0
 				},
@@ -1945,55 +1945,55 @@
 					"reads": 97,
 					"writes": 61
 				},
-				"step#anon140": {
+				"step#anon142": {
 					"reads": 1,
 					"writes": 0
 				},
-				"step#anon299": {
+				"step#anon301": {
 					"reads": 1,
 					"writes": 0
 				},
-				"step#anon335": {
+				"step#anon337": {
 					"reads": 1,
 					"writes": 0
 				},
-				"step#anon34": {
+				"step#anon342": {
+					"reads": 1,
+					"writes": 0
+				},
+				"step#anon354": {
+					"reads": 1,
+					"writes": 0
+				},
+				"step#anon36": {
 					"reads": 3,
 					"writes": 0
 				},
-				"step#anon340": {
+				"step#anon396": {
 					"reads": 1,
 					"writes": 0
 				},
-				"step#anon352": {
+				"step#anon399": {
 					"reads": 1,
 					"writes": 0
 				},
-				"step#anon394": {
+				"step#anon400": {
 					"reads": 1,
 					"writes": 0
 				},
-				"step#anon397": {
-					"reads": 1,
-					"writes": 0
-				},
-				"step#anon398": {
-					"reads": 1,
-					"writes": 0
-				},
-				"step#anon439": {
-					"reads": 1,
-					"writes": 0
-				},
-				"step#anon57": {
-					"reads": 1,
-					"writes": 0
-				},
-				"step#anon58": {
+				"step#anon441": {
 					"reads": 1,
 					"writes": 0
 				},
 				"step#anon59": {
+					"reads": 1,
+					"writes": 0
+				},
+				"step#anon60": {
+					"reads": 1,
+					"writes": 0
+				},
+				"step#anon61": {
 					"reads": 4,
 					"writes": 0
 				},
@@ -3241,7 +3241,7 @@
 					"reads": 1,
 					"writes": 1
 				},
-				"step#anon42": {
+				"step#anon44": {
 					"reads": 1,
 					"writes": 0
 				},
@@ -4043,7 +4043,7 @@
 					"reads": 2,
 					"writes": 1
 				},
-				"step#anon51": {
+				"step#anon53": {
 					"reads": 1,
 					"writes": 0
 				}
@@ -4141,15 +4141,15 @@
 					"reads": 19,
 					"writes": 2
 				},
-				"step#anon42": {
-					"reads": 1,
-					"writes": 0
-				},
-				"step#anon424": {
+				"step#anon426": {
 					"reads": 1,
 					"writes": 0
 				},
 				"step#anon44": {
+					"reads": 1,
+					"writes": 0
+				},
+				"step#anon46": {
 					"reads": 1,
 					"writes": 0
 				},
@@ -4815,15 +4815,15 @@
 					"reads": 1,
 					"writes": 0
 				},
-				"step#anon240": {
+				"step#anon242": {
 					"reads": 1,
 					"writes": 0
 				},
-				"step#anon34": {
+				"step#anon36": {
 					"reads": 2,
 					"writes": 0
 				},
-				"step#anon44": {
+				"step#anon46": {
 					"reads": 1,
 					"writes": 0
 				},
@@ -4946,7 +4946,7 @@
 					"writes": 0
 				},
 				"panel:Alchemy": {
-					"reads": 5,
+					"reads": 6,
 					"writes": 0
 				},
 				"panel:Auto Potion": {
@@ -5095,7 +5095,7 @@
 					"reads": 5,
 					"writes": 0
 				},
-				"step#anon299": {
+				"step#anon301": {
 					"reads": 1,
 					"writes": 0
 				}
@@ -5581,27 +5581,27 @@
 					"reads": 113,
 					"writes": 2
 				},
-				"step#anon140": {
+				"step#anon142": {
 					"reads": 1,
 					"writes": 0
 				},
-				"step#anon34": {
+				"step#anon36": {
 					"reads": 4,
 					"writes": 0
 				},
-				"step#anon39": {
+				"step#anon41": {
 					"reads": 3,
 					"writes": 0
 				},
-				"step#anon51": {
+				"step#anon53": {
 					"reads": 2,
 					"writes": 0
 				},
-				"step#anon52": {
+				"step#anon54": {
 					"reads": 2,
 					"writes": 0
 				},
-				"step#anon58": {
+				"step#anon60": {
 					"reads": 1,
 					"writes": 0
 				},
@@ -5661,7 +5661,7 @@
 					"reads": 1,
 					"writes": 0
 				},
-				"step#anon39": {
+				"step#anon41": {
 					"reads": 1,
 					"writes": 0
 				},
@@ -5993,11 +5993,11 @@
 					"reads": 17,
 					"writes": 1
 				},
-				"step#anon42": {
+				"step#anon44": {
 					"reads": 1,
 					"writes": 0
 				},
-				"step#anon44": {
+				"step#anon46": {
 					"reads": 1,
 					"writes": 0
 				},
@@ -6075,7 +6075,7 @@
 					"reads": 4,
 					"writes": 2
 				},
-				"step#anon140": {
+				"step#anon142": {
 					"reads": 1,
 					"writes": 0
 				}
@@ -6199,7 +6199,7 @@
 					"reads": 6,
 					"writes": 1
 				},
-				"step#anon9": {
+				"step#anon11": {
 					"reads": 1,
 					"writes": 0
 				}
@@ -6285,7 +6285,7 @@
 					"reads": 7,
 					"writes": 4
 				},
-				"step#anon140": {
+				"step#anon142": {
 					"reads": 1,
 					"writes": 0
 				}
@@ -6363,7 +6363,7 @@
 					"reads": 2,
 					"writes": 2
 				},
-				"step#anon23": {
+				"step#anon25": {
 					"reads": 1,
 					"writes": 0
 				}
@@ -6399,7 +6399,7 @@
 					"reads": 2,
 					"writes": 1
 				},
-				"step#anon138": {
+				"step#anon140": {
 					"reads": 1,
 					"writes": 0
 				}
@@ -6429,7 +6429,7 @@
 					"reads": 2,
 					"writes": 1
 				},
-				"step#anon21": {
+				"step#anon23": {
 					"reads": 1,
 					"writes": 0
 				}
@@ -6521,7 +6521,7 @@
 					"reads": 6,
 					"writes": 0
 				},
-				"step#anon42": {
+				"step#anon44": {
 					"reads": 2,
 					"writes": 0
 				},
@@ -6543,7 +6543,7 @@
 					"reads": 2,
 					"writes": 0
 				},
-				"step#anon7": {
+				"step#anon9": {
 					"reads": 1,
 					"writes": 0
 				}
@@ -7251,7 +7251,7 @@
 					"reads": 2,
 					"writes": 1
 				},
-				"step#anon44": {
+				"step#anon46": {
 					"reads": 1,
 					"writes": 0
 				}
@@ -7269,7 +7269,7 @@
 					"reads": 2,
 					"writes": 1
 				},
-				"step#anon44": {
+				"step#anon46": {
 					"reads": 2,
 					"writes": 0
 				}
@@ -7395,7 +7395,7 @@
 					"reads": 6,
 					"writes": 4
 				},
-				"step#anon10": {
+				"step#anon12": {
 					"reads": 1,
 					"writes": 0
 				}
@@ -7762,7 +7762,7 @@
 					"writes": 0
 				},
 				"magic": {
-					"reads": 9,
+					"reads": 8,
 					"writes": 0
 				},
 				"main": {
@@ -7815,6 +7815,10 @@
 				},
 				"optionOrigin": {
 					"reads": 2,
+					"writes": 0
+				},
+				"panel:Alchemy": {
+					"reads": 1,
 					"writes": 0
 				},
 				"panel:COS inventory": {
