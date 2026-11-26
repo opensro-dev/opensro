@@ -70,6 +70,9 @@ type MonsterDef struct {
 	MotionState uint8
 	// Zero preserves the existing live-row encoding. Retained corpses use DEAD.
 	LifeState uint8
+	// BodyStatus is the body mode byte after MotionState (monster.Instance
+	// BodyStatus); zero is no mode.
+	BodyStatus uint8
 	// Structure selects the CICATStruct row (BuildStructureCreateRow) and
 	// carries its fields: hit points, event zone, state, TypeID4.
 	Structure      bool
@@ -138,7 +141,7 @@ func BuildMonsterCreateRow(def MonsterDef, gid uint32, spawn Spawn) []byte {
 		U16(spawn.Angle).
 		U8(def.LifeState).
 		U8(def.MotionState).
-		U8(0).
+		U8(def.BodyStatus).
 		F32(float32(def.WalkSpeed)).
 		F32(float32(def.RunSpeed)).
 		F32(float32(def.ScaleDenom))
@@ -211,7 +214,7 @@ func BuildStructureCreateRow(def MonsterDef, gid uint32, spawn Spawn) []byte {
 		U16(spawn.Angle).
 		U8(def.LifeState).
 		U8(def.MotionState).
-		U8(0).
+		U8(def.BodyStatus).
 		F32(float32(def.WalkSpeed)).
 		F32(float32(def.RunSpeed)).
 		F32(float32(def.ScaleDenom)).
@@ -264,7 +267,7 @@ func MonsterWireDefFromInstance(instance monster.Instance, nowMs int64) MonsterD
 		Structure:   ref.Structure, CurrentHP: instance.CurrentHP,
 		EventStructID: instance.Nest.EventStructID, TypeID4: ref.TypeID4,
 		TradeNpc: monster.TradeNpcMonster(ref), TradeVariant: instance.TradeVariant,
-		StructureState: instance.StructureState,
+		StructureState: instance.StructureState, BodyStatus: instance.BodyStatus,
 	}
 	if instance.CurrentHP == 0 {
 		def.LifeState = wire.LifeStateDead

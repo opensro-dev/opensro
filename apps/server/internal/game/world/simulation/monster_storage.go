@@ -45,6 +45,7 @@ type residentMonster struct {
 	arena               bool
 	spawnHeading        uint16
 	tradeVariant        uint8
+	bodyStatus          uint8
 	structureState      uint16
 	currentHP           uint32
 	damageSinceSummon   uint32
@@ -206,7 +207,7 @@ func (s *monsterStorage) set(gid uint32, row monster.Instance) {
 		s.maxBodyRadius = radius
 	}
 	resident := residentMonster{row.ConditionalUsed, sparse, ref, nest, row.Help, row.Motion, row.Spawn,
-		row.NestDetached, row.GMSpawned, row.Arena, row.SpawnHeading, row.TradeVariant, row.StructureState, row.CurrentHP, row.DamageSinceSummon, row.LastSummonCommandMs,
+		row.NestDetached, row.GMSpawned, row.Arena, row.SpawnHeading, row.TradeVariant, row.BodyStatus, row.StructureState, row.CurrentHP, row.DamageSinceSummon, row.LastSummonCommandMs,
 		row.Opponents, row.SummonActionUntilMs, row.SummonerGID,
 		row.SummonSightRange, row.SummonerFollowRange}
 	held := monsterHotSlot{gid: gid, row: resident, maxHP: row.Ref.MaxHP,
@@ -291,6 +292,7 @@ func (r *residentMonster) fill(dst *monster.Instance, gid uint32) {
 	dst.SpawnHeading = r.spawnHeading
 	dst.TradeVariant = r.tradeVariant
 	dst.StructureState = r.structureState
+	dst.BodyStatus = r.bodyStatus
 	dst.CurrentHP = r.currentHP
 	dst.DamageSinceSummon = r.damageSinceSummon
 	dst.LastSummonCommandMs = r.lastSummonCommandMs

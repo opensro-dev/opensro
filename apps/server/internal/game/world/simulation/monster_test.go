@@ -188,3 +188,25 @@ func TestTradeNpcRowEndsWithItsVariant(t *testing.T) {
 		}
 	}
 }
+
+/*
+================
+TestMonsterBodyStatusRidesTheSpawnRow
+
+A monster's body mode is the byte after its life and motion states (the
+client reads it into +0x460 and applies it at spawn, client 0x4F3B8B),
+from the instance through the wire def; zero for an ordinary monster.
+================
+*/
+func TestMonsterBodyStatusRidesTheSpawnRow(t *testing.T) {
+	const bodyByte = 31
+	box := monster.Instance{Ref: monster.MonsterRef{RefObjID: 2, MaxHP: 1000}, CurrentHP: 1000, BodyStatus: 2}
+	spawn := Spawn{RegionID: 25258, X: 812, Y: 75, Z: 392}
+	if row := BuildMonsterCreateRow(MonsterWireDefFromInstance(box, 0), 400001, spawn); row[bodyByte] != 2 {
+		t.Fatalf("the untouchable box spawns with body byte %d", row[bodyByte])
+	}
+	box.BodyStatus = 0
+	if row := BuildMonsterCreateRow(MonsterWireDefFromInstance(box, 0), 400001, spawn); row[bodyByte] != 0 {
+		t.Fatalf("an ordinary monster spawns with body byte %d", row[bodyByte])
+	}
+}

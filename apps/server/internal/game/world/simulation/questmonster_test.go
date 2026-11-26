@@ -229,30 +229,36 @@ func TestQuestMonsterRarityOverride(t *testing.T) {
 
 /*
 ================
-TestDaemonRingPicksItsThirdByTheRoll
+TestSpawnRingsPickTheirThirdByTheRoll
 
-The v1.188 event spawner's ring: rand() % 101 below 50 lands
-in the outer third, 50 to 79 in the middle third, 80 to 100 in the inner
-third; the fraction places the point inside its third.
+The v1.188 rings on a radius of 51: the event spawner's roll (rand() %
+101) below 50 lands in the outer third, 50 to 79 in the middle, 80 to 100
+in the inner third; the factory's cuts are 70 and 90. The fraction
+places the point inside its third.
 ================
 */
-func TestDaemonRingPicksItsThirdByTheRoll(t *testing.T) {
+func TestSpawnRingsPickTheirThirdByTheRoll(t *testing.T) {
 	const radius = 51
 	cases := []struct {
+		ring           SpawnRing
 		band, fraction uint32
 		want           float64
 	}{
-		{band: 0, fraction: 0, want: 34},
-		{band: 49, fraction: nativeRandomMaximum, want: 51},
-		{band: 50, fraction: 0, want: 17},
-		{band: 79, fraction: 0, want: 17},
-		{band: 80, fraction: 0, want: 0},
-		{band: 100, fraction: nativeRandomMaximum, want: 17},
-		{band: 101, fraction: 0, want: 34},
+		{ring: EventSpawnerRing(radius), band: 0, fraction: 0, want: 34},
+		{ring: EventSpawnerRing(radius), band: 49, fraction: nativeRandomMaximum, want: 51},
+		{ring: EventSpawnerRing(radius), band: 50, fraction: 0, want: 17},
+		{ring: EventSpawnerRing(radius), band: 79, fraction: 0, want: 17},
+		{ring: EventSpawnerRing(radius), band: 80, fraction: 0, want: 0},
+		{ring: EventSpawnerRing(radius), band: 100, fraction: nativeRandomMaximum, want: 17},
+		{ring: EventSpawnerRing(radius), band: 101, fraction: 0, want: 34},
+		{ring: FactoryRing(radius), band: 69, fraction: 0, want: 34},
+		{ring: FactoryRing(radius), band: 70, fraction: 0, want: 17},
+		{ring: FactoryRing(radius), band: 89, fraction: nativeRandomMaximum, want: 34},
+		{ring: FactoryRing(radius), band: 90, fraction: 0, want: 0},
 	}
 	for _, c := range cases {
-		if got := daemonRingRadius(radius, c.band, c.fraction); math.Abs(got-c.want) > 1e-4 {
-			t.Errorf("band %d fraction %d: %f, want %f", c.band, c.fraction, got, c.want)
+		if got := c.ring.distance(c.band, c.fraction); math.Abs(got-c.want) > 1e-4 {
+			t.Errorf("cuts %d/%d band %d fraction %d: %f, want %f", c.ring.OuterCut, c.ring.InnerCut, c.band, c.fraction, got, c.want)
 		}
 	}
 }

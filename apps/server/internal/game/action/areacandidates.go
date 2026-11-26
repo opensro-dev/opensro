@@ -84,7 +84,9 @@ func (rt *Runtime) areaCandidates(q areaQuery) []areaCandidate {
 			// own-side job bandit whatever the selection mode: an area never
 			// splashes one, primary or not (#2080). A companion's area reads
 			// its owner's job state the same way, through the query's caster.
-			if q.caster != nil && rt.jobMonsterTargetRefusal(q.caster, m) != 0 {
+			// A protected body mode (the untouchable Pandora box) refuses
+			// every caster, a casterless area too.
+			if monsterBodyProtected(m) || q.caster != nil && rt.monsterTargetRefusal(q.caster, m) != 0 {
 				continue
 			}
 			// Port-only (SRO_STR_INT_UNIQUES): a copy this caster's build may
