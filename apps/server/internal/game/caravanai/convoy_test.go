@@ -369,6 +369,11 @@ func TestHandsOffHireEndsWhenTheTradersSellOrThePartyGoes(t *testing.T) {
 	rt.mu.Lock()
 	cost = hiredGoodsCost(rt.findAgentLocked("division", "[AI]Trader_Mei"))
 	rt.mu.Unlock()
+	// The goods must cost something, or "only the fee kept" below would
+	// hold without any refund.
+	if cost <= 0 {
+		t.Fatal("the hired Trader carried no goods to refund")
+	}
 	rt.SetPartyOrder("division", "Boss", nil, 41_000)
 	if unit := step("[AI]Trader_Mei", 41_000); unit.HiredBy != "Boss" {
 		t.Fatal("a hire ended before its agent joined the party")

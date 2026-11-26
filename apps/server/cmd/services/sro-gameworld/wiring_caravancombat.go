@@ -55,7 +55,6 @@ func (game *gameplayPlane) caravanCast(c *enterworld.Character, target uint32, n
 			game.caravanAgents.RequestManaRecovery(game.divisionID, c.Name)
 		}
 		if skill != basicSkill && basicSkill != 0 {
-			skill = basicSkill
 			result = game.items.HandleTargetInteract(game.divisionID, c, (wire.SkillAction{ActionId: basicSkill, HasTarget: true, TargetGid: target}).Encode())
 		}
 	}
