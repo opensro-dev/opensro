@@ -44,6 +44,8 @@ Port-only caravan state belongs with its feature wiring.
 type caravanRuntimeState struct {
 	caravanSkills     map[string][]uint32
 	caravanRessSkill  map[string]uint32
+	caravanImbueSkill map[string]uint32
+	caravanUpkeepAtMs map[string]int64
 	caravanAttackAt   map[string]int64
 	caravanAgents     *caravanai.Runtime
 	caravanNextStepMs int64
@@ -358,7 +360,7 @@ func (game *gameplayPlane) caravanAgentsTick(ticker *simulation.Ticker, nowMs in
 			if c == nil {
 				continue
 			}
-			if p, ok := game.caravanPlayer(game.divisionID, c.Name); ok && p.HPPercent > 0 {
+			if p, ok := game.caravanPrey(c.Name); ok {
 				p.Distance = float32(caravanai.WaypointDistance(p.At, caravanai.Waypoint{RegionID: unit.RegionID, X: unit.X, Z: unit.Z}))
 				if p.Distance <= 320 {
 					nearby = append(nearby, p.ObservedPlayer)
@@ -397,6 +399,7 @@ func (game *gameplayPlane) caravanAgentsTick(ticker *simulation.Ticker, nowMs in
 				}
 			}
 			game.keepCaravanSpeed(c, unit, nowMs)
+			game.keepCaravanFit(c, unit, nowMs)
 			if !mustRejoin {
 				game.showCaravanLoot(c, unit, nearby, nowMs)
 			}
@@ -447,9 +450,7 @@ func (game *gameplayPlane) caravanAgentsTick(ticker *simulation.Ticker, nowMs in
 				}
 			} else if !deadNow && decision.Action == caravanai.ActionAttackTarget && !mustRejoin {
 				if target := game.deps.CharacterByName(game.divisionID, decision.TargetName); target != nil {
-					alive := false
-					game.deps.Read(game.divisionID, func() { alive = enterworld.CharacterAlive(target) })
-					if alive {
+					if game.caravanStrikeable(target) {
 						tSpawn := game.items.LiveSpawnFor(game.divisionID, target)
 						targetDist := caravanai.WaypointDistance(
 							caravanai.Waypoint{RegionID: updated.RegionID, X: updated.X, Z: updated.Z},

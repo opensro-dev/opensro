@@ -6,6 +6,7 @@ wiring_caravancombat.go - port-only caravan combat through native action owners
 package main
 
 import (
+	"opensro.online/server/internal/domain"
 	"opensro.online/server/internal/game/action"
 	"opensro.online/server/internal/game/caravanai"
 	"opensro.online/server/internal/game/enterworld"
@@ -45,6 +46,16 @@ func (game *gameplayPlane) caravanCast(c *enterworld.Character, target uint32, n
 			}
 		}
 	}
+	// An imbue is instant and never queues: it goes up ahead of the blow,
+	// when the mana holds both, so it never starves the skill itself.
+	var imbued action.OpResult
+	if imbue := game.caravanImbueSkill[c.Name]; imbue != 0 && !game.items.ServerActorImbued(game.divisionID, c.Name, nowMs) {
+		imbueRow, _ := game.deps.Skills.SkillByID(imbue)
+		skillRow, _ := game.deps.Skills.SkillByID(skill)
+		if _, _, mp, _ := game.items.GameplayVitals(game.divisionID, c); int64(mp) >= int64(imbueRow.Consumption.MP)+int64(skillRow.Consumption.MP) {
+			imbued = game.items.HandleTargetInteract(game.divisionID, c, (wire.SkillAction{ActionId: imbue}).Encode())
+		}
+	}
 	result := game.items.HandleTargetInteract(game.divisionID, c, (wire.SkillAction{ActionId: skill, HasTarget: true, TargetGid: target}).Encode())
 
 	// Native B245 insufficient-MP refusal 0x3004 carries only its low error byte.
@@ -58,6 +69,8 @@ func (game *gameplayPlane) caravanCast(c *enterworld.Character, target uint32, n
 			result = game.items.HandleTargetInteract(game.divisionID, c, (wire.SkillAction{ActionId: basicSkill, HasTarget: true, TargetGid: target}).Encode())
 		}
 	}
+	result.Frames = append(imbued.Frames, result.Frames...)
+	result.Broadcast = append(imbued.Broadcast, result.Broadcast...)
 	return result
 }
 
@@ -228,4 +241,52 @@ func (game *gameplayPlane) caravanCombatants() []simulation.SessionSnapshot {
 		out = append(out, snap)
 	}
 	return out
+}
+
+/*
+================
+keepCaravanFit
+
+Twice a second: an agent frozen, burnt, shocked or poisoned drinks a
+universal pill (the native item, cooldown and all); one resting in town
+has its gear repaired, so it leaves on every run whole.
+================
+*/
+func (game *gameplayPlane) keepCaravanFit(c *enterworld.Character, unit *caravanai.AgentUnit, nowMs int64) {
+	if unit.RespawnPending || unit.HP <= 0 || nowMs < game.caravanUpkeepAtMs[c.Name] {
+		return
+	}
+	if game.caravanUpkeepAtMs == nil {
+		game.caravanUpkeepAtMs = make(map[string]int64)
+	}
+	game.caravanUpkeepAtMs[c.Name] = nowMs + 500
+	if game.items.ServerActorNeedsCure(game.divisionID, c.Name) {
+		game.caravanUseItem(game.divisionID, c.Name, caravanai.UniversalPillItem)
+	}
+	if unit.State == caravanai.StateIdleInTown || unit.State == caravanai.StateRecruiting {
+		game.publishCaravanAction(c, game.items.ServerActorRepair(game.divisionID, c.Name))
+	}
+}
+
+/*
+================
+caravanPrey / caravanStrikeable
+
+A player out of a job suit is no party to the job war. caravanPrey is
+what an agent observes: an online, living player in a suit.
+caravanStrikeable re-reads the worn suit at the blow, so a target from a
+grudge or a last attacker, or a suit taken off mid-fight, is never struck.
+================
+*/
+func (game *gameplayPlane) caravanPrey(name string) (caravanai.PlayerPosition, bool) {
+	p, ok := game.caravanPlayer(game.divisionID, name)
+	return p, ok && p.HPPercent > 0 && p.JobType != domain.JobNone
+}
+
+func (game *gameplayPlane) caravanStrikeable(target *enterworld.Character) bool {
+	strikeable := false
+	game.deps.Read(game.divisionID, func() {
+		strikeable = enterworld.CharacterAlive(target) && enterworld.DressedJob(target) != domain.JobNone
+	})
+	return strikeable
 }

@@ -447,6 +447,13 @@ Distances use 10 world units per in-game metre (skill ranges: 180 units = 18m); 
   45% or less, `ITEM_ETC_MP_POTION_05` when mana runs low; nothing else heals them. Every agent keeps
   `ITEM_MALL_MOVE_SPEED_UP_50` running (checked every 2s) and moves at the buffed speed (75 run, 30
   walk); a mounted Trader rides at the transport's speed, as natively. An empty stack is restocked.
+- **Fit to fight:** an agent that is frozen, frostbitten, burnt, shocked, poisoned or zombied drinks
+  `ITEM_ETC_CURE_ALL_04` (the universal pill, checked twice a second, native cooldown). Each agent
+  also trains one force mastery (Cold, Lightning or Fire, by actor) with what the flat Chinese
+  300-point total leaves, and raises its highest weapon imbue before a blow when its mana covers the
+  imbue and the skill both. An agent resting in town has its gear repaired to the native maximum
+  (`action.ServerActorRepair`, free), so it leaves on every run whole.
+- **Job war only:** agents never take a player out of a job suit as a target, and never strike one.
 - **Hunter targets:** a Hunter with an AI or player Thief within sight fights the Thief and skips the
   scan for the world's own monsters (native NPC thieves and mobs) until no Thief is near.
 - **Persistence fix:** the caravan runtime's flush loop (memories, route heat, hires) is now started:
