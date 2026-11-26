@@ -11,6 +11,7 @@ import (
 	"bytes"
 	"strings"
 	"testing"
+	"time"
 
 	"opensro.online/server/internal/domain"
 	"opensro.online/server/internal/game/enterworld"
@@ -141,12 +142,16 @@ the whole quantity answers the count byte too.
 ================
 */
 func TestStallAddRefusals(t *testing.T) {
+	// The test's clock, so a rental period can sit either side of now.
+	const stallTestNowUnix = 1_800_000_000
+
 	add := func(slot, bagSlot uint8, count uint16) []byte {
 		return stallEdit(wire.StallEditAdd, slot, bagSlot, byte(count), byte(count>>8), 0x2c, 1, 0, 0, 0, 0, 0, 0, 0)
 	}
 	create := func(t *testing.T) (*Runtime, *enterworld.Character) {
 		t.Helper()
 		rt, owner, _, _ := stallFixture(t)
+		rt.Now = func() time.Time { return time.Unix(stallTestNowUnix, 0) }
 		rt.HandleStallCreate(testDivision, owner, wire.NewWriter(16).WStr("Potions").Payload())
 		return rt, owner
 	}
@@ -207,10 +212,40 @@ func TestStallAddRefusals(t *testing.T) {
 		rt, owner := create(t)
 		for i := range owner.MissionInventory {
 			if owner.MissionInventory[i].Slot == 13 {
-				owner.MissionInventory[i].RentExpiresUnix = 1
+				owner.MissionInventory[i].RentExpiresUnix = stallTestNowUnix + 3600
 			}
 		}
 		refused(t, rt, owner, add(0, 13, 20), wire.StallErrPeriodRunning)
+	})
+
+	// Natively only a running period refuses: a rental that ran out
+	// during the session falls through to the trade judgment.
+	t.Run("rental period over", func(t *testing.T) {
+		rt, owner := create(t)
+		for i := range owner.MissionInventory {
+			if owner.MissionInventory[i].Slot == 13 {
+				owner.MissionInventory[i].RentExpiresUnix = stallTestNowUnix - 1
+			}
+		}
+		if out := rt.HandleStallEdit(testDivision, owner, add(0, 13, 20)); len(out.Frames) != 1 || out.Frames[0].Payload[0] != 1 {
+			t.Fatalf("an expired rental answered %+v, want the add accepted", out.Frames)
+		}
+	})
+
+	// The native order: an already-offered item is refused before its
+	// count is read, and the count before the price.
+	t.Run("already offered before the count", func(t *testing.T) {
+		rt, owner := create(t)
+		if out := rt.HandleStallEdit(testDivision, owner, add(0, 13, 20)); out.Frames[0].Payload[0] != 1 {
+			t.Fatalf("first add %+v", out.Frames)
+		}
+		refused(t, rt, owner, add(1, 13, 5), wire.StallErrAlreadyOffered)
+	})
+	t.Run("count before the price", func(t *testing.T) {
+		rt, owner := create(t)
+		over := stallAddOfferAt(0, 13, rt.stallPriceLimit()+1, rt.RaisedGoldCaps)
+		over[4] = 5 // the u16 count's low byte: a partial stack
+		refused(t, rt, owner, over, wire.StallErrBadCount)
 	})
 
 	t.Run("no network group", func(t *testing.T) {
