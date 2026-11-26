@@ -5,9 +5,11 @@ conn_wt_compress.go - large WebTransport records travel gzip-compressed
 
 The WebSocket has permessage-deflate for its large messages (#2311);
 QUIC has no such layer, so the EnterWorld result and the commerce item
-references crossed the control stream raw: about 9.5 MB of JSON on every
-login and teleport, measured live on 2026-11-25. Port-only, not native,
-off unless SRO_WEBTRANSPORT_COMPRESSION is on.
+references cross the control stream raw: about 0.75 MB and 2.2 MB of JSON
+on a session's first entry (#4439 sends them once per session, #4447
+trimmed the item rows). The EnterWorld record gzips 14.9x (754 KB to
+51 KB) in about 5 ms, measured on the shipped data 2026-11-26.
+Port-only, not native, off unless SRO_WEBTRANSPORT_COMPRESSION is on.
 
 The client asks in the session's URL, so a tab that does not know the
 record form is never sent one and nothing in the handshake changes. Only

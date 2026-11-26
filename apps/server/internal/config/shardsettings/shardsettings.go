@@ -720,8 +720,8 @@ var Settings = []Setting{
 	// catalogue, never from this switch.
 	{Env: "SRO_WEBTRANSPORT_PUBLIC", NomadVar: "webtransport_public", Default: "off"},
 	// Port-only, not native: large WebTransport records gzip-compressed
-	// for the clients that ask (about 9.5 MB of JSON per login and
-	// teleport otherwise). "off" sends every record raw. Server only: a
+	// for the clients that ask (about 3 MB of JSON on a session's first
+	// entry otherwise). "off" sends every record raw. Server only: a
 	// client always asks, and the record itself says what it is.
 	{Env: "SRO_WEBTRANSPORT_COMPRESSION", NomadVar: "webtransport_compression", Default: "off"},
 }
