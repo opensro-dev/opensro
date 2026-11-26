@@ -338,9 +338,9 @@ func TestMatchJoinHandshakeEndToEndOverWire(t *testing.T) {
 		"owner notify for jack (request 1)")
 
 	// ---- while Jack's application stands, his own registration is
-	// refused record-again (one standing at a time) ----
+	// refused join-duplicate (one standing at a time) ----
 	sendFrame(t, jack, match.OpPartyRegisterRequest, partyRequest(0, 555, 0, 0, 1, 80, "jack party"))
-	expectExactFrame(t, jack, match.OpPartyRegisterAck, []byte{2, 0x1B}, "register while join pending refusal")
+	expectExactFrame(t, jack, match.OpPartyRegisterAck, []byte{2, 0x24}, "register while join pending refusal")
 
 	// ---- Kate's request DISPLACES Jack's: Jack is acked no-reply and
 	// Mira gets the fresh notify ----
