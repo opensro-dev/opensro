@@ -755,6 +755,7 @@ enter
 			connect();
 		},
 		chatBlocks: core.chatBlocks,
+		chatHistory: core.chatHistory,
 		/*
 ================
 depart
@@ -834,6 +835,13 @@ reconnect
 		/*
 ================
 disconnect
+
+A forgetting disconnect (a fresh sign-in, session reset) retires the
+whole world, but the conversation is the next entry's to judge: it
+keeps the log only for the same character on the same shard (#3435),
+and a sign-in after a lost session re-enters that character through
+roster restore, so clearing here would empty the chat before the
+re-entry could keep it (#4513).
 ================
 		*/
 		disconnect( forget = false ) {
@@ -846,7 +854,7 @@ disconnect
 				disconnectMessage = "";
 				incidentID = "";
 				if ( hasWorld ) {
-					core.clear();
+					core.clear( true );
 				}
 				hasWorld = false;
 				resume = undefined;

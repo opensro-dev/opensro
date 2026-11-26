@@ -5,8 +5,12 @@ chat.ts - character-session chat, receipts and received public history
 
 World travel replaces scene data, not the conversation, and so does a
 re-entry of the same character after its session was lost (#3435): the
-lines a player was away for stay to be read. Character changes, a departure
-to character select and session disposal clear it. A server-authored public
+lines a player was away for stay to be read. A forgetting disconnect
+suspends it and hands the decision to the entry that follows (#4513).
+Character changes, a departure to character select and session disposal
+clear it. The last 100 lines also survive a page reload per character
+(restore, chat-history.ts; port-only, not native - default by owner
+decision 2026-11-26). A server-authored public
 echo determines the beta channel; its later native receipt only releases the
 outstanding request.
 
@@ -32,6 +36,7 @@ import {
 	stripChatMarkers
 } from "@/engine/foundation/gameplay/chat-item-links";
 import { CHAT_HISTORY_CONTROL } from "@/engine/foundation/gameplay/commerce-controls";
+import { CHAT_HISTORY_KEPT, type StoredChatLine } from "@/engine/foundation/gameplay/chat-history";
 import { NO_JOB_CLASS } from "@/engine/foundation/gameplay/job-guild";
 import { partyActiveJob } from "@/engine/foundation/gameplay/party-matching";
 import { CHAT_ACK_TIMEOUT_MS, uiTuningFrom } from "@/engine/foundation/ui/ui-tuning";
@@ -42,7 +47,8 @@ import {
 	WHISPER_BLOCK_ACK_OPCODE
 } from "@/engine/contracts/opcodes";
 import { viewOf } from "@/engine/foundation/binary/byte-view";
-const CHAT_LINE_LIMIT = 128;
+// The window keeps the last CHAT_HISTORY_KEPT lines (chat-history.ts):
+// the 101st drops the oldest, live and across a reload alike.
 const CHAT_FEEDBACK_LIMIT = 100;
 const CHAT_TEXT_LIMIT = 100;
 const CHAT_NAME_LIMIT = 128;
@@ -279,6 +285,9 @@ export function createChat(
 		name = "",
 		alias = "",
 		displayName = "";
+	// Port-only (chat-history.ts): the lines the browser kept for one
+	// character, offered before its entry; bootstrap spends them once.
+	let kept: { name: string; lines: readonly StoredChatLine[]; } | null = null;
 	let localBlocks: readonly string[] = [];
 	let blocked: readonly string[] = [];
 	let blockPending = false;
@@ -306,7 +315,7 @@ Live lines are stamped on arrival; replayed history keeps the server's time.
 ================
 	*/
 	function append( line: ChatLine ) {
-		lines = [ ...lines.slice( 1 - CHAT_LINE_LIMIT ), {
+		lines = [ ...lines.slice( 1 - CHAT_HISTORY_KEPT ), {
 			...line,
 			sequence: ++sequence,
 			sentAt: line.sentAt ?? Date.now()
@@ -359,6 +368,20 @@ options
 		},
 		/*
 ================
+restore
+
+Offer the lines the browser kept for a character (chat-history.ts;
+port-only, not native - default by owner decision 2026-11-26) before
+it enters. bootstrap spends the offer once, only for that character
+and only onto an empty log, so an in-session re-entry that kept its
+lines never hears them twice and another character reads nothing.
+================
+		*/
+		restore( nextName: string, saved: readonly StoredChatLine[] ) {
+			kept = nextName ? { name: nextName, lines: saved } : null;
+		},
+		/*
+================
 bootstrap
 ================
 		*/
@@ -378,6 +401,13 @@ bootstrap
 				pending = null;
 				error = null;
 			}
+			// Port-only (chat-history.ts): a fresh log for the character
+			// the browser kept lines for starts from them, filed as
+			// history - said before this session, so never speech.
+			if ( kept && kept.name === nextName && nextName && lines.length === 0 ) {
+				lines = kept.lines.map( line => ({ ...line, sequence: ++sequence, history: true }) );
+			}
+			kept = null;
 			name = nextName;
 			alias = entryJobAlias( value );
 			displayName = ownDisplayName( value, nextName );
@@ -653,6 +683,7 @@ clear
 			blocked = [];
 			lines = [];
 			feedback = [];
+			kept = null;
 			name = "";
 			alias = "";
 			displayName = "";

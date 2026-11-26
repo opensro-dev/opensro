@@ -2190,6 +2190,85 @@ test("transport loss retains the admitted inventory and entities until explicit 
 	presentation.dispose();
 });
 
+/*
+================
+chatLineBody
+
+A named 0x3667 body: [u8 channel][u16 sender][sender][u16 chars][utf16 text].
+================
+*/
+function chatLineBody( channel, name, text ) {
+	const sender = Buffer.from( name, "utf8" ), message = Buffer.from( text, "utf16le" );
+	const body = Buffer.alloc( 5 + sender.length + message.length );
+	body[0] = channel;
+	body.writeUInt16LE( sender.length, 1 );
+	sender.copy( body, 3 );
+	body.writeUInt16LE( text.length, 3 + sender.length );
+	message.copy( body, 5 + sender.length );
+	return body;
+}
+
+test("a forgetting disconnect keeps the chat for the same character's next entry (#4513)", async t => {
+	const sockets = socketHarness( t ),
+		world = createWorldSession( async () => "ticket", undefined, ignoreIncident ),
+		presentation = createPresentation();
+	const accept = () => {
+		let batch;
+		while ( (batch = world.take()) ) {
+			presentation.apply( batch );
+			world.ack( batch.sequence );
+		}
+	};
+	/*
+================
+begin
+
+One fresh entry of a named character on the shared shard.
+================
+	*/
+	const begin = async ( name, at ) => {
+		world.enter( name, "shard", "http://localhost:9000" );
+		await settle();
+		world.step( at );
+		const socket = sockets.at( -1 );
+		socket.onopen();
+		socket.receive( 2, welcome() );
+		world.step( at + 1 );
+		await settle();
+		world.step( at + 2 );
+		socket.receive( 7, entered( { ...bootstrap, character: { name } } ) );
+		for ( const row of rows ) socket.receive( row.opcode, row.payload );
+		world.step( at + 3 );
+		accept();
+		return socket;
+	};
+	const texts = () => presentation.gameplay()?.chat?.lines.map( line => line.text ) ?? [];
+	let socket = await begin( "fixture", 1 );
+	socket.receive( 0x3667, chatLineBody( 6, "Peer", "selling blades" ) );
+	socket.receive( 0x3667, chatLineBody( 2, "Friend", "are you there?" ) );
+	world.step( 5 );
+	accept();
+	assert.deepEqual( texts(), [ "selling blades", "are you there?" ] );
+	// A sign-in after a lost session (session reset) forgets the world
+	// before the same character enters again; the world retires whole,
+	// but the conversation is the next entry's to judge (#3435).
+	world.disconnect( true );
+	world.step( 6 );
+	accept();
+	assert.equal( presentation.count(), 0, "the forget still retires the world" );
+	socket = await begin( "fixture", 10 );
+	assert.deepEqual(
+		texts(),
+		[ "selling blades", "are you there?" ],
+		"the same character keeps its lines across the forget"
+	);
+	world.disconnect( true );
+	await begin( "Other", 20 );
+	assert.deepEqual( texts(), [], "another character starts from nothing" );
+	world.dispose();
+	presentation.dispose();
+});
+
 test("reference admission holds native packets until verified data, and cancellation retires the fetch", async t => {
 	const sockets = socketHarness( t );
 	let release, signal;
