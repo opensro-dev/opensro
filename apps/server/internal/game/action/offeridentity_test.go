@@ -66,6 +66,9 @@ TestStallRefusesAnOfferChangedInPlace
 */
 func TestStallRefusesAnOfferChangedInPlace(t *testing.T) {
 	rt, owner, buyer, _ := stallFixture(t)
+	// The sword's network group, as the game-data table gives it;
+	// the fixture's map names the potion's group only.
+	rt.StallCategories[[4]int64{3, 1, 6, 2}] = 40
 	rt.HandleStallCreate(testDivision, owner, wire.NewWriter(16).WStr("Blades").Payload())
 	setRowPlus(owner, 20, 7)
 	add := stallEdit(wire.StallEditAdd, 0, 20, 1, 0, 0x2c, 1, 0, 0, 0, 0, 0, 0, 0)

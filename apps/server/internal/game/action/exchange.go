@@ -259,6 +259,13 @@ func (rt *Runtime) exchangeOfferable(c *enterworld.Character, slot uint8) (inven
 	if !ok {
 		return inventory.Item{}, wire.ErrCodeInvalidRequest
 	}
+	// Tradeable below still owns the judgment; the door only names
+	// the refusal, and a summoned pet's item carries its own native
+	// refusal rather than the generic cannot-trade byte (#4490
+	// U18-01).
+	if item.Summon != nil && item.Summon.Summoned {
+		return inventory.Item{}, wire.ExchangeErrSummonedPet
+	}
 	if !rt.Tradeable(item.Codename, item.ForgeBound, item.EarnedBought, item.Summon) {
 		return inventory.Item{}, wire.ExchangeErrCannotTrade
 	}

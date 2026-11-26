@@ -143,6 +143,17 @@ const (
 	StallErrNetworkStale uint8 = 0x4F
 	StallErrNetworkGold  uint8 = 0x52
 	StallErrNetworkBag   uint8 = 0x53
+	// #4490 U18-08: the add-offer refusals the native stall module
+	// answers in its word form: the bag item is already offered in
+	// this stall (0x3C13), carries no trade permission (0x3C2D),
+	// belongs to a summoned pet (0x3C3A), sits inside its rental
+	// period (0x3C55), or maps to no stall-network group (0x3C3C).
+	// stall_test.go pins each byte.
+	StallErrAlreadyOffered uint8 = 0x13
+	StallErrNotTradeable   uint8 = 0x2D
+	StallErrSummonedPet    uint8 = 0x3A
+	StallErrNoNetworkGroup uint8 = 0x3C
+	StallErrPeriodRunning  uint8 = 0x55
 )
 
 /*
