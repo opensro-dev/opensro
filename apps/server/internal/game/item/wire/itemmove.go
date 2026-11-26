@@ -417,14 +417,16 @@ func readSubMove(r *Reader) (SubMove, error) {
 const MoveTypeAvatarToPlayer uint8 = 0x23
 const MoveTypePlayerToAvatar uint8 = 0x24
 
-// Magic Cube inventory ops (issue #3906): 0x706D movement bytes 0x27/0x28
-// (decimal 39/40 in the later shard procedure). v1.696 client jump table
+// Magic Cube inventory ops (issue #3906): 0x706D movement bytes 0x27/0x28/0x29
+// (decimal 39/40/41 in the later shard procedure). v1.696 client jump table
 // at client 0x7f6e4c: 0x27 → client 0x7f7be0 [src][dst][u16 qty];
 // 0x28 → client 0x7f7b90 [u32 RefObjID] then the same three fields
 // (struct+0x38; client result apply feeds it to the withdrawn elixir's
-// RefObjID).
+// RefObjID); 0x29 → client 0x7f7480 [u8 cubeSlot][u32 RefObjID][u16 qty]
+// (server-to-client consume from cube during Alchemy Reinforce).
 const MoveTypePushIntoMagicCube uint8 = 0x27
 const MoveTypePopFromMagicCube uint8 = 0x28
+const MoveTypeConsumeMagicCube uint8 = 0x29
 
 /*
 ================

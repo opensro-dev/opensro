@@ -26,11 +26,13 @@ import { isNameChangeScrollItem, nameChangeTail } from "@/engine/foundation/game
 import { isWeaponSwitchScroll, weaponSwitchTail } from "@/engine/foundation/gameplay/weapon-switch";
 import { raceSwitchKindOf, raceSwitchTail } from "@/engine/foundation/gameplay/race-switch";
 import {
+	applyMagicCubeConsumeLocal,
 	applyMagicCubePopLocal,
 	applyMagicCubePushLocal,
 	encodeMagicCubePop,
 	encodeMagicCubePush,
 	isMagicCube,
+	MAGIC_CUBE_MOVE_CONSUME,
 	MAGIC_CUBE_MOVE_POP,
 	MAGIC_CUBE_MOVE_PUSH
 } from "@/engine/foundation/gameplay/magic-cube";
@@ -2591,7 +2593,8 @@ receive
 					throw Error( "Magic Cube deposit occupancy mismatch" );
 				}
 				const cap = tooltipRefs.get( elixir.refObjId )?.fields.maxStack ?? 0;
-				const applied = applyMagicCubePushLocal( cube, elixir, quantity, cap );
+				const cubeCap = tooltipRefs.get( cube.refObjId )?.fields.itemParam9_2bc ?? 0;
+				const applied = applyMagicCubePushLocal( cube, elixir, quantity, cap, cubeCap );
 				if ( !applied ) throw Error( "Magic Cube deposit apply failed" );
 				if ( applied.elixirLeft ) bag.set( source, applied.elixirLeft );
 				else bag.delete( source );
@@ -2628,6 +2631,22 @@ receive
 				pending = null;
 				error = null;
 				playItem( { handle: "SND_EQUIP", typeFlags: applied.destination.typeFlags } );
+				return true;
+			}
+			if ( op === 0xb06d && p[1] === MAGIC_CUBE_MOVE_CONSUME ) {
+				if ( p.length !== 9 ) throw Error( "Invalid Magic Cube consume result" );
+				const cubeSlot = p[2]!,
+					refObjId = v.getUint32( 3, true ),
+					quantity = v.getUint16( 7, true );
+				const bag = new Map( slots ), cube = bag.get( cubeSlot );
+				if ( !cube || !isMagicCube( cube.typeFlags ) ) {
+					throw Error( "Magic Cube consume occupancy mismatch" );
+				}
+				const nextCube = applyMagicCubeConsumeLocal( cube, refObjId, quantity );
+				if ( !nextCube ) throw Error( "Magic Cube consume apply failed" );
+				bag.set( cubeSlot, nextCube );
+				slots = bag;
+				published = null;
 				return true;
 			}
 			const sale = saleResult( op, p );

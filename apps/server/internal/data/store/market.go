@@ -44,6 +44,7 @@ package store
 import (
 	"database/sql"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"math"
 
@@ -207,6 +208,9 @@ func (s *Store) listFromStorageLocked(req domain.MarketListRequest, listing doma
 		return domain.MarketListing{}, domain.ErrMarketNoItem
 	}
 	if err := req.Admit(row); err != nil {
+		if errors.Is(err, domain.ErrMarketMagicCube) {
+			return domain.MarketListing{}, domain.ErrMarketMagicCube
+		}
 		return domain.MarketListing{}, domain.ErrMarketNotTradeable
 	}
 	listing.Item = row
@@ -247,6 +251,9 @@ func (s *Store) listFromBagLocked(req domain.MarketListRequest, listing domain.M
 		return domain.MarketListing{}, domain.ErrMarketNoItem
 	}
 	if err := req.Admit(row); err != nil {
+		if errors.Is(err, domain.ErrMarketMagicCube) {
+			return domain.MarketListing{}, domain.ErrMarketMagicCube
+		}
 		return domain.MarketListing{}, domain.ErrMarketNotTradeable
 	}
 	listing.Division = division

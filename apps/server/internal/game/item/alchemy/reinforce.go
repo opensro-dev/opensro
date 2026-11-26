@@ -17,6 +17,7 @@ import (
 	"slices"
 	"sort"
 
+	"opensro.online/server/internal/domain"
 	"opensro.online/server/internal/game/item/inventory"
 	"opensro.online/server/internal/game/item/wire"
 	"opensro.online/server/internal/game/nasrun"
@@ -52,6 +53,22 @@ type Outcome struct {
 	// false for it, exactly as for a failure that never rolled
 	// destruction, so the save needs its own mark.
 	ImmortalSaved bool
+	// CubeConsume records the elixir spent out of a Magic Cube's linked
+	// storage so ResultFrames emits 0xB06D 0x29 instead of 0x3645 (#3906).
+	CubeConsume *CubeConsumption
+}
+
+/*
+================
+CubeConsumption
+
+One elixir deduction from a Magic Cube's linked storage during Reinforce.
+================
+*/
+type CubeConsumption struct {
+	Slot     uint8
+	RefObjID uint32
+	Quantity uint16
 }
 
 /*
@@ -234,8 +251,33 @@ func clone(items []inventory.Item) []inventory.Item {
 	out := append([]inventory.Item(nil), items...)
 	for i := range out {
 		out[i].MagicOptions = append([]uint64(nil), out[i].MagicOptions...)
+		out[i].LinkedStorage = domain.CloneCOSContainer(out[i].LinkedStorage)
 	}
 	return out
+}
+
+/*
+================
+cubeElixirIndex
+
+Index in storage.Rows of the lowest-slot stored elixir with StackCount > 0.
+Matches the reference server's lowest-slot linked-storage selection.
+================
+*/
+func cubeElixirIndex(storage *domain.COSContainer) (int, bool) {
+	if storage == nil {
+		return -1, false
+	}
+	best := -1
+	for i, row := range storage.Rows {
+		if row.StackCount < 1 {
+			continue
+		}
+		if best < 0 || row.Slot < storage.Rows[best].Slot {
+			best = i
+		}
+	}
+	return best, best >= 0
 }
 
 /*
@@ -382,6 +424,20 @@ func (c *Catalog) Reinforce(items []inventory.Item, slots []uint8, bonus int, ro
 				return zero, Refusal(0x12)
 			}
 			elixir = i
+		case c.MagicCube && wire.IsMagicCube(ref.Flags):
+			// Port-only, not native (#3906): the v1.188 reference server admits
+			// a Magic Cube in the reinforce elixir slot when StoredItemCount >= 1
+			// and refuses an empty cube with 0x5407.
+			if elixir >= 0 {
+				return zero, Refusal(0x12)
+			}
+			if item.Data == 0 {
+				return zero, Refusal(7)
+			}
+			if _, ok := cubeElixirIndex(item.LinkedStorage); !ok {
+				return zero, Refusal(7)
+			}
+			elixir = i
 		case ref.Flags == wire.PackTypeFlags(3, 3, 10, 2):
 			if powder >= 0 {
 				return zero, Refusal(0x12)
@@ -399,8 +455,27 @@ func (c *Catalog) Reinforce(items []inventory.Item, slots []uint8, bonus int, ro
 	}
 	item := &out[target]
 	ref := c.Items[item.Codename]
-	recipe := c.Items[out[elixir].Codename]
+	usingCube := wire.IsMagicCube(out[elixir].TypeFlags)
+	cubeRowIdx := -1
+	var recipe Reference
+	if usingCube {
+		var ok bool
+		cubeRowIdx, ok = cubeElixirIndex(out[elixir].LinkedStorage)
+		if !ok {
+			return zero, Refusal(7)
+		}
+		stored := out[elixir].LinkedStorage.Rows[cubeRowIdx]
+		recipe, ok = c.Items[stored.Codename]
+		if !ok || recipe.Flags != wire.PackTypeFlags(3, 3, 10, 1) {
+			return zero, Refusal(7)
+		}
+	} else {
+		recipe = c.Items[out[elixir].Codename]
+	}
 	if nasrun.IsSpirit(ref.Flags) {
+		if usingCube {
+			return zero, Refusal(9)
+		}
 		return c.reinforceSpirit(out, target, elixir, powder, roll)
 	}
 	if item.Plus >= NativeReinforceCeiling {
@@ -479,8 +554,31 @@ func (c *Catalog) Reinforce(items []inventory.Item, slots []uint8, bonus int, ro
 	}
 	// The server's consumption step: consume one of each staged material,
 	// and the target only when the destruction bit survives the
-	// protection branch.
-	out[elixir].Quantity--
+	// protection branch. A Magic Cube deducts one stored elixir from its
+	// linked storage and stays in the bag (v1.188 reference server).
+	if usingCube {
+		storage := out[elixir].LinkedStorage
+		stored := storage.Rows[cubeRowIdx]
+		if stored.StackCount > 1 {
+			storage.Rows[cubeRowIdx].StackCount--
+		} else {
+			storage.Rows = append(storage.Rows[:cubeRowIdx], storage.Rows[cubeRowIdx+1:]...)
+		}
+		var total uint32
+		for _, row := range storage.Rows {
+			if row.StackCount > 0 {
+				total += uint32(row.StackCount)
+			}
+		}
+		out[elixir].Data = total
+		result.CubeConsume = &CubeConsumption{
+			Slot:     out[elixir].Slot,
+			RefObjID: stored.RefObjID,
+			Quantity: 1,
+		}
+	} else {
+		out[elixir].Quantity--
+	}
 	if powder >= 0 {
 		out[powder].Quantity--
 	}

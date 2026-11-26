@@ -45,3 +45,22 @@ func EncodePopFromMagicCubeResult(refObjID uint32, sourceSlot, destSlot uint8, q
 		U16(quantity).
 		Payload()
 }
+
+// EncodeConsumeMagicCubeResult returns a successful type-0x29 payload:
+// [0x01][0x29][u8 cubeSlot][u32 RefObjID][u16 qty]. v1.696 client body
+// reader at client 0x7f7480 (emitted when Alchemy Reinforce consumes an
+// elixir stored inside a Magic Cube).
+/*
+================
+EncodeConsumeMagicCubeResult
+================
+*/
+func EncodeConsumeMagicCubeResult(cubeSlot uint8, refObjID uint32, quantity uint16) []byte {
+	return NewWriter(9).
+		U8(ResultSuccess).
+		U8(MoveTypeConsumeMagicCube).
+		U8(cubeSlot).
+		U32(refObjID).
+		U16(quantity).
+		Payload()
+}

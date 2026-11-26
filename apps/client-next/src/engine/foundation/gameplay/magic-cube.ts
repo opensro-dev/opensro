@@ -25,6 +25,52 @@ export const MAGIC_CUBE_FILTER_SHIELD = 8;
 
 export const MAGIC_CUBE_MOVE_PUSH = 0x27;
 export const MAGIC_CUBE_MOVE_POP = 0x28;
+export const MAGIC_CUBE_MOVE_CONSUME = 0x29;
+
+const MAGIC_CUBE_DESC = "Stores matching elixirs. Empty it before selling or listing on the market.";
+
+// Port-only (#3906): v1.150 ships no Magic Cube text rows. These fallback
+// strings match the v1.696 Media.pk2 English rows for UI notices and all
+// sixteen Item Mall packages so titles, tooltips and search resolve even
+// before client textdataname.en.json is rebuilt with SRO_MAGIC_CUBE=on.
+// A shipped / rebuilt catalog entry always wins over this table.
+export const MAGIC_CUBE_COPY: Readonly<Record<string, string>> = Object.freeze( {
+	UIIT_MSG_MAGIC_CUBE_USE: "Will you use the Magic Cube?",
+	UIIT_STT_MAGIC_CUBE_INVENTORY_FULL: "Insufficient space. You cannot put any more items in the Magic Cube.",
+	UIIT_STT_MAGIC_CUBE_STORE_SELL_ERROR: "You cannot sell the Magic Cube with items still in it",
+	SN_ITEM_MALL_MAGIC_CUBE_WEAPON: "Magic Cube (Weapon) - 50 slots",
+	SN_ITEM_MALL_MAGIC_CUBE_ARMOR: "Magic Cube (Protector) - 50 slots",
+	SN_ITEM_MALL_MAGIC_CUBE_ACCESSARY: "Magic Cube (Accessory) - 50 slots",
+	SN_ITEM_MALL_MAGIC_CUBE_SHIELD: "Magic Cube (Shield) - 50 slots",
+	SN_ITEM_MALL_MAGIC_CUBE_WEAPON_10: "Magic Cube (Weapon) - 10 slots",
+	SN_ITEM_MALL_MAGIC_CUBE_ARMOR_10: "Magic Cube (Protector) - 10 slots",
+	SN_ITEM_MALL_MAGIC_CUBE_ACCESSARY_10: "Magic Cube (Accessory) - 10 slots",
+	SN_ITEM_MALL_MAGIC_CUBE_SHIELD_10: "Magic Cube (Shield) - 10 slots",
+	SN_ITEM_MALL_MAGIC_CUBE_WEAPON_20: "Magic Cube (Weapon) - 20 slots",
+	SN_ITEM_MALL_MAGIC_CUBE_ARMOR_20: "Magic Cube (Protector) - 20 slots",
+	SN_ITEM_MALL_MAGIC_CUBE_ACCESSARY_20: "Magic Cube (Accessory) - 20 slots",
+	SN_ITEM_MALL_MAGIC_CUBE_SHIELD_20: "Magic Cube (Shield) - 20 slots",
+	SN_ITEM_MALL_MAGIC_CUBE_WEAPON_30: "Magic Cube (Weapon) - 30 slots",
+	SN_ITEM_MALL_MAGIC_CUBE_ARMOR_30: "Magic Cube (Protector) - 30 slots",
+	SN_ITEM_MALL_MAGIC_CUBE_ACCESSARY_30: "Magic Cube (Accessory) - 30 slots",
+	SN_ITEM_MALL_MAGIC_CUBE_SHIELD_30: "Magic Cube (Shield) - 30 slots",
+	SN_ITEM_MALL_MAGIC_CUBE_WEAPON_TT_DESC: MAGIC_CUBE_DESC,
+	SN_ITEM_MALL_MAGIC_CUBE_ARMOR_TT_DESC: MAGIC_CUBE_DESC,
+	SN_ITEM_MALL_MAGIC_CUBE_ACCESSARY_TT_DESC: MAGIC_CUBE_DESC,
+	SN_ITEM_MALL_MAGIC_CUBE_SHIELD_TT_DESC: MAGIC_CUBE_DESC,
+	SN_ITEM_MALL_MAGIC_CUBE_WEAPON_10_TT_DESC: MAGIC_CUBE_DESC,
+	SN_ITEM_MALL_MAGIC_CUBE_ARMOR_10_TT_DESC: MAGIC_CUBE_DESC,
+	SN_ITEM_MALL_MAGIC_CUBE_ACCESSARY_10_TT_DESC: MAGIC_CUBE_DESC,
+	SN_ITEM_MALL_MAGIC_CUBE_SHIELD_10_TT_DESC: MAGIC_CUBE_DESC,
+	SN_ITEM_MALL_MAGIC_CUBE_WEAPON_20_TT_DESC: MAGIC_CUBE_DESC,
+	SN_ITEM_MALL_MAGIC_CUBE_ARMOR_20_TT_DESC: MAGIC_CUBE_DESC,
+	SN_ITEM_MALL_MAGIC_CUBE_ACCESSARY_20_TT_DESC: MAGIC_CUBE_DESC,
+	SN_ITEM_MALL_MAGIC_CUBE_SHIELD_20_TT_DESC: MAGIC_CUBE_DESC,
+	SN_ITEM_MALL_MAGIC_CUBE_WEAPON_30_TT_DESC: MAGIC_CUBE_DESC,
+	SN_ITEM_MALL_MAGIC_CUBE_ARMOR_30_TT_DESC: MAGIC_CUBE_DESC,
+	SN_ITEM_MALL_MAGIC_CUBE_ACCESSARY_30_TT_DESC: MAGIC_CUBE_DESC,
+	SN_ITEM_MALL_MAGIC_CUBE_SHIELD_30_TT_DESC: MAGIC_CUBE_DESC
+} );
 
 /*
 ================
@@ -81,9 +127,9 @@ Authored slot count (Param9 / itemParam9_2bc), or the linked-storage
 capacity already published on the cube. Zero when neither is known.
 ================
 */
-export function magicCubeCapacity( cube: InventoryItem ): number {
+export function magicCubeCapacity( cube: InventoryItem, authoredCapacity = 0 ): number {
 	if ( cube.linkedStorage && cube.linkedStorage.capacity > 0 ) return cube.linkedStorage.capacity;
-	const authored = cube.nativeFields?.itemParam9_2bc ?? 0;
+	const authored = authoredCapacity > 0 ? authoredCapacity : (cube.nativeFields?.itemParam9_2bc ?? 0);
 	return authored === 10 || authored === 20 || authored === 30 || authored === 50 ? authored : 0;
 }
 
@@ -143,28 +189,34 @@ export function encodeMagicCubePop(
 ================
 applyMagicCubePushLocal
 
-Move quantity of elixir into the cube's linked storage. Returns null when
-the bag rows cannot account for the server's grant (wrong identity or
-over-take).
+Move quantity of elixir into the cube's linked storage, matching the
+server's GrantStack rule: merge into the lowest-slot partial stack when
+stackCap > 1, otherwise allocate the lowest free slot (e.g. v1.150
+elixirs with maxStack 1). Returns null when the bag rows cannot account
+for the server's grant (wrong identity, over-take, or cube full).
 ================
 */
 export function applyMagicCubePushLocal(
 	cube: InventoryItem,
 	elixir: InventoryItem,
 	quantity: number,
-	stackCap = 0
+	stackCap = 0,
+	authoredCapacity = 0
 ): { cube: InventoryItem; elixirLeft: InventoryItem | null; } | null {
 	if ( quantity < 1 || elixir.quantity < quantity ) return null;
-	const capacity = magicCubeCapacity( cube );
+	const capacity = magicCubeCapacity( cube, authoredCapacity );
 	if ( capacity < 1 ) return null;
-	const rows = [ ...(cube.linkedStorage?.rows ?? []) ];
-	const mergeAt = rows.findIndex( row => row.refObjId === elixir.refObjId );
+	const cap = stackCap > 0 ? stackCap : 1;
+	const rows = [ ...(cube.linkedStorage?.rows ?? []) ].sort( ( a, b ) => a.slot - b.slot );
+	const mergeAt = cap > 1 ?
+		rows.findIndex( row => row.refObjId === elixir.refObjId && row.quantity < cap ) :
+		-1;
 	if ( mergeAt >= 0 ) {
 		const existing = rows[mergeAt]!;
-		if ( stackCap > 0 && existing.quantity + quantity > stackCap ) return null;
+		if ( existing.quantity + quantity > cap ) return null;
 		rows[mergeAt] = { ...existing, quantity: existing.quantity + quantity };
 	} else {
-		if ( rows.length >= capacity ) return null;
+		if ( quantity > cap || rows.length >= capacity ) return null;
 		const free = freeLinkedSlot( rows, capacity );
 		if ( free < 0 ) return null;
 		rows.push( {
@@ -197,8 +249,9 @@ export function applyMagicCubePushLocal(
 ================
 applyMagicCubePopLocal
 
-Withdraw quantity of the named elixir RefObjID from the cube into a bag
-destination row (or a fresh empty slot).
+Withdraw quantity of the named elixir RefObjID from the lowest matching
+linked-storage slot into a bag destination row (or a fresh empty slot),
+matching the server's linkedSlotByRef order.
 ================
 */
 export function applyMagicCubePopLocal(
@@ -210,7 +263,8 @@ export function applyMagicCubePopLocal(
 	stackCap = 0
 ): { cube: InventoryItem; destination: InventoryItem; } | null {
 	if ( quantity < 1 || !cube.linkedStorage ) return null;
-	const rows = [ ...cube.linkedStorage.rows ];
+	const cap = stackCap > 0 ? stackCap : 1;
+	const rows = [ ...cube.linkedStorage.rows ].sort( ( a, b ) => a.slot - b.slot );
 	const at = rows.findIndex( row => row.refObjId === refObjId && row.quantity > 0 );
 	if ( at < 0 ) return null;
 	const source = rows[at]!;
@@ -221,7 +275,7 @@ export function applyMagicCubePopLocal(
 	let bagRow: InventoryItem;
 	if ( destination ) {
 		if ( destination.refObjId !== refObjId ) return null;
-		if ( stackCap > 0 && destination.quantity + quantity > stackCap ) return null;
+		if ( destination.quantity + quantity > cap ) return null;
 		bagRow = { ...destination, quantity: destination.quantity + quantity };
 	} else {
 		bagRow = {
@@ -245,6 +299,35 @@ export function applyMagicCubePopLocal(
 			linkedStorage: { capacity: cube.linkedStorage.capacity, rows }
 		},
 		destination: bagRow
+	};
+}
+
+/*
+================
+applyMagicCubeConsumeLocal
+
+Deduct quantity of the named elixir RefObjID from the lowest matching
+linked-storage slot (0xB06D 0x29 from Alchemy Reinforce; v1.696 client
+0x7f7480). The cube stays in its bag slot.
+================
+*/
+export function applyMagicCubeConsumeLocal(
+	cube: InventoryItem,
+	refObjId: number,
+	quantity: number
+): InventoryItem | null {
+	if ( quantity < 1 || !cube.linkedStorage ) return null;
+	const rows = [ ...cube.linkedStorage.rows ].sort( ( a, b ) => a.slot - b.slot );
+	const at = rows.findIndex( row => row.refObjId === refObjId && row.quantity >= quantity );
+	if ( at < 0 ) return null;
+	const source = rows[at]!;
+	const left = source.quantity - quantity;
+	if ( left > 0 ) rows[at] = { ...source, quantity: left };
+	else rows.splice( at, 1 );
+	return {
+		...cube,
+		quantity: magicCubeStoredCount( rows ),
+		linkedStorage: { capacity: cube.linkedStorage.capacity, rows }
 	};
 }
 

@@ -21,6 +21,7 @@ the UI text and the mall rows. The browser client needs both.
 | Consignment refusal | `UIIT_STT_OPEN_MARKET_SELL_IMPOSSIBLE_MAGIC_CUBE` (Media.pk2 text; not in the thin `sro_client.exe` string table) | checked (market admit `magic-cube`) |
 | Use confirm | `UIIT_MSG_MAGIC_CUBE_USE` | checked (client-local confirm → window; no item-use send) |
 | 0x706D body layout for 0x27 / 0x28 | v1.696 jump table `0x7f6e4c`: push `0x7f7be0` `[src][dst][u16 qty]`; pop `0x7f7b90` `[u32 RefObjID]` then the same three (struct+0x38; result apply `0xc9f631`) | checked |
+| Alchemy Reinforce direct Magic Cube use + `0xB06D 0x29` consume | v1.188 reference server reinforce admission (slot 1 when `StoredItemCount >= 1`, empty refusal `0x5407`, linked elixir unwrap for category match and probability, consume op `0x29`); v1.696 client jump table `0x7f6e4c[0x29]` → `0x7f7480` `[u8 cubeSlot][u32 RefObjID][u16 qty]` | checked |
 | Package silk 6 / 12 / 18 / 30 by capacity | later `refpricepolicyofitem` for `PACKAGE_ITEM_MALL_MAGIC_CUBE_*` | checked |
 
 Binaries used:

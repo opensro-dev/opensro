@@ -281,6 +281,7 @@ import { isMallUseConfirmItem } from "@/engine/foundation/gameplay/mall-use";
 import { createMagicCubeHud } from "./hud/magic-cube-hud";
 import {
 	isMagicCube,
+	MAGIC_CUBE_COPY,
 	MAGIC_CUBE_USE_CONFIRM_KEY,
 	magicCubeMatchesFilter
 } from "@/engine/foundation/gameplay/magic-cube";
@@ -2557,22 +2558,15 @@ export function createUi( ports: UiPorts ) {
 		// the catalogue's own "Indicate ..." voice.
 		if ( key === "UIIT_STT_CHAR_TITLE_SIGN" ) return "Indicate own title";
 		if ( key === "UIIT_STT_OTHER_TITLE_SIGN" ) return "Indicate other titles";
-		// Port-only (#3906): v1.150 has no Magic Cube UIIT_* rows; the
-		// v1.696 English text stands until the later text tables ship.
-		if ( key === "UIIT_MSG_MAGIC_CUBE_USE" ) return "Will you use the Magic Cube?";
-		if ( key === "UIIT_STT_MAGIC_CUBE_INVENTORY_FULL" ) {
-			return "Insufficient space. You cannot put any more items in the Magic Cube.";
-		}
-		if ( key === "UIIT_STT_MAGIC_CUBE_STORE_SELL_ERROR" ) {
-			return "You cannot sell the Magic Cube with items still in it";
-		}
 		// The Contributor login prompt (port-only, contributor-titles.ts).
 		const contributorCopy = CONTRIBUTOR_PROMPT_COPY[key];
 		if ( contributorCopy ) return contributorCopy;
 		// The Styria Clash windows and manager rows (port-only, #3648).
 		const styriaCopy = STYRIA_COPY[key];
 		if ( styriaCopy ) return styriaCopy;
-		return hud.data()?.strings[key] ?? "";
+		// Shipped / rebuilt text tables win; fall back to Magic Cube copy (#3906)
+		// when v1.150 textdataname.en.json lacks the later rows.
+		return hud.data()?.strings[key] || MAGIC_CUBE_COPY[key] || "";
 	}
 	/*
 	================
@@ -9248,7 +9242,8 @@ export function createUi( ports: UiPorts ) {
 					dirty = true;
 					return;
 				}
-				// Port-only (#3906): release a Magic Cube elixir onto a bag slot.
+				// Port-only (#3906): release a Magic Cube elixir onto a bag slot
+				// (withdraw) or onto the open Alchemy window (slot the cube itself).
 				if (
 					event.id.startsWith( "magic-cube-slot:" ) && view?.gameplay &&
 					!view.gameplay.inventoryPending && magicCubeHud.cubeSlot() !== null
@@ -9258,7 +9253,11 @@ export function createUi( ports: UiPorts ) {
 						cubeSlot = magicCubeHud.cubeSlot()!,
 						cube = view.gameplay.inventory.find( row => row.slot === cubeSlot ),
 						item = cube?.linkedStorage?.rows.find( row => row.slot === linkedSlot );
-					if ( item && target && !target.disabled && target.id.startsWith( "slot:" ) ) {
+					if (
+						item && target && !target.disabled && panel === "Alchemy" && target.id.startsWith( "alchemy-" )
+					) {
+						activate( "alchemy-slot:" + cubeSlot );
+					} else if ( item && target && !target.disabled && target.id.startsWith( "slot:" ) ) {
 						const destination = Number( target.id.slice( 5 ) ),
 							equipmentEnd = view.gameplay.equipmentSlotCount ?? 13;
 						if ( destination >= equipmentEnd ) {
@@ -10827,6 +10826,15 @@ export function createUi( ports: UiPorts ) {
 				// (BR-261020-1019-8648), so free the selection: the next item
 				// clicked binds as the new target.
 				if ( outcome.flags & ALCHEMY_DESTROYED ) alchemySlots = [];
+				else if ( alchemySlots.length > 1 && next.gameplay?.inventory ) {
+					// A Magic Cube stays in the bag after spending its last elixir;
+					// clear its reagent slot once empty so it cannot sit stale.
+					alchemySlots = alchemySlots.filter( ( slot, idx ) => {
+						if ( idx === 0 ) return true;
+						const row = next.gameplay!.inventory.find( r => r.slot === slot );
+						return !row || !isMagicCube( row.typeFlags ) || row.quantity > 0;
+					} );
+				}
 				dirty = true;
 			}
 			if ( alchemyEffect ) {
@@ -28706,17 +28714,6 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 					authoredLabeledButton( at( 216 ), x, y, "stall-prompt-cancel", hudCopy( "UIIT_CTL_CANCEL" ) );
 				}
 			}
-			if (
-				worldVisible && carriedItem && ITEM_CARRY_PANELS.includes( panel )
-			) {
-				const item = carriedRow( carriedItem, game ), path = iconPath( item?.icon );
-				if ( path ) {
-					paths.push( path );
-					if ( resources.has( path ) ) {
-						rect( [ carriedItem.x - 16, carriedItem.y - 16, 32, 32 ], white, path );
-					}
-				}
-			}
 			if ( worldVisible && rebirthDue && !deathDismissed ) {
 				const layout = rebirthDialog( w, h, deathPosition ),
 					art = ROOT + "interface/messagebox/msgbox_rebirth.png",
@@ -31058,6 +31055,19 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 				}
 				endWindow( admission, "withdrawal-confirm" );
 			}
+			if (
+				worldVisible && carriedItem &&
+				(ITEM_CARRY_PANELS.includes( panel ) || carriedItem.source.startsWith( "magic-cube-slot:" ) ||
+					carriedItem.source.startsWith( "arena-chest-item:" ))
+			) {
+				const item = carriedRow( carriedItem, game ), path = iconPath( item?.icon );
+				if ( path ) {
+					paths.push( path );
+					if ( resources.has( path ) ) {
+						rect( [ carriedItem.x - 16, carriedItem.y - 16, 32, 32 ], white, path );
+					}
+				}
+			}
 			if ( worldVisible && carriedMacroPotion?.icon ) {
 				paths.push( carriedMacroPotion.icon );
 				if ( resources.has( carriedMacroPotion.icon ) ) {
@@ -31162,7 +31172,8 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 						lookup = ( symbol: string ) =>
 							!symbol || symbol === "xxx" ?
 								"" :
-								localization.text( symbol, "" ) || hudData.strings[symbol] || "";
+								localization.text( symbol, "" ) || hudData.strings[symbol] || MAGIC_CUBE_COPY[symbol] ||
+								"";
 					const items = tooltipItems(
 							id,
 							game,
