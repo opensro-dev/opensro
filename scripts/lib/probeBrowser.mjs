@@ -4,7 +4,11 @@
 probeBrowser.mjs - owned Chrome launcher for browser tests and probes
 
 Keeps browser defaults consistent while allowing explicit lifecycle tests
-to exercise Chrome's real background scheduling policy.
+to exercise Chrome's real background scheduling policy. Every browser it
+starts runs bounded (processPriority.mjs boundChildren): Chrome raises its
+own GPU process above normal, and a software-WebGPU probe left open took
+every core above the owner's desktop (2026-11-26), so the bound belongs
+to the launcher, not to each script that calls it.
 
 ===========================================================================
 */
@@ -14,6 +18,7 @@ import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
 import { watchProbeBrowser } from "./probeFailureCapture.mjs";
+import { boundChildren, browserImage } from "./processPriority.mjs";
 
 const BACKGROUND_THROTTLING_OVERRIDES = [
 	"--disable-background-timer-throttling",
@@ -157,7 +162,7 @@ export async function launchProbeBrowser( {
 		if ( userDataDir || deviceScaleFactor !== undefined ) {
 			throw Error( "Background scheduling probes require a fresh profile and native device scale" );
 		}
-		return watched( await launchBackgroundBrowser( launchOptions, pageOptions ) );
+		return owned( await launchBackgroundBrowser( launchOptions, pageOptions ), executablePath );
 	}
 	if ( userDataDir ) {
 		const context = await chromium.launchPersistentContext( userDataDir, {
@@ -170,25 +175,30 @@ export async function launchProbeBrowser( {
 			throw new Error( "persistent probe context did not expose its browser" );
 		}
 		const page = context.pages()[0] ?? (await context.newPage());
-		return watched( { browser, page } );
+		return owned( { browser, page }, executablePath );
 	}
 
 	const browser = await chromium.launch( launchOptions );
 	const page = await browser.newPage( {
 		...pageOptions
 	} );
-	return watched( { browser, page } );
+	return owned( { browser, page }, executablePath );
 }
 
 /*
 ================
-watched
+owned
 
-Every launch's page is kept for a failed test's stuck capture
-(probeFailureCapture.mjs).
+Every launch is bounded and watched. The bound is set beside the launch,
+not before it returns: the helper compiles its shim on start, seconds on
+a busy machine, and a probe's first frames are not worth that wait. Nor
+is close: a probe that closes first leaves the helper nothing to hold,
+and it exits on its own. The page is kept for a failed test's stuck
+capture (probeFailureCapture.mjs).
 ================
 */
-function watched( launched ) {
+function owned( launched, executablePath ) {
+	void boundChildren( browserImage( executablePath ) );
 	watchProbeBrowser( launched.browser, launched.page );
 	return launched;
 }

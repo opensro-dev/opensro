@@ -19,9 +19,22 @@ from the research tree; the research copy stays for its own tests.
 Everything below was run end to end on Windows 11 with Python 3.13
 (2026-11-13, and again from a fresh agent on 2026-11-15). Seed apply takes
 about a minute; index takes 2 to 5 minutes and prints little while it
-works. You need your own retail `SRO_Client.exe` (v1.150, SHA-256
-`375e868234437e815af8ce9289ddea7ec9144430f4ea24e32988a6d6c9dd108a`)
-or the v1.188 `SR_GameServer.exe`; the seed is useless without it.
+works. You need your own retail `SRO_Client.exe` (v1.150) or the v1.188
+`SR_GameServer.exe`; the seed is useless without it.
+
+Two v1.150 client builds circulate, and the seed names one of them:
+`375e8682...` (the build the maintainers analyse) and `f6580bf6...`
+(the copy supplied by the maintainer, #4467). Hash yours before you
+start (`Get-FileHash .\SRO_Client.exe -Algorithm SHA256` in
+PowerShell). `seed-manifest.json` pins every verified build of each
+target: the seed's own build applies unchanged; another build whose
+`.text` section hashes to the seed build's applies unchanged too (the
+code is byte-identical, only the wrapper differs); a build with an
+offsets table in the manifest applies with its addresses translated;
+a known build with neither is named by the error, with what to do
+next, instead of a bare refusal. The server seed likewise leaves a
+slot for the stock v1.188 build (#4478). An address from one build is
+never evidence about another until one of those three paths says so.
 
 The venv, the seed, the `.rzdb` project and revtool's own data
 (`REVTOOL_DATA_DIR`, default `<repo>/.state/revtool`) can all live outside
@@ -323,6 +336,7 @@ json.dump({"format": "sro-bn-function-names", "version": 1,
 ```
 py -3 -m unittest tools.re.revtool.test_revtool_cli_contract
 py -3 -m unittest tools.re.revtool.test_revtool_index_and_unpayable
+py -3 -m unittest tools.re.revtool.test_revtool_pipe
 py -3 -m unittest tools.re.revtool.test_revtool_port
 py -3 -m unittest tools.re.revtool.test_revtool_rizin
 py -3 -m unittest tools.re.revtool.test_revtool_seed

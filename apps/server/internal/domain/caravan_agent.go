@@ -45,6 +45,22 @@ type CaravanAgentMemoryRow struct {
 
 /*
 ================
+CaravanEscortDayRow
+
+One day's paid AI-trader escort count for one Hunter (slice 5 of
+#3704): the daily reward cap's ledger. Day is a UTC calendar day,
+2006-01-02.
+================
+*/
+type CaravanEscortDayRow struct {
+	Division   string
+	HunterName string
+	Day        string
+	PaidCount  int
+}
+
+/*
+================
 CaravanRouteHeatRow
 
 Per-region ambush danger score learned by caravan agents along trade highways.

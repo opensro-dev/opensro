@@ -30,6 +30,7 @@ import (
 
 	"opensro.online/server/internal/domain"
 	"opensro.online/server/internal/game/enterworld"
+	"opensro.online/server/internal/game/item/inventory"
 	"opensro.online/server/internal/game/item/wire"
 	"opensro.online/server/internal/game/social/guild"
 	"opensro.online/server/internal/game/world/simulation"
@@ -281,6 +282,30 @@ func (rt *Runtime) releaseGuildStorage(division, name string) {
 
 /*
 ================
+containerHoldsBoundRow
+
+Whether a row being deposited is a summoner whose pet carries a bound
+row. A summoned pet's canonical bag is its live companion record and
+the summoner row's own copy is the dormant one; both are read, so the
+answer does not depend on which record travels with the row (#4479).
+================
+*/
+func containerHoldsBoundRow(snapshot *enterworld.Character, row inventory.Item) bool {
+	pet := row.Summon
+	if pet == nil {
+		return false
+	}
+	if cosContainerHoldsBoundRow(pet.Container) {
+		return true
+	}
+	if active := snapshot.ActiveCOS; active != nil && active.GID == pet.GID {
+		return cosContainerHoldsBoundRow(active.Container)
+	}
+	return false
+}
+
+/*
+================
 applyGuildStorageMove
 
 The five guild move types: the holder's moves at the manager, one store
@@ -302,11 +327,40 @@ func (rt *Runtime) applyGuildStorageMove(division string, c *enterworld.Characte
 	// the economy. The personal warehouse stays open to it (the owner's
 	// own round-trip), so the refusal lives here, not in storableItem,
 	// and ahead of the session gates: the caller's own bag is no secret.
+	// A summoner row is judged by what it carries as well as by its own
+	// mark (#4479): read in the v1.188 server, the storage move
+	// moves the summoner row alone and never inspects the rows a pet
+	// carries, so no native refusal exists to copy. The
+	// inference from #1980's own reason, recorded here: for this door a
+	// pet loaded with a bound row is the bound row.
 	if personal == wire.MoveTypeStorageDeposit {
 		if snapshot := rt.characterSnapshot(division, c); snapshot != nil {
-			if row, present := bagOf(snapshot).At(q.SourceSlot); present && row.ForgeBound {
+			if row, present := bagOf(snapshot).At(q.SourceSlot); present &&
+				(row.ForgeBound || containerHoldsBoundRow(snapshot, row)) {
 				return failureResult(errCodeInvalidStorageTarget)
 			}
+		}
+	}
+	// Port-only (#4491): the same judgment on the way out. A pet that
+	// entered the chest before the deposit gate existed still carries
+	// its bound rows, and a withdraw would hand them to whichever
+	// member takes the pet. The chest row's record is dormant - a pet
+	// in the chest is nobody's live companion - so it decides alone.
+	// Refusing removes nothing: the row stays the guild's until an
+	// operator empties the pet, where a sweep would have to destroy
+	// the bound rows outright. The refusal runs inside the move's own
+	// commit, under the store lock, so no chest move between a check
+	// and the withdraw can slip a loaded pet into the slot.
+	mutate := rt.storageMutation(personal, q)
+	if personal == wire.MoveTypeStorageWithdraw {
+		withdraw := mutate
+		mutate = func(next *domain.Character, room *domain.AccountStorage) error {
+			for _, row := range room.Rows {
+				if row.Slot == int64(q.SourceSlot) && row.Summon != nil && cosContainerHoldsBoundRow(row.Summon.Container) {
+					return storageRefusal(errCodeInvalidStorageTarget)
+				}
+			}
+			return withdraw(next, room)
 		}
 	}
 	if code := rt.guildStorageHoldCode(division, c, gid, !goldMove); code != 0 {
@@ -315,7 +369,7 @@ func (rt *Runtime) applyGuildStorageMove(division string, c *enterworld.Characte
 	if store == nil {
 		return failureResult(wire.ErrCodeInvalidRequest)
 	}
-	_, refusal, err := store.TransactGuildStorageAs(division, c.ID, rt.storageMutation(personal, q))
+	_, refusal, err := store.TransactGuildStorageAs(division, c.ID, mutate)
 	var moveRefusal storageRefusal
 	switch {
 	case errors.As(err, &moveRefusal):

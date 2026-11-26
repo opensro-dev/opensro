@@ -179,7 +179,7 @@ func TestKilledThiefLeadsItsGangBackAfterTheTrader(t *testing.T) {
 }
 
 func TestBlockedVengeanceReturnsTheGangToDen(t *testing.T) {
-	rt := NewRuntime(Config{Enabled: true}, nil, WorldHooks{
+	rt := NewRuntime(Config{Enabled: true}, nil, nil, WorldHooks{
 		Move: func(_ string, from, _ Waypoint, _ float32) (Waypoint, bool) { return from, false },
 	})
 	t.Cleanup(func() { _ = rt.Close() })

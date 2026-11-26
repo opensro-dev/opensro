@@ -3,118 +3,114 @@
 
 wiring_caravaneconomy.go - port-only caravan gold settlements
 
-The daily allowance and gold credit commit together on the player's own
-record. A restart cannot reset the allowance or pay a completed run twice.
+Port-only, not native (SRO_AI_CARAVANS). The caravan runtime decides what
+is owed (caravanai: the hire price, the escort reward and its daily cap
+in the escort-day ledger); the gold moves here, through the character's
+own mutation door, so the store's economy ledger records each change
+under its door (domain.economyDoorReasons: caravan-hire, caravan-escort,
+caravan-hire-payout). Every door refuses a character pending deletion
+and a balance it would carry past wire.MaxGold, and changes nothing then.
 
 ===========================================================================
 */
 package main
 
 import (
-	"time"
-
 	log "github.com/sirupsen/logrus"
 	"opensro.online/server/internal/domain"
 	"opensro.online/server/internal/game/enterworld"
 	"opensro.online/server/internal/game/item/wire"
 )
 
-const caravanDailyRewardLimit = 3
-
 /*
 ================
-caravanHireFee
+caravanGoldDoor
 
-The job rules are the AI runtime's (caravanai.CanHire); this only takes gold.
+Moves amount (signed) through door when allowed holds under the door.
+false when the character is unknown, runtime-only or pending deletion,
+when allowed refuses, or when the balance would leave [0, MaxGold]. An
+online character is pushed its new balance.
 ================
 */
-func (game *gameplayPlane) caravanHireFee(division, player string, fee int64) bool {
-	c := game.deps.CharacterByName(division, player)
-	if c == nil || fee <= 0 {
+func (game *gameplayPlane) caravanGoldDoor(division, name, door string, amount int64, allowed func(c *enterworld.Character) bool) bool {
+	c := game.deps.CharacterByName(division, name)
+	if c == nil || amount == 0 {
 		return false
 	}
-	paid := game.deps.Update(c, "caravan-hire", func() bool {
-		if c.RuntimeOnly || enterworld.DressedJob(c) == domain.JobNone || c.Gold == nil || *c.Gold < fee {
-			return false
-		}
-		gold := *c.Gold - fee
-		c.Gold = &gold
-		return true
-	})
-	if paid {
-		game.publishCaravanGold(division, c)
-	}
-	return paid
-}
-
-/*
-================
-caravanHirePayout
-
-A hired Trader's sale or returned goods cost, or a refused hire's fee. No
-daily cap: it is the player's own gold coming back.
-================
-*/
-func (game *gameplayPlane) caravanHirePayout(division, player string, gold int64) bool {
-	c := game.deps.CharacterByName(division, player)
-	if c == nil || gold <= 0 {
-		log.WithFields(log.Fields{"player": player, "gold": gold}).Warn("caravan hire payout has no loaded character")
-		return false
-	}
-	paid := game.deps.Update(c, "caravan-hire-payout", func() bool {
-		if c.RuntimeOnly {
+	moved := game.deps.Update(c, door, func() bool {
+		if c.RuntimeOnly || c.DeletePending || (allowed != nil && !allowed(c)) {
 			return false
 		}
 		balance := int64(0)
 		if c.Gold != nil {
 			balance = *c.Gold
 		}
-		balance = min(balance+gold, int64(wire.MaxGold))
+		if balance < 0 || (amount > 0 && balance > int64(wire.MaxGold)-amount) || (amount < 0 && balance < -amount) {
+			return false
+		}
+		balance += amount
 		c.Gold = &balance
 		return true
 	})
-	if paid {
+	if moved {
 		game.publishCaravanGold(division, c)
 	}
-	return paid
+	return moved
+}
+
+/*
+================
+caravanHireFee
+
+The job rules are the AI runtime's (caravanai.CanHire); this only takes
+gold, from a player wearing a job suit.
+================
+*/
+func (game *gameplayPlane) caravanHireFee(division, player string, fee int64) bool {
+	if fee <= 0 {
+		return false
+	}
+	return game.caravanGoldDoor(division, player, "caravan-hire", -fee, func(c *enterworld.Character) bool {
+		return enterworld.DressedJob(c) != domain.JobNone
+	})
+}
+
+/*
+================
+caravanHirePayout
+
+A hired Trader's sale or returned goods cost, or a refused hire's fee:
+the player's own gold coming back, so no daily cap. A refusal (a balance
+already near MaxGold) is logged with the amount, never clamped away.
+================
+*/
+func (game *gameplayPlane) caravanHirePayout(division, player string, gold int64) bool {
+	if gold <= 0 {
+		return false
+	}
+	if !game.caravanGoldDoor(division, player, "caravan-hire-payout", gold, nil) {
+		log.WithFields(log.Fields{"player": player, "gold": gold}).Warn("caravan hire payout refused: no loaded character, or the balance cannot hold it")
+		return false
+	}
+	return true
 }
 
 /*
 ================
 caravanEscortReward
+
+Pays a completed escort's reward to a living Hunter. The runtime has
+already counted it against the Hunter's daily cap (caravanai
+advanceAlongRouteLocked), so this only moves the gold.
 ================
 */
 func (game *gameplayPlane) caravanEscortReward(division, player string, reward int64, _ string) {
-	c := game.deps.CharacterByName(division, player)
-	if c == nil || reward <= 0 {
+	if reward <= 0 {
 		return
 	}
-	day := time.Now().UTC().Unix() / 86400
-	paid := game.deps.Update(c, "caravan-escort", func() bool {
-		if c.RuntimeOnly || enterworld.DressedJob(c) != domain.JobHunter || !enterworld.CharacterAlive(c) {
-			return false
-		}
-		count := c.CaravanRewardCount
-		if c.CaravanRewardDay != day {
-			count = 0
-		}
-		if count >= caravanDailyRewardLimit {
-			return false
-		}
-		gold := int64(0)
-		if c.Gold != nil {
-			gold = *c.Gold
-		}
-		if gold < 0 || gold > int64(wire.MaxGold)-reward {
-			return false
-		}
-		gold += reward
-		c.Gold, c.CaravanRewardDay, c.CaravanRewardCount = &gold, day, count+1
-		return true
+	game.caravanGoldDoor(division, player, "caravan-escort", reward, func(c *enterworld.Character) bool {
+		return enterworld.DressedJob(c) == domain.JobHunter && enterworld.CharacterAlive(c)
 	})
-	if paid {
-		game.publishCaravanGold(division, c)
-	}
 }
 
 /*

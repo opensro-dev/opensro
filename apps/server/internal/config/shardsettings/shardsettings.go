@@ -418,6 +418,10 @@ var Settings = []Setting{
 	// native; "off" is native: avatar storage keeps four slots). The same
 	// switch imports the Spirit's item rows at build time.
 	{Env: "SRO_NASRUN", NomadVar: "nasrun", Default: "off"},
+	// The mall Magic Cube (#3906, port-only, not native; "off" is native:
+	// no deposit/withdraw, no sell/consignment refusal). The same switch
+	// imports the sixteen cube rows at build time (scripts/magic_cube_import.py).
+	{Env: "SRO_MAGIC_CUBE", NomadVar: "magic_cube", Default: "off"},
 	// Owner, 2026-11-08: the connection census - staff census reads and
 	// the public people counts (#2716/#2717, opensro-web#78; port-only,
 	// not native; "off" opens no journal and installs no census route).

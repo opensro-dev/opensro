@@ -759,6 +759,8 @@ test("terminal asset failures reach the session as asset incidents, once per epi
 		worldStats: () => ({ visibleGroups: 0, pendingGroups: 0, pendingTextures: 0, residentGroups: 0 }),
 		phase: () => rendererError ? "failed" : "ready",
 		error: () => rendererError,
+		errorStack: () =>
+			rendererError ? "Error: Invalid animation layer\n    at evaluate (/assets/bootstrap.js:1:2)" : null,
 		adapterFacts: () => ({
 			vendor: "nvidia",
 			architecture: "ampere",
@@ -859,7 +861,10 @@ test("terminal asset failures reach the session as asset incidents, once per epi
 			code: "asset_failed",
 			message: "asset=/assets/audio/ui_click.ogg error=Audio: EncodingError: Unable to decode audio data"
 		} );
-		// A UI image failure carries the retry owner's facts (#2559).
+		// A UI image failure carries the retry owner's facts (#2559),
+		// but only once it has stood the image owner's whole retry
+		// ladder (#4508): inside the ladder the retry may still heal
+		// it, and a healed retry files nothing.
 		owners.ui.resourceError = () => "UI image unavailable; retrying: /assets/ui/panel.ddj: Failed to decode";
 		owners.ui.resourceFailure = () => ({
 			path: "/assets/ui/panel.ddj",
@@ -867,7 +872,10 @@ test("terminal asset failures reach the session as asset incidents, once per epi
 			transient: true,
 			message: "UI image unavailable; retrying: /assets/ui/panel.ddj: Failed to decode"
 		});
+		const beforeImage = assetReports().length;
 		await frame();
+		assert.equal( assetReports().length, beforeImage, "a retrying image files nothing inside its ladder" );
+		for ( let i = 0; i < 31; i++ ) await frame();
 		assert.deepEqual( assetReports().at( -1 ), {
 			kind: "client-report",
 			incidentKind: "asset",
@@ -919,7 +927,9 @@ test("terminal asset failures reach the session as asset incidents, once per epi
 			incidentKind: "asset",
 			code: "renderer_failed",
 			message: "asset=- transient=false attempts=0 error=D3D12 device removed (DXGI_ERROR_DEVICE_HUNG): " +
-				"the GPU device instance has been suspended | adapter: nvidia/ampere features=texture-compression-bc"
+				"the GPU device instance has been suspended | adapter: nvidia/ampere features=texture-compression-bc",
+			// The frame's own throw names its site (#4504).
+			stack: "Error: Invalid animation layer\n    at evaluate (/assets/bootstrap.js:1:2)"
 		} );
 		assert.ok( closed.length > 0, "the runtime disposed after filing" );
 	} finally {

@@ -44,6 +44,7 @@ export const ITEM_SLOT_PREFIXES = [
 	"avatar:",
 	"storage-slot:",
 	"cos-slot:",
+	"magic-cube-slot:",
 	"gacha-bag:",
 	"gacha-card",
 	"stall-slot:",

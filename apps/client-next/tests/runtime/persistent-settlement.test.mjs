@@ -71,6 +71,9 @@ function backend( t, hooks = {} ) {
 	t.mock.timers.enable( { apis: [ "setTimeout" ] } );
 	const rows = new Map();
 	const events = [];
+	// Caches opened through this storage, for has(): one shared cache
+	// serves every name, but a name exists only once opened.
+	const opened = new Set();
 	const cache = {
 		/*
 		================
@@ -130,7 +133,16 @@ function backend( t, hooks = {} ) {
 			async open( name ) {
 				events.push( [ "open", name ] );
 				await hooks.open?.();
+				opened.add( name );
 				return cache;
+			},
+			/*
+			================
+			has
+			================
+			*/
+			async has( name ) {
+				return opened.has( name );
 			}
 		}
 	} );

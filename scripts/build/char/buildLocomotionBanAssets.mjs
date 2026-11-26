@@ -50,7 +50,7 @@ import {
 } from "./native/skillEffectAnimationRegistry.ts";
 import { refreshPrecompressedSidecars } from "../generatedManifestSidecars.mjs";
 import { resolveRoster } from "./resolveCharRoster.mjs";
-import { dataAssetPath, loadDataAsset } from "../shared/jmxAssetIO.mjs";
+import { dataAssetPathOnDisk, loadDataAsset } from "../shared/jmxAssetIO.mjs";
 import { writeJsonIfChangedSync } from "../shared/jsonOut.mjs";
 import { isMainScript } from "../shared/fsUtils.mjs";
 import { splitTextDataRow } from "../shared/textDataIo.mjs";
@@ -147,7 +147,7 @@ async function publishClip( gamePath, publishedByPath ) {
 	const existing = publishedByPath.get( normalized );
 	if ( existing ) return existing;
 
-	const sourcePath = dataAssetPath( gamePath );
+	const sourcePath = dataAssetPathOnDisk( gamePath );
 	const buffer = await loadDataAsset( gamePath );
 	// Validate the raw payload with the proven parser before publishing; the
 	// browser-side WIP loader will re-parse the same bytes for real.

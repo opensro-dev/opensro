@@ -29,8 +29,8 @@ on the far bank. Route variants include the Dead Ravine, Central-Tarim, Highland
 Escort commands require the correct worn job suit, a living nearby player and an available recruiter
 in town. `!hire <hunter>` charges 1,500,000 gold once. `!accept <trader>` requires a Hunter to remain within
 320 units for at least 90% of a surviving run (minimum 30 seconds; observation gaps invalidate it).
-Rewards are limited to three per character per UTC day and persist with the gold credit. Schema 48
-adds these optional counters; the local launcher retains a backup and runs the offline upgrade.
+Rewards are limited to three per Hunter per UTC day, counted in the `caravan_escort_days` ledger
+(store layout 17), so the cap survives a GameWorld restart; no character record changes.
 Commands are limited to one per character per second. Chat cannot deal damage: use ordinary combat.
 Dialogue and model notes are filtered as plain, bounded text.
 
@@ -69,7 +69,25 @@ configured compatible compiler, so ordinary tests/static checks run but race ver
 
 | Switch | Where | Effect |
 | --- | --- | --- |
-| `SRO_AI_CARAVANS` | GameWorld, job variable `ai_caravans` | The agent roster and its tick; memories persist in store layout 14 (`caravan_agent_memories`, `caravan_route_heat`) |
+| `SRO_AI_CARAVANS` | GameWorld, job variable `ai_caravans` | The agent roster and its tick; memories persist in store layout 14 (`caravan_agent_memories`, `caravan_route_heat`), the daily escort cap in layout 17 (`caravan_escort_days`, schema 60) |
+
+## Slice 5: the economy, abuse-proof
+
+The escort contract's reward, the hire fee and the parley's cargo drop move real value, under these rules:
+
+- An AI-trader escort pays only when the Hunter stayed within escort range (`escortRangeUnits`, 150 world
+  units) at every step of the run and the trader survived it; a trader killed on the road voids the run, and
+  an abandoned or void run records no escort trust either.
+- One Hunter holds one AI-trader escort at a time; `!accept` refuses a second until the first completes.
+- Paid escorts are capped per Hunter per UTC day at `MaxPaidEscortsPerDay` (3, a placeholder for the owner's
+  call), counted in `caravan_escort_days` as each payment is made, so a restart cannot reset the day.
+- Hiring an AI Hunter debits `BaseHunterHireFeeGold` (15,000) from the trader's purse before the hire binds;
+  a purse that cannot pay hires nobody.
+- A parley tribute is the trader's own cargo: that many units of its origin town's real specialty trade
+  goods (Jangan CH, Donwhang WC, Hotan AM - see `caravanai/tradegoods.go` for the data trail) dropped on the
+  ground where it stands, never goods conjured for the occasion.
+- Gold moves through the character's own mutation door, so the store ledger records it (doors
+  `caravan-escort-reward` and `caravan-hire-fee`); an escort reward is created gold by design of the epic.
 
 ## The decision brain
 

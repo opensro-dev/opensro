@@ -185,7 +185,7 @@ func (rt *Runtime) applyCosGroundAt(division string, c *enterworld.Character, q 
 			if count == 0 {
 				count = 1
 			}
-			grant, fault := inv.GrantStack(inventory.Item{TradeOwner: item.TradeOwner, RecordID: item.RecordID, RefObjID: item.RefObjID, Codename: item.Codename, TypeFlags: item.TypeFlags, Quantity: count, Plus: item.Plus, VarianceBits: item.VarianceBits, Durability: item.Durability, MagicOptions: item.MagicOptions, Data: item.Data, Summon: domain.CloneCOS(item.Summon), ForgeBound: item.ForgeBound, EarnedBought: item.EarnedBought}, rt.maxStackFor(item.TypeFlags, item.Codename))
+			grant, fault := inv.GrantStack(inventory.Item{TradeOwner: item.TradeOwner, RecordID: item.RecordID, RefObjID: item.RefObjID, Codename: item.Codename, TypeFlags: item.TypeFlags, Quantity: count, Plus: item.Plus, VarianceBits: item.VarianceBits, Durability: item.Durability, MagicOptions: item.MagicOptions, Data: item.Data, Summon: domain.CloneCOS(item.Summon), LinkedStorage: domain.CloneCOSContainer(item.LinkedStorage), ForgeBound: item.ForgeBound, EarnedBought: item.EarnedBought}, rt.maxStackFor(item.TypeFlags, item.Codename))
 			if fault != nil {
 				code := fault.Code
 				if code == wire.ErrCodeStorageFull {
@@ -474,6 +474,8 @@ func (rt *Runtime) grantPeerCosPickup(division string, picker, recipient *enterw
 			Codename: current.Codename, TypeFlags: current.TypeFlags, Quantity: count, Plus: current.Plus,
 			VarianceBits: current.VarianceBits, Durability: current.Durability, MagicOptions: current.MagicOptions,
 			Data: current.Data, Summon: domain.CloneCOS(current.Summon),
+			LinkedStorage: domain.CloneCOSContainer(current.LinkedStorage),
+			ForgeBound:    current.ForgeBound, EarnedBought: current.EarnedBought,
 		}, rt.maxStackFor(current.TypeFlags, current.Codename))
 		if fault != nil {
 			peerBagFull = fault.Code == wire.ErrCodeStorageFull

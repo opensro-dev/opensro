@@ -51,6 +51,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 from pe_image import PEImage
 from revtool_paths import DATA_DIR, DEFAULT_BINARY
+import revtool_pipe
 
 SEED_FORMAT = "sro-revtool-seed"
 SEED_VERSION = 1
@@ -299,6 +300,19 @@ def text_section_bytes(binary_path):
 	raise SeedError(f"{binary_path}: no .text section to scan against")
 
 
+def _text_sha256_file(binary_path):
+	"""sha256 of the binary's .text, or None when it cannot be read.
+
+	Builds are verified by .text identity (#4467): two builds of one
+	target whose code sections match byte for byte take the same
+	addresses everywhere the seed speaks of.
+	"""
+	try:
+		return hashlib.sha256(text_section_bytes(binary_path)).hexdigest()
+	except (SeedError, OSError):
+		return None
+
+
 def scan_seed(seed_path, binary_path):
 	"""Text-run scan of the shipped bytes and of the payload."""
 	with open(seed_path, "rb") as fh:
@@ -321,14 +335,8 @@ def scan_seed(seed_path, binary_path):
 # =====================================================================
 
 def open_session(binary):
-	"""One rzpipe connection, no auto-analysis (cf. revtool_rizin)."""
-	try:
-		import rzpipe
-	except ImportError as exc:
-		raise SeedError(
-			"rzpipe is not importable; use the pinned venv "
-			"(docs/native/REVERSE_ENGINEERING.md)") from exc
-	return rzpipe.open(binary)
+	"""One rizin process, no auto-analysis (cf. revtool_rizin)."""
+	return revtool_pipe.open(binary)
 
 
 def _batched(pipe, commands):
@@ -336,12 +344,12 @@ def _batched(pipe, commands):
 	for command in commands:
 		if batch and (len(batch) >= APPLY_CHUNK_COMMANDS
 					  or size + len(command) + 1 > APPLY_CHUNK_BYTES):
-			pipe.cmd("\n".join(batch))
+			revtool_pipe.command(pipe, "\n".join(batch))
 			batch, size = [], 0
 		batch.append(command)
 		size += len(command) + 1
 	if batch:
-		pipe.cmd("\n".join(batch))
+		revtool_pipe.command(pipe, "\n".join(batch))
 
 
 def rizin_names(functions):
@@ -416,10 +424,10 @@ Returns (retried, ghosts removed).
 		head = command.split()
 		va = int(head[-1] if head[0] in ("af+", "afn") else head[1], 16)
 		if va in missing:
-			pipe.cmd(command)
+			revtool_pipe.command(pipe, command)
 	ghosts = [va for va in present if va not in seed and va not in preexisting]
 	for va in ghosts:
-		pipe.cmd(f"af- @ {va:#x}")
+		revtool_pipe.command(pipe, f"af- @ {va:#x}")
 	return len(missing), len(ghosts)
 
 
@@ -452,15 +460,15 @@ address inside a neighbour's block) is reported, never assumed.
 		lock_fd = None
 		pipe = opener(binary_path)
 		try:
-			pipe.cmd("e scr.color=false")
-			preexisting = {row["offset"] for row in (pipe.cmdj("aflj") or [])}
+			revtool_pipe.command(pipe, "e scr.color=false")
+			preexisting = {row["offset"] for row in (revtool_pipe.command_json(pipe, "aflj") or [])}
 			_batched(pipe, _seed_commands(functions, preexisting))
-			rows = pipe.cmdj("aflj") or []
+			rows = revtool_pipe.command_json(pipe, "aflj") or []
 			present = {row["offset"]: row.get("name", "") for row in rows}
 			stats["retried"], stats["ghosts"] = _repair_apply(
 				pipe, functions, preexisting, present)
 			if stats["retried"] or stats["ghosts"]:
-				rows = pipe.cmdj("aflj") or []
+				rows = revtool_pipe.command_json(pipe, "aflj") or []
 				present = {row["offset"]: row.get("name", "") for row in rows}
 			defined = [va for va, _ in functions if va in present]
 			stats["preexisting"] = sum(1 for va, _ in functions if va in preexisting)
@@ -471,12 +479,9 @@ address inside a neighbour's block) is reported, never assumed.
 						if va in present and not is_anonymous(name)]
 			sample = labelled[::max(1, len(labelled) // 20)][:20] if labelled else []
 			sampled_ok = sum(1 for va, name in sample if present.get(va) == name)
-			pipe.cmd(f'Ps "{tmp_path}"')
+			revtool_pipe.command(pipe, f'Ps "{tmp_path}"')
 		finally:
-			try:
-				pipe.cmd("q!")
-			except Exception:
-				pass
+			revtool_pipe.close(pipe)
 		if not os.path.exists(tmp_path):
 			raise SeedError(f"rizin did not write {tmp_path}")
 		os.replace(tmp_path, rzdb_path)
@@ -561,6 +566,7 @@ def cmd_seed_verify(args, con):
 	if len(blob) > SEED_SIZE_LIMIT:
 		raise SystemExit("error: seed is over the size cap")
 	manifest = args.manifest
+	pin = None
 	if manifest == "none":
 		manifest = False
 		print("  manifest: not checked (--manifest none; an unreleased build)")
@@ -584,14 +590,40 @@ def cmd_seed_verify(args, con):
 		if not os.path.exists(binary):
 			raise SystemExit(f"error: binary not found: {binary}")
 		digest = _sha256_file(binary)
-		if digest != payload["binary_sha256"]:
+		builds = None
+		if pin is not None:
+			try:
+				builds = asset_builds(pin)
+			except SeedError as exc:
+				raise SystemExit(f"error: {exc}") from exc
+		how = "exact" if digest == payload["binary_sha256"] else None
+		if builds is not None and how is None:
+			_, how = resolve_binary_build(builds, digest, _text_sha256_file(binary))
+		if how == "exact":
+			extra = "hash matches"
+		elif how == "text":
+			extra = (f"a verified build ({digest}) with byte-identical .text; "
+					 "every seed address applies")
+		elif how == "mapped":
+			extra = (f"a verified build ({digest}) with an address mapping; "
+					 "seed apply translates the seed's addresses")
+		elif how == "unmapped":
+			raise SystemExit(
+				f"error: binary sha256 {digest} is a verified {payload['target']} build "
+				"with no published mapping yet: the seed cannot describe it. Report the "
+				"hash in #4467 (client) or #4478 (server), or build a seed from your "
+				"own overlay (seed build).")
+		elif builds is not None:
+			raise SystemExit(
+				"error: " + unknown_binary_message(payload["target"], builds, digest))
+		else:
 			raise SystemExit(
 				f"error: binary sha256 {digest} != seed {payload['binary_sha256']}")
 		try:
 			scan_seed(args.seed, binary)
 		except SeedError as exc:
 			raise SystemExit(f"error: {exc}") from exc
-		print("  binary: hash matches, text-run scan clean (.text)")
+		print(f"  binary: {extra}, text-run scan clean (.text)")
 	return 0
 
 
@@ -604,7 +636,44 @@ def cmd_seed_apply(args, con):
 	if not os.path.exists(binary):
 		raise SystemExit(f"error: binary not found: {binary}")
 	digest = _sha256_file(binary)
-	if digest != payload["binary_sha256"]:
+	manifest = getattr(args, "manifest", None)
+	if manifest == "none":
+		manifest = False
+	if manifest is None and os.path.exists(os.path.join(os.path.dirname(os.path.abspath(__file__)), MANIFEST_NAME)):
+		manifest = os.path.join(os.path.dirname(os.path.abspath(__file__)), MANIFEST_NAME)
+	builds = None
+	if manifest:
+		_, assets = _manifest_pins(manifest)
+		for asset in assets:
+			if asset.get("file") == os.path.basename(args.seed):
+				try:
+					builds = asset_builds(asset)
+				except SeedError as exc:
+					raise SystemExit(f"error: {exc}") from exc
+				break
+	build, how = (None, "exact") if digest == payload["binary_sha256"] else (None, None)
+	if how is None and builds is not None:
+		build, how = resolve_binary_build(builds, digest, _text_sha256_file(binary))
+	dropped = 0
+	if how == "mapped":
+		functions, dropped = translate_functions(payload["functions"], build["offsets"])
+		payload = {**payload, "functions": functions}
+		print(f"  binary is a verified build with an address mapping "
+			  f"({build['label']}): {len(functions)} functions translated, "
+			  f"{dropped} outside every mapped span and left out")
+	elif how == "text":
+		print(f"  binary is a verified build ({digest}) with byte-identical .text: "
+			  "the seed's addresses apply unchanged")
+	elif how == "unmapped":
+		raise SystemExit(
+			f"error: binary sha256 {digest} is a verified {payload['target']} build "
+			"with no published mapping yet: the seed cannot describe it. Report the "
+			"hash in #4467 (client) or #4478 (server), or build a seed from your "
+			"own overlay (seed build).")
+	elif how is None:
+		if builds is not None:
+			raise SystemExit(
+				"error: " + unknown_binary_message(payload["target"], builds, digest))
 		raise SystemExit(
 			f"error: binary sha256 {digest} != seed {payload['binary_sha256']}; "
 			"the seed only describes its own binary")
@@ -639,7 +708,7 @@ def cmd_seed_apply(args, con):
 	print(f"  sampled labelled names {sampled_ok} of {sampled} match")
 	if sampled and sampled_ok != sampled:
 		raise SystemExit("error: sampled names do not match the seed")
-	record_applied_seed(rzdb, _sha256_file(args.seed), args.seed, payload)
+	record_applied_seed(rzdb, _sha256_file(args.seed), args.seed, payload, digest)
 	print(f"  recorded the seed's sha beside the project ({seed_record_path(rzdb)})")
 	return 0
 
@@ -666,18 +735,22 @@ def seed_record_path(rzdb_path):
 	return rzdb_path + SEED_RECORD_SUFFIX
 
 
-def record_applied_seed(rzdb_path, seed_sha256, seed_file, payload):
+def record_applied_seed(rzdb_path, seed_sha256, seed_file, payload, applied_binary_sha256=None):
 	"""Write the applied-seed record beside a freshly applied project.
 
 	Atomic (temp file + os.replace in the project's directory), like
 	the project save itself, so a crash never leaves a torn record.
+	binary_sha256 names the binary the project was applied TO (a
+	verified second build under #4467 may differ from the seed's own);
+	seed_binary_sha256 always names the build the seed describes.
 	"""
 	record = {
 		"format": SEED_RECORD_FORMAT,
 		"version": SEED_RECORD_VERSION,
 		"seed_sha256": seed_sha256,
 		"seed_file": os.path.basename(seed_file),
-		"binary_sha256": payload["binary_sha256"],
+		"binary_sha256": applied_binary_sha256 or payload["binary_sha256"],
+		"seed_binary_sha256": payload["binary_sha256"],
 		"target": payload["target"],
 	}
 	path = seed_record_path(rzdb_path)
@@ -728,6 +801,143 @@ def _manifest_pins(manifest_path):
 	return manifest.get("tag"), manifest.get("assets") or []
 
 
+# =====================================================================
+# verified builds (#4467): one seed, several builds of its target
+#
+# A seed describes one build exactly. Other builds of the same target
+# are pinned per asset in the manifest's builds list: the first build
+# is the seed's own; a build whose text_sha256 matches the seed
+# build's is byte-identical in .text, so every seed address applies
+# unchanged; a build with an offsets table (spans of seed-build VAs,
+# each with its signed delta) takes the seed's functions translated;
+# a build with neither is known but unmapped. A build whose hash the
+# maintainers have not recorded yet pins binary_sha256 null - a slot,
+# never a guess. Payloads do not change: the mapping lives here.
+# =====================================================================
+
+_HEX64_RE = re.compile(r"^[0-9a-f]{64}$")
+
+
+def _check_offsets(offsets, where):
+	"""Normalized offsets spans, or SeedError: sorted, disjoint, sane."""
+	if offsets is None:
+		return None
+	if not isinstance(offsets, list):
+		raise SeedError(f"{where}: offsets must be a list or null")
+	spans = []
+	for span in offsets:
+		if not isinstance(span, dict) or \
+				not isinstance(span.get("from"), int) or \
+				not isinstance(span.get("to"), int) or \
+				not isinstance(span.get("delta"), int) or \
+				span["from"] >= span["to"]:
+			raise SeedError(f"{where}: bad offsets span {span!r}")
+		if spans and span["from"] < spans[-1]["to"]:
+			raise SeedError(f"{where}: offsets spans overlap or are unsorted at {span!r}")
+		spans.append({"from": span["from"], "to": span["to"], "delta": span["delta"]})
+	return spans
+
+
+def asset_builds(asset):
+	"""One manifest asset's verified builds, normalized and checked.
+
+	The first build is the seed's own (its binary_sha256 is the
+	asset's pin). A version-1 manifest carries no builds list: the
+	seed's own build is the only one it knows.
+	"""
+	raw = asset.get("builds")
+	if raw is None:
+		return [{
+			"label": f"{asset.get('target')} (the build the seed describes)",
+			"binary_sha256": asset.get("binary_sha256"),
+			"text_sha256": None,
+			"offsets": None,
+		}]
+	if not isinstance(raw, list) or not raw:
+		raise SeedError(f"manifest asset {asset.get('file')}: builds must be a non-empty list")
+	builds = []
+	for build in raw:
+		where = f"manifest asset {asset.get('file')} build {build.get('label')!r}"
+		if not isinstance(build, dict) or not isinstance(build.get("label"), str):
+			raise SeedError(f"{where}: a build needs a label")
+		for field in ("binary_sha256", "text_sha256"):
+			value = build.get(field)
+			if value is not None and not (isinstance(value, str) and _HEX64_RE.match(value)):
+				raise SeedError(f"{where}: {field} must be a sha256 or null")
+		builds.append({
+			"label": build["label"],
+			"binary_sha256": build.get("binary_sha256"),
+			"text_sha256": build.get("text_sha256"),
+			"offsets": _check_offsets(build.get("offsets"), where),
+		})
+	if builds[0]["binary_sha256"] != asset.get("binary_sha256"):
+		raise SeedError(
+			f"manifest asset {asset.get('file')}: the first build must be the seed's own "
+			f"(binary_sha256 {asset.get('binary_sha256')})")
+	return builds
+
+
+def resolve_binary_build(builds, binary_sha256, text_sha256):
+	"""(build, how) for a contributor's binary against an asset's builds.
+
+	how is "exact" (the seed's own build), "text" (a binary whose .text
+	is byte-identical to the seed build's - the code is the same, so
+	every address applies), "mapped" (a known build with an offsets
+	table), "unmapped" (a known build with no mapping yet) or
+	"unknown" (nothing matches; build is None). Text identity is
+	checked before the mapping: identical code needs no translation,
+	whichever build line pinned the binary's hash.
+	"""
+	seed_build = builds[0]
+	if binary_sha256 == seed_build["binary_sha256"]:
+		return seed_build, "exact"
+	if text_sha256 is not None and seed_build["text_sha256"] is not None and \
+			text_sha256 == seed_build["text_sha256"]:
+		return seed_build, "text"
+	for build in builds[1:]:
+		if build["binary_sha256"] is not None and build["binary_sha256"] == binary_sha256:
+			if build["offsets"] is not None:
+				return build, "mapped"
+			return build, "unmapped"
+	return None, "unknown"
+
+
+def translate_functions(functions, offsets):
+	"""Seed function rows under a build's offsets table.
+
+	Returns (rows, dropped): a row inside a span moves by its delta;
+	a row outside every span is dropped - reported, never placed at
+	a guessed address.
+	"""
+	rows, dropped = [], 0
+	for va, name in functions:
+		for span in offsets:
+			if span["from"] <= va < span["to"]:
+				rows.append([va + span["delta"], name])
+				break
+		else:
+			dropped += 1
+	return rows, dropped
+
+
+def unknown_binary_message(target, builds, binary_sha256):
+	"""The refusal a contributor can act on: every known hash, and what to do."""
+	known = [b for b in builds if b["binary_sha256"]]
+	lines = [f"binary sha256 {binary_sha256} is not a verified {target} build."]
+	for build in known:
+		state = "the seed's own build" if build is builds[0] else \
+			("has an address mapping" if build["offsets"] is not None else "known, no mapping published yet")
+		lines.append(f"  {build['binary_sha256']}  {build['label']} ({state})")
+	issue = "#4467" if target == "client" else "#4478"
+	lines.append(
+		"hash your copy and compare (PowerShell: Get-FileHash <exe> -Algorithm SHA256). "
+		"If yours is a known build without a mapping, the seed cannot describe it yet: "
+		f"report the hash in {issue}, or build a seed from your own overlay (seed build). "
+		"If it matches no line above, it is not a build the maintainers hold - do not "
+		"reuse addresses from another build unchecked.")
+	return "\n".join(lines)
+
+
 def stale_seed_warning(binary_sha256, rzdb_path, manifest_path=None):
 	"""The stale-seed warning line for a project, or None when current.
 
@@ -745,7 +955,11 @@ def stale_seed_warning(binary_sha256, rzdb_path, manifest_path=None):
 		return None
 	tag, assets = _manifest_pins(manifest_path)
 	for pin in assets:
-		if pin.get("binary_sha256") != binary_sha256:
+		try:
+			known = [b["binary_sha256"] for b in asset_builds(pin) if b["binary_sha256"]]
+		except SeedError:
+			continue
+		if binary_sha256 not in known:
 			continue
 		if pin.get("sha256") == record["seed_sha256"]:
 			return None
@@ -793,6 +1007,9 @@ def check_asset_against_pin(path, pin):
 	if len(payload["functions"]) != pin["functions"] or \
 			len(payload["ledger"]) != pin["ledger_lines"]:
 		raise SeedError(f"{path}: function/ledger counts do not match the manifest pin")
+	# The builds table rides along unverified at publish time only if
+	# it parses: a malformed one must fail here, not at a contributor.
+	asset_builds(pin)
 	return payload, digest
 
 

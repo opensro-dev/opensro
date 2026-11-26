@@ -27,6 +27,7 @@ row's item-mall-tab-scroll:<first> (issue #4093).
 import type { UiRect } from "@/engine/contracts/ui";
 import type { MallOffer, MallTab } from "@/engine/contracts/item-mall";
 import { type MallCategoryList, mallTabCaptionLater } from "@/engine/foundation/ui/item-mall-layout";
+import { BONUS_SILK_CAPTION_KEY, EARNED_SILK_CAPTION, silkWalletHelp } from "@/engine/foundation/ui/mall-wallet";
 import {
 	RENEWAL_ART,
 	RENEWAL_GOODS_PER_PAGE,
@@ -98,7 +99,9 @@ export type RenewalMallOp =
 		// caret after it while the field has focus.
 		readonly textRect: UiRect;
 	}
-	| { readonly kind: "doll"; readonly rect: UiRect; };
+	| { readonly kind: "doll"; readonly rect: UiRect; }
+	// A hover region whose help the HUD shows as a tooltip (port-only).
+	| { readonly kind: "help"; readonly id: string; readonly text: string; readonly rect: UiRect; };
 
 /*
 ================
@@ -147,6 +150,8 @@ export interface RenewalMallInput {
 		readonly earnedSilk: number;
 		readonly giftSilk: number;
 		readonly points: number;
+		// The shard's earned purchase rule (SRO_EARNED_SILK_TRADABLE).
+		readonly earnedTradable: boolean;
 	} | undefined;
 	readonly character: { readonly name: string; readonly level: number | undefined; };
 	readonly origin: readonly [number, number];
@@ -499,30 +504,33 @@ export function renewalMallView( input: RenewalMallInput ): RenewalMallOp[] {
 	if ( input.character.level !== undefined ) {
 		label( "Lv. " + input.character.level, infoRect( "GDR_ITEM_MALL_MYINFO_LEVEL" ), WHITE, 2 );
 	}
-	// The wallet rows in their authored order (Silk 29, Point 50, Gift Silk
-	// 69 in ifnewitemmallmyinfo.txt), with the port's earned row (#4133)
-	// under Silk: it reuses the Silk row's controls and coin mark, and only
-	// its caption is the port's own, as no native string names earned silk.
-	// The authored rows fill the box (its background ends at 88, the
-	// buttons start at 92), so the four rows share the space from the Silk
-	// row to the background's bottom, at no more than the authored pitch.
-	// Stepping one authored pitch past Point put the earned row onto the
-	// Silk row, because Gift Silk sits below Point (#4133 follow-up).
+	// The wallet's three Silk rows (#4480): Silk, Earned Silk and Bonus
+	// Silk, top to bottom at the authored pitch, captions and help from
+	// foundation/ui/mall-wallet.ts. The authored box holds Silk 29, Point 50
+	// and Gift Silk 69 (ifnewitemmallmyinfo.txt). The Point row is never
+	// drawn: the English client hides it in the classic window
+	// (CIFItemMallMyInfo_OnCreate 6BDA60, language 4), and four rows in a
+	// box drawn for three crowded the last onto its edge. Earned Silk
+	// (port-only, #4133) reuses the Silk row's controls and coin mark; Bonus
+	// Silk takes the client's own "Bonus Silk" caption, the name the
+	// classic window and the purchase dialog print, over the later string's
+	// "Gift Silk".
+	const tradable = input.balance?.earnedTradable === true;
 	const walletRows = [
 		{
-			caption: copy( infoControl( "GDR_ITEM_MALL_MYINFO_STA_SILK_STR" ).text ),
+			caption: copy( infoControl( WALLET_SILK.caption ).text ),
 			names: WALLET_SILK,
-			amount: input.balance?.silk
+			amount: input.balance?.silk,
+			kind: "silk"
 		},
-		{ caption: "Earned silk", names: WALLET_SILK, amount: input.balance?.earnedSilk },
-		...[ WALLET_POINT, WALLET_GIFT_SILK ]
-			.sort( ( a, b ) => infoControl( a.value ).rect[1] - infoControl( b.value ).rect[1] )
-			.map( names => ({
-				caption: copy( infoControl( names.caption ).text ),
-				names,
-				amount: names === WALLET_POINT ? input.balance?.points : input.balance?.giftSilk
-			}) )
-	];
+		{ caption: EARNED_SILK_CAPTION, names: WALLET_SILK, amount: input.balance?.earnedSilk, kind: "earned" },
+		{
+			caption: copy( BONUS_SILK_CAPTION_KEY ) || copy( infoControl( WALLET_GIFT_SILK.caption ).text ),
+			names: WALLET_GIFT_SILK,
+			amount: input.balance?.giftSilk,
+			kind: "bonus"
+		}
+	] as const;
 	const walletStep = renewalWalletStep( info, walletRows.length );
 	const walletTop = infoControl( WALLET_SILK.value ).rect[1];
 	walletRows.forEach( ( row, index ) => {
@@ -538,6 +546,19 @@ export function renewalMallView( input: RenewalMallInput ): RenewalMallOp[] {
 		const markControl = infoControl( row.names.mark );
 		if ( markControl.texture ) authored( markControl, ix, iy + dy );
 		else label( copy( markControl.text ), shifted( row.names.mark ), WHITE );
+		// Port-only: hovering the row, caption to mark, says what the
+		// balance is and what spends it.
+		const caption = shifted( row.names.caption ),
+			mark = shifted( row.names.mark ),
+			value = shifted( row.names.value );
+		const top = Math.min( caption[1], value[1], mark[1] );
+		const bottom = Math.max( caption[1] + caption[3], value[1] + value[3], mark[1] + mark[3] );
+		ops.push( {
+			kind: "help",
+			id: "item-mall-renewal-wallet-" + row.kind,
+			text: silkWalletHelp( row.kind, tradable ),
+			rect: [ caption[0], top, mark[0] + mark[2] - caption[0], bottom - top ]
+		} );
 	} );
 	// Buy silk and Coupon open retail web pages; the port has none to
 	// link to, so both stay disabled as the classic window's do.

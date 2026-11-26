@@ -57,7 +57,7 @@ func TestDeadCharactersAreIgnoredAsIfAbsent(t *testing.T) {
 	}
 
 	// Runtime StepAgent must ignore a dead Thief player on the road and keep moving.
-	rt := NewRuntime(Config{Enabled: true}, nil, WorldHooks{})
+	rt := NewRuntime(Config{Enabled: true}, nil, nil, WorldHooks{})
 	t.Cleanup(func() { _ = rt.Close() })
 	rt.EnsureDivisionRoster("division")
 	rt.manualRuns = true
@@ -83,7 +83,7 @@ TestGroupedRespawnDelayResurrectionAndSoloInstantRespawn
 func TestGroupedRespawnDelayResurrectionAndSoloInstantRespawn(t *testing.T) {
 	ctx := context.Background()
 	playerAt := Waypoint{RegionID: 25239, X: 1400, Z: 1000}
-	rt := NewRuntime(Config{Enabled: true}, nil, WorldHooks{
+	rt := NewRuntime(Config{Enabled: true}, nil, nil, WorldHooks{
 		Player: func(_, name string) (PlayerPosition, bool) {
 			if name != "PlayerTrader" {
 				return PlayerPosition{}, false
@@ -166,7 +166,7 @@ TestDisbandedEscortsAndReinforcementsTeleportToTownImmediately
 ================
 */
 func TestDisbandedEscortsAndReinforcementsTeleportToTownImmediately(t *testing.T) {
-	rt := NewRuntime(Config{Enabled: true}, nil, WorldHooks{})
+	rt := NewRuntime(Config{Enabled: true}, nil, nil, WorldHooks{})
 	t.Cleanup(func() { _ = rt.Close() })
 	rt.EnsureDivisionRoster("division")
 	rt.manualRuns = true
@@ -203,7 +203,7 @@ TestHunterWithRessKeepsDeadTraderAndRevivesInPlace
 ================
 */
 func TestHunterWithRessKeepsDeadTraderAndRevivesInPlace(t *testing.T) {
-	rt := NewRuntime(Config{Enabled: true}, nil, WorldHooks{})
+	rt := NewRuntime(Config{Enabled: true}, nil, nil, WorldHooks{})
 	t.Cleanup(func() { _ = rt.Close() })
 	rt.EnsureDivisionRoster("division")
 	rt.manualRuns = true
@@ -261,7 +261,7 @@ TestTransportLossWithRessHunterEndsRunCleanlyInsteadOfLoopingOnFoot
 ================
 */
 func TestTransportLossWithRessHunterEndsRunCleanlyInsteadOfLoopingOnFoot(t *testing.T) {
-	rt := NewRuntime(Config{Enabled: true}, nil, WorldHooks{})
+	rt := NewRuntime(Config{Enabled: true}, nil, nil, WorldHooks{})
 	t.Cleanup(func() { _ = rt.Close() })
 	rt.EnsureDivisionRoster("division")
 	rt.manualRuns = true

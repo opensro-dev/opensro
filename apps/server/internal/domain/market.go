@@ -58,11 +58,14 @@ const (
 // The refusals every front end maps to its own words. None changes
 // anything: a refused door leaves the item and the money where they were.
 var (
-	ErrMarketNotFound      = errors.New("market: no such listing")
-	ErrMarketChanged       = errors.New("market: the listing changed")
-	ErrMarketOwnListing    = errors.New("market: a seller cannot buy their own listing")
-	ErrMarketNoItem        = errors.New("market: no such item")
-	ErrMarketNotTradeable  = errors.New("market: the item cannot be traded")
+	ErrMarketNotFound     = errors.New("market: no such listing")
+	ErrMarketChanged      = errors.New("market: the listing changed")
+	ErrMarketOwnListing   = errors.New("market: a seller cannot buy their own listing")
+	ErrMarketNoItem       = errors.New("market: no such item")
+	ErrMarketNotTradeable = errors.New("market: the item cannot be traded")
+	// ErrMarketMagicCube is a non-empty Magic Cube listed on consignment
+	// (UIIT_STT_OPEN_MARKET_SELL_IMPOSSIBLE_MAGIC_CUBE; #3906).
+	ErrMarketMagicCube     = errors.New("market: a Magic Cube that still holds elixirs cannot be listed")
 	ErrMarketPrice         = errors.New("market: invalid price")
 	ErrMarketCap           = errors.New("market: too many open listings")
 	ErrMarketFunds         = errors.New("market: not enough to pay")
@@ -231,7 +234,12 @@ type MarketBuyRequest struct {
 	To           string
 	Receiver     *Character
 	BagSlot      int64
-	Rules        MarketRules
+	// Admit is the listing's trade rule (MarketListRequest.Admit), judged
+	// again at the sale: a row admitted before the rule tightened (#4491,
+	// a pet loaded with bound rows) never changes hands on that stale
+	// admission. The seller can still take it back.
+	Admit func(InventoryRow) error
+	Rules MarketRules
 }
 
 /*
@@ -282,7 +290,9 @@ type MarketAcceptRequest struct {
 	SellerAccount string
 	Buyer         *Character
 	BagSlot       int64
-	Rules         MarketRules
+	// Admit is the trade rule judged again at the sale (MarketBuyRequest).
+	Admit func(InventoryRow) error
+	Rules MarketRules
 }
 
 /*

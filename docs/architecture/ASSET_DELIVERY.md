@@ -83,7 +83,17 @@ Why the raw total exceeds the original:
   textures: 213 MiB from 125 MiB). Images whose original was uncompressed
   RGBA (icons, most UI) are smaller as PNG.
 - **Outdoor region records are JSON**, gzip-compressed inside the packs
-  (about 18% of the JSON). The original binary map files are smaller.
+  (about 18% of the JSON). The original binary map files are smaller: a
+  region's terrain is about 74 KiB gzipped, against 37 KiB for its gzipped
+  `.m` file.
+  Until 2026-11 every region also carried its terrain twice: the top-level
+  `terrain.blocks` and `terrainTextures.blocks`, and again in a one-entry
+  `sectors` list. A bundle that covers only its own sector now leaves the
+  list out (`sectorList` in `buildMapLoaderRegionBundle.mjs`), which made
+  each region about a third smaller (measured on 4 live regions: 626,000 to
+  421,141 bytes gzipped). Every reader (client, server water surface,
+  region index) takes the top-level rows when the list is absent, so the
+  data needs no client release.
 - **Leftovers of older builds were still packed** (for example tile2d
   PNGs next to the `.texture` files that replaced them). The publication
   ledger exists to stop this; see below.
@@ -418,8 +428,12 @@ All reads happen in the asset worker
 `packs/packs.ts` resolves the path through the manifest (a request for
 `x.json` also finds `x.json.gz`) and tries, in order:
 
-1. **Cache Storage** (`packs/persistent.ts`, cache `sro-next-verified-v1`),
-   keyed by the member's digest. A hit is re-hashed; a mismatch is removed.
+1. **Cache Storage** (`packs/persistent.ts`, caches `sro-next-verified-v2-<hex>`
+   by the digest's first hex digit), keyed by the member's digest. A hit is
+   re-hashed; a mismatch is removed. A read these miss is answered from the
+   older single cache `sro-next-verified-v1` when the browser still has it,
+   and that copy moves; the older cache is deleted 14 days after its first
+   open, or when the origin refuses a write for quota.
 2. **A resident pack** already in memory (up to 128 MiB of whole packs).
 3. **The pack**:
    - a pack of at most 4 MiB is fetched whole, verified and kept;

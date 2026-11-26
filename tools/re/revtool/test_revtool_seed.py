@@ -352,6 +352,192 @@ class ApplyTests(unittest.TestCase):
 				revtool_seed.cmd_seed_apply(args, None)
 
 
+class VerifiedBuildTests(unittest.TestCase):
+	"""#4467: one seed, several verified builds of its target."""
+
+	SEED_SHA = "ab" * 32
+	TEXT_SHA = "cd" * 32
+	TWIN_SHA = "ef" * 32
+	MAPPED_SHA = "12" * 32
+	KNOWN_SHA = "34" * 32
+
+	def _asset(self, builds):
+		return {"target": "client", "file": "revtool-seed-client.xz",
+				"binary_sha256": self.SEED_SHA, "builds": builds}
+
+	def _builds(self):
+		return revtool_seed.asset_builds(self._asset([
+			{"label": "seed build", "binary_sha256": self.SEED_SHA,
+			 "text_sha256": self.TEXT_SHA, "offsets": None},
+			{"label": "twin", "binary_sha256": self.TWIN_SHA,
+			 "text_sha256": None, "offsets": None},
+			{"label": "mapped", "binary_sha256": self.MAPPED_SHA,
+			 "text_sha256": None,
+			 "offsets": [{"from": 0x401000, "to": 0x402000, "delta": 0x100}]},
+			{"label": "known", "binary_sha256": self.KNOWN_SHA,
+			 "text_sha256": None, "offsets": None},
+			{"label": "stock, hash not recorded", "binary_sha256": None,
+			 "text_sha256": None, "offsets": None},
+		]))
+
+	def test_v1_manifest_knows_only_the_seed_build(self):
+		builds = revtool_seed.asset_builds(
+			{"target": "client", "file": "x.xz", "binary_sha256": self.SEED_SHA})
+		self.assertEqual(len(builds), 1)
+		self.assertEqual(builds[0]["binary_sha256"], self.SEED_SHA)
+
+	def test_builds_table_is_checked(self):
+		with self.assertRaises(revtool_seed.SeedError):
+			revtool_seed.asset_builds(self._asset([
+				{"label": "not the seed build", "binary_sha256": self.TWIN_SHA,
+				 "text_sha256": None, "offsets": None}]))
+		with self.assertRaises(revtool_seed.SeedError):
+			revtool_seed.asset_builds(self._asset([
+				{"label": "seed build", "binary_sha256": self.SEED_SHA,
+				 "text_sha256": "not-a-hash", "offsets": None}]))
+		with self.assertRaises(revtool_seed.SeedError):
+			revtool_seed.asset_builds(self._asset([
+				{"label": "seed build", "binary_sha256": self.SEED_SHA,
+				 "text_sha256": None,
+				 "offsets": [{"from": 0x402000, "to": 0x401000, "delta": 0}]}]))
+
+	def test_resolution_modes(self):
+		builds = self._builds()
+		self.assertEqual(
+			revtool_seed.resolve_binary_build(builds, self.SEED_SHA, None)[1], "exact")
+		# Byte-identical .text wins over the known-but-unmapped row the
+		# hash alone would have picked.
+		self.assertEqual(
+			revtool_seed.resolve_binary_build(builds, self.TWIN_SHA, self.TEXT_SHA)[1],
+			"text")
+		self.assertEqual(
+			revtool_seed.resolve_binary_build(builds, self.MAPPED_SHA, "00" * 32)[1],
+			"mapped")
+		self.assertEqual(
+			revtool_seed.resolve_binary_build(builds, self.KNOWN_SHA, "00" * 32)[1],
+			"unmapped")
+		self.assertEqual(
+			revtool_seed.resolve_binary_build(builds, "99" * 32, "00" * 32),
+			(None, "unknown"))
+
+	def test_translation_moves_spans_and_drops_the_rest(self):
+		rows, dropped = revtool_seed.translate_functions(
+			[[0x401000, "a"], [0x401FFF, "b"], [0x402000, "c"], [0x400000, "d"]],
+			[{"from": 0x401000, "to": 0x402000, "delta": -0x40}])
+		self.assertEqual(rows, [[0x400FC0, "a"], [0x401FBF, "b"]])
+		self.assertEqual(dropped, 2)
+
+	def test_the_refusal_names_every_known_hash(self):
+		message = revtool_seed.unknown_binary_message("client", self._builds(), "99" * 32)
+		for sha in (self.SEED_SHA, self.TWIN_SHA, self.MAPPED_SHA, self.KNOWN_SHA, "99" * 32):
+			self.assertIn(sha, message)
+		self.assertIn("Get-FileHash", message)
+
+	def _verify_args(self, seed, binary, manifest):
+		return SimpleNamespace(seed=seed, seed_binary=binary, binary=None, manifest=manifest)
+
+	def _stage_verify(self, td):
+		seed = os.path.join(td, "revtool-seed-client.xz")
+		payload = {
+			"format": revtool_seed.SEED_FORMAT, "version": 1,
+			"target": "client", "binary_sha256": self.SEED_SHA,
+			"binary_sha_source": "db meta",
+			"functions": [[0x401000, "sub_401000"]], "ledger": []}
+		Path(seed).write_bytes(revtool_seed.encode_seed(payload))
+		manifest = os.path.join(td, "pins.json")
+		blob = Path(seed).read_bytes()
+		Path(manifest).write_text(json.dumps({"assets": [{
+			"target": "client", "file": "revtool-seed-client.xz",
+			"sha256": hashlib.sha256(blob).hexdigest(), "bytes": len(blob),
+			"binary_sha256": self.SEED_SHA, "functions": 1, "ledger_lines": 0,
+			"builds": [
+				{"label": "seed build", "binary_sha256": self.SEED_SHA,
+				 "text_sha256": self.TEXT_SHA, "offsets": None},
+				{"label": "twin", "binary_sha256": self.TWIN_SHA,
+				 "text_sha256": None, "offsets": None}]}]}), encoding="utf-8")
+		binary = os.path.join(td, "twin.exe")
+		Path(binary).write_bytes(b"twin build bytes")
+		return seed, binary, manifest
+
+	def test_verify_accepts_a_text_identical_build(self):
+		with tempfile.TemporaryDirectory() as td:
+			seed, binary, manifest = self._stage_verify(td)
+			args = self._verify_args(seed, binary, manifest)
+			with mock.patch.object(revtool_seed, "_sha256_file", return_value=self.TWIN_SHA), \
+					mock.patch.object(revtool_seed, "_text_sha256_file", return_value=self.TEXT_SHA), \
+					mock.patch.object(revtool_seed, "scan_seed", return_value=None):
+				buf = io.StringIO()
+				with redirect_stdout(buf):
+					self.assertEqual(revtool_seed.cmd_seed_verify(args, None), 0)
+			self.assertIn("byte-identical .text", buf.getvalue())
+
+	def test_verify_refuses_an_unknown_build_by_name(self):
+		with tempfile.TemporaryDirectory() as td:
+			seed, binary, manifest = self._stage_verify(td)
+			args = self._verify_args(seed, binary, manifest)
+			with mock.patch.object(revtool_seed, "_sha256_file", return_value="99" * 32), \
+					mock.patch.object(revtool_seed, "_text_sha256_file", return_value="00" * 32), \
+					mock.patch.object(revtool_seed, "scan_seed", return_value=None):
+				with self.assertRaises(SystemExit) as caught:
+					revtool_seed.cmd_seed_verify(args, None)
+			self.assertIn(self.TWIN_SHA, str(caught.exception))
+			self.assertIn("99" * 32, str(caught.exception))
+
+	def test_apply_translates_a_mapped_build(self):
+		with tempfile.TemporaryDirectory() as td:
+			seed = os.path.join(td, "revtool-seed-client.xz")
+			payload = {
+				"format": revtool_seed.SEED_FORMAT, "version": 1,
+				"target": "client", "binary_sha256": self.SEED_SHA,
+				"binary_sha_source": "db meta",
+				"functions": [[0x401000, "a"], [0x500000, "far"]], "ledger": []}
+			Path(seed).write_bytes(revtool_seed.encode_seed(payload))
+			manifest = os.path.join(td, "pins.json")
+			Path(manifest).write_text(json.dumps({"assets": [{
+				"target": "client", "file": "revtool-seed-client.xz",
+				"binary_sha256": self.SEED_SHA,
+				"builds": [
+					{"label": "seed build", "binary_sha256": self.SEED_SHA,
+					 "text_sha256": self.TEXT_SHA, "offsets": None},
+					{"label": "mapped", "binary_sha256": self.MAPPED_SHA,
+					 "text_sha256": None,
+					 "offsets": [{"from": 0x400000, "to": 0x480000, "delta": 0x200}]}]}]}),
+				encoding="utf-8")
+			binary = os.path.join(td, "mapped.exe")
+			Path(binary).write_bytes(b"mapped build bytes")
+			args = SimpleNamespace(
+				seed=seed, binary=binary, seed_binary=None, manifest=manifest,
+				rzdb=os.path.join(td, "x.rzdb"), limit=0, force=False)
+			applied = {}
+
+			def fake_apply(payload_arg, binary_path, rzdb_path, **kwargs):
+				applied["functions"] = payload_arg["functions"]
+				return 1, 1, 1, 1
+
+			with mock.patch.object(revtool_seed, "_sha256_file", return_value=self.MAPPED_SHA), \
+					mock.patch.object(revtool_seed, "_text_sha256_file", return_value="00" * 32), \
+					mock.patch.object(revtool_seed, "apply_seed", side_effect=fake_apply):
+				with redirect_stdout(io.StringIO()):
+					self.assertEqual(revtool_seed.cmd_seed_apply(args, None), 0)
+			# Only the in-span row moved; the record names this build.
+			self.assertEqual(applied["functions"], [[0x401200, "a"]])
+			record = revtool_seed.load_applied_seed(os.path.join(td, "x.rzdb"))
+			self.assertEqual(record["binary_sha256"], self.MAPPED_SHA)
+			self.assertEqual(record["seed_binary_sha256"], self.SEED_SHA)
+
+	def test_the_shipped_manifest_carries_both_known_builds(self):
+		beside = os.path.join(os.path.dirname(os.path.abspath(__file__)),
+							  revtool_seed.MANIFEST_NAME)
+		with open(beside, encoding="utf-8") as fh:
+			manifest = json.load(fh)
+		by_target = {asset["target"]: asset for asset in manifest["assets"]}
+		client = revtool_seed.asset_builds(by_target["client"])
+		self.assertTrue(any(b["binary_sha256"] and
+							b["binary_sha256"].startswith("f6580bf6") for b in client))
+		server = revtool_seed.asset_builds(by_target["server"])
+		self.assertTrue(any(b["binary_sha256"] is None for b in server))
+
+
 class StaleSeedTests(unittest.TestCase):
 	"""#4043: the applied-seed record and the stale-seed warning."""
 

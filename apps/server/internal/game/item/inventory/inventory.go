@@ -86,8 +86,9 @@ type Item struct {
 	// CSOItem body carries (wire.ItemBody.MagicOptions). Only
 	// equipment-family rows carry them; they ride every move/drop/pickup
 	// so a bag shuffle can never strip a persisted option.
-	MagicOptions []uint64
-	Data         uint32 // item record data word (+0x38): capsule monster, Spirit clock
+	MagicOptions  []uint64
+	Data          uint32               // +0x38: capsule monster, Spirit clock, Magic Cube StoredItemCount
+	LinkedStorage *domain.COSContainer // Magic Cube elixir rows (#3906); bag moves must carry it
 	// RecordID projects the native item-record +20/+24 search identity when
 	// supplied by an owner. Its DB allocation/load lifecycle is not implemented
 	// by this field. A newly split row starts at zero; RefObjID is not a substitute.

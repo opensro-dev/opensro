@@ -23,22 +23,21 @@ TestEscortCannotBeStolenOrCompletedRemotely
 */
 func TestEscortCannotBeStolenOrCompletedRemotely(t *testing.T) {
 	for _, eligible := range []bool{true, false} {
-		book := NewContractBook()
-		contract := book.BindAITraderEscort("division", "trader", "hunter", TownJangan, TownDonwhang, 4, 1000)
-		if !contract.Active {
+		book := NewContractBook(nil)
+		if _, bound := book.BindAITraderEscort("division", "trader", "hunter", TownJangan, TownDonwhang, 4, 1000); !bound {
 			t.Fatal("first contract refused")
 		}
-		if book.BindAITraderEscort("division", "trader", "intruder", TownJangan, TownDonwhang, 4, 2000).Active {
+		if _, bound := book.BindAITraderEscort("division", "trader", "intruder", TownJangan, TownDonwhang, 4, 2000); bound {
 			t.Fatal("contract stolen")
 		}
 		for now := int64(2000); now <= 41000; now += 1000 {
 			book.SampleEscort("division", "trader", eligible, now)
 		}
-		_, paid := book.CompleteAITraderRun("division", "trader", RegionDonwhangTown, 41000, nil)
-		if paid != eligible {
+		_, completed, paid := book.CompleteAITraderRun("division", "trader", RegionDonwhangTown, 41000, nil)
+		if !completed || paid != eligible {
 			t.Fatalf("proximity eligibility %v, paid %v", eligible, paid)
 		}
-		if _, again := book.CompleteAITraderRun("division", "trader", RegionDonwhangTown, 42000, nil); again {
+		if _, again, _ := book.CompleteAITraderRun("division", "trader", RegionDonwhangTown, 42000, nil); again {
 			t.Fatal("duplicate payout")
 		}
 	}
@@ -52,7 +51,7 @@ TestWorldCallbackCanReenterTheRoster
 func TestWorldCallbackCanReenterTheRoster(t *testing.T) {
 	done := make(chan struct{})
 	var rt *Runtime
-	rt = NewRuntime(Config{Enabled: true}, nil, WorldHooks{OnParleyCargoDrop: func(division, _ string, _ uint16, _, _, _ float32, _ int, _ int64) {
+	rt = NewRuntime(Config{Enabled: true}, nil, nil, WorldHooks{OnParleyCargoDrop: func(division, _ string, _ uint16, _, _, _ float32, _ int, _ int64) {
 		rt.EnsureDivisionRoster(division)
 		close(done)
 	}})
@@ -79,7 +78,7 @@ TestDeathCancelsEscortAndChatCannotDealDamage
 ================
 */
 func TestDeathCancelsEscortAndChatCannotDealDamage(t *testing.T) {
-	rt := NewRuntime(Config{Enabled: true}, nil, WorldHooks{})
+	rt := NewRuntime(Config{Enabled: true}, nil, nil, WorldHooks{})
 	t.Cleanup(func() { _ = rt.Close() })
 	roster := rt.EnsureDivisionRoster("division")
 	trader := roster[0]
@@ -106,7 +105,7 @@ func TestMoveUsesWorldValidationAndShippedTerminal(t *testing.T) {
 	terminal := TownWaypoint(TownJangan)
 	terminal.X = 500
 	calls := 0
-	rt := NewRuntime(Config{Enabled: true, Terminals: map[TownID]Waypoint{TownJangan: terminal}}, nil, WorldHooks{Move: func(_ string, from, to Waypoint, distance float32) (Waypoint, bool) { calls++; return from, false }})
+	rt := NewRuntime(Config{Enabled: true, Terminals: map[TownID]Waypoint{TownJangan: terminal}}, nil, nil, WorldHooks{Move: func(_ string, from, to Waypoint, distance float32) (Waypoint, bool) { calls++; return from, false }})
 	t.Cleanup(func() { _ = rt.Close() })
 	roster := rt.EnsureDivisionRoster("division")
 	_, unit, _ := rt.StepAgent(context.Background(), "division", roster[0].Name, nil, 1000)
@@ -139,7 +138,7 @@ TestConvoyStartsTogetherAndFollowsAdmittedFerry
 func TestConvoyStartsTogetherAndFollowsAdmittedFerry(t *testing.T) {
 	crossed := false
 	var arrival Waypoint
-	rt := NewRuntime(Config{Enabled: true}, nil, WorldHooks{FollowFerry: func(_, _ string, leader Waypoint) (Waypoint, bool) {
+	rt := NewRuntime(Config{Enabled: true}, nil, nil, WorldHooks{FollowFerry: func(_, _ string, leader Waypoint) (Waypoint, bool) {
 		crossed = leader.FerrySourceRef == 1 && leader.FerryTargetID == 2
 		return arrival, true
 	}})
@@ -181,7 +180,7 @@ TestCaravanRecoversExhaustedManaForItsSkillRotation
 */
 func TestCaravanRecoversExhaustedManaForItsSkillRotation(t *testing.T) {
 	healed := false
-	rt := NewRuntime(Config{Enabled: true}, nil, WorldHooks{Heal: func(_, _ string, amount int64) int64 { healed = true; return 1000 }})
+	rt := NewRuntime(Config{Enabled: true}, nil, nil, WorldHooks{Heal: func(_, _ string, amount int64) int64 { healed = true; return 1000 }})
 	t.Cleanup(func() { _ = rt.Close() })
 	rt.EnsureDivisionRoster("division")
 	rt.manualRuns = true
@@ -199,7 +198,7 @@ TestTraderKeepsMovingWithCloseEscort
 */
 func TestTraderKeepsMovingWithCloseEscort(t *testing.T) {
 	moves, crossings := 0, 0
-	rt := NewRuntime(Config{Enabled: true}, nil, WorldHooks{
+	rt := NewRuntime(Config{Enabled: true}, nil, nil, WorldHooks{
 		Move: func(_ string, from, _ Waypoint, _ float32) (Waypoint, bool) {
 			moves++
 			from.X += 10
@@ -268,7 +267,7 @@ TestNativeManaRefusalRequestsRecoveryAboveThePercentageThreshold
 */
 func TestNativeManaRefusalRequestsRecoveryAboveThePercentageThreshold(t *testing.T) {
 	healed := 0
-	rt := NewRuntime(Config{Enabled: true}, nil, WorldHooks{Heal: func(_, _ string, _ int64) int64 { healed++; return 14500 }})
+	rt := NewRuntime(Config{Enabled: true}, nil, nil, WorldHooks{Heal: func(_, _ string, _ int64) int64 { healed++; return 14500 }})
 	t.Cleanup(func() { _ = rt.Close() })
 	rt.EnsureDivisionRoster("division")
 	rt.manualRuns = true
@@ -293,7 +292,7 @@ TestThiefPotionsAreBoundedAndNeverStalemateIndefinitely
 */
 func TestThiefPotionsAreBoundedAndNeverStalemateIndefinitely(t *testing.T) {
 	heals := 0
-	rt := NewRuntime(Config{Enabled: true}, nil, WorldHooks{Heal: func(_, _ string, _ int64) int64 { heals++; return 5000 }})
+	rt := NewRuntime(Config{Enabled: true}, nil, nil, WorldHooks{Heal: func(_, _ string, _ int64) int64 { heals++; return 5000 }})
 	t.Cleanup(func() { _ = rt.Close() })
 	rt.EnsureDivisionRoster("division")
 	rt.manualRuns = true
@@ -326,7 +325,7 @@ TestEscortDisengagesDistantStalemateToRejoinTrader
 */
 func TestEscortDisengagesDistantStalemateToRejoinTrader(t *testing.T) {
 	movedTo := Waypoint{}
-	rt := NewRuntime(Config{Enabled: true}, nil, WorldHooks{
+	rt := NewRuntime(Config{Enabled: true}, nil, nil, WorldHooks{
 		Move: func(_ string, from, to Waypoint, _ float32) (Waypoint, bool) {
 			movedTo = to
 			return from, false
@@ -373,7 +372,7 @@ TestDedicatedEscortRespawnsWithLeaderAndReattachesAtDeparture
 ================
 */
 func TestDedicatedEscortRespawnsWithLeaderAndReattachesAtDeparture(t *testing.T) {
-	rt := NewRuntime(Config{Enabled: true}, nil, WorldHooks{})
+	rt := NewRuntime(Config{Enabled: true}, nil, nil, WorldHooks{})
 	t.Cleanup(func() { _ = rt.Close() })
 	rt.EnsureDivisionRoster("division")
 	rt.manualRuns = true
@@ -405,7 +404,7 @@ TestEscortedTraderStaysMountedAndHealsTransportAtLowHP
 */
 func TestEscortedTraderStaysMountedAndHealsTransportAtLowHP(t *testing.T) {
 	heals := 0
-	rt := NewRuntime(Config{Enabled: true}, nil, WorldHooks{Heal: func(_, _ string, _ int64) int64 { heals++; return 21908 }})
+	rt := NewRuntime(Config{Enabled: true}, nil, nil, WorldHooks{Heal: func(_, _ string, _ int64) int64 { heals++; return 21908 }})
 	t.Cleanup(func() { _ = rt.Close() })
 	rt.EnsureDivisionRoster("division")
 	rt.manualRuns = true
@@ -443,7 +442,7 @@ TestBowAgentStopsAtRangedDistanceAndHoldsWhileCasting
 func TestBowAgentStopsAtRangedDistanceAndHoldsWhileCasting(t *testing.T) {
 	moves := 0
 	casting := false
-	rt := NewRuntime(Config{Enabled: true}, nil, WorldHooks{
+	rt := NewRuntime(Config{Enabled: true}, nil, nil, WorldHooks{
 		Move:    func(_ string, from, _ Waypoint, _ float32) (Waypoint, bool) { moves++; return from, false },
 		Casting: func(_, _ string) bool { return casting },
 	})
@@ -487,7 +486,7 @@ TestWorldThreatSuppressesCompetingPlayerChase
 ================
 */
 func TestWorldThreatSuppressesCompetingPlayerChase(t *testing.T) {
-	rt := NewRuntime(Config{Enabled: true}, nil, WorldHooks{
+	rt := NewRuntime(Config{Enabled: true}, nil, nil, WorldHooks{
 		Player: func(_, _ string) (PlayerPosition, bool) {
 			return PlayerPosition{
 				ObservedPlayer: ObservedPlayer{Name: "[AI]Thief_Kael", JobType: domain.JobThief, HPPercent: 100, Distance: 80},
@@ -522,7 +521,7 @@ TestHunterManaRecoveryPreservesBattleHPPotions
 */
 func TestHunterManaRecoveryPreservesBattleHPPotions(t *testing.T) {
 	heals := 0
-	rt := NewRuntime(Config{Enabled: true}, nil, WorldHooks{Heal: func(_, _ string, _ int64) int64 { heals++; return 14500 }})
+	rt := NewRuntime(Config{Enabled: true}, nil, nil, WorldHooks{Heal: func(_, _ string, _ int64) int64 { heals++; return 14500 }})
 	t.Cleanup(func() { _ = rt.Close() })
 	rt.EnsureDivisionRoster("division")
 	rt.manualRuns = true
@@ -548,7 +547,7 @@ func TestHunterManaRecoveryPreservesBattleHPPotions(t *testing.T) {
 }
 
 func TestUnreachableWorldThreatDisengagesAfterCombatStall(t *testing.T) {
-	rt := NewRuntime(Config{Enabled: true}, nil, WorldHooks{
+	rt := NewRuntime(Config{Enabled: true}, nil, nil, WorldHooks{
 		Move: func(_ string, from, _ Waypoint, _ float32) (Waypoint, bool) {
 			// Simulate a nav-blocked cliff/wall preventing any approach progress.
 			return from, false
@@ -589,7 +588,7 @@ func TestHiredEscortTeleportsBeyond200mAndFiresContractPartyHook(t *testing.T) {
 	jangan := TownWaypoint(TownJangan)
 	playerAt := jangan
 	var formed []string
-	rt := NewRuntime(Config{Enabled: true}, nil, WorldHooks{
+	rt := NewRuntime(Config{Enabled: true}, nil, nil, WorldHooks{
 		OnHireFee: func(_, _ string, _ int64) bool { return true },
 		OnContractFormed: func(division, playerName, agentName string) {
 			formed = append(formed, division+":"+playerName+":"+agentName)
@@ -656,7 +655,7 @@ TestRespawnedEscortFollowsHighwayGateOutOfTown
 ================
 */
 func TestRespawnedEscortFollowsHighwayGateOutOfTown(t *testing.T) {
-	rt := NewRuntime(Config{Enabled: true}, nil, WorldHooks{})
+	rt := NewRuntime(Config{Enabled: true}, nil, nil, WorldHooks{})
 	t.Cleanup(func() { _ = rt.Close() })
 	rt.EnsureDivisionRoster("division")
 	rt.manualRuns = true
@@ -707,7 +706,7 @@ TestGrandCaravanBothTraderGroupsFollowTheFerry
 */
 func TestGrandCaravanBothTraderGroupsFollowTheFerry(t *testing.T) {
 	crossings := map[string]int{}
-	rt := NewRuntime(Config{Enabled: true}, nil, WorldHooks{
+	rt := NewRuntime(Config{Enabled: true}, nil, nil, WorldHooks{
 		FollowFerry: func(_, name string, at Waypoint) (Waypoint, bool) {
 			if at.FerrySourceRef == 10 && at.FerryTargetID == 20 {
 				crossings[name]++

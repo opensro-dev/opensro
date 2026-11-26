@@ -786,12 +786,15 @@ function assertIndependentOutdoorBundle( bundle, sector ) {
 			`Outdoor ${expectedId} emitted source frame ${bundle.source.sectorId}; every split bundle must own its region frame`
 		);
 	}
-	if ( bundle.terrain.sectorCount !== 1 || bundle.terrain.sectors?.length !== 1 ) {
+	if ( bundle.terrain.sectorCount !== 1 || bundle.terrainTextures.sectorCount !== 1 ) {
 		throw new Error(
-			`Outdoor ${expectedId} emitted ${
-				bundle.terrain.sectorCount ?? bundle.terrain.sectors?.length ?? 0
-			} terrain sectors; expected one`
+			`Outdoor ${expectedId} emitted ${bundle.terrain.sectorCount} terrain sectors; expected one`
 		);
+	}
+	// One sector travels once, in the top-level blocks (sectorList in
+	// buildMapLoaderRegionBundle.mjs).
+	if ( bundle.terrain.sectors || bundle.terrainTextures.sectors ) {
+		throw new Error( `Outdoor ${expectedId} repeats its terrain in a sector list` );
 	}
 	if (
 		bundle.sharedRenderResourcesPublicPath !== OUTDOOR_WORLD_SHARED_RENDER_PUBLIC_PATH ||

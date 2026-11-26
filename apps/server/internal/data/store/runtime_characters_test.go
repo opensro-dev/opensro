@@ -40,8 +40,6 @@ func TestRuntimeActorsAreTransientAndUseTheSharedDoor(t *testing.T) {
 	if !s.UpdateCharacters([]*domain.Character{player, actor}, "mixed actor hit", func() bool {
 		actor.CurrentHP = int64Ptr(12)
 		player.Gold = int64Ptr(123)
-		player.CaravanRewardDay = 123
-		player.CaravanRewardCount = 3
 		return true
 	}) {
 		t.Fatal("mixed door refused")
@@ -51,7 +49,7 @@ func TestRuntimeActorsAreTransientAndUseTheSharedDoor(t *testing.T) {
 	}
 	s.Close()
 	reopened := openTest(t, dir, newTestClock())
-	if got := reopened.Characters().CharactersForDivision(testDivision); len(got) != 2 || *got[0].Gold != 123 || got[0].CaravanRewardDay != 123 || got[0].CaravanRewardCount != 3 {
+	if got := reopened.Characters().CharactersForDivision(testDivision); len(got) != 2 || *got[0].Gold != 123 {
 		t.Fatalf("transient actor persisted or real update lost: %+v", got)
 	}
 }

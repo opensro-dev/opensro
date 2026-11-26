@@ -212,7 +212,7 @@ func TestRuntimeParleyHonorBetrayalAndContracts(t *testing.T) {
 
 	rt := NewRuntime(
 		Config{Enabled: true, BrainMode: BrainHardcoded},
-		nil,
+		nil, nil,
 		WorldHooks{
 			Player: func(_ string, name string) (PlayerPosition, bool) {
 				return PlayerPosition{ObservedPlayer: ObservedPlayer{Name: name, HPPercent: 100}, At: TownWaypoint(TownJangan)}, true
@@ -271,13 +271,15 @@ func TestRuntimeParleyHonorBetrayalAndContracts(t *testing.T) {
 		t.Fatalf("expected !memory reply to show Trust: -100, got %q", memReply)
 	}
 
-	// 6. Complete [AI]Trader_Jin's contract delivery and verify payout + Hunter trust.
+	// 6. Complete [AI]Trader_Jin's contract delivery: IronGuard was
+	// sampled near the trader for the whole run, so it pays (contracts.go
+	// CompleteAITraderRun) with +25 Hunter trust.
 	for now := int64(3100); now <= 40100; now += 1000 {
 		rt.Contracts().SampleEscort(div, "[AI]Trader_Jin", true, now)
 	}
-	contract, completed := rt.Contracts().CompleteAITraderRun(div, "[AI]Trader_Jin", RegionDonwhangTown, 40_100, rt.Memories())
-	if !completed || contract.RewardGold <= 0 {
-		t.Fatalf("expected escort contract to complete with positive reward, got %+v", contract)
+	contract, completed, payable := rt.Contracts().CompleteAITraderRun(div, "[AI]Trader_Jin", RegionDonwhangTown, 40_100, rt.Memories())
+	if !completed || !payable || contract.RewardGold <= 0 {
+		t.Fatalf("expected the kept escort to complete payable, got %+v completed=%v payable=%v", contract, completed, payable)
 	}
 	if rt.hooks.OnContractReward != nil {
 		rt.hooks.OnContractReward(div, contract.HunterName, contract.RewardGold, contract.TraderName)
@@ -391,7 +393,7 @@ Verifies:
 ================
 */
 func TestSchedulerMinActiveTradesHireableHuntersAndDistressAid(t *testing.T) {
-	rt := NewRuntime(Config{Enabled: true, BrainMode: BrainHardcoded}, nil, WorldHooks{})
+	rt := NewRuntime(Config{Enabled: true, BrainMode: BrainHardcoded}, nil, nil, WorldHooks{})
 	t.Cleanup(func() { _ = rt.Close() })
 	const div = "Shard_Scheduler"
 	roster := rt.EnsureDivisionRoster(div)

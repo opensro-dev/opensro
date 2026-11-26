@@ -44,7 +44,7 @@ import { assembleCompoundCharacter } from "./itemAttachments.mjs";
 import { parseSkillAniSet } from "./parseSkillEffect.mjs";
 import { parseBan, parseCharacterBsr } from "./formats.mjs";
 import { SKILL_EFFECT_ANIMATION_ID_BY_NAME } from "./native/skillEffectAnimationRegistry.ts";
-import { dataAssetPath, dataRoot, loadDataAsset, loadMaterialTextures } from "../shared/jmxAssetIO.mjs";
+import { dataAssetPathOnDisk, dataRoot, loadDataAsset, loadMaterialTextures } from "../shared/jmxAssetIO.mjs";
 import { runGraph } from "../graph/graph.mjs";
 import { claimPublicFile } from "../shared/publicationLedger.mjs";
 import { normalizeAssetPath } from "../shared/assetPaths.mjs";
@@ -224,7 +224,7 @@ export async function materialVariantSlots( bsrPath, isMob ) {
 	if ( source === null ) return [];
 	const slots = [];
 	for ( const [slot, materialPath] of characterMaterialVariants( source, bsrPath ) ) {
-		if ( slot !== 0 && fs.existsSync( dataAssetPath( materialPath ) ) ) slots.push( slot );
+		if ( slot !== 0 && fs.existsSync( dataAssetPathOnDisk( materialPath ) ) ) slots.push( slot );
 	}
 	return slots.sort( ( a, b ) => a - b );
 }

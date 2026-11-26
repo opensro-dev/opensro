@@ -19,6 +19,8 @@ player click would (item use, rebirth, berserk, select, pickup).
 
 import { type CountJobRow, countJobRemainingMs } from "./count-job";
 import { isSurvivalParamJob, type ParamJobRow, paramJobRemainingMs } from "./param-job";
+import { equipmentBroken } from "./press-admission";
+import { BAG_FIRST_SLOT } from "./sro-macro-potion";
 
 // Hunt block byte indices (live 017b3806.., writer 00da8bb0).
 export const HUNT_BYTE_RANGE = 0;
@@ -160,6 +162,32 @@ export interface MacroHuntFacts {
 	readonly targetLivingMonster: boolean;
 	readonly nearestMonsterGid: number | undefined;
 	readonly nearestPickupGid: number | undefined;
+}
+
+/*
+================
+wornEquipmentBroken
+
+The hunt's "something is broken" fact over the worn slots. A worn row
+counts only when its item has a durability range: the v1.150 warning
+scan (6F32D0) reads durability only after nMaxDurability != 0, and the
+inventory overlay keeps the same rule. Worn bolts and arrows carry no
+durability, so a crossbow or bow user's hunt no longer reads them as
+broken gear and walks back to town (#4519).
+================
+*/
+export function wornEquipmentBroken(
+	bag: readonly {
+		readonly slot: number;
+		readonly typeFlags: number;
+		readonly durability?: number;
+		readonly tooltip?: { readonly fields?: { readonly maxDurability?: number; }; };
+	}[]
+): boolean {
+	return bag.some( entry =>
+		entry.slot < BAG_FIRST_SLOT && (entry.tooltip?.fields?.maxDurability ?? 0) > 0 &&
+		equipmentBroken( entry.typeFlags, entry.durability ?? 0 )
+	);
 }
 
 /*

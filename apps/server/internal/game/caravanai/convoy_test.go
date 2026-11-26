@@ -48,7 +48,7 @@ func hireRuntime(t *testing.T, players map[string]*hirePlayer, paid *map[string]
 
 func hireRuntimeWith(t *testing.T, store MemoryStore, players map[string]*hirePlayer, paid *map[string]int64) *Runtime {
 	t.Helper()
-	rt := NewRuntime(Config{Enabled: true}, store, WorldHooks{
+	rt := NewRuntime(Config{Enabled: true}, store, nil, WorldHooks{
 		Player: func(_, name string) (PlayerPosition, bool) {
 			p := players[name]
 			if p == nil || !p.online {
@@ -446,7 +446,7 @@ TestGrandCaravanRunsHourlyWithTwoFiveStarTradersAndSixHunters
 */
 func TestGrandCaravanRunsHourlyWithTwoFiveStarTradersAndSixHunters(t *testing.T) {
 	var chat []string
-	rt := NewRuntime(Config{Enabled: true}, nil, WorldHooks{OnAgentChat: func(_, _ string, _ uint16, msg string) { chat = append(chat, msg) }})
+	rt := NewRuntime(Config{Enabled: true}, nil, nil, WorldHooks{OnAgentChat: func(_, _ string, _ uint16, msg string) { chat = append(chat, msg) }})
 	t.Cleanup(func() { _ = rt.Close() })
 	step := func(now int64) {
 		rt.StepAgent(context.Background(), "division", "[AI]Thief_Wisp", nil, now)
@@ -549,7 +549,7 @@ func TestSoloScenicBendIsSkippedWhenUnreachable(t *testing.T) {
 		t.Fatalf("the bend is only %.0f units off the road", off)
 	}
 
-	rt := NewRuntime(Config{Enabled: true}, nil, WorldHooks{Move: func(_ string, from, _ Waypoint, _ float32) (Waypoint, bool) { return from, false }})
+	rt := NewRuntime(Config{Enabled: true}, nil, nil, WorldHooks{Move: func(_ string, from, _ Waypoint, _ float32) (Waypoint, bool) { return from, false }})
 	t.Cleanup(func() { _ = rt.Close() })
 	rt.EnsureDivisionRoster("division")
 	rt.manualRuns = true

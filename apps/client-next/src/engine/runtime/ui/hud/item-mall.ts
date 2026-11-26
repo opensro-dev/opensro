@@ -18,6 +18,7 @@ import {
 } from "@/engine/foundation/ui/item-mall-layout";
 import { renewalGoodsCells } from "@/engine/foundation/ui/renewal-mall";
 import type { MallPurchase } from "@/engine/foundation/gameplay/item-mall-wire";
+import { MAGIC_CUBE_COPY } from "@/engine/foundation/gameplay/magic-cube";
 
 /*
 ================
@@ -557,7 +558,9 @@ export function createItemMall() {
 					key === "basket" ?
 					basket.has( offer.packageId ) :
 					search !== "" ?
-					(names[offer.name] ?? offer.name).toLowerCase().includes( search.toLowerCase() ) :
+					(names[offer.name] || MAGIC_CUBE_COPY[offer.name] || offer.name).toLowerCase().includes(
+						search.toLowerCase()
+					) :
 					current && current.shop < 0 ?
 					offer.badge === "recommended" :
 					current && offer.shop === current.shop && offer.tab === current.tab

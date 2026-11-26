@@ -114,7 +114,13 @@ func (game *gameplayPlane) wireCaravanAgents() {
 		log.WithError(err).Error("AI caravan highway disabled")
 		return
 	}
-	rt := caravanai.NewRuntime(cfg, memStore, caravanai.WorldHooks{
+	// The daily paid-escort cap's ledger (layout 17): the character
+	// store implements it; a store without it caps per process only.
+	var dayStore caravanai.EscortDayStore
+	if s, ok := game.deps.Characters.(caravanai.EscortDayStore); ok {
+		dayStore = s
+	}
+	rt := caravanai.NewRuntime(cfg, memStore, dayStore, caravanai.WorldHooks{
 		Move: game.caravanMove, Player: game.caravanPlayer, Heal: game.items.HealServerActor,
 		Casting: game.items.ServerActorCasting,
 		Ferry:   game.caravanFerry, FollowFerry: game.caravanFollowFerry,
@@ -254,15 +260,6 @@ func (game *gameplayPlane) wireCaravanChat() {
 				return "A grand caravan is active or needs two available Traders and six Hunters.", true
 			}
 			return "Grand caravan mustering.", true
-		}
-		if strings.EqualFold(fields[0], "!accept") {
-			capped := false
-			game.deps.Read(divisionID, func() {
-				capped = c.CaravanRewardDay == time.Now().UTC().Unix()/86400 && c.CaravanRewardCount >= caravanDailyRewardLimit
-			})
-			if capped {
-				return "You have received today's three caravan escort rewards.", true
-			}
 		}
 		return game.caravanAgents.HandlePlayerCommand(divisionID, playerName, playerJob, message, nowMs)
 	}

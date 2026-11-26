@@ -8,7 +8,7 @@
 import path from "node:path";
 import { existsSync } from "node:fs";
 import { readFile } from "node:fs/promises";
-import { resolveOnDiskPath } from "../world/io.mjs";
+import { resolveOnDiskPath, resolveOnDiskPathSync } from "../world/io.mjs";
 import { extractedRoot, imageSourceRoot, normalizeAssetPath } from "../world/paths.mjs";
 import { parseJmxBmtMaterialSet, resolveBmtTexturePath } from "../world/objects/formats.mjs";
 import { noteRead } from "../graph/reads.mjs";
@@ -19,6 +19,16 @@ export const dataRoot = path.join( extractedRoot, "Data_extracted" );
 /** Absolute path for a game-relative asset (e.g. res/cos/t_horse1.bsr). */
 export function dataAssetPath( gamePath ) {
 	return path.join( dataRoot, ...normalizeAssetPath( gamePath ).split( "/" ) );
+}
+
+/**
+ * The on-disk spelling of a game-relative asset, resolved synchronously.
+ * The one way a synchronous reader or probe opens a data file (#4468):
+ * dataAssetPath alone keeps the folded spelling, which only exists on a
+ * case-insensitive file system when the tree holds the authored case.
+ */
+export function dataAssetPathOnDisk( gamePath ) {
+	return resolveOnDiskPathSync( dataAssetPath( gamePath ) );
 }
 
 /** Read a game-relative asset from Data_extracted (noted for actions, graph/reads.mjs). */

@@ -1,15 +1,11 @@
 # Files written before dprint was adopted. This ledger may only shrink:
 # format a file, then delete its line. See scripts/checks/check_formatting.mjs.
-apps/client-next/src/engine/contracts/camera-script.ts
 apps/client-next/src/engine/contracts/damage-text.ts
 apps/client-next/src/engine/contracts/effective-hp.ts
 apps/client-next/src/engine/contracts/footprint.ts
-apps/client-next/src/engine/contracts/frontend.ts
-apps/client-next/src/engine/contracts/model.ts
 apps/client-next/src/engine/contracts/navigation.ts
 apps/client-next/src/engine/contracts/presentation-random.ts
 apps/client-next/src/engine/foundation/animation/action-time.ts
-apps/client-next/src/engine/foundation/animation/animation-activation.ts
 apps/client-next/src/engine/foundation/animation/avatar-override.ts
 apps/client-next/src/engine/foundation/animation/body-shape.ts
 apps/client-next/src/engine/foundation/animation/bsr-particle-transform.ts
@@ -256,7 +252,6 @@ apps/client-next/tests/runtime/character-info.test.mjs
 apps/client-next/tests/runtime/snapshot-age.test.mjs
 apps/client-next/tests/runtime/ui-cleanup.test.mjs
 apps/client-next/tools/beta/archive.mjs
-apps/client-next/tools/beta/compression.mjs
 apps/client-next/tools/beta/serve.mjs
 apps/client-next/tools/beta/verify.mjs
 apps/client-next/tools/dev/edge.mjs

@@ -104,7 +104,7 @@ func TestMarketGoldSaleOwesTheListingCharacter(t *testing.T) {
 	if err != nil || stored.SellerName != seller.Name || !stored.Anonymous {
 		t.Fatalf("stored listing = %+v, %v", stored, err)
 	}
-	sale, err := s.MarketBuy(domain.MarketBuyRequest{ListingID: listing.ID, Version: listing.Version,
+	sale, err := s.MarketBuy(domain.MarketBuyRequest{Admit: admitAll, ListingID: listing.ID, Version: listing.Version,
 		BuyerAccount: marketBuyer, Payer: buyer, Rules: testOfferRules})
 	if err != nil || !sale.Unpaid || sale.SellerChar != seller.ID || sale.To != domain.MarketToWarehouse {
 		t.Fatalf("sale = %+v, %v", sale, err)
@@ -155,7 +155,7 @@ func TestMarketBuyIntoTheBag(t *testing.T) {
 	t.Parallel()
 	s, seller, buyer := bagMarketFixture(t)
 	listing := listFromBag(t, s, seller, domain.MarketGold, 1000, false)
-	buy := domain.MarketBuyRequest{ListingID: listing.ID, Version: listing.Version, BuyerAccount: marketBuyer, Payer: buyer,
+	buy := domain.MarketBuyRequest{Admit: admitAll, ListingID: listing.ID, Version: listing.Version, BuyerAccount: marketBuyer, Payer: buyer,
 		To: domain.MarketToBag, Receiver: buyer, BagSlot: 20, Rules: testOfferRules}
 
 	buyer.MissionInventory = []domain.InventoryRow{{Slot: 20, RefObjID: 62, Codename: "ITEM_ETC_GOLD_01", VarianceBits: "0", StackCount: 1}}
@@ -239,7 +239,7 @@ func TestMarketOffers(t *testing.T) {
 		t.Fatalf("seller offers = %+v / %+v, %v", incoming, outgoing, err)
 	}
 
-	accept := domain.MarketAcceptRequest{OfferID: made.ID, SellerAccount: marketSeller, Buyer: buyer, BagSlot: -1,
+	accept := domain.MarketAcceptRequest{Admit: admitAll, OfferID: made.ID, SellerAccount: marketSeller, Buyer: buyer, BagSlot: -1,
 		Rules: testOfferRules}
 	fillWarehouse(t, s, buyer)
 	if _, _, err := s.MarketAcceptOffer(accept); !errors.Is(err, domain.ErrMarketBuyerFull) {
@@ -290,7 +290,7 @@ func TestMarketOfferClosesWhenTheListingGoes(t *testing.T) {
 		t.Fatal(err)
 	}
 	*buyer.Gold = 10
-	if _, _, err := s.MarketAcceptOffer(domain.MarketAcceptRequest{OfferID: made.ID, SellerAccount: marketSeller, Buyer: buyer,
+	if _, _, err := s.MarketAcceptOffer(domain.MarketAcceptRequest{Admit: admitAll, OfferID: made.ID, SellerAccount: marketSeller, Buyer: buyer,
 		BagSlot: -1, Rules: testOfferRules}); !errors.Is(err, domain.ErrMarketBuyerFunds) {
 		t.Fatalf("an accept the buyer cannot pay: %v", err)
 	}
@@ -357,7 +357,7 @@ func TestMarketOrphanedProceedsGoToTheWarehouse(t *testing.T) {
 	t.Parallel()
 	s, seller, buyer := bagMarketFixture(t)
 	listing := listFromBag(t, s, seller, domain.MarketGold, 1000, false)
-	if _, err := s.MarketBuy(domain.MarketBuyRequest{ListingID: listing.ID, Version: listing.Version, BuyerAccount: marketBuyer,
+	if _, err := s.MarketBuy(domain.MarketBuyRequest{Admit: admitAll, ListingID: listing.ID, Version: listing.Version, BuyerAccount: marketBuyer,
 		Payer: buyer, Rules: testOfferRules}); err != nil {
 		t.Fatal(err)
 	}

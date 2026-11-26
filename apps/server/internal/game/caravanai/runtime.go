@@ -269,11 +269,13 @@ type remoteDecision struct {
 NewRuntime
 
 NewRuntime constructs an AI Caravan & Thief Runtime with the provided Config,
-MemoryStore, and optional WorldHooks. The owner runs Run on its own
-goroutine and calls Close at shutdown, before the store closes.
+MemoryStore, and optional WorldHooks. dayStore backs the slice-5 daily
+escort cap and may be nil (the counts then live in memory only). The
+owner runs Run on its own goroutine and calls Close at shutdown, before
+the store closes.
 ==================
 */
-func NewRuntime(cfg Config, store MemoryStore, hooks WorldHooks) *Runtime {
+func NewRuntime(cfg Config, store MemoryStore, dayStore EscortDayStore, hooks WorldHooks) *Runtime {
 	var remote Brain
 	if brain, isRemote := NewBrain(cfg).(*LLMBrain); isRemote {
 		remote = brain
@@ -288,7 +290,7 @@ func NewRuntime(cfg Config, store MemoryStore, hooks WorldHooks) *Runtime {
 		remote:        remote,
 		memories:      NewMemoryBook(store),
 		parleys:       NewParleyTracker(),
-		contracts:     NewContractBook(),
+		contracts:     NewContractBook(dayStore),
 		hooks:         hooks,
 		agents:        make(map[string][]*AgentUnit),
 		distress:      make(map[string]DistressCall),
@@ -321,8 +323,8 @@ func (r *Runtime) Run(ctx context.Context) {
 			if err := r.memories.Flush(); err != nil {
 				log.WithError(err).Warn("caravan-ai: memory flush failed; retrying next pass")
 			}
-			if err := r.flushHires(); err != nil {
-				log.WithError(err).Warn("caravan-ai: hire flush failed; retrying next pass")
+			if err := errors.Join(r.flushHires(), r.contracts.Flush()); err != nil {
+				log.WithError(err).Warn("caravan-ai: hire or escort-day flush failed; retrying next pass")
 			}
 		}
 	}
@@ -343,7 +345,7 @@ func (r *Runtime) Close() error {
 	}
 	r.cancelRemote()
 	r.remoteJobs.Wait()
-	return errors.Join(r.memories.Flush(), r.flushHires())
+	return errors.Join(r.memories.Flush(), r.flushHires(), r.contracts.Flush())
 }
 
 /*
@@ -944,7 +946,13 @@ func (r *Runtime) advanceAlongRouteLocked(unit *AgentUnit, nowMs int64) *EscortC
 	}
 	unit.State = StateDelivering
 	if unit.Role == RoleTrader {
-		if contract, ok := r.contracts.CompleteAITraderRun(unit.Division, unit.Name, unit.RegionID, nowMs, r.memories); ok {
+		// Delivery pays only a payable run (contracts.go) under the
+		// Hunter's daily cap; the gold moves from the step's effects,
+		// off the lock.
+		if contract, done, payable := r.contracts.CompleteAITraderRun(unit.Division, unit.Name, unit.RegionID, nowMs, r.memories); done && payable &&
+			!contract.HunterIsAI && contract.HunterName != "" && contract.RewardGold > 0 &&
+			r.contracts.PaidEscortsToday(unit.Division, contract.HunterName, nowMs) < MaxPaidEscortsPerDay {
+			r.contracts.RecordPaidEscort(unit.Division, contract.HunterName, nowMs)
 			completed = &contract
 		}
 		r.finishRunLocked(unit, nowMs)

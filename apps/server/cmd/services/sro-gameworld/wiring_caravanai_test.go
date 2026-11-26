@@ -70,7 +70,7 @@ func TestCaravanShippedActors(t *testing.T) {
 	if err := game.configureCaravanHighway(&cfg); err != nil {
 		t.Fatal(err)
 	}
-	game.caravanAgents = caravanai.NewRuntime(cfg, nil, caravanai.WorldHooks{Move: game.caravanMove, Ferry: game.caravanFerry, PickUp: game.caravanPickUp})
+	game.caravanAgents = caravanai.NewRuntime(cfg, nil, nil, caravanai.WorldHooks{Move: game.caravanMove, Ferry: game.caravanFerry, PickUp: game.caravanPickUp})
 	t.Cleanup(func() {
 		if err := game.caravanAgents.Close(); err != nil {
 			t.Error(err)
@@ -128,11 +128,19 @@ func TestCaravanShippedActors(t *testing.T) {
 	if err := authority.CreateCharacter(game.divisionID, "escort-account", hunter); err != nil {
 		t.Fatal(err)
 	}
-	for i := 0; i < 5; i++ {
-		game.caravanEscortReward(game.divisionID, hunter.Name, 1000, "trader")
+	// The daily cap is the runtime's (contracts_slice5_test.go); the door
+	// pays a dressed, living Hunter and refuses a balance past MaxGold.
+	game.caravanEscortReward(game.divisionID, hunter.Name, 1000, "trader")
+	if *hunter.Gold != 1100 {
+		t.Fatalf("escort reward: gold=%d, want 1100", *hunter.Gold)
 	}
-	if *hunter.Gold != 3100 || hunter.CaravanRewardCount != 3 {
-		t.Fatalf("daily reward cap failed: gold=%d count=%d", *hunter.Gold, hunter.CaravanRewardCount)
+	full := int64(wire.MaxGold) - 10
+	if !game.deps.Update(hunter, "test-fill", func() bool { hunter.Gold = &full; return true }) {
+		t.Fatal("could not fill the purse")
+	}
+	game.caravanEscortReward(game.divisionID, hunter.Name, 1000, "trader")
+	if game.caravanHirePayout(game.divisionID, hunter.Name, 1000) || *hunter.Gold != full {
+		t.Fatalf("a credit past MaxGold moved gold: %d, want %d", *hunter.Gold, full)
 	}
 	initial := game.caravanAgents.EnsureDivisionRoster(game.divisionID)[0]
 
@@ -460,7 +468,7 @@ func TestCaravanShippedActors(t *testing.T) {
 	cancel()
 	<-arrivalsDone
 
-	grand := caravanai.NewRuntime(cfg, nil, caravanai.WorldHooks{})
+	grand := caravanai.NewRuntime(cfg, nil, nil, caravanai.WorldHooks{})
 	defer grand.Close()
 	if !grand.StartGrandCaravan(game.divisionID, now.UnixMilli()) {
 		t.Fatal("could not muster the shipped grand caravan")
@@ -589,7 +597,7 @@ func TestCaravanPartyAndMovementPolish(t *testing.T) {
 	if err := game.configureCaravanHighway(&cfg); err != nil {
 		t.Fatal(err)
 	}
-	rt := caravanai.NewRuntime(cfg, nil, caravanai.WorldHooks{
+	rt := caravanai.NewRuntime(cfg, nil, nil, caravanai.WorldHooks{
 		Move:      game.caravanMove,
 		Ferry:     game.caravanFerry,
 		Player:    game.caravanPlayer,
@@ -791,7 +799,7 @@ func TestCaravanThiefDenOpenPlazaAndMovement(t *testing.T) {
 	}
 	denTerm := cfg.Terminals[caravanai.TownThiefDen]
 	t.Logf("ThiefDen terminal: region=%d x=%.2f y=%.2f z=%.2f", denTerm.RegionID, denTerm.X, denTerm.Y, denTerm.Z)
-	game.caravanAgents = caravanai.NewRuntime(cfg, nil, caravanai.WorldHooks{Move: game.caravanMove, Ferry: game.caravanFerry})
+	game.caravanAgents = caravanai.NewRuntime(cfg, nil, nil, caravanai.WorldHooks{Move: game.caravanMove, Ferry: game.caravanFerry})
 	t.Cleanup(func() { _ = game.caravanAgents.Close() })
 	if err := game.initCaravanActors(); err != nil {
 		t.Fatal(err)

@@ -31,12 +31,10 @@ recorded here as an inference: 100%, the chance every sibling hunt's
 proof-goods effectively drop at, at collect counts (40 to 500) in the
 same band as the hunt counts beside them (390 to 650).
 
-Held back with the talk/hunt gaps of arabia_quests.go: QNO_AR_012,
-QNO_AR_014 and QNO_AR_018, whose missing talk line (_01, _05 and _06)
-is a Korean-only stub row in the later text - present in the archive,
-but with no English cell, so the quest-table import leaves it out and
-the line never ships - and QNO_AR_017, which stands behind
-QNO_AR_012. QNO_AR_066 and QNO_AR_068 stay out too: their target
+QNO_AR_012, QNO_AR_014, QNO_AR_017 and QNO_AR_018 waited with the
+talk/hunt gaps of arabia_quests.go for their stub talk lines (_01,
+_05 and _06) to be recovered under the same owner call (2026-11-26,
+#4134). QNO_AR_066 and QNO_AR_068 stay out: their target
 kinds (MOB_AR_TELBASTA2_ARMOR, MOB_AR_MAD_GENERAL_CLON) are placed by
 no nest and shipped in no character row. So does QNO_AR_091: its NPC,
 NPC_AR_SPECIAL_SOLDIER_11 (v1.696 characterdata 40523), has no npcpos
@@ -113,8 +111,8 @@ func arabiaDeliver(code string, start, end string, reward arabiaReward, item str
 ================
 arabiaCollectSpecs
 
-The 38 quests, in codename order: 25 collects (the last seven of
-them Karem's unlimited essence collects) and 13 deliveries.
+The 41 quests, in codename order: 26 collects (the last seven of
+them Karem's unlimited essence collects) and 15 deliveries.
 ================
 */
 func arabiaCollectSpecs() []QuestSpec {
@@ -122,9 +120,13 @@ func arabiaCollectSpecs() []QuestSpec {
 		arabiaDeliver("QNO_AR_006", "NPC_AR_SOLDIER_2", "NPC_AR_FARMER3", arabiaReward{47050, 41456232, 806}, "ITEM_QNO_AR_006_01"),
 		arabiaDeliver("QNO_AR_007", "NPC_AR_KHALED", "NPC_AR_FARMER1", arabiaReward{47050, 41456232, 806}, "ITEM_QNO_AR_007_01"),
 		arabiaCollect("QNO_AR_011", 2, "NPC_AR_FARMER1", arabiaReward{185848, 82912465, 1611}, "ITEM_QNO_AR_011_01", 180, "MOB_AR_BARUSWOLF_ADONIS1_CLONE"),
+		arabiaCollect("QNO_AR_012", 2, "NPC_AR_FARMER1", arabiaReward{185848, 82912465, 1611}, "ITEM_QNO_AR_012_01", 270, "MOB_AR_BARUSWOLF_ADONIS2_CLONE"),
 		arabiaCollect("QNO_AR_013", 2, "NPC_AR_FARMER3", arabiaReward{185848, 82912465, 1611}, "ITEM_QNO_AR_013_01", 90, "MOB_AR_UNEG"),
+		arabiaCollect("QNO_AR_014", 2, "NPC_AR_FARMER2", arabiaReward{185848, 82912465, 1611}, "ITEM_QNO_AR_014_01", 390, "MOB_AR_MANGYANG_PLUNDER1_CLONE"),
 		arabiaCollect("QNO_AR_015", 2, "NPC_AR_FARMER2", arabiaReward{185848, 82912465, 1611}, "ITEM_QNO_AR_015_01", 40, "MOB_AR_MANGYANG_PLUNDER2_CLONE"),
 		arabiaDeliver("QNO_AR_016", "NPC_AR_FARMER1", "NPC_AR_SPECIAL", arabiaReward{47050, 41456232, 806}, "ITEM_QNO_AR_016_01", "QNO_AR_011"),
+		arabiaDeliver("QNO_AR_017", "NPC_AR_FARMER1", "NPC_AR_ACCESSORY", arabiaReward{47050, 41456232, 806}, "ITEM_QNO_AR_017_01", "QNO_AR_012"),
+		arabiaDeliver("QNO_AR_018", "NPC_AR_FARMER3", "NPC_AR_CHOUKRI", arabiaReward{47050, 41456232, 806}, "ITEM_QNO_AR_018_01", "QNO_AR_013"),
 		arabiaCollect("QNO_AR_022", 2, "NPC_AR_SPECIAL_SOLDIER_2", arabiaReward{232260, 135250958, 2887}, "ITEM_QNO_AR_022_01", 240, "MOB_AR_BLOOD_HYENA_FASTWOLF"),
 		arabiaCollect("QNO_AR_023", 2, "NPC_AR_SPECIAL_SOLDIER_2", arabiaReward{232260, 135250958, 2887}, "ITEM_QNO_AR_023_01", 360, "MOB_AR_WENEG"),
 		arabiaDeliver("QNO_AR_024", "NPC_AR_SPECIAL_SOLDIER_3", "NPC_AR_SOLDIER_1", arabiaReward{47400, 52597595, 1123}, "ITEM_QNO_AR_024_01", "QNO_AR_022"),

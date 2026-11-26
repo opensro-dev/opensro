@@ -34,6 +34,23 @@ import { placementLayer, readWorldLayerTable } from "./worldLayers.mjs";
 
 /*
 ================
+sectorList
+
+The per-sector list a bundle carries beside its seed sector's top-level
+blocks. A bundle that covers only its seed sector (every split outdoor
+region) leaves the list out: its one entry would repeat the top-level rows
+and made each region about a third larger on the wire. Every reader takes
+the top-level rows when the list is absent: the client world decoder
+(world.ts) and outdoor resolver (resources.ts), the server's water surface
+(water_assets.go) and the region index (buildWorldRegionIndex.mjs).
+================
+*/
+function sectorList( sectors ) {
+	return sectors.length === 1 ? {} : { sectors };
+}
+
+/*
+================
 buildJmxWorldRegionBundle
 ================
 */
@@ -216,7 +233,7 @@ export async function buildJmxWorldRegionBundle( options ) {
 			blocks: terrain.blocks,
 			sectorGrid: terrainCoverage.sectorGrid,
 			sectorCount: terrainSectors.length,
-			sectors: terrainSectors
+			...sectorList( terrainSectors )
 		},
 		terrainTextures: {
 			signature: terrainTexture.signature,
@@ -231,7 +248,7 @@ export async function buildJmxWorldRegionBundle( options ) {
 			blockCount: terrainTexture.blocks.length,
 			blocks: terrainTexture.blocks,
 			sectorCount: terrainTextureSectors.length,
-			sectors: terrainTextureSectors,
+			...sectorList( terrainTextureSectors ),
 			tileCatalog: {
 				signature: tileCatalog.signature,
 				sourcePath: toGameRelative( tileCatalogPath, sourceGameRoot ),

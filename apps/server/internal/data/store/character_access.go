@@ -228,6 +228,7 @@ func (s *Store) GroundSnapshotForRestore() domain.GroundSnapshot {
 		for i := range out {
 			out[i].MagicOptions = append([]uint64(nil), out[i].MagicOptions...)
 			out[i].Summon = domain.CloneCOS(out[i].Summon)
+			out[i].LinkedStorage = domain.CloneCOSContainer(out[i].LinkedStorage)
 		}
 		divisions[divisionID] = out
 	}

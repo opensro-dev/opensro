@@ -85,6 +85,7 @@ var layoutSteps = []layoutStep{
 	{14, true, "empty AI caravan memory and route-heat tables", []string{"caravan_agent_memories", "caravan_route_heat"}, caravanAgentSchema},
 	{15, true, "empty earned-silk wallet and silk-history split tables", []string{"mall_earned_silk", "silk_history_earned"}, mallEarnedSilkSchema + silkHistoryEarnedSchema},
 	{16, true, "empty beta silk hour-progress table", []string{"beta_silk_progress"}, betaSilkProgressSchema},
+	{17, true, "empty AI caravan escort-day ledger table", []string{"caravan_escort_days"}, caravanEscortDaySchema},
 }
 
 /*

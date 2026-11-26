@@ -1,4 +1,5 @@
 import { mkdir, readFile, readdir, writeFile } from "node:fs/promises";
+import { readdirSync } from "node:fs";
 import path from "node:path";
 import { noteRead } from "../graph/reads.mjs";
 import { foldAssetCase } from "../shared/assetPaths.mjs";
@@ -114,6 +115,75 @@ export async function resolveOnDiskPath( file ) {
 		let real = directoryEntry( await directoryIndex( directory ), segment );
 		if ( real === undefined ) {
 			real = directoryEntry( await directoryIndex( directory, true ), segment );
+		}
+		if ( real === undefined ) {
+			return file;
+		}
+		directory = path.join( directory, real );
+	}
+	return directory;
+}
+
+// One directory listing per directory per process for the synchronous
+// resolver, with the same refresh-on-miss rule as the async cache: the
+// build creates directories as it goes, so a listing taken before a
+// sibling appeared must not answer for it.
+const syncDirectoryIndexes = new Map();
+
+/*
+================
+directoryIndexSync
+
+The synchronous twin of directoryIndex, over an injectable listing so
+a test can serve a case-sensitive directory on a platform whose own
+file system folds case. The listing is cached per directory; a null
+index (the directory cannot be listed) is cached too.
+================
+*/
+function directoryIndexSync( directory, listDirectory, refresh = false ) {
+	if ( !refresh && syncDirectoryIndexes.has( directory ) ) {
+		return syncDirectoryIndexes.get( directory );
+	}
+	let index = null;
+	try {
+		const names = new Set();
+		const byFolded = new Map();
+		for ( const name of listDirectory( directory ) ) {
+			names.add( name );
+			const folded = foldAssetCase( name );
+			if ( !byFolded.has( folded ) ) {
+				byFolded.set( folded, name );
+			}
+		}
+		index = { names, byFolded };
+	} catch {
+		index = null;
+	}
+	syncDirectoryIndexes.set( directory, index );
+	return index;
+}
+
+/*
+================
+resolveOnDiskPathSync
+
+resolveOnDiskPath for the readers that cannot await (the character
+and effect readers open synchronously): the same rule - an exact
+segment keeps the caller's spelling, a case-only difference takes the
+real entry, a genuinely missing segment keeps the caller's spelling so
+the failure names the path that was asked for. One rule in two
+runtimes, so a build can never disagree with itself about the
+spelling of a file (#4468).
+================
+*/
+export function resolveOnDiskPathSync( file, listDirectory = readdirSync ) {
+	const parsed = path.parse( file );
+	const segments = file.slice( parsed.root.length ).split( /[\\/]+/ ).filter( Boolean );
+	let directory = parsed.root;
+	for ( const segment of segments ) {
+		let real = directoryEntry( directoryIndexSync( directory, listDirectory ), segment );
+		if ( real === undefined ) {
+			real = directoryEntry( directoryIndexSync( directory, listDirectory, true ), segment );
 		}
 		if ( real === undefined ) {
 			return file;

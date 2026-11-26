@@ -359,8 +359,14 @@ func (r *Runtime) HandlePlayerCommand(
 			r.mu.Unlock()
 			return "Meet a recruiting Trader in town to accept an escort.", true
 		}
-		contract := r.contracts.BindAITraderEscort(division, unit.Name, playerName, unit.OriginTown, unit.DestTown, unit.CargoStars, nowMs)
-		if !contract.Active {
+		// The daily cap is asked before a contract binds, so a capped
+		// Hunter is told now rather than finishing a run unpaid.
+		if r.contracts.PaidEscortsToday(division, playerName, nowMs) >= MaxPaidEscortsPerDay {
+			r.mu.Unlock()
+			return fmt.Sprintf("You have received today's %d caravan escort rewards.", MaxPaidEscortsPerDay), true
+		}
+		contract, bound := r.contracts.BindAITraderEscort(division, unit.Name, playerName, unit.OriginTown, unit.DestTown, unit.CargoStars, nowMs)
+		if !bound {
 			r.mu.Unlock()
 			return "You or that Trader already have a contract.", true
 		}

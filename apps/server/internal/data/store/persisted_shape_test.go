@@ -91,7 +91,7 @@ var strictRecords = []struct {
 	{"character", reflect.TypeOf(domain.Character{})},
 	{"ground-item", reflect.TypeOf(domain.GroundItemRecord{})},
 	{"letter", reflect.TypeOf(domain.LetterRecord{})},
-	{"guild", reflect.TypeOf(domain.GuildRecord{})},
+	{"guild", reflect.TypeOf(guildRecordStored{})},
 	{"guild-member", reflect.TypeOf(domain.GuildMemberRecord{})},
 	{"training-camp", reflect.TypeOf(domain.TrainingCampRecord{})},
 	{"training-camp-member", reflect.TypeOf(domain.TrainingCampMemberRecord{})},
@@ -102,7 +102,7 @@ var strictRecords = []struct {
 	{"fortress-item-forge", reflect.TypeOf(domain.FortressItemForgeRecord{})},
 	{"trade-reward-pool", reflect.TypeOf(domain.TradeRewardPool{})},
 	{"job-rankings", reflect.TypeOf(domain.JobRankings{})},
-	{"account-storage", reflect.TypeOf(domain.AccountStorage{})},
+	{"account-storage", reflect.TypeOf(accountStorageRecord{})},
 	{"unique-kill", reflect.TypeOf(domain.UniqueKill{})},
 	{"halloween-box-account", reflect.TypeOf(domain.HalloweenBoxAccount{})},
 	{"sook-arena-account", reflect.TypeOf(domain.SookArenaAccount{})},
@@ -160,6 +160,7 @@ var tableOnlySchemaSteps = map[int]string{
 	45: "layout 13 adds trade_history (trade_history.go)",
 	47: "layout 14 adds caravan_agent_memories and caravan_route_heat (caravan_agents.go)",
 	59: "layout 16 adds beta_silk_progress (betasilk.go)",
+	60: "layout 17 adds caravan_escort_days (caravan_escort_days.go)",
 }
 
 /*

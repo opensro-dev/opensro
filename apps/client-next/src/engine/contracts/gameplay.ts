@@ -238,6 +238,20 @@ export type GameplayCommand =
 	| { readonly kind: "effect-cancel"; readonly skillId: number; readonly token: number; }
 	| { readonly kind: "minimap-floors"; readonly poses: readonly Pose[]; }
 	| { readonly kind: "avatar-move"; readonly equip: boolean; readonly source: number; readonly destination: number; }
+	// Port-only (#3906): Magic Cube deposit / withdraw (0x706D 0x27 / 0x28).
+	| {
+		readonly kind: "magic-cube-push";
+		readonly source: number;
+		readonly cubeSlot: number;
+		readonly quantity: number;
+	}
+	| {
+		readonly kind: "magic-cube-pop";
+		readonly cubeSlot: number;
+		readonly destination: number;
+		readonly refObjId: number;
+		readonly quantity: number;
+	}
 	| import("@/engine/foundation/gameplay/party-matching").PartyMatchCommand
 	| { readonly kind: "gm-command"; readonly line: string; }
 	// The debug console's weather rows: a mode to set (mode 1 releases the
@@ -604,6 +618,12 @@ export interface InventoryItem {
 	// the tooltip reference carries), so activation rules can read
 	// them - the mall-use gate reads canUse (token 24).
 	readonly nativeFields?: ItemFieldValues;
+	// Port-only (#3906): a Magic Cube's linked elixir rows. Absent on
+	// every other item. Quantity on the cube itself is StoredItemCount.
+	readonly linkedStorage?: {
+		readonly capacity: number;
+		readonly rows: readonly InventoryItem[];
+	};
 	readonly slot: number;
 	readonly refObjId: number;
 	readonly typeFlags: number;

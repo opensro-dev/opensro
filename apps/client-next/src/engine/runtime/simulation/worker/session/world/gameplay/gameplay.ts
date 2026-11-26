@@ -324,7 +324,7 @@ import {
 import { createCastMotionLock } from "@/engine/foundation/gameplay/cast-motion-lock";
 import { createSkillPressQueue, decidePress } from "@/engine/foundation/gameplay/skill-queue";
 import { combatAdmissionRadius, combatStopPoint, refBodyRadius } from "@/engine/foundation/gameplay/combat-spacing";
-import { equipmentBroken, equippedWeaponKind, pressAdmission } from "@/engine/foundation/gameplay/press-admission";
+import { equippedWeaponKind, pressAdmission } from "@/engine/foundation/gameplay/press-admission";
 import { movementHeading } from "@/engine/foundation/gameplay/native-movement";
 import {
 	bootstrapProgression,
@@ -403,7 +403,8 @@ import {
 	isMacroHuntNeverTarget,
 	macroUsageTimeEnded,
 	pickMacroHuntAction,
-	spiritNeedsWake
+	spiritNeedsWake,
+	wornEquipmentBroken
 } from "@/engine/foundation/gameplay/sro-macro-hunt";
 import {
 	MACRO_NOTICE_TELEPORT_OFF,
@@ -638,6 +639,8 @@ const GROUND_SKILL_MOVE_SUPPRESS_MS = 500;
 const INVENTORY_SORT_CANCELLERS: readonly GameplayCommand["kind"][] = [
 	"inventory-move",
 	"avatar-move",
+	"magic-cube-push",
+	"magic-cube-pop",
 	"item-use",
 	"item-drop",
 	"gold-drop",
@@ -4275,6 +4278,18 @@ state here before a command can claim a native wire conversation.
 			if ( command.kind === "avatar-move" ) {
 				return inventory.avatarMove( command.equip, command.source, command.destination, now );
 			}
+			if ( command.kind === "magic-cube-push" ) {
+				return inventory.magicCubePush( command.source, command.cubeSlot, command.quantity, now );
+			}
+			if ( command.kind === "magic-cube-pop" ) {
+				return inventory.magicCubePop(
+					command.cubeSlot,
+					command.destination,
+					command.refObjId,
+					command.quantity,
+					now
+				);
+			}
 			if ( command.kind === "inventory-move" ) {
 				// 594980 is the equipment drop action: the key is pushed
 				// nowhere else in the client (594AA9) and the handler is
@@ -7537,9 +7552,7 @@ the configured range. Notices mirror 00dade90 / return-reason UIIT rows
 				party
 			) :
 			undefined;
-		const wornBroken = bag.some( entry =>
-			entry.slot < BAG_FIRST_SLOT && equipmentBroken( entry.typeFlags, entry.durability )
-		);
+		const wornBroken = wornEquipmentBroken( bag );
 		const spiritSlot = findSpiritWakeSlot();
 		// 006872d0 requires skill-on (+0x181) before the VIP walk.
 		const usageTimeEnded = !!settings.skillOn &&

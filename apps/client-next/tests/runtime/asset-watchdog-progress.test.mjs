@@ -247,6 +247,63 @@ test("a decode-phase download flips the job back to the download window", t => {
 	assert.deepEqual( assets.take( id ), { kind: "error", id, error: TIMEOUT_ERROR, transient: true } );
 });
 
+test("one job's decoder work keeps a co-resident decoding job alive", t => {
+	const { assets, worker, clock } = fixture( t );
+	const world = assets.request( REGION );
+	const effect = assets.request( "https://assets.test/assets/effects/programs.json#skill%2Fchina%2Flightning" );
+	// Both primary reads are in and the pipe has drained: both jobs decode.
+	worker.onmessage( { data: { kind: "job-decoding", id: world } } );
+	worker.onmessage( { data: { kind: "job-decoding", id: effect } } );
+	// The world job reports CPU work every 50 s for five minutes. The effect
+	// job reports nothing of its own: the worker is one thread, so while it
+	// decodes the world the effect's turn cannot come. The world's work is
+	// the only liveness there is, and it must count for both.
+	for ( let step = 1; step <= 6; step++ ) {
+		clock.now += 50000;
+		worker.onmessage( { data: { kind: "job-decoding-progress", id: world, units: step * 1024 } } );
+		assert.equal( assets.take( effect ), null, "a co-resident job must outlive another job's long decode" );
+		assert.equal( assets.health().phase, "running" );
+	}
+	// The work notes stop: now the effect job's own silence runs out.
+	clock.now += 61000;
+	assert.equal( assets.health().phase, "running" );
+	assert.deepEqual(
+		assets.take( effect ),
+		{
+			kind: "error",
+			id: effect,
+			error: "Asset worker timed out while loading /assets/effects/programs.json",
+			transient: true
+		}
+	);
+});
+
+test("one job's download keeps a co-resident job in its download window alive", t => {
+	const { assets, worker, clock } = fixture( t );
+	const world = assets.request( REGION );
+	const manifest = assets.request( "https://assets.test/assets/npc/manifest.json" );
+	// The manifest job is admitted behind the world's stream and reports
+	// nothing; the world's trickle is the pipe moving for both of them.
+	for ( let step = 1; step <= 3; step++ ) {
+		clock.now += 100000;
+		worker.onmessage( { data: { kind: "job-progress", id: world, bytes: step * 500 } } );
+		assert.equal( assets.take( manifest ), null, "a queued load must not die of the pipe's other traffic" );
+		assert.equal( assets.health().phase, "running" );
+	}
+	// The pipe falls silent: the manifest's own window runs out.
+	clock.now += 121000;
+	assert.equal( assets.health().phase, "running" );
+	assert.deepEqual(
+		assets.take( manifest ),
+		{
+			kind: "error",
+			id: manifest,
+			error: "Asset worker timed out while loading /assets/npc/manifest.json",
+			transient: true
+		}
+	);
+});
+
 test("a healthy fast load behaves exactly as before", t => {
 	const { assets, worker, clock } = fixture( t );
 	const id = assets.request( REGION );

@@ -47,6 +47,14 @@ Direct3D 9 device, so a Windows build over Remote Desktop or on a GPU-less VM
 stops with the reason; set `SRO_PORTABLE_MIPS=1` to build that session with
 the portable mip generator (equivalent, not native bytes) instead.
 
+Two builds of the v1.150 client circulate (SHA-256 `375e8682...` and
+`f6580bf6...`); either builds the game. They are not interchangeable as
+reverse-engineering evidence: the revtool seed names its build, and
+`seed-manifest.json` pins the verified builds and how each is accepted
+(see `tools/re/revtool/README.md`, "Quick start"). Hash your copy
+(`Get-FileHash .\SRO_Client.exe -Algorithm SHA256`) before reusing an
+address from a report or a fixture.
+
 The **game root** is the client folder. By default it is the folder that
 contains this checkout; to keep the client elsewhere, set `SRO_GAME_ROOT` to
 it (the folder holding `SRO_Client.exe`, not `extracted`):

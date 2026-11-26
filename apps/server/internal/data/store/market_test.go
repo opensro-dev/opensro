@@ -141,6 +141,10 @@ func TestMarketListTakesTheItemOutOfTheWarehouse(t *testing.T) {
 	if _, err := s.MarketList(request); !errors.Is(err, domain.ErrMarketNotTradeable) {
 		t.Fatalf("an untradeable item listed: %v", err)
 	}
+	request.Admit = func(domain.InventoryRow) error { return domain.ErrMarketMagicCube }
+	if _, err := s.MarketList(request); !errors.Is(err, domain.ErrMarketMagicCube) {
+		t.Fatalf("a non-empty Magic Cube refusal was masked: %v", err)
+	}
 	request.Admit = admitAll
 	request.Price = 0
 	if _, err := s.MarketList(request); !errors.Is(err, domain.ErrMarketPrice) {
@@ -236,7 +240,7 @@ func TestMarketBuyWithSilk(t *testing.T) {
 	t.Parallel()
 	s, _, seller, buyer := marketFixture(t)
 	listing := listSword(t, s, domain.MarketSilk, 500)
-	buy := domain.MarketBuyRequest{ListingID: listing.ID, Version: listing.Version, BuyerAccount: marketBuyer, Rules: testMarketRules}
+	buy := domain.MarketBuyRequest{Admit: admitAll, ListingID: listing.ID, Version: listing.Version, BuyerAccount: marketBuyer, Rules: testMarketRules}
 
 	if _, err := s.MarketBuy(buy); !errors.Is(err, domain.ErrMarketFunds) {
 		t.Fatalf("a buyer with no Silk bought: %v", err)
@@ -290,6 +294,41 @@ func TestMarketBuyWithSilk(t *testing.T) {
 
 /*
 ================
+TestMarketSaleJudgesTheTradeRuleAgain
+
+A row listed before the trade rule refused it (#4491: a pet loaded
+with bound rows) is judged again at the sale: the buy is refused,
+nothing is paid, and the listing stays open for the seller to take
+back. A sale with no rule at all is refused too.
+================
+*/
+func TestMarketSaleJudgesTheTradeRuleAgain(t *testing.T) {
+	t.Parallel()
+	s, _, _, _ := marketFixture(t)
+	listing := listSword(t, s, domain.MarketSilk, 500)
+	if _, err := s.GrantSilk(marketBuyer, 800); err != nil {
+		t.Fatal(err)
+	}
+	refuse := func(domain.InventoryRow) error { return domain.ErrMarketNotTradeable }
+	buy := domain.MarketBuyRequest{Admit: refuse, ListingID: listing.ID, Version: listing.Version, BuyerAccount: marketBuyer, Rules: testMarketRules}
+	if _, err := s.MarketBuy(buy); !errors.Is(err, domain.ErrMarketNotTradeable) {
+		t.Fatalf("a listing the rule now refuses sold: %v", err)
+	}
+	buy.Admit = nil
+	if _, err := s.MarketBuy(buy); !errors.Is(err, domain.ErrMarketUnavailable) {
+		t.Fatalf("a sale with no trade rule sold: %v", err)
+	}
+	if wallet, _ := readMallBalance(s.syncDBLocked(), marketBuyer); wallet.Silk != 800 {
+		t.Fatalf("a refused sale charged the buyer: %d left", wallet.Silk)
+	}
+	buy.Admit = admitAll
+	if _, err := s.MarketBuy(buy); err != nil {
+		t.Fatalf("the listing is no longer open after the refusals: %v", err)
+	}
+}
+
+/*
+================
 TestMarketBuyWithGold
 
 The buyer's character pays; the seller's warehouse gets the price less
@@ -300,7 +339,7 @@ func TestMarketBuyWithGold(t *testing.T) {
 	t.Parallel()
 	s, _, seller, buyer := marketFixture(t)
 	listing := listSword(t, s, domain.MarketGold, 1000)
-	buy := domain.MarketBuyRequest{ListingID: listing.ID, Version: listing.Version, BuyerAccount: marketBuyer, Rules: testMarketRules}
+	buy := domain.MarketBuyRequest{Admit: admitAll, ListingID: listing.ID, Version: listing.Version, BuyerAccount: marketBuyer, Rules: testMarketRules}
 
 	if _, err := s.MarketBuy(buy); !errors.Is(err, domain.ErrMarketUnavailable) {
 		t.Fatalf("a gold buy with no paying character: %v", err)
@@ -349,7 +388,7 @@ func TestMarketBuyKeepsADeferredGoldWrite(t *testing.T) {
 	s.BeginTickBatch()
 	s.MutateCharacterDeferred(buyer, "quest-reward", func() { buyer.Gold = int64Ptr(*buyer.Gold + 500) })
 	// 12345 alone cannot pay 12600; with the queued 500 it can.
-	if _, err := s.MarketBuy(domain.MarketBuyRequest{ListingID: listing.ID, Version: listing.Version, BuyerAccount: marketBuyer,
+	if _, err := s.MarketBuy(domain.MarketBuyRequest{Admit: admitAll, ListingID: listing.ID, Version: listing.Version, BuyerAccount: marketBuyer,
 		Payer: buyer, Rules: testMarketRules}); err != nil {
 		t.Fatalf("the buy did not see the deferred gold: %v", err)
 	}
@@ -394,7 +433,7 @@ func TestMarketBuyRefusesBeyondTheBuyersGold(t *testing.T) {
 	t.Parallel()
 	s, _, _, buyer := marketFixture(t)
 	listing := listSword(t, s, domain.MarketGold, 20000)
-	_, err := s.MarketBuy(domain.MarketBuyRequest{ListingID: listing.ID, Version: listing.Version, BuyerAccount: marketBuyer,
+	_, err := s.MarketBuy(domain.MarketBuyRequest{Admit: admitAll, ListingID: listing.ID, Version: listing.Version, BuyerAccount: marketBuyer,
 		Payer: buyer, Rules: testMarketRules})
 	if !errors.Is(err, domain.ErrMarketFunds) || *buyer.Gold != 12345 {
 		t.Fatalf("buy past the purse = %v, gold %d", err, *buyer.Gold)
@@ -424,7 +463,7 @@ func TestMarketExpiryReturnsHoldsAndTakesBack(t *testing.T) {
 		t.Fatal(err)
 	}
 	clock.Advance(25 * time.Hour)
-	if _, err := s.MarketBuy(domain.MarketBuyRequest{ListingID: listing.ID, Version: listing.Version, BuyerAccount: marketBuyer, Rules: testMarketRules}); !errors.Is(err, domain.ErrMarketChanged) {
+	if _, err := s.MarketBuy(domain.MarketBuyRequest{Admit: admitAll, ListingID: listing.ID, Version: listing.Version, BuyerAccount: marketBuyer, Rules: testMarketRules}); !errors.Is(err, domain.ErrMarketChanged) {
 		t.Fatalf("an expired listing sold: %v", err)
 	}
 	if n, err := s.ExpireMarketListings(10); err != nil || n != 1 {
@@ -529,7 +568,7 @@ func TestMarketBuyNeverSpendsGiftSilk(t *testing.T) {
 	if _, err := s.syncDBLocked().Exec(`INSERT INTO mall_accounts (account_id, silk, gift_silk, points) VALUES (?, 0, 800, 0)`, marketBuyer); err != nil {
 		t.Fatal(err)
 	}
-	buy := domain.MarketBuyRequest{ListingID: listing.ID, Version: listing.Version, BuyerAccount: marketBuyer, Rules: testMarketRules}
+	buy := domain.MarketBuyRequest{Admit: admitAll, ListingID: listing.ID, Version: listing.Version, BuyerAccount: marketBuyer, Rules: testMarketRules}
 	if _, err := s.MarketBuy(buy); !errors.Is(err, domain.ErrMarketFunds) {
 		t.Fatalf("gift Silk paid a listing: %v", err)
 	}

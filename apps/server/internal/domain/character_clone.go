@@ -305,6 +305,7 @@ func cloneCharacterFilteredFrom(source *Character, rows cloneRows, previous *Cha
 	default:
 		clone.MissionInventory = cloneEquipmentRows(source.MissionInventory)
 	}
+	clone.CubeStorages = stagedChild(source.CubeStorages, previousChild.CubeStorages, CloneCharacterCubeStorages)
 	clone.Buyback = stagedChild(source.Buyback, previousChild.Buyback, cloneBuybackRows)
 	clone.World = stagedChild(source.World, previousChild.World, cloneCharacterWorld)
 	if rows == rowsCast {
@@ -483,8 +484,26 @@ func cloneInventoryRows(source []InventoryRow) []InventoryRow {
 		clone[index].Summon = CloneCOS(source[index].Summon)
 		clone[index].MagicOptions =
 			cloneSlice(source[index].MagicOptions)
+		clone[index].LinkedStorage = cloneLinkedStorage(source[index].LinkedStorage)
 	}
 	return clone
+}
+
+/*
+================
+cloneLinkedStorage
+
+A Magic Cube's elixir bag (#3906): capacity and rows, detached so a
+door copy cannot mutate the live cube.
+================
+*/
+func cloneLinkedStorage(source *COSContainer) *COSContainer {
+	if source == nil {
+		return nil
+	}
+	bag := *source
+	bag.Rows = cloneInventoryRows(source.Rows)
+	return &bag
 }
 
 /*
@@ -526,6 +545,7 @@ func stagedInventoryRows(source, previous []InventoryRow) []InventoryRow {
 		clone[index] = source[index]
 		clone[index].Summon = CloneCOS(source[index].Summon)
 		clone[index].MagicOptions = cloneSlice(source[index].MagicOptions)
+		clone[index].LinkedStorage = cloneLinkedStorage(source[index].LinkedStorage)
 	}
 	if shared {
 		// Nothing moved: the previous slice itself, as stagedChild

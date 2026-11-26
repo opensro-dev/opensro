@@ -35,7 +35,7 @@ import { writeIntoPublicTreeSync } from "../shared/publicWrite.mjs";
 import fs from "node:fs";
 import path from "node:path";
 import { compileBsrVisualToGlb } from "./compileBsrVisual.mjs";
-import { dataAssetPath } from "../shared/jmxAssetIO.mjs";
+import { dataAssetPathOnDisk } from "../shared/jmxAssetIO.mjs";
 import { convertTextureTrees } from "../shared/convertImagesRunner.mjs";
 import { isMainScript } from "../shared/fsUtils.mjs";
 import { listTextDataShardNamesSync, readTextDataLinesSync, splitTextDataRow } from "../shared/textDataIo.mjs";
@@ -122,7 +122,7 @@ export async function buildDropModelAssets( { skipTextures = false } = {} ) {
 			built += 1;
 			continue;
 		}
-		if ( !fs.existsSync( dataAssetPath( bsrPath ) ) ) {
+		if ( !fs.existsSync( dataAssetPathOnDisk( bsrPath ) ) ) {
 			absent += 1;
 			console.warn( `[itemdrop] SKIP ${gamePath} (not in Data_extracted)` );
 			continue;
