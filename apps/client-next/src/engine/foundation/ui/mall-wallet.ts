@@ -35,12 +35,12 @@ export const BONUS_SILK_CAPTION_KEY = "UIIT_CTL_SILK_INQUIRY_GIFT_SILK";
 
 export type SilkWalletKind = "silk" | "earned" | "bonus";
 
-const SILK_HELP = "Silk: your main balance, from starter Silk, staff grants and your " +
-	"consignment market sales. Item Mall goods it pays for are account-bound.";
+const SILK_HELP =
+	"Silk: your main balance, from starter Silk, staff grants and your consignment market sales. Item Mall goods it pays for are account-bound.";
 const EARNED_SILK_HELP = "Earned Silk: Silk you earn by playing in the world. Purchases spend it first.";
 const EARNED_SILK_TRADABLE_HELP = " Goods paid for wholly with Earned Silk can be traded.";
-const BONUS_SILK_HELP = "Bonus Silk: Silk from rewards such as referrals. " +
-	"Spend it in the Item Mall; the consignment market does not take it.";
+const BONUS_SILK_HELP =
+	"Bonus Silk: Silk from rewards such as referrals. Spend it in the Item Mall; the consignment market does not take it.";
 
 /*
 ================
