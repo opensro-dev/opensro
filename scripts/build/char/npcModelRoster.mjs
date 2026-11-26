@@ -234,6 +234,25 @@ export function serverRosterKey() {
 
 /*
 ================
+serverExportsKey
+
+Everything the resource build reads of the server's Go code, as bytes:
+the npc bake's roster exports (serverRosterKey) and the unique-nest
+table. The whole-build fingerprint keys on this instead of the sources
+behind them (resourceBuildFingerprint.mjs, #4337), through the same
+exports the lanes then reuse.
+================
+*/
+export function serverExportsKey() {
+	return createHash( "sha256" )
+		.update( serverRosterKey() )
+		.update( "\n" )
+		.update( exportRoster( "unique-nests", "unique-nests", process.env ) )
+		.digest( "hex" );
+}
+
+/*
+================
 rosterExportSet
 
 Every export the bake reads, each with the env it runs under.

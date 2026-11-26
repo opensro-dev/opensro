@@ -17,6 +17,7 @@ import path from "node:path";
 import { test } from "node:test";
 import { crossCityTeleportEnabled, loadCrossCityTeleportLinkRows } from "../../build/shared/crossCityTeleport.mjs";
 import { computeResourceBuildFingerprint } from "../../build/shared/resourceBuildFingerprint.mjs";
+import { STUB_FINGERPRINT_KEYS } from "../helpers/fingerprintKeys.mjs";
 
 // The town gates in Silk Road order: Jangan, Donwhang, Hotan, Samarkand,
 // Constantinople.
@@ -99,9 +100,9 @@ test("an unset switch follows a profile that turns it on", ( t ) => {
 
 test("flipping the switch changes the resource build fingerprint", async ( t ) => {
 	withEnv( t, { SRO_CROSS_CITY_TELEPORT: "off" } );
-	const off = await computeResourceBuildFingerprint();
+	const off = await computeResourceBuildFingerprint( STUB_FINGERPRINT_KEYS );
 	process.env.SRO_CROSS_CITY_TELEPORT = "on";
-	const on = await computeResourceBuildFingerprint();
+	const on = await computeResourceBuildFingerprint( STUB_FINGERPRINT_KEYS );
 	assert.notEqual( on.hash, off.hash );
 });
 

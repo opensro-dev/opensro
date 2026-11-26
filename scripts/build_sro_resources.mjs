@@ -18,6 +18,8 @@ import { assertClientInputs, PYTHON_BUILD_MODULES, PYTHON_INSTALL_HINT } from ".
 import { runPython } from "./build/shared/pythonRun.mjs";
 import {
 	computeResourceBuildFingerprint,
+	describeMovedRoots,
+	movedRoots,
 	readRecordedFingerprint,
 	writeRecordedFingerprint
 } from "./build/shared/resourceBuildFingerprint.mjs";
@@ -90,7 +92,7 @@ await withGeneratedAssetsLock( "SRO resource build", async () => {
 			`SRO resource inputs/outputs changed since the last build ` +
 				`(fingerprint miss over ${current.fileCount} files, ${
 					(current.elapsedMs / 1000).toFixed( 1 )
-				}s); building.`
+				}s; moved: ${describeMovedRoots( movedRoots( recorded, current ) )}); building.`
 		);
 	}
 
