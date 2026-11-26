@@ -652,18 +652,7 @@ func (s *MonsterState) tickOverwriteHive(state *divisionMonsterState, key string
 	// Native: a full hive neither ticks nor advances its callback phase.
 	if h.live < limit && nowMs-h.tickMs >= monster.NestHiveTickMs {
 		h.tickMs = nowMs
-		if s.template.Nests[members[0]].UniqueShare != "" {
-			// Port-only, not native (SRO_STR_INT_UNIQUES): the copies share
-			// one anchor list, so the next location is a draw among the
-			// points no other copy holds rather than a fixed member.
-			if pick, ok := s.sharedHivePick(state, members, nowMs); ok {
-				members = []int{pick}
-			} else {
-				members = nil
-			}
-		} else if h.selected >= 0 {
-			members = []int{h.selected}
-		}
+		members = s.hiveMembers(state, members, h.selected, nowMs)
 		for _, index := range members {
 			n := state.nests[index]
 			if n.elapsed(nowMs) && n.live < s.template.Nests[index].InstanceLimit() &&

@@ -97,6 +97,28 @@ func (s *MonsterState) releaseAnchorHeldBy(state *divisionMonsterState, gid uint
 
 /*
 ================
+hiveMembers
+
+The members an overwrite hive should try this tick. A shared hive draws
+among the points no other copy holds; every other hive keeps the native
+selected location. Port-only, not native (SRO_STR_INT_UNIQUES).
+================
+*/
+func (s *MonsterState) hiveMembers(state *divisionMonsterState, members []int, selected int, nowMs int64) []int {
+	if s.template.Nests[members[0]].UniqueShare == "" {
+		if selected >= 0 {
+			return []int{selected}
+		}
+		return members
+	}
+	if pick, ok := s.sharedHivePick(state, members, nowMs); ok {
+		return []int{pick}
+	}
+	return nil
+}
+
+/*
+================
 sharedHivePick
 
 The member a shared hive should spawn at: a draw among the points whose
