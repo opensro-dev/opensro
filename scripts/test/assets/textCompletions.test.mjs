@@ -69,10 +69,9 @@ test("the later client's reverse scroll destinations complete the v1.150 table",
 test("the Settings tab titles resolve to each tab's own name (#4512)", () => {
 	// The Option window's five tabs, in native order: the routine at
 	// 0x5c9eb5..0x5c9fa0 resolves these keys into tab slots 0..4. The
-	// v1.150 English cell for the camera tab ships "Set time" while the
-	// row's Korean (viewpoint settings), "Setting Sight" and "View"
-	// cells all name the camera page - a defective shipped value the
-	// built catalogue corrects, so the tab shows its own name.
+	// v1.150 English cell for the camera tab ships "Set time"; the built
+	// catalogue takes the later client's own correction (v1.696
+	// textuisystem_800.txt row 796, "View") over it.
 	const entries = {
 		UIIT_CTL_MENU_VIDEOSET: "Video",
 		UIIT_CTL_MENU_AUDIOSET: "Audio",
@@ -83,13 +82,13 @@ test("the Settings tab titles resolve to each tab's own name (#4512)", () => {
 	completeUiText( entries );
 	assert.equal( entries.UIIT_CTL_MENU_VIDEOSET, "Video" );
 	assert.equal( entries.UIIT_CTL_MENU_AUDIOSET, "Audio" );
-	assert.equal( entries.UIIT_CTL_MENU_CAMERASET, "Camera" );
+	assert.equal( entries.UIIT_CTL_MENU_CAMERASET, "View" );
 	assert.equal( entries.UIIT_CTL_MENU_INPUTSET, "Set input" );
 	assert.equal( entries.UIIT_CTL_MENU_GAMESET, "Set game" );
-	// Only the defective value is corrected: any other shipped value stands.
-	const other = { UIIT_CTL_MENU_CAMERASET: "Kamera" };
+	// A catalogue without the row gains none: the correction is not a completion.
+	const other = { UIIT_CTL_MENU_VIDEOSET: "Video" };
 	completeUiText( other );
-	assert.equal( other.UIIT_CTL_MENU_CAMERASET, "Kamera" );
+	assert.equal( "UIIT_CTL_MENU_CAMERASET" in other, false );
 });
 
 test("the later client's party summon lines complete the v1.150 table", () => {

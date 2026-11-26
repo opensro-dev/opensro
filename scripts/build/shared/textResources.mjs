@@ -168,9 +168,16 @@ export function completeGuideTitles( entries ) {
 	return entries;
 }
 
-// Product localization disambiguations for regional NPC shop groups where official English
-// omitted Chinese vs European distinctions present in Korean, Chinese, Japanese, and Vietnamese.
+// Corrections to defective shipped English, applied over the shipped cell.
+// - Regional NPC shop groups: official English omitted the Chinese vs
+//   European distinction the Korean, Chinese, Japanese and Vietnamese carry.
+// - UIIT_CTL_MENU_CAMERASET (#4512): the Option window's camera tab (native
+//   0x5c9f19 resolves it into tab slot 2). v1.150 ships "Set time" in the
+//   English cell, while every other cell of the row names the camera page.
+//   The later client corrected the row itself: v1.696 textuisystem_800.txt
+//   row 796 reads "View", its own English, taken here.
 export const UI_TEXT_COMPLETIONS = Object.freeze( {
+	UIIT_CTL_MENU_CAMERASET: "View",
 	SN_STORE_SMITH_GROUP1: "Purchase/sell/repair Chinese weapon",
 	SN_STORE_SMITH_EU_GROUP1: "Purchase/sell/repair European weapon",
 	SN_STORE_ARMOR_GROUP1: "Purchase/sell/repair Chinese protector for men",
@@ -359,17 +366,6 @@ export const LATER_UI_TEXT_COMPLETIONS = Object.freeze( {
 
 export function completeUiText( entries ) {
 	completeRestrictionText( entries );
-	// Product correction for a defective shipped English cell, not a
-	// claim of native output (#4512): the Option window's camera tab.
-	// The native routine at 0x5c9f19 resolves UIIT_CTL_MENU_CAMERASET
-	// into tab slot 2, and the v1.150 English cell ships "Set time"
-	// while the row's Korean (viewpoint settings), "Setting Sight"
-	// and "View" cells all name the camera page, so the retail
-	// English client shows the wrong tab name. Only the defective
-	// value is corrected; any other shipped value stands.
-	if ( entries.UIIT_CTL_MENU_CAMERASET === "Set time" ) {
-		entries.UIIT_CTL_MENU_CAMERASET = "Camera";
-	}
 	// Client 7508C0 requests this key, but v1.150 omits the entire row.
 	// Product completion uses the shipped Shaitan appearance/kill wording.
 	if ( !entries.UIIT_MSG_DEAD_TAHOMET?.trim() ) {
