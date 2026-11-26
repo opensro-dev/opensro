@@ -30,6 +30,23 @@ A good lists when:
 	  instead of a period, stays unlisted; a term naming another item
 	  is the native load's fatal, so the build refuses it here.
 
+One later tab is remapped, not carried: v1.696 sells its miscellaneous
+alchemy goods in MALL_ARCHEMY_ETC, a tab v1.150's mall does not have.
+Per the owner's rule for the later goods (2026-11-25: every new v1.696
+good goes to the normal Silk Mall, no new tab is carried for one tab's
+goods), those goods are placed in MALL_ARCHEMY_ATHANASIA, the last tab
+of the same alchemy group (MALL_ARCHEMY_GROUP1: Astral, Athanasia, then
+ETC in the later client). A remapped good still lists only when every
+item its scraps name stands in the tree; today none of the tab's four
+families is served - the degree-3 Destruction Rondo (3/3/11/9, the
+dissolve lane consumes the 3/3/11/6 rondo), the 12th-grade Magic Proof
+Stones (3/3/10/8, no native family), the 11th-grade Special Awaken
+Stones (3/3/11/15, no awakening system here) and the trade seals and
+statement (3/3/9/0 and 3/3/11/12, no job-craft exchange here) - so the
+tab's goods stay unlisted on the items, each family tracked by its own
+issue (#4573 proof stones, #4574 awaken stones, #4575 trade seals,
+#4576 the degree-3 rondo), and list here the day its item import lands.
+
 Not listed: the PRE_MALL_ tabs, v1.696's second-currency shop of ITEM_PRE_
 copies (no currency of that kind exists here). The Devil's Spirit's two
 tabs the tree lacks are carried over from the later client when one of
@@ -77,6 +94,11 @@ PACKAGE_ID, PACKAGE_CODE = 2, 3
 SCRAP_PACKAGE, SCRAP_ITEM = 2, 3
 ITEM_ID, ITEM_CODE, CHARACTER_CODE = 1, 2, 2
 MALL_TAB = "MALL_"
+# Later tabs the tree lacks that are placed in an existing tab rather
+# than carried over (the banner above): the miscellaneous alchemy tab
+# lands in the last tab of its own alchemy group. A PRE_MALL_ tab is
+# never remapped - it stays the second-currency shop.
+TAB_REMAP = {"MALL_ARCHEMY_ETC": "MALL_ARCHEMY_ATHANASIA"}
 SUMMON_SCROLL = re.compile(r"ITEM_(COS_[A-Z0-9_]+)_SCROLL")
 SCRAP_RENT = 21
 NO_RENT = "xxx"
@@ -278,8 +300,12 @@ def goods_rows(later, tree, rent_rows=None, item_by_id=None):
 	rows[RENT_TABLE] = []
 	listed, unlisted = [], collections.Counter()
 	rent_terms, rentals = set(), 0
+	remapped = {}
 	for row in sold:
-		tab, package = row[GOODS_TAB], row[GOODS_PACKAGE]
+		package = row[GOODS_PACKAGE]
+		tab = TAB_REMAP.get(row[GOODS_TAB], row[GOODS_TAB])
+		if tab != row[GOODS_TAB]:
+			remapped[package] = tab
 		if package in listed:
 			continue
 		reason = unlisted_reason(tab, package, (package_row, scraps, prices, rent_rows, item_by_id), tree)
@@ -336,6 +362,7 @@ def goods_rows(later, tree, rent_rows=None, item_by_id=None):
 	carried = sorted({row[GOODS_TAB] for row in rows["refshopgoods.txt"]} & set(tree.carry_tabs))
 	return rows, {"packages": listed, "listed": len(listed), "rentals": rentals + staged_rentals,
 		"rentTerms": sorted(rent_terms), "unstage": sorted(unstage), "tabs": carried,
+		"remapped": {package: remapped[package] for package in listed if package in remapped},
 		"unlisted": dict(sorted(unlisted.items()))}
 
 

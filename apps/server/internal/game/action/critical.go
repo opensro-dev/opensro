@@ -96,16 +96,27 @@ func (rt *Runtime) resolveCombatRequest(request combatRequest) (combat.WallOutco
 	actor.character = strings.ToLower(actor.character)
 	key := skill.ID & 0xffffff // key is 0x43000000 | skill ID.
 	previous := rt.criticals.actors[actor][key]
+	// A player in a monster's shape (transform mode 1) is the hit-outcome
+	// routine's own hit group: no critical is rolled for it and its damage
+	// never touches the lanes (the transformed branch below). The
+	// classification reads the monster's shape before the weapon, so a
+	// shaped player is never in the fortress group either.
+	transformed := false
+	if actor.monster == 0 && actor.character != "" {
+		if shaped := rt.findCharacter(actor.division, actor.character); shaped != nil && shaped.TransformMode == 1 {
+			transformed = true
+		}
+	}
 	// A player swinging a fortress weapon (worn weapon kind TID4 16) is
 	// the hit-outcome routine's fortress hit group: no critical is
 	// rolled for it and its damage never touches the lanes (the
 	// fortress branch below).
 	fortressArmed := false
-	if actor.monster == 0 && actor.character != "" {
+	if !transformed && actor.monster == 0 && actor.character != "" {
 		fortressArmed = rt.fortressArmed(actor.division, actor.character)
 	}
 	critical, next := false, previous
-	if request.lanes&4 != 0 && !fortressArmed {
+	if request.lanes&4 != 0 && !transformed && !fortressArmed {
 		rate, err := combat.EffectiveCriticalRate(attacker.CriticalRate, skill.CriticalModifier)
 		if err != nil {
 			return combat.WallOutcome{}, err
@@ -120,7 +131,7 @@ func (rt *Runtime) resolveCombatRequest(request combatRequest) (combat.WallOutco
 	// In the reference server's hit-outcome routine, MATTR_AVATAR_MDIA rolls
 	// after critical and before the damage lanes so the random stream order matches.
 	ignoreDefense := false
-	if actor.monster == 0 && !fortressArmed {
+	if actor.monster == 0 && !transformed && !fortressArmed {
 		if chance := combat.IgnoreDefenseChance(attacker, defender); chance > 0 {
 			mdiaKey := ignoreDefenseProbabilityPrefix | skill.ID&0xffffff
 			procced, mdiaNext, err := combat.CriticalOutcome(chance, rt.criticals.actors[actor][mdiaKey], rt.CombatRoll)
@@ -145,13 +156,13 @@ func (rt *Runtime) resolveCombatRequest(request combatRequest) (combat.WallOutco
 		return blocked, nil
 	}
 
-	if fortressArmed {
+	var out combat.WallOutcome
+	var err error
+	if transformed {
 		// The block roll comes first, as for any hit; a blocked
-		// fortress hit is a bare type-2 record and consumes no damage
-		// draw. Against an ordinary target the hit deals exactly 1;
-		// against a fortress structure it deals the attack-power draw
-		// (combat.FortressDamage). The hit has no lanes, so a standing
-		// wall never splits it and its lane accumulators stay zero.
+		// monster-shaped hit is a bare type-2 record and consumes no
+		// damage draw. The hit has no lanes, so a standing wall never
+		// splits it and its lane accumulators stay zero.
 		blocked := false
 		if skill.Attack.Present {
 			var blockErr error
@@ -163,18 +174,34 @@ func (rt *Runtime) resolveCombatRequest(request combatRequest) (combat.WallOutco
 		if blocked {
 			return combat.WallOutcome{Defender: combat.Result{ResultFlags: 1, Blocked: true}}, nil
 		}
-		damage := uint32(1)
-		if defender.Structure {
-			var damageErr error
-			damage, damageErr = combat.FortressDamage(attacker, rt.CombatRoll)
-			if damageErr != nil {
-				return combat.WallOutcome{}, damageErr
-			}
+		damage, damageErr := combat.LevelScaledDamage(attacker.Level, rt.CombatRoll)
+		if damageErr != nil {
+			return combat.WallOutcome{}, damageErr
 		}
 		return combat.WallOutcome{Defender: combat.Result{Damage: damage, ResultFlags: 1}}, nil
 	}
-	var out combat.WallOutcome
-	var err error
+	if fortressArmed {
+		// The block roll comes first, as for any hit; a blocked
+		// fortress hit is a bare type-2 record with no damage. An
+		// unblocked hit deals exactly 1: the group never reaches the
+		// lane formula. (Against a fortress-class target the native
+		// amount is the attacker's weapon attack-power draw instead;
+		// this port spawns no such targets today - #4490.) The hit
+		// has no lanes, so a standing wall never splits it and its
+		// lane accumulators stay zero.
+		blocked := false
+		if skill.Attack.Present {
+			var blockErr error
+			blocked, blockErr = rollBlock()
+			if blockErr != nil {
+				return combat.WallOutcome{}, blockErr
+			}
+		}
+		if blocked {
+			return combat.WallOutcome{Defender: combat.Result{ResultFlags: 1, Blocked: true}}, nil
+		}
+		return combat.WallOutcome{Defender: combat.Result{Damage: 1, ResultFlags: 1}}, nil
+	}
 	calculation := combat.AttackCalculation{
 		Attack: skill.Attack, OriginalFlags: skill.Attack.Flags, Lanes: request.lanes,
 		Player: actor.monster == 0, Critical: critical, IgnoreDefense: ignoreDefense,

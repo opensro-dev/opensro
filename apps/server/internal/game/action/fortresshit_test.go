@@ -4,8 +4,8 @@
 fortresshit_test.go - a fortress weapon's admitted hits
 
 The hit-outcome routine's fortress group: an admitted fortress-weapon
-swing deals 1 to an ordinary target and the attack-power draw to a
-fortress structure, never the lane formula.
+swing deals exactly 1 to every target this port fields, never the lane
+formula.
 
 ===========================================================================
 */
@@ -89,10 +89,13 @@ func TestFortressWeaponHitDealsOneToAnOrdinaryTarget(t *testing.T) {
 
 /*
 ================
-TestFortressWeaponHitDrawsAgainstAStructure
+TestFortressWeaponBlockedHitDealsNothing
+
+A blocked fortress hit is the bare type-2 record: no damage, and the
+block shortcut consumes no draw.
 ================
 */
-func TestFortressWeaponHitDrawsAgainstAStructure(t *testing.T) {
+func TestFortressWeaponBlockedHitDealsNothing(t *testing.T) {
 	rt, _, c, _ := newCombatTestRuntime(t, 100000)
 	armFortressHammer(t, rt, c)
 	draws := 0
@@ -102,39 +105,7 @@ func TestFortressWeaponHitDrawsAgainstAStructure(t *testing.T) {
 	out, err := rt.resolveCombatRequest(combatRequest{
 		actor:    criticalActor{division: testDivision, character: c.Name},
 		skill:    fortressHitSkill(), attacker: attacker,
-		defender: combat.Stats{Structure: true}, lanes: 4,
-	})
-	if err != nil {
-		t.Fatal(err)
-	}
-	// 100 + 137 % (200 - 100 + 1) = 136.
-	if out.Defender.Damage != 136 || out.Defender.Blocked {
-		t.Fatalf("fortress hit on a structure = %+v, want the draw 136", out.Defender)
-	}
-	if draws != 1 {
-		t.Fatalf("structure draw consumed %d draws, want 1", draws)
-	}
-}
-
-/*
-================
-TestFortressWeaponBlockedHitTakesNoDamageDraw
-
-A blocked fortress hit is a bare blocked record even against a
-structure: the damage draw never happens.
-================
-*/
-func TestFortressWeaponBlockedHitTakesNoDamageDraw(t *testing.T) {
-	rt, _, c, _ := newCombatTestRuntime(t, 100000)
-	armFortressHammer(t, rt, c)
-	draws := 0
-	rt.CombatRoll = func() (uint32, error) { draws++; return 137, nil }
-	attacker := combat.Stats{Level: 1,
-		PhysicalAttackMin: 100, PhysicalAttackMax: 200, MagicalAttackMin: 500, MagicalAttackMax: 600}
-	out, err := rt.resolveCombatRequest(combatRequest{
-		actor:    criticalActor{division: testDivision, character: c.Name},
-		skill:    fortressHitSkill(), attacker: attacker,
-		defender: combat.Stats{Structure: true, BlockRate: 100}, lanes: 4,
+		defender: combat.Stats{BlockRate: 100}, lanes: 4,
 	})
 	if err != nil {
 		t.Fatal(err)
