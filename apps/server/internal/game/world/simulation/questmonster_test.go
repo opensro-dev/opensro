@@ -11,6 +11,7 @@ stale admission must not allocate identities or leak actors into another world.
 package simulation
 
 import (
+	"math"
 	"testing"
 	"time"
 
@@ -222,6 +223,36 @@ func TestQuestMonsterRarityOverride(t *testing.T) {
 	for _, actor := range state.MaterializedInstances("quest") {
 		if actor.CurrentHP != actor.EffectiveMaxHP() || (actor.Rarity() == 7 && actor.CurrentHP != 7059*30) {
 			t.Fatalf("grade %d spawned at %d of %d HP, want full", actor.Rarity(), actor.CurrentHP, actor.EffectiveMaxHP())
+		}
+	}
+}
+
+/*
+================
+TestDaemonRingPicksItsThirdByTheRoll
+
+The v1.188 event spawner's ring: rand() % 101 below 50 lands
+in the outer third, 50 to 79 in the middle third, 80 to 100 in the inner
+third; the fraction places the point inside its third.
+================
+*/
+func TestDaemonRingPicksItsThirdByTheRoll(t *testing.T) {
+	const radius = 51
+	cases := []struct {
+		band, fraction uint32
+		want           float64
+	}{
+		{band: 0, fraction: 0, want: 34},
+		{band: 49, fraction: nativeRandomMaximum, want: 51},
+		{band: 50, fraction: 0, want: 17},
+		{band: 79, fraction: 0, want: 17},
+		{band: 80, fraction: 0, want: 0},
+		{band: 100, fraction: nativeRandomMaximum, want: 17},
+		{band: 101, fraction: 0, want: 34},
+	}
+	for _, c := range cases {
+		if got := daemonRingRadius(radius, c.band, c.fraction); math.Abs(got-c.want) > 1e-4 {
+			t.Errorf("band %d fraction %d: %f, want %f", c.band, c.fraction, got, c.want)
 		}
 	}
 }

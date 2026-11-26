@@ -22,6 +22,16 @@ import (
 const nativeRandomMaximum = 32767
 const nativeCircleRadians = 6.2831854820251465
 
+// The v1.188 event spawner's ring bands: rand() % 101 below
+// 50 lands in the outer third, below 80 in the middle third, else in the
+// inner third.
+const (
+	daemonRingRollSpan   = 101
+	daemonRingOuterRolls = 50
+	daemonRingInnerFrom  = 80
+	daemonRingThirds     = 3
+)
+
 /*
 ================
 QuestMonsterSpawn
@@ -43,6 +53,10 @@ Aggressive fills a gap of the port's tactics data: a monster whose
 tactics carry no controls attacks on sight (with eventAggressiveSight
 when no sight range is named) instead of standing passive; tactics that
 carry controls keep their own hostility, as natively.
+DaemonRingRadius, when set, replaces RadiusMin and RadiusSpan with the
+v1.188 event spawner's three-band ring of that radius (daemonRingRadius),
+and a point the ground refuses lands on Position instead, as the
+spawner's does (the Pandora waves, action/pandorabox.go).
 ================
 */
 type QuestMonsterSpawn struct {
@@ -54,12 +68,14 @@ type QuestMonsterSpawn struct {
 	NowMs         int64
 	RadiusMin     float64
 	RadiusSpan    float64
-	LifetimeMs    int64
-	TacticsFrom   *monster.NestRow
-	Rarity        uint8
-	HasRarity     bool
-	Aggressive    bool
-	TacticsGrade  uint8
+	// DaemonRingRadius is the event spawner's ring (see the banner).
+	DaemonRingRadius float64
+	LifetimeMs       int64
+	TacticsFrom      *monster.NestRow
+	Rarity           uint8
+	HasRarity        bool
+	Aggressive       bool
+	TacticsGrade     uint8
 	// AvoidClosedObjects redraws the landing point (up to questSpawnAttempts times) while it is
 	// inside a closed object, so the monster can be hit (port-only, not native: the retail
 	// scripts take their first draw). Ignored until SetSpawnClosedObjectCheck is wired.
@@ -107,7 +123,31 @@ temple_sanctum.go).
 ================
 */
 func (request QuestMonsterSpawn) atNamedPoint() bool {
-	return request.FixedPosition && request.RadiusMin == 0 && request.RadiusSpan == 0
+	return request.FixedPosition && request.RadiusMin == 0 && request.RadiusSpan == 0 && request.DaemonRingRadius == 0
+}
+
+/*
+================
+daemonRingRadius
+
+The v1.188 event spawner's landing distance on a ring of radius:
+band is its rand() roll, which picks the outer, middle or
+inner third (daemonRingOuterRolls, daemonRingInnerFrom); fraction is the
+uniform draw that places the point inside that third. Half the monsters
+stand in the outer third, so a wave surrounds its centre rather than
+piling on it.
+================
+*/
+func daemonRingRadius(radius float64, band, fraction uint32) float64 {
+	third := float64(float32(radius / daemonRingThirds))
+	base := third
+	switch roll := band % daemonRingRollSpan; {
+	case roll < daemonRingOuterRolls:
+		base = third + third
+	case roll >= daemonRingInnerFrom:
+		base = 0
+	}
+	return float64(float32(float64(float32(float64(fraction)/nativeRandomMaximum))*third + base))
 }
 
 /*
@@ -140,13 +180,25 @@ func (s *MonsterState) SpawnQuestMonsterGID(request QuestMonsterSpawn) (uint32, 
 	for attempt := 1; ; attempt++ {
 		angleFraction := float32(float64(s.randomWord()) / nativeRandomMaximum)
 		angle = float64(float32(float64(angleFraction) * nativeCircleRadians))
-		radiusFraction := float32(float64(s.randomWord()) / nativeRandomMaximum)
-		radius := float64(float32(float64(radiusFraction)*request.RadiusSpan + request.RadiusMin))
+		var radius float64
+		if request.DaemonRingRadius > 0 {
+			radius = daemonRingRadius(request.DaemonRingRadius, s.randomWord(), s.randomWord())
+		} else {
+			radiusFraction := float32(float64(s.randomWord()) / nativeRandomMaximum)
+			radius = float64(float32(float64(radiusFraction)*request.RadiusSpan + request.RadiusMin))
+		}
 		spawn = normalizeGeneratedMonsterSpawn(monster.SpawnPoint{
 			RefObjID: ref.RefObjID, RegionID: center.RegionID,
 			X: center.X + math.Cos(angle)*radius, Y: center.Y, Z: center.Z + math.Sin(angle)*radius,
 		})
 		grounded, valid := s.resolveSpawnGround(spawn, center.Y)
+		if !valid && request.DaemonRingRadius > 0 {
+			// The event spawner lands a refused point on its centre.
+			spawn = normalizeGeneratedMonsterSpawn(monster.SpawnPoint{
+				RefObjID: ref.RefObjID, RegionID: center.RegionID, X: center.X, Y: center.Y, Z: center.Z,
+			})
+			grounded, valid = s.resolveSpawnGround(spawn, center.Y)
+		}
 		if !valid {
 			return 0, false
 		}

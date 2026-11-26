@@ -171,23 +171,47 @@ func (rt *Runtime) monsterHeld(codename string) bool {
 
 /*
 ================
+summonEventGate
+
+One item's lines for the summon event's refusals: a town region answers
+townLine, a user below minLevel levelLine. The v1.188 server picks the
+town line by event: the scrolls answer
+SN_TALK_QEV_CH_EVENT_0818_01, Pandora's Box
+SN_TALK_QEV_CH_EVENT_KISAENG_060517_N.
+================
+*/
+type summonEventGate struct {
+	townLine  string
+	minLevel  int64
+	levelLine string
+}
+
+// The scrolls' gates.
+var (
+	partySummonGate   = summonEventGate{townLine: partySummonTownLine, minLevel: partySummonMinLevel, levelLine: partySummonLevelLine}
+	summonScrollGate  = summonEventGate{townLine: partySummonTownLine, minLevel: summonScrollMinLevel, levelLine: summonScrollLevelLine}
+	monsterSummonGate = summonEventGate{townLine: partySummonTownLine}
+)
+
+/*
+================
 Runtime.summonEventRefusal
 
 The summon event's native refusals, in order, none spending the item: a
-town region, a user below minLevel (levelLine), the battle arena. The
+town region, a user below the gate's level, the battle arena. The
 refusal's notice is appended to result; ok is false when one answered.
 at is where the user stands, for a caller that opens its event there.
 ================
 */
-func (rt *Runtime) summonEventRefusal(use persistentSummonUse, minLevel int64, levelLine string, result *OpResult) (at simulation.Spawn, ok bool) {
+func (rt *Runtime) summonEventRefusal(use persistentSummonUse, gate summonEventGate, result *OpResult) (at simulation.Spawn, ok bool) {
 	c := use.character
 	at = rt.liveSpawn(simulation.WorldKey(use.division, c.Name), c, use.nowMs)
 	if battlefield, known := world.RegionPlayerCombat(at.RegionID); !known || !battlefield {
-		result.Frames = append(result.Frames, exchangeBanner(partySummonTownLine))
+		result.Frames = append(result.Frames, exchangeBanner(gate.townLine))
 		return at, false
 	}
-	if *c.Level < minLevel {
-		result.Frames = append(result.Frames, exchangeBanner(levelLine))
+	if *c.Level < gate.minLevel {
+		result.Frames = append(result.Frames, exchangeBanner(gate.levelLine))
 		return at, false
 	}
 	if rt.sookRun(use.division, c) != nil {
@@ -265,7 +289,7 @@ func (rt *Runtime) usePartySummonScroll(use persistentSummonUse, result *OpResul
 		result.DiagnosticRefusal = "item-use: party summon scroll owner unavailable"
 		return false
 	}
-	if _, ok := rt.summonEventRefusal(use, partySummonMinLevel, partySummonLevelLine, result); !ok {
+	if _, ok := rt.summonEventRefusal(use, partySummonGate, result); !ok {
 		return false
 	}
 	kind, found := partySummonKind(*c.Level, rt.monsterHeld)
