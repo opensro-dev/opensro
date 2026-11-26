@@ -22,10 +22,12 @@ import (
 	"opensro.online/server/internal/testsupport/clientdata"
 )
 
-// arabiaWanted is the authored set, in table order: 9 talks, 20 hunts.
+// arabiaWanted is the authored set, in table order: 15 talks, 22 hunts.
 var arabiaWanted = []string{
-	"QNO_AR_005", "QNO_AR_008", "QNO_AR_009", "QNO_AR_020", "QNO_AR_021",
-	"QNO_AR_028", "QNO_AR_029", "QNO_AR_030", "QNO_AR_031", "QNO_AR_040",
+	"QNO_AR_001", "QNO_AR_002", "QNO_AR_003", "QNO_AR_004", "QNO_AR_005",
+	"QNO_AR_008", "QNO_AR_009", "QNO_AR_010", "QNO_AR_019", "QNO_AR_020",
+	"QNO_AR_021", "QNO_AR_026", "QNO_AR_027", "QNO_AR_028", "QNO_AR_029",
+	"QNO_AR_030", "QNO_AR_031", "QNO_AR_040",
 	"QNO_AR_041", "QNO_AR_042", "QNO_AR_043", "QNO_AR_045", "QNO_AR_047",
 	"QNO_AR_049", "QNO_AR_052", "QNO_AR_053", "QNO_AR_054", "QNO_AR_060",
 	"QNO_AR_092", "QNO_AR_093", "QNO_AR_094", "QNO_AR_096", "QNO_AR_097",
@@ -97,6 +99,18 @@ func TestArabiaTableIsTheEvidenceSet(t *testing.T) {
 		farm.MaxCompletions != 1 || farm.RewardExp != 34546860 || farm.RewardGold != 47050 || farm.RewardSkillExp != 671 {
 		t.Errorf("QNO_AR_005 %+v", farm)
 	}
+	head := known["QNO_AR_001"]
+	if head.Objective != ObjectiveTalk || head.StartNpcCodename != "NPC_AR_SHARIAL" || head.EndNpcCodename != "NPC_AR_SHEHERAZADE" ||
+		head.MaxCompletions != 1 || head.RewardExp != 34546860 || head.RewardGold != 47050 || head.RewardSkillExp != 671 {
+		t.Errorf("QNO_AR_001 %+v", head)
+	}
+	marauders := known["QNO_AR_010"]
+	if marauders.Objective != ObjectiveParallel || marauders.MaxCompletions != 2 || len(marauders.Objectives) != 2 ||
+		marauders.Objectives[0].KillMonsterCodenames[0] != "MOB_AR_MANGYANG_PLUNDER1_CLONE" || marauders.Objectives[0].KillCount != 390 ||
+		marauders.Objectives[1].KillMonsterCodenames[0] != "MOB_AR_MANGYANG_PLUNDER2_CLONE" || marauders.Objectives[1].KillCount != 390 ||
+		marauders.RewardExp != 165824929 || marauders.RewardGold != 366990 || marauders.RewardSkillExp != 3222 {
+		t.Errorf("QNO_AR_010 %+v", marauders)
+	}
 	hunt := known["QNO_AR_008"]
 	if hunt.Objective != ObjectiveParallel || hunt.MaxCompletions != 2 || len(hunt.Objectives) != 2 ||
 		hunt.Objectives[0].KillMonsterCodenames[0] != "MOB_AR_BARUSWOLF_ADONIS1_CLONE" || hunt.Objectives[0].KillCount != 390 ||
@@ -112,10 +126,9 @@ func TestArabiaTableIsTheEvidenceSet(t *testing.T) {
 	if known["QNO_AR_097"].MaxCompletions != 5 || known["QNO_AR_102"].MaxCompletions != 5 || known["QNO_AR_103"].MaxCompletions != 5 {
 		t.Error("the 5-times hunts lost their limit")
 	}
-	// Held back, by the file's own evidence rule (dialog gaps, kinds
-	// no source carries or places): none of these may appear.
-	for _, held := range []string{"QNO_AR_001", "QNO_AR_002", "QNO_AR_003", "QNO_AR_004", "QNO_AR_010",
-		"QNO_AR_019", "QNO_AR_026", "QNO_AR_027", "QNO_AR_059", "QNO_AR_063", "QNO_AR_066", "QNO_AR_068"} {
+	// Held back, by the file's own evidence rule (kinds no source
+	// carries or places): none of these may appear.
+	for _, held := range []string{"QNO_AR_059", "QNO_AR_063", "QNO_AR_066", "QNO_AR_068"} {
 		if _, ok := known[held]; ok {
 			t.Errorf("%s is authored ahead of its evidence", held)
 		}

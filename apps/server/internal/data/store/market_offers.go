@@ -163,7 +163,7 @@ func (s *Store) MarketAcceptOffer(req domain.MarketAcceptRequest) (domain.Market
 		return domain.MarketSale{}, offer, domain.ErrMarketBuyerFull
 	}
 	sale, err := s.settleSaleLocked(saleTerms{listing: listing, buyer: offer.BuyerAccount, payer: buyer,
-		price: offer.Price, to: to, receiver: buyer, bagSlot: req.BagSlot, rules: req.Rules,
+		price: offer.Price, to: to, receiver: buyer, bagSlot: req.BagSlot, admit: req.Admit, rules: req.Rules,
 		within: func(tx *sql.Tx) error { return setOfferStateTx(tx, offer.ID, domain.MarketOfferAccepted) }})
 	if err != nil {
 		return domain.MarketSale{}, offer, err

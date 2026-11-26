@@ -36,6 +36,32 @@ func writeTestAsset(t *testing.T, root, publicPath, contents string) {
 // type-1 waveType-0 (dry); block (4,0) type-1 waveType-2 (water).
 func syntheticWaterRoot(t *testing.T) string {
 	t.Helper()
+	return syntheticWaterRootWith(t, sectorListTerrain)
+}
+
+// syntheticWaterBlocks are the five water records syntheticWaterRoot
+// describes, as bundle JSON.
+const syntheticWaterBlocks = `[
+	{"blockX": 0, "blockZ": 0, "water": {"type": 0, "waveType": 1, "height": 50}},
+	{"blockX": 1, "blockZ": 0, "water": {"type": -1, "waveType": 3, "height": -20}},
+	{"blockX": 2, "blockZ": 0, "water": {"type": 0, "waveType": 0, "height": 50}},
+	{"blockX": 3, "blockZ": 0, "water": {"type": 1, "waveType": 0, "height": 50}},
+	{"blockX": 4, "blockZ": 0, "water": {"type": 1, "waveType": 2, "height": 50}}
+]`
+
+// The two terrain shapes a region bundle ships. A bundle covering several
+// sectors lists each one; a split outdoor region covers only its own and
+// carries its rows once, at the top level, with no sector list
+// (sectorList in scripts/build/world/maploader/buildMapLoaderRegionBundle.mjs).
+const (
+	sectorListTerrain = `{"sectors": [{"sectorX": 79, "sectorY": 107, "blocks": ` + syntheticWaterBlocks + `}]}`
+	topLevelTerrain   = `{"sectorCount": 1, "blocks": ` + syntheticWaterBlocks + `}`
+)
+
+// syntheticWaterRootWith is syntheticWaterRoot with the bundle's terrain
+// object given.
+func syntheticWaterRootWith(t *testing.T, terrain string) string {
+	t.Helper()
 	root := t.TempDir()
 	writeTestAsset(t, root, "assets/world/world-region-catalog.json", `{
 		"regionsById": {
@@ -56,16 +82,7 @@ func syntheticWaterRoot(t *testing.T) string {
 	}`)
 	writeTestAsset(t, root, "assets/world/outdoor/regions/region-6b4f.json", `{
 		"source": {"sectorId": "0x6b4f", "sectorX": 79, "sectorY": 107},
-		"terrain": {"sectors": [{
-			"sectorX": 79, "sectorY": 107,
-			"blocks": [
-				{"blockX": 0, "blockZ": 0, "water": {"type": 0, "waveType": 1, "height": 50}},
-				{"blockX": 1, "blockZ": 0, "water": {"type": -1, "waveType": 3, "height": -20}},
-				{"blockX": 2, "blockZ": 0, "water": {"type": 0, "waveType": 0, "height": 50}},
-				{"blockX": 3, "blockZ": 0, "water": {"type": 1, "waveType": 0, "height": 50}},
-				{"blockX": 4, "blockZ": 0, "water": {"type": 1, "waveType": 2, "height": 50}}
-			]
-		}]},
+		"terrain": `+terrain+`,
 		"navmesh": {"regionSize": 1920, "regions": [{}]}
 	}`)
 	// A no-navmesh region: the reference builds NO surface for it, so every
@@ -79,9 +96,30 @@ func moveTo(regionID uint16, x, y, z float64) simulation.MovementRequest {
 }
 
 func TestWaterValidatorSyntheticSurface(t *testing.T) {
-	validator := NewWaterValidator(syntheticWaterRoot(t))
-	validator.SetDeepWaterRefusal(true)
+	// Both terrain shapes must give the same surface: split outdoor regions
+	// ship only the top-level blocks.
+	for _, shape := range []struct{ name, terrain string }{
+		{"sectorList", sectorListTerrain},
+		{"topLevelBlocksOnly", topLevelTerrain},
+	} {
+		t.Run(shape.name, func(t *testing.T) {
+			validator := NewWaterValidator(syntheticWaterRootWith(t, shape.terrain))
+			validator.SetDeepWaterRefusal(true)
+			checkSyntheticSurface(t, validator)
+		})
+	}
+}
 
+/*
+================
+checkSyntheticSurface
+
+The syntheticWaterRoot surface's verdict at each corner of the
+isNativeWaterCell gate.
+================
+*/
+func checkSyntheticSurface(t *testing.T, validator *WaterValidator) {
+	t.Helper()
 	cases := []struct {
 		name   string
 		move   simulation.MovementRequest

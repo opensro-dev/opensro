@@ -132,6 +132,18 @@ test("hunt item kinds match the type words used for scrolls and hammers", () => 
 	assert.equal( huntItemKind( 0x0dec ), undefined );
 });
 
+test("worn bolts never read as broken gear; a worn weapon at 0 does (6F32D0, #4519)", () => {
+	// Type words as the item record packs them: TID1 << 2, TID2 << 5, TID3 << 7, TID4 << 11.
+	const tid = ( t1, t2, t3, t4 ) => t1 << 2 | t2 << 5 | t3 << 7 | t4 << 11;
+	const crossbow = { slot: 6, typeFlags: tid( 3, 1, 6, 15 ), tooltip: { fields: { maxDurability: 64 } } };
+	// Worn ammo: a stack, no durability range, durability 0.
+	const bolts = { slot: 7, typeFlags: tid( 3, 3, 4, 2 ), durability: 0, tooltip: { fields: { maxDurability: 0 } } };
+	assert.equal( hunt.wornEquipmentBroken( [ { ...crossbow, durability: 40 }, bolts ] ), false );
+	assert.equal( hunt.wornEquipmentBroken( [ { ...crossbow, durability: 0 }, bolts ] ), true );
+	// A broken row in the bag is not worn.
+	assert.equal( hunt.wornEquipmentBroken( [ { ...crossbow, slot: 20, durability: 0 } ] ), false );
+});
+
 test("while dead: scroll, town, or wait by resurrect byte", () => {
 	assert.deepEqual(
 		pickMacroHuntAction( block( { [HUNT_BYTE_RESURRECT]: HUNT_RESURRECT_SCROLL } ), facts( { alive: false } ) ),

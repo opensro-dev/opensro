@@ -295,7 +295,7 @@ func (s *Store) MarketBuy(req domain.MarketBuyRequest) (domain.MarketSale, error
 		return domain.MarketSale{}, domain.ErrMarketChanged
 	}
 	return s.settleSaleLocked(saleTerms{listing: listing, buyer: req.BuyerAccount, payer: req.Payer, price: listing.Price,
-		to: req.To, receiver: req.Receiver, bagSlot: req.BagSlot, rules: req.Rules})
+		to: req.To, receiver: req.Receiver, bagSlot: req.BagSlot, admit: req.Admit, rules: req.Rules})
 }
 
 /*
@@ -304,7 +304,8 @@ saleTerms
 
 One sale settleSaleLocked makes: a buy at the listing's price, or an
 accepted offer at its own. within runs inside the sale's transaction
-(the offer's state change), nil for a buy.
+(the offer's state change), nil for a buy. admit is the caller's trade
+rule, judged again at the sale.
 ================
 */
 type saleTerms struct {
@@ -315,6 +316,7 @@ type saleTerms struct {
 	to       string
 	receiver *domain.Character
 	bagSlot  int64
+	admit    func(domain.InventoryRow) error
 	rules    domain.MarketRules
 	within   func(tx *sql.Tx) error
 }
@@ -346,6 +348,14 @@ func (s *Store) settleSaleLocked(t saleTerms) (domain.MarketSale, error) {
 	}
 	if t.price < 1 || t.price > listing.Price {
 		return domain.MarketSale{}, domain.ErrMarketPrice
+	}
+	// The listing's admission is judged again (#4491): a row listed
+	// before the trade rule refused it stays the seller's.
+	if t.admit == nil {
+		return domain.MarketSale{}, domain.ErrMarketUnavailable
+	}
+	if err := t.admit(listing.Item); err != nil {
+		return domain.MarketSale{}, err
 	}
 	fee := t.rules.MarketFee(t.price)
 	sale := domain.MarketSale{ListingID: listing.ID, BuyerAccount: t.buyer, Currency: listing.Currency,
