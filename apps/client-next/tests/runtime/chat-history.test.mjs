@@ -133,7 +133,7 @@ test("only plain line facts are written down, capped at the kept count", () => {
 		text: "line " + i,
 		outgoing: false,
 		sentAt: NOON_UTC + i,
-		links: [ { refObjId: 1 } ],
+		links: [ undefined ],
 		notice: { name: "Peer" }
 	}) );
 	const stored = storedChatLines( many );
