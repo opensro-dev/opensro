@@ -168,6 +168,7 @@ var catalogueExempt = map[string]string{
 	"SRO_ANNOUNCE_SOX_DROP":                    "a shard-wide drop notice; the catalogue publishes no notices",
 	"SRO_SEAL_BOARD":                           "a weekly tally kept from committed drops; no catalogue file carries it",
 	"SRO_JOB_HONOR":                            "a ledger scored from committed job events; no catalogue file carries it",
+	"SRO_ATTENDANCE":                           "a per-character check-in ledger; no catalogue file carries it",
 	"SRO_EVENT_BOT":                            "an operator-run chat event host; no catalogue file carries it",
 	"SRO_SEAL_CENSUS":                          "staff telemetry; no catalogue file carries it",
 	"SRO_CONTRIBUTOR_TITLES":                   "a title pushed at runtime from the operations sync's file; no catalogue file carries it",

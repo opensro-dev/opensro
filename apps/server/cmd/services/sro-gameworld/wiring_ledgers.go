@@ -10,6 +10,10 @@ state, flushes on its own timer while the world runs, and is flushed and
 closed once at drain or when a failed boot rolls back. That shared
 lifecycle lives here, so the application calls one owner for all of them.
 
+The attendance ledger (wiring_attendance.go, #3255) is the same kind of
+port-only ledger but writes through, so it has no timer: it is only
+closed.
+
 The AI caravans' memories (SRO_AI_CARAVANS, wiring_caravanai.go) share
 it: they are written behind into the authority store, so they flush on
 their own timer and once more at drain, before that store closes. A
@@ -25,6 +29,7 @@ import (
 
 	"golang.org/x/sync/errgroup"
 	"opensro.online/server/internal/game/caravanai"
+	"opensro.online/server/internal/platform/attendance"
 	"opensro.online/server/internal/platform/jobhonor"
 	"opensro.online/server/internal/platform/sealboard"
 )
@@ -41,6 +46,8 @@ type shardLedgers struct {
 	sealBoard *sealboard.Service
 	// jobHonor is the job honor ledger; nil off.
 	jobHonor *jobhonor.Service
+	// attendance is the attendance calendar ledger; nil off.
+	attendance *attendance.Service
 	// caravans is the AI caravan runtime's memory flush; nil off.
 	caravans *caravanai.Runtime
 }
@@ -57,6 +64,9 @@ func installShardLedgers(application *gameWorldApplication, gameplay *gameplayPl
 		return err
 	}
 	if err := installJobHonor(application, gameplay, shardID); err != nil {
+		return err
+	}
+	if err := installAttendance(application, gameplay, shardID); err != nil {
 		return err
 	}
 	return nil
@@ -105,6 +115,9 @@ func (ledgers *shardLedgers) close() error {
 	}
 	if ledgers.jobHonor != nil {
 		err = errors.Join(err, ledgers.jobHonor.Close())
+	}
+	if ledgers.attendance != nil {
+		err = errors.Join(err, ledgers.attendance.Close())
 	}
 	if ledgers.caravans != nil {
 		err = errors.Join(err, ledgers.caravans.Close())

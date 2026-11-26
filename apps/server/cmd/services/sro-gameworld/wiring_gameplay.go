@@ -25,6 +25,7 @@ import (
 	"opensro.online/server/internal/cluster/shard"
 	"opensro.online/server/internal/data/store"
 	"opensro.online/server/internal/game/action"
+	"opensro.online/server/internal/game/attendancefeed"
 	"opensro.online/server/internal/game/companion"
 	"opensro.online/server/internal/game/enterworld"
 	"opensro.online/server/internal/game/gmcommand"
@@ -58,6 +59,7 @@ import (
 	"opensro.online/server/internal/game/world/simulation"
 	"opensro.online/server/internal/game/world/styria"
 	"opensro.online/server/internal/game/world/worldarea"
+	"opensro.online/server/internal/platform/attendance"
 	"opensro.online/server/internal/platform/jobhonor"
 	"opensro.online/server/internal/transport"
 )
@@ -96,8 +98,13 @@ type gameplayPlane struct {
 	jobHonorTierBytes   []byte
 	jobHonorTierReached map[string]bool
 	jobHonorTierNext    int64
-	movement            *movement.Runtime
-	water               *movement.WaterValidator
+	// attendance is the attendance ledger and attendanceFeed its
+	// calendar feed (both nil when SRO_ATTENDANCE is off;
+	// wiring_attendance.go).
+	attendance     *attendance.Service
+	attendanceFeed *attendancefeed.Service
+	movement       *movement.Runtime
+	water          *movement.WaterValidator
 	// planes owns every AI route, monster and pet alike: the outdoor
 	// detour in the field, the cave's region route on a dungeon floor.
 	planes   simulation.Planes
