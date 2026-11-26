@@ -162,6 +162,9 @@ export function boundChildren( imageName, bound = childTreeBound(), platform = p
 			}
 		);
 		helper.unref();
-		for ( const stream of [ helper.stdin, helper.stdout, helper.stderr ] ) stream?.unref?.();
+		// The pipes are sockets, which unref; the stream types do not say so.
+		for ( const stream of [ helper.stdin, helper.stdout, helper.stderr ] ) {
+			if ( stream && "unref" in stream && typeof stream.unref === "function" ) stream.unref();
+		}
 	} );
 }
