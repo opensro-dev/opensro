@@ -1117,7 +1117,7 @@ A town revive (rebirth at the appointed point, in the same world) moves
 every companion but a parked trade transport, which stays where it was
 parked, goods and all.
 
-Inferred, not read from SR_GameServer (the v1.188 binary was not at hand,
+Inferred, not read from the v1.188 server binary (it was not at hand,
 owner's call 2026-11-26): natively the transport outlives its parked
 trader's death and keeps its goods in the world (tradercargodrop.go), and
 the town teleport the revive runs through refuses a summoned transport
