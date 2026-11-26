@@ -345,11 +345,11 @@ func (rt *Runtime) handleItemUse(
 			}
 			return rt.usePartySummonScroll(persistentSummonUse{division: divisionID, character: character, ref: ref, row: rowIndex, request: request, nowMs: nowMs}, &result)
 		}
-		if family == itemUseRigidSummonScroll {
+		if family == itemUseMonsterSummonScroll {
 			if len(tail) != 0 {
 				return false
 			}
-			return rt.useRigidSummonScroll(persistentSummonUse{division: divisionID, character: character, ref: ref, row: rowIndex, request: request, nowMs: nowMs}, &result)
+			return rt.useMonsterSummonScroll(persistentSummonUse{division: divisionID, character: character, ref: ref, row: rowIndex, request: request, nowMs: nowMs}, &result)
 		}
 		if family == itemUsePandoraBox {
 			if len(tail) != 0 {

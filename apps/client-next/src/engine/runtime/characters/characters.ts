@@ -182,6 +182,9 @@ export function createCharacterPresentation(
 	const knockbacks = createKnockbackPresentation();
 	const retiring = new Set<number>(),
 		disappearing = new Map<number, PresentationDisappear>();
+	// Gids whose despawn removes the body at once (EntityState.vanishes):
+	// CIGIDObject_Despawn's 0 s branch (0x852848) for MOB_AUTOMOB.
+	const vanishing = new Set<number>();
 	const allocateActor = createPresentationIds(), lizardGid = allocateActor();
 	// The frame's published results; several phases write them (presentation-contract.ts).
 	const output: PresentationOutput = {
@@ -329,6 +332,7 @@ export function createCharacterPresentation(
 		lastSeconds = Number.NEGATIVE_INFINITY;
 		presentationState.reset();
 		retiring.clear();
+		vanishing.clear();
 		disappearing.clear();
 		spawnFades.reset();
 		presentationEvents.resetDamageTexts();
@@ -429,12 +433,13 @@ export function createCharacterPresentation(
 	animation and children) under a fresh actor id, forgets the despawned
 	gids, and drops fading copies older than 1.5 seconds. A gid that
 	respawned before its copy faded keeps the copy on the old material
-	owner and hands the new body a fresh one.
+	owner and hands the new body a fresh one. A vanishing gid leaves no
+	copy: its fade lasts 0 s.
 	================
 	*/
 	function retireDespawned( seconds: number, entities: readonly EntityState[] ) {
 		for ( const gid of retiring ) {
-			const actor = output.displayed.get( gid );
+			const actor = vanishing.has( gid ) ? undefined : output.displayed.get( gid );
 			if ( actor ) {
 				const id = allocateActor(), state = states.get( gid );
 				// A gid that respawned before its copy faded is a new instance:
@@ -471,6 +476,7 @@ export function createCharacterPresentation(
 			avatarOverrides.delete( gid );
 			committedAuxiliary.delete( gid );
 			auxiliaryActors.delete( gid );
+			vanishing.delete( gid );
 		}
 		retiring.clear();
 		for ( const [id, row] of disappearing ) if ( seconds - row.started >= 1.5 ) disappearing.delete( id );
@@ -1020,6 +1026,7 @@ export function createCharacterPresentation(
 					auxiliary.resetStages();
 					groundClocks.clear();
 					retiring.clear();
+					vanishing.clear();
 					disappearing.clear();
 					// A journal resync rebuilds the same world (#1481): the
 					// held characters keep their spawn ramps.
@@ -1033,6 +1040,8 @@ export function createCharacterPresentation(
 						// A journal resync republishes the held character instead (#1481).
 						if ( !event.resync ) spawnFades.respawn( event.entity.gid );
 					}
+					if ( event.entity.vanishes ) vanishing.add( event.entity.gid );
+					else vanishing.delete( event.entity.gid );
 					next.push( { kind: event.kind, gid: event.entity.gid, refObjId: event.entity.refObjId } );
 				} else if ( event.kind === "despawn" ) {
 					presentationState.forgetStance( event.gid );
@@ -1058,6 +1067,7 @@ export function createCharacterPresentation(
 				auxiliary.resetStages();
 				groundClocks.clear();
 				retiring.clear();
+				vanishing.clear();
 				disappearing.clear();
 				presentationEvents.resetDamageTexts();
 			} );
