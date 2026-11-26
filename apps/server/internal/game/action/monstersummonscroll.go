@@ -159,7 +159,7 @@ func (rt *Runtime) useMonsterSummonScroll(use persistentSummonUse, result *OpRes
 		result.DiagnosticRefusal = "item-use: monster summon scroll owner unavailable"
 		return false
 	}
-	at, ok := rt.summonEventRefusal(use, 0, "", result)
+	at, ok := rt.summonEventRefusal(use, monsterSummonGate, result)
 	if !ok {
 		return false
 	}
