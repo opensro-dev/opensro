@@ -22,8 +22,8 @@ package match_test
 //	modify           -> 0xB3DC ack + the listing updates in place;
 //	delete           -> 0xB535 {id} + the row disappears;
 //	mentor cycle     -> 0xB55D / 0xB701 / 0xB70B twins, byte-exact;
-//	duplicate reg    -> 0xB6FF {2, 0x1B} (the client's
-//	                    RECORD_ERROR_AGAIN code), and the same code
+//	duplicate reg    -> 0xB6FF {2, 0x24} (the precheck's standing
+//	                    refusal, JOIN_ERROR_DUPLE), and the same code
 //	                    refuses a register on the other board while
 //	                    one registration is live;
 //	unwired joins    -> 0x75BF/0x7592 answer the pinned 0xB5BF/0xB592
@@ -417,13 +417,13 @@ func TestMatchLaneEndToEndOverWire(t *testing.T) {
 
 	// ---- duplicate register: the record-again refusal ----
 	sendFrame(t, hero, match.OpPartyRegisterRequest, partyRequest(0, 9999, 0, 0, 1, 80, "dup"))
-	expectExactFrame(t, hero, match.OpPartyRegisterAck, []byte{2, 0x1B}, "duplicate register refusal")
+	expectExactFrame(t, hero, match.OpPartyRegisterAck, []byte{2, 0x24}, "duplicate register refusal")
 	gameReadyBarrier(t, hero, "post-duplicate-register")
 
 	// ---- one standing at a time: a live party registration also
 	// refuses a mentor registration ----
 	sendFrame(t, hero, match.OpMentorRegisterRequest, mentorRequest(0, 7, 1, "hero camp"))
-	expectExactFrame(t, hero, match.OpMentorRegisterAck, []byte{2, 0x1B}, "cross-board register refusal")
+	expectExactFrame(t, hero, match.OpMentorRegisterAck, []byte{2, 0x24}, "cross-board register refusal")
 	gameReadyBarrier(t, hero, "post-cross-board-register")
 
 	// ---- modify: 0xB3DC ack + the listing updates in place ----
@@ -471,7 +471,7 @@ func TestMatchLaneEndToEndOverWire(t *testing.T) {
 
 	// A second mentor registration while one is live: record-again.
 	sendFrame(t, alice, match.OpMentorRegisterRequest, mentorRequest(0, 8, 2, "alice camp again"))
-	expectExactFrame(t, alice, match.OpMentorRegisterAck, []byte{2, 0x1B}, "duplicate mentor register refusal")
+	expectExactFrame(t, alice, match.OpMentorRegisterAck, []byte{2, 0x24}, "duplicate mentor register refusal")
 	gameReadyBarrier(t, alice, "post-duplicate-mentor-register")
 
 	sendFrame(t, hero, match.OpMentorPageRequest, []byte{1})

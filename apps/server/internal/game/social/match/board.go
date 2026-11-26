@@ -129,7 +129,7 @@ func (b *Board) allocID() uint32 {
 // registration across the party and mentor boards: while one is live a
 // fresh registration is refused (the client modifies through 0x73DC
 // instead), which the register handlers answer with
-// partyMatchErrAlreadyRegistered.
+// partyMatchErrStandingHeld.
 /*
 ================
 HasRegistration

@@ -273,10 +273,9 @@ func (r *Runtime) mentorEntryFromRequest(character *enterworld.Character, reques
 	}
 }
 
-// handlePartyRegister answers 0x76FF with the 0xB6FF success ack. An
-// outstanding join application refuses first (JOIN_ERROR_DUPLE), then the
-// form, then a registration already held (RECORD_ERROR_AGAIN; modify is
-// 0x73DC).
+// handlePartyRegister answers 0x76FF with the 0xB6FF success ack. A
+// matching standing already held (a registration or a join application)
+// refuses first with 0x24, then the form is checked (modify is 0x73DC).
 /*
 ================
 handlePartyRegister
@@ -293,9 +292,9 @@ func (r *Runtime) handlePartyRegister(s *transport.Session, opcode uint16, paylo
 		_ = s.Send(opcode+0x4000, []byte{2, 2})
 		return
 	}
-	if r.joinPending(divisionID, character) {
-		log.Debugf("match: party register from %s refused (join application outstanding)", character.Name)
-		_ = s.Send(opcode+0x4000, []byte{2, partyMatchErrJoinPending})
+	if r.standingHeld(divisionID, character) {
+		log.Debugf("match: party register from %s refused (matching standing held)", character.Name)
+		_ = s.Send(opcode+0x4000, []byte{2, partyMatchErrStandingHeld})
 		return
 	}
 	request, refusal := r.preparePartyRegistration(divisionID, character, request)
@@ -303,15 +302,10 @@ func (r *Runtime) handlePartyRegister(s *transport.Session, opcode uint16, paylo
 		_ = s.Send(opcode+0x4000, []byte{2, refusal})
 		return
 	}
-	if r.board.HasRegistration(ownerKey(divisionID, character.Name)) {
-		log.Debugf("match: party register from %s refused (already registered)", character.Name)
-		_ = s.Send(opcode+0x4000, []byte{2, partyMatchErrAlreadyRegistered})
-		return
-	}
 	entry, ok := r.board.RegisterParty(divisionID, ownerKey(divisionID, character.Name), r.partyEntryFromRequest(divisionID, character, request))
 	if !ok {
-		log.Debugf("match: party register from %s refused (already registered)", character.Name)
-		_ = s.Send(opcode+0x4000, []byte{2, partyMatchErrAlreadyRegistered})
+		log.Debugf("match: party register from %s refused (registered meanwhile)", character.Name)
+		_ = s.Send(opcode+0x4000, []byte{2, partyMatchErrStandingHeld})
 		return
 	}
 	_ = s.Send(OpPartyRegisterAck, EncodePartyRegAck(entry))
@@ -427,20 +421,15 @@ func (r *Runtime) handleMentorRegister(s *transport.Session, opcode uint16, payl
 		log.Debugf("match: 0x%04X malformed from %s: %v", opcode, character.Name, err)
 		return
 	}
-	if r.joinPending(divisionID, character) {
-		log.Debugf("match: mentor register from %s refused (join application outstanding)", character.Name)
-		_ = s.Send(OpMentorRegisterAck, []byte{2, partyMatchErrJoinPending})
-		return
-	}
-	if r.board.HasRegistration(ownerKey(divisionID, character.Name)) {
-		log.Debugf("match: mentor register from %s refused (already registered)", character.Name)
-		_ = s.Send(OpMentorRegisterAck, []byte{2, partyMatchErrAlreadyRegistered})
+	if r.standingHeld(divisionID, character) {
+		log.Debugf("match: mentor register from %s refused (matching standing held)", character.Name)
+		_ = s.Send(OpMentorRegisterAck, []byte{2, partyMatchErrStandingHeld})
 		return
 	}
 	entry, ok := r.board.RegisterMentor(divisionID, ownerKey(divisionID, character.Name), r.mentorEntryFromRequest(character, request))
 	if !ok {
-		log.Debugf("match: mentor register from %s refused (already registered)", character.Name)
-		_ = s.Send(OpMentorRegisterAck, []byte{2, partyMatchErrAlreadyRegistered})
+		log.Debugf("match: mentor register from %s refused (registered meanwhile)", character.Name)
+		_ = s.Send(OpMentorRegisterAck, []byte{2, partyMatchErrStandingHeld})
 		return
 	}
 	_ = s.Send(OpMentorRegisterAck, EncodeMentorRegisterAckB55D(entry))
@@ -577,18 +566,16 @@ func (r *Runtime) SessionClosed(s *transport.Session) {
 // precheck and its purpose test (0x2C0A, 0x2C1D,
 // 0x2C23); the v1.150 client shows them as UIIT_MSG_PARTYERR_* /
 // UIIT_MSG_PARTYMATCH_RECORD_ERROR_* through the 0x200 notice table.
-// AlreadyRegistered is the client's RECORD_ERROR_AGAIN code (v1.150
-// client table 0x68B8E8): a character already holding a registration on
-// either board. JoinPending is the client's JOIN_ERROR_DUPLE code: the
-// register precheck's standing test, which refuses while a join
-// application is outstanding, ahead of the form checks.
+// StandingHeld is the register precheck's standing refusal (0x2C24),
+// which the v1.150 client shows as UIIT_MSG_PARTYMATCH_JOIN_ERROR_DUPLE
+// (category-2 table 0x68B8E8): a registration already held or a join
+// application outstanding, refused ahead of the form checks.
 const (
-	partyMatchErrUnknown           uint8 = 0x02
-	partyMatchErrCreatorLevel      uint8 = 0x0A
-	partyMatchErrAlreadyRegistered uint8 = 0x1B
-	partyMatchErrNotPartyLeader    uint8 = 0x1D
-	partyMatchErrPurpose           uint8 = 0x23
-	partyMatchErrJoinPending       uint8 = 0x24
+	partyMatchErrUnknown        uint8 = 0x02
+	partyMatchErrCreatorLevel   uint8 = 0x0A
+	partyMatchErrNotPartyLeader uint8 = 0x1D
+	partyMatchErrPurpose        uint8 = 0x23
+	partyMatchErrStandingHeld   uint8 = 0x24
 )
 
 // minPartyCreatorLevel is the level a partyless registrant needs: the native precheck
@@ -614,16 +601,22 @@ func (r *Runtime) levelCap() int64 {
 
 /*
 ================
-joinPending
+standingHeld
 
-The register precheck's standing test: a character with a join
-application outstanding may not register on either board until it is
-answered or withdrawn. The join request marks the standing and the
-register precheck refuses any standing but free (or in a party) before
-it reads the form, so this refusal comes first.
+The register precheck's standing test: one matching standing at a
+time. The reference server keeps it in one byte - a join request sets
+1, a registration's success reply sets 4 - and its register precheck
+refuses any standing but free or in a party with 0x2C24 before it
+reads the form. The port derives the standing from its owners instead:
+a live registration on either board or an outstanding join
+application. The mentor board follows the party board's rule (the
+reference server has no mentor board to read; inferred).
 ================
 */
-func (r *Runtime) joinPending(divisionID string, character *domain.Character) bool {
+func (r *Runtime) standingHeld(divisionID string, character *domain.Character) bool {
+	if r.board.HasRegistration(ownerKey(divisionID, character.Name)) {
+		return true
+	}
 	return r.joins.hasJoiner(divisionID, character.Name)
 }
 
