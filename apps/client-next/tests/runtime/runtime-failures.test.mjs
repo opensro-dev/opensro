@@ -759,6 +759,8 @@ test("terminal asset failures reach the session as asset incidents, once per epi
 		worldStats: () => ({ visibleGroups: 0, pendingGroups: 0, pendingTextures: 0, residentGroups: 0 }),
 		phase: () => rendererError ? "failed" : "ready",
 		error: () => rendererError,
+		errorStack: () =>
+			rendererError ? "Error: Invalid animation layer\n    at evaluate (/assets/bootstrap.js:1:2)" : null,
 		adapterFacts: () => ({
 			vendor: "nvidia",
 			architecture: "ampere",
@@ -925,7 +927,9 @@ test("terminal asset failures reach the session as asset incidents, once per epi
 			incidentKind: "asset",
 			code: "renderer_failed",
 			message: "asset=- transient=false attempts=0 error=D3D12 device removed (DXGI_ERROR_DEVICE_HUNG): " +
-				"the GPU device instance has been suspended | adapter: nvidia/ampere features=texture-compression-bc"
+				"the GPU device instance has been suspended | adapter: nvidia/ampere features=texture-compression-bc",
+			// The frame's own throw names its site (#4504).
+			stack: "Error: Invalid animation layer\n    at evaluate (/assets/bootstrap.js:1:2)"
 		} );
 		assert.ok( closed.length > 0, "the runtime disposed after filing" );
 	} finally {
