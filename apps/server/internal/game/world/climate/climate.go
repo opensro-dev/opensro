@@ -14,6 +14,9 @@ weather never jumps: it fades toward the target in tenths, one step at most
 every three seconds, and a change of kind fades the old kind out to zero
 before the new one rises.
 
+A GM's /WEATHER (State.Force, port-only, not native) starts a spell of
+its own on one climate; it then runs out and fades home like a rolled one.
+
 The package holds no clock and no random source of its own: the caller
 passes the time and a rand()-style source, so tests are deterministic. It
 knows nothing about players or packets; action/weather.go delivers.
@@ -72,6 +75,17 @@ const (
 	// nativeRandMax is the C runtime's RAND_MAX + 1: the native source
 	// answers 0..32767.
 	nativeRandMax = 32768
+)
+
+// A GM's /WEATHER spell (Force; port-only, not native). The original has no
+// command that sets the weather, so these bounds are the port's: a spell
+// lasts at least a minute and at most two hours, and an amount of zero
+// takes the climate's own rain or snow base (defaultForceAmount when the
+// row has none, as most clear-sky climates do).
+const (
+	MinForceDurationMs = 60_000
+	MaxForceDurationMs = 7_200_000
+	defaultForceAmount = 150
 )
 
 /*
@@ -210,9 +224,13 @@ when its players must be told. A climate that never changes weather
 */
 func (s *State) Update(nowMs int64) bool {
 	if s.row.ChangeWeather == 0 {
-		return false
-	}
-	if nowMs > s.nextRollAt {
+		// Natively such a climate never moves. Only a GM's spell (Force)
+		// sets it going; it runs out and fades home like any spell, and
+		// once home and idle the climate is still again.
+		if s.cur == s.target && s.eventDuration == 0 {
+			return false
+		}
+	} else if nowMs > s.nextRollAt {
 		s.roll(nowMs)
 	}
 	if s.cur == s.target && s.eventDuration != 0 && nowMs-s.eventStartAt > s.eventDuration {
@@ -251,6 +269,48 @@ func (s *State) roll(nowMs int64) {
 	}
 	s.eventDuration = int64(s.row.Duration) + int64(s.rand(int(s.row.DurationVariance)+1))
 	s.updateStep()
+}
+
+/*
+================
+State.Force
+
+A GM's weather spell (port-only, not native; gmcommand's /WEATHER): the
+climate heads for the weather through the native fade, holds it for
+durationMs, then returns to its initial weather exactly as a rolled spell
+does. The periodic roll cannot replace it while it runs (roll returns
+early inside a spell). An amount of zero is the climate's own base for
+the kind; durationMs is clamped into the force bounds. Returns the weather
+the climate is heading for.
+================
+*/
+func (s *State) Force(nowMs int64, weather Weather, durationMs int64) Weather {
+	if weather.Amount == 0 {
+		weather.Amount = s.forceAmount(weather.Kind)
+	}
+	s.target = weather
+	s.eventStartAt = nowMs
+	s.eventDuration = min(max(durationMs, MinForceDurationMs), MaxForceDurationMs)
+	s.updateStep()
+	return weather
+}
+
+/*
+================
+State.forceAmount
+
+The amount a GM's spell takes when none was typed: the row's rain or snow
+base, else defaultForceAmount.
+================
+*/
+func (s *State) forceAmount(kind uint8) uint8 {
+	switch {
+	case kind == Snow && s.row.Snowfall != 0:
+		return s.row.Snowfall
+	case kind == Rain && s.row.Rainfall != 0:
+		return s.row.Rainfall
+	}
+	return defaultForceAmount
 }
 
 /*

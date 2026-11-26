@@ -162,6 +162,14 @@ const (
 	// u16-sized UTF-8 text. The reply is EncodeModerationReply's.
 	SubNotice uint8 = 0xFB
 
+	// SubWeather is the port's /WEATHER clear|rain|snow [amount] [minutes]
+	// (GM tooling, not native; always on for a grant carrying world
+	// control, owner decision 2026-11-26; action/weather.go): subcmd, u8
+	// kind (the 0x3BDE kinds: 1 clear, 2 rain, 3 snow), u8 amount (0 = the
+	// climate's own), u16 minutes (0 = the default). The reply is
+	// EncodeModerationReply's, so the GM reads what was set or why not.
+	SubWeather uint8 = 0xFC
+
 	// NoticeTextMaxBytes bounds the /NOTICE frame: the banner's
 	// MaxChatNoticeUnits UTF-16 units at four UTF-8 bytes each at most.
 	// The unit limit itself is the handler's, so the GM reads why.
@@ -234,6 +242,10 @@ type Request struct {
 	BerserkLevel uint8
 	// GaugeBalls is /SETGAUGE's Berserk gauge balls.
 	GaugeBalls uint8
+	// WeatherKind, WeatherAmount and WeatherMinutes are /WEATHER's fields.
+	WeatherKind    uint8
+	WeatherAmount  uint8
+	WeatherMinutes uint16
 	// SpeedPercent is /SETSPEED's percent of the effective speed.
 	SpeedPercent uint16
 	// Forge is /FORGE's command text (the rejoined typed tail).
@@ -341,6 +353,16 @@ func DecodeGmCommand(payload []byte) (Request, error) {
 			}
 		}
 		request.Forge = string(textBytes)
+		return request, nil
+	}
+	if subcmd == SubWeather {
+		// subcmd, u8 kind, u8 amount, u16 minutes. The kind's range is the
+		// owner's to refuse, so the GM reads why.
+		if len(payload) != 5 {
+			return Request{}, fmt.Errorf("gmcommand: WEATHER requires five bytes")
+		}
+		request.WeatherKind, request.WeatherAmount = payload[1], payload[2]
+		request.WeatherMinutes = binary.LittleEndian.Uint16(payload[3:])
 		return request, nil
 	}
 	if subcmd == SubNotice {

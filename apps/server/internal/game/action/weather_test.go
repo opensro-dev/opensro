@@ -9,7 +9,9 @@ package action
 
 import (
 	"bytes"
+	"strings"
 	"testing"
+	"time"
 
 	"opensro.online/server/internal/game/enterworld"
 	"opensro.online/server/internal/game/world/monster"
@@ -203,5 +205,51 @@ func TestQuietWeatherTickAllocatesNothing(t *testing.T) {
 	rt.advanceWeather(1)
 	if allocs := testing.AllocsPerRun(100, func() { rt.advanceWeather(2) }); allocs != 0 {
 		t.Fatalf("a quiet weather tick allocated %.1f times", allocs)
+	}
+}
+
+/*
+================
+TestGMWeatherFadesItsClimateIn
+
+A GM's /WEATHER in Jangan sets climate 1001 heading for snow; the next
+fade step reaches the player in Jangan and not the one in 2004's region.
+Clear 180 toward snow 100 steps by (180+100)/10 = 28.
+================
+*/
+func TestGMWeatherFadesItsClimateIn(t *testing.T) {
+	rt, characters := newWeatherTestRuntime(t, true, [2]uint16{weatherJangan, weatherSnowy})
+	rt.Now = func() time.Time { return time.UnixMilli(0) }
+	rt.advanceResidentRegions(1)
+	text, ok := rt.SetWeatherGM(testDivision, characters[0].Name, 3, 100, 0)
+	if !ok || !strings.HasPrefix(text, "snow 100 for 10 min on climate 1001") {
+		t.Fatalf("SetWeatherGM = %q, %v", text, ok)
+	}
+	got := weatherDeliveries(t, rt.advanceWeather(3000))
+	if len(got) != 1 || !bytes.Equal(got[characters[0].ID], []byte{1, 152}) {
+		t.Fatalf("forced snow delivered %v, want only 01 98 to %d", got, characters[0].ID)
+	}
+}
+
+/*
+================
+TestGMWeatherRefusals
+
+An unknown kind, a region without a climate, and the cycle off each
+refuse with a reason and set nothing.
+================
+*/
+func TestGMWeatherRefusals(t *testing.T) {
+	rt, characters := newWeatherTestRuntime(t, true, [2]uint16{weatherJangan, weatherSnowy})
+	if text, ok := rt.SetWeatherGM(testDivision, characters[0].Name, 9, 0, 0); ok || text == "" {
+		t.Fatalf("kind 9 = %q, %v", text, ok)
+	}
+	placeWeatherCharacter(rt, characters[0], 0)
+	if text, ok := rt.SetWeatherGM(testDivision, characters[0].Name, 2, 0, 0); ok || !strings.Contains(text, "no weather") {
+		t.Fatalf("climate-less region = %q, %v", text, ok)
+	}
+	off, offCharacters := newWeatherTestRuntime(t, false, [2]uint16{weatherJangan, weatherSnowy})
+	if text, ok := off.SetWeatherGM(testDivision, offCharacters[0].Name, 2, 0, 0); ok || !strings.Contains(text, "SRO_WEATHER") {
+		t.Fatalf("cycle off = %q, %v", text, ok)
 	}
 }

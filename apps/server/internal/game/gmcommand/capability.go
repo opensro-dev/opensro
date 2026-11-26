@@ -47,6 +47,7 @@ var subcommandCapability = map[uint8]staff.Capability{
 	SubSetTime:     staff.WorldControl,
 	SubFlagWorld:   staff.WorldControl,
 	SubOpenWorld:   staff.WorldControl,
+	SubWeather:     staff.WorldControl,
 
 	SubMakeItem:    staff.MakeItem,
 	SubLoadMonster: staff.SpawnMonster,

@@ -224,6 +224,8 @@ func dispatchGmCommand(deps Dependencies, presence PresenceView, divisionID stri
 		return handleModeration(deps, divisionID, sender, request, status)
 	case SubNotice:
 		return handleNotice(divisionID, sender, request)
+	case SubWeather:
+		return handleWeather(divisionID, sender, request, status)
 	case SubLieName, SubRealName:
 		return handleWho(deps, presence, divisionID, request)
 	case SubFindUser:

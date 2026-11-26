@@ -178,3 +178,14 @@ func (w *World) RegionWeather(region uint16) (Weather, bool) {
 	}
 	return w.states[index].Current(), true
 }
+
+/*
+================
+World.Force
+
+A GM's weather spell on the climate at an index (State.Force).
+================
+*/
+func (w *World) Force(index int, nowMs int64, weather Weather, durationMs int64) Weather {
+	return w.states[index].Force(nowMs, weather, durationMs)
+}

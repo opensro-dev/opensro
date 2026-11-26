@@ -59,6 +59,15 @@ const MAX_MODERATION_TEXT_BYTES = 1024;
 // so the GM reads why a long notice was refused.
 const GM_NOTICE = 0xfb;
 const MAX_NOTICE_TEXT_BYTES = 400;
+// The port's /WEATHER clear|rain|snow [amount] [minutes] (GM tooling, not
+// native; always on, for a GM whose staff grant carries world control):
+// subcommand 0xFC, u8 kind (the 0x3BDE kinds), u8 amount and u16 minutes,
+// zero for either meaning the server's default. The bounds are the
+// server's (action/weather.go); the reply is the moderation text reply.
+const GM_WEATHER = 0xfc;
+const GM_WEATHER_KINDS = { CLEAR: 1, RAIN: 2, SNOW: 3 } as const;
+const GM_WEATHER_MAX_AMOUNT = 255;
+const GM_WEATHER_MAX_MINUTES = 120;
 // The port's /FORGE <CODENAME> [key=value ...] and /FORGE help <CODENAME>
 // (GM tooling, not native; the server's SRO_GM_ITEM_FORGE, off unless a
 // shard enables it): subcommand 0xF2 and a u16-sized ANSI string carrying
@@ -408,10 +417,10 @@ export function gmReply( p: Uint8Array ): GmReply | null {
 		const percent = viewOf( p ).getUint16( 2, true );
 		return { console: true, text: "-> speed set to " + percent + "%" };
 	}
-	if ( (code >= GM_CHAT_MUTE && code <= GM_ALLOW_LOGOUT) || code === GM_NOTICE ) {
-		// The port's moderation and notice answers carry the server's text
-		// on both results (gmcommand/moderation.go, notice.go), so the GM
-		// always reads why.
+	if ( (code >= GM_CHAT_MUTE && code <= GM_ALLOW_LOGOUT) || code === GM_NOTICE || code === GM_WEATHER ) {
+		// The port's moderation, notice and weather answers carry the
+		// server's text on both results (gmcommand/moderation.go, notice.go,
+		// admin.go), so the GM always reads why.
 		return { console: true, text: (result === 1 ? "-> " : "Failed. -> ") + string() };
 	}
 	if ( code === GM_FORGE ) {
@@ -708,6 +717,20 @@ export function gmRequest(
 		const payload = new Uint8Array( 1 + text.length );
 		payload[0] = GM_NOTICE;
 		payload.set( text, 1 );
+		return { opcode: OP_GM_COMMAND, payload };
+	}
+	// Any case: the command is port-only. A missing amount or minutes is
+	// zero, the server's default; a number outside the bounds never leaves.
+	if ( name?.toUpperCase() === "/WEATHER" ) {
+		const kind = (GM_WEATHER_KINDS as Readonly<Record<string, number>>)[arg.toUpperCase()];
+		if ( kind === undefined || tokens.length > 4 ) return null;
+		const numbers = tokens.slice( 2 ).map( token => /^[0-9]+$/.test( token ) ? Number( token ) : -1 );
+		const amount = numbers[0] ?? 0, minutes = numbers[1] ?? 0;
+		if ( amount < 0 || amount > GM_WEATHER_MAX_AMOUNT || minutes < 0 || minutes > GM_WEATHER_MAX_MINUTES ) {
+			return null;
+		}
+		const payload = Uint8Array.of( GM_WEATHER, kind, amount, 0, 0 );
+		new DataView( payload.buffer ).setUint16( 3, minutes, true );
 		return { opcode: OP_GM_COMMAND, payload };
 	}
 	// Any case: the command is port-only, and players type it as /forge.

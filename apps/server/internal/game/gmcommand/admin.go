@@ -4,7 +4,8 @@
 admin.go - the GM's lookup, kick, status and guild recall commands
 
 /WORLDSTATUS, /BAN, /RECALLGUILD, /LIENAME and /REALNAME: arms of the
-v1.188 server's per-player GM special-command handler.
+v1.188 server's per-player GM special-command handler. /WEATHER is the
+port's own (not native).
 Lookups and the kick are answered here from the character records and
 the presence directory; world counts and the guild recall belong to the
 action owner and come through its ports.
@@ -234,4 +235,40 @@ func handleSetTime(request Request, status []BodyStatusCommands) Outcome {
 	}
 	owner.SetGameTimeGM(request.Amount)
 	return Outcome{Ack: []byte{AckResultOK, SubSetTime}}
+}
+
+/*
+================
+WeatherControl
+
+The action-owned /WEATHER (action/weather.go): the reply text says what
+was set, or why nothing was.
+================
+*/
+type WeatherControl interface {
+	SetWeatherGM(division, name string, kind, amount uint8, minutes uint16) (string, bool)
+}
+
+/*
+================
+handleWeather
+
+Port-only, not native (owner decision 2026-11-26: always on, no flag,
+as /SILK). Both results carry the owner's text (EncodeModerationReply).
+================
+*/
+func handleWeather(divisionID string, sender *enterworld.Character, request Request, status []BodyStatusCommands) Outcome {
+	if len(status) == 0 {
+		return Outcome{Ack: EncodeModerationReply(AckResultFail, SubWeather, "weather unavailable"), Refusal: "weather-unavailable"}
+	}
+	owner, ok := status[0].(WeatherControl)
+	if !ok {
+		return Outcome{Ack: EncodeModerationReply(AckResultFail, SubWeather, "weather unavailable"), Refusal: "weather-unavailable"}
+	}
+	text, set := owner.SetWeatherGM(divisionID, sender.Name, request.WeatherKind, request.WeatherAmount, request.WeatherMinutes)
+	if !set {
+		return Outcome{Ack: EncodeModerationReply(AckResultFail, SubWeather, text), Refusal: "weather-refused: " + text}
+	}
+	log.WithFields(log.Fields{"gm": sender.Name, "division": divisionID, "weather": text}).Info("gmcommand: /WEATHER set")
+	return Outcome{Ack: EncodeModerationReply(AckResultOK, SubWeather, text)}
 }
