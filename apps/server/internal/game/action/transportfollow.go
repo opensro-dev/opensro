@@ -20,6 +20,10 @@ same notice as the original parked tether, so a trader cannot outrun a
 transport held back by a fight or a wall. It acts only while the transport
 follows.
 
+Our shard turns SRO_TRANSPORT_FOLLOW on in config/shard-settings.json
+(owner, 2026-11-26, #4541: the transport should follow the trader); the
+tether default keeps it within 100 m. Any other shard stays native.
+
 Everything else stays native: mounting still needs the trader within
 cosMountRange of the transport, thieves and bandits still target it at its
 own pose (companionTargets reads the follower's presentation), and its
