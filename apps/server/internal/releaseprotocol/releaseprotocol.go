@@ -61,6 +61,13 @@ type Contracts struct {
 // Current is the release protocol this build speaks, and the contract
 // versions it fixes. Encoders version their payloads from these.
 const (
+	// Protocol 23 admits the port-only smallest-stack reload control
+	// (opcode 22, client commerce-controls.ts AMMO_RELOAD_CONTROL;
+	// action/ammunitionpreference.go, #4527): one byte the client
+	// declares per session, read per shot, never answered. Only the
+	// Experimental row's opt-in reaches it, and the frame is
+	// client-to-server only, so a protocol-22 tab computes nothing
+	// wrong and stays served (Oldest does not move, per the rule below).
 	// Protocol 22 (BootstrapContract 3) sends the EnterWorld session
 	// constants - the bootstrap's refObjSnapshot and magicOptionSnapshot
 	// and the game-ready commerce seed - once per session (#4421): a
@@ -84,7 +91,7 @@ const (
 	// rewards and tags the seasonal decoration's placements with their
 	// world layer (see WorldContract 1). Protocol 16 grows a pet chat
 	// link to name its pet (see ChatContract 2).
-	Current = 22
+	Current = 23
 	// Oldest is the oldest protocol this server still serves. A bump
 	// whose change an older client cannot survive in ordinary play moves
 	// Oldest with Current; a bump whose change only a new, opt-in action
@@ -97,6 +104,8 @@ const (
 	// holding a permanent rental-kind avatar), which no older tab reads.
 	// 22 serves only 22: the contract-3 bootstrap refusal is ordinary
 	// play too (every re-entry after a teleport).
+	// 23 serves 22 too: only the opt-in reload declaration reaches the
+	// new frame (see Current), so an open 22 tab is never locked out.
 	Oldest = 22
 	// The market contract: 1 carries the port-only consignment market
 	// (SRO_CONSIGNMENT) on control opcode 20 both ways, and the server

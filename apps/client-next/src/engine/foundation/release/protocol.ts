@@ -70,7 +70,12 @@ checks) reads the same numbers the client ships.
 // Protocol 22 states the session-constants digest in EnterWorld (#4421):
 // a held answer omits the entry's reference snapshot, magic options and
 // commerce seed, which 21 would wait on forever, so 21 is refused.
-export const RELEASE_PROTOCOL = 22;
+// Protocol 23 admits the port-only smallest-stack reload control
+// (opcode 22, commerce-controls.ts AMMO_RELOAD_CONTROL; #4527), which
+// only a client with the Experimental row composes. A protocol-22 tab
+// computes nothing wrong - it never declares the byte and there is no
+// answer to read - so 22 stays served.
+export const RELEASE_PROTOCOL = 23;
 // The public reference file's contract (releaseprotocol.ReferencesContract).
 export const REFERENCES_CONTRACT = 3;
 export const RELEASE_PROTOCOL_HEADER = "X-OpenSRO-Protocol";

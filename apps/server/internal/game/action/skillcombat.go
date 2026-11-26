@@ -467,7 +467,7 @@ func (rt *Runtime) acceptSkillStagePhaseAt(divisionID string, character, snapsho
 			}
 			battleFrames = rt.enterBattleState(divisionID, character, nowMs)
 			if consumeAmmo {
-				ammo = applyAmmunitionDebit(character, debit)
+				ammo = applyAmmunitionDebit(character, debit, rt.ammoReloadsSmallest(character))
 			}
 			if advanced {
 				rt.commitOffensivePhaseCost(divisionID, character, skill, cost, nowMs, release != nil)

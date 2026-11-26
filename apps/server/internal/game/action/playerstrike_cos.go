@@ -316,7 +316,7 @@ func (rt *Runtime) strikeCOSTarget(st offensiveStage, target combatTarget, caste
 		battle = rt.enterBattleState(division, character, now)
 		attack = rt.registerPlayerAttack(division, character, owner, now)
 		if st.consumeAmmo {
-			ammo = applyAmmunitionDebit(character, debit)
+			ammo = applyAmmunitionDebit(character, debit, rt.ammoReloadsSmallest(character))
 		}
 		if st.advanced {
 			rt.commitOffensivePhaseCost(division, character, skill, cost, now, st.release != nil)

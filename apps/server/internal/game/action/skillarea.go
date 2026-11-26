@@ -683,7 +683,7 @@ func (rt *Runtime) acceptSkillAreaAt(division string, character, snapshot *enter
 		}
 		battleFrames = rt.enterBattleState(division, character, nowMs)
 		if consumeAmmo {
-			ammo = applyAmmunitionDebit(character, debit)
+			ammo = applyAmmunitionDebit(character, debit, rt.ammoReloadsSmallest(character))
 		}
 		if charged {
 			rt.commitOffensivePhaseCost(division, character, skill, cost, nowMs, release != nil)

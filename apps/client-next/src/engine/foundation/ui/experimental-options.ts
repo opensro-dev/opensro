@@ -184,6 +184,13 @@ export interface ExperimentalOptions {
 	// vectors without re-reading the target (CProjectileTrace_Process 8D8580,
 	// CProjectile_Bezier_Process 879650). Off unless turned on.
 	readonly homingProjectiles: boolean;
+	// Port-only, not native (#4527): the auto-reload that empties the
+	// quiver takes the smallest matching bag stack of bolts or arrows
+	// instead of the native lowest bag slot (ties still go to the lower
+	// slot). The choice rides a one-byte control frame to the server
+	// (ammunitionpreference.go) and is read per shot; off is the
+	// original's lowest-slot reload.
+	readonly smallestAmmoStack: boolean;
 	// Port-only, not native (owner 2026-10-24, extended #2741): companion
 	// and vigor auto-potions (transport-auto-potion.ts, companion-potions.ts).
 	// The original watches only the player (70C550). On unless turned off
@@ -513,6 +520,7 @@ export function experimentalOptions( value: unknown = null ): ExperimentalOption
 		shortNotices: record.shortNotices !== false,
 		autoSelect: enabled( "autoSelect" ),
 		homingProjectiles: enabled( "homingProjectiles" ),
+		smallestAmmoStack: enabled( "smallestAmmoStack" ),
 		transportAutoPotion: record.transportAutoPotion !== false,
 		webTransport: record.webTransport !== false,
 		petClickOpensWindow: record.petClickOpensWindow !== false,
@@ -691,6 +699,9 @@ export interface ExperimentalGameplay {
 	readonly highlightEventNotices?: boolean;
 	readonly webTransport: boolean;
 	readonly homingProjectiles?: boolean;
+	// Port-only (#4527): the server reloads the quiver from the
+	// smallest matching bag stack while on; off (or unset) is native.
+	readonly smallestAmmoStack?: boolean;
 	readonly sunDropMarker?: boolean;
 	readonly warpArrivalSound?: boolean;
 	readonly christmasCarols?: boolean;
@@ -715,6 +726,7 @@ export function experimentalGameplay( options: ExperimentalOptions ): Experiment
 		breakNotices: options.breakNotices,
 		highlightEventNotices: options.highlightEventNotices,
 		homingProjectiles: options.homingProjectiles,
+		smallestAmmoStack: options.smallestAmmoStack,
 		sunDropMarker: options.sunDropMarker,
 		warpArrivalSound: options.warpArrivalSound,
 		christmasCarols: options.christmasCarols,

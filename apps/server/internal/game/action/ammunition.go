@@ -136,7 +136,7 @@ ordinary inventory move of the whole stack into socket 7. Without one, socket
 7 stays empty and later shots are refused (0x300E).
 ================
 */
-func applyAmmunitionDebit(character *enterworld.Character, debit ammunitionDebit) ammunitionResult {
+func applyAmmunitionDebit(character *enterworld.Character, debit ammunitionDebit, smallest bool) ammunitionResult {
 	if debit.remaining != 0 {
 		character.MissionInventory[debit.index].StackCount = debit.remaining
 		return ammunitionResult{count: uint16(debit.remaining)}
@@ -146,7 +146,7 @@ func applyAmmunitionDebit(character *enterworld.Character, debit ammunitionDebit
 		character.MissionInventory[:debit.index:debit.index],
 		character.MissionInventory[debit.index+1:]...,
 	)
-	reload := reloadMagazine(character, spent.TypeFlags)
+	reload := reloadMagazine(character, spent.TypeFlags, smallest)
 	if reload == nil {
 		return ammunitionResult{}
 	}
@@ -157,18 +157,36 @@ func applyAmmunitionDebit(character *enterworld.Character, debit ammunitionDebit
 ================
 reloadMagazine
 
-Moves the lowest bag stack with the spent ammunition's type id (the packed
+Moves one whole bag stack with the spent ammunition's type id (the packed
 TID, not the exact item) into socket 7, or returns nil when none exists.
+Native takes the lowest bag slot, the first match scanning upward from
+slot 13; stack counts are never compared (#4527). The port-only
+smallest-stack choice (ammunitionpreference.go, the client's Experimental
+row) takes the smallest matching stack instead, ties going to the lower
+slot; it is asked for per shot, so turning the row off restores the
+native pick at once.
 ================
 */
-func reloadMagazine(character *enterworld.Character, typeFlags uint16) *ammunitionReload {
+func reloadMagazine(character *enterworld.Character, typeFlags uint16, smallest bool) *ammunitionReload {
 	best := -1
 	for index, row := range character.MissionInventory {
 		if !inventory.InBag(character, row.Slot) ||
 			row.TypeFlags != typeFlags || row.StackCount < 1 || row.StackCount > 0xffff {
 			continue
 		}
-		if best < 0 || row.Slot < character.MissionInventory[best].Slot {
+		if best < 0 {
+			best = index
+			continue
+		}
+		held := character.MissionInventory[best]
+		if smallest {
+			if row.StackCount < held.StackCount ||
+				row.StackCount == held.StackCount && row.Slot < held.Slot {
+				best = index
+			}
+			continue
+		}
+		if row.Slot < held.Slot {
 			best = index
 		}
 	}

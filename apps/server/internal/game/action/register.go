@@ -60,6 +60,7 @@ func (rt *Runtime) Register(hub *transport.Hub) {
 	rt.registerDeparture(hub)
 	rt.registerMall(hub)
 	rt.registerCrest(hub)
+	rt.registerAmmoReload(hub)
 	rt.registerMarket(hub)
 	hub.Handle(0x7341, rt.hubHandler(hub, rt.HandleBerserk))
 	hub.Handle(0x7495, rt.hubHandler(hub, rt.HandlePortal))

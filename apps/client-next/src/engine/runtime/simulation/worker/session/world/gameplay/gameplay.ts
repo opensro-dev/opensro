@@ -116,7 +116,7 @@ import {
 	crestRegisterResult,
 	crestRegisterUploadPayload
 } from "@/engine/foundation/gameplay/crest-register";
-import { CREST_UPLOAD_CONTROL } from "@/engine/foundation/gameplay/commerce-controls";
+import { AMMO_RELOAD_CONTROL, CREST_UPLOAD_CONTROL } from "@/engine/foundation/gameplay/commerce-controls";
 import { weaponSwitchFailureText } from "@/engine/foundation/gameplay/weapon-switch";
 import { raceSwitchFailureText, raceSwitchKindOf, type RaceSwitchKind } from "@/engine/foundation/gameplay/race-switch";
 import { alchemyNotice } from "@/engine/foundation/gameplay/alchemy-notices";
@@ -924,6 +924,24 @@ tracked routes it through sendFrame's pickup and press bookkeeping.
 	}
 	/*
 ================
+sendAmmoReloadPreference
+
+Declares the Experimental smallest-stack reload row (#4527, port-only)
+to the server: one byte on the control lane, 1 for the smallest
+matching bag stack, 0 for the native lowest bag slot. The server
+answers nothing and reads the choice per shot, so a toggle under a
+live world takes effect on the next reload. Held until the world is
+ready like every request of its kind.
+================
+	*/
+	function sendAmmoReloadPreference() {
+		sendWhenLive( {
+			opcode: AMMO_RELOAD_CONTROL,
+			payload: Uint8Array.of( ammoReloadSmallest ? 1 : 0 )
+		} );
+	}
+	/*
+================
 sendSkillPress
 
 A skill press leaves: its answer times the round trip. When the server will
@@ -1606,6 +1624,11 @@ fails; retry persistence without restoring stale slot occupancy.
 	// experimentalGameplay); undefined while the row is off, which leaves
 	// the native pickup loop untouched.
 	let petPickupKinds: number | undefined;
+	// The Experimental smallest-stack reload row (#4527, port-only): off
+	// is the native lowest-bag-slot reload; the server holds the choice
+	// (sendAmmoReloadPreference), declared at every worldReady while on
+	// and whenever the row changes under a live world.
+	let ammoReloadSmallest = false;
 	// Port-only (#3907): the Experimental "SRO Macro" row, and the macro
 	// auto-potion's row order (checkMacroPotion), auto-skill cursors
 	// (checkMacroSkill), and auto-hunt start clock (checkMacroHunt).
@@ -2288,6 +2311,11 @@ The Experimental window's gameplay rows (experimentalGameplay).
 			highlightEventNotices = value.highlightEventNotices !== false;
 			homingProjectiles = value.homingProjectiles === true;
 			petPickupKinds = value.petPickupKinds;
+			const smallestAmmoStack = value.smallestAmmoStack === true;
+			if ( smallestAmmoStack !== ammoReloadSmallest ) {
+				ammoReloadSmallest = smallestAmmoStack;
+				if ( live ) sendAmmoReloadPreference();
+			}
 			sroMacroEnabled = value.sroMacro === true;
 		},
 		/*
@@ -7228,6 +7256,13 @@ leave in the order their packets raised them.
 			const held = deferredSends;
 			deferredSends = [];
 			for ( const row of held ) sendWhenLive( row.frame, row.tracked );
+			// An entry with the reload row on redeclares it (#4527): the
+			// server holds the choice per character for the session and
+			// forgets it at restart, so this session keeps the word. A
+			// row that is off declares nothing - the server's default is
+			// the native reload, and a tab that never opted in sends
+			// exactly what it sent before the row existed.
+			if ( ammoReloadSmallest ) sendAmmoReloadPreference();
 		},
 		/*
 ================
