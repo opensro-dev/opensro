@@ -2264,6 +2264,21 @@ chatBlocks
 		},
 		/*
 ================
+chatHistory
+
+The lines the browser kept for the character about to enter
+(chat-history.ts; port-only, not native - default by owner decision
+2026-11-26). The chat owner spends them at its bootstrap.
+================
+		*/
+		chatHistory(
+			name: string,
+			lines: readonly import("@/engine/foundation/gameplay/chat-history").StoredChatLine[]
+		) {
+			chat.restore( name, lines );
+		},
+		/*
+================
 options
 ================
 		*/

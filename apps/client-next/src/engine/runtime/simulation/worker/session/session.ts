@@ -466,6 +466,10 @@ baseUrl
 				world.chatBlocks( command.value );
 				return;
 			}
+			if ( command.kind === "chat-history" ) {
+				world.chatHistory( command.name, command.lines );
+				return;
+			}
 			if ( command.kind === "game-options" ) {
 				world.options( command.value );
 				return;

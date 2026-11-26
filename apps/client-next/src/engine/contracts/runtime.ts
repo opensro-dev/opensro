@@ -220,6 +220,16 @@ export interface Platform extends Disposable {
 	saveSightMode( value: import("@/engine/foundation/rendering/camera-options").SightMode ): void;
 	saveAudioOptions( value: import("@/engine/foundation/audio/options").AudioOptions ): void;
 	saveChatBlocks( value: readonly string[] ): void;
+	// The chat lines the browser keeps per character across a reload
+	// (chat-history.ts; port-only, not native - default by owner decision
+	// 2026-11-26): one scope's record, and one scope's save.
+	chatHistory(
+		scope: string
+	): readonly import("@/engine/foundation/gameplay/chat-history").StoredChatLine[];
+	saveChatHistory(
+		scope: string,
+		lines: readonly import("@/engine/contracts/gameplay").ChatLine[]
+	): void;
 	saveExperimentalOptions( value: import("@/engine/foundation/ui/experimental-options").ExperimentalOptions ): void;
 	uniqueNotifyBook(): Readonly<
 		Record<string, import("@/engine/foundation/gameplay/unique-status").UniqueNotifySettings>

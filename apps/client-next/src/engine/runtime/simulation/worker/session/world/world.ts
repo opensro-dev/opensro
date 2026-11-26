@@ -755,6 +755,7 @@ enter
 			connect();
 		},
 		chatBlocks: core.chatBlocks,
+		chatHistory: core.chatHistory,
 		/*
 ================
 depart

@@ -601,6 +601,7 @@ the entry continues it like the one after a world transfer.
 		noteInput: gameplay.noteInput,
 		notice: gameplay.notice,
 		chatBlocks: gameplay.chatBlocks,
+		chatHistory: gameplay.chatHistory,
 		options: gameplay.options,
 		experimental( value: import("@/engine/foundation/ui/experimental-options").ExperimentalGameplay ) {
 			gameplay.experimental( value );

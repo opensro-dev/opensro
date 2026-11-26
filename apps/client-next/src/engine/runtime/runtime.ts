@@ -35,6 +35,7 @@ import { createAssets } from "./assets/assets";
 import { createReleaseWatch, releaseNotice } from "./release/release-watch";
 import { createInput } from "./input/input";
 import { createPlatform } from "./platform/platform";
+import { chatHistoryScope } from "@/engine/foundation/gameplay/chat-history";
 import { createBuildInfo } from "./build-info/build-info";
 import { createBugReport, diagnosticActors, type ReportParts } from "./bug-report/bug-report";
 import type { BugReportField } from "@/engine/contracts/bug-report";
@@ -168,6 +169,10 @@ export function startRuntime(
 		} );
 		const presentation = own( createPresentation() );
 		let sessionState: SessionState | null = null;
+		// The chat record last written to the browser's store
+		// (chat-history.ts), as the scope and tail it was written from:
+		// an unchanged tail writes nothing.
+		let savedChatSignature = "";
 		const assets = own( createAssets() );
 		const audio = own(
 			createAudio( assets, new URL( "/", import.meta.url ).href, random, Math.trunc( performance.now() ) >>> 0 )
@@ -208,7 +213,20 @@ export function startRuntime(
 		*/
 		function sessionCommand( command: import("@/engine/contracts/session").SessionCommand ) {
 			if ( frontend && command.kind === "enter-world" ) {
-				if ( frontend.start() ) simulation.session( command );
+				if ( frontend.start() ) {
+					// The lines the browser kept for this character go
+					// ahead of the entry (chat-history.ts; port-only, not
+					// native - default by owner decision 2026-11-26), so
+					// the worker can spend them at its bootstrap.
+					simulation.session( {
+						kind: "chat-history",
+						name: command.character,
+						lines: platform.chatHistory(
+							chatHistoryScope( sessionState?.divisionId ?? "", command.character )
+						)
+					} );
+					simulation.session( command );
+				}
 				return;
 			}
 			if ( command.kind === "gameplay" && command.command.kind === "skill" && worldPointer ) {
@@ -1177,6 +1195,24 @@ export function startRuntime(
 							}
 						}
 						simulation.ackWorld( batch.sequence );
+						// Port-only (chat-history.ts; default by owner decision
+						// 2026-11-26): the presented log is the browser's
+						// record of the conversation. Write it when its tail
+						// moved; an empty log writes nothing, so a departure
+						// never erases the record a reload will restore.
+						const chatLines = presentation.gameplay()?.chat?.lines;
+						if (
+							sessionState?.phase === "world" && sessionState.character &&
+							chatLines && chatLines.length > 0
+						) {
+							const scope = chatHistoryScope( sessionState.divisionId ?? "", sessionState.character );
+							const signature = scope + ":" + chatLines.length + ":" +
+								(chatLines[chatLines.length - 1]?.sequence ?? 0);
+							if ( signature !== savedChatSignature ) {
+								savedChatSignature = signature;
+								platform.saveChatHistory( scope, chatLines );
+							}
+						}
 					} catch ( error ) {
 						platform.report( `Runtime failed: World publication: ${String( error )}`, error );
 						dispose();

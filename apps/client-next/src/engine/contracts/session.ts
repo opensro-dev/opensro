@@ -51,6 +51,14 @@ export interface BugReportResult {
 export type SessionCommand =
 	| WorldExitCommand
 	| { readonly kind: "chat-blocks"; readonly value: readonly string[]; }
+	// The lines the browser kept for the entering character (chat-history.ts;
+	// port-only, not native - default by owner decision 2026-11-26), offered
+	// ahead of enter-world; the worker never touches storage itself.
+	| {
+		readonly kind: "chat-history";
+		readonly name: string;
+		readonly lines: readonly import("@/engine/foundation/gameplay/chat-history").StoredChatLine[];
+	}
 	| {
 		readonly kind: "experimental-gameplay";
 		readonly value: import("@/engine/foundation/ui/experimental-options").ExperimentalGameplay;

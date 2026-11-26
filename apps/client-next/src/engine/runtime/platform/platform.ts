@@ -18,6 +18,12 @@ import {
 } from "@/engine/foundation/ui/extended-quickslot";
 import { chatBlocks } from "@/engine/foundation/gameplay/chat-blocks";
 import {
+	chatHistoryBook,
+	chatHistorySavedBook,
+	storedChatLines,
+	type StoredChatLine
+} from "@/engine/foundation/gameplay/chat-history";
+import {
 	defaultVideoOptions,
 	fitCanvasViewport,
 	surfaceSize,
@@ -211,6 +217,37 @@ export function createPlatform(
 		if ( event.key !== null && event.key !== uniqueNotifyKey ) return;
 		uniqueNotify = storedUniqueNotifyBook();
 	}, { signal: lifetime.signal } );
+	// Port-only (chat-history.ts; default by owner decision 2026-11-26):
+	// the chat lines the browser keeps per character across a reload,
+	// scope to lines. The worker never touches storage: the runtime
+	// saves the presented log here and offers a character's record back
+	// ahead of its entry. A corrupt record restores as empty.
+	const chatHistoryKey = "sro:v1150:chat-history:1";
+	let chatHistory: Readonly<Record<string, readonly StoredChatLine[]>> = {};
+	try {
+		const stored = localStorage.getItem( chatHistoryKey );
+		if ( stored !== null ) chatHistory = chatHistoryBook( JSON.parse( stored ) );
+	} catch ( error ) {
+		status.value = "Chat history could not be restored: " + String( error );
+	}
+	/*
+	================
+	storedChatHistoryBook
+
+	The book the store holds now (#4433's rule, as the notify book):
+	saves re-read instead of trusting the copy above, so a record
+	another tab wrote since this tab loaded survives; a corrupt record
+	reads as the book we already hold.
+	================
+	*/
+	function storedChatHistoryBook(): Readonly<Record<string, readonly StoredChatLine[]>> {
+		try {
+			const stored = localStorage.getItem( chatHistoryKey );
+			return stored === null ? {} : chatHistoryBook( JSON.parse( stored ) );
+		} catch {
+			return chatHistory;
+		}
+	}
 	const preferenceKey = "sro:v1150:game-options:1";
 	let preferences = initialGameOptions();
 	try {
@@ -898,6 +935,34 @@ export function createPlatform(
 			const next = chatBlocks( value );
 			localStorage.setItem( blockKey, JSON.stringify( next ) );
 			onUi( { kind: "chat-blocks", value: next } );
+		},
+		/*
+		================
+		chatHistory
+
+		The lines the browser kept for one scope (chat-history.ts),
+		re-read so another tab's saves are honoured.
+		================
+		*/
+		chatHistory( scope: string ) {
+			return storedChatHistoryBook()[scope] ?? [];
+		},
+		/*
+		================
+		saveChatHistory
+
+		One scope's presented log joins the stored book; the save
+		re-reads first (#4433), so it never erases another scope or
+		another tab's newer record.
+		================
+		*/
+		saveChatHistory( scope: string, lines: readonly import("@/engine/contracts/gameplay").ChatLine[] ) {
+			chatHistory = chatHistorySavedBook( storedChatHistoryBook(), scope, storedChatLines( lines ) );
+			try {
+				localStorage.setItem( chatHistoryKey, JSON.stringify( chatHistory ) );
+			} catch ( error ) {
+				status.value = "Chat history could not be saved: " + String( error );
+			}
 		},
 		/*
 		================
