@@ -761,16 +761,20 @@ export function createBugReport( options: BugReportOptions ): BugReportOwner {
 	================
 	watchPageLifetime
 
-	World entry starts this page's lifetime marker (#4545): from then
-	on the heartbeat in page-lifetime.ts keeps the tab's evidence until
-	the page hides cleanly (dispose ends it) or dies (the next boot
-	reads it). chat runs on every HUD assembly, so the first assembly
-	that sees the world phase is within a frame of the entry itself.
+	The start of world entry starts this page's lifetime marker (#4545):
+	from then on the heartbeat in page-lifetime.ts keeps the tab's
+	evidence until the page hides cleanly (dispose ends it) or dies (the
+	next boot reads it). It starts at entering-world, not world: loading
+	the world is the page's memory peak, and a page killed there (a
+	reload that "took more than one minute") must leave a marker too;
+	lastPhase tells the two apart. chat runs on every HUD assembly, so
+	the first assembly that sees the phase is within a frame of it.
 	================
 	*/
 	function watchPageLifetime(): void {
 		if ( !pageLifetimeStarted ) {
-			if ( options.state().session?.phase !== "world" ) return;
+			const phase = options.state().session?.phase;
+			if ( phase !== "entering-world" && phase !== "world" ) return;
 			pageLifetimeStarted = true;
 			startPageLifetime( () => ({
 				entities: options.state().entities,
