@@ -620,7 +620,13 @@ func (rt *Runtime) commitRebirth(divisionID string, character *enterworld.Charac
 		// The pet travels to the appointed spawn, as it did before the
 		// split: the prepared spawn below is the player's resolved stand
 		// (terrain-lifted or rescued), not the pet's relocation centre.
-		previousPets = rt.relocateReturningPet(divisionID, character, arrival.spawn)
+		// A parked transport stays where it was parked
+		// (relocateRevivingPets), unless the revive leaves its world.
+		if arrival.world == currentWorld {
+			previousPets = rt.relocateRevivingPets(divisionID, character, arrival.spawn)
+		} else {
+			previousPets = rt.relocateReturningPet(divisionID, character, arrival.spawn)
+		}
 		if plan.preparedDeferred {
 			var ok bool
 			prepared, ok = rt.deps.PrepareReentry(divisionID, plan.candidate)

@@ -1094,15 +1094,53 @@ func (rt *Runtime) refreshCompanionOwnerLabels(division string, c *enterworld.Ch
 	rt.petMu.Unlock()
 }
 
-// Successful owner re-entry retires motion/pickup from the departed world.
-// The persisted pet identity and inventory survive; the new projection starts
-// around its owner's admitted destination, before bootstrap publication.
 /*
 ================
 relocateReturningPet
+
+Successful owner re-entry retires motion/pickup from the departed world.
+The persisted pet identity and inventory survive; the new projection starts
+around its owner's admitted destination, before bootstrap publication.
+A parked trade transport travels too (a return scroll, a portal, a GM
+move); a town revive leaves it behind (relocateRevivingPets).
 ================
 */
 func (rt *Runtime) relocateReturningPet(division string, c *enterworld.Character, destination simulation.Spawn) map[petOwnerKey]petSession {
+	return rt.relocateCompanions(division, c, destination, false)
+}
+
+/*
+================
+relocateRevivingPets
+
+A town revive (rebirth at the appointed point, in the same world) moves
+every companion but a parked trade transport, which stays where it was
+parked, goods and all.
+
+Inferred, not read from SR_GameServer (the v1.188 binary was not at hand,
+owner's call 2026-11-26): natively the transport outlives its parked
+trader's death and keeps its goods in the world (tradercargodrop.go), and
+the town teleport the revive runs through refuses a summoned transport
+outright (goodsteleport.go), so the original never carries one to town.
+The trader then stands past the 100 m tether and may only walk back
+toward it (tether.go), or retire it from anywhere with the Clean
+command (costerminate.go), which drops the goods where it stands.
+================
+*/
+func (rt *Runtime) relocateRevivingPets(division string, c *enterworld.Character, destination simulation.Spawn) map[petOwnerKey]petSession {
+	return rt.relocateCompanions(division, c, destination, true)
+}
+
+/*
+================
+relocateCompanions
+
+The shared body of the two relocations above. transportStays leaves a
+parked trade transport's session untouched: its pose, generation and
+tether anchor carry on as if its owner had never moved.
+================
+*/
+func (rt *Runtime) relocateCompanions(division string, c *enterworld.Character, destination simulation.Spawn, transportStays bool) map[petOwnerKey]petSession {
 	rt.petMu.Lock()
 	previous := make(map[petOwnerKey]petSession)
 	ownerKey := petOwnerKey{division: division, name: strings.ToLower(c.Name)}
@@ -1114,12 +1152,16 @@ func (rt *Runtime) relocateReturningPet(division string, c *enterworld.Character
 		if key.division != division || key.name != strings.ToLower(c.Name) || key.gid == 0 || state.character != c {
 			continue
 		}
+		if transportStays && rt.isParkedTransport(c.CompanionByGID(key.gid)) {
+			continue
+		}
 		previous[key] = *state
 		keys = append(keys, key)
 	}
 	rt.petMu.Unlock()
-	// The parked transport travels with its trader; its tether follows on
-	// the next pet tick, and the old anchor holds nothing until then.
+	// A travelling transport's tether follows on the next pet tick, and the
+	// old anchor holds nothing until then. One left behind is re-anchored
+	// on the same tick where it stands.
 	if rt.Worlds != nil {
 		rt.Worlds.ClearTether(simulation.WorldKey(division, c.Name))
 	}
@@ -1151,6 +1193,21 @@ func (rt *Runtime) relocateReturningPet(division string, c *enterworld.Character
 		}
 	}
 	return previous
+}
+
+/*
+================
+isParkedTransport
+
+A summoned, unridden trade transport (TID4 2).
+================
+*/
+func (rt *Runtime) isParkedTransport(cos *enterworld.CharacterCOS) bool {
+	if cos == nil || !cos.Summoned || cos.Mounted {
+		return false
+	}
+	ref, ok := rt.cosReferenceVerdict(cos)
+	return ok && isVehicleCOS(ref.TidWord)
 }
 
 /*
