@@ -38,10 +38,22 @@ function fakeInput() {
 	};
 }
 
+/*
+================
+asInput
+
+The fake as the input type configureCredentialHints takes: it carries
+only the two members the function writes.
+================
+*/
+function asInput( fake ) {
+	return /** @type {HTMLInputElement} */ (/** @type {unknown} */ (fake));
+}
+
 test("the login edits keep the tokens a password manager fills", () => {
 	for ( const [id, token] of [ [ "account", "username" ], [ "password", "current-password" ] ] ) {
 		const input = fakeInput();
-		configureCredentialHints( input, id );
+		configureCredentialHints( asInput( input ), id );
 		assert.equal( input.attributes.get( "autocomplete" ), token );
 		assert.equal( input.attributes.has( "data-1p-ignore" ), false );
 	}
@@ -50,7 +62,7 @@ test("the login edits keep the tokens a password manager fills", () => {
 test("chat and every other edit refuse Autofill and the password managers", () => {
 	for ( const id of [ "chat-input", "stat-points", "stall-prompt-quantity" ] ) {
 		const input = fakeInput();
-		configureCredentialHints( input, id );
+		configureCredentialHints( asInput( input ), id );
 		// "off" is the value Chrome overrides for address Autofill.
 		assert.equal( input.attributes.get( "autocomplete" ), GAME_EDIT_AUTOCOMPLETE );
 		assert.notEqual( GAME_EDIT_AUTOCOMPLETE, "off" );
