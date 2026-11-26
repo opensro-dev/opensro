@@ -18,14 +18,15 @@ Every action id is one the classic window already dispatches
 (item-mall-category, item-mall-tab, item-mall-buy, item-mall-wear,
 item-mall-reserve, item-mall-root:4/5, item-mall-buy-all, item-mall-page,
 item-mall-home, item-mall-search, item-mall-close), plus the card popup's
-item-mall-popup:<index> and item-mall-popup-close, and the scrolled tab
-row's item-mall-tab-scroll:<first> (issue #4093).
+item-mall-popup:<index> and item-mall-popup-close, the scrolled tab
+row's item-mall-tab-scroll:<first> (issue #4093), and the gender
+filter's item-mall-gender:<sex> (issue #4480).
 
 ===========================================================================
 */
 
 import type { UiRect } from "@/engine/contracts/ui";
-import type { MallOffer, MallTab } from "@/engine/contracts/item-mall";
+import type { MallGender, MallOffer, MallTab } from "@/engine/contracts/item-mall";
 import { type MallCategoryList, mallTabCaptionLater } from "@/engine/foundation/ui/item-mall-layout";
 import { BONUS_SILK_CAPTION_KEY, EARNED_SILK_CAPTION, silkWalletHelp } from "@/engine/foundation/ui/mall-wallet";
 import {
@@ -36,6 +37,7 @@ import {
 	RENEWAL_MALL_WIDTH,
 	RENEWAL_WINDOW_FRAME,
 	renewalBadgeArt,
+	renewalGenderRects,
 	renewalGoodsRect,
 	renewalMallControl,
 	renewalPagerRects,
@@ -120,6 +122,11 @@ export interface RenewalMallBrowse {
 	readonly page: number;
 	readonly pageSize: number;
 	readonly count: number;
+	// The gender filter (issue #4480): the chosen sex, and whether the
+	// list behind the page holds a gendered package at all (the
+	// filter's segments draw only then).
+	readonly gender: "all" | MallGender;
+	readonly gendered: boolean;
 	readonly offers: readonly MallOffer[];
 	readonly search: string;
 	readonly searchDraft: string;
@@ -453,6 +460,33 @@ export function renewalMallView( input: RenewalMallInput ): RenewalMallOp[] {
 			texture: RENEWAL_ART + "mall_page_next.png",
 			disabled: browse.page >= pages - 1,
 			selected: false
+		} );
+	}
+
+	// The gender filter (issue #4480, port-only): while the list behind
+	// the page holds a gendered package, the three segments sit on the
+	// pager row's left, the chosen one gold. The sex comes from each
+	// package's own gender (its items' ReqGender), never its name.
+	if ( browse.gendered ) {
+		const segments = [
+			[ "all", "All" ],
+			[ "male", "Male" ],
+			[ "female", "Female" ]
+		] as const;
+		const rects = renewalGenderRects();
+		segments.forEach( ( [value, caption], index ) => {
+			const rect = at( rects[index]! );
+			const on = browse.gender === value;
+			ops.push( {
+				kind: "button",
+				id: "item-mall-gender:" + value,
+				label: caption,
+				rect,
+				texture: RENEWAL_ART + (on ? "mall_sub_tab_on.png" : "mall_sub_tab_off.png"),
+				disabled: false,
+				selected: on
+			} );
+			label( caption, rect, on ? GOLD : WHITE, 1 );
 		} );
 	}
 

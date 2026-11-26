@@ -297,6 +297,37 @@ test("the window names sellers, hides anonymous ones and never sells a player it
 	}
 });
 
+test("the wallet labels each balance on its own, and a buy names the balance it spends (#4480)", () => {
+	const { f, step } = storageKeeper( true );
+	try {
+		step();
+		f.ui.event( { kind: "activate", id: "market-open" } );
+		const controls = step();
+		// The fixture's account holds 40 Silk and 25 Earned Silk; every
+		// balance stands with its own caption, none run together.
+		assert.ok( f.hasText( "Gold" ) && f.hasText( "Silk" ) && f.hasText( "Earned Silk" ) );
+		assert.ok( f.hasText( "40" ) && f.hasText( "25" ) );
+		assert.ok( !f.hasText( "Earned:" ), "the earned balance is never abbreviated" );
+		// The Silk balances carry the mall wallet's hover help, the one
+		// wording both windows share; gold has no silk help.
+		assert.match( controls.get( "market-wallet-silk" )?.helpText ?? "", /consignment market sales/ );
+		assert.match( controls.get( "market-wallet-earned" )?.helpText ?? "", /spend it first/ );
+		assert.equal( controls.get( "market-wallet-gold" ), undefined );
+		// Row 7 is priced in gold, row 8 in silk: each buy box names the
+		// balance the purchase spends before asking where the item goes.
+		f.ui.event( { kind: "activate", id: "market-row-buy:7" } );
+		step();
+		assert.ok( f.hasText( "Paid from your Gold." ) );
+		f.ui.event( { kind: "activate", id: "market-dialog-cancel" } );
+		step();
+		f.ui.event( { kind: "activate", id: "market-row-buy:8" } );
+		step();
+		assert.ok( f.hasText( "Paid from Earned Silk first, then Silk." ) );
+	} finally {
+		f.dispose();
+	}
+});
+
 test("a buy asks where the item goes and sends that place", () => {
 	const { f, step, sent } = storageKeeper( true );
 	try {

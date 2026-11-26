@@ -534,6 +534,74 @@ test("the catalogue's own name keys pair by their _M_ / _W_ segment", () => {
 	);
 });
 
+/*
+================
+sexed
+
+The Knight and Saint pairs with an ungendered scroll between them,
+each offer carrying the gender the server read from its item.
+================
+*/
+function sexed() {
+	const sexes = [ "male", "female", undefined, "male", "female" ];
+	return named( [ "Knight (M)", "Knight (F)", "Scroll", "Saint (M)", "Saint (F)" ] )
+		.map( ( offer, index ) => ({ ...offer, gender: sexes[index] }) );
+}
+
+test("the gender filter keeps the chosen sex and every ungendered good (#4480)", () => {
+	const mall = renewalMall();
+	mall.browse( 1, 1 );
+	const catalogue = { ...state(), offers: sexed() };
+	let read = mall.read( catalogue );
+	assert.equal( read.gender, "all" );
+	assert.equal( read.gendered, true );
+	assert.deepEqual(
+		read.offers.map( offer => offer.name ),
+		[ "Knight (M)", "Knight (F)", "Scroll", "Saint (M)", "Saint (F)" ]
+	);
+	mall.setGender( "male" );
+	read = mall.read( catalogue );
+	assert.deepEqual( read.offers.map( offer => offer.name ), [ "Knight (M)", "Scroll", "Saint (M)" ] );
+	mall.setGender( "female" );
+	read = mall.read( catalogue );
+	assert.deepEqual( read.offers.map( offer => offer.name ), [ "Knight (F)", "Scroll", "Saint (F)" ] );
+	// A word that is not a sex changes nothing.
+	mall.setGender( "bogus" );
+	assert.equal( mall.read( catalogue ).gender, "female" );
+	// The classic window's list is the filtered one too, but only the
+	// renewal view draws the control; an ungendered list reports none.
+	mall.setGender( "all" );
+	assert.equal( mall.read( { ...state(), offers: named( [ "Potion", "Scroll" ] ) } ).gendered, false );
+});
+
+test("the view draws the gender segments only over gendered goods, the chosen one selected (#4480)", () => {
+	const mall = renewalMall();
+	mall.browse( 1, 1 );
+	const catalogue = { ...state(), offers: sexed() };
+	let ops = view( mall, { state: catalogue } );
+	for ( const sex of [ "all", "male", "female" ] ) {
+		assert.ok( button( ops, "item-mall-gender:" + sex ), sex );
+	}
+	assert.equal( button( ops, "item-mall-gender:all" )?.selected, true );
+	// On the pager's row, left of its previous arrow, inside the goods area.
+	const pager = renewalPagerRects();
+	for ( const sex of [ "all", "male", "female" ] ) {
+		const rect = defined( button( ops, "item-mall-gender:" + sex ) ).rect;
+		assert.ok( rect[0] >= RENEWAL_GOODS_AREA[0] && rect[0] + rect[2] <= pager.prev[0], sex + " clears the pager" );
+		assert.ok(
+			rect[1] + rect[3] <= RENEWAL_GOODS_AREA[1] + RENEWAL_GOODS_AREA[3],
+			sex + " stays in the goods area"
+		);
+	}
+	mall.setGender( "female" );
+	ops = view( mall, { state: catalogue } );
+	assert.equal( button( ops, "item-mall-gender:female" )?.selected, true );
+	assert.equal( button( ops, "item-mall-gender:all" )?.selected, false );
+	// No gendered goods in the list: no segments.
+	const plain = view( mall, { state: { ...state(), offers: named( [ "Potion", "Scroll" ] ) } } );
+	assert.equal( button( plain, "item-mall-gender:all" ), undefined );
+});
+
 test("the search draft filters nothing until Search applies it, and matches the English name", () => {
 	const mall = renewalMall();
 	mall.setNames( { SN_DEVIL: "Devil Wing Armor (M)", SN_SAINT: "Saint Knight Armor (M)" } );

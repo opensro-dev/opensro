@@ -7,6 +7,7 @@ replace production rendering, modal ownership, validation or request reducers.
 ===========================================================================
 */
 import type { EntryFixture } from "./entry-recipes.mjs";
+import type { MallGender, MallOffer } from "../../src/engine/contracts/item-mall";
 import type { Platform } from "../../src/engine/contracts/runtime";
 import type { createBugReportDialog } from "../../src/engine/runtime/bug-report/dialog";
 import type { Journey } from "./scenarios";
@@ -57,6 +58,103 @@ activate
 */
 function activate( context: RecipeContext, id: string ) {
 	context.ui.event( { kind: "activate", id } );
+}
+
+/*
+================
+avatarMallState
+
+The shipped v1.150 avatar shelves as a mall state: the wedding dress
+and hat pairs (their items' own ReqGender, 1 male and 0 female,
+published as each package's gender) and an ungendered monster booth
+(ReqGender 2, no gender). Names, icons and prices are the shipped
+rows; nothing is sent.
+================
+*/
+function avatarMallState() {
+	const offer = (
+		tab: number,
+		slot: number,
+		row: {
+			packageId: number;
+			name: string;
+			description: string;
+			icon: string;
+			silk: number;
+			itemIds: readonly number[];
+			gender?: MallGender;
+		}
+	): MallOffer => ({
+		group: 852,
+		shop: 5,
+		tab,
+		slot,
+		giftSilk: 0,
+		currencyMask: 22,
+		allowsPoints: true,
+		purchaseLimit: 5,
+		...row
+	});
+	return {
+		tabs: [
+			{ shop: 5, tab: 0, category: "MALL_AVATAR", label: "UIIT_STT_SILKMALL_BOOTH" },
+			{ shop: 5, tab: 1, category: "MALL_AVATAR", label: "UIIT_STT_SILKMALL_DRESS" },
+			{ shop: 5, tab: 2, category: "MALL_AVATAR", label: "UIIT_STT_SILKMALL_HAT" }
+		],
+		offers: [
+			offer( 0, 0, {
+				packageId: 20005,
+				name: "SN_ITEM_MALL_BOOTH_MOB_BIGEYEGHOST",
+				description: "SN_ITEM_MALL_BOOTH_MOB_BIGEYEGHOST_TT_DESC",
+				icon: "item/Avatar/mall_booth_mob_bigeyeghost.ddj",
+				silk: 50,
+				itemIds: [ 3848 ]
+			} ),
+			offer( 1, 0, {
+				packageId: 38548,
+				name: "SN_ITEM_MALL_AVATAR_M_EU_WEDDING",
+				description: "SN_ITEM_MALL_AVATAR_M_EU_WEDDING_TT_DESC",
+				icon: "item/Avatar/mall_avatar_m_eu_wedding.ddj",
+				silk: 130,
+				itemIds: [ 23295 ],
+				gender: "male" as const
+			} ),
+			offer( 1, 1, {
+				packageId: 38550,
+				name: "SN_ITEM_MALL_AVATAR_W_EU_WEDDING",
+				description: "SN_ITEM_MALL_AVATAR_W_EU_WEDDING_TT_DESC",
+				icon: "item/Avatar/mall_avatar_w_eu_wedding.ddj",
+				silk: 130,
+				itemIds: [ 23296 ],
+				gender: "female" as const
+			} ),
+			offer( 2, 0, {
+				packageId: 38549,
+				name: "SN_ITEM_MALL_AVATAR_M_EU_WEDDING_HAT",
+				description: "SN_ITEM_MALL_AVATAR_M_EU_WEDDING_HAT_TT_DESC",
+				icon: "item/Avatar/mall_avatar_m_eu_wedding_hat.ddj",
+				silk: 30,
+				itemIds: [ 23291 ],
+				gender: "male" as const
+			} ),
+			offer( 2, 1, {
+				packageId: 38551,
+				name: "SN_ITEM_MALL_AVATAR_W_EU_WEDDING_HAT",
+				description: "SN_ITEM_MALL_AVATAR_W_EU_WEDDING_HAT_TT_DESC",
+				icon: "item/Avatar/mall_avatar_w_eu_wedding_hat.ddj",
+				silk: 30,
+				itemIds: [ 23292 ],
+				gender: "female" as const
+			} )
+		],
+		silk: 700,
+		earnedSilk: 60,
+		earnedTradable: true,
+		giftSilk: 20,
+		points: 5,
+		pending: false,
+		revision: 1
+	};
 }
 
 /*
@@ -230,6 +328,56 @@ export const extendedRecipes: readonly ExtendedRecipe[] = [
 			};
 			await context.step();
 			activate( context, "item-mall" );
+		}
+	},
+	{
+		id: "dialog:item-mall-gender",
+		title: "Item Mall renewal gender filter (#4480)",
+		family: "Dialogs",
+		source: "runtime/ui/hud/item-mall.ts gender filter / renewal-mall-view.ts segments",
+		resources: [
+			"ifitemmall",
+			"ifitemmallshop",
+			"ifitemmallshopslot",
+			"ifitemmallconfirmbuy",
+			"ifitemmallconfirmslot",
+			"ifitemmallusepoint"
+		],
+		control: "item-mall-gender:female",
+		async open( context ) {
+			context.state.gameplay.itemMall = avatarMallState();
+			await context.step();
+			activate( context, "item-mall" );
+			await context.step();
+			activate( context, "item-mall-category:1" );
+			await context.step();
+			activate( context, "item-mall-tab:1" );
+		}
+	},
+	{
+		id: "dialog:item-mall-gender-female",
+		title: "Item Mall renewal gender filter, Female chosen (#4480)",
+		family: "Dialogs",
+		source: "runtime/ui/hud/item-mall.ts gender filter / renewal-mall-view.ts segments",
+		resources: [
+			"ifitemmall",
+			"ifitemmallshop",
+			"ifitemmallshopslot",
+			"ifitemmallconfirmbuy",
+			"ifitemmallconfirmslot",
+			"ifitemmallusepoint"
+		],
+		control: "item-mall-gender:female",
+		async open( context ) {
+			context.state.gameplay.itemMall = avatarMallState();
+			await context.step();
+			activate( context, "item-mall" );
+			await context.step();
+			activate( context, "item-mall-category:1" );
+			await context.step();
+			activate( context, "item-mall-tab:1" );
+			await context.step();
+			activate( context, "item-mall-gender:female" );
 		}
 	},
 	{

@@ -9,7 +9,7 @@ and purchase completion. Closing a dialog never retries a purchase.
 ===========================================================================
 */
 
-import type { MallOffer, MallState, MallPreviewState } from "@/engine/contracts/item-mall";
+import type { MallGender, MallOffer, MallState, MallPreviewState } from "@/engine/contracts/item-mall";
 import {
 	mallCategories,
 	mallCategoriesLater,
@@ -39,6 +39,11 @@ export function createItemMall() {
 	// touches either.
 	let categoriesLater = false;
 	let search = "";
+	// The renewal mall's gender filter (issue #4480, port-only): the
+	// chosen wearer sex, matched against each package's own gender (its
+	// items' ReqGender, published by the server). Unlike the search it
+	// survives category switches; reset() restores "all".
+	let gender: "all" | MallGender = "all";
 	// The later client's renewal mall window, the desktop default when
 	// its import is published (owner 2026-11-20). It browses the later
 	// rail, opens a popup per goods card (popup is its index on the page,
@@ -136,6 +141,7 @@ export function createItemMall() {
 
 	function reset() {
 		visible = false;
+		gender = "all";
 		category = -1;
 		tab = 0;
 		tabFirst = 0;
@@ -312,6 +318,21 @@ export function createItemMall() {
 		setSearch( text: string ) {
 			if ( typeof text !== "string" ) return;
 			search = text.slice( 0, 32 );
+			page = 0;
+			popup = -1;
+		},
+		/*
+		================
+		setGender
+
+		The renewal mall's gender filter (issue #4480): "all", "male" or
+		"female". A change returns to the first page, as a search edit
+		does.
+		================
+		*/
+		setGender( value: string ) {
+			if ( value !== "all" && value !== "male" && value !== "female" ) return;
+			gender = value;
 			page = 0;
 			popup = -1;
 		},
@@ -565,15 +586,24 @@ export function createItemMall() {
 					offer.badge === "recommended" :
 					current && offer.shop === current.shop && offer.tab === current.tab
 			) ?? [];
+			// The gender filter (#4480) narrows whatever list the tabs,
+			// the search or the basket chose: a gendered package must
+			// match the chosen sex, an ungendered one lists under every
+			// choice. gendered says the list behind the filter holds a
+			// gendered package at all (the control's reason to be).
+			const gendered = offers.some( offer => offer.gender !== undefined );
+			const listed = gender === "all" ?
+				offers :
+				offers.filter( offer => offer.gender === undefined || offer.gender === gender );
 			// The renewal grid pages by its cells (gendered pairs keep their
 			// rows, so a cell may stand empty); the classic window by offers.
-			const cells = renewal ? renewalGoodsCells( offers, names ) : null;
-			const total = cells ? cells.length : offers.length;
+			const cells = renewal ? renewalGoodsCells( listed, names ) : null;
+			const total = cells ? cells.length : listed.length;
 			const currentPage = Math.min( page, Math.max( 0, Math.ceil( total / pageSize ) - 1 ) );
 			const pageCells = cells?.slice( currentPage * pageSize, (currentPage + 1) * pageSize );
 			const pageOffers = pageCells ?
-				pageCells.filter( index => index >= 0 ).map( index => offers[index]! ) :
-				offers.slice( currentPage * pageSize, (currentPage + 1) * pageSize );
+				pageCells.filter( index => index >= 0 ).map( index => listed[index]! ) :
+				listed.slice( currentPage * pageSize, (currentPage + 1) * pageSize );
 			// grid[cell] is the cell's index into the page's offers, or -1.
 			let next = 0;
 			const grid = pageCells ? pageCells.map( index => index >= 0 ? next++ : -1 ) : null;
@@ -608,6 +638,8 @@ export function createItemMall() {
 				tabs: shown,
 				count: total,
 				offers: pageOffers,
+				gender,
+				gendered,
 				grid
 			};
 		},
