@@ -62,9 +62,18 @@ type InventoryRow struct {
 	// item's type gives: a monster capsule's is the monster the mask turns
 	// its user into; a Devil's Spirit's (3/1/14, port-only behind
 	// SRO_NASRUN) is its awakening expiry in Unix seconds, 0 while
-	// dormant (nasrun/clock.go). No item is both. The JSON key keeps the
-	// capsule's original name so every saved record still decodes.
+	// dormant (nasrun/clock.go); a Magic Cube's (3/2/3, issue #3906) is
+	// StoredItemCount, the number of elixirs in its linked storage. No
+	// item is more than one of these. The JSON key keeps the capsule's
+	// original name so every saved record still decodes.
 	Data uint32 `json:"transformRefObjId,omitempty"`
+	// LinkedStorage holds a Magic Cube's elixir rows (issue #3906): capacity
+	// and contents keyed by this cube's RecordID on the native side. Absent
+	// on every other item. StoredItemCount (Data) stays in step with the
+	// number of occupied slots so the CSOItem body never lies. Persisted at
+	// the owning record's top level (cubestorage.go) so schema 61 stays
+	// additive inside schema 60's read window (#3090).
+	LinkedStorage *COSContainer `json:"-"`
 	// ForgeBound marks an item forged by the GM item-forge tool (port
 	// only, issue #1980): it refuses trade, NPC sale, stall offer and
 	// player drop. Absent on every native row.
@@ -358,8 +367,12 @@ type Character struct {
 
 	AnimationSetName string `json:"animationSetName"`
 
-	MissionInventory []InventoryRow  `json:"missionInventory"`
-	World            *CharacterWorld `json:"world,omitempty"`
+	MissionInventory []InventoryRow `json:"missionInventory"`
+	// CubeStorages persists Magic Cube linked storage at the character's
+	// top level (cubestorage.go, schema 61): store packs it on write and
+	// unpacks it back onto the owning InventoryRow on load.
+	CubeStorages []CharacterCubeStorage `json:"cubeStorages,omitempty"`
+	World        *CharacterWorld        `json:"world,omitempty"`
 
 	// ActiveCOS is the server-authoritative summoned companion/transport.
 	// The item use that creates it consumes the ITEM_COS_* row and persists

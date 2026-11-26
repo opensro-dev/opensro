@@ -142,6 +142,7 @@ var catalogueExempt = map[string]string{
 	"SRO_CONSIGNMENT":                          "the player market's escrow; no catalogue file carries listings",
 	"SRO_REFERRALS":                            "account referrals for the website; no catalogue file carries them",
 	"SRO_NASRUN":                               "an avatar socket rule at runtime; items.json publishes the Spirit rows only when the build imported them",
+	"SRO_MAGIC_CUBE":                           "a bag deposit/withdraw rule at runtime; items.json publishes the cube rows only when the build imported them",
 	"SRO_CONNECTION_JOURNAL":                   "staff census and the status page's people counts; no catalogue file carries it",
 	"SRO_JOB_SUIT_HIDES_ARMOR":                 "how a worn suit is drawn; the catalogue publishes no rendering",
 	"SRO_QUICK_FUSE":                           "a client wait in the alchemy window; the catalogue publishes no timers",

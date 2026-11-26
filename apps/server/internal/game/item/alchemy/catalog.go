@@ -89,6 +89,9 @@ type Catalog struct {
 	// Nasrun admits the Devil's Spirit as a reinforce target for
 	// Sabakun's jewel (nasrun.go); false is native.
 	Nasrun bool
+	// MagicCube admits a non-empty Magic Cube in the reinforce elixir slot
+	// (port-only, not native, #3906); false is native.
+	MagicCube bool
 }
 
 /*

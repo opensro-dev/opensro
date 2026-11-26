@@ -23,7 +23,10 @@ A good lists when:
 	  to a period in that table and names the very item the scrap sells:
 	  the server owns the rental clock and the item's expiry (issue
 	  #4240), and the step writes the term's row with the good so the
-	  built tree carries it. A term with no row, or a fixed window
+	  built tree carries it, its rented item renumbered to the tree's
+	  own identity of that item: the later client numbers its items
+	  its own way, and a row naming the later id rents another item
+	  or none in the tree. A term with no row, or a fixed window
 	  instead of a period, stays unlisted; a term naming another item
 	  is the native load's fatal, so the build refuses it here.
 
@@ -72,7 +75,7 @@ NASRUN_TABS = ("MALL_PREMIUM_NASRUN", "MALL_PREMIUM_NASRUN_ETC")
 GOODS_TAB, GOODS_PACKAGE, GOODS_SLOT = 2, 3, 4
 PACKAGE_ID, PACKAGE_CODE = 2, 3
 SCRAP_PACKAGE, SCRAP_ITEM = 2, 3
-ITEM_CODE, CHARACTER_CODE = 2, 2
+ITEM_ID, ITEM_CODE, CHARACTER_CODE = 1, 2, 2
 MALL_TAB = "MALL_"
 SUMMON_SCROLL = re.compile(r"ITEM_(COS_[A-Z0-9_]+)_SCROLL")
 SCRAP_RENT = 21
@@ -106,34 +109,53 @@ def tree_reader(native, output):
 
 
 # ================
-# sharded_codes
+# sharded_rows
 #
-# The codenames of one sharded table (itemdata, characterdata): its
-# index names the shard files, each read from the tree.
+# The rows of one sharded table (itemdata, characterdata): its index
+# names the shard files, each read from the tree.
 # ================
-def sharded_codes(read, index_name, column):
+def sharded_rows(read, index_name):
 	raw = read(index_name)
 	if raw is None:
-		return set()
-	codes = set()
+		return
 	for row in tables.table_rows(raw):
 		if not row or not row[0].strip():
 			continue
 		shard = read(sro_pk2.fold_ascii(row[0].strip()))
 		if shard is not None:
-			codes |= {cells[column] for cells in tables.table_rows(shard) if len(cells) > column}
-	return codes
+			yield from tables.table_rows(shard)
+
+
+# ================
+# sharded_codes
+#
+# The codenames of one sharded table.
+# ================
+def sharded_codes(read, index_name, column):
+	return {cells[column] for cells in sharded_rows(read, index_name) if len(cells) > column}
+
+
+# ================
+# sharded_ids
+#
+# One sharded table's identities by codename: the id the tree knows
+# each row by, which the server and the wire key on.
+# ================
+def sharded_ids(read, index_name, code_column, id_column):
+	return {cells[code_column]: cells[id_column] for cells in sharded_rows(read, index_name)
+		if len(cells) > max(code_column, id_column)}
 
 
 # ================
 # TreeView
 #
-# What the selection reads of the built tree: its item and creature
-# codenames, its mall tables and its shop tab codes.
+# What the selection reads of the built tree: its item identities by
+# codename, its creature codenames, its mall tables and its shop tab
+# codes.
 # ================
 class TreeView:
-	def __init__(self, item_codes, creature_codes, mall_rows, shop_tabs, carry_tabs=frozenset()):
-		self.item_codes, self.creature_codes = item_codes, creature_codes
+	def __init__(self, item_ids, creature_codes, mall_rows, shop_tabs, carry_tabs=frozenset()):
+		self.item_ids, self.creature_codes = item_ids, creature_codes
 		self.mall_rows, self.shop_tabs = mall_rows, shop_tabs
 		# Tabs the tree lacks that the step may carry over from the
 		# later client (add_goods names the Devil's Spirit's): a good
@@ -164,6 +186,26 @@ def rent_verdict(term, scrap, rent_rows, item_by_id):
 
 
 # ================
+# built_rent_row
+#
+# The term's later row as the tree ships it: its rented-item cell is the
+# tree's identity of the scrap's item. The later row names the later
+# client's id (28268 for the Winter attachment the tree knows as 29411),
+# and the server marks the reference that cell names as a rental
+# (itemrefs_rent.go): left as it was, 150 of r204l's 252 rows marked an
+# absent or a different item, and a rented good's rows desynced every
+# packet that carried their deadline.
+# ================
+def built_rent_row(rent_row, item_code, tree):
+	item_id = tree.item_ids.get(item_code)
+	if item_id is None:
+		raise ValueError(f"rent term {rent_row[RENT_CODE]} rents {item_code}, which the tree does not hold")
+	row = list(rent_row)
+	row[RENT_ITEM_ID] = item_id
+	return row
+
+
+# ================
 # unlisted_reason
 #
 # Why one later good stays out, or None when it lists.
@@ -186,7 +228,7 @@ def unlisted_reason(tab, package, later_index, tree):
 		if reason is not None:
 			return reason
 	held = [row[SCRAP_ITEM] for row in rows]
-	absent = [code for code in held if code not in tree.item_codes]
+	absent = [code for code in held if code not in tree.item_ids]
 	if absent:
 		return "item not in the tree: " + ", ".join(absent)
 	for code in held:
@@ -252,14 +294,15 @@ def goods_rows(later, tree, rent_rows=None, item_by_id=None):
 			next_slot[tab], package_id=package_id))
 		next_slot[tab] += 1
 		listed.append(package)
-		terms = [scrap[SCRAP_RENT] for scrap in scraps[package]
+		rented = [scrap for scrap in scraps[package]
 			if len(scrap) > SCRAP_RENT and scrap[SCRAP_RENT] not in (NO_RENT, "")]
-		if terms:
+		if rented:
 			rentals += 1
-		for term in terms:
+		for scrap in rented:
+			term = scrap[SCRAP_RENT]
 			if term not in rent_terms:
 				rent_terms.add(term)
-				rows[RENT_TABLE].append(rent_rows[term])
+				rows[RENT_TABLE].append(built_rent_row(rent_rows[term], scrap[SCRAP_ITEM], tree))
 	# Goods an earlier step already staged (the avatar import lists the
 	# avatars it carries before this step runs) sell through the same
 	# goods table, so their rent rows must ship too: a staged rental
@@ -282,7 +325,7 @@ def goods_rows(later, tree, rent_rows=None, item_by_id=None):
 				break
 			if term not in rent_terms:
 				rent_terms.add(term)
-				rows[RENT_TABLE].append(rent_row)
+				rows[RENT_TABLE].append(built_rent_row(rent_row, scrap[SCRAP_ITEM], tree))
 		else:
 			staged_rentals += 1
 	for tab, slots in next_slot.items():
@@ -361,7 +404,7 @@ def tab_label_row(symbol, text):
 def read_tree(read):
 	mall_rows = {name: tables.table_rows(read(name) or b"") for name, _ in mall.MALL_TABLES}
 	tabs = {row[SHOP_TAB_CODE] for row in tables.table_rows(read(SHOP_TAB_TABLE) or b"") if len(row) > SHOP_TAB_CODE}
-	return TreeView(sharded_codes(read, "itemdata.txt", ITEM_CODE), sharded_codes(read, "characterdata.txt", CHARACTER_CODE),
+	return TreeView(sharded_ids(read, "itemdata.txt", ITEM_CODE, ITEM_ID), sharded_codes(read, "characterdata.txt", CHARACTER_CODE),
 		mall_rows, tabs)
 
 

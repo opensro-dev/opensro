@@ -83,7 +83,17 @@ Why the raw total exceeds the original:
   textures: 213 MiB from 125 MiB). Images whose original was uncompressed
   RGBA (icons, most UI) are smaller as PNG.
 - **Outdoor region records are JSON**, gzip-compressed inside the packs
-  (about 18% of the JSON). The original binary map files are smaller.
+  (about 18% of the JSON). The original binary map files are smaller: a
+  region's terrain is about 74 KiB gzipped, against 37 KiB for its gzipped
+  `.m` file.
+  Until 2026-11 every region also carried its terrain twice: the top-level
+  `terrain.blocks` and `terrainTextures.blocks`, and again in a one-entry
+  `sectors` list. A bundle that covers only its own sector now leaves the
+  list out (`sectorList` in `buildMapLoaderRegionBundle.mjs`), which made
+  each region about a third smaller (measured on 4 live regions: 626,000 to
+  421,141 bytes gzipped). Every reader (client, server water surface,
+  region index) takes the top-level rows when the list is absent, so the
+  data needs no client release.
 - **Leftovers of older builds were still packed** (for example tile2d
   PNGs next to the `.texture` files that replaced them). The publication
   ledger exists to stop this; see below.

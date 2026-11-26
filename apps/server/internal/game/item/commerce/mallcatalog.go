@@ -96,8 +96,9 @@ type MallCatalog struct {
 }
 
 // rentTerms is refrentitem by code: the terms that rent for a period of
-// minutes, and the terms that rent over a fixed begin/end window (no
-// mall good names those; only periods are sold, issue #4240).
+// minutes, the item each period rents, and the terms that rent over a
+// fixed begin/end window (no mall good names those; only periods are
+// sold, issue #4240).
 /*
 ================
 rentTerms
@@ -105,6 +106,7 @@ rentTerms
 */
 type rentTerms struct {
 	periods map[string]uint32
+	items   map[string]uint32
 	windows map[string]bool
 }
 
@@ -113,6 +115,7 @@ type rentTerms struct {
 // fixed window in the begin/end cells instead).
 const (
 	rentTermCode    = 1
+	rentTermItem    = 2
 	rentTermMinutes = 9
 )
 
@@ -125,7 +128,7 @@ then fails hydration as a term without a row, which names the data.
 ================
 */
 func parseRentTerms(rows [][]string) rentTerms {
-	terms := rentTerms{periods: map[string]uint32{}, windows: map[string]bool{}}
+	terms := rentTerms{periods: map[string]uint32{}, items: map[string]uint32{}, windows: map[string]bool{}}
 	for _, row := range rows {
 		if len(row) <= rentTermMinutes || row[rentTermCode] == "" {
 			continue
@@ -138,7 +141,12 @@ func parseRentTerms(rows [][]string) rentTerms {
 			terms.windows[row[rentTermCode]] = true
 			continue
 		}
+		item, err := strconv.ParseUint(row[rentTermItem], 10, 32)
+		if err != nil {
+			continue
+		}
 		terms.periods[row[rentTermCode]] = uint32(minutes)
+		terms.items[row[rentTermCode]] = uint32(item)
 	}
 	return terms
 }

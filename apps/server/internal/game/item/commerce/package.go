@@ -108,6 +108,12 @@ func packageContent(row []string, refs enterworld.ItemRefSource, rents rentTerms
 		if data != 0 || plus != 0 || variance != 0 || count != 0 {
 			return Content{}, fmt.Errorf("commerce: summoner template has an unexpected record: %s", row[3])
 		}
+	case wire.IsMagicCube(flags):
+		// Port-only (#3906): an unopened Magic Cube (TID 3/2/3/1) holds zero
+		// elixirs (Data = 0) and carries no plus, variance or magic options.
+		if data != 0 || plus != 0 || variance != 0 || count != 0 {
+			return Content{}, fmt.Errorf("commerce: magic cube template has an unexpected record: %s", row[3])
+		}
 	default:
 		return Content{}, fmt.Errorf("commerce: unsupported item template %s", row[3])
 	}
@@ -119,6 +125,15 @@ func packageContent(row []string, refs enterworld.ItemRefSource, rents rentTerms
 				return Content{}, fmt.Errorf("commerce: rent term %s is a fixed window; only periods are sold", term)
 			}
 			return Content{}, fmt.Errorf("commerce: rent term %s has no refrentitem row", term)
+		}
+		// The wire measures a row by its reference: the leg rides every
+		// row of the item the term's row names (itemrefs_rent.go,
+		// wire/rentrefs.go), and the deadline rides this content's rows.
+		// A term renting another item would send a deadline the client
+		// does not measure for, as r204l's rows did (they named the
+		// later client's ids), so the catalogue refuses it.
+		if rented := rents.items[term]; rented != ref.RefObjID {
+			return Content{}, fmt.Errorf("commerce: rent term %s rents item %d, not %s (%d)", term, rented, ref.Codename, ref.RefObjID)
 		}
 		content.RentMinutes = minutes
 	}

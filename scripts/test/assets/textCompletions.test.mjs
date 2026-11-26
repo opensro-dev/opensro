@@ -66,6 +66,31 @@ test("the later client's reverse scroll destinations complete the v1.150 table",
 	assert.equal( shipped.UIIT_CLT_REVERSE_RETRUN_SCROLL_PARTY_MOVE, "Shipped" );
 });
 
+test("the Settings tab titles resolve to each tab's own name (#4512)", () => {
+	// The Option window's five tabs, in native order: the routine at
+	// 0x5c9eb5..0x5c9fa0 resolves these keys into tab slots 0..4. The
+	// v1.150 English cell for the camera tab ships "Set time"; the built
+	// catalogue takes the later client's own correction (v1.696
+	// textuisystem_800.txt row 796, "View") over it.
+	const entries = {
+		UIIT_CTL_MENU_VIDEOSET: "Video",
+		UIIT_CTL_MENU_AUDIOSET: "Audio",
+		UIIT_CTL_MENU_CAMERASET: "Set time",
+		UIIT_CTL_MENU_INPUTSET: "Set input",
+		UIIT_CTL_MENU_GAMESET: "Set game"
+	};
+	completeUiText( entries );
+	assert.equal( entries.UIIT_CTL_MENU_VIDEOSET, "Video" );
+	assert.equal( entries.UIIT_CTL_MENU_AUDIOSET, "Audio" );
+	assert.equal( entries.UIIT_CTL_MENU_CAMERASET, "View" );
+	assert.equal( entries.UIIT_CTL_MENU_INPUTSET, "Set input" );
+	assert.equal( entries.UIIT_CTL_MENU_GAMESET, "Set game" );
+	// A catalogue without the row gains none: the correction is not a completion.
+	const other = { UIIT_CTL_MENU_VIDEOSET: "Video" };
+	completeUiText( other );
+	assert.equal( "UIIT_CTL_MENU_CAMERASET" in other, false );
+});
+
 test("the later client's party summon lines complete the v1.150 table", () => {
 	// The v1.696 band (textuisystem_4600.txt ids 4528-4537, 4552-4563,
 	// 4579; textuisystem_5500.txt id 5404) for the party summon window

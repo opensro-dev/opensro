@@ -42,17 +42,22 @@ func TestSkinChangeBody(t *testing.T) {
 
 // The client's CSOItem_Deserialize reads them back: band 0x40 bodies are
 // the RefObjID plus the group's
-// own tail - the mask's monster, a pet summoner's record byte - never the
-// 18-byte equipment body the reference server serializes.
+// own tail - the mask's monster, a pet summoner's record byte, a Magic
+// Cube's StoredItemCount - never the 18-byte equipment body the reference
+// server serializes.
 func TestBand40ItemBodies(t *testing.T) {
 	capsule := ItemBody{RefObjID: 10364, TypeFlags: PackTypeFlags(3, 2, 2, 0), Data: 1933}
 	summoner := ItemBody{RefObjID: 2000, TypeFlags: PackTypeFlags(3, 2, 1, 1), Plus: 7, Durability: 9}
+	cube := ItemBody{RefObjID: 24663, TypeFlags: PackTypeFlags(3, 2, 3, 1), Data: 7}
+	emptyCube := ItemBody{RefObjID: 24663, TypeFlags: PackTypeFlags(3, 2, 3, 1), Data: 0}
 	for _, tc := range []struct {
 		body ItemBody
 		want []byte
 	}{
 		{capsule, concat(u32le(10364), u32le(1933))},
 		{summoner, concat(u32le(2000), []byte{1})},
+		{cube, concat(u32le(24663), u32le(7))},
+		{emptyCube, concat(u32le(24663), u32le(0))},
 	} {
 		got := tc.body.Encode()
 		if !bytes.Equal(got, tc.want) || tc.body.EncodedSize() != len(tc.want) {
@@ -62,8 +67,14 @@ func TestBand40ItemBodies(t *testing.T) {
 		if err != nil || back.RefObjID != tc.body.RefObjID || back.Data != tc.body.Data {
 			t.Fatalf("%#x read back %+v %v", tc.body.TypeFlags, back, err)
 		}
+		if IsMagicCube(tc.body.TypeFlags) && back.Quantity != uint16(tc.body.Data) {
+			t.Fatalf("magic-cube quantity %d, want stored count %d", back.Quantity, tc.body.Data)
+		}
 	}
 	if _, err := readItemBody(NewReader(concat(u32le(2000), []byte{2})), summoner.TypeFlags, nil); err == nil {
 		t.Fatal("a summoner with a pet record was accepted")
+	}
+	if !IsMagicCube(PackTypeFlags(3, 2, 3, 1)) || IsMagicCube(PackTypeFlags(3, 2, 2, 0)) {
+		t.Fatal("IsMagicCube must match TID 3.2.3 only")
 	}
 }

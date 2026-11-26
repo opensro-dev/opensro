@@ -48,12 +48,13 @@ func rarityMatches(item publicstats.MarketItem, rarity string) bool {
 }
 
 // The item TypeIDs the classification reads (TID1 3 = item; TID2 1 =
-// equipment, 2 = pet, 3 = consumable).
+// equipment, 2 = pet/cube, 3 = consumable; TID2 2 / TID3 3 = Magic Cube).
 const (
 	typeItem       = 3
 	typeEquipment  = 1
 	typePet        = 2
 	typeConsumable = 3
+	typeMagicCube3 = 3
 )
 
 // equipmentClass is one equipment TypeID3 row: its category and, for body
@@ -122,6 +123,9 @@ func Category(types [4]int64) string {
 	if types[0] == typeItem {
 		switch types[1] {
 		case typePet:
+			if types[2] == typeMagicCube3 {
+				return "other"
+			}
 			return "pet"
 		case typeConsumable:
 			return "consumable"

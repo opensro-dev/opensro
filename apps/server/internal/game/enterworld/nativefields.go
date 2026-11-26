@@ -219,6 +219,7 @@ var wireItemFieldNames = []string{
 	"useCooldownGroup524", "useCooldownDuration528",
 	"associatedSkillId", "useSkillId", "useSkillDurationMs",
 	"canUse", "itemParam1_29c", "itemParam3_2a4", "itemParam4_2a8", "itemParam5_2ac",
+	"itemParam9_2bc", "itemParam10_2c0",
 	"stoneFamilyMask", "stoneTooltipMask",
 }
 

@@ -272,6 +272,22 @@ func TestItemMoveRequestEncodings(t *testing.T) {
 			request: ItemMoveRequest{MovementType: MoveTypeGoldDrop, GoldAmount: 8800},
 			want:    []byte{0x0A, 0x60, 0x22, 0x00, 0x00},
 		},
+		{
+			// v1.696 client 0x7f7be0
+			name: "type 0x27 push into Magic Cube",
+			request: ItemMoveRequest{
+				MovementType: MoveTypePushIntoMagicCube, SourceSlot: 14, DestSlot: 13, Quantity: 2,
+			},
+			want: []byte{0x27, 14, 13, 2, 0},
+		},
+		{
+			// v1.696 client 0x7f7b90
+			name: "type 0x28 pop from Magic Cube",
+			request: ItemMoveRequest{
+				MovementType: MoveTypePopFromMagicCube, RefObjID: 2151, SourceSlot: 13, DestSlot: 15, Quantity: 1,
+			},
+			want: []byte{0x28, 0x67, 0x08, 0, 0, 13, 15, 1, 0},
+		},
 	}
 
 	for _, testCase := range cases {

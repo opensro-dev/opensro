@@ -13,6 +13,7 @@ import type { EntityState } from "@/engine/contracts/world";
 import type { GameplayState } from "@/engine/contracts/gameplay";
 import type { Renderer, FrameWork } from "@/engine/contracts/runtime";
 import { actorQueryRows } from "@/engine/foundation/animation/actor-query-rows";
+import { dressedAvatars } from "@/engine/foundation/gameplay/avatar-socket";
 import type { DressCatalog, WornItem } from "@/engine/foundation/animation/equipment-appearance";
 import type { SkillLookup } from "@/engine/foundation/ui/buff-viewer";
 import type { Resource, PresentationOutput, PresentationDisappear } from "./internal/presentation-contract";
@@ -472,7 +473,8 @@ export function publishCharacters(
 				resource: mallResource,
 				dress,
 				equipment: worn ? gameplay.inventory : [],
-				avatars: worn ? local.avatars ?? [] : [],
+				// The try-on dresses what the world actor dresses: no Spirit.
+				avatars: worn ? dressedAvatars( local.avatars ?? [] ) : [],
 				seconds,
 				source: next.get( local.gid ),
 				shape: skin?.shape

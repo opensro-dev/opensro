@@ -26,6 +26,7 @@ import god_import
 import hunting2_import
 import jupiter_import
 import later_mall_items
+import magic_cube_import
 import muhan_import
 import pharaoh_temple_import
 import reset_scroll_import
@@ -78,6 +79,9 @@ LATER_LAYERS = (
 	# (SRO_MALL_CATEGORIES): on stages their item shard beside the mall
 	# layout that lists them.
 	("gearsStones", gears_stone_import.add_stones),
+	# The mall Magic Cubes (port-only, #3906): SRO_MAGIC_CUBE stages the
+	# sixteen v1.696 rows in their own shard (190002).
+	("magicCubes", magic_cube_import.add_magic_cubes),
 	# The Item Mall reset scrolls (port-only): each its own switch
 	# (SRO_STAT_RESET_SCROLL, SRO_SKILL_RESET_SCROLL) stages its v1.696
 	# item in its own shard (300000).

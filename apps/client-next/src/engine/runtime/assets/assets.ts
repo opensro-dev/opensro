@@ -168,10 +168,10 @@ export function createAssets(): AssetOwner {
 	checkDeadline
 
 	Enforce the stall windows of active loads and of cancellation
-	acknowledgements. A load dies only of silence (no worker bytes inside its
-	window, the shorter one once decoding) or of the absolute ceiling; byte
-	progress slides the window (noteJobProgress), so a slow link is slow,
-	never fatal. Expiry is per job: the job takes the same transient error
+	acknowledgements. A load dies only of worker silence (no job's bytes
+	or decoder work inside its window, the shorter one once decoding) or
+	of the absolute ceiling; worker activity slides the windows
+	(noteWorkerActivity), so a slow link is slow, never fatal. Expiry is per job: the job takes the same transient error
 	the old whole-runtime failure carried, the worker is asked to cancel it,
 	and every other job continues. The expired job keeps its slot until the
 	worker acknowledges (its late result or release), like a cancellation:
@@ -224,19 +224,43 @@ export function createAssets(): AssetOwner {
 
 	/*
 	================
+	noteWorkerActivity
+
+	The worker reported work: bytes read for one job, or one decoder's
+	work units. The worker is one thread behind one pipe, so work on any
+	job is the only liveness every job has - the loader already credits
+	one download's bytes to every waiting load for the same reason
+	(#4508). Each live job's stall window therefore slides, in the phase
+	that job is in; the absolute ceiling in checkDeadline never slides,
+	and a job the busy worker never reaches dies of it. A worker serving
+	nothing reports nothing, and total silence still expires each job
+	inside its own window.
+	================
+	*/
+	function noteWorkerActivity() {
+		const now = performance.now();
+		for ( const job of jobs.values() ) {
+			if ( job.result || job.cancelled ) continue;
+			job.deadline = now + (job.decoding ? REQUEST_DECODE_STALL_MS : REQUEST_STALL_MS);
+		}
+	}
+
+	/*
+	================
 	noteJobProgress
 
-	The worker read more of a job's stream: slide its stall window. The
-	window that slides is the phase the job is in; the absolute ceiling in
-	checkDeadline never slides. Notes for finished, cancelled or unknown
-	jobs are inert (a load's last bytes can race its own completion).
+	The worker read more of a job's stream: its byte count grows, and the
+	read is worker activity (noteWorkerActivity), so every live job's
+	window slides, each in its own phase. Notes for finished, cancelled
+	or unknown jobs are inert (a load's last bytes can race its own
+	completion).
 	================
 	*/
 	function noteJobProgress( id: number, bytes: number ) {
 		const job = jobs.get( id );
 		if ( !job || job.result || job.cancelled || bytes <= job.bytes ) return;
 		job.bytes = bytes;
-		job.deadline = performance.now() + (job.decoding ? REQUEST_DECODE_STALL_MS : REQUEST_STALL_MS);
+		noteWorkerActivity();
 	}
 
 	/*
@@ -263,17 +287,20 @@ export function createAssets(): AssetOwner {
 	The decoder reported more of its own work: slide the decode window.
 	Pure CPU work moves no bytes, so without these notes a city decode
 	that outlasts the decode window reads as a hung worker and dies
-	mid-decode (#2862). Only an increase inside the decoding phase
-	counts; the worker counts one job's decode calls into one monotonic
-	total, so a note at or under the high-water mark is a stale echo.
-	The absolute ceiling in checkDeadline never slides.
+	mid-decode (#2862). The work is also worker activity
+	(noteWorkerActivity): while the one thread decodes, every other
+	job's turn waits behind it, so their windows slide too. Only an
+	increase inside the decoding phase counts; the worker counts one
+	job's decode calls into one monotonic total, so a note at or under
+	the high-water mark is a stale echo. The absolute ceiling in
+	checkDeadline never slides.
 	================
 	*/
 	function noteJobDecodingProgress( id: number, units: number ) {
 		const job = jobs.get( id );
 		if ( !job || job.result || job.cancelled || !job.decoding || units <= job.decodeUnits ) return;
 		job.decodeUnits = units;
-		job.deadline = performance.now() + REQUEST_DECODE_STALL_MS;
+		noteWorkerActivity();
 	}
 
 	/*

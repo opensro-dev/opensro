@@ -211,6 +211,10 @@ func BuildItemBody(row WireItem) []byte {
 		Quantity:     uint16(quantity),
 		MagicOptions: magicOptions,
 		Data:         row.Data, Summon: domain.CloneCOS(row.Summon),
+		// A rental's deadline rides its login row as it rides every
+		// live one (inventory.Item.Body): dropped here, a rented avatar
+		// read as permanent after every relog until its next live packet.
+		RentExpiresUnixMs: max(row.RentExpiresUnix, 0) * 1000,
 	}.Encode()
 }
 

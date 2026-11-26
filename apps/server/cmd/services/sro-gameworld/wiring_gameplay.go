@@ -33,6 +33,7 @@ import (
 	"opensro.online/server/internal/game/item/commerce"
 	"opensro.online/server/internal/game/item/wire"
 	"opensro.online/server/internal/game/macro"
+	"opensro.online/server/internal/game/magiccube"
 	"opensro.online/server/internal/game/moderation"
 	"opensro.online/server/internal/game/nasrun"
 	"opensro.online/server/internal/game/progression"
@@ -205,6 +206,7 @@ func newGameplayPlane(
 	items.AttackPetExpansion = companion.AttackPetExpansionEnabled()
 	items.NasrunSocket = nasrun.Enabled(os.Getenv(nasrun.Env))
 	items.NasrunTokens = items.NasrunSocket
+	items.MagicCube = magiccube.Enabled(os.Getenv(magiccube.Env))
 	items.Guilds = deps.Guilds
 	items.UnlimitedItems = enterworld.StarterKitCodenames(deps.StarterKit)
 	if err := items.ValidateLootReferences(); err != nil {

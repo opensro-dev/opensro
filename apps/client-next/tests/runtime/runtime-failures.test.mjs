@@ -861,7 +861,10 @@ test("terminal asset failures reach the session as asset incidents, once per epi
 			code: "asset_failed",
 			message: "asset=/assets/audio/ui_click.ogg error=Audio: EncodingError: Unable to decode audio data"
 		} );
-		// A UI image failure carries the retry owner's facts (#2559).
+		// A UI image failure carries the retry owner's facts (#2559),
+		// but only once it has stood the image owner's whole retry
+		// ladder (#4508): inside the ladder the retry may still heal
+		// it, and a healed retry files nothing.
 		owners.ui.resourceError = () => "UI image unavailable; retrying: /assets/ui/panel.ddj: Failed to decode";
 		owners.ui.resourceFailure = () => ({
 			path: "/assets/ui/panel.ddj",
@@ -869,7 +872,10 @@ test("terminal asset failures reach the session as asset incidents, once per epi
 			transient: true,
 			message: "UI image unavailable; retrying: /assets/ui/panel.ddj: Failed to decode"
 		});
+		const beforeImage = assetReports().length;
 		await frame();
+		assert.equal( assetReports().length, beforeImage, "a retrying image files nothing inside its ladder" );
+		for ( let i = 0; i < 31; i++ ) await frame();
 		assert.deepEqual( assetReports().at( -1 ), {
 			kind: "client-report",
 			incidentKind: "asset",

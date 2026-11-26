@@ -216,7 +216,14 @@ func isVersionMismatch(err error) bool {
 // (port-only, #3704 slice 5), so the daily cap survives a restart. A
 // Hunter without a row has been paid nothing that day; the offline
 // upgrade rewrites no record.
-const CurrentVersion = 60
+// Version 61 adds optional top-level Magic Cube linked-storage carriers
+// (cubeStorages on character and account_storage, storageCubeStorages on
+// guild, and linkedStorage on ground_items; port-only, #3906). InventoryRow
+// keeps LinkedStorage in memory only (json:"-") so no existing nested item
+// array gains a key, keeping the step additive inside schema 60's read
+// window (#3090). Records saved earlier carry none and are not cubes with
+// contents; the offline upgrade rewrites no record.
+const CurrentVersion = 61
 
 /*
 ================
@@ -287,10 +294,11 @@ var storeSteps = map[int]storeStep{
 	41: {true, "optional account gourdCount", 12, 17},
 	42: {true, "optional arena entry markers and reward chest", 12, 17},
 	43: {false, "the survival arena count moves to the account plane: the character count becomes a seed, so an older binary would count against it", 12, 17},
-	// 44 to 51 are no longer the current schema: each low end is the
+	// 44 to 60 are no longer the current schema: each low end is the
 	// layout it ran at, and its high end follows the current layout
 	// (layouts 25 and up always end at the current one). The current
-	// schema (60) takes the wide low end.
+	// schema (61) takes the wide low end so role repair can run on a
+	// store at any older layout (upgrade_tables_test.go).
 	44: {true, "optional top-level ravenRefugeReadyAtMs recovery deadline", 12, 17},
 	45: {true, "no record change; layout 13 adds trade_history", 13, 17},
 	46: {true, "optional per-character Nasrun token balance and daily count", 13, 17},
@@ -303,7 +311,8 @@ var storeSteps = map[int]storeStep{
 	55: {true, "optional per-character reverseUserPoint (reverse return scroll saved location, #3903)", 15, 17},
 	58: {false, "optional per-character inventoryAdditionUsed and account expansionUses (later capacity addition items, #4240); the warehouse count nests in the guild record", 15, 17},
 	59: {true, "no record change; layout 16 adds beta_silk_progress (the hourly silk clock, #4429)", 16, 17},
-	60: {true, "no record change; layout 17 adds caravan_escort_days (the AI caravan daily escort cap, #3704 slice 5)", 5, 17},
+	60: {true, "no record change; layout 17 adds caravan_escort_days (the AI caravan daily escort cap, #3704 slice 5)", 17, 17},
+	61: {true, "optional top-level Magic Cube linked storage (cubeStorages / storageCubeStorages / linkedStorage, #3906)", 5, 17},
 }
 
 // SkillSeedFunc resolves the current racial base-skill set while preserving
@@ -425,5 +434,6 @@ func decodeCharacterStrict(raw json.RawMessage) (*domain.Character, unknownField
 	if strings.TrimSpace(character.AccountID) == "" {
 		return nil, "", fmt.Errorf("character %q has no accountId; account ownership is mandatory in schema v%d", character.Name, CurrentVersion)
 	}
+	unpackCharacterCubeStorages(character)
 	return character, unknown, nil
 }

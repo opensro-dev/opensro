@@ -115,6 +115,9 @@ func (rt *Runtime) HandleItemMove(
 		wire.MoveTypeGuildStorageGoldDeposit, wire.MoveTypeGuildStorageGoldWithdraw:
 		return rt.applyGuildStorageMove(divisionID, character, request)
 
+	case wire.MoveTypePushIntoMagicCube, wire.MoveTypePopFromMagicCube:
+		return rt.applyMagicCubeMove(character, request)
+
 	default:
 		return failureResult(wire.ErrCodeInvalidRequest)
 	}
