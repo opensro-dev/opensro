@@ -172,12 +172,29 @@ func TestMonsterDropScatterNormalizesRegionAndFallsBackOnBlockedPlacement(t *tes
 	if got.Position.RegionID != 0x62A9 || got.Position.X != 7 {
 		t.Fatalf("cross-region drop %+v", got.Position)
 	}
-	rt.DropRoll = dropRollSequence(0, 0, 0, 16384)
+	// A refused placement is redrawn once from the death position: the
+	// second attempt's spot (angle ~half a turn, least radius) is kept.
+	rt.DropRoll = dropRollSequence(0, 0, 0, 16384, 0, 0)
+	constrainCalls := 0
+	rt.ConstrainMovement = func(_ string, from, to simulation.Spawn) (simulation.Spawn, *simulation.MoveError) {
+		constrainCalls++
+		if constrainCalls == 1 {
+			return from, &simulation.MoveError{Reason: "blocked"}
+		}
+		return to, nil
+	}
+	got = rt.scatterMonsterDrop(item, at, 0)
+	if got.Position.RegionID != at.RegionID || got.Position.X != float32(at.X-8) || math.Abs(float64(got.Position.Z)-at.Z) > 0.01 {
+		t.Fatalf("retry placement %+v, want the second attempt's spot", got.Position)
+	}
+
+	// Both placements refused: the death record is kept whole.
+	rt.DropRoll = dropRollSequence(0, 0, 0, 0, 0, 0)
 	rt.ConstrainMovement = func(_ string, from, to simulation.Spawn) (simulation.Spawn, *simulation.MoveError) {
 		return from, &simulation.MoveError{Reason: "blocked"}
 	}
 	got = rt.scatterMonsterDrop(item, at, 0)
-	if got.Position != item.Position || got.Y != item.Y || got.Heading == item.Heading {
+	if got.Position != item.Position || got.Y != item.Y || got.Heading != item.Heading {
 		t.Fatalf("fallback %+v", got)
 	}
 	rt.DropRoll = func() (uint32, error) { return 0, errors.New("entropy unavailable") }

@@ -162,7 +162,9 @@ func PlanGoldDrop(ref GoldHeapRef, amount uint32, at simulation.Spawn, droppedBy
 // scatterMonsterDrop follows the reference server's monster drop scatter:
 // independent angle, radius and heading draws after admission. The server
 // reference is v1.188; it is mechanism evidence, not a v1.150 pixel proof.
-// Rejected geometry falls back to the live death position, never the move goal.
+// A refused placement is redrawn once from the death position with fresh
+// draws; the item keeps the death position only when both placements are
+// refused (or the roll source fails), never the move goal.
 /*
 ================
 scatterMonsterDrop
@@ -185,37 +187,36 @@ func (rt *Runtime) scatterMonsterDrop(item grounditem.Item, at simulation.Spawn,
 		value, err := rt.DropRoll()
 		return float32(float64(value) / 32767), err == nil && value <= 32767
 	}
-	angleUnit, ok := draw()
-	if !ok {
-		return item
-	}
-	radiusUnit, ok := draw()
-	if !ok {
-		return item
-	}
-	headingUnit, ok := draw()
-	if !ok {
-		return item
-	}
 	const tau = 6.2831854820251465
-	angle := float32(float64(angleUnit) * tau)
-	radius := float32(float64(minRadius) + float64(maxRadius-minRadius)*float64(radiusUnit))
-	to := at
-	to.X = float64(float32(float32(at.X) + float32(float32(math.Cos(float64(angle)))*radius)))
-	to.Z = float64(float32(float32(at.Z) + float32(float32(math.Sin(float64(angle)))*radius)))
-	to = simulation.NormalizeSpawnFrame(to)
-	if rt.ConstrainMovement != nil {
-		checked, refusal := rt.ConstrainMovement(item.DroppedBy, at, to)
-		if refusal != nil || checked.RegionID != to.RegionID || checked.X != to.X || checked.Z != to.Z {
-			to = at
-			if retry, valid := draw(); valid {
-				headingUnit = retry
+	for attempt := 0; attempt < 2; attempt++ {
+		angleUnit, ok := draw()
+		if !ok {
+			return item
+		}
+		radiusUnit, ok := draw()
+		if !ok {
+			return item
+		}
+		headingUnit, ok := draw()
+		if !ok {
+			return item
+		}
+		angle := float32(float64(angleUnit) * tau)
+		radius := float32(float64(minRadius) + float64(maxRadius-minRadius)*float64(radiusUnit))
+		to := at
+		to.X = float64(float32(float32(at.X) + float32(float32(math.Cos(float64(angle)))*radius)))
+		to.Z = float64(float32(float32(at.Z) + float32(float32(math.Sin(float64(angle)))*radius)))
+		to = simulation.NormalizeSpawnFrame(to)
+		if rt.ConstrainMovement != nil {
+			checked, refusal := rt.ConstrainMovement(item.DroppedBy, at, to)
+			if refusal != nil || checked.RegionID != to.RegionID || checked.X != to.X || checked.Z != to.Z {
+				continue
 			}
-		} else {
 			to = checked
 		}
+		to.Angle = simulation.HeadingWordFromRadians(float64(float32(float64(headingUnit) * tau)))
+		item.Position, item.Y, item.Heading = placementFor(to)
+		return item
 	}
-	to.Angle = simulation.HeadingWordFromRadians(float64(float32(float64(headingUnit) * tau)))
-	item.Position, item.Y, item.Heading = placementFor(to)
 	return item
 }
