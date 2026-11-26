@@ -386,9 +386,8 @@ movedRoots
 What a miss moved, against the recorded fingerprint: the build settings
 (the env knobs and postures), each root that changed, appeared or went,
 and for a changed directory root the recorded folders that moved instead
-of the whole root. A record written before a field existed simply names
-less (no knobs, the root without its folders); the aggregate hash is
-unchanged, so such a record still skips a no-op build.
+of the whole root. A record without the knobs or a root's folders (a
+recorder that predates them) names less, never wrongly: the root alone.
 ================
 */
 export function movedRoots( recorded, current ) {
