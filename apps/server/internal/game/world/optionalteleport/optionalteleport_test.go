@@ -6,7 +6,8 @@ optionalteleport_test.go - which imported rows the port serves
 Synthetic textdata directories: no import is the native table (nil), the
 outdoor map rows of named regions are served by their own ids, dungeon
 groups and unnamed regions are dropped, Alexandria rows follow its
-overlay and SRO_ALEXANDRIA, and a malformed import is refused.
+overlay and SRO_ALEXANDRIA, a band above the shard's level cap is
+lowered to it, and a malformed import is refused.
 
 ===========================================================================
 */
@@ -168,6 +169,36 @@ func TestAdmitsTheLevelBand(t *testing.T) {
 	for level, want := range map[int64]bool{1: false, 49: false, 50: true, 60: true, 61: false} {
 		if !open.Admits(level) || band.Admits(level) != want {
 			t.Fatalf("level %d: open %v band %v, want true %v", level, open.Admits(level), band.Admits(level), want)
+		}
+	}
+}
+
+/*
+================
+TestCapLevelBandsAdmitsTheCap
+
+Alexandria's 95/999 rows on a 90-cap shard admit level 90; the 110 cap
+keeps the imported minimum, and an open row stays open.
+================
+*/
+func TestCapLevelBandsAdmitsTheCap(t *testing.T) {
+	for _, tc := range []struct {
+		levelCap    int64
+		admits      map[int64]bool
+		wantMinimum int64
+	}{
+		{90, map[int64]bool{89: false, 90: true}, 90},
+		{110, map[int64]bool{90: false, 94: false, 95: true, 110: true}, 95},
+	} {
+		points := []Point{{LevelMin: 95, LevelMax: 999}, {}}
+		CapLevelBands(points, tc.levelCap)
+		if points[0].LevelMin != tc.wantMinimum || points[1].LevelMin != 0 || points[0].LevelMax != 999 {
+			t.Fatalf("cap %d: bands %+v", tc.levelCap, points)
+		}
+		for level, want := range tc.admits {
+			if points[0].Admits(level) != want || !points[1].Admits(level) {
+				t.Fatalf("cap %d level %d: admits %v, want %v", tc.levelCap, level, points[0].Admits(level), want)
+			}
 		}
 	}
 }

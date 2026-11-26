@@ -24,6 +24,11 @@ INFERENCE: LevelMin / LevelMax are the table's level band (0 means no
 limit); the port refuses a use outside it. The shipped rows use 0/0,
 50/999, 70/999 and 95/999.
 
+INFERENCE: the table was written for the VSRO 110 cap. On a shard whose
+cap is lower (Alexandria open at the native 90), a minimum above the cap
+could never be met while the city's gates still take the player there,
+so CapLevelBands lowers such a minimum to the cap.
+
 ===========================================================================
 */
 package optionalteleport
@@ -96,6 +101,26 @@ func (p Point) Admits(level int64) bool {
 		return false
 	}
 	return p.LevelMax <= 0 || level <= p.LevelMax
+}
+
+/*
+================
+CapLevelBands
+
+Lowers every minimum level above levelCap to levelCap (see the file
+header), so the highest level the shard reaches always admits the row.
+A non-positive cap leaves the bands as imported.
+================
+*/
+func CapLevelBands(points []Point, levelCap int64) {
+	if levelCap <= 0 {
+		return
+	}
+	for i := range points {
+		if points[i].LevelMin > levelCap {
+			points[i].LevelMin = levelCap
+		}
+	}
 }
 
 type importRow struct {

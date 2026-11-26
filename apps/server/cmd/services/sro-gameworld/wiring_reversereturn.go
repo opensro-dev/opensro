@@ -21,6 +21,7 @@ import (
 	log "github.com/sirupsen/logrus"
 
 	"opensro.online/server/internal/game/action"
+	"opensro.online/server/internal/game/progression"
 	"opensro.online/server/internal/game/world/optionalteleport"
 )
 
@@ -40,6 +41,12 @@ func configureReverseReturnMap(items *action.Runtime, textdataDir string) error 
 	if err != nil {
 		return fmt.Errorf("reverse return map: %w", err)
 	}
+	// The imported bands assume the 110 cap; a lower cap admits its top level.
+	levelCap, err := progression.LevelCapFromEnv()
+	if err != nil {
+		return fmt.Errorf("reverse return map: %w", err)
+	}
+	optionalteleport.CapLevelBands(imported, levelCap)
 	items.ConfigureReverseReturnMap(true, imported)
 	items.AddReverseReturnMapPoints(hwanReverseMapExtras(textdataDir))
 	source := "inferred"
