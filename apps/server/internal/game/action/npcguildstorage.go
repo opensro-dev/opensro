@@ -348,14 +348,19 @@ func (rt *Runtime) applyGuildStorageMove(division string, c *enterworld.Characte
 	// in the chest is nobody's live companion - so it decides alone.
 	// Refusing removes nothing: the row stays the guild's until an
 	// operator empties the pet, where a sweep would have to destroy
-	// the bound rows outright.
-	if personal == wire.MoveTypeStorageWithdraw && store != nil {
-		if room, refusal, err := store.TransactGuildStorageAs(division, c.ID, nil); err == nil && !refusal.Refused() {
+	// the bound rows outright. The refusal runs inside the move's own
+	// commit, under the store lock, so no chest move between a check
+	// and the withdraw can slip a loaded pet into the slot.
+	mutate := rt.storageMutation(personal, q)
+	if personal == wire.MoveTypeStorageWithdraw {
+		withdraw := mutate
+		mutate = func(next *domain.Character, room *domain.AccountStorage) error {
 			for _, row := range room.Rows {
 				if row.Slot == int64(q.SourceSlot) && row.Summon != nil && cosContainerHoldsBoundRow(row.Summon.Container) {
-					return failureResult(errCodeInvalidStorageTarget)
+					return storageRefusal(errCodeInvalidStorageTarget)
 				}
 			}
+			return withdraw(next, room)
 		}
 	}
 	if code := rt.guildStorageHoldCode(division, c, gid, !goldMove); code != 0 {
@@ -364,7 +369,7 @@ func (rt *Runtime) applyGuildStorageMove(division string, c *enterworld.Characte
 	if store == nil {
 		return failureResult(wire.ErrCodeInvalidRequest)
 	}
-	_, refusal, err := store.TransactGuildStorageAs(division, c.ID, rt.storageMutation(personal, q))
+	_, refusal, err := store.TransactGuildStorageAs(division, c.ID, mutate)
 	var moveRefusal storageRefusal
 	switch {
 	case errors.As(err, &moveRefusal):

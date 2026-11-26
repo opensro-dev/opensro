@@ -293,11 +293,13 @@ func (rt *Runtime) Tradeable(codename string, forgeBound bool, earnedBought bool
 		return false
 	}
 	// Port-only (#4491; the guild warehouse's rule in #4479): a pet
-	// loaded with a bound row is the bound row. The summoned refusal
-	// above leaves only the dormant record to judge, and it is the
-	// record every door holds - the table and the stall read the bag
-	// row, the market reads the stored row.
-	if summon != nil && cosContainerHoldsBoundRow(summon.Container) {
+	// changes hands with everything it carries, so it passes only when
+	// every carried row would pass on its own - a forged-bound row, a
+	// record-bound mall row (#4217) and a sealed helmet alike. The
+	// summoned refusal above leaves only the dormant record to judge,
+	// and it is the record every door holds: the table and the stall
+	// read the bag row, the market reads the stored row.
+	if summon != nil && !rt.carriedRowsTradeable(summon.Container) {
 		return false
 	}
 	items := rt.deps.ItemReferences()
@@ -316,6 +318,27 @@ func (rt *Runtime) Tradeable(codename string, forgeBound bool, earnedBought bool
 	// Port-only, not native (halloween.go): a sealed event helmet never
 	// reaches the table either, however tradeable its row is.
 	return !rt.HalloweenHelmetSeal.Sealed(codename)
+}
+
+/*
+================
+carriedRowsTradeable
+
+Whether every row a pet carries would pass Tradeable on its own. The
+one trade judgment applies to the load too, so no door keeps a second
+list of what may not change hands.
+================
+*/
+func (rt *Runtime) carriedRowsTradeable(container *domain.COSContainer) bool {
+	if container == nil {
+		return true
+	}
+	for _, held := range container.Rows {
+		if !rt.Tradeable(held.Codename, held.ForgeBound, held.EarnedBought, held.Summon) {
+			return false
+		}
+	}
+	return true
 }
 
 /*

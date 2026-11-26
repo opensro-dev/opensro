@@ -37,6 +37,10 @@ import (
 // stackable whose only special property is the row's bound mark.
 const tradePetStoneCodename = "ITEM_ETC_TRADEPET_STONE"
 
+// tradePetMallCodename is a record-bound mall row (canTrade 0, #4217):
+// it carries no mark of its own, and its reference row alone refuses it.
+const tradePetMallCodename = "ITEM_MALL_TRADEPET_BOUND"
+
 /*
 ================
 tradePetRefs
@@ -59,6 +63,11 @@ func tradePetRefs() cosTestItemSource {
 	}
 	refs.staticItemSource[tradePetStoneCodename] = &enterworld.ItemRef{
 		Codename: tradePetStoneCodename, RefObjID: 11460, TypeIDs: [4]int64{3, 3, 1, 1},
+		NativeFields: enterworld.NewNativeFields(map[string]float64{"canTrade": 1}),
+	}
+	refs.staticItemSource[tradePetMallCodename] = &enterworld.ItemRef{
+		Codename: tradePetMallCodename, RefObjID: 11461, TypeIDs: [4]int64{3, 3, 1, 1},
+		NativeFields: enterworld.NewNativeFields(map[string]float64{"canTrade": 0}),
 	}
 	return refs
 }
@@ -67,8 +76,8 @@ func tradePetRefs() cosTestItemSource {
 ================
 tradePetBag
 
-The seller's starting bag: a bound stone at 20, an unbound one at 21
-and the pickup-pet summoner at 23.
+The seller's starting bag: a bound stone at 20, an unbound one at 21,
+a record-bound mall row at 22 and the pickup-pet summoner at 23.
 ================
 */
 func tradePetBag(refs cosTestItemSource) []enterworld.InventoryRow {
@@ -76,6 +85,8 @@ func tradePetBag(refs cosTestItemSource) []enterworld.InventoryRow {
 		{Slot: 20, RefObjID: 11460, Codename: tradePetStoneCodename,
 			TypeFlags: wire.PackTypeFlags(3, 3, 1, 1), StackCount: 1, ForgeBound: true},
 		{Slot: 21, RefObjID: 11460, Codename: tradePetStoneCodename,
+			TypeFlags: wire.PackTypeFlags(3, 3, 1, 1), StackCount: 1},
+		{Slot: 22, RefObjID: 11461, Codename: tradePetMallCodename,
 			TypeFlags: wire.PackTypeFlags(3, 3, 1, 1), StackCount: 1},
 		{Slot: 23, RefObjID: 901, Codename: "SUMMON_PICKUP",
 			TypeFlags: refs.staticItemSource["SUMMON_PICKUP"].TypeFlags(), StackCount: 1},
@@ -237,6 +248,28 @@ func TestBoundRowInsideAPetStaysOffTheExchangeTable(t *testing.T) {
 	}
 	if bagRowByCodename(a, "SUMMON_PICKUP") == nil {
 		t.Fatal("the refused put took the pet off the seller")
+	}
+	if bagRowByCodename(b, "SUMMON_PICKUP") != nil {
+		t.Fatal("the buyer holds the pet after the refusal")
+	}
+}
+
+/*
+================
+TestRecordBoundRowInsideAPetStaysOffTheExchangeTable
+
+A mall row the reference refuses (canTrade 0) carries no mark of its
+own; the pet carrying it is refused by the same judgment as the row.
+================
+*/
+func TestRecordBoundRowInsideAPetStaysOffTheExchangeTable(t *testing.T) {
+	rt, a, b, refs := boundPetTradeFixture(t)
+
+	loadTradePetAndDismiss(t, rt, a, refs, 22)
+	openTradeExchange(t, rt, a, b)
+	put := rt.HandleItemMove(testDivision, a, []byte{wire.MoveTypeExchangePut, 23})
+	if len(put.Frames) != 1 || !bytes.Equal(put.Frames[0].Payload, []byte{2, wire.ExchangeErrCannotTrade}) {
+		t.Fatalf("exchange put of a pet carrying a record-bound row = %+v, want the cannot-trade refusal", put.Frames)
 	}
 	if bagRowByCodename(b, "SUMMON_PICKUP") != nil {
 		t.Fatal("the buyer holds the pet after the refusal")
