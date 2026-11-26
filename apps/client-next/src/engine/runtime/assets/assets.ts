@@ -25,7 +25,14 @@ again.
 import { assetRequestBudget } from "@/engine/foundation/assets/asset-budget";
 import { ASSET_STREAM_SLOTS, assetSlotsFree } from "@/engine/foundation/assets/asset-slots";
 import { createWorldLease } from "./world-lease";
-import type { AssetLane, AssetOwner, AssetRequest, AssetResult, AssetWorkerMessage } from "@/engine/contracts/assets";
+import type {
+	AssetLane,
+	AssetOwner,
+	AssetRequest,
+	AssetRequestTiming,
+	AssetResult,
+	AssetWorkerMessage
+} from "@/engine/contracts/assets";
 import type { Degradation } from "@/engine/contracts/network";
 import { storedExperimentalOptions } from "@/engine/foundation/ui/experimental-options";
 import { chooseHdTextureVariant, chooseTextureVariant } from "@/engine/foundation/assets/texture-variants";
@@ -49,6 +56,9 @@ const REQUEST_ABSOLUTE_MS = 600000;
 // REQUEST_DECODE_STALL_MS of silence. A shorter window reports that
 // healthy worker as unanswering (#2871), so the two windows are one.
 const CANCEL_ACK_MS = REQUEST_DECODE_STALL_MS;
+// Recent finished download attempts kept for the bug report (#4580): at a
+// report's scale a few minutes of requests, never a session's whole history.
+const REQUEST_TIMINGS_MAX = 128;
 // The degraded code an unacknowledged cancellation reports (client AGENTS.md).
 const CANCEL_UNACKNOWLEDGED = "asset-cancel-unacknowledged";
 const PACKS_CHECK_FAILED = "asset-packs-check-failed";
@@ -97,6 +107,9 @@ export function createAssets(): AssetOwner {
 		abandoned?: boolean;
 	}>();
 	const degradations: Degradation[] = [];
+	// The report's recent download attempts (#4580), oldest first; the
+	// worker measures them, this ring only keeps the tail.
+	const requestTimings: AssetRequestTiming[] = [];
 	let progress: import("@/engine/contracts/assets").AssetProgress | null = null;
 	let releaseStale = false;
 	let nextId = 0, disposed = false, failure: string | null = null;
@@ -327,6 +340,17 @@ export function createAssets(): AssetOwner {
 			if ( !disposed && !failure ) noteJobProgress( event.data.id, event.data.bytes );
 			return;
 		}
+		if ( event.data.kind === "request-timings" ) {
+			// Diagnostics only (#4580): kept for the report's snapshot,
+			// never acted on.
+			if ( !disposed && !failure ) {
+				requestTimings.push( ...event.data.records );
+				if ( requestTimings.length > REQUEST_TIMINGS_MAX ) {
+					requestTimings.splice( 0, requestTimings.length - REQUEST_TIMINGS_MAX );
+				}
+			}
+			return;
+		}
 		if ( event.data.kind === "job-decoding" ) {
 			if ( !disposed && !failure ) noteJobDecoding( event.data.id );
 			return;
@@ -533,7 +557,8 @@ export function createAssets(): AssetOwner {
 						"loading" as const,
 					result: job.result?.kind ?? null
 				}) ),
-				store: progress?.store ?? null
+				store: progress?.store ?? null,
+				requests: requestTimings.slice()
 			};
 		},
 		progress: () => progress,

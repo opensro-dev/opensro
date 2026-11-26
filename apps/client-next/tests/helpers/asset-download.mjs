@@ -32,8 +32,12 @@ fixture
 export function fixture( t, fetch, limit = 3 ) {
 	t.mock.timers.enable( { apis: [ "setTimeout" ] } );
 	t.mock.method( globalThis, "fetch", fetch );
-	const messages = [];
+	const messages = [], timings = [];
 	const loader = createLoader( message => {
+		if ( message.kind === "request-timings" ) {
+			timings.push( ...message.records );
+			return;
+		}
 		if (
 			![ "progress", "job-progress", "job-decoding", "job-fetching", "hd-availability" ].includes( message.kind )
 		) {
@@ -42,7 +46,7 @@ export function fixture( t, fetch, limit = 3 ) {
 	} );
 	t.after( () => loader.dispose() );
 	loader.receive( { kind: "load", id: 1, url: "https://example.test/asset", limit } );
-	return { loader, messages };
+	return { loader, messages, timings };
 }
 
 /*

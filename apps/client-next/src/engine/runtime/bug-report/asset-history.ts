@@ -16,7 +16,10 @@ The samples settle which stall it was:
 Each sample is a bounded copy of AssetOwner.snapshot (paths only; the asset
 owner already strips credentials and queries). It also carries the
 persistent store's counters: a report of slow loading or heavy data use
-shows whether revisits were served locally or downloaded again.
+shows whether revisits were served locally or downloaded again. The
+document's current entry also carries the worker's recent finished
+download attempts (#4580): each attempt's time to its first byte and its
+whole duration, so a slow link reads apart from a stalled request.
 
 ===========================================================================
 */
@@ -109,8 +112,17 @@ export function createAssetHistory( options: AssetHistoryOptions ) {
 			return {
 				note: "t is seconds from the first frame of replay.mp4 (negative: before the recording); " +
 					"available is free request slots; ageMs is how long each listed load has been open; " +
-					"store is the persistent asset store's counters since the asset worker started.",
-				current: { t: at( nowMs ), phase: options.phase(), queue: queue() },
+					"store is the persistent asset store's counters since the asset worker started; " +
+					"current.requests are the worker's recent finished download attempts, oldest first: " +
+					"firstByteMs is the wait for the headers (-1 when none arrived), durationMs the whole " +
+					"attempt, outcome ok/stall/http/error - a long steady duration is a slow link, a stall " +
+					"or a firstByteMs of -1 is a request that stopped answering.",
+				current: {
+					t: at( nowMs ),
+					phase: options.phase(),
+					queue: queue(),
+					requests: options.read()?.requests ?? []
+				},
 				samples: samples.map( ( { atMs, ...sample } ) => ({ t: at( atMs ), ...sample }) )
 			};
 		}
