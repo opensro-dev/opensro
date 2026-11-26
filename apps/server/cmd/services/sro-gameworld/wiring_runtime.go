@@ -334,6 +334,7 @@ func (game *gameplayPlane) newMissionTicker(peerReferences *action.PeerReference
 		}
 		if game.caravanAgents != nil {
 			ticker.Monsters.ServerCombatants = game.caravanCombatants
+			ticker.RuntimeObject = game.caravanObject
 		}
 		// Port-only, not native: the monster leg's worker pool
 		// (#2205). Unset keeps the serial leg; the pool only changes

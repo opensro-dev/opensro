@@ -153,6 +153,13 @@ func (game *gameplayPlane) initCaravanActors() error {
 		}
 		game.caravanActors = append(game.caravanActors, c)
 	}
+	game.caravanObjects = make(map[uint32]bool, 2*len(game.caravanActors))
+	for _, c := range game.caravanActors {
+		game.caravanObjects[simulation.PlayerObjectID(c.ID)] = true
+		if c.RuntimeTransportGID != 0 {
+			game.caravanObjects[c.RuntimeTransportGID] = true
+		}
+	}
 	if err := registry.RegisterRuntimeCharacters(game.divisionID, game.caravanActors); err != nil {
 		return err
 	}

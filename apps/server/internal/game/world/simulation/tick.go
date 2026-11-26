@@ -358,6 +358,12 @@ type Ticker struct {
 	Monsters *MonsterMoverOps
 	// PlayerMap enables the beta world map roster leg (playermap.go).
 	PlayerMap bool
+	// RuntimeObject names the gids of port-only server-owned actors (the
+	// AI caravans, SRO_AI_CARAVANS) and their transports. Their routed
+	// frames reach the viewers whose published objects hold them, as a
+	// ground item's do; no peer lane ever shows them. Nil, the default and
+	// the native world, means none.
+	RuntimeObject func(gid uint32) bool
 	// PositionStream is SRO_POSITION_STREAM (position_stream.go):
 	// port-only, not native. False, the default, is the native fan-out.
 	PositionStream bool
@@ -867,6 +873,11 @@ func (t *Ticker) routeHookFrames(routedFrames []DivisionFrames, work []divisionT
 			continue
 		}
 		if routed.SourceGID != 0 {
+			// Ground items, and the port-only server actors when wired, are
+			// shown through the object journal rather than a peer lane, so a
+			// viewer that published them receives their frames.
+			publishedSource := routed.SourceGID > domain.GroundItemGIDBase && routed.SourceGID <= domain.GroundItemGIDLimit ||
+				t.RuntimeObject != nil && t.RuntimeObject(routed.SourceGID)
 			for _, division := range work {
 				if division.divisionID != routed.DivisionID {
 					continue
@@ -878,7 +889,7 @@ func (t *Ticker) routeHookFrames(routedFrames []DivisionFrames, work []divisionT
 					}
 					peer := PlayerObjectID(viewer.CharacterID) == routed.SourceGID || division.state.shownPeers[viewer.SessionID][routed.SourceGID]
 					published := false
-					if routed.SourceGID < domain.MonsterGIDBase || routed.SourceGID > domain.MonsterGIDLimit {
+					if publishedSource {
 						for _, gid := range viewer.PublishedObjects {
 							if gid == routed.SourceGID {
 								published = true

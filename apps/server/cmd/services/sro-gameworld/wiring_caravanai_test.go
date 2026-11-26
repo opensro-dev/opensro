@@ -89,6 +89,11 @@ func TestCaravanShippedActors(t *testing.T) {
 		if enterworld.ObjectIDForCharacter(c) >= domain.NPCGIDBase {
 			t.Fatal("actor occupied a foreign object identity range")
 		}
+		// The ticker routes an actor's and its transport's frames to the
+		// viewers that published them (Ticker.RuntimeObject).
+		if !game.caravanObject(enterworld.ObjectIDForCharacter(c)) || (c.RuntimeTransportGID != 0 && !game.caravanObject(c.RuntimeTransportGID)) {
+			t.Fatalf("%s is not a routed runtime object", c.Name)
+		}
 		if c.ActiveCOS != nil && (c.ActiveCOS.GID < domain.COSGIDBase || c.ActiveCOS.GID > domain.COSGIDLimit || c.ActiveCOS.Codename != "COS_T_DHORSE3") {
 			t.Fatalf("transport identity or shipped reference invalid: %+v", c.ActiveCOS)
 		}

@@ -42,12 +42,15 @@ Port-only caravan state belongs with its feature wiring.
 ================
 */
 type caravanRuntimeState struct {
-	caravanSkills       map[string][]uint32
-	caravanRessSkill    map[string]uint32
-	caravanAttackAt     map[string]int64
-	caravanAgents       *caravanai.Runtime
-	caravanNextStepMs   int64
-	caravanActors       []*enterworld.Character
+	caravanSkills     map[string][]uint32
+	caravanRessSkill  map[string]uint32
+	caravanAttackAt   map[string]int64
+	caravanAgents     *caravanai.Runtime
+	caravanNextStepMs int64
+	caravanActors     []*enterworld.Character
+	// caravanObjects holds every actor's and transport's gid, filled once
+	// at boot with caravanActors (caravanObject).
+	caravanObjects      map[uint32]bool
 	caravanMapAtMs      int64
 	caravanMoving       map[string]bool
 	caravanMode         map[string]uint8

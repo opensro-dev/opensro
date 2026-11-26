@@ -196,6 +196,19 @@ func (game *gameplayPlane) isCaravanThreatIgnored(name string, gid uint32, nowMs
 
 /*
 ================
+caravanObject
+
+Whether gid is a caravan actor or its transport (Ticker.RuntimeObject).
+The set is written once at boot, before the ticker starts, and only read
+after.
+================
+*/
+func (game *gameplayPlane) caravanObject(gid uint32) bool {
+	return game.caravanObjects[gid]
+}
+
+/*
+================
 caravanCombatants
 
 Detached AI target/census inputs. They have no socket or visibility recipient.
