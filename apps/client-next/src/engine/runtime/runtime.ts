@@ -540,6 +540,7 @@ export function startRuntime(
 					failed: () => simulation.error() !== null
 				},
 				gpu: () => renderer.adapterFacts(),
+				gpuAllocations: () => renderer.gpuAllocations(),
 				network: () => simulation.netJournal(),
 				assets: () => assets.snapshot?.(),
 				// An uncaught error never reached an incident, only a bug

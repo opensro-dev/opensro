@@ -113,6 +113,8 @@ export interface BugReportOptions {
 	readonly session?: BugReportSessionLane;
 	/** The WebGPU adapter's facts, read by the device owner (foundation/rendering/gpu-facts.ts). */
 	readonly gpu?: () => import("@/engine/foundation/rendering/gpu-facts").GpuFacts | null;
+	/** The page's live GPU allocation totals, read by the device owner (#4545). */
+	readonly gpuAllocations?: () => import("@/engine/foundation/rendering/gpu-allocations").GpuAllocationTotals | null;
 	/** Game context at the moment the window opens (character, place…). */
 	readonly context: () => readonly BugReportField[];
 	/** The game's sound for the replay, or null until there is any. */
@@ -693,6 +695,7 @@ export function createBugReport( options: BugReportOptions ): BugReportOwner {
 				null,
 			replay: { phase: recording.phase(), droppedFrames: recorder.dropped(), lastError: recorder.lastError() },
 			gpu: options.gpu?.() ?? null,
+			gpuAllocations: options.gpuAllocations?.() ?? null,
 			previousPage,
 			preferences,
 			resources
@@ -778,7 +781,8 @@ export function createBugReport( options: BugReportOptions ): BugReportOwner {
 			pageLifetimeStarted = true;
 			startPageLifetime( () => ({
 				entities: options.state().entities,
-				phase: options.state().session?.phase ?? "unknown"
+				phase: options.state().session?.phase ?? "unknown",
+				gpu: options.gpuAllocations?.() ?? null
 			}) );
 			return;
 		}

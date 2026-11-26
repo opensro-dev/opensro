@@ -8,8 +8,9 @@ and files no report: the tab simply comes back and everything the page
 knew is gone (BR-261126-1443-4077: two players, a reload every three
 or four minutes, no evidence). This module is the evidence. While the
 page is in the world it keeps a sessionStorage marker - when the page
-entered the world, when it last beat, how many entities it presented
-and its session phase - refreshed on a 30 s heartbeat. A clean end
+entered the world, when it last beat, how many entities it presented,
+its session phase and its standing GPU allocation totals - refreshed
+on a 30 s heartbeat. A clean end
 removes the marker (bug-report's dispose, reached from the platform's
 one pagehide listener). A marker still there at the next boot means
 the previous page died without one, and takePreviousPage turns it into
@@ -33,6 +34,8 @@ access, and a diagnostics marker must never take the page down.
 ===========================================================================
 */
 
+import type { GpuAllocationTotals } from "@/engine/foundation/rendering/gpu-allocations";
+
 // The tab's page-lifetime marker (sessionStorage).
 const PAGE_LIFETIME_KEY = "sro:page-lifetime:1";
 
@@ -50,6 +53,8 @@ its session phase, as bug-report's state read names them.
 export interface PageLifetimeSample {
 	readonly entities: number;
 	readonly phase: string;
+	/** The page's standing GPU allocation totals at this beat, or null. */
+	readonly gpu?: GpuAllocationTotals | null;
 }
 
 /*
@@ -66,6 +71,8 @@ export interface PreviousPage {
 	readonly uptimeS: number;
 	readonly lastEntities: number;
 	readonly lastPhase: string;
+	/** The dead page's standing GPU allocation totals at its last beat. */
+	readonly lastGpu: GpuAllocationTotals | null;
 	readonly secondsSinceLastBeat: number;
 }
 
@@ -140,7 +147,8 @@ function writePageLifetimeMarker( nowMs: number ): void {
 				startedAtMs: pageLifetime.startedAtMs,
 				lastBeatMs: nowMs,
 				entities: Number.isFinite( current.entities ) ? current.entities : 0,
-				phase: typeof current.phase === "string" ? current.phase : "unknown"
+				phase: typeof current.phase === "string" ? current.phase : "unknown",
+				gpu: current.gpu ?? null
 			} )
 		);
 	} catch {
@@ -218,6 +226,7 @@ interface PageLifetimeMarker {
 	lastBeatMs?: unknown;
 	entities?: unknown;
 	phase?: unknown;
+	gpu?: unknown;
 }
 
 /*
@@ -262,6 +271,32 @@ export function takePreviousPage( nowMs: number, hooks: PageLifetimeHooks = {} )
 		uptimeS: Math.max( 0, Math.round( (lastBeatMs - startedAtMs) / 1000 ) ),
 		lastEntities: typeof marker?.entities === "number" && Number.isFinite( marker.entities ) ? marker.entities : 0,
 		lastPhase: typeof marker?.phase === "string" ? marker.phase : "unknown",
+		lastGpu: gpuTotalsOrNull( marker?.gpu ),
 		secondsSinceLastBeat: Math.max( 0, Math.round( (nowMs - lastBeatMs) / 1000 ) )
+	};
+}
+
+/*
+================
+gpuTotalsOrNull
+
+A marker's GPU totals, or null: an older marker has none, and a
+corrupt one must not invent them. All four figures must be finite
+numbers or the whole read is none - a half-total would mislead the
+very question (did the dead page hold too much?) the field answers.
+================
+*/
+function gpuTotalsOrNull( value: unknown ): GpuAllocationTotals | null {
+	if ( typeof value !== "object" || value === null ) return null;
+	const totals = value as Partial<GpuAllocationTotals>;
+	for ( const field of [ "buffers", "bufferBytes", "textures", "textureBytes" ] as const ) {
+		const figure = totals[field];
+		if ( typeof figure !== "number" || !Number.isFinite( figure ) || figure < 0 ) return null;
+	}
+	return {
+		buffers: totals.buffers!,
+		bufferBytes: totals.bufferBytes!,
+		textures: totals.textures!,
+		textureBytes: totals.textureBytes!
 	};
 }
