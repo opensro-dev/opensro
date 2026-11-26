@@ -21,6 +21,12 @@ export const CARAVAN_HIRE_OPCODE = 0x3fcf;
 export const CARAVAN_HIRE_REQUEST_OPCODE = 0x7fcf;
 export const CARAVAN_LEAD_OPCODE = 0x3fd0;
 export const CARAVAN_HIRE_NPC_OPCODE = 0x3fd1;
+// The 0x7FCF request's operation byte: open or refresh the list, hire,
+// hand the lead, extend an own Hunter's or Thief's hour.
+export const CARAVAN_HIRE_OPEN = 0;
+export const CARAVAN_HIRE_TAKE = 1;
+export const CARAVAN_HIRE_LEAD = 2;
+export const CARAVAN_HIRE_EXTEND = 3;
 
 export interface CaravanHireRow {
 	readonly name: string;
@@ -151,7 +157,7 @@ body is a protocol error, never a partial window.
 ================
 request
 
-The window's request frame: refresh (0), hire (1) or lead (2).
+The window's request frame: refresh (0), hire (1), lead (2) or extend (3).
 ================
 		*/
 		request( operation: 0 | 1 | 2 | 3, stars: number, name: string ): WireFrame {

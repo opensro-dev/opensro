@@ -245,6 +245,8 @@
     "src/engine/runtime/ui/hud/market-window.ts": "src/engine/runtime/ui/ui.ts",
     "src/engine/runtime/ui/hud/sro-macro-hud.ts": "src/engine/runtime/ui/ui.ts",
     "src/engine/runtime/ui/hud/sro-macro-window.ts": "src/engine/runtime/ui/ui.ts",
+    "src/engine/runtime/ui/hud/caravan-hire-hud.ts": "src/engine/runtime/ui/ui.ts",
+    "src/engine/runtime/ui/hud/caravan-hire-window.ts": "src/engine/runtime/ui/ui.ts",
     "src/engine/runtime/ui/hud/market-window-pen.ts": "src/engine/runtime/ui/ui.ts",
     "src/engine/runtime/ui/hud/market-window-side.ts": "src/engine/runtime/ui/ui.ts",
     "src/engine/runtime/ui/hud/map-chrome.ts": "src/engine/runtime/ui/hud/map-tools.ts",

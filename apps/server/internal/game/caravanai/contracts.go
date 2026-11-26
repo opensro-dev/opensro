@@ -3,19 +3,22 @@
 
 contracts.go - Two-way Mercenary Escort Contracts (port-only)
 
-Manages two-way mercenary contracts between players and AI caravan agents:
- 1. AI Traders departing on 3★-5★ runs recruit real Hunter players in town
-    and pay bonus gold + trust upon delivery at the destination shop.
- 2. Real Trader players in town hire AI Hunters to follow and defend their
-    caravan across the Jangan-Donwhang-Hotan highway.
+Owns the escort contracts between real Hunter players and AI caravan
+Traders: an AI Trader departing on a 3-5 star run recruits a Hunter in
+town (!accept), and pays bonus gold and trust when it delivers at the
+destination shop. Hiring AI agents for gold is hiring.go's, not this
+file's.
 
-Slice 5 (#3704) makes the money side abuse-proof: an AI-trader escort
-pays only when the Hunter stayed within escort range for the whole run
-and the trader lived to deliver (NoteEscortWatch, VoidTraderEscort),
-one Hunter holds one AI-trader escort at a time, and paid escorts are
-counted per Hunter per UTC day against MaxPaidEscortsPerDay in the
-EscortDayStore ledger. The amounts are the sketch's; the cap is a
-placeholder for the owner's call.
+Slice 5 (#3704, #4487) makes the money side abuse-proof:
+  - one contract per Hunter and per Trader (BindAITraderEscort);
+  - the runtime samples the Hunter's distance along the run
+    (SampleEscort), and a gap past escortSampleGapMs voids the run;
+    delivery pays only after escortMinRunMs with the Hunter near for
+    escortNearPercent of it (CompleteAITraderRun), and a Trader that
+    dies loses its contract (Cancel);
+  - paid escorts are counted per Hunter per UTC day against
+    MaxPaidEscortsPerDay in the EscortDayStore ledger, asked both at
+    !accept and at delivery.
 
 ===========================================================================
 */

@@ -417,22 +417,6 @@ func (r *Runtime) Contracts() *ContractBook {
 
 /*
 ==================
-HireFee
-
-The gold one hire, and one hour's extension, costs on this shard
-(SRO_CARAVAN_HIRE_FEE, config.go); DefaultHireFeeGold when the config
-names none.
-==================
-*/
-func (r *Runtime) HireFee() int64 {
-	if r == nil || r.cfg.HireFeeGold <= 0 {
-		return DefaultHireFeeGold
-	}
-	return r.cfg.HireFeeGold
-}
-
-/*
-==================
 EnsureDivisionRoster
 
 EnsureDivisionRoster hydrates persisted memories and spawns the default
