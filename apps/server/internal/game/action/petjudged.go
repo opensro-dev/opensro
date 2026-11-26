@@ -106,11 +106,8 @@ func (rt *Runtime) advancePetJudged(key petOwnerKey, state *petSession, facts *p
 		rt.cancelPetCombat(key, state, nowMs)
 		return state.mover.AnyFollower().Stop(nowMs), true
 	}
-	if rt.TransportFollowTether && isVehicleCOS(ref.TidWord) {
-		// Port-only (transportfollow.go): a following transport holds
-		// its trader as a parked one does, from where it walks now.
-		state.tether = &simulation.Tether{Anchor: state.mover.AnyFollower().Position(nowMs),
-			Range: simulation.TradeTransportTetherRange, Reason: simulation.TetherTradeTransport}
+	if rt.tetherFollowingTransport(state, ref.TidWord, ownerWorld.LiveSpawnAt(nowMs), nowMs) {
+		return state.mover.AnyFollower().Stop(nowMs), true
 	}
 	// The stuck answer is the session's own, built once: refresh the
 	// cells it reads, then install it. advancePet's deferred call runs

@@ -36,6 +36,8 @@ package action
 import (
 	"os"
 	"strings"
+
+	"opensro.online/server/internal/game/world/simulation"
 )
 
 // EnvTransportFollow turns the following trade transport on ("on", "1",
@@ -45,6 +47,12 @@ const EnvTransportFollow = "SRO_TRANSPORT_FOLLOW"
 // EnvTransportFollowTether keeps the 100 m tether on a following transport
 // ("on", "1", "true"). It acts only with EnvTransportFollow on.
 const EnvTransportFollowTether = "SRO_TRANSPORT_FOLLOW_TETHER"
+
+// transportFollowReach is how far a trader may stand from its following
+// transport before the transport parks instead (world units): twice the
+// tether, since the tether lets a walking trader overshoot by one step and
+// no more, so a trader past this jumped (a town revive) rather than walked.
+const transportFollowReach = 2 * simulation.TradeTransportTetherRange
 
 /*
 ================
@@ -83,4 +91,41 @@ while the port-only SRO_TRANSPORT_FOLLOW is on.
 */
 func (rt *Runtime) companionFollows(tid uint16) bool {
 	return followingCOSBand(tid>>11) || rt.TransportFollow && isVehicleCOS(tid)
+}
+
+/*
+================
+Runtime.tetherFollowingTransport
+
+The following transport's tether for this tick (SRO_TRANSPORT_FOLLOW_TETHER),
+held from where it walks now, as a parked transport holds its trader. Both
+pet tick paths (advancePetSession and advancePetJudged) set it here. Returns
+true when the trader stands out of follow reach: it jumped (a town revive,
+#4543), so the caller stops the transport where it stands and the tether
+lets the trader only walk back to it.
+================
+*/
+func (rt *Runtime) tetherFollowingTransport(state *petSession, tid uint16, trader simulation.Spawn, nowMs int64) (parked bool) {
+	if !rt.TransportFollowTether || !isVehicleCOS(tid) {
+		return false
+	}
+	at := state.mover.AnyFollower().Position(nowMs)
+	state.tether = &simulation.Tether{Anchor: at, Range: simulation.TradeTransportTetherRange, Reason: simulation.TetherTradeTransport}
+	return !transportWithinFollowReach(at, trader)
+}
+
+/*
+================
+transportWithinFollowReach
+
+Whether a trader stands close enough for its following transport to walk
+after it (transportFollowReach). Another plane (a dungeon against the
+field) is always out of reach: the transport does not path across worlds.
+================
+*/
+func transportWithinFollowReach(transport, trader simulation.Spawn) bool {
+	if transport.RegionID&0x8000 != trader.RegionID&0x8000 {
+		return false
+	}
+	return simulation.WorldDistance2D(transport, trader) <= transportFollowReach
 }
