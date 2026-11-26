@@ -518,16 +518,21 @@ async function tryOnAvatars( avatars ) {
 	let handed = null;
 	publishCharacters(
 		{
-			local: { gid: 1, refObjId: 10, avatars },
-			gameplay: { inventory: [] },
+			// A stand-in: publishCharacters reads only these fields.
+			local: /** @type {any} */ ({ gid: 1, refObjId: 10, avatars }),
+			gameplay: /** @type {any} */ ({ inventory: [] }),
 			next: new Map(),
 			seconds: 0,
 			blindHeld: false,
 			modelParticles: 0
 		},
 		{ displayed: new Map() },
-		{ catalog: new Map( [ [ 10, { codename: "CHAR_CH_MAN_ADVENTURER", glb: "body" } ] ] ), dress: {}, manifest: 3 },
-		{
+		/** @type {any} */ ({
+			catalog: new Map( [ [ 10, { codename: "CHAR_CH_MAN_ADVENTURER", glb: "body" } ] ] ),
+			dress: {},
+			manifest: 3
+		}),
+		/** @type {any} */ ({
 			renderer: {
 				setCharacterAssembly() {},
 				setCharacterActors() {},
@@ -549,7 +554,7 @@ async function tryOnAvatars( avatars ) {
 					return [];
 				}
 			}
-		}
+		})
 	);
 	return handed;
 }
