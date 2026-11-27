@@ -132,7 +132,17 @@ their bag, beside the token award (`internal/game/action/nasrun_drops.go`, odds 
 
 ## The mall listing (#3456 step 5)
 
-With `SRO_NASRUN` on, Sabakun's jewel and the extension gear list in the Item Mall's Premium > Gears tab through
-the gears-stones layout (`internal/game/item/commerce/mallcategories.go`, `nasrunGoods`), at the tab's 30-silk
-tier, badged new - the silk door beside the token shop's honor tabs. The listing stands only while the system
-does: off, or with the items' rows unstaged, the catalogue is the shipped 91 offers exactly (#3331).
+With `SRO_NASRUN` on, the Devil's Spirit family lists in the Item Mall's Premium > Gears tab
+(`internal/game/item/commerce/mallcategories.go`, `nasrunGoods`), each item its own package, badged new - the silk
+door beside the token shop's honor tabs (#3456 step 5, #4240 part 4):
+
+| Goods | Silk | Source of the price |
+| --- | --- | --- |
+| The six A grade Spirits | 150 | the later mall |
+| The extension gear | 50 | the later mall |
+| Sabakun's jewel | 30 | authored (no later listing) |
+
+- The S grade `_UNIQUE` pair is not sold: the later mall lists it only as a Premium Mall copy, and that shop is
+  never ported (owner decision on #4240).
+- The listing stands only while the system does: off, or with the items' rows unstaged, the catalogue is the
+  shipped 91 offers exactly (#3331).
