@@ -49,7 +49,7 @@ func teleportTravel(t *testing.T, rt *Runtime, c *enterworld.Character, clock *f
 			useReturn(rt, c)
 		} else {
 			c.World.LastDeathPoint = &domain.WorldPoint{WorldSpawn: *worldSpawnFromMission(destination)}
-			reverseReturn(rt, c, reverseReturnLastDeath)
+			useReverseScroll(rt, c, reverseReturnLastDeath)
 		}
 		clock.Advance(30 * time.Second)
 		rt.TickHook()(clock.NowMs())

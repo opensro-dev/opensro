@@ -183,9 +183,9 @@ TestReverseScrollKeepsATransportOutOfADungeon
 
 The scroll path of the dungeon bar (reversereturn.go, 0x5E): with the rule
 on, a reverse return scroll aimed at a death point inside a dungeon (the
-Donwhang cave, 0x8001) refuses a summoned transport, from the bag (0x75BD)
-and from a gate alike, spending nothing and starting no cast; the same
-scroll without the transport, or to a town, starts.
+Donwhang cave, 0x8001) refuses a summoned transport from the bag (0x75BD),
+spending nothing and starting no cast; the same scroll without the
+transport, or to a town, starts.
 ================
 */
 func TestReverseScrollKeepsATransportOutOfADungeon(t *testing.T) {
@@ -194,42 +194,35 @@ func TestReverseScrollKeepsATransportOutOfADungeon(t *testing.T) {
 	if !simulation.IsDungeonRegion(cave.RegionID) || simulation.IsDungeonRegion(town.RegionID) {
 		t.Fatal("fixture: 0x8001 must be a dungeon and 25000 must not")
 	}
-	for _, path := range []string{"bag", "gate"} {
-		for _, c := range []struct {
-			name      string
-			died      simulation.Spawn
-			transport bool
-			refused   bool
-		}{
-			{"transport into a dungeon", cave, true, true},
-			{"no transport into a dungeon", cave, false, false},
-			{"transport to a town", town, true, false},
-		} {
-			rt, ch, _ := reverseReturnFixture(t)
-			rt.JobGoodsTeleport = true
-			ch.World.LastDeathPoint = &domain.WorldPoint{WorldSpawn: *worldSpawnFromMission(c.died)}
-			if c.transport {
-				summonTestTransport(rt, ch)
+	for _, c := range []struct {
+		name      string
+		died      simulation.Spawn
+		transport bool
+		refused   bool
+	}{
+		{"transport into a dungeon", cave, true, true},
+		{"no transport into a dungeon", cave, false, false},
+		{"transport to a town", town, true, false},
+	} {
+		rt, ch, _ := reverseReturnFixture(t)
+		rt.JobGoodsTeleport = true
+		ch.World.LastDeathPoint = &domain.WorldPoint{WorldSpawn: *worldSpawnFromMission(c.died)}
+		if c.transport {
+			summonTestTransport(rt, ch)
+		}
+		out := useReverseScroll(rt, ch, reverseReturnLastDeath)
+		scrolls := ch.MissionInventory[len(ch.MissionInventory)-1].StackCount
+		if c.refused {
+			if len(out.Frames) == 0 || !bytes.Equal(out.Frames[0].Payload, wire.EncodeItemUseError(0x5e)) {
+				t.Fatalf("%s: a transport was taken into a dungeon: %+v", c.name, out.Frames)
 			}
-			var out OpResult
-			if path == "bag" {
-				out = useReverseScroll(rt, ch, reverseReturnLastDeath)
-			} else {
-				out = reverseReturn(rt, ch, reverseReturnLastDeath)
+			if scrolls != 2 || ch.NativeTeleportMode != 0 {
+				t.Fatalf("%s: a refused scroll was spent (%d left) or cast (mode %d)", c.name, scrolls, ch.NativeTeleportMode)
 			}
-			scrolls := ch.MissionInventory[len(ch.MissionInventory)-1].StackCount
-			if c.refused {
-				if len(out.Frames) == 0 || !bytes.Equal(out.Frames[0].Payload, wire.EncodeItemUseError(0x5e)) {
-					t.Fatalf("%s, %s: a transport was taken into a dungeon: %+v", path, c.name, out.Frames)
-				}
-				if scrolls != 2 || ch.NativeTeleportMode != 0 {
-					t.Fatalf("%s, %s: a refused scroll was spent (%d left) or cast (mode %d)", path, c.name, scrolls, ch.NativeTeleportMode)
-				}
-				continue
-			}
-			if scrolls != 1 || ch.NativeTeleportMode != 1 {
-				t.Fatalf("%s, %s: the scroll did not start (%d left, mode %d): %+v", path, c.name, scrolls, ch.NativeTeleportMode, out.Frames)
-			}
+			continue
+		}
+		if scrolls != 1 || ch.NativeTeleportMode != 1 {
+			t.Fatalf("%s: the scroll did not start (%d left, mode %d): %+v", c.name, scrolls, ch.NativeTeleportMode, out.Frames)
 		}
 	}
 }
