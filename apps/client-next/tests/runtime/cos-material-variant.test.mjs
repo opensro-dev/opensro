@@ -52,24 +52,24 @@ function body( materialKind, materialVariants ) {
 
 test("a companion with an authored material kind takes its variant model", () => {
 	const resource = body( 1, { 1: SPOTTED } );
-	const entity = { gid: 5, kind: "cos", refObjId: 17809, name: "Spotted" };
+	const entity = /** @type {any} */ ({ gid: 5, kind: "cos", refObjId: 17809, name: "Spotted" });
 	assert.equal( lookupWith( resource ).resourceFor( entity )?.glb, SPOTTED );
 });
 
 test("a companion without an authored kind keeps the base model", () => {
 	const resource = body( 0, { 1: SPOTTED } );
-	const entity = { gid: 5, kind: "cos", refObjId: 17809, name: "Plain" };
+	const entity = /** @type {any} */ ({ gid: 5, kind: "cos", refObjId: 17809, name: "Plain" });
 	assert.equal( lookupWith( resource ).resourceFor( entity )?.glb, BASE );
 });
 
 test("a companion whose slot was never published keeps the base model", () => {
 	const resource = body( 1, { 3: SPOTTED } );
-	const entity = { gid: 5, kind: "cos", refObjId: 17809, name: "Spotted" };
+	const entity = /** @type {any} */ ({ gid: 5, kind: "cos", refObjId: 17809, name: "Spotted" });
 	assert.equal( lookupWith( resource ).resourceFor( entity )?.glb, BASE );
 });
 
 test("a monster still takes its authored variant", () => {
 	const resource = body( 1, { 1: SPOTTED } );
-	const entity = { gid: 6, kind: "monster", refObjId: 17809, name: "Clone" };
+	const entity = /** @type {any} */ ({ gid: 6, kind: "monster", refObjId: 17809, name: "Clone" });
 	assert.equal( lookupWith( resource ).resourceFor( entity )?.glb, SPOTTED );
 });
