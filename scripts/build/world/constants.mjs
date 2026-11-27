@@ -34,6 +34,7 @@ export const MAPO2_LOD_GROUPS = 4;
 export const MAPO2_PLACEMENT_BYTES = 30;
 
 export const REGION_SIZE = 1920;
+export const OUTDOOR_WORLD_AREA = "outdoor";
 export const OUTDOOR_WORLD_SHARED_RENDER_PUBLIC_PATH = "/assets/world/outdoor/shared-render-resources.json";
 export const TITLE_TERRAIN_SECTOR_MARGIN = 1;
 
