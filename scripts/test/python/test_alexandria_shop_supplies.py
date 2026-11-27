@@ -46,7 +46,7 @@ TEMPLATE_PACKAGES = [
 ALCHEMY_GOODS = ["PACKAGE_ITEM_ETC_ARCHEMY_REINFORCE_PROB_UP_A_09"]
 
 
-def tables(potion_goods=POTION_GOODS, alchemy_goods=ALCHEMY_GOODS):
+def tables(potion_goods=POTION_GOODS, alchemy_goods=ALCHEMY_GOODS, alchemy_first_slot=0):
 	packages = [["1", "11", str(10 + i), code, "0", "EXPAND_TERM_ALL", "SN", "SN_TT", "old.ddj", *FILLER] for i, code in enumerate(TEMPLATE_PACKAGES)]
 	scraps = [["1", "11", c, c.replace("PACKAGE_ITEM_", "ITEM_", 1), "0", "0", "120", *["0"] * 13, *FILLER, str(100 + i)] for i, c in enumerate(TEMPLATE_PACKAGES)]
 	prices = [["1", "11", c, "1", "1000", *FILLER] for c in TEMPLATE_PACKAGES]
@@ -75,7 +75,7 @@ def tables(potion_goods=POTION_GOODS, alchemy_goods=ALCHEMY_GOODS):
 		]),
 		"refshopgoods.txt": utf16(
 			[["1", "11", "STORE_KT_POTION_TAB1", code, str(slot), *FILLER] for slot, code in enumerate(potion_goods)]
-			+ [["1", "11", "STORE_SD_ACCESSORY_TAB3", code, str(slot), *FILLER] for slot, code in enumerate(alchemy_goods)]
+			+ [["1", "11", "STORE_SD_ACCESSORY_TAB3", code, str(slot), *FILLER] for slot, code in enumerate(alchemy_goods, alchemy_first_slot)]
 		),
 		"refpackageitem.txt": utf16(packages),
 		"refscrapofpackageitem.txt": utf16(scraps),
@@ -240,6 +240,20 @@ class MergeTests(unittest.TestCase):
 			self.assertEqual([r[3] for r in goods_of(again, tab)], [r[3] for r in goods_of(merged, tab)])
 		self.assertEqual(summary["goods"], 0)
 		self.assertEqual(summary["packages"], 0)
+
+	def test_a_good_joins_a_free_slot_when_the_tab_starts_past_slot_0(self):
+		# r204n: the later table's slot 0 package was not imported, so the
+		# alchemy tab held slots 1..n and an added stone took slot n, the
+		# last kept row's; the GameWorld refuses a duplicate slot.
+		kept = ["PACKAGE_ITEM_ETC_ARCHEMY_REINFORCE_PROB_UP_A_09", "PACKAGE_ITEM_ETC_ARCHEMY_POTION_SPEED_09"]
+		merged, _ = self.merge(alchemy_goods=kept, alchemy_first_slot=1)
+		for tab in {r[2] for r in table_rows(merged["refshopgoods.txt"])}:
+			slots = [r[4] for r in goods_of(merged, tab)]
+			self.assertEqual(len(slots), len(set(slots)), f"{tab} repeats a slot: {sorted(slots, key=int)}")
+		alchemy = goods_of(merged, "STORE_SD_ACCESSORY_TAB3")
+		self.assertGreater(len(alchemy), len(kept))
+		self.assertEqual([r[4] for r in alchemy[:2]], ["1", "2"])
+		self.assertIn("0", [r[4] for r in alchemy])
 
 	def test_a_tab_never_passes_the_native_maximum(self):
 		full = [f"PACKAGE_ITEM_ETC_FILLER_{n:02d}" for n in range(44)]
