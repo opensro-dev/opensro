@@ -105,9 +105,10 @@ func TestNpcTalkWithBrokenQuestRowIsRefused(t *testing.T) {
 ================
 TestNpcTalkWhileBusyIsRefused
 
-While an exchange is open, a stall is kept, or a stall is being visited,
-the talk refuses IM_BUSY before anything else; a pending exchange
-request alone does not make the player busy.
+While an exchange is open, a stall is kept, a stall is being visited, or
+the player's motion is locked by an open cast, the talk refuses IM_BUSY
+before anything else; a pending exchange request alone does not make the
+player busy.
 ================
 */
 func TestNpcTalkWhileBusyIsRefused(t *testing.T) {
@@ -131,6 +132,10 @@ func TestNpcTalkWhileBusyIsRefused(t *testing.T) {
 			if _, err := rt.Stalls.Enter(testDivision, c.Name, "keeper"); err != nil {
 				t.Fatal(err)
 			}
+		}},
+		// The motion-change lock (0x4EF880): a skill cast still open.
+		{"mid-cast", func(t *testing.T, rt *Runtime, c *enterworld.Character) {
+			rt.pendingSkillFinalizes = append(rt.pendingSkillFinalizes, newPendingSkillFinalize(testDivision, c.Name))
 		}},
 	}
 	for _, tc := range busy {
