@@ -25,7 +25,7 @@ import {
 	actionCensusKey,
 	censusGate
 } from "../../tools/ui-action-census-gate.mjs";
-import { censusText, censusVerdict } from "../../tools/census-verdict.mjs";
+import { censusTable as censusTableOf, censusText, censusVerdict } from "../../tools/census-verdict.mjs";
 import path from "node:path";
 import { codeClosure } from "../../../../scripts/build/shared/codeStamp.mjs";
 
@@ -255,34 +255,97 @@ test("census verdict: equal passes, a moved row fails and names its scene, an ex
 	assert.equal( censusVerdict( table, censusText( grown ), false, [] ).ok, false, "but not on a native build" );
 });
 
-test("census gate: a changed committed census is judged against the kept table, never rebuilt", async () => {
-	const kept = new Map();
-	let builds = 0;
-	const cache = { find: key => kept.get( key ), record: ( key, text ) => kept.set( key, text ) };
-	const build = async () => {
-		builds++;
-		return censusTable();
+// The two fixture scenes as the tool's --parts build gives them: Shop
+// read shop.json, System read system.json and probed an absent file.
+const SCENE_READS = { Shop: [ "/shop.json" ], System: [ "/absent.json", "/system.json" ] };
+
+/*
+================
+partsBuilder
+
+A --parts build over the fixture scenes (all when names is undefined),
+counting the scenes each call built.
+================
+*/
+function partsBuilder( shopRow = "buy" ) {
+	const table = JSON.parse( censusTable( shopRow ) );
+	const builds = [];
+	const build = async names => {
+		const wanted = names ?? Object.keys( table.scenes );
+		builds.push( wanted );
+		const scenes = {};
+		for ( const name of wanted ) scenes[name] = { census: table.scenes[name], reads: SCENE_READS[name] };
+		return { names: Object.keys( table.scenes ), scenes };
 	};
+	return { build, builds };
+}
+
+test("census gate: a changed committed census is judged against the kept scenes, never rebuilt", async () => {
+	const kept = new Map(), files = { "/shop.json": "a", "/system.json": "b" };
+	const cache = { find: key => kept.get( key ), record: ( key, text ) => kept.set( key, text ) };
+	const digest = async file => files[file] ?? "missing";
+	const { build, builds } = partsBuilder();
 	const verdict = ( current, text ) => censusVerdict( current, text, false, [] );
-	const first = await censusGate( { key: "k", committed: censusTable(), cache, build, verdict } );
-	assert.deepEqual( [ first.code, first.built, builds ], [ 0, true, 1 ] );
+	const gate = ( key, committed ) => censusGate( { key, committed, cache, build, digest, verdict } );
+	const fixture = text => censusText( { ...JSON.parse( text ), about: censusAbout() } );
+	const first = await gate( "k", fixture( censusTable() ) );
+	assert.deepEqual( [ first.code, first.built, builds.length ], [ 0, [ "Shop", "System" ], 1 ] );
 	// The committed census moves (a refresh commit): same inputs, no build.
-	const stale = await censusGate( { key: "k", committed: censusTable( "sell" ), cache, build, verdict } );
-	assert.deepEqual( [ stale.code, stale.built, builds ], [ 1, false, 1 ] );
-	const refreshed = await censusGate( { key: "k", committed: censusTable(), cache, build, verdict } );
-	assert.deepEqual( [ refreshed.code, refreshed.built, builds ], [ 0, false, 1 ] );
-	// A build input moves: a new key builds again.
-	const moved = await censusGate( { key: "k2", committed: censusTable(), cache, build, verdict } );
-	assert.deepEqual( [ moved.code, moved.built, builds ], [ 0, true, 2 ] );
+	const stale = await gate( "k", fixture( censusTable( "sell" ) ) );
+	assert.deepEqual( [ stale.code, stale.built, builds.length ], [ 1, [], 1 ] );
+	const refreshed = await gate( "k", fixture( censusTable() ) );
+	assert.deepEqual( [ refreshed.code, refreshed.built, builds.length ], [ 0, [], 1 ] );
+	// A code input moves: a new key builds every scene again.
+	const moved = await gate( "k2", fixture( censusTable() ) );
+	assert.deepEqual( [ moved.code, moved.built, builds.length ], [ 0, [ "Shop", "System" ], 2 ] );
+});
+
+test("census gate: only a scene whose read file moved is rebuilt, an absent file appearing included", async () => {
+	const kept = new Map(), files = { "/shop.json": "a", "/system.json": "b", "/other.json": "c" };
+	const cache = { find: key => kept.get( key ), record: ( key, text ) => kept.set( key, text ) };
+	const digest = async file => files[file] ?? "missing";
+	const { build, builds } = partsBuilder();
+	const verdict = ( current, text ) => censusVerdict( current, text, false, [] );
+	const committed = censusText( { ...JSON.parse( censusTable() ), about: censusAbout() } );
+	const gate = () => censusGate( { key: "k", committed, cache, build, digest, verdict } );
+	await gate();
+	files["/other.json"] = "c2";
+	const unrelated = await gate();
+	assert.deepEqual( [ unrelated.code, unrelated.built ], [ 0, [] ], "a file no scene read rebuilds nothing" );
+	files["/shop.json"] = "a2";
+	const shop = await gate();
+	assert.deepEqual( [ shop.code, shop.built, builds.at( -1 ) ], [ 0, [ "Shop" ], [ "Shop" ] ] );
+	assert.match( shop.lines[0], /rebuilt 1 of 2 scenes \(Shop: \/shop\.json\)/ );
+	files["/absent.json"] = "now";
+	const appeared = await gate();
+	assert.deepEqual( appeared.built, [ "System" ] );
+	assert.equal( (await gate()).built.length, 0, "the rebuilt scenes were recorded with their new digests" );
 });
 
 test("census gate: a failed build fails the gate and records nothing", async () => {
 	const kept = new Map();
 	const cache = { find: key => kept.get( key ), record: ( key, text ) => kept.set( key, text ) };
-	const result = await censusGate( { key: "k", committed: "", cache, build: async () => undefined } );
+	const result = await censusGate( {
+		key: "k",
+		committed: "",
+		cache,
+		build: async () => undefined,
+		digest: async () => "missing"
+	} );
 	assert.equal( result.code, 1 );
 	assert.equal( kept.size, 0 );
 });
+
+/*
+================
+censusAbout
+
+The about line census-verdict.mjs's censusTable writes.
+================
+*/
+function censusAbout() {
+	return censusTableOf( [], {} ).about;
+}
 
 // Every module the census tool can run outside src/ (which the closure
 // keys itself) must be a key input: census-verdict.mjs shapes the

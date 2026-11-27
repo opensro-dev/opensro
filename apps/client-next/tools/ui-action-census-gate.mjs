@@ -14,14 +14,20 @@ them stands until one of those moves.
 The committed census is not one of them: it is only what the table is
 judged against (census-verdict.mjs, milliseconds). Keyed into the build,
 a census refresh commit (#4603) made r204n rebuild for 468 s a table
-that could not have changed. So this wrapper:
+that could not have changed. Nor is the whole asset tree: keyed on its
+pack manifest, any asset build reran every scene (r204n: 582 s), while
+each scene reads a few published files. So this wrapper:
 
   - digests the import closure of the census's roots (not a directory:
     an unrelated client change must not pay for the census, and a file
-    ui.ts newly imports must start paying) into the build key;
-  - reuses the table recorded for that key (checkStamps.findResult), or
-    builds it (ui-action-census.mjs --out) and records it;
-  - judges that table against the committed census on every run.
+    ui.ts newly imports must start paying) into the code key;
+  - keeps, for that key (checkStamps.findResult), every scene's census
+    with the digest of each published file it requested, an absent one
+    included;
+  - rebuilds (ui-action-census.mjs --parts) only the scenes one of whose
+    files moved, all of them when no record holds the key, and records
+    the mix;
+  - judges the assembled table against the committed census on every run.
 
 SRO_CHECK_FORCE=1 ignores recorded tables, so the gate builds afresh.
 `--write` still goes to tools/ui-action-census.mjs directly.
@@ -35,7 +41,10 @@ import os from "node:os";
 import path from "node:path";
 
 import { findResult, fingerprintOf, recordResult, snapshot } from "../../../scripts/checks/checkStamps.mjs";
-import { censusVerdict } from "./census-verdict.mjs";
+import { MISSING_DIGEST } from "../../../scripts/build/graph/action.mjs";
+import { openFileHashCache } from "../../../scripts/build/shared/fileHashCache.mjs";
+import { buildStatePath, CLIENT_PUBLIC_ROOT } from "../../../scripts/lib/generatedRoot.mjs";
+import { censusTable, censusText, censusVerdict } from "./census-verdict.mjs";
 import { imports, project, resolve, root } from "./project.mjs";
 
 export const ACTION_CENSUS_STAMP = "client-ui-action-census";
@@ -81,14 +90,12 @@ export const ACTION_CENSUS_FILES = [
 // remaining inputs are the files above.
 const SNAPSHOT_PATHS = [ "apps/client-next/src", ...ACTION_CENSUS_FILES ];
 
-// Non-path key parts: the Node that strips the types, the built asset
-// tree the scenes read (its pack manifest stands for the whole tree, as
-// in the client check's own key), and this gate's format salt.
-export const ACTION_CENSUS_KEYS = [
-	"@node,--version",
-	"!.generated/client-public/assets/packs/manifest.json",
-	"=ui-action-census-gate-3"
-];
+// Non-path key parts: the Node that strips the types and this gate's
+// format salt. The published files are keyed per scene, by what it read.
+export const ACTION_CENSUS_KEYS = [ "@node,--version", "=ui-action-census-gate-4" ];
+// The gate's own (path -> sha256) cache of the published files the scenes
+// read: one owner per cache file.
+const HASH_CACHE_PATH = buildStatePath( "census-file-hash-cache.json" );
 
 const CLIENT_PREFIX = "apps/client-next/";
 
@@ -152,33 +159,32 @@ export function actionCensusKey( entries, inputSet ) {
 
 /*
 ================
-buildCensus
+buildParts
 
-The census table, built by the tool in its own process (--out): the
-table's text, or undefined when the build failed (its output already
-went to the console).
+The named scenes (all when names is undefined) built by the tool in its
+own process (--parts): { names, scenes: { name: { census, reads } } },
+or undefined when the build failed (its output already went to the
+console).
 ================
 */
-function buildCensus() {
+function buildParts( names ) {
 	const directory = fs.mkdtempSync( path.join( os.tmpdir(), "sro-census-" ) );
-	const out = path.join( directory, "ui-action-census.json" );
+	const out = path.join( directory, "parts.json" );
+	const argv = [ path.join( root, "tools/ui-action-census.mjs" ), "--parts", out ];
+	if ( names ) argv.push( "--scenes", names.join( "," ) );
 	return new Promise( ( resolvePromise ) => {
-		const child = spawn( process.execPath, [ path.join( root, "tools/ui-action-census.mjs" ), "--out", out ], {
-			cwd: root,
-			stdio: "inherit",
-			windowsHide: true
-		} );
+		const child = spawn( process.execPath, argv, { cwd: root, stdio: "inherit", windowsHide: true } );
 		const settle = code => {
-			let text;
+			let parts;
 			if ( code === 0 ) {
 				try {
-					text = fs.readFileSync( out, "utf8" );
+					parts = JSON.parse( fs.readFileSync( out, "utf8" ) );
 				} catch {
-					text = undefined;
+					parts = undefined;
 				}
 			}
 			fs.rmSync( directory, { recursive: true, force: true } );
-			resolvePromise( text );
+			resolvePromise( parts );
 		};
 		child.on( "error", () => settle( 1 ) );
 		child.on( "close", code => settle( code ?? 1 ) );
@@ -187,26 +193,86 @@ function buildCensus() {
 
 /*
 ================
-censusGate
+movedScenes
 
-The gate's decision, with its effects passed in: the table recorded for
-key (cache.find) or a fresh build (build, then cache.record), judged
-against the committed text. Returns { code, lines, built }.
+The recorded scenes one of whose read files no longer has its recorded
+digest, each with the first moved file: [[name, file]].
 ================
 */
-export async function censusGate( { key, committed, cache, build, verdict = censusVerdict } ) {
-	let text = cache.find( key );
-	const built = text === undefined;
-	if ( built ) {
-		text = await build();
-		if ( text === undefined ) {
-			return { code: 1, lines: [ "verify:ui-action-census: the census build failed" ], built };
+async function movedScenes( record, digest ) {
+	const moved = [];
+	for ( const name of record.names ) {
+		for ( const [file, recorded] of record.scenes[name].reads ) {
+			if ( (await digest( file )) !== recorded ) {
+				moved.push( [ name, file ] );
+				break;
+			}
 		}
-		cache.record( key, text );
 	}
-	const judged = verdict( committed, text );
-	const source = built ? "built" : "reused (build inputs unchanged)";
-	return { code: judged.ok ? 0 : 1, lines: [ `verify:ui-action-census: table ${source}`, ...judged.lines ], built };
+	return moved;
+}
+
+/*
+================
+censusGate
+
+The gate's decision, with its effects passed in: the scenes recorded for
+key (cache.find) are kept while every file each read holds its digest;
+the rest are built (build( names ), all when nothing is recorded), and
+the mix is recorded (cache.record) and judged against the committed
+text. Returns { code, lines, built } with built the rebuilt scene names.
+================
+*/
+export async function censusGate( { key, committed, cache, build, digest, verdict = censusVerdict } ) {
+	const found = cache.find( key );
+	const record = found === undefined ? undefined : JSON.parse( found );
+	const moved = record ? await movedScenes( record, digest ) : [];
+	const built = record ? moved.map( ( [name] ) => name ) : undefined;
+	let names = record?.names, scenes = record?.scenes;
+	if ( !record || built.length > 0 ) {
+		const parts = await build( built );
+		if ( parts === undefined ) {
+			return { code: 1, lines: [ "verify:ui-action-census: the census build failed" ], built: built ?? [] };
+		}
+		names = parts.names;
+		scenes = { ...scenes };
+		for ( const [name, part] of Object.entries( parts.scenes ) ) {
+			const reads = [];
+			for ( const file of part.reads ) reads.push( [ file, await digest( file ) ] );
+			scenes[name] = { census: part.census, reads };
+		}
+		cache.record( key, JSON.stringify( { names, scenes } ) );
+	}
+	const judged = verdict( committed, censusText( censusTable( names, scenes ) ) );
+	const source = !record ?
+		`built (${names.length} scenes)` :
+		moved.length === 0 ?
+		"reused (build inputs unchanged)" :
+		`rebuilt ${moved.length} of ${names.length} scenes (${moved.map( ( [n, f] ) => `${n}: ${f}` ).join( ", " )})`;
+	return {
+		code: judged.ok ? 0 : 1,
+		lines: [ `verify:ui-action-census: table ${source}`, ...judged.lines ],
+		built: built ?? names
+	};
+}
+
+/*
+================
+publishedDigest
+
+A digest function over the published tree: a file's sha256 through the
+gate's hash cache, MISSING_DIGEST for one the fixture could not read
+(the census treats any read failure as absent).
+================
+*/
+function publishedDigest( hashes ) {
+	return async file => {
+		try {
+			return await hashes.hashFile( CLIENT_PUBLIC_ROOT + file );
+		} catch {
+			return MISSING_DIGEST;
+		}
+	};
 }
 
 /*
@@ -221,6 +287,7 @@ async function main() {
 	const closure = actionCensusClosure( model.files );
 	const key = actionCensusKey( snapshot( SNAPSHOT_PATHS ), actionCensusInputSet( closure ) );
 	const committed = fs.existsSync( CENSUS_PATH ) ? fs.readFileSync( CENSUS_PATH, "utf8" ) : "";
+	const hashes = await openFileHashCache( HASH_CACHE_PATH );
 	const result = await censusGate( {
 		key,
 		committed,
@@ -228,8 +295,10 @@ async function main() {
 			find: k => findResult( ACTION_CENSUS_STAMP, k ),
 			record: ( k, text ) => recordResult( ACTION_CENSUS_STAMP, k, text )
 		},
-		build: buildCensus
+		build: buildParts,
+		digest: publishedDigest( hashes )
 	} );
+	await hashes.save();
 	for ( const line of result.lines ) (result.code === 0 ? console.log : console.error)( line );
 	process.exitCode = result.code;
 }
