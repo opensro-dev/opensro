@@ -97,6 +97,15 @@ export interface SkillQueueState {
 	readonly fireAtMs?: number;
 }
 
+// Server-confirmed queued skill press tracked alongside its target so
+// gameplay prediction can start windup one one-way latency early.
+export interface ServerQueuedPress {
+	readonly skill: number;
+	readonly sinceMs: number;
+	readonly target?: number;
+	readonly predicted?: boolean;
+}
+
 /*
 ================
 DeniedPress
@@ -120,7 +129,7 @@ round-trip estimate.
 */
 export function createSkillPressQueue<Command>() {
 	let queued: QueuedPress<Command> | null = null, queuedSince = 0, denied: DeniedPress | null = null;
-	let serverQueued: SkillQueueState | null = null, lastSent: number | undefined;
+	let armQueued: ServerQueuedPress | null = null, lastSent: number | undefined, lastSentTarget: number | undefined;
 	let approaching: SkillQueueState | null = null, approachTarget = 0;
 	let rtt = 0, answerPendingSince: number | null = null;
 	return {
@@ -185,8 +194,9 @@ export function createSkillPressQueue<Command>() {
 		queued answer queues it.
 		================
 		*/
-		sent( now: number, skill: number ) {
+		sent( now: number, skill: number, target?: number ) {
 			lastSent = skill;
+			lastSentTarget = target;
 			answerPendingSince = now;
 			// A newer press replaces the command the server was running for.
 			approaching = null;
@@ -201,6 +211,7 @@ export function createSkillPressQueue<Command>() {
 		*/
 		commandSent() {
 			lastSent = undefined;
+			lastSentTarget = undefined;
 			approaching = null;
 		},
 		/*
@@ -256,18 +267,30 @@ export function createSkillPressQueue<Command>() {
 		================
 		*/
 		commandCount( kind: number, count: number, now: number ): boolean {
-			let next = serverQueued;
+			let next = armQueued;
 			if ( count < 2 ) next = null;
 			else if ( kind === ACTION_STATE_ARM ) {
 				next = lastSent === undefined ?
 					null :
-					serverQueued?.skill === lastSent ?
-					serverQueued :
-					{ skill: lastSent, sinceMs: now };
+					armQueued?.skill === lastSent && armQueued?.target === lastSentTarget ?
+					armQueued :
+					{
+						skill: lastSent,
+						sinceMs: now,
+						...(lastSentTarget !== undefined ? { target: lastSentTarget } : {})
+					};
 			}
-			const changed = next !== serverQueued;
-			serverQueued = next;
+			const changed = next !== armQueued;
+			armQueued = next;
 			return changed;
+		},
+		serverQueued(): ServerQueuedPress | null {
+			return armQueued;
+		},
+		markServerQueuedPredicted() {
+			if ( armQueued && !armQueued.predicted ) {
+				armQueued = { ...armQueued, predicted: true };
+			}
 		},
 		/*
 		================
@@ -302,7 +325,9 @@ export function createSkillPressQueue<Command>() {
 		state() {
 			const next: SkillQueueState | undefined = queued ?
 				{ skill: queued.skill, sinceMs: queuedSince, fireAtMs: queued.fireAtMs } :
-				serverQueued ?? approaching ?? undefined;
+				armQueued ?
+				{ skill: armQueued.skill, sinceMs: armQueued.sinceMs } :
+				approaching ?? undefined;
 			return {
 				skillQueue: next,
 				skillDenied: denied ?? undefined
@@ -317,8 +342,9 @@ export function createSkillPressQueue<Command>() {
 			queued = null;
 			queuedSince = 0;
 			denied = null;
-			serverQueued = null;
+			armQueued = null;
 			lastSent = undefined;
+			lastSentTarget = undefined;
 			approaching = null;
 			rtt = 0;
 			answerPendingSince = null;
