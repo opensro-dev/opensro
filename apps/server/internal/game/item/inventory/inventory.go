@@ -649,7 +649,8 @@ func retainedOversizedStack(item Item, stackCap uint16) bool {
 	}
 	switch flags {
 	case wire.PackTypeFlags(3, 3, 1, 1), wire.PackTypeFlags(3, 3, 1, 2), wire.PackTypeFlags(3, 3, 1, 3),
-		wire.PackTypeFlags(3, 3, 1, 4), wire.PackTypeFlags(3, 3, 1, 9), wire.PackTypeFlags(3, 3, 10, 2):
+		wire.PackTypeFlags(3, 3, 1, 4), wire.PackTypeFlags(3, 3, 1, 9), wire.PackTypeFlags(3, 3, 2, 1),
+		wire.PackTypeFlags(3, 3, 2, 6), wire.PackTypeFlags(3, 3, 2, 7), wire.PackTypeFlags(3, 3, 10, 2):
 		return true
 	default:
 		return false

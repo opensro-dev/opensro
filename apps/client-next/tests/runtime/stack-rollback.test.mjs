@@ -73,8 +73,25 @@ test("retained elixirs split at cap one; native singles still swap", () => {
 	}, { ...a, slot: 14 } ] );
 });
 
+// The SRO_STACK_SIZES families, as enterworld.stackGroups lists them.
+const CONFIGURABLE_FAMILIES = [
+	0x8ec,
+	0x10ec,
+	0x18ec,
+	0x20ec,
+	0x48ec,
+	0x396c,
+	0x316c,
+	0x96c,
+	0xd6c,
+	0x156c,
+	0xdec,
+	0x15ec,
+	0x3dec
+];
+
 test("all configurable families transfer retained stacks", () => {
-	for ( const flags of [ 0x8ec, 0x10ec, 0x18ec, 0x20ec, 0x48ec, 0xd6c, 0x156c, 0xdec, 0x15ec, 0x3dec ] ) {
+	for ( const flags of CONFIGURABLE_FAMILIES ) {
 		const result = planWholeTransfer(
 			[ item( 13, 100, flags ) ],
 			[ item( 0, 10, flags ) ],

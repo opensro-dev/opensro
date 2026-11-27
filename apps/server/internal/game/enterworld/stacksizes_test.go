@@ -81,9 +81,11 @@ func TestStackSizesRaiseOnlyTheirGroups(t *testing.T) {
 		{"vigor potion", stackRef(1, 3, 50), true, 2000, 50},
 		{"pet hp potion", stackRef(1, 4, 50), true, 500, 50},
 		{"pet hunger potion", stackRef(1, 9, 50), true, 500, 50},
+		{"pet abnormal state recovery potion", stackRef(2, 7, 50), true, 500, 50},
 		{"universal pill", stackRef(2, 6, 50), true, 500, 50},
-		// Other cures (purification pills, 3/3/2/1) are not universal pills.
-		{"purification pill", stackRef(2, 1, 50), false, 50, 50},
+		{"purification pill", stackRef(2, 1, 50), true, 500, 50},
+		// Other cures stay native.
+		{"other cure", stackRef(2, 2, 50), false, 50, 50},
 		{"elixir", stackRef(10, 1, 1), true, 50, 1},
 		{"lucky powder", stackRef(10, 2, 50), true, 100, 50},
 		// A single item in a potion family keeps its cap.
