@@ -200,10 +200,17 @@ func TestGateHitRangeIs800PlainNpcIs300(t *testing.T) {
 	if !rt.npcWithinHitRange(testDivision, c, gate) {
 		t.Fatal("a gate at 400 was refused")
 	}
-	rt.NpcRoster[0].Spawn.X = base + teleportHitRange + 10
-	gate.Spawn = rt.NpcRoster[0].Spawn
-	if rt.npcWithinHitRange(testDivision, c, gate) {
-		t.Fatal("a gate beyond 800 was admitted")
+	// Literal distances, not the constant: a gate range moved off 800 in
+	// either direction turns one of these red.
+	for _, tc := range []struct {
+		offset float64
+		admit  bool
+	}{{790, true}, {810, false}} {
+		gate.Spawn = rt.NpcRoster[0].Spawn
+		gate.Spawn.X = base + tc.offset
+		if got := rt.npcWithinHitRange(testDivision, c, gate); got != tc.admit {
+			t.Fatalf("a gate at %v: admitted %v, want %v", tc.offset, got, tc.admit)
+		}
 	}
 }
 
