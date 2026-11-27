@@ -109,8 +109,8 @@ One frame of the talk window: the conversation, the authored layout and
 its origin, the text services, the pointer state and the NPC's service
 menu. Service flags left out are off, except talk; portalRows replaces
 the service menu with the teleport destinations. canReverseReturn adds the
-reverse return's two destinations (5D4410, capability 0x20000000): the
-beginner guides' free return, or a gate's while a scroll is held.
+reverse return's two destinations (5D4410, capability 0x20000000, CICNPC only at
+5D95AD): the beginner guides' free return.
 ================
 */
 export interface NpcTalkInput {

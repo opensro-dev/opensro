@@ -8,7 +8,9 @@ The beginner guides (NPC_EU_ADVICE3, NPC_CH_SOLDIER_EM1) hold service 0x1E
 (the reference server's NPC service setup), so their select grant carries
 capability 0x20000000; the talk window then lists two rows (client 5D4410, action
 0x2B) and a click sends 0x7495 [u32 gid][u8 5][u8 choice] (client 6FEF10): 2 is the
-last recall point, 3 the place of the last death.
+last recall point, 3 the place of the last death. Only those guides carry
+service 0x1E; teleport gates and ferry NPCs do not receive capability 0x20000000
+for holding a scroll.
 
 The reference server's teleport use handler, case 5, is free: the
 NPC must offer a teleport service (8, 9,
@@ -18,7 +20,7 @@ a missing point (0x1C21 for one outside any world), and the move. Its
 own 0x1E test asks the player's service set, which is always
 empty, so it never refuses.
 
-ITEM_MALL_REVERSE_RETURN_SCROLL (3/3/3/3) is used from the bag. A right
+ITEM_MALL_REVERSE_RETURN_SCROLL (3/3/3/3) is used solely from the bag. A right
 click opens a two-row choice box (message box 0x1E); CGInterface_OnMsgBoxResult
 (6971B0) answers it with CIFInventory_ExecuteItemAction, which sends 0x75BD
 [slot][u16 type][u8 choice]: 2 the last recall point, 3 the last death
@@ -30,9 +32,6 @@ scroll's slot, category-1 notice 390). The v1.150 dialog sends only 2 and
 3. v1.188's choice 7 (a saved point, u32 id) is refused unless the
 port-only SRO_REVERSE_RETURN_MAP option is on (reversemap.go).
 
-INFERENCE: a teleport gate also lists the rows while the player holds a
-scroll, and the click runs the same scroll rule.
-
 ===========================================================================
 */
 
@@ -41,7 +40,6 @@ package action
 import (
 	"opensro.online/server/internal/domain"
 	"opensro.online/server/internal/game/enterworld"
-	"opensro.online/server/internal/game/item/inventory"
 	"opensro.online/server/internal/game/item/wire"
 	"opensro.online/server/internal/game/tunables"
 	"opensro.online/server/internal/game/world/instance"
@@ -82,54 +80,6 @@ const (
 
 /*
 ================
-reverseReturnScrollRow
-
-The bag row of the first reverse return scroll the player holds.
-================
-*/
-func (rt *Runtime) reverseReturnScrollRow(c *enterworld.Character) (int, *enterworld.ItemRef, bool) {
-	refs := rt.deps.ItemReferences()
-	if refs == nil {
-		return 0, nil, false
-	}
-	found, slot := -1, int64(0)
-	var held *enterworld.ItemRef
-	for index, row := range c.MissionInventory {
-		if !inventory.InBag(c, row.Slot) || row.StackCount < 1 || found >= 0 && row.Slot >= slot {
-			continue
-		}
-		ref, ok := refs.ItemRefByCodename(row.Codename)
-		if !ok || ref == nil || ref.RefObjID != row.RefObjID || ref.TypeIDs != [4]int64{3, 3, 3, 3} {
-			continue
-		}
-		found, slot, held = index, row.Slot, ref
-	}
-	return found, held, found >= 0
-}
-
-/*
-================
-reverseReturnCapability
-
-A teleport gate's extra select bit while the player holds a reverse return
-scroll (INFERENCE, see the file header). The guides' bit is their service
-0x1E, already in TalkFlags. The caller holds the division lock.
-================
-*/
-func (rt *Runtime) reverseReturnCapability(npc simulation.NpcDef, c *enterworld.Character) uint32 {
-	// The Bandit Den gate offers only its return-point row (0x100) and
-	// is a gate all the same.
-	if npc.TalkFlags&(simulation.NpcTalkFlagTeleport|simulation.NpcTalkFlagResurrectPoint) == 0 {
-		return 0
-	}
-	if _, _, held := rt.reverseReturnScrollRow(c); !held {
-		return 0
-	}
-	return simulation.NpcTalkFlagReverseReturn
-}
-
-/*
-================
 reverseReturnPoint
 
 The recorded point a choice names, or the refusal for a missing one.
@@ -167,9 +117,8 @@ func hasTeleportService(npc simulation.NpcDef) bool {
 ================
 handleReverseReturn
 
-0x7495 type 5 from the selected NPC: a teleport gate spends a held scroll
-(the inference above), every other teleport service NPC runs the native free
-case 5.
+0x7495 type 5 from the selected NPC: runs the native free case 5 for any
+teleport service NPC.
 ================
 */
 func (rt *Runtime) handleReverseReturn(division string, c *enterworld.Character, gid uint32, choice uint8) OpResult {
@@ -192,46 +141,7 @@ func (rt *Runtime) handleReverseReturn(division string, c *enterworld.Character,
 	if !hasTeleportService(npc) {
 		return portalFailure(errCodeTeleportService)
 	}
-	if _, _, held := rt.reverseReturnScrollRow(c); held && !npc.Services.Has(simulation.NpcServiceReverseReturn) {
-		if choice != reverseReturnLastRecall && choice != reverseReturnLastDeath {
-			return portalFailure(2)
-		}
-		return rt.scrollReverseReturn(division, c, choice)
-	}
 	return rt.guideReverseReturn(division, c, gid, choice)
-}
-
-/*
-================
-scrollReverseReturn
-
-The held scroll's reverse return from a teleport gate. The caller holds
-the division lock.
-================
-*/
-func (rt *Runtime) scrollReverseReturn(division string, c *enterworld.Character, choice uint8) OpResult {
-	result := itemUseFailure(wire.ErrCodeInvalidRequest)
-	var used *enterworld.ItemRef
-	now := rt.Now().UnixMilli()
-	committed := rt.deps.Update(c, "reverse-return", func() bool {
-		if c.DeletePending {
-			return false
-		}
-		if !enterworld.CharacterAlive(c) {
-			result = itemUseFailure(wire.ErrCodeItemUseDead)
-			return false
-		}
-		row, ref, held := rt.reverseReturnScrollRow(c)
-		if !held {
-			return false
-		}
-		used = ref
-		return rt.beginReverseReturnScroll(division, c, ref, row, reverseReturnTarget{choice: choice}, now, &result)
-	})
-	if committed && used != nil {
-		rt.publishItemUseVisual(c, used, 0, &result)
-	}
-	return result
 }
 
 /*
