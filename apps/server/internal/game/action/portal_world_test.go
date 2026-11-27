@@ -161,6 +161,44 @@ func TestFortressPortalStoneServesOnlyTheOwningGuild(t *testing.T) {
 
 /*
 ================
+TestFortressPortalStoneServesTheTemporaryHolder
+
+The inner gates judge the holder, not the owner: once a capture stands
+the capturing guild uses the charge gate and the old owner's guild is
+refused 0x1C1D, though nothing about the stone moved.
+================
+*/
+func TestFortressPortalStoneServesTheTemporaryHolder(t *testing.T) {
+	rt, c := fortressPortalFixture(t, testFieldFortGate)
+	enterFortress(t, rt, c)
+	var jangan uint32
+	for _, record := range rt.Fortresses.Records(testDivision) {
+		if record.CodeName == "FORTRESS_JANGAN" {
+			jangan = record.ID
+		}
+	}
+	rt.Fortresses.Occupy(testDivision, jangan, 7)
+	owner := int64(7)
+	c.GuildID = &owner
+	if out := usePortal(rt, c, testFortChargeGate, 47); len(out.Frames) == 0 || out.Frames[0].Opcode != enterworld.OpcodeResetClient {
+		t.Fatalf("the owner's guild was refused its charge gate: %+v", out)
+	}
+	if !rt.Fortresses.Capture(testDivision, jangan, 9, rt.Now().UnixMilli()) {
+		t.Fatal("the capture did not stand")
+	}
+	out := usePortal(rt, c, testFortChargeGate, 47)
+	if len(out.Frames) != 1 || !bytes.Equal(out.Frames[0].Payload, []byte{2, portalFortressOwnersOnly}) {
+		t.Fatalf("portal stone served the old owner over the holder: %+v", out)
+	}
+	captor := int64(9)
+	c.GuildID = &captor
+	if out := usePortal(rt, c, testFortChargeGate, 47); len(out.Frames) == 0 || out.Frames[0].Opcode != enterworld.OpcodeResetClient {
+		t.Fatalf("the temporary holder was refused its charge gate: %+v", out)
+	}
+}
+
+/*
+================
 enterFortress
 ================
 */

@@ -184,9 +184,9 @@ The native teleport's siege branch. The destination gate's own building decides 
 rule: a fortress gate takes anyone not in a
 job suit while no war runs (the native war-entry check returns
 before its war checks when the server's war mode is clear); every other
-portal of the fortress takes only the owning guild
-(the native owner test) or an allied one (the allied test,
-fortress_allies.go).
+portal of the fortress takes only the holder's guild (a temporary
+holder while a capture stands) or one allied with it (the defender
+test, fortress_allies.go).
 ================
 */
 func (rt *Runtime) fortressEntry(division string, c *enterworld.Character, destination portalDestination, world instance.Definition) byte {
@@ -208,11 +208,9 @@ func (rt *Runtime) fortressEntry(division string, c *enterworld.Character, desti
 	if c.GuildID != nil {
 		guildID = *c.GuildID
 	}
-	if !rt.Fortresses.GuildOwns(division, fortressID, guildID) {
-		record, _ := rt.Fortresses.Get(division, fortressID)
-		if guildID == 0 || record.GuildID == 0 || !rt.Unions.Allied(division, record.GuildID, guildID) {
-			return portalFortressOwnersOnly
-		}
+	record, _ := rt.Fortresses.Get(division, fortressID)
+	if !rt.fortressDefender(division, record, guildID) {
+		return portalFortressOwnersOnly
 	}
 	return 0
 }
