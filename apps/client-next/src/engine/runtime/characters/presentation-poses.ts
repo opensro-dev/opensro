@@ -17,10 +17,8 @@ already overrides the angle of a held pose.
 
 ===========================================================================
 */
-import { castAnimating } from "@/engine/foundation/animation/auxiliary-motion";
 import { STALL_TITLE_MODE } from "@/engine/foundation/gameplay/interaction-approach";
-import type { CastState, GameplayState, MovementPath, Pose, VitalState } from "@/engine/contracts/gameplay";
-import type { CharacterLayer } from "@/engine/contracts/character";
+import type { GameplayState, MovementPath, Pose, VitalState } from "@/engine/contracts/gameplay";
 import type { EntityState } from "@/engine/contracts/world";
 import type { CharacterPresentationState } from "./internal/presentation-contract";
 
@@ -34,6 +32,24 @@ resolved, and released or rebound, here), and the action phase's
 waiting and active casts.
 ================
 */
+/*
+================
+holdSurvivesRevision
+
+Whether a navigation hold outlives a new movement revision: only a
+stationary one, the heading-only 0xB2F5 a chained cast sends at the
+settled server point (#1233). A correction that moves the actor ends
+the hold, as the native B2F5 handler (775B50) writes the wire position
+to the mover: absorbing it while a cast animated let a unique that
+casts back to back (the Tiger Girl, BR-261127-0952-B0CA) stand at its
+old drawn spot, unturned, then jump metres when the hold finally ended.
+================
+*/
+export function holdSurvivesRevision( hold: Pose, pose: Pose, moving: boolean ): boolean {
+	return !moving && hold.regionId === pose.regionId && hold.x === pose.x && hold.y === pose.y &&
+		hold.z === pose.z;
+}
+
 export interface DrawnPosesFrame {
 	readonly selected: readonly EntityState[];
 	readonly gameplay: GameplayState | null;
@@ -41,9 +57,6 @@ export interface DrawnPosesFrame {
 	readonly logicalPose: ( entity: EntityState ) => Pose;
 	readonly localMover: ( gid: number ) => boolean;
 	readonly states: Map<number, CharacterPresentationState>;
-	readonly castByActor: ReadonlyMap<number, CastState>;
-	readonly actionLayersByActor: ReadonlyMap<number, CharacterLayer[]>;
-	readonly waitingActors: ReadonlySet<number>;
 	readonly vitalsByGid: ReadonlyMap<number, VitalState>;
 	readonly health: { dead( gid: number ): boolean; } | undefined;
 	// The action phase's pending deaths: a death whose hit lands in this
@@ -90,9 +103,6 @@ export function resolveDrawnPoses( frame: DrawnPosesFrame ): Map<number, Pose> {
 		logicalPose,
 		localMover,
 		states,
-		castByActor,
-		actionLayersByActor,
-		waitingActors,
 		vitalsByGid,
 		health,
 		pendingDeaths,
@@ -127,9 +137,6 @@ export function resolveDrawnPoses( frame: DrawnPosesFrame ): Map<number, Pose> {
 			if ( displaced || dead || entity.mountedOn ) {
 				state.navigationHold = undefined;
 			} else if ( state.navigationHold.revision !== movementRevision ) {
-				const cast = castByActor.get( entity.gid );
-				const waiting = !dead && waitingActors.has( entity.gid );
-				const activeCast = castAnimating( cast, actionLayersByActor.get( entity.gid )?.length ?? 0 );
 				let requestedMoving = (local ? gameplay?.moving : entity.moving) ?? false;
 				const statusMask = vitalsByGid.get( entity.gid )?.abnormal ?? 0;
 				const poseFrozen = statusOwner.view(
@@ -139,14 +146,11 @@ export function resolveDrawnPoses( frame: DrawnPosesFrame ): Map<number, Pose> {
 				).poseLocked;
 				const stall = !dead && entity.appearanceState?.[6] === STALL_TITLE_MODE;
 				if ( poseFrozen || stall ) requestedMoving = false;
-				const hold = state.navigationHold.logical;
-				const samePoint = hold.regionId === nativePose.regionId && hold.x === nativePose.x &&
-					hold.y === nativePose.y && hold.z === nativePose.z;
 				// A stationary heading correction (0xB2F5 before the next cast in
 				// a chain) bumps movementRevision without moving the settled
 				// server position. Rebind the hold so the body does not decay to
 				// the server pose and leave ground cast VFX behind at the hold.
-				if ( !requestedMoving && (waiting || activeCast || samePoint) ) {
+				if ( holdSurvivesRevision( state.navigationHold.logical, nativePose, requestedMoving ) ) {
 					state.navigationHold.revision = movementRevision;
 					state.navigationHold.logical = { ...nativePose };
 				} else {
