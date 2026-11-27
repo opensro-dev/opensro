@@ -81,6 +81,7 @@ func startLetterServer(t *testing.T, dir string, seeds []*enterworld.Character) 
 		authority.MutateCharacter(c, label, fn)
 	}
 	deps.Letters = authority.Letters()
+	deps.Guilds = authority.Guilds()
 
 	srv, err := transport.NewServer(transport.Config{
 		WTAddr:            "127.0.0.1:0",

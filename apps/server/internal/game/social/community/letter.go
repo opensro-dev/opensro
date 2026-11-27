@@ -305,6 +305,34 @@ func RegisterLetter(hub *transport.Hub, deps Dependencies, presence Presence) {
 		}
 		log.Debugf("community: letter from %s delivered to %s's mailbox", sender.Name, outcome.RecipientName)
 	})
+	hub.Handle(OpGroupLetterSendRequest, func(s *transport.Session, opcode uint16, payload []byte) {
+		sender, divisionID, bound := enterworld.SessionCharacter(deps, s)
+		if !bound {
+			log.Debugf("community: 0x%04X from unbound session %d discarded", opcode, s.ID)
+			return
+		}
+		// The group letter takes the same chat gate as the single
+		// letter: a chat-blocked sender's request dies here after
+		// the restriction notice.
+		if restriction.Report(s, transport.CommandRestrictionChat) {
+			return
+		}
+		outcome := HandleGroupLetterSend(deps, divisionID, sender, payload, time.Now())
+		if outcome.Refusal != "" {
+			if outcome.AckPayload != nil {
+				_ = s.Send(OpGroupLetterSendAnswer, outcome.AckPayload)
+			}
+			log.Debugf("community: 0x7600 (group-letter-send) refused for %s: %s", sender.Name, outcome.Refusal)
+			return
+		}
+		_ = s.Send(OpGroupLetterSendAnswer, outcome.AckPayload)
+		for _, delivery := range outcome.Deliveries {
+			if peer, online := presenceSession(presence, divisionID, delivery.RecipientName); online {
+				_ = peer.Send(OpFriendLetterEventPush, delivery.PushPayload)
+			}
+		}
+		log.Debugf("community: group letter from %s delivered to %d mailbox(es)", sender.Name, len(outcome.Deliveries))
+	})
 	hub.Handle(OpLetterReadFetchRequest, func(s *transport.Session, opcode uint16, payload []byte) {
 		character, divisionID, bound := enterworld.SessionCharacter(deps, s)
 		if !bound {
