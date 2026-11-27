@@ -150,28 +150,43 @@ func TestReverseScrollInBattleArenaWorldOrder(t *testing.T) {
 ================
 TestLimitedUseReturnsInBattleArenaWorldAreRefused
 
-A limited use runs the same return handlers without a bag row, so the
-arena refuses both its return and its reverse return with 0x187A and
-starts no cast.
+A limited use runs the same return handlers without a bag row
+(CUsedItemLimit_vf1C calls 0x4A00C0), so it answers as the bag does:
+the return refuses 0x187A; the reverse return checks the world's type
+first, so the shipped type-1 arena answers 0x18F5 and a type-0 arena
+0x187A. None starts a cast.
 ================
 */
 func TestLimitedUseReturnsInBattleArenaWorldAreRefused(t *testing.T) {
+	if err := instance.RegisterPortOnly([]instance.Definition{
+		{ID: 980, CodeName: "INS_ARENA_JOB_WAR", NativeType: 0, LayerLimit: 1},
+	}); err != nil {
+		t.Fatal(err)
+	}
 	rt, c, _, ref := returnFixture(t, 5000)
 	standInArena(t, c)
 	reverse := &enterworld.ItemRef{RefObjID: 3800, Codename: "ITEM_MALL_REVERSE_RETURN_SCROLL", Country: 3,
 		TypeIDs: [4]int64{3, 3, 3, 3}, ReturnDestination: "RESURRECT",
 		NativeFields: enterworld.NewNativeFields(map[string]float64{"canUse": 1, "itemParam1_29c": 5000, "itemParam2_2a0": 1})}
 	for _, tc := range []struct {
-		name string
-		ref  *enterworld.ItemRef
-	}{{"return", ref}, {"reverse return", reverse}} {
+		name  string
+		ref   *enterworld.ItemRef
+		world instance.DefinitionID
+		code  uint8
+	}{
+		{"return", ref, instance.DefinitionID(styria.WorldID), errCodeScrollArena},
+		{"reverse return in the type-1 arena", reverse, instance.DefinitionID(styria.WorldID), errCodeReverseWorld},
+		{"reverse return in a type-0 arena", reverse, 980, errCodeScrollArena},
+	} {
+		packed := uint32(instance.Pack(tc.world, 1))
+		c.World.PackedInstance = &packed
 		var result OpResult
 		var revived *revivedWhereDead
 		if rt.runLimitedUse(testDivision, c, tc.ref, reverseReturnLastRecall, rt.Now().UnixMilli(), &result, &revived) {
 			t.Fatalf("limited %s in the arena started", tc.name)
 		}
-		if len(result.Frames) != 1 || !bytes.Equal(result.Frames[0].Payload, wire.EncodeItemUseError(errCodeScrollArena)) {
-			t.Fatalf("limited %s answered %+v, want the 0x7a refusal", tc.name, result.Frames)
+		if len(result.Frames) != 1 || !bytes.Equal(result.Frames[0].Payload, wire.EncodeItemUseError(tc.code)) {
+			t.Fatalf("limited %s answered %+v, want refusal %#x", tc.name, result.Frames, tc.code)
 		}
 		if c.NativeTeleportMode != 0 {
 			t.Fatalf("limited %s started the cast", tc.name)

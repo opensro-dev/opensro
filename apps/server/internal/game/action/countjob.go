@@ -251,9 +251,9 @@ func (rt *Runtime) runLimitedUse(division string, c *enterworld.Character, ref *
 		if rt.jobRefusesScroll(tunables.JobBlockReverseReturnScroll, c, result) {
 			return false
 		}
-		// The reverse handler (0x4A00C0) refuses a Battle Arena world
-		// ahead of the shared checks, as the bag's reverse scroll does.
-		if rt.returnScrollArenaRefused(c, result) {
+		// The same reverse handler as the bag's scroll (0x4A00C0): its
+		// world tests run ahead of the shared checks.
+		if reverseWorldRefused(c, result) {
 			return false
 		}
 		duration, ok := returnScrollDuration(ref)
