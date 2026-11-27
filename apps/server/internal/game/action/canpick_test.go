@@ -17,6 +17,7 @@ import (
 	"testing"
 
 	"opensro.online/server/internal/game/enterworld"
+	"opensro.online/server/internal/game/item/gacha"
 	"opensro.online/server/internal/game/item/inventory"
 	"opensro.online/server/internal/game/item/wire"
 	"opensro.online/server/internal/game/world/simulation"
@@ -35,6 +36,10 @@ func canPickRefs() staticItemSource {
 		unpickableCodename: {
 			RefObjID: 88001, Codename: unpickableCodename, TypeIDs: [4]int64{3, 3, 1, 1},
 			NativeFields: enterworld.NewNativeFields(map[string]float64{"canPick": 0, "canTrade": 1, "maxStack": 10}),
+		},
+		gacha.CardCodename: {
+			RefObjID: 9238, Codename: gacha.CardCodename, TypeIDs: [4]int64{3, 3, 14, 1},
+			NativeFields: enterworld.NewNativeFields(map[string]float64{"canPick": 0, "maxStack": 50}),
 		},
 		"ITEM_FIXTURE_PICKABLE": {
 			RefObjID: 88002, Codename: "ITEM_FIXTURE_PICKABLE", TypeIDs: [4]int64{3, 3, 1, 1},
@@ -94,5 +99,48 @@ func TestPickupOfAPickableRowStillGrants(t *testing.T) {
 	}
 	if !found {
 		t.Fatalf("pickable row missing from the bag: %+v", c.MissionInventory)
+	}
+}
+
+/*
+================
+TestPickupOfAGroundGachaCard
+
+The Magic Pop ticket is authored canPick 0. With SRO_UNIQUE_POP_TICKET
+on, a ticket on the ground (a unique's, a GM's, a player's own drop) is
+picked up like any item; off, it keeps the native 0x39 refusal. The pet
+lane reads the same gate.
+================
+*/
+func TestPickupOfAGroundGachaCard(t *testing.T) {
+	for _, popTicket := range []bool{false, true} {
+		c := testCharacter()
+		rt, clock := newTestRuntime(c, canPickRefs())
+		rt.UniqueRules.PopTicket = popTicket
+		spawn := simulation.SeedWorldState(c).Spawn
+		drop := PlanItemDrop(inventory.Item{RefObjID: 9238, Codename: gacha.CardCodename, TypeFlags: wire.PackTypeFlags(3, 3, 14, 1), Quantity: 1}, 1, spawn, c.Name, clock.Now())
+		added := rt.Ground.Add(testDivision, drop)
+		result := rt.HandleTargetInteract(testDivision, c, wire.TargetInteract{Gid: added.Gid}.Encode())
+		found := false
+		for _, row := range c.MissionInventory {
+			if row.Codename == gacha.CardCodename {
+				found = true
+			}
+		}
+		if got := rt.groundItemPickable(drop); got != popTicket {
+			t.Fatalf("popTicket=%v: pet lane gate = %v", popTicket, got)
+		}
+		if !popTicket {
+			if len(result.Frames) == 0 || !bytes.Equal(result.Frames[0].Payload, wire.EncodeItemMoveError(wire.ErrCodeCannotBePicked)) {
+				t.Fatalf("flag off: refusal frames %+v, want 0x39", result.Frames)
+			}
+			if rt.Ground.Count(testDivision) != 1 || found {
+				t.Fatalf("flag off: ticket left the ground (count %d, bagged %v)", rt.Ground.Count(testDivision), found)
+			}
+			continue
+		}
+		if rt.Ground.Count(testDivision) != 0 || !found {
+			t.Fatalf("flag on: ticket not taken (count %d, bagged %v)", rt.Ground.Count(testDivision), found)
+		}
 	}
 }
