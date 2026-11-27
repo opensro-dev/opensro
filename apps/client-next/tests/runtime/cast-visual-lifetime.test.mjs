@@ -39,12 +39,15 @@ const raw = JSON.parse( readFileSync( CLIENT_PUBLIC_ROOT + "/assets/skill/effect
 harness
 
 Builds an effects presenter fed with the real decoded records of the
-given skills. The caster is the local player; durations are stubbed at
-one second, so a released visual is due out within one second of its
-bracket event (its fade, when the stage authors one, is shorter).
+given skills. The caster is the local player; durations default to one
+second, so a released visual is due out within one second of its
+bracket event (its fade, when the stage authors one, is shorter). A
+test may instead drive admission itself: ready flips when the model
+lands, and duration reads 0 until then, 1.2 (the teleport program's
+decoded length) after.
 ================
 */
-function harness( skillIds ) {
+function harness( skillIds, duration = () => 1, ready = () => true ) {
 	const records = {};
 	for ( const id of skillIds ) records[id] = raw[id];
 	const catalog = createEffectDecoder().decode(
@@ -88,8 +91,8 @@ function harness( skillIds ) {
 			entities,
 			game,
 			now,
-			() => true,
-			() => 1,
+			ready,
+			duration,
 			events,
 			() => ({ regionId: 257, x: 0, y: 0, z: 0, yaw: radians( 0 ) }),
 			[ {
@@ -136,6 +139,40 @@ test("a teleport windup ends when its cast bracket closes", () => {
 	assert.ok(
 		!tail.some( n => n.includes( "wizard_light_teleport_a" ) ),
 		`the windup outlives its bracket: ${tail}`
+	);
+	assert.equal( owner.error(), null );
+	owner.dispose();
+});
+
+test("a teleport windup whose bracket closes before its model lands is still drawn", () => {
+	// #4696: the live wire folds the mode-1 release into the B245 batch
+	// (casting time 0) and the mode-2 finalize lands ~71 ms later, long
+	// before the effect program's model can be fetched and decoded.
+	// duration() reads 0 until that admission, so a release stamped in
+	// the meantime must not delete the visual before its first frame.
+	let admitted = false;
+	const { owner, game, step } = harness(
+		[ 9063 ],
+		() => admitted ? 1.2 : 0,
+		() => admitted
+	);
+	const cast = { token: 7, caster: 1, target: 1, skill: 9063, receivedAtMs: 0, shotAtMs: 0 };
+	game.casts = [ cast ];
+	step( 0, [ { cast, phase: "READY", event: 0, at: 0 } ] );
+	// The finalize closes the bracket while the model is still cold.
+	cast.cancelledAtMs = 71;
+	step( .05 );
+	step( .1 );
+	admitted = true;
+	step( .15 );
+	assert.ok(
+		names( step( .2 ) ).some( n => n.includes( "wizard_light_teleport_a" ) ),
+		"the windup draws once its model is admitted"
+	);
+	// Released at the bracket close, it plays its program tail out.
+	assert.ok(
+		!names( step( 1.5 ) ).some( n => n.includes( "wizard_light_teleport_a" ) ),
+		"the windup is gone after its release tail"
 	);
 	assert.equal( owner.error(), null );
 	owner.dispose();

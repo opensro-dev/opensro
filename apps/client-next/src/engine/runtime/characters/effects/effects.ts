@@ -3395,21 +3395,36 @@ export function createCharacterEffects(
 					const command = visual.command;
 					if ( command ) {
 						const cast = castStates.get( visual.token );
-						// Inferred: a retained buff token must not keep its completed windup alive,
-						// unless a SHOT mover of the cast still has to trade it (windup-trade.ts).
+						// 8DF180 (the mode-1 release) tears down no spawned stage
+						// object; a deco's attachments end only when the deco does -
+						// the cancel (8DCF40 -> 8DC030) or advancing past the final
+						// stage (8DF480). A one-shot windup therefore follows its
+						// cast bracket. Inferred: a looping windup must still stop
+						// when the shot fires (its stage is over, and a retained buff
+						// token must not keep it alive), unless a SHOT mover of the
+						// cast still has to trade it (windup-trade.ts).
 						if (
 							!current.has( visual.token ) ||
 							cast?.cancelledAtMs !== undefined || !entity ||
-							command.windup && cast?.shotAtMs !== undefined && clock >= cast.shotAtMs &&
+							command.windup && command.loop && cast?.shotAtMs !== undefined &&
+								clock >= cast.shotAtMs &&
 								!windupAwaitsTrade( catalog?.[String( cast.skill )]?.stages, command.slot )
 						) releaseCommand( command, now );
 						stepRelease( command, now );
 					}
+					// A released program visual is removed after its tail, but
+					// duration() reads 0 until the program's model is admitted:
+					// a windup released before admission (an instant cast whose
+					// bracket closed during the fetch) would be deleted before
+					// its first drawn frame. Hold it for admission, bounded by
+					// the same never-resident limit as the one-shot reaper.
 					if (
 						command?.released !== undefined &&
 						(!isEffectProgramModel( visual.actor.model ) ||
-							now - command.released >=
-								(command.fade || duration( visual.actor.model, visual.actor.clip )))
+							ready( visual.actor.model ) &&
+								now - command.released >=
+									(command.fade || duration( visual.actor.model, visual.actor.clip )) ||
+							now - command.released >= UNREADY_ONE_SHOT_SECONDS)
 					) {
 						active.delete( gid );
 						continue;
