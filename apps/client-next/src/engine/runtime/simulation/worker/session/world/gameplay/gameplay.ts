@@ -424,9 +424,16 @@ import {
 	potionSlot
 } from "@/engine/foundation/gameplay/sro-macro";
 import { createTradeProgress } from "./trade-progress/trade-progress";
+import {
+	encodeAttendanceCheckIn,
+	encodeAttendanceClaimAccumulation,
+	encodeAttendanceClaimContinuity,
+	OP_ATTENDANCE_REQUEST
+} from "@/engine/foundation/gameplay/attendance";
 import { createCaravanHire } from "@/engine/foundation/gameplay/caravan-hire";
 import { createServerEvent } from "./server-event/server-event";
 import { createUniqueDamageRank } from "./unique-rank/unique-rank";
+import { createAttendance } from "./attendance/attendance";
 import { createJobHonor } from "./job-honor/job-honor";
 import { createJobHonorTiers } from "./job-honor/job-honor-tiers";
 import { createStyria } from "./styria/styria";
@@ -831,6 +838,7 @@ export function createGameplay(
 		serverEvent = createServerEvent(),
 		uniqueRank = createUniqueDamageRank(),
 		jobHonor = createJobHonor(),
+		attendance = createAttendance(),
 		jobHonorTiers = createJobHonorTiers(),
 		styria = createStyria(),
 		uniqueStatus = createUniqueStatus(),
@@ -2126,6 +2134,7 @@ clears it when another character enters.
 		macroHuntLastActionAtMs = 0;
 		uniqueRank.clear();
 		jobHonor.clear();
+		attendance.clear();
 		jobHonorTiers.clear();
 		styria.clear();
 		uniqueStatus.clear();
@@ -2855,6 +2864,18 @@ state here before a command can claim a native wire conversation.
 					throw Error( "Invalid caravan hire" );
 				}
 				return sendFrame( caravanHire.request( command.operation, command.stars, command.name ) );
+			}
+			if ( command.kind === "attendance" ) {
+				// Port-only (#3255): 0x7FD2, the calendar's check-in and claims.
+				if ( !localGid ) throw Error( "Invalid attendance request" );
+				return sendFrame( {
+					opcode: OP_ATTENDANCE_REQUEST,
+					payload: command.operation === 0 ?
+						encodeAttendanceCheckIn() :
+						command.operation === 1 ?
+						encodeAttendanceClaimContinuity( command.tier ) :
+						encodeAttendanceClaimAccumulation( command.tier )
+				} );
 			}
 			if ( command.kind === "caravan-hire-close" ) {
 				caravanHire.clear();
@@ -4934,6 +4955,12 @@ Packet handling must not depend on which HUD panel is currently open.
 					return true;
 				}
 				if ( jobHonor.receive( frame ) ) {
+					dirty = true;
+					return true;
+				}
+				// Port-only (#3255): the attendance month (attendance.ts),
+				// under SRO_ATTENDANCE.
+				if ( attendance.receive( frame ) ) {
 					dirty = true;
 					return true;
 				}
@@ -7156,6 +7183,9 @@ The published plane when something changed since the last take, else null.
 				...(sroMacro.view() ? { sroMacro: sroMacro.view() } : {}),
 				uniqueDamageRank: uniqueRank.current(),
 				jobHonor: jobHonor.current(),
+				// Port-only (#3255): the attendance month and tiers
+				// (attendance.ts), under SRO_ATTENDANCE.
+				attendance: attendance.view(),
 				// Port-only (#3648): the Styria Clash standing and its
 				// latched result (styria.ts), under SRO_STYRIA_CLASH.
 				styria: styria.current(),

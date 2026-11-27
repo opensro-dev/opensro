@@ -418,6 +418,15 @@ export const EXPERIMENTAL_TABS: readonly ExperimentalTab[] = [
 						id: "experimental-job-honor",
 						label: "Job honor ranking",
 						description: "System menu: the job honor ranking and your standing."
+					},
+					{
+						// Port-only, not native (#3255): the Attendance
+						// Calendar window over the attendance feed; the row
+						// only adds its System menu entry and window.
+						key: "attendanceCalendar",
+						id: "experimental-attendance-calendar",
+						label: "Attendance calendar",
+						description: "System menu: monthly check-in and attendance rewards."
 					}
 				]
 			},
