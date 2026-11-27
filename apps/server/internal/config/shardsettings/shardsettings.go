@@ -586,6 +586,11 @@ var Settings = []Setting{
 	// page the expansion quests then grow. On by the owner's call; "off"
 	// is native. Existing records keep whatever capacity they hold.
 	{Env: "SRO_INVENTORY_PAGES", NomadVar: "inventory_pages", Default: "on"},
+	// Owner, 2026-11-27: port-only, not native - a character deletion
+	// matures after one day instead of the native seven ("off" is native).
+	// The character list publishes the matured instant, so the select
+	// screen counts down the same day.
+	{Env: "SRO_QUICK_CHARACTER_DELETE", NomadVar: "quick_character_delete", Default: "off"},
 	// Unset keeps every level at the level-1 pace; our deployment's bands
 	// (#1606: 1-59 at the pace, 60-110 on one smooth curve) are in
 	// config/shard-settings.json. The catalogue prices quest rewards

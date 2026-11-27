@@ -80,19 +80,24 @@ func TestRecordWritesTheLineWithAllFields(t *testing.T) {
 TestDailyRotationSplitsAtTheUTCDate
 
 Lines on two UTC days land in two daily files, each named for its day.
+The days straddle today's UTC midnight: Open runs on the real clock and
+prunes at every rotation, so fixed dates fell out of the retention window
+once they were 30 days old and the test broke on 2026-11-27.
 ================
 */
 func TestDailyRotationSplitsAtTheUTCDate(t *testing.T) {
 	dir := t.TempDir()
+	midnight := time.Now().UTC().Truncate(24 * time.Hour)
+	before, after := midnight.Add(-time.Second), midnight.Add(time.Second)
 	l := Open(dir, 30)
-	l.Record(Entry{At: time.Date(2026, 10, 28, 23, 59, 59, 0, time.UTC), AccountID: "a", Character: "A", Channel: "all", Text: "before"})
-	l.Record(Entry{At: time.Date(2026, 10, 29, 0, 0, 1, 0, time.UTC), AccountID: "a", Character: "A", Channel: "all", Text: "after"})
+	l.Record(Entry{At: before, AccountID: "a", Character: "A", Channel: "all", Text: "before"})
+	l.Record(Entry{At: after, AccountID: "a", Character: "A", Channel: "all", Text: "after"})
 	l.Close()
 
-	if lines := readLines(t, filepath.Join(dir, "chat-2026-10-28.log")); len(lines) != 1 || lines[0].Text != "before" {
+	if lines := readLines(t, filepath.Join(dir, fileName(before))); len(lines) != 1 || lines[0].Text != "before" {
 		t.Fatalf("first day = %+v", lines)
 	}
-	if lines := readLines(t, filepath.Join(dir, "chat-2026-10-29.log")); len(lines) != 1 || lines[0].Text != "after" {
+	if lines := readLines(t, filepath.Join(dir, fileName(after))); len(lines) != 1 || lines[0].Text != "after" {
 		t.Fatalf("second day = %+v", lines)
 	}
 }

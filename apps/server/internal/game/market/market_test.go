@@ -49,7 +49,7 @@ TestRulesAreTheOwnersNumbers
 */
 func TestRulesAreTheOwnersNumbers(t *testing.T) {
 	rules := Rules()
-	if rules.FeePercent != 1 || rules.DurationMs != 24*60*60*1000 || rules.OpenCap != 20 || rules.OfferCap != OpenOfferCap {
+	if rules.FeePercent != 1 || rules.DurationMs != 7*24*60*60*1000 || rules.OpenCap != 20 || rules.OfferCap != OpenOfferCap {
 		t.Fatalf("rules = %+v", rules)
 	}
 	if fee := rules.MarketFee(1000); fee != 10 {
