@@ -151,7 +151,7 @@ func TestReverseScrollInBattleArenaWorldOrder(t *testing.T) {
 TestLimitedUseReturnsInBattleArenaWorldAreRefused
 
 A limited use runs the same return handlers without a bag row
-(CUsedItemLimit_vf1C calls 0x4A00C0), so it answers as the bag does:
+(the limited-use work calls the bag's reverse handler), so it answers as the bag does:
 the return refuses 0x187A; the reverse return checks the world's type
 first, so the shipped type-1 arena answers 0x18F5 and a type-0 arena
 0x187A. None starts a cast.

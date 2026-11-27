@@ -190,7 +190,7 @@ resurrectScrollAdmission
 
 The ordinary (RESURRECT) return's admission, from the bag or as a
 limited use: the cast checks (quest, casting, criminal state), then the
-Battle Arena refusal, then the destination's transport refusal. 0x4A0380
+Battle Arena refusal, then the destination's transport refusal. The reference server
 tests the arena ahead of the destination string, so a reader with a
 transport in the arena hears 0x187A, not 0x185E.
 ================

@@ -255,8 +255,8 @@ type reverseReturnTarget struct {
 ================
 reverseWorldRefused
 
-The reverse handler's world tests (0x4A00C0), shared by the bag's scroll
-and the limited use (CUsedItemLimit_vf1C calls the same handler): the
+The reverse handler's world tests, shared by the bag's scroll
+and the limited use (the limited-use work calls the same handler): the
 current world's reference type (+0x20) must be zero, else 0x18F5; then
 a Battle Arena world refuses 0x187A, so the cast cannot take a player
 out of a running match. Sets *result and returns true when it refuses.
