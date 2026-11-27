@@ -360,11 +360,6 @@ func (rt *Runtime) HandlePortal(division string, c *enterworld.Character, payloa
 		return portalFailure(refusal)
 	}
 	source := rt.portals.destinations[sourceID]
-	// Reference server: a murderer (PvP state 2) may not pass a building gate (the
-	// source object's vtable +0x44), 0x1C16; a ferry still carries one.
-	if source.building && murderer(c) {
-		return portalFailure(errCodeMurdererGate)
-	}
 
 	link, ok := rt.portals.links[[2]uint32{sourceID, target}]
 	// Outside its window the Sarin gate's schedule job has cleared its
@@ -408,6 +403,11 @@ func (rt *Runtime) HandlePortal(division string, c *enterworld.Character, payloa
 		}
 		if c.NativeTeleportMode != 0 || rt.hasOpenSkillCast(division, c.Name) {
 			return 0, portalFailure(0x14), false
+		}
+		// The native murderer refusal stands last, after the link's
+		// restrictions, the fare and the gold check.
+		if gateMurdererRefused(c, source, arrival) {
+			return 0, portalFailure(errCodeMurdererGate), false
 		}
 		if failure := portalSpendItems(c, link); failure != 0 {
 			return 0, portalFailure(failure), false
@@ -633,22 +633,64 @@ const portalFareFreeMaxLevel = 20
 
 /*
 ================
+highestLevelReached
+
+The character record's level watermark: the highest level the character
+has ever reached, which the native level gates read. A record without
+the watermark reads its current level.
+================
+*/
+func highestLevelReached(c *enterworld.Character) int64 {
+	if c.MaxLevel != nil {
+		return *c.MaxLevel
+	}
+	if c.Level != nil {
+		return *c.Level
+	}
+	return 0
+}
+
+/*
+================
 portalFareFree
 
 Natively a character whose highest level reached is 20 or less pays no
 gate or ferry fare (the same test stands before the gold check in the
-gate body and in the NPC teleport handler). A record without the
-watermark reads its current level.
+gate body and in the NPC teleport handler).
 ================
 */
 func portalFareFree(c *enterworld.Character) bool {
-	maxLevel := int64(0)
-	if c.MaxLevel != nil {
-		maxLevel = *c.MaxLevel
-	} else if c.Level != nil {
-		maxLevel = *c.Level
+	return highestLevelReached(c) <= portalFareFreeMaxLevel
+}
+
+// ordinaryWorldID is GenWorldID 1, the ordinary shared game world.
+const ordinaryWorldID instance.DefinitionID = 1
+
+/*
+================
+gateMurdererRefused
+
+Whether the native murderer refusal (0x1C16) bars this gate use. The
+source must be a structure - a building gate; an NPC's ferry never
+refuses. A fortress (siege) destination never refuses: the native arm
+sits in the branch the world's slot 31 (+0x7C) answers 0 for, and only
+a siege world answers 1 (Definition.Siege). Otherwise the gate refuses
+when the player stands in the ordinary game world and the gate leads
+into it, or whatever the worlds when the gate stands in the tomb
+region 0x8002 - a tomb floor's gate into the next floor refuses too.
+The caller runs it after the link's restrictions, the fare and the gold
+check, where the native handler runs it.
+================
+*/
+func gateMurdererRefused(c *enterworld.Character, source, arrival portalDestination) bool {
+	if !source.building || !murderer(c) {
+		return false
 	}
-	return maxLevel <= portalFareFreeMaxLevel
+	if world, known := instance.Lookup(arrival.world); known && world.Siege() {
+		return false
+	}
+	inOrdinary := instance.ID(domain.CharacterWorldInstance(c)).Definition() == ordinaryWorldID
+	return inOrdinary && arrival.world == ordinaryWorldID || source.spawn.RegionID == tombFloor6RegionID
 }
 
 // Reference server: the quest bit blocks buildings and the route into the

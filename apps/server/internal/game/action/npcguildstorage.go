@@ -282,26 +282,29 @@ func (rt *Runtime) releaseGuildStorage(division, name string) {
 
 /*
 ================
-containerHoldsBoundRow
+petLoadTradeable
 
-Whether a row being deposited is a summoner whose pet carries a bound
-row. A summoned pet's canonical bag is its live companion record and
-the summoner row's own copy is the dormant one; both are read, so the
+Whether the pet behind a row being deposited may change hands with
+everything it carries: every carried row must pass the exchange's own
+judgment (carriedRowsTradeable), so a forged-bound row, a record-bound
+mall row such as a Devil's Spirit and a sealed helmet are refused alike.
+A summoned pet's canonical bag is its live companion record and the
+summoner row's own copy is the dormant one; both are read, so the
 answer does not depend on which record travels with the row (#4479).
 ================
 */
-func containerHoldsBoundRow(snapshot *enterworld.Character, row inventory.Item) bool {
+func (rt *Runtime) petLoadTradeable(snapshot *enterworld.Character, row inventory.Item) bool {
 	pet := row.Summon
 	if pet == nil {
-		return false
-	}
-	if cosContainerHoldsBoundRow(pet.Container) {
 		return true
 	}
-	if active := snapshot.ActiveCOS; active != nil && active.GID == pet.GID {
-		return cosContainerHoldsBoundRow(active.Container)
+	if !rt.carriedRowsTradeable(pet.Container) {
+		return false
 	}
-	return false
+	if active := snapshot.ActiveCOS; active != nil && active.GID == pet.GID {
+		return rt.carriedRowsTradeable(active.Container)
+	}
+	return true
 }
 
 /*
@@ -332,18 +335,21 @@ func (rt *Runtime) applyGuildStorageMove(division string, c *enterworld.Characte
 	// moves the summoner row alone and never inspects the rows a pet
 	// carries, so no native refusal exists to copy. The
 	// inference from #1980's own reason, recorded here: for this door a
-	// pet loaded with a bound row is the bound row.
+	// pet loaded with a bound row is the bound row. The load is judged
+	// by the trade rule, not by the forge's mark alone: a record-bound
+	// mall row (canTrade 0, a Devil's Spirit) carries no mark, and a
+	// mark-only scan let a pet carry it to another account's member.
 	if personal == wire.MoveTypeStorageDeposit {
 		if snapshot := rt.characterSnapshot(division, c); snapshot != nil {
 			if row, present := bagOf(snapshot).At(q.SourceSlot); present &&
-				(row.ForgeBound || containerHoldsBoundRow(snapshot, row)) {
+				(row.ForgeBound || !rt.petLoadTradeable(snapshot, row)) {
 				return failureResult(errCodeInvalidStorageTarget)
 			}
 		}
 	}
 	// Port-only (#4491): the same judgment on the way out. A pet that
 	// entered the chest before the deposit gate existed still carries
-	// its bound rows, and a withdraw would hand them to whichever
+	// its bound or untradeable rows, and a withdraw would hand them to whichever
 	// member takes the pet. The chest row's record is dormant - a pet
 	// in the chest is nobody's live companion - so it decides alone.
 	// Refusing removes nothing: the row stays the guild's until an
@@ -356,7 +362,7 @@ func (rt *Runtime) applyGuildStorageMove(division string, c *enterworld.Characte
 		withdraw := mutate
 		mutate = func(next *domain.Character, room *domain.AccountStorage) error {
 			for _, row := range room.Rows {
-				if row.Slot == int64(q.SourceSlot) && row.Summon != nil && cosContainerHoldsBoundRow(row.Summon.Container) {
+				if row.Slot == int64(q.SourceSlot) && row.Summon != nil && !rt.carriedRowsTradeable(row.Summon.Container) {
 					return storageRefusal(errCodeInvalidStorageTarget)
 				}
 			}

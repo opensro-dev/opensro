@@ -466,6 +466,10 @@ type rebirthPlan struct {
 	arrivalWorld     instance.ID
 }
 
+// beginnerRebirthMaxLevel is the highest level reached up to which the
+// death dialog's rise-where-you-fell choice still revives in place.
+const beginnerRebirthMaxLevel = 10
+
 /*
 ================
 planRebirth
@@ -504,8 +508,9 @@ func (rt *Runtime) planRebirth(
 	}
 	// Natively a team death (free-battle capes, arena) revives where
 	// it fell at any level, whatever the choice; otherwise the present point
-	// is a beginner's (level 10 or below). The shard may set the town
-	// rule for team deaths too (teamdeath.go).
+	// is a beginner's (highest level reached 10 or below - the native
+	// handler reads the record's level watermark, not the current level).
+	// The shard may set the town rule for team deaths too (teamdeath.go).
 	var camp *flagWarMatch
 	var arrival travelPoint
 	matchRebirth := false
@@ -526,7 +531,7 @@ func (rt *Runtime) planRebirth(
 	if inPlace && !forceTown {
 		choice = wire.RebirthAtPresentPoint
 	}
-	if choice == wire.RebirthAtPresentPoint && !inPlace && before.Level != nil && *before.Level > 10 {
+	if choice == wire.RebirthAtPresentPoint && !inPlace && highestLevelReached(before) > beginnerRebirthMaxLevel {
 		return nil, OpResult{}, false
 	}
 	destination := corpse.Spawn

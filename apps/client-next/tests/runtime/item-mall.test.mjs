@@ -564,6 +564,40 @@ test("the catalogue decoder keeps a known badge and drops an unknown one", () =>
 	assert.equal( state.offers[2]?.badge, undefined );
 });
 
+test("the catalogue decoder keeps a known package gender and drops an unknown one (#4480)", () => {
+	const offer = ( slot, gender ) => ({
+		group: 852,
+		shop: 0,
+		tab: 0,
+		slot,
+		currencyMask: 2,
+		packageId: 90000 + slot,
+		name: "Package " + slot,
+		description: "Description",
+		icon: "item/example.ddj",
+		silk: 5,
+		giftSilk: 0,
+		allowsPoints: false,
+		purchaseLimit: 5,
+		itemIds: [ 42 ],
+		...(gender === null ? {} : { gender })
+	});
+	const payload = new TextEncoder().encode( JSON.stringify( {
+		version: 1,
+		tabs: [ { shop: 0, tab: 0, category: "MALL_ARCHEMY", label: "Astral" } ],
+		offers: [ offer( 0, "male" ), offer( 1, "female" ), offer( 2, "bogus" ), offer( 3, null ) ],
+		silk: 0,
+		earnedSilk: 0,
+		giftSilk: 0,
+		points: 0
+	} ) );
+	const { state } = mallProjection( payload );
+	assert.equal( state.offers[0]?.gender, "male" );
+	assert.equal( state.offers[1]?.gender, "female" );
+	assert.equal( state.offers[2]?.gender, undefined );
+	assert.equal( state.offers[3]?.gender, undefined );
+});
+
 test("the lump-buy boxes caption their total row with the total-price line", () => {
 	// 528920 sets the total control's text on both boxes that draw a
 	// total row: UIIT_MSG_QUESTION_SILKMALL_ZZIM_LUMP_BUY_TOTAL

@@ -192,10 +192,27 @@ func TestFireTrapExplodesOnTheFirstMonsterInRange(t *testing.T) {
 
 /*
 ================
+castTrapExpectRefusal
+
+Press the trap cast and require the native refusal byte back.
+================
+*/
+func castTrapExpectRefusal(t *testing.T, rt *Runtime, c *enterworld.Character, skill enterworld.SkillRow, want byte) {
+	t.Helper()
+	out := rt.HandleTargetInteract(testDivision, c, wire.SkillAction{ActionId: skill.ID}.Encode())
+	frame, ok := findFrame(out.Frames, wire.OpSkillCastResult)
+	if !ok || len(frame.Payload) < 2 || frame.Payload[0] != 2 || frame.Payload[1] != want {
+		t.Fatalf("trap cast not refused with %#x: %+v", want, out)
+	}
+}
+
+/*
+================
 TestFireTrapRetirement
 
-A second plant retires the first (one live trap per link group) and its
-buff, and a planter walking past the authored distance retires both.
+A second plant at the authored live cap is refused (0x3029) and leaves
+the first trap and its buff untouched; a planter walking past the
+authored distance retires both.
 ================
 */
 func TestFireTrapRetirement(t *testing.T) {
@@ -204,22 +221,24 @@ func TestFireTrapRetirement(t *testing.T) {
 		t.Fatal("could not clear the trigger monster")
 	}
 	plantCombatTrap(t, rt, clock, c, skill, clock.NowMs())
-	first := rt.SkillObjects.Snapshot()[0].Spawn.GID
+	first := rt.SkillObjects.Snapshot()[0]
 	clock.Advance(time.Duration(skill.CoolTimeMs+1) * time.Millisecond)
 	rt.drainSkillFinalizes(clock.NowMs())
-	release := plantCombatTrap(t, rt, clock, c, skill, clock.NowMs())
+	// The shipped row carries the trap word but no qest word, so the
+	// count refusal is 0x3029 (wire byte 0x29).
+	castTrapExpectRefusal(t, rt, c, skill, 0x29)
 	objects := rt.SkillObjects.Snapshot()
-	if len(objects) != 1 || objects[0].Spawn.GID == first {
-		t.Fatalf("live trap cap not enforced: %+v", objects)
+	if len(objects) != 1 || objects[0].Spawn.GID != first.Spawn.GID {
+		t.Fatalf("refused cast disturbed the live trap: %+v", objects)
 	}
-	if buffs := rt.effects.Snapshot(testDivision, c.Name); len(buffs) != 1 || buffs[0].InstanceToken != objects[0].OwnerEffect {
-		t.Fatalf("replaced trap left its buff: %+v", buffs)
+	if buffs := rt.effects.Snapshot(testDivision, c.Name); len(buffs) != 1 || buffs[0].InstanceToken != first.OwnerEffect {
+		t.Fatalf("refused cast disturbed the trap buff: %+v", buffs)
 	}
 	key := simulation.WorldKey(testDivision, c.Name)
 	rt.Worlds.Update(key, func() simulation.WorldState { return simulation.SeedWorldState(c) }, func(w *simulation.WorldState) {
 		w.Spawn.X += float64(skill.CombatTrap.OwnerDistance) + 1
 	})
-	rt.AdvanceSkillObjects(release+int64(enterworld.CombatTrapScanMs), nil)
+	rt.AdvanceSkillObjects(clock.NowMs()+int64(enterworld.CombatTrapScanMs), nil)
 	if len(rt.SkillObjects.Snapshot()) != 0 || len(rt.effects.Snapshot(testDivision, c.Name)) != 0 {
 		t.Fatal("trap or its buff survived its planter walking away")
 	}
@@ -227,10 +246,41 @@ func TestFireTrapRetirement(t *testing.T) {
 
 /*
 ================
+TestTrapCountRefusalCodeChoice
+
+At the cap the refusal is 0x3037 only when the row carries both the qest
+and trap words; under the cap nothing refuses.
+================
+*/
+func TestTrapCountRefusalCodeChoice(t *testing.T) {
+	rt, clock, c, skill, gid := combatTrapFixture(t)
+	if !rt.Monsters.Defeat(testDivision, gid, clock.Now()) {
+		t.Fatal("could not clear the trigger monster")
+	}
+	plantCombatTrap(t, rt, clock, c, skill, clock.NowMs())
+	if code := rt.trapCountRefusal(testDivision, c, skill); code != 0x3029 {
+		t.Fatalf("shipped row at cap: %#x, want 0x3029", code)
+	}
+	both := skill
+	both.CastGate.Qest = true
+	if code := rt.trapCountRefusal(testDivision, c, both); code != 0x3037 {
+		t.Fatalf("qest+trap row at cap: %#x, want 0x3037", code)
+	}
+	under := skill
+	under.CombatTrap.MaxLive = 2
+	if code := rt.trapCountRefusal(testDivision, c, under); code != 0 {
+		t.Fatalf("under the cap: %#x, want 0", code)
+	}
+}
+
+/*
+================
 TestFireTrapLimitIsScopedToDivision
 
-Player GIDs may coincide across divisions. Replanting must neither count
-nor retire another division's trap, even when its link group also matches.
+Player GIDs may coincide across divisions. The live count must neither
+count nor touch another division's trap, even when its link group also
+matches: the local trap alone fills the cap, and once it is gone the
+replant succeeds beside the foreign trap.
 ================
 */
 func TestFireTrapLimitIsScopedToDivision(t *testing.T) {
@@ -239,7 +289,8 @@ func TestFireTrapLimitIsScopedToDivision(t *testing.T) {
 		t.Fatal("could not clear the trigger monster")
 	}
 	plantCombatTrap(t, rt, clock, c, skill, clock.NowMs())
-	foreign := rt.SkillObjects.Snapshot()[0]
+	local := rt.SkillObjects.Snapshot()[0]
+	foreign := local
 	foreign.Division = "other-division"
 	foreign, err := rt.SkillObjects.Create(foreign)
 	if err != nil {
@@ -247,12 +298,27 @@ func TestFireTrapLimitIsScopedToDivision(t *testing.T) {
 	}
 	clock.Advance(time.Duration(skill.CoolTimeMs+1) * time.Millisecond)
 	rt.drainSkillFinalizes(clock.NowMs())
-	plantCombatTrap(t, rt, clock, c, skill, clock.NowMs())
+	castTrapExpectRefusal(t, rt, c, skill, 0x29)
 	objects := rt.SkillObjects.Snapshot()
 	if len(objects) != 2 {
-		t.Fatalf("replant crossed division boundary: %+v", objects)
+		t.Fatalf("refused cast crossed division boundary: %+v", objects)
 	}
 	found := false
+	for _, object := range objects {
+		found = found || object.Spawn.GID == foreign.Spawn.GID
+	}
+	if !found {
+		t.Fatal("another division's trap was retired")
+	}
+	if !rt.SkillObjects.Remove(local.Spawn.GID) {
+		t.Fatal("local trap missing")
+	}
+	plantCombatTrap(t, rt, clock, c, skill, clock.NowMs())
+	objects = rt.SkillObjects.Snapshot()
+	if len(objects) != 2 {
+		t.Fatalf("replant beside the foreign trap failed: %+v", objects)
+	}
+	found = false
 	for _, object := range objects {
 		found = found || object.Spawn.GID == foreign.Spawn.GID
 	}

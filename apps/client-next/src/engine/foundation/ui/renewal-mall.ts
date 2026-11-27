@@ -88,6 +88,14 @@ const PAGER_PREV_LEFT = 263;
 const PAGER_NEXT_LEFT = 385;
 const PAGER_WIDTH = 36;
 const PAGER_HEIGHT = 12;
+
+// The gender filter's three segments (All, Male, Female; issue #4480,
+// port-only): on the pager's row, from the grid's left edge, ending
+// before the pager's previous arrow. Their height is the pager
+// label's.
+const GENDER_WIDTHS = [ 28, 38, 48 ] as const;
+const GENDER_GAP = 2;
+const GENDER_HEIGHT = 16;
 // The scrolled row's arrows (the pager's 36x12 art): centred on the
 // 78..102 tab row, the next arrow ending one pixel inside the goods
 // area's right edge (543, the cards' margin), the previous one 4 pixels
@@ -406,6 +414,24 @@ export function renewalSubTabArrowRects(): { readonly prev: UiRect; readonly nex
 		prev: [ SUB_PREV_LEFT, SUB_ARROW_TOP, PAGER_WIDTH, PAGER_HEIGHT ],
 		next: [ SUB_NEXT_LEFT, SUB_ARROW_TOP, PAGER_WIDTH, PAGER_HEIGHT ]
 	};
+}
+
+/*
+================
+renewalGenderRects
+
+The gender filter's segment rects (All, Male, Female), window-relative:
+the pager row's left, from the goods grid's left edge (issue #4480).
+================
+*/
+export function renewalGenderRects(): readonly UiRect[] {
+	const rects: UiRect[] = [];
+	let left = GOODS_LEFT;
+	for ( const width of GENDER_WIDTHS ) {
+		rects.push( [ left, PAGER_TOP - 2, width, GENDER_HEIGHT ] );
+		left += width + GENDER_GAP;
+	}
+	return rects;
 }
 
 /*

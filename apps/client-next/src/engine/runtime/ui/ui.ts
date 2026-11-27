@@ -4268,6 +4268,12 @@ export function createUi( ports: UiPorts ) {
 			dirty = true;
 			return;
 		}
+		// Port-only, not native: the renewal window's gender filter (#4480).
+		if ( id.startsWith( "item-mall-gender:" ) ) {
+			itemMall.setGender( id.slice( "item-mall-gender:".length ) );
+			dirty = true;
+			return;
+		}
 		if ( id.startsWith( "item-mall-buy:" ) && view?.gameplay?.itemMall ) {
 			const state = itemMall.read( view.gameplay.itemMall );
 			const offer = state.offers[Number( id.slice( "item-mall-buy:".length ) )];

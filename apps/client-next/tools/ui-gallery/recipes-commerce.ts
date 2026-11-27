@@ -183,7 +183,7 @@ Every listing, seller and price is synthetic; nothing is sent.
 */
 async function consignment(
 	context: RecipeContext,
-	page: "mine" | "few" | "empty" | "many" | "offers" | "sell" | "buy"
+	page: "mine" | "few" | "empty" | "many" | "offers" | "sell" | "buy" | "buy-silk"
 ) {
 	const sword = {
 		...herb,
@@ -272,6 +272,7 @@ async function consignment(
 					item: "Strom Bow (+3)"
 				} ],
 				silk: 40,
+				earnedSilk: 25,
 				warehouseGold: 0,
 				rules: { feePercent: 1, durationMs: 86_400_000, openCap: 20, offerCap: 20 }
 			},
@@ -288,6 +289,9 @@ async function consignment(
 	}
 	if ( page === "sell" ) await press( context, "market-sell-pick" );
 	if ( page === "buy" ) await press( context, "market-row-buy:101" );
+	// Row 100 is the page's first Silk listing: its buy box names the
+	// balance a purchase spends (Earned Silk first, then Silk, #4480).
+	if ( page === "buy-silk" ) await press( context, "market-row-buy:100" );
 }
 
 /*
@@ -315,7 +319,8 @@ export const commerceRecipes: readonly ExtendedRecipe[] = [
 			"sell",
 			"market-sell-slot:13"
 		],
-		[ "buy", "buy", "market-dialog-confirm" ]
+		[ "buy", "buy", "market-dialog-confirm" ],
+		[ "buy-silk", "buy-silk", "market-dialog-confirm" ]
 	] as const).map( ( [name, page, witness] ) => ({
 		id: "breadth:consignment-" + name,
 		title: "Consignment market - " + name,

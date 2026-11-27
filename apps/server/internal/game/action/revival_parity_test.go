@@ -52,6 +52,43 @@ func TestPresentRebirthRecoversFortyPercentAndPreservesMana(t *testing.T) {
 
 /*
 ================
+TestPresentRebirthGateReadsTheHighestLevelReached
+
+The native rise-where-you-fell gate reads the record's level watermark:
+a character who has ever passed level 10 stays dead at the present point
+even if de-levelled back under it; a record without the watermark falls
+back to its current level.
+================
+*/
+func TestPresentRebirthGateReadsTheHighestLevelReached(t *testing.T) {
+	// Reached 20 but de-levelled to 1: refuses; the corpse stays dead.
+	above := rebirthTestCharacter(1, 0)
+	above.MaxLevel = testInt64(20)
+	rt, _ := newTestRuntime(above, testItems())
+	out := rt.HandleLocalRebirth(testDivision, above, []byte{wire.RebirthAtPresentPoint})
+	if len(out.Frames) != 0 || enterworld.CharacterAlive(above) {
+		t.Fatalf("watermark 20 at level 1 revived in place: %+v", out)
+	}
+	// Reached exactly 10: rises.
+	edge := rebirthTestCharacter(1, 0)
+	edge.MaxLevel = testInt64(10)
+	rt, _ = newTestRuntime(edge, testItems())
+	out = rt.HandleLocalRebirth(testDivision, edge, []byte{wire.RebirthAtPresentPoint})
+	if len(out.Frames) < 3 || !enterworld.CharacterAlive(edge) {
+		t.Fatalf("watermark 10 refused the in-place rise: %+v", out)
+	}
+	// No watermark: the current level gates (level 11 refuses).
+	plain := rebirthTestCharacter(11, 0)
+	plain.MaxLevel = nil
+	rt, _ = newTestRuntime(plain, testItems())
+	out = rt.HandleLocalRebirth(testDivision, plain, []byte{wire.RebirthAtPresentPoint})
+	if len(out.Frames) != 0 || enterworld.CharacterAlive(plain) {
+		t.Fatalf("unwatermarked level 11 revived in place: %+v", out)
+	}
+}
+
+/*
+================
 TestSkillResurrectionPublishesAndExpiresProtection
 
 The native resurrection response calls the town teleport with the in-place selector before skill recovery.

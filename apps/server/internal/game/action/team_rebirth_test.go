@@ -81,6 +81,9 @@ func TestTeamDeathRevivesInPlaceAtAnyLevel(t *testing.T) {
 	}
 
 	monster := rebirthTestCharacter(80, 0)
+	// A level-80 record's watermark is 80 too: these fixtures gate on the
+	// native watermark read, not the current level.
+	monster.MaxLevel = testInt64(80)
 	monster.DeathKind = uint8(pk.DeathMonster)
 	rt, _ = newTestRuntime(monster, testItems())
 	if result := rt.HandleLocalRebirth(testDivision, monster, []byte{wire.RebirthAtPresentPoint}); len(result.Frames) != 0 || enterworld.CharacterAlive(monster) {
@@ -117,6 +120,7 @@ func TestTeamDeathTownRuleSetting(t *testing.T) {
 	}
 
 	team := rebirthTestCharacter(80, 0)
+	team.MaxLevel = testInt64(80)
 	team.DeathKind = uint8(pk.DeathTeam)
 	rt, _ := newTestRuntime(team, testItems())
 	rt.TeamDeathTownRule = true
@@ -136,6 +140,7 @@ and refunds no earlier loss.
 */
 func TestSessionEndForgetsTheDeathKind(t *testing.T) {
 	c := rebirthTestCharacter(80, 0)
+	c.MaxLevel = testInt64(80)
 	c.DeathKind, c.LastExpLoss = uint8(pk.DeathTeam), 5000
 	rt, _ := newTestRuntime(c, testItems())
 	rt.ForgetCharacter(testDivision, c.Name)

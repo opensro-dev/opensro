@@ -142,6 +142,33 @@ func packageContent(row []string, refs enterworld.ItemRefSource, rents rentTerms
 
 /*
 ================
+packageGender
+
+The package's wearer sex for the renewal mall's gender filter (issue
+#4480): the first content whose item reference carries a ReqGender of
+0 or 1 (female, male) names it. A ReqGender of 2 or an absent field is
+ungendered and never names the package. The sex is read from the
+item's own field, never from a package or item name.
+================
+*/
+func packageGender(contents []Content) string {
+	for _, content := range contents {
+		value, present := content.Ref.NativeFields.Lookup("reqGender")
+		if !present {
+			continue
+		}
+		switch value {
+		case 0:
+			return "female"
+		case 1:
+			return "male"
+		}
+	}
+	return ""
+}
+
+/*
+================
 Hydrate
 
 Finish the catalogue before publishing it. A missing item definition must not
@@ -156,6 +183,7 @@ func (catalog *MallCatalog) Hydrate(refs enterworld.ItemRefSource) error {
 			return fmt.Errorf("mall: %s: %w", offer.Code, err)
 		}
 		offer.Contents = contents
+		offer.Gender = packageGender(contents)
 		offer.PurchaseLimit = 5
 		if len(contents) == 1 && wire.IsEtcBand(contents[0].Ref.TypeFlags()) && contents[0].Data == 0 {
 			offer.PurchaseLimit = contents[0].Stack
