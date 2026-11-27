@@ -163,9 +163,24 @@ func (rt *Runtime) applyInventoryMove(
 			stackCap = rt.maxStackFor(sourceRow.TypeFlags, sourceRow.Codename)
 		}
 
+		// Taking a worn item off is the native detach, not a swap
+		// (#4490 U6-09): the item lands in the bag's first free place
+		// whatever place was asked, and a full bag refuses (0x07). The
+		// move and its answer name the place it actually took.
+		destSlot := request.DestSlot
+		if inventory.IsEquipmentSlot(request.SourceSlot) &&
+			inventory.IsBagSlot(request.DestSlot, inventory.BagEnd(character)) {
+			free, ok := inv.FirstFreeBagSlot()
+			if !ok {
+				result = failureResult(wire.ErrCodeStorageFull)
+				return false
+			}
+			destSlot = free
+		}
+
 		if _, fault := inv.Transfer(
 			request.SourceSlot,
-			request.DestSlot,
+			destSlot,
 			request.Quantity,
 			stackCap,
 		); fault != nil {
@@ -181,7 +196,7 @@ func (rt *Runtime) applyInventoryMove(
 			return false
 		}
 
-		subMoves, fault := rt.completeEquipmentPair(inv, request.SourceSlot, request.DestSlot)
+		subMoves, fault := rt.completeEquipmentPair(inv, request.SourceSlot, destSlot)
 		if fault != nil {
 			result = failureResult(fault.Code)
 			return false
@@ -277,7 +292,7 @@ func (rt *Runtime) applyInventoryMove(
 					Opcode: wire.OpItemMoveResponse,
 					Payload: wire.EncodeInventoryMoveResult(
 						request.SourceSlot,
-						request.DestSlot,
+						destSlot,
 						request.Quantity,
 						subMoves,
 					),
