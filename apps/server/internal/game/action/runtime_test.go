@@ -559,7 +559,7 @@ func TestM1VisualsAlwaysRideBehindSocketTransfers(t *testing.T) {
 		result := rt.HandleItemMove(testDivision, character, encodeMove(t, wire.ItemMoveRequest{
 			MovementType: wire.MoveTypeInventory, SourceSlot: 6, DestSlot: 20, Quantity: 1,
 		}))
-		// The original's worn-to-bag path is a detach (server 0x5255E0):
+		// The original's worn-to-bag path is a detach:
 		// the worn sword goes to the bag's first free place and the held
 		// sword stays in the bag, so viewers see the socket clear, not
 		// an equip of the occupant (#4490 U6-09).

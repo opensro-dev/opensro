@@ -320,9 +320,9 @@ func TestMostWantedStripKeepsTheStreak(t *testing.T) {
 		t.Fatalf("after the strip: state %+v sent %v, want level 2 unsuited", state, sent)
 	}
 
-	// The detach puts the suit in the bag's first free place (server
-	// 0x5255E0; #4490 U6-09), not necessarily the place asked: wear it
-	// back from wherever it landed.
+	// The detach puts the suit in the bag's first free place (#4490
+	// U6-09), not necessarily the place asked: wear it back from
+	// wherever it landed.
 	suitSlot := uint8(0)
 	for i := range c.MissionInventory {
 		if c.MissionInventory[i].RefObjID == suitRef && c.MissionInventory[i].Slot >= 13 {

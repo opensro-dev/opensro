@@ -429,7 +429,7 @@ func TestEquipRequirementOrderMatchesNativeMask(t *testing.T) {
 }
 
 // TestUnequipOntoAnOccupiedSlotDetachesToTheFirstFreePlace: the
-// original's kind-0 worn-to-bag path is a detach (server 0x5255E0) -
+// original's kind-0 worn-to-bag path is a detach -
 // the worn piece lands in the bag's first free place whatever place
 // was asked, never a swap, so the occupant of the asked place stays
 // in the bag and runs no requirement gate at all (#4490 U6-09).
@@ -470,8 +470,8 @@ func TestUnequipOntoAnOccupiedSlotDetachesToTheFirstFreePlace(t *testing.T) {
 }
 
 // TestUnequipIntoAFullBagRefusesStorageFull: with no free bag place the
-// detach scan comes up empty and the original answers 0x1807; the worn
-// piece stays on (server 0x5255E0; #4490 U6-09).
+// detach scan comes up empty and the original answers the
+// storage-full code; the worn piece stays on (#4490 U6-09).
 func TestUnequipIntoAFullBagRefusesStorageFull(t *testing.T) {
 	items := requirementTestItems()
 	character := requirementTestCharacter(5, []enterworld.InventoryRow{
