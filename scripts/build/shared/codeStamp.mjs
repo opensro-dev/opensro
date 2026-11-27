@@ -31,6 +31,7 @@ import { fileURLToPath } from "node:url";
 import { generatedPath } from "../../lib/generatedRoot.mjs";
 import { writeStateFile } from "./stateFile.mjs";
 import { rebuildRoot } from "../world/paths.mjs";
+import { scriptKeys } from "./scriptReach.mjs";
 
 // Static and dynamic imports with a relative specifier.
 const RELATIVE_IMPORT = /(?:\bfrom\s*|\bimport\s*\(\s*|\bimport\s+)["'](\.{1,2}\/[^"']+)["']/g;
@@ -125,6 +126,35 @@ export async function moduleClosures( records, repositoryRoot = rebuildRoot ) {
 
 /*
 ================
+moduleClosureKeys
+
+moduleClosures with what each closure's Node scripts can reach
+(scriptReach.mjs): per record, { files, scripts }, scripts mapping a
+script to its reached digest and flags, or null when the step reaches
+none of it. The scripts the step's Python names are its entries.
+================
+*/
+export async function moduleClosureKeys( records, repositoryRoot = rebuildRoot ) {
+	const indexes = await sourceIndexes( repositoryRoot );
+	const keys = [];
+	for ( const [ranFiles, importedFiles] of records ) {
+		const entries = new Set();
+		const files = await walkClosure(
+			ranFiles,
+			importedFiles,
+			repositoryRoot,
+			indexes,
+			PYTHON_MODULE_IMPORT,
+			false,
+			entries
+		);
+		keys.push( { files, scripts: await scriptKeys( files, [ ...entries ] ) } );
+	}
+	return keys;
+}
+
+/*
+================
 sourceIndexes
 
 The Python and script indexes one walk resolves names against.
@@ -143,9 +173,19 @@ walked in full; importedFiles, and with importsRun false the Python modules
 any file imports, are walked without the scripts they name. pythonImport is
 the pattern a Python file's followed imports match. A file reached first
 by import and later as run code is walked again for its scripts.
+entries, when given, collects the Node scripts a Python file that ran
+names: the scripts the closure's code may run.
 ================
 */
-async function walkClosure( ranFiles, importedFiles, repositoryRoot, { python, scripts }, pythonImport, importsRun ) {
+async function walkClosure(
+	ranFiles,
+	importedFiles,
+	repositoryRoot,
+	{ python, scripts },
+	pythonImport,
+	importsRun,
+	entries = new Set()
+) {
 	// file -> whether it was walked as code that ran.
 	const seen = new Map();
 	const pending = [
@@ -167,10 +207,9 @@ async function walkClosure( ranFiles, importedFiles, repositoryRoot, { python, s
 			const code = text.replace( PYTHON_COMMENT, "" );
 			if ( ran ) {
 				for ( const match of code.matchAll( SCRIPT_LITERAL ) ) {
-					pending.push( [
-						resolveNamed( match[1], { file, directory, repositoryRoot, index: scripts } ),
-						true
-					] );
+					const script = resolveNamed( match[1], { file, directory, repositoryRoot, index: scripts } );
+					entries.add( script );
+					pending.push( [ script, true ] );
 				}
 			}
 			for ( const match of code.matchAll( DATA_LITERAL ) ) {

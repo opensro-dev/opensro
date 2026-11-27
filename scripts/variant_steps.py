@@ -70,6 +70,9 @@ JOURNAL_FORMAT = "sro-variant-steps"
 # means bumps this instead, and an older journal starts the record over.
 JOURNAL_VERSION = 2
 JOURNAL_NAME = "variant-steps.json"
+# The keying a step's recorded reads carry when its Node scripts are keyed
+# by what it reaches (scriptReach.mjs); a record without it keyed them whole.
+REACH_KEYING = "reach"
 BLOB_ROOT = "variant-blobs"
 # The chain every build starts from: the empty tree, in this format.
 EMPTY_STATE = hashlib.sha256(f"sro-variant-steps/{JOURNAL_VERSION}".encode("ascii")).hexdigest()
@@ -520,8 +523,9 @@ class Runner:
 	# (variant_stamp.module_closures). Steps with the same record share one
 	# closure computation.
 	# ================
-	def recorded_code_key(self, ran: list[str], imported: list[str] = (), functions: dict | None = None) -> str:
-		key = (tuple(ran), tuple(imported), frozen_functions(functions))
+	def recorded_code_key(self, ran: list[str], imported: list[str] = (), functions: dict | None = None,
+			reach: bool = True) -> str:
+		key = (tuple(ran), tuple(imported), frozen_functions(functions), reach)
 		if key not in self._code_keys:
 			self.key_code([key])
 		return self._code_keys[key]
@@ -535,7 +539,7 @@ class Runner:
 	# ================
 	def key_code(self, keys: list[tuple]):
 		records = []
-		for ran, imported, _ in keys:
+		for ran, imported, _, _ in keys:
 			records.append((
 				[code_path(location, self.code_root) for location in ran],
 				[code_path(location, self.code_root) for location in imported],
@@ -544,10 +548,12 @@ class Runner:
 			[([f for f in ran if f.is_file()], [f for f in imported if f.is_file()]) for ran, imported in records],
 			self.repository_root,
 		)
-		for key, (ran, imported), closure in zip(keys, records, closures):
+		for key, (ran, imported), (closure, scripts) in zip(keys, records, closures):
 			files = set(closure) | set(ran) | set(imported)
 			functions = None if key[2] is None else dict(key[2])
-			self._code_keys[key] = code_key(sorted(files), self.code_root, self.environ, frozenset(key[0]), functions)
+			self._code_keys[key] = code_key(
+				sorted(files), self.code_root, self.environ, frozenset(key[0]), functions, scripts if key[3] else None
+			)
 
 	# ================
 	# key_journal_code
@@ -559,9 +565,13 @@ class Runner:
 		keys = []
 		for entry in self.journal or []:
 			reads = entry.get("reads") or {}
-			key = (tuple(reads.get("code", [])), tuple(reads.get("imported", [])), frozen_functions(reads.get("functions")))
-			if key not in self._code_keys and key not in keys:
-				keys.append(key)
+			record = (tuple(reads.get("code", [])), tuple(reads.get("imported", [])), frozen_functions(reads.get("functions")))
+			# A record keyed before scripts were keyed by reach is judged
+			# as it was keyed, and upgraded (reached_entry) once it holds.
+			for reach in {reads.get("keying") == REACH_KEYING, True}:
+				key = record + (reach,)
+				if key not in self._code_keys and key not in keys:
+					keys.append(key)
 		if keys:
 			self.key_code(keys)
 
@@ -628,7 +638,7 @@ class Runner:
 		}
 		return {
 			"roots": sorted(roots), "code": sorted(locations), "imported": sorted(modules - locations),
-			"files": files, "functions": dict(sorted(started.items())),
+			"files": files, "functions": dict(sorted(started.items())), "keying": REACH_KEYING,
 		}
 
 	# ================
@@ -646,7 +656,8 @@ class Runner:
 				"roots": sorted(set(recorded_reads.get("roots", [])) | set(step["roots"])),
 			}
 		code = "unrecorded" if recorded_reads is None else self.recorded_code_key(
-			recorded_reads.get("code", []), recorded_reads.get("imported", []), recorded_reads.get("functions")
+			recorded_reads.get("code", []), recorded_reads.get("imported", []), recorded_reads.get("functions"),
+			recorded_reads.get("keying") == REACH_KEYING
 		)
 		return {
 			"arguments": step["argumentsKey"], "later": later_key, "code": code,
@@ -840,8 +851,8 @@ class Runner:
 		step = self.steps[index]
 		entry = None if self.fresh or index >= self.matched else self.journal[index]
 		if entry is not None and index < self.first:
+			self.records.append(self.reached_entry(step, entry, self.state))
 			self.state = chain(self.state, entry["effect"])
-			self.records.append(entry)
 			return decode_result(entry["result"], self.variant), "current"
 		# Every earlier step is settled, so their results are in hand.
 		later = tuple(step["later"]()) if step["later"] else ()
@@ -854,8 +865,8 @@ class Runner:
 					target.unlink(missing_ok=True)
 				else:
 					lay_blob(self.variant, sha, target)
+			self.records.append(self.reached_entry(step, entry, self.state))
 			self.state = chain(self.state, entry["effect"])
-			self.records.append(entry)
 			return decode_result(entry["result"], self.variant), "replayed"
 		if now is not None:
 			# Said, not silent: r204l's rebuild reran avatars-v1696 with no
@@ -883,6 +894,24 @@ class Runner:
 			"result": encoded, "laterKey": later_key,
 		})
 		return value, "ran"
+
+	# ================
+	# reached_entry
+	#
+	# A journal entry that held, as the next build should find it: one
+	# recorded before Node scripts were keyed by reach (scriptReach.mjs)
+	# held under whole-file keys, which proves the code is what ran, so
+	# it is re-keyed by reach over that same code. Without this the first
+	# build after the change re-ran every step behind a script: the
+	# format, not the code, would have moved their keys.
+	# ================
+	def reached_entry(self, step: dict, entry: dict, state: str) -> dict:
+		reads = entry.get("reads")
+		if reads is None or entry.get("key") is None or reads.get("keying") == REACH_KEYING:
+			return entry
+		reached = {**reads, "keying": REACH_KEYING}
+		parts = self.key_parts(step, reached, state, entry.get("laterKey", ""))
+		return {**entry, "reads": reached, "parts": parts, "key": parts_key(step["name"], parts)}
 
 	# ================
 	# finish
