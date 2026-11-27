@@ -701,6 +701,13 @@ func (rt *Runtime) commitExperience(
 	if beginnerMarkCleared {
 		character.VisualFlags = next.VisualFlags
 	}
+	// The transport's bag grows with its owner (#4490 U11-01): after the
+	// level commit, a fresh 0x3158 record carries the grown capacity.
+	if walk.levelsGained > 0 {
+		if frame, grew := rt.growTransportBag(character); grew {
+			frames = append(frames, frame)
+		}
+	}
 	return frames, true, spMinted
 }
 
