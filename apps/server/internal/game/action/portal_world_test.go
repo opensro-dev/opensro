@@ -9,6 +9,7 @@ import (
 	"opensro.online/server/internal/game/enterworld"
 	"opensro.online/server/internal/game/item/wire"
 	"opensro.online/server/internal/game/staff"
+	"opensro.online/server/internal/game/world/fortress"
 	"opensro.online/server/internal/game/world/instance"
 	"opensro.online/server/internal/game/world/monster"
 	"opensro.online/server/internal/game/world/simulation"
@@ -288,4 +289,76 @@ func TestFortressWarBeginsByClearingTheFortress(t *testing.T) {
 	rt.FortressWarChanged(testDivision, now, false)
 	rt.advanceFortressPhases(now)
 	inField(t, rt, c, "the war's end")
+}
+
+/*
+================
+TestFortressWarEntryCapsAndCaptureWait
+
+The war-entry check, in the original's order: a guild that neither
+owns the fortress nor applied hears 0x1C; for five minutes after a
+capture only the holder's side enters (the attackers hear 0x1E); then
+each side counts the PCs already inside - the holder's side against
+half of MaxEntrance, the attackers against half of it while the
+fortress has an owner - and a full side hears 0x1B. The capturing
+guild applied, as it must to fight: the application, not the capture,
+admits it past the participant test.
+================
+*/
+func TestFortressWarEntryCapsAndCaptureWait(t *testing.T) {
+	rt, c, clock := fortressFixtureWithClock(t, testFieldFortGate)
+	rt.Fortresses = fortress.New([]fortress.Catalog{{ID: 1, CodeName: "FORTRESS_JANGAN", MaxEntrance: 4}})
+	rt.Fortresses.SetPeriod(testDivision, fortress.PeriodWar, true)
+	rt.Fortresses.Occupy(testDivision, 1, 77)
+	enterAs := func(guild int64) byte {
+		if guild == 0 {
+			c.GuildID = nil
+		} else {
+			c.GuildID = &guild
+		}
+		return rt.fortressWarEntry(testDivision, c, 1)
+	}
+	if got := enterAs(0); got != portalFortressNotInWar {
+		t.Fatalf("a guildless entry answered %#x", got)
+	}
+	if got := enterAs(55); got != portalFortressNotInWar {
+		t.Fatalf("an uninvolved guild answered %#x", got)
+	}
+	rt.Fortresses.SetApplication(testDivision, 1, 42, fortress.RequestAttack, true)
+	if got := enterAs(42); got != 0 {
+		t.Fatalf("an applied attacker answered %#x", got)
+	}
+	rt.Fortresses.SetApplication(testDivision, 1, 88, fortress.RequestAttack, true)
+	if !rt.Fortresses.Capture(testDivision, 1, 88, clock.NowMs()) {
+		t.Fatal("the capture did not stand")
+	}
+	if got := enterAs(42); got != portalFortressCaptureWait {
+		t.Fatalf("an attacker in the capture wait answered %#x", got)
+	}
+	if got := enterAs(88); got != 0 {
+		t.Fatalf("the temporary holder answered %#x", got)
+	}
+	rt.Fortresses.Advance(clock.NowMs() + fortress.CaptureWaitMs)
+	if got := enterAs(42); got != 0 {
+		t.Fatalf("an attacker after the wait answered %#x", got)
+	}
+	deps := rt.deps.(*enterworld.Deps)
+	stand := func(name string, id int64, guild int64) {
+		member := *c
+		member.ID, member.Name = id, name
+		member.GuildID = &guild
+		fixtureCharacters(deps.Characters)[testDivision] = append(fixtureCharacters(deps.Characters)[testDivision], &member)
+		rt.characterAdmissions.Store(simulation.WorldKey(testDivision, name), populationAdmission{
+			lease: instance.Lease{ID: instance.Pack(2, portalWorldLayer)}, division: testDivision, name: name})
+	}
+	stand("holderTwo", 31, 88)
+	stand("holderThree", 32, 88)
+	if got := enterAs(88); got != portalFortressFull {
+		t.Fatalf("a defender past half of MaxEntrance answered %#x", got)
+	}
+	stand("attackerTwo", 33, 42)
+	stand("attackerThree", 34, 42)
+	if got := enterAs(42); got != portalFortressFull {
+		t.Fatalf("an attacker past half of MaxEntrance answered %#x", got)
+	}
 }
