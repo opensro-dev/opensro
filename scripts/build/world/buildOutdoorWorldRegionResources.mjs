@@ -34,7 +34,9 @@ import {
 } from "./constants.mjs";
 import {
 	findStaleOutdoorRegions,
+	outdoorInputSetKey,
 	outdoorRegionInputDigest,
+	outdoorRegionInputSignature,
 	outdoorSharedInputDigest,
 	readRegionLedger,
 	writeTerrainTileLedger
@@ -275,7 +277,8 @@ export async function loadOutdoorWorldRegionResourceGroup( options = {} ) {
 			extractedRoot: options.extractedRoot,
 			sectors,
 			jobs: normalizeJobs( options.jobs ),
-			publicRoot: options.publicRoot
+			publicRoot: options.publicRoot,
+			ledgerPath: options.ledgerPath
 		} );
 		if ( stale.length > 0 ) {
 			throw new Error(
@@ -414,13 +417,32 @@ export async function buildOutdoorWorldRegionResources( options = {} ) {
 
 	let built = 0;
 	let reused = 0;
-	const { tiles: tilesByRegion, references: referencesByRegion, inputs: inputsByRegion } = await readRegionLedger();
+	const {
+		tiles: tilesByRegion,
+		references: referencesByRegion,
+		inputs: inputsByRegion,
+		inputStats: inputStatsByRegion,
+		sharedDigest: ledgerSharedDigest
+	} = await readRegionLedger();
 	// After the shared stores above: their published bytes join every digest.
 	const sharedDigest = await outdoorSharedInputDigest( sourceExtractedRoot, publicRoot );
+	// This run's signatures, the whole-set key's input: the ledger map may
+	// still name sectors discovery no longer finds, the key must not.
+	const runSignatures = new Map();
 	await mapWithConcurrency( selectedSectors, jobs, async ( sector, index ) => {
 		const publicPath = outdoorRegionBundlePublicPath( sector.id );
 		const outputPath = publicPathToFile( publicPath, publicRoot );
-		const inputDigest = await outdoorRegionInputDigest( sector, sharedDigest );
+		// A region whose input files kept their size and mtime since its
+		// digest was recorded is not re-read or re-hashed: the recorded
+		// digest stands, while the shared digest it was folded under stands.
+		const recordedSignature = inputStatsByRegion.get( String( sector.id ) );
+		const signature = await outdoorRegionInputSignature( sector );
+		inputStatsByRegion.set( String( sector.id ), signature );
+		runSignatures.set( String( sector.id ), signature );
+		const inputDigest = !force && ledgerSharedDigest === sharedDigest &&
+				signature === recordedSignature && inputsByRegion.has( String( sector.id ) ) ?
+			inputsByRegion.get( String( sector.id ) ) :
+			await outdoorRegionInputDigest( sector, sharedDigest );
 		if ( !force && inputsByRegion.get( String( sector.id ) ) === inputDigest && (await exists( outputPath )) ) {
 			// Reuse keeps the bundle, not a promise that its images still exist.
 			let tiles = tilesByRegion.get( String( sector.id ) );
@@ -487,7 +509,18 @@ export async function buildOutdoorWorldRegionResources( options = {} ) {
 		} );
 	} );
 
-	await writeTerrainTileLedger( tilesByRegion, referencesByRegion, inputsByRegion );
+	// The whole-set key vouches for the input set only when this run saw
+	// every sector (the same gate as the code stamp below); a partial run
+	// refreshes the signatures it touched and leaves the key unwritten. The
+	// recorded shared digest stands only while every recorded input digest
+	// was computed under it: a partial run under a moved shared digest
+	// leaves the set mixed and records none.
+	const fullRun = selectedSectors.length === sectors.length;
+	await writeTerrainTileLedger( tilesByRegion, referencesByRegion, inputsByRegion, {
+		inputStats: inputStatsByRegion,
+		setKey: fullRun ? outdoorInputSetKey( sharedDigest, runSignatures ) : null,
+		sharedDigest: fullRun || ledgerSharedDigest === sharedDigest ? sharedDigest : null
+	} );
 	const missingBundlePaths = await findMissingBundlePaths( descriptor.regions, jobs );
 	let published = false;
 	let catalog;
