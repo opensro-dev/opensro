@@ -7,7 +7,9 @@ Each admitted v1.696 item and the skills its rows name stage in the
 import's own shards under marker-kept identities, with the later
 client's English texts and icons; a rebuild keeps the identities and
 one copy of each text; a missing or miscast row refuses; no v1.696
-root named reaps exactly what a previous pass added.
+root named reaps exactly what a previous pass added. The native 20%
+damage scroll takes the later overlap word while the import runs and
+gets its own back on the off path (#4690).
 ===========================================================================
 """
 import script_paths  # noqa: F401  (puts scripts/ and its build folders on sys.path, #3410)
@@ -28,6 +30,11 @@ from test_nasrun_import import archive_bytes, utf16  # noqa: E402
 
 NATIVE_ID = 5000
 ITEM_CODES = [code for code, _ in mall_items.ITEMS]
+SCROLL_20P = mall_items.OVERLAP_CODES[0]
+# The 20% scroll's overlap words: v1.150 (states 0x05, 0x04) and the
+# later tables' (0x5E added).
+NATIVE_OVERLAP, LATER_OVERLAP = str(0x405), str(0x4055E)
+SCROLL_SHARD = "skilldata_3000.txt"
 
 
 # ================
@@ -87,7 +94,7 @@ class LaterMallItemsTest(unittest.TestCase):
 	# items, the nine skills and their texts, and an output tree
 	# with one native item, one native skill and a name table.
 	# ================
-	def fixture(self, base, drop_item=None, drop_skill=None):
+	def fixture(self, base, drop_item=None, drop_skill=None, scroll_in_output=False):
 		later, native, output = base / "later", base / "native", base / "output"
 		text_root = output / mall_items.TEXT_ROOT
 		text_root.mkdir(parents=True)
@@ -99,6 +106,9 @@ class LaterMallItemsTest(unittest.TestCase):
 				item_rows.append(later_item_row(code, kind, 40001 + position))
 		skill_rows = [later_skill_row(code, 31000 + position)
 			for position, code in enumerate(mall_items.SKILL_CODES) if code != drop_skill]
+		later_scroll = later_skill_row(SCROLL_20P, 3109)
+		later_scroll[mall_items.SKILL_OVERLAP] = LATER_OVERLAP
+		skill_rows.append(later_scroll)
 		symbols = ["SN_" + code for code in ITEM_CODES + list(mall_items.SKILL_CODES)]
 		symbols += [symbol + "_TT_DESC" for symbol in symbols]
 		self.media = archive_bytes({
@@ -116,6 +126,16 @@ class LaterMallItemsTest(unittest.TestCase):
 		native_skill[0], native_skill[1], native_skill[3] = "1", str(NATIVE_ID), "SKILL_NATIVE"
 		(text_root / "skilldata.txt").write_bytes(utf16([["skilldata_5000.txt"]]))
 		(text_root / "skilldata_5000.txt").write_bytes(utf16([native_skill]))
+		# The native 20% scroll, in a shard of the native tree (or, with
+		# scroll_in_output, of an earlier layer's output).
+		scroll = ["0"] * mall_items.SKILL_COLUMNS
+		scroll[0], scroll[1], scroll[3] = "1", "3109", SCROLL_20P
+		scroll[mall_items.SKILL_OVERLAP] = NATIVE_OVERLAP
+		other = ["0"] * mall_items.SKILL_COLUMNS
+		other[0], other[1], other[3] = "1", "3110", "SKILL_NATIVE_NEIGHBOUR"
+		(native / mall_items.TEXT_ROOT / SCROLL_SHARD).write_bytes(utf16([scroll, other]))
+		if scroll_in_output:
+			(text_root / SCROLL_SHARD).write_bytes(utf16([scroll, other]))
 		(text_root / mall_items.NAME_TABLE).write_bytes(
 			utf16([["1", "SN_NATIVE_A", "", "", "", "", "", "", "Native A"]]))
 		return later, native, output, text_root
@@ -243,6 +263,46 @@ class LaterMallItemsTest(unittest.TestCase):
 			names = self.names(text_root)
 			self.assertNotIn("SN_" + ITEM_CODES[0], names)
 			self.assertIn("SN_NATIVE_A", names)
+
+	# ================
+	# scroll_word
+	# ================
+	def scroll_word(self, text_root):
+		return self.shard_rows(text_root, SCROLL_SHARD, mall_items.SKILL_CODENAME)[SCROLL_20P][mall_items.SKILL_OVERLAP]
+
+	# ================
+	# test_the_20p_scroll_takes_the_later_overlap
+	#
+	# The import copies the native shard into the output and gives the
+	# scroll the later word; its neighbour row is untouched. A rebuild
+	# records the native word, not its own; the off path removes the
+	# copy it made.
+	# ================
+	def test_the_20p_scroll_takes_the_later_overlap(self):
+		with tempfile.TemporaryDirectory() as root:
+			later, native, output, text_root = self.fixture(Path(root))
+			self.run_import(later, native, output)
+			self.assertEqual(self.scroll_word(text_root), LATER_OVERLAP)
+			self.assertIn("SKILL_NATIVE_NEIGHBOUR", self.shard_rows(text_root, SCROLL_SHARD, mall_items.SKILL_CODENAME))
+			summary = self.run_import(later, native, output)
+			self.assertEqual(summary["overlaps"], [{"shard": SCROLL_SHARD, "code": SCROLL_20P,
+				"native": NATIVE_OVERLAP, "word": LATER_OVERLAP, "created": True}])
+			self.run_import(later, native, output, root=None)
+			self.assertFalse((text_root / SCROLL_SHARD).exists())
+
+	# ================
+	# test_an_earlier_layers_shard_keeps_its_file
+	#
+	# A shard another layer wrote is patched in place and, on the off
+	# path, keeps its file with the native word back.
+	# ================
+	def test_an_earlier_layers_shard_keeps_its_file(self):
+		with tempfile.TemporaryDirectory() as root:
+			later, native, output, text_root = self.fixture(Path(root), scroll_in_output=True)
+			self.run_import(later, native, output)
+			self.assertEqual(self.scroll_word(text_root), LATER_OVERLAP)
+			self.run_import(later, native, output, root=None)
+			self.assertEqual(self.scroll_word(text_root), NATIVE_OVERLAP)
 
 
 if __name__ == "__main__":

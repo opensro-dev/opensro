@@ -54,9 +54,13 @@ Identities come from published_ids, above every object (items) and
 skill row of the tree, marker-kept so a rebuild keeps them; a row
 either family already has refuses. The shards are this import's own
 (itemdata_330000.txt, skilldata_330000.txt): one importer owns one
-shard, and the off path unlinks them. Names and descriptions are the
-later client's own English (cap110 merge_texts), and icons ride the
-cap110 asset closure. A build without the v1.696 client reaps
+shard, and the off path unlinks them. One native column is the
+exception: the v1.150 20% damage scroll takes the later overlap word
+(OVERLAP_CODES, #4690) in the output copy of its shard, and the marker
+keeps the native word for the off path to put back. Names and
+descriptions are the later client's own English (cap110 merge_texts),
+and icons ride the cap110 asset closure. A build without the v1.696
+client reaps
 exactly what the marker records.
 
 ===========================================================================
@@ -89,6 +93,16 @@ ITEM_SHARD = "itemdata_330000.txt"
 SKILL_SHARD = "skilldata_330000.txt"
 ITEM_MANIFEST = "itemdata.txt"
 SKILL_MANIFEST = "skilldata.txt"
+# The native skill rows whose overlap word (column 18, Action_Overlap)
+# the later tables changed (#4690). The later mall damage scrolls and the
+# Devil's Spirit's lent skills all install casting state 0x5E, so each
+# refuses the others; the v1.150 20% scroll's word (0x405) predates that
+# state and let it stack with them. v1.696 and the 1.188 server both
+# carry 0x4055E for it. The import takes the later word while it runs
+# and puts the native one back on its off path.
+OVERLAP_CODES = ("SKILL_MALL_DAMAGE_INC_20P_SCROLL_01",)
+SKILL_OVERLAP = 18
+
 # The later text tables that carry item and skill names
 # (mall_avatar_import reads the same three).
 LATER_TEXT_TABLES = ("textdata_equip&skill.txt", "textdata_object.txt", "textdata_new.txt")
@@ -211,14 +225,77 @@ def remove_assets(output, records):
 
 
 # ================
+# restore_overlaps
+#
+# Put back the native overlap words a marker records. A shard this
+# import copied into the output only to patch goes again once it reads
+# as the native rows; a shard another layer wrote keeps that layer's
+# rows with the native word restored.
+# ================
+def restore_overlaps(native, output, records):
+	for record in records:
+		path = safe_target(output / TEXT_ROOT, record["shard"])
+		if not path.exists():
+			continue
+		rows = tables.table_rows(path.read_bytes())
+		for row in rows:
+			if len(row) > SKILL_OVERLAP and row[SKILL_CODENAME] == record["code"]:
+				row[SKILL_OVERLAP] = record["native"]
+		source = native / TEXT_ROOT / record["shard"]
+		if record["created"] and source.exists() and rows == tables.table_rows(source.read_bytes()):
+			path.unlink()
+		else:
+			write_atomically(path, cap110.encode_rows(rows))
+
+
+# ================
+# patch_overlaps
+#
+# Give each OVERLAP_CODES row the later table's overlap word, in the
+# output copy of the shard that holds it (copied from the native tree
+# when no layer wrote one). Returns the marker records restore_overlaps
+# reads; a row the tree lacks refuses, as a missing later row does.
+# ================
+def patch_overlaps(native, output, later_rows):
+	later = {row[SKILL_CODENAME]: row[SKILL_OVERLAP] for row in later_rows
+		if len(row) > SKILL_OVERLAP and row[SKILL_SERVICE] == "1" and row[SKILL_CODENAME] in OVERLAP_CODES}
+	records = []
+	for code in OVERLAP_CODES:
+		if code not in later:
+			raise ValueError(f"the later client has no skill {code}")
+		found = None
+		for root in (output / TEXT_ROOT, native / TEXT_ROOT):
+			for path in sorted(root.glob("skilldata_*.txt")):
+				if sro_pk2.fold_ascii(path.name) == SKILL_SHARD:
+					continue
+				if any(len(row) > SKILL_OVERLAP and row[SKILL_CODENAME] == code for row in tables.table_rows(path.read_bytes())):
+					found = path
+					break
+			if found:
+				break
+		if found is None:
+			raise ValueError(f"no skill table holds {code}")
+		target = safe_target(output / TEXT_ROOT, found.name)
+		created = not target.exists()
+		rows = tables.table_rows(found.read_bytes())
+		for row in rows:
+			if len(row) > SKILL_OVERLAP and row[SKILL_CODENAME] == code:
+				records.append({"shard": found.name, "code": code, "native": row[SKILL_OVERLAP], "word": later[code], "created": created})
+				row[SKILL_OVERLAP] = later[code]
+		write_atomically(target, cap110.encode_rows(rows))
+	return records
+
+
+# ================
 # remove_import
 #
 # The off path: the texts, the two shards and their manifest lines,
 # the later asset files and the marker.
 # ================
-def remove_import(output, prior, marker):
+def remove_import(native, output, prior, marker):
 	text_root = output / TEXT_ROOT
 	nasrun.strip_texts(safe_target(text_root, NAME_TABLE), set(prior.get("texts", [])))
+	restore_overlaps(native, output, prior.get("overlaps", []))
 	for shard_name, manifest_name in ((ITEM_SHARD, ITEM_MANIFEST), (SKILL_SHARD, SKILL_MANIFEST)):
 		shard = safe_target(text_root, shard_name)
 		if shard.exists():
@@ -251,13 +328,14 @@ def add_later_mall_items(native, output, v1696_root=None, env=os.environ):
 	text_root = output / TEXT_ROOT
 	root_named = str(v1696_root or "").strip() or env.get(ROOT_ENV, "").strip()
 	if not root_named:
-		remove_import(output, prior, marker)
+		remove_import(native, output, prior, marker)
 		return {"enabled": False, "reason": f"{ROOT_ENV} is not set"}
 	root = Path(root_named)
 	jupiter.require_v1696_pin(root, tuple(shared.FOLDERS))
 	item_codes = [code for code, _ in ITEMS]
 	# A rebuild starts from the tables without this import's own rows.
 	nasrun.strip_texts(safe_target(text_root, NAME_TABLE), set(prior.get("texts", [])))
+	restore_overlaps(native, output, prior.get("overlaps", []))
 	for path in sorted(text_root.glob("itemdata*.txt")):
 		if sro_pk2.fold_ascii(path.name) in (ITEM_SHARD, ITEM_MANIFEST):
 			continue
@@ -268,7 +346,8 @@ def add_later_mall_items(native, output, v1696_root=None, env=os.environ):
 		archives, identities = avatars.open_archives(stack, root, avatars.V1696_SOURCE)
 		media, index = archives["Media"]
 		item_rows = select_item_rows(avatars.later_table_rows(media, index, "itemdata.txt"))
-		skill_rows = select_skill_rows(avatars.later_table_rows(media, index, "skilldata.txt"))
+		later_skills = avatars.later_table_rows(media, index, "skilldata.txt")
+		skill_rows = select_skill_rows(later_skills)
 
 		occupied = published_ids.occupied_objects(text_root, (ITEM_SHARD,))
 		allocated = published_ids.allocate(published_ids.OBJECTS, occupied, item_codes, prior.get("items", {}))
@@ -324,6 +403,7 @@ def add_later_mall_items(native, output, v1696_root=None, env=os.environ):
 	write_atomically(safe_target(text_root, ITEM_SHARD), cap110.encode_rows(staged_items))
 	write_atomically(safe_target(text_root, SKILL_SHARD), cap110.encode_rows(staged_skills))
 	write_atomically(name_path, merged_names)
+	overlaps = patch_overlaps(native, output, later_skills)
 	for shard_name, manifest_name in ((ITEM_SHARD, ITEM_MANIFEST), (SKILL_SHARD, SKILL_MANIFEST)):
 		manifest = safe_target(text_root, manifest_name)
 		current = manifest.read_bytes() if manifest.exists() else (native / TEXT_ROOT / manifest_name).read_bytes()
@@ -337,6 +417,7 @@ def add_later_mall_items(native, output, v1696_root=None, env=os.environ):
 		"skills": {row[SKILL_CODENAME]: int(row[SKILL_ID]) for row in staged_skills},
 		"texts": sorted(after - known), "absentDescriptions": absent_descriptions,
 		"assets": item_assets + skill_assets,
+		"overlaps": overlaps,
 		"limits": [
 			"The dungeon free-entry tickets (3/3/13/22, 3/3/13/23) are not imported: no Forgotten World content stands in the port, and the Pharaoh tomb ticket's free entry is unported.",
 			"The OptLevel upgrade scrolls (3/3/3/14) and the premium quest ticket (3/3/3/15) are not imported: neither case has a lane yet.",
