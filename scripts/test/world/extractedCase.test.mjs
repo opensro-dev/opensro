@@ -15,14 +15,20 @@ trees only; no game data.
 */
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import test from "node:test";
 
 import { buildDungeonResourceManifest } from "../../build/world/assets/buildDungeonResources.mjs";
-import { notedExists, notedReadFile, resolveOnDiskPath, resolveOnDiskPathSync } from "../../build/world/io.mjs";
+import {
+	notedExists,
+	notedReadFile,
+	resolveOnDiskPath,
+	resolveOnDiskPathSync,
+	walkStart
+} from "../../build/world/io.mjs";
 
 /*
 ================
@@ -311,5 +317,30 @@ test("the dungeon manifest reads a DOF the table names with authored case", asyn
 	assert.equal(
 		manifest.resources[0].sourcePath,
 		"Data_extracted/dungeon/wchina/dunhwang_cv.dof"
+	);
+});
+
+test("a path under a trusted root is resolved from that root, never above it", async ( t ) => {
+	const root = await makeExtractedTree( t );
+	const onDisk = path.join( root, "Data_extracted", "dungeon", "wchina", "case.txt" );
+	writeFileSync( onDisk, "c" );
+	const listed = [];
+	const list = directory => {
+		listed.push( directory );
+		return readdirSync( directory );
+	};
+	const asked = path.join( root, "Data_extracted", "Dungeon", "WChina", "Case.txt" );
+	assert.equal( resolveOnDiskPathSync( asked, list, [ root ] ), onDisk );
+	// Only the directories below the root: the root's parents are the
+	// configuration's spelling, and a listing of them would key every
+	// reader on whatever else lands beside the tree.
+	assert.ok( listed.length > 0 );
+	assert.ok(
+		listed.every( directory => !path.relative( root, directory ).startsWith( ".." ) ),
+		listed.join( "\n" )
+	);
+	assert.deepEqual(
+		walkStart( path.join( path.dirname( root ), "outside.txt" ), [ root ] ).directory,
+		path.parse( root ).root
 	);
 });
