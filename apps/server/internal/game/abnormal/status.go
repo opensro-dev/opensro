@@ -200,6 +200,11 @@ type SkillParams struct {
 	// EffectArea is the kind-1 efr block at RefSkill+0x28C.
 	// Select 4 or 5 forces the party selector unless the shape is already 5 or 6.
 	EffectArea EffectArea
+	// PersistentArea is the kind-3 efr block at RefSkill+0x294: the
+	// area a standing effect works in - a fortress structure skill's
+	// pulse or aura reach. The damage skills select 24 there and the
+	// holder-side auras 32, which is how the two families share the slot.
+	PersistentArea EffectArea
 	// AdmitDeadParty is the resu tag (0x72657375) stored at RefSkill+0x330.
 	// The party selector skips the alive check when that tag is set.
 	// Word 0 is the highest level it revives (0x3012 above it, none when
