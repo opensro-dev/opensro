@@ -771,6 +771,13 @@ type Runtime struct {
 	// sookChristmasGroups and sookChristmasSnow are its window and
 	// snowfall states advanceEventGroups last saw; tick goroutine only.
 	sookChristmasGroups, sookChristmasSnow eventGroupWatch
+	// ChristmasDecoration is the towns' Christmas decoration and carols
+	// alone (port-only, not native; progression/christmas_decoration.go),
+	// on the Christmas switch in its own mode. The zero value is off.
+	ChristmasDecoration progression.ChristmasDecoration
+	// christmasDecorationGroups is its window state advanceEventGroups
+	// last saw; tick goroutine only.
+	christmasDecorationGroups eventGroupWatch
 	// pandora is the open Pandora's Boxes (pandorabox.go; port-only).
 	pandora pandoraBoxes
 	// HalloweenHelmetSeal seals the event helmets at the transfer doors

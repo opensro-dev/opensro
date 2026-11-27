@@ -68,6 +68,10 @@ type NpcDialogBranch struct {
 // npcDialogRefuseRow is the refusal row a branching offer ends with.
 const npcDialogRefuseRow = "SN_TALK_COMMON_DENY"
 
+// npcDialogMaxQuestRow replaces an offer's Accept row once the character
+// holds the native quest cap (the client numbers later rows around it).
+const npcDialogMaxQuestRow = "SN_TALK_COMMON_MAXQUEST"
+
 /*
 ================
 NpcDialogPage
@@ -584,6 +588,14 @@ func (rt *Runtime) openNpcDialogConfirm(divisionID string, character *enterworld
 		conversation.Stage = npcDialogAcceptRow
 		rt.NpcDialogs.Put(divisionID, character.Name, conversation)
 		rows := []string{conversation.Pending.AcceptRowSymbol}
+		return []wire.Frame{{Opcode: wire.OpNpcDialog, Payload: wire.EncodeNpcDialogOptions(conversation.Pending.PromptSymbol, rows)}}, ""
+	}
+	// At the native cap the offer's Accept row becomes the max-quest row:
+	// the conversation ends on it and no acceptance is offered. A hand-in
+	// (Complete) is not an Accept row and still confirms.
+	if !conversation.Pending.Complete && len(character.ActiveQuests) >= enterworld.MaxActiveQuests {
+		rt.NpcDialogs.Clear(divisionID, character.Name)
+		rows := []string{npcDialogMaxQuestRow}
 		return []wire.Frame{{Opcode: wire.OpNpcDialog, Payload: wire.EncodeNpcDialogOptions(conversation.Pending.PromptSymbol, rows)}}, ""
 	}
 	rt.NpcDialogs.Put(divisionID, character.Name, conversation)

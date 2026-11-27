@@ -220,7 +220,8 @@ test("a ranged pack block that stalls resumes its range after the kept bytes", a
 	} );
 	const loader = createLoader( message => {
 		if (
-			![ "progress", "job-progress", "job-decoding", "job-fetching", "hd-availability" ].includes( message.kind )
+			![ "progress", "job-progress", "job-decoding", "job-fetching", "hd-availability", "request-timings" ]
+				.includes( message.kind )
 		) {
 			messages.push( message );
 		}

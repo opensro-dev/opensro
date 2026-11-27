@@ -4,7 +4,11 @@
 build.mjs - verified browser release assembly
 
 Freezes application inputs and projects public assets before creating the
-release archive. Private maps remain outside the deployable package.
+release archive. The client is AGPL source and public on purpose: each
+chunk carries the license banner and names its source map, which ships
+beside it with the readable source it was compiled from (NOTICE.md;
+policy.mjs inspectSourceMap). A private copy of every map stays outside
+the package too, for symbolicate.mjs.
 
 Assets are served as packs: the client reads every asset through its verified
 pack reader. Only the few files the browser loads by URL itself
@@ -21,12 +25,21 @@ import {
 	sameStoredForm,
 	storedMemberBytes
 } from "../../../../scripts/build/shared/packFormat.mjs";
-import { clientBuildDefinitions } from "../build-metadata.mjs";
+import { clientBuildDefinitions, clientStamp, releaseSourceOutput } from "../build-metadata.mjs";
 import { readFile, writeFile, mkdir } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { build } from "vite";
-import { files, inspect, publicIndex, safeName, sha, releaseIdentity, verifyDirectory } from "./policy.mjs";
+import {
+	files,
+	inspect,
+	inspectSourceMap,
+	publicIndex,
+	safeName,
+	sha,
+	releaseIdentity,
+	verifyDirectory
+} from "./policy.mjs";
 import { ASSET_SCHEMA, RELEASE_PROTOCOL } from "../../src/engine/foundation/release/protocol.ts";
 import { nativeAssetUrls } from "../../src/engine/foundation/assets/native-assets.ts";
 import { archiveRelease } from "./archive.mjs";
@@ -145,6 +158,8 @@ export async function buildApplication( { base = root, directory, source, mode =
 	});
 	const staging = path.resolve( directory, "../../private/compiled-" + mode );
 	await mkdir( staging, { recursive: true } );
+	// The banner and the published source paths, for page and worker chunks alike.
+	const output = releaseSourceOutput( base, clientStamp( base ).revision );
 	await build( {
 		root: base,
 		configFile: false,
@@ -156,11 +171,11 @@ export async function buildApplication( { base = root, directory, source, mode =
 		logLevel: "warn",
 		plugins: [ plugin() ],
 		resolve: { alias: { "@": path.join( base, "src" ) } },
-		worker: { plugins: () => [ plugin() ] },
+		worker: { plugins: () => [ plugin() ], rollupOptions: { output } },
 		build: {
 			outDir: staging,
 			emptyOutDir: false,
-			sourcemap: "hidden",
+			sourcemap: true,
 			minify: "esbuild",
 			rollupOptions: {
 				// The frozen pages (freezeSource holds every APPLICATION_PAGES entry).
@@ -170,7 +185,7 @@ export async function buildApplication( { base = root, directory, source, mode =
 						path.join( base, page )
 					] )
 				),
-				output: {}
+				output
 			}
 		},
 		// frame-probes.ts folds its probe lookup away outside development, so
@@ -183,6 +198,12 @@ export async function buildApplication( { base = root, directory, source, mode =
 		const bytes = await readFile( path.join( staging, name ) );
 		if ( name.endsWith( ".map" ) ) maps.set( name, bytes );
 		else await write( path.join( directory, name ), bytes );
+	}
+	// Each map ships beside its chunk only when it shows exactly the frozen
+	// source it was compiled from.
+	for ( const [name, bytes] of maps ) {
+		inspectSourceMap( name, bytes, source );
+		await write( path.join( directory, name ), bytes );
 	}
 	for ( const name of await files( directory ) ) {
 		inspect( name, await readFile( path.join( directory, name ) ), { application: true } );
@@ -221,6 +242,18 @@ export function requireNativeAssets( applicationFiles, native, members ) {
 	for ( const url of native ) {
 		if ( !members.has( url ) ) throw Error( "Native asset is not a published member: " + url );
 	}
+}
+/*
+================
+releaseMime
+
+The type an application file is served as.
+================
+*/
+function releaseMime( name ) {
+	if ( name.endsWith( ".map" ) ) return "application/json";
+	if ( name.endsWith( ".js" ) ) return "text/javascript";
+	return name.endsWith( ".css" ) ? "text/css" : "text/html";
 }
 /*
 ================
@@ -321,7 +354,7 @@ export async function buildBeta(
 			url: "/" + name,
 			file: "application/" + name,
 			length: bytes.length,
-			mime: name.endsWith( ".js" ) ? "text/javascript" : name.endsWith( ".css" ) ? "text/css" : "text/html"
+			mime: releaseMime( name )
 		} );
 	}
 	manifest.assetAuthorityHash = sha( authority );

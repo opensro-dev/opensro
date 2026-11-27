@@ -1,12 +1,13 @@
 /*
 ===========================================================================
 
-interactionlock_test.go - a stall or an exchange pins its player (#3433)
+interactionlock_test.go - a stall or an exchange pins its caster (#3433)
 
-While a player keeps a stall, visits one or trades, the movement lane's
-interaction gate holds and no direct skill is admitted, so neither a walk
-nor a teleport (Ghost Walk, a dash) carries the player out of it. An
-item's own skill keeps the item-use door's rule.
+While a player keeps a stall, visits one or trades, no direct skill is
+admitted, so a teleport (Ghost Walk, a dash) does not carry the player
+out of it. An item's own skill keeps the item-use door's rule. Ground
+movement weighs the narrower gate (the original walks an exchange
+partner): TestMovementInteractionPinsStallAndWindowNotExchange.
 
 ===========================================================================
 */

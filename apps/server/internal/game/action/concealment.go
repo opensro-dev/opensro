@@ -279,7 +279,7 @@ func (rt *Runtime) RetireMoveEffects(division, name string, now int64) {
 		rt.retireEffectsOnEvent(division, character, effectEventMove, now)
 		return true
 	})
-	rt.cancelJobDressOnMove(division, character)
+	rt.cancelJobDress(division, character)
 }
 
 /*

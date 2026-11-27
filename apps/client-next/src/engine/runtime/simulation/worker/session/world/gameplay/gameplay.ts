@@ -12,6 +12,9 @@ commands and cannot bypass actor eligibility.
 // CGInterface_ExecuteActionCommand 695420: 1000 + 6 asks the selected
 // player to trade.
 const ACTION_EXCHANGE = 1006;
+// The guild level the guild warehouse opens at: the server's rule
+// (domain.GuildStorageMinLevel) and the menu row's "(level 2 or above)".
+const GUILD_STORAGE_MIN_LEVEL = 2;
 import { defaultUiTuning, type UiTuning, uiTuningFrom } from "@/engine/foundation/ui/ui-tuning";
 import { EVENT_EXCHANGE_FUNCTION } from "@/engine/foundation/ui/npc-talk";
 import { guildBanRefused, guildSoldierRefusal } from "@/engine/foundation/gameplay/guild-manager";
@@ -417,10 +420,12 @@ import {
 import { isSpiritItem } from "@/engine/foundation/gameplay/avatar-socket";
 import { macroRegionIsTown } from "@/engine/foundation/gameplay/region-combat";
 import {
+	currentMacroSkills,
 	MACRO_HUNT,
 	MACRO_ROW_HP,
 	MACRO_ROW_MP,
 	MACRO_SKILL,
+	OP_MACRO_CONFIG,
 	potionSlot
 } from "@/engine/foundation/gameplay/sro-macro";
 import { createTradeProgress } from "./trade-progress/trade-progress";
@@ -1595,6 +1600,27 @@ fails; retry persistence without restoring stale slot occupancy.
 			}
 			bindingRepairs.delete( slot );
 		}
+	}
+	/*
+================
+refreshMacroSkills
+
+Port-only (#3907): moves the Auto-Skills lists off a rank the character
+no longer knows onto its learned successor (currentMacroSkills) and
+saves the change, as the hotbar's upgrade swap saves its slots. Runs
+after an upgrade and when the server sends the settings, so a list
+saved before an upgrade repairs itself. A skill save already in flight
+(the player's own edit) is left alone: the repair would replace its
+pending copy, and the next settings replay repairs what it commits.
+================
+	*/
+	function refreshMacroSkills() {
+		const live = sroMacro.view();
+		if ( !live || sroMacro.saving( MACRO_SKILL ) ) return;
+		const next = currentMacroSkills( live, bindings.skills, skillGroups );
+		if ( next === live ) return;
+		const frame = sroMacro.saveFrame( MACRO_SKILL, next );
+		if ( frame ) sendWhenLive( frame );
 	}
 	let worldClock: GameplayState["worldClock"];
 	// CGInterface+0x640: the death kind the 0x37CE notice carries (74FE50 ->
@@ -3144,15 +3170,21 @@ state here before a command can claim a native wire conversation.
 					throw Error( "Select a guild manager" );
 				}
 				// 5DA1B0 @5da261: with the 0x4000 capability proven by the
-				// row above, a guild under level 3 prints the limit on the
+				// row above, a guild under the level prints the limit on the
 				// guide and the centre banner (67a600 @5db134, 67d030
-				// @5da2ae) and sends nothing.
-				if ( social.guild && social.guild.level < 3 ) {
+				// @5da2ae) and sends nothing. Native bug, fixed: the v1.150
+				// client compares with 3 ("must be 3 or higher") while its own
+				// menu row says level 2 (UIIT_CTL_GUILD_WAREHOUSE) and the
+				// server admits level 2 (domain.GuildStorageMinLevel, a 30-slot
+				// warehouse), so a level 2 guild was offered storage and then
+				// refused. The gate follows the server, with the client's own
+				// level 2 line (BR-261127-1322-3980).
+				if ( social.guild && social.guild.level < GUILD_STORAGE_MIN_LEVEL ) {
 					npcConversation.showWindow();
 					notices = [
 						...notices.slice( -99 ),
 						{
-							key: "UIIT_MSG_GUILD_STORE_LIMIT",
+							key: "UIIT_MSG_GUILD_WAREHOUSE_LIMIT",
 							value: 0,
 							nativeType: 0,
 							notificationBanner: true,
@@ -4924,6 +4956,9 @@ Packet handling must not depend on which HUD panel is currently open.
 				if ( sroMacro.receive( frame ) ) {
 					const failure = sroMacro.takeNotice();
 					if ( failure ) notices = [ ...notices.slice( -99 ), { ...failure, sequence: ++noticeSequence } ];
+					// Only the settings push, never a save answer: a refused
+					// repair must not resend itself on its own answer.
+					if ( frame.opcode === OP_MACRO_CONFIG ) refreshMacroSkills();
 					dirty = true;
 					return true;
 				}
@@ -5795,6 +5830,7 @@ Packet handling must not depend on which HUD panel is currently open.
 							row.kind === 0x49 && replaced.has( row.payload ) ? { ...row, payload: id } : row
 						)
 					};
+					refreshMacroSkills();
 					training.receipt( frame.opcode, id );
 					progression = { ...progression, error: undefined };
 					dirty = true;

@@ -117,6 +117,7 @@ var catalogueExempt = map[string]string{
 	"SRO_STORAGE_PAGES":                        "a warehouse's size at runtime; the catalogue publishes no storage",
 	"SRO_GUILD_STORAGE_PAGES":                  "a guild warehouse's size at runtime; the catalogue publishes no storage",
 	"SRO_INVENTORY_PAGES":                      "a character's inventory base at creation and world entry; the catalogue publishes no character state",
+	"SRO_QUICK_CHARACTER_DELETE":               "how long a character deletion waits, read by the store; the catalogue publishes no character state",
 	"SRO_FAST_DEN_RETURN":                      "a scroll countdown at runtime; the catalogue publishes no timers",
 	"SRO_UNIQUE_DAMAGE_RANK":                   "a post-kill damage notice; the catalogue publishes no notices",
 	"SRO_UNIQUE_STATUS":                        "the in-game unique status feed at runtime; the catalogue publishes no live monster state (the public API reads the same owners either way)",

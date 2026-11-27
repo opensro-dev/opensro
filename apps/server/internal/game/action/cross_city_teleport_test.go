@@ -95,6 +95,8 @@ func TestCrossCityTeleportTravel(t *testing.T) {
 	clientdata.RequireGameData(t)
 	t.Setenv(EnvCrossCityTeleport, "on")
 	rt, c, _, _ := returnFixture(t, 30000)
+	// A paying traveller: past the free-fare watermark (U8-10).
+	c.MaxLevel = testInt64(25)
 	rt.NpcSpawn.Enabled, rt.NpcSpawn.AtPlayer = true, true
 	rt.NpcRoster = []simulation.NpcDef{{ObjectID: 252094, RefObjID: 2094, Codename: "STORE_CH", Teleport: &simulation.TeleportGateBounds{Radius: 10, Height: 25, FortressID: 1}}}
 	if err := rt.ConfigurePortals(gamedatatest.TextdataDir(t)); err != nil {
@@ -113,5 +115,35 @@ func TestCrossCityTeleportTravel(t *testing.T) {
 	arrival := rt.portals.destinations[25].spawn
 	if c.World.Spawn == nil || c.World.Spawn.RegionID == nil || *c.World.Spawn.RegionID != int64(arrival.RegionID) {
 		t.Fatalf("arrived at %+v, want region %d", c.World.Spawn, arrival.RegionID)
+	}
+}
+
+/*
+================
+TestCrossCityTeleportFreeAtTheWatermark
+
+A character whose highest level reached is 20 or less pays no fare:
+the same gate carries him for nothing, even with no gold at all.
+================
+*/
+func TestCrossCityTeleportFreeAtTheWatermark(t *testing.T) {
+	clientdata.RequireGameData(t)
+	t.Setenv(EnvCrossCityTeleport, "on")
+	rt, c, _, _ := returnFixture(t, 30000)
+	c.MaxLevel = testInt64(20)
+	rt.NpcSpawn.Enabled, rt.NpcSpawn.AtPlayer = true, true
+	rt.NpcRoster = []simulation.NpcDef{{ObjectID: 252094, RefObjID: 2094, Codename: "STORE_CH", Teleport: &simulation.TeleportGateBounds{Radius: 10, Height: 25, FortressID: 1}}}
+	if err := rt.ConfigurePortals(gamedatatest.TextdataDir(t)); err != nil {
+		t.Fatal(err)
+	}
+	rt.HandleObjectSelect(testDivision, c, wire.NewWriter(4).U32(252094).Payload())
+	gold := int64(0)
+	c.Gold = &gold
+	result := rt.HandlePortal(testDivision, c, wire.NewWriter(9).U32(252094).U8(2).U32(25).Payload())
+	if len(result.Frames) == 0 || result.Frames[0].Opcode != enterworld.OpcodeResetClient {
+		t.Fatalf("gate travel: %+v", result)
+	}
+	if *c.Gold != 0 {
+		t.Fatalf("fare charged at the watermark: gold %d", *c.Gold)
 	}
 }

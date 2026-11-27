@@ -9,6 +9,7 @@ from pathlib import Path
 import unittest
 
 import alexandria_npc_services as services
+import alexandria_shop_d10 as d10
 import alexandria_npcs as npcs
 import import_vsro_alexandria as tables
 
@@ -35,9 +36,9 @@ class ServicesTests(unittest.TestCase):
 		kept, report = services.unique_slots(goods)
 		self.assertEqual([(r[3], r[4]) for r in kept], [("A", "1"), ("B", "2"), ("C", "0")])
 		self.assertEqual(report, {"moved": ["TAB:1->2:B"], "dropped": []})
-		full = [["1", "15", "FULL", f"P{s}", str(s)] for s in range(services.MAX_TAB_SLOTS)]
+		full = [["1", "15", "FULL", f"P{s}", str(s)] for s in range(d10.MAX_TAB_SLOTS)]
 		kept, report = services.unique_slots(full + [["1", "15", "FULL", "LATE", "3"]])
-		self.assertEqual(len(kept), services.MAX_TAB_SLOTS)
+		self.assertEqual(len(kept), d10.MAX_TAB_SLOTS)
 		self.assertEqual(report["dropped"], ["FULL:3:LATE"])
 
 	# ================

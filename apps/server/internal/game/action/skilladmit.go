@@ -151,6 +151,14 @@ type admitContext struct {
 	Indirect bool
 	// TransformRef is +0x20, the RefObj msch word 1 reads.
 	TransformRef uint32
+	// FortressRole is the caster's guild fortress role, read before the
+	// caller opened a character door (RoleRead). Inside a door the guild
+	// read would take the store lock the door already holds, and the
+	// store's RWMutex is not re-entrant: r204n's GameWorld hung on it
+	// (tick stalls 2026-11-27 09:06 and 09:08). A caller outside every
+	// door leaves RoleRead false and admission reads the role itself.
+	FortressRole uint8
+	RoleRead     bool
 }
 
 /*
@@ -203,6 +211,14 @@ func (rt *Runtime) contextSkillAdmission(division string, c *enterworld.Characte
 	// Natively qest wants a clear area around the caster.
 	if skill.CastGate.Qest {
 		if code := rt.qestRefusal(division, c, skill.CastGate.Efr3Radius, now); code != 0 {
+			return code
+		}
+	}
+
+	// Natively a planted trap at its link group's live cap refuses the
+	// cast; the oldest trap is not ended to make room.
+	if skill.CombatTrap.Pinned {
+		if code := rt.trapCountRefusal(division, c, skill); code != 0 {
 			return code
 		}
 	}
@@ -271,7 +287,11 @@ func (rt *Runtime) contextSkillAdmission(division string, c *enterworld.Characte
 	}
 
 	if mask&admitEquipment != 0 {
-		if code := skillEquipmentRefusal(c, rt.statCatalogs().Items, skill); code != 0 {
+		role := context.FortressRole
+		if !context.RoleRead {
+			role = rt.guildFortressRole(division, c)
+		}
+		if code := skillEquipmentRefusal(c, rt.statCatalogs().Items, skill, role); code != 0 {
 			return code
 		}
 	}
@@ -334,7 +354,7 @@ compared with the primary weapon's TID4, bare hand counting as 1, and
 0xFF / 0xFF admits anything.
 ==================
 */
-func skillEquipmentRefusal(c *enterworld.Character, items enterworld.ItemRefSource, skill enterworld.SkillRow) uint16 {
+func skillEquipmentRefusal(c *enterworld.Character, items enterworld.ItemRefSource, skill enterworld.SkillRow, fortressRole uint8) uint16 {
 	if skill.Reqi.Present {
 		return combat.ReqiRefusal(c, items, skill.Reqi)
 	}
@@ -354,10 +374,15 @@ func skillEquipmentRefusal(c *enterworld.Character, items enterworld.ItemRefSour
 	case tid4 != kinds[0] && tid4 != kinds[1]:
 		code = 0x300d
 	case tid4 == 0x10:
-		// The native fortress siege equipment check needs a siege
-		// fortress context (the player's +0x72F*4). Nothing in this port creates
-		// one, so a fortress weapon is always refused.
-		code = 0x3047
+		// The fortress siege check runs at every cast: the worn
+		// weapon's role mask (media column 124) must share a bit
+		// with the caster's fortress-guild role. Without a member
+		// record the role reads 0 and shares nothing, so a guild-less
+		// or role-less caster is refused like a mismatched one.
+		ref, _, worn := eq.Item(6)
+		if !worn || ref == nil || fortressRole&uint8(ref.FortressRoleMask) == 0 {
+			code = 0x3047
+		}
 	}
 
 	// Natively a broken main weapon is 0x300F whatever the kind said.
@@ -548,6 +573,36 @@ func (rt *Runtime) qestRefusal(division string, c *enterworld.Character, radius 
 		}
 	}
 	return 0
+}
+
+/*
+==================
+trapCountRefusal
+
+The native outgoing-linked-effects walk counts the caster's live objects
+in the incoming skill's link group and refuses at the authored cap
+(the lnks third word): 0x3029, or 0x3037 when the row carries both the
+qest (+0x49C) and trap (+0x4A0) words. The count is the planter's own
+traps in this division: another division's traps never count, and no
+live trap is retired to admit the new cast.
+==================
+*/
+func (rt *Runtime) trapCountRefusal(division string, c *enterworld.Character, skill enterworld.SkillRow) uint16 {
+	trap := skill.CombatTrap
+	owner := enterworld.ObjectIDForCharacter(c)
+	live := 0
+	for _, object := range rt.SkillObjects.Snapshot() {
+		if object.Division == division && object.OwnerGID == owner && object.Program.Combat && object.Program.LinkGroup == trap.LinkGroup {
+			live++
+		}
+	}
+	if uint32(live) < trap.MaxLive {
+		return 0
+	}
+	if skill.CastGate.Qest && skill.CastGate.TrapPresent {
+		return 0x3037
+	}
+	return 0x3029
 }
 
 /*

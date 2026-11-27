@@ -63,18 +63,18 @@ func TestJanganAlchemyShopRenamesAndRegroupsTheGrocer(t *testing.T) {
 		t.Fatalf("grocer name = %q", grocer.Name)
 	}
 	tabs := grocerTabs(grocer)
-	if len(tabs) != 5 {
+	if len(tabs) != 6 {
 		t.Fatalf("grocer has %d tabs", len(tabs))
 	}
 	wantLabels := []string{"SN_TAB_ACCESSORY", "SN_TAB_ETC",
-		janganElixirsLabel, janganAttrStonesLabel, janganMagicStonesLabel}
+		janganElixirsLabel, janganAttrStonesLabel, janganMagicStonesLabel, janganD10StonesLabel}
 	for i, want := range wantLabels {
 		if tabs[i].LabelSymbol != want {
 			t.Fatalf("tab %d label = %q, want %q", i, tabs[i].LabelSymbol, want)
 		}
 	}
 	// The synthesized ids sit above every authored id: the shipped
-	// tables' largest tab id is 2378, so the tabs are 2379-2381 (the
+	// tables' largest tab id is 2378, so the tabs are 2379-2382 (the
 	// shop catalogue derives the same ids; commerce pins them too),
 	// consecutive in tab order under one new group above the authored
 	// group maximum.
@@ -89,7 +89,7 @@ func TestJanganAlchemyShopRenamesAndRegroupsTheGrocer(t *testing.T) {
 			}
 		}
 	}
-	for i := 0; i < 3; i++ {
+	for i := 0; i < 4; i++ {
 		tab := tabs[2+i]
 		if tab.TabID != int32(2379+i) || tab.GroupID != maxGroup+1 || tab.GroupLabelSymbol != janganAlchemyGroupLabel {
 			t.Fatalf("synthesized tab %d = %+v (authored group maximum %d)", i, tab, maxGroup)

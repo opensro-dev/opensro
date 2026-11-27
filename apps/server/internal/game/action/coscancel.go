@@ -51,7 +51,9 @@ func cosCancelResult(code uint8) OpResult {
 ================
 attackPetSummonBlocked
 
-Port-only: scrolls and toolbar dismissal share the owner/pet attack delay.
+The owner/pet battle test: the owner's battle state, attack lock or
+combat intent, or any summoned pet in combat. Scrolls and toolbar
+dismissal share it for the port-only attack-pet delay.
 ================
 */
 func (rt *Runtime) attackPetSummonBlocked(division string, c *enterworld.Character, now int64) bool {
@@ -86,12 +88,20 @@ func (rt *Runtime) HandleCosCancel(division string, c *enterworld.Character, pay
 	unlock := rt.lockDivision(division)
 	defer unlock()
 	gid := binary.LittleEndian.Uint32(payload)
+	// The native admission opens with the manager state and the owner's
+	// life (#4490 U11-03), ahead of the roster: a teleporting or mounted
+	// owner hears 0x440D, a dead owner 0x4411, whatever GID was named.
+	// The pet's own HP is not tested - a retained corpse stays
+	// cancellable.
+	if c.NativeTeleportMode != 0 || c.CompanionByGID(gid) != nil && c.CompanionByGID(gid).Mounted {
+		return cosCancelResult(0x0D)
+	}
+	if !enterworld.CharacterAlive(c) {
+		return cosCancelResult(0x11)
+	}
 	snapshot, ref := rt.ownedCOSSnapshot(division, c, gid)
 	if snapshot == nil || (ref.TidWord>>11 != 3 && ref.TidWord>>11 != 4) {
 		return cosCancelResult(3)
-	}
-	if snapshot.NativeTeleportMode != 0 || snapshot.CompanionByGID(gid).Mounted {
-		return cosCancelResult(0x0D)
 	}
 	now := rt.Now().UnixMilli()
 	if rt.AttackPetExpansion && ref.TidWord>>11 == attackPetBand && rt.attackPetSummonBlocked(division, snapshot, now) {
@@ -103,6 +113,11 @@ func (rt *Runtime) HandleCosCancel(division string, c *enterworld.Character, pay
 		!(simulation.WorldDistance2D(owner, pet) < cosCancelRange) {
 		return cosCancelResult(4)
 	}
+	// The native handler's last refusal is the preset code 2 when the
+	// COS has no live world actor (a registry find by its gid, erased
+	// at actor retirement), never a battle test: a fighting pickup pet
+	// is put away natively. The port's retained-corpse dismissal stays
+	// as pinned (#4490 U11-03, the actor-absence code 2 left open).
 	var cancelled *enterworld.CharacterCOS
 	if !rt.deps.Update(c, "cos-cancel", func() bool {
 		cos := c.CompanionByGID(gid)

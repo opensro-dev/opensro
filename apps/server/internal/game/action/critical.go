@@ -98,15 +98,32 @@ func (rt *Runtime) resolveCombatRequest(request combatRequest) (combat.WallOutco
 	previous := rt.criticals.actors[actor][key]
 	// A player in a monster's shape (transform mode 1) is the hit-outcome
 	// routine's own hit group: no critical is rolled for it and its damage
-	// never touches the lanes (the transformed branch below).
+	// never touches the lanes (the transformed branch below). The
+	// classification reads the monster's shape before the weapon, so a
+	// shaped player is never in the fortress group either.
 	transformed := false
 	if actor.monster == 0 && actor.character != "" {
 		if shaped := rt.findCharacter(actor.division, actor.character); shaped != nil && shaped.TransformMode == 1 {
 			transformed = true
 		}
 	}
+	// A player swinging a fortress weapon (worn weapon kind TID4 16) is
+	// the hit-outcome routine's fortress hit group: no critical is
+	// rolled for it and its damage never touches the lanes (the
+	// fortress branch below).
+	fortressArmed := false
+	if !transformed && actor.monster == 0 && actor.character != "" {
+		fortressArmed = rt.fortressArmed(actor.division, actor.character)
+	}
+	// A hit on a fortress structure (the defender's ref marks it) is
+	// the hit-outcome routine's target-side hit group: no critical is
+	// rolled for it and its damage never touches the lanes (the
+	// structure branch below). The classification reads the target
+	// before the weapon, so a fortress weapon against a structure is
+	// in this group, never in the fortress group.
+	structureTarget := actor.monster == 0 && actor.character != "" && defender.Structure
 	critical, next := false, previous
-	if request.lanes&4 != 0 && !transformed {
+	if request.lanes&4 != 0 && !transformed && !fortressArmed && !structureTarget {
 		rate, err := combat.EffectiveCriticalRate(attacker.CriticalRate, skill.CriticalModifier)
 		if err != nil {
 			return combat.WallOutcome{}, err
@@ -121,7 +138,7 @@ func (rt *Runtime) resolveCombatRequest(request combatRequest) (combat.WallOutco
 	// In the reference server's hit-outcome routine, MATTR_AVATAR_MDIA rolls
 	// after critical and before the damage lanes so the random stream order matches.
 	ignoreDefense := false
-	if actor.monster == 0 && !transformed {
+	if actor.monster == 0 && !transformed && !fortressArmed && !structureTarget {
 		if chance := combat.IgnoreDefenseChance(attacker, defender); chance > 0 {
 			mdiaKey := ignoreDefenseProbabilityPrefix | skill.ID&0xffffff
 			procced, mdiaNext, err := combat.CriticalOutcome(chance, rt.criticals.actors[actor][mdiaKey], rt.CombatRoll)
@@ -170,6 +187,52 @@ func (rt *Runtime) resolveCombatRequest(request combatRequest) (combat.WallOutco
 		}
 		return combat.WallOutcome{Defender: combat.Result{Damage: damage, ResultFlags: 1}}, nil
 	}
+	if structureTarget {
+		// The block roll comes first, as for any hit; a blocked
+		// structure hit is a bare type-2 record and consumes no
+		// damage draw. An unblocked hit is the target-side group's
+		// amount: the attacker's attack-power draw scaled by the
+		// worn weapon's kind factor (the bare draw for a fortress
+		// weapon). The hit has no lanes, so a standing wall never
+		// splits it and its lane accumulators stay zero.
+		blocked := false
+		if skill.Attack.Present {
+			var blockErr error
+			blocked, blockErr = rollBlock()
+			if blockErr != nil {
+				return combat.WallOutcome{}, blockErr
+			}
+		}
+		if blocked {
+			return combat.WallOutcome{Defender: combat.Result{ResultFlags: 1, Blocked: true}}, nil
+		}
+		damage, damageErr := combat.StructureHitDamage(rt.weaponKind(actor.division, actor.character), attacker, rt.CombatRoll)
+		if damageErr != nil {
+			return combat.WallOutcome{}, damageErr
+		}
+		return combat.WallOutcome{Defender: combat.Result{Damage: damage, ResultFlags: 1}}, nil
+	}
+	if fortressArmed {
+		// The block roll comes first, as for any hit; a blocked
+		// fortress hit is a bare type-2 record with no damage. An
+		// unblocked hit deals exactly 1: the group never reaches the
+		// lane formula. (A fortress-class target never reaches this
+		// branch: the target-side group above classifies it first.)
+		// The hit has no lanes, so a standing wall never splits it
+		// and its lane accumulators stay zero.
+		blocked := false
+		if skill.Attack.Present {
+			var blockErr error
+			blocked, blockErr = rollBlock()
+			if blockErr != nil {
+				return combat.WallOutcome{}, blockErr
+			}
+		}
+		if blocked {
+			return combat.WallOutcome{Defender: combat.Result{ResultFlags: 1, Blocked: true}}, nil
+		}
+		return combat.WallOutcome{Defender: combat.Result{Damage: 1, ResultFlags: 1}}, nil
+	}
 	calculation := combat.AttackCalculation{
 		Attack: skill.Attack, OriginalFlags: skill.Attack.Flags, Lanes: request.lanes,
 		Player: actor.monster == 0, Critical: critical, IgnoreDefense: ignoreDefense,
@@ -210,6 +273,36 @@ func (rt *Runtime) resolveCombatRequest(request combatRequest) (combat.WallOutco
 	}
 	rt.rememberProbability(actor, key, next)
 	return out, nil
+}
+
+/*
+================
+weaponKind
+
+The named player character's worn weapon kind: the packed type word's
+kind bits (the word shifted right 11), read from slot 6. A broken or
+missing weapon reads 0, as the server's equipped-item TID read does.
+================
+*/
+func (rt *Runtime) weaponKind(division, name string) uint32 {
+	c := rt.findCharacter(division, name)
+	if c == nil {
+		return 0
+	}
+	return uint32(combat.ReqiEquipment{C: c, Items: rt.statCatalogs().Items}.WeaponTID(6) >> 11)
+}
+
+/*
+================
+fortressArmed
+
+Whether the named player character's worn weapon (slot 6) is a fortress
+weapon: the packed type word's kind bits (TID4 << 11) read 16. A broken
+or missing weapon reads 0, as the server's equipped-item TID read does.
+================
+*/
+func (rt *Runtime) fortressArmed(division, name string) bool {
+	return rt.weaponKind(division, name) == 16
 }
 
 /*

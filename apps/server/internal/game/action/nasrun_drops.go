@@ -6,7 +6,7 @@ nasrun_drops.go - Devil's Spirit lucky drops paid in a unique's settlement
 Port-only, not native (#3456 step 3d), on with SRO_NASRUN, beside the
 token award (nasrun_tokens.go). The owner picked the odds (2026-11-16,
 #3456): on a unique kill, each eligible contributor rolls for a Devil's
-Spirit (0.25 % easy, 0.5 % hard) and for Sabakun's jewel (2 %), under
+Spirit (10 % easy, 20 % hard) and for Sabakun's jewel (90 %), under
 normal loot rights. The odds are game/nasrun/drops.go; this file rolls
 them and puts what was won in the winner's bag.
 

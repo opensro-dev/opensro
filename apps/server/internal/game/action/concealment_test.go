@@ -266,15 +266,25 @@ func TestPartyInvisibilityCoversCasterAndParty(t *testing.T) {
 ==================
 TestNpcActionEndsTheHide
 
-The reference server retires the hide before the NPC request is even validated.
+The reference server retires the hide before the NPC request is even
+validated, and before its busy refusal: a talk refused IM_BUSY during an
+open exchange ends the hide too.
 ==================
 */
 func TestNpcActionEndsTheHide(t *testing.T) {
-	rt, _, c := concealmentFixture(t, rogueStealthID)
-	castSelf(rt, c, rogueStealthID)
-	rt.HandleNpcAction(testDivision, c, wire.NewWriter(8).U32(999).U32(1).Payload())
-	if c.NativeBodyStatus != 0 || hasSkillEffect(rt, c.Name, rogueStealthID) {
-		t.Fatal("an NPC request left the hide on")
+	for _, busy := range []bool{false, true} {
+		rt, _, c := concealmentFixture(t, rogueStealthID)
+		castSelf(rt, c, rogueStealthID)
+		if busy {
+			rt.Exchanges.Open(testDivision, c.Name, "partner")
+		}
+		_, refusal := rt.HandleNpcAction(testDivision, c, wire.NewWriter(8).U32(999).U32(1).Payload())
+		if c.NativeBodyStatus != 0 || hasSkillEffect(rt, c.Name, rogueStealthID) {
+			t.Fatalf("busy %v: an NPC request left the hide on", busy)
+		}
+		if busy && refusal != "an exchange, a stall or a stall visit is open" {
+			t.Fatalf("busy talk: refusal %q, want the IM_BUSY refusal", refusal)
+		}
 	}
 }
 

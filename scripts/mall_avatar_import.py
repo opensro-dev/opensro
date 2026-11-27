@@ -424,9 +424,10 @@ class AuthoredIds:
 # The package, scrap and silk price v1.150 would carry for a one-avatar
 # package it never shipped, in the later client's column layout: named,
 # described and drawn as the item itself (mallextra.go authorMallPackage
-# writes the same rows for an operator-listed item).
+# writes the same rows for an operator-listed item). price defaults to
+# the avatar kind's tier; the pet import passes its tab's.
 # ================
-def author_package(rows, row, ids):
+def author_package(rows, row, ids, price=None):
 	code = row[items.CODENAME]
 	package = PACKAGE_PREFIX + code
 	if package in ids.package_names:
@@ -440,7 +441,8 @@ def author_package(rows, row, ids):
 	rows["refscrapofpackageitem.txt"].append(
 		["1", NATIVE_SOURCE, package, code] + ["0"] * SCRAP_ZERO_COLUMNS + none + [str(ids.next_serial)]
 	)
-	rows["refpricepolicyofitem.txt"].append(["1", NATIVE_SOURCE, package, SILK_CURRENCY, SILK_PRICE[avatar_kind(code)]] + none)
+	silk = price if price is not None else SILK_PRICE[avatar_kind(code)]
+	rows["refpricepolicyofitem.txt"].append(["1", NATIVE_SOURCE, package, SILK_CURRENCY, silk] + none)
 	ids.next_package += 1
 	ids.next_serial += 1
 	return package

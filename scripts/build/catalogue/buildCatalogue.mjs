@@ -31,6 +31,7 @@ import { fileURLToPath } from "node:url";
 import { buildStatePath, clientPublicPath, generatedPath } from "../../lib/generatedRoot.mjs";
 import { sharedCacheEnvironment } from "../../lib/goEnvironment.mjs";
 import { runPython } from "../shared/pythonRun.mjs";
+import { cachedFileWriter } from "./cachedFiles.mjs";
 import { fillFormerIds, readFormerIds } from "./formerIds.mjs";
 import { playerNotes } from "./playerNotes.mjs";
 import { publishedPortraits } from "./publishedPortraits.mjs";
@@ -40,6 +41,7 @@ import { publishedPortraits } from "./publishedPortraits.mjs";
 const { createMagicTable, itemTooltipRows } = await import( "./siteTooltip.mjs" );
 const { writeTooltipBundle } = await import( "./tooltipBundle.mjs" );
 const { skillTooltip } = await import( "../../../apps/client-next/src/engine/foundation/ui/skill-tooltip.ts" );
+const { portShopTabCopy } = await import( "../../../apps/client-next/src/engine/foundation/ui/port-shop-copy.ts" );
 const { createTooltipSkillDecoder } = await import(
 	"../../../apps/client-next/src/engine/foundation/ui/skill-tooltip-catalog.ts"
 );
@@ -50,8 +52,10 @@ const serverRoot = path.join( repositoryRoot, "apps", "server" );
 // links to, whose beta values deploy.py passes from this file.
 const SHARD_SETTINGS = path.join( serverRoot, "config", "shard-settings.json" );
 // The WebP encoders' content cache (webp_pool.py): an image unchanged since
-// any earlier build is copied, not encoded again.
+// any earlier build is linked, not encoded again.
 const WEBP_CACHE = buildStatePath( "catalogue-webp-cache" );
+// The tooltip files' content cache (cachedFiles.mjs), beside the WebP one.
+const FILE_CACHE = buildStatePath( "catalogue-file-cache" );
 // A requirement value no item asks for: requirements read as met (white),
 // since the catalogue has no player to compare against.
 const MET = 0xffff;
@@ -370,7 +374,14 @@ async function main() {
 		rmSync( out, { recursive: true, force: true } );
 		mkdirSync( path.join( out, "schema" ), { recursive: true } );
 		writeFileSync( path.join( out, "items.json" ), JSON.stringify( items ) + "\n" );
-		const tooltip = await writeTooltipBundle( { out, items: items.items, references, magicRows, text } );
+		const tooltip = await writeTooltipBundle( {
+			out,
+			items: items.items,
+			references,
+			magicRows,
+			text,
+			writeFile: cachedFileWriter( FILE_CACHE )
+		} );
 		console.log(
 			`tooltip bundle: ${tooltip.items} items, ${tooltip.symbols} text symbols, ${tooltip.vectors} golden vectors`
 		);
@@ -380,7 +391,9 @@ async function main() {
 		writeFileSync( path.join( out, "regions.json" ), JSON.stringify( regions ) + "\n" );
 		const npcs = readJSON( path.join( work, "npcs.json" ) );
 		for ( const tab of npcs.npcs.flatMap( npc => npc.tabs ) ) {
-			tab.label = text( tab.labelSymbol ) || tab.labelSymbol;
+			// A tab the port synthesizes has no text row; the shop window's
+			// port copy names it (port-shop-copy.ts).
+			tab.label = text( tab.labelSymbol ) || portShopTabCopy( tab.labelSymbol ) || tab.labelSymbol;
 		}
 		writeFileSync( path.join( out, "npcs.json" ), JSON.stringify( npcs ) + "\n" );
 		const search = readJSON( path.join( work, "search.json" ) );

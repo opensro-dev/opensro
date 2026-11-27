@@ -14,6 +14,7 @@ import type { GameplayState } from "@/engine/contracts/gameplay";
 import type { Renderer, FrameWork } from "@/engine/contracts/runtime";
 import { actorQueryRows } from "@/engine/foundation/animation/actor-query-rows";
 import { dressedAvatars } from "@/engine/foundation/gameplay/avatar-socket";
+import { visualChangeAvatars } from "@/engine/foundation/animation/visual-changes";
 import type { DressCatalog, WornItem } from "@/engine/foundation/animation/equipment-appearance";
 import type { SkillLookup } from "@/engine/foundation/ui/buff-viewer";
 import type { Resource, PresentationOutput, PresentationDisappear } from "./internal/presentation-contract";
@@ -423,23 +424,38 @@ interface PortraitBindings {
 	>;
 	readonly resources: PortraitResources;
 	readonly portraitEmission: Pick<ReturnType<typeof createModelEmission>, "step">;
-	readonly mallPreview: {
+	readonly mallPreview: MannequinLane & {
 		skin(): { model: number; shape: number; } | null;
-		glow(): { actor: CharacterActor; particles: readonly ModelParticle[]; } | null;
-		step(
-			frame: {
-				resource: Resource;
-				dress: DressCatalog;
-				equipment: readonly WornItem[];
-				avatars: readonly { readonly refObjId: number; }[];
-				seconds: number;
-				source?: CharacterActor;
-				shape?: number;
-			},
-			resources: Pick<PortraitResources, "ready" | "plan">,
-			renderer: Pick<Renderer, "setCharacterAssembly" | "enchantSparks">
-		): readonly CharacterActor[];
 	};
+	// Port-only (SRO_NASRUN, #4407): the inventory doll's costume-free clone.
+	readonly costumeDoll: MannequinLane & {
+		request( items: readonly number[] | null ): void;
+	};
+}
+
+/*
+================
+MannequinLane
+
+A dressed clone of the player (mall-preview.ts createMallPreview).
+================
+*/
+interface MannequinLane {
+	glow(): { actor: CharacterActor; particles: readonly ModelParticle[]; } | null;
+	step(
+		frame: {
+			resource: Resource;
+			dress: DressCatalog;
+			equipment: readonly WornItem[];
+			avatars: readonly { readonly refObjId: number; }[];
+			seconds: number;
+			source?: CharacterActor;
+			shape?: number;
+			gid?: number;
+		},
+		resources: Pick<PortraitResources, "ready" | "plan">,
+		renderer: Pick<Renderer, "setCharacterAssembly" | "enchantSparks">
+	): readonly CharacterActor[];
 }
 
 /*
@@ -457,7 +473,7 @@ export function publishCharacters(
 ) {
 	const { local, gameplay, next, seconds, blindHeld, modelParticles } = frame;
 	const { catalog, dress, manifest } = published;
-	const { renderer, resources, mallPreview, portraitEmission } = bindings;
+	const { renderer, resources, mallPreview, costumeDoll, portraitEmission } = bindings;
 	// 5BAF70 -> 5B9DF0 builds a slot-owned preview from the roster model.
 	// It remains admitted even when no world entity exists for that member.
 	const portraits: CharacterActor[] = [];
@@ -489,10 +505,33 @@ export function publishCharacters(
 		// present, so one owner sees one lane's call per frame. A closed
 		// mannequin (glow() null) still steps the lane with no holders,
 		// so its rows retire that frame instead of idling until reset.
-		const glow = mallPreview.glow();
+		// Port-only (SRO_NASRUN, #4407): a lent Spirit skill's costume dresses
+		// the world actor alone. The native doll is its own character built
+		// from the worn items (8EADC0, see renderer portraitSource), so it
+		// keeps the gear: while a costume is on, a clone dressed as the world
+		// actor would be without it presents under the local gid, which the
+		// portrait lookup prefers over the world actor.
+		const costume = visualChangeAvatars( local.gid, gameplay.attachedEffects, dress.visualChanges );
+		costumeDoll.request( costume ? [] : null );
+		if ( costume ) {
+			portraits.push( ...costumeDoll.step(
+				{
+					resource: localResource,
+					dress,
+					equipment: gameplay.inventory,
+					avatars: dressedAvatars( local.avatars ?? [] ),
+					seconds,
+					source: next.get( local.gid ),
+					gid: local.gid
+				},
+				resources,
+				renderer
+			) );
+		}
+		const glow = mallPreview.glow(), dollGlow = costume ? costumeDoll.glow() : null;
 		portraits.push(
 			...portraitEmission.step(
-				glow ? [ glow ] : [],
+				[ glow, dollGlow ].filter( holder => holder !== null ),
 				seconds,
 				resources.ready,
 				CHARACTER_ACTORS - (next.size - modelParticles) - portraits.length

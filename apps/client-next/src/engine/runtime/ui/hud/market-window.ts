@@ -31,6 +31,7 @@ import {
 	MARKET_PRICE_DIGITS,
 	marketTimeLeft
 } from "@/engine/foundation/gameplay/market";
+import { EARNED_SILK_CAPTION, silkWalletHelp } from "@/engine/foundation/ui/mall-wallet";
 import type { UiAuthoredFrame } from "../frame/frame-contract";
 import {
 	MARKET_SORT_ORDER,
@@ -63,6 +64,7 @@ import {
 	priceText,
 	REFUSED,
 	RIGHT_LEFT,
+	SILK,
 	STRIPE,
 	WIDTH
 } from "./market-window-pen";
@@ -159,17 +161,46 @@ export function drawMarketWindow( frame: UiAuthoredFrame, frameDraw: MarketPaint
 	} );
 	frameDraw.closeButton( frame, px + WIDTH - 26, py + 10, "market-close" );
 	const pen = penOf( frame, frameDraw, view, px, py );
-	// A Silk listing is paid from Earned Silk first, then Silk (#4133), so
-	// both balances show, as the Item Mall header splits them.
+	// Every balance labelled on its own (#4480): caption and amount side
+	// by side along the title band, the two Silk balances carrying the
+	// mall wallet's hover help (foundation/ui/mall-wallet.ts is the one
+	// owner of that text; this window invents no second wording).
 	const mine = view.market?.mine;
-	pen.text(
-		`Gold: ${marketAmount( view.gold )}  ·  Silk: ${marketAmount( mine?.silk ?? 0 )}  ·  Earned: ${
-			marketAmount( mine?.earnedSilk ?? 0 )
-		}`,
-		[ px + WIDTH - 420, py + 8, 380, 22 ],
-		GOLD,
-		2
-	);
+	const wallet = [
+		{ id: "market-wallet-gold", caption: "Gold", amount: marketAmount( view.gold ), color: GOLD, help: "" },
+		{
+			id: "market-wallet-silk",
+			caption: "Silk",
+			amount: marketAmount( mine?.silk ?? 0 ),
+			color: SILK,
+			help: silkWalletHelp( "silk", false )
+		},
+		{
+			id: "market-wallet-earned",
+			caption: EARNED_SILK_CAPTION,
+			amount: marketAmount( mine?.earnedSilk ?? 0 ),
+			color: SILK,
+			help: silkWalletHelp( "earned", false )
+		}
+	] as const;
+	let walletRight = px + WIDTH - 40;
+	for ( const row of [ ...wallet ].reverse() ) {
+		const amountWidth = frame.text.run( row.amount ).width;
+		const captionWidth = frame.text.run( row.caption ).width;
+		const left = walletRight - amountWidth - 6 - captionWidth;
+		pen.text( row.caption, [ left, py + 8, captionWidth + 2, 22 ], DIM );
+		pen.text( row.amount, [ walletRight - amountWidth, py + 8, amountWidth, 22 ], row.color, 2 );
+		if ( row.help ) {
+			pen.frame.controls.push( {
+				id: row.id,
+				kind: "region",
+				label: row.help,
+				helpText: row.help,
+				rect: [ left, py + 8, walletRight - left, 22 ]
+			} );
+		}
+		walletRight = left - 18;
+	}
 	// The column rule between the listings and the seller's side.
 	frameDraw.rect( frame, {
 		r: [ px + RIGHT_LEFT - MARGIN / 2, py + CHIP_TOP, 1, HEIGHT - CHIP_TOP - 12 ],
@@ -591,7 +622,14 @@ function dialogBox( pen: Pen ) {
 		const price = marketPriceValue( dialog.price );
 		ready = price >= 1 && price < listing.price;
 	} else {
-		pen.text( "Where should the item go?", [ x + 16, y + 80, DIALOG_WIDTH - 32, 20 ], DIM );
+		// Which balance pays, before the buyer commits (#4480): a Silk
+		// price draws Earned Silk first, then Silk (#4133).
+		pen.text(
+			listing.currency === "silk" ? "Paid from Earned Silk first, then Silk." : "Paid from your Gold.",
+			[ x + 56, y + 70, DIALOG_WIDTH - 72, 14 ],
+			DIM
+		);
+		pen.text( "Where should the item go?", [ x + 16, y + 88, DIALOG_WIDTH - 32, 20 ], DIM );
 	}
 	destinationButtons( pen, "market-dialog-to:", dialog.to, x + 16, y + 106 );
 	pen.button( "market-dialog-cancel", "Cancel", x + DIALOG_WIDTH - 172, y + DIALOG_HEIGHT - 34, 76 );

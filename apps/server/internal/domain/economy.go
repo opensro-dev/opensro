@@ -100,12 +100,14 @@ var economyDoorReasons = map[string]economyDoorReason{
 	"fortress-item-forge":       {loss: "fortress_fee"},
 	"fortress-war-apply":        {loss: "fortress_fee"},
 	"fortress-structure-repair": {loss: "fortress_fee"},
-	"guild-level-up":            {loss: "guild_fee"},
-	"training-camp-open":        {loss: "academy_fee"},
-	"guild-war-begin":           {loss: "guild_war_stake"},
-	"guild-war-compensation":    {gain: "guild_war_compensation"},
-	"mercenary-attribute":       {loss: "guild_fee"},
-	"operator-grant-items":      {gain: "gm_grant", loss: "gm_grant"},
+	// A structure's level-up price (fortress_upgrade.go).
+	"fortress-structure-upgrade": {loss: "fortress_fee"},
+	"guild-level-up":             {loss: "guild_fee"},
+	"training-camp-open":         {loss: "academy_fee"},
+	"guild-war-begin":            {loss: "guild_war_stake"},
+	"guild-war-compensation":     {gain: "guild_war_compensation"},
+	"mercenary-attribute":        {loss: "guild_fee"},
+	"operator-grant-items":       {gain: "gm_grant", loss: "gm_grant"},
 	// The operator's gold correction (#3309): one signed adjustment
 	// through the character's own door. Its kind follows the sign
 	// (EconomyReasonKindAt): a credit mints, a debit burns.
@@ -120,6 +122,16 @@ var economyDoorReasons = map[string]economyDoorReason{
 	// market-proceeds when its lane claims the sale (market_proceeds.go).
 	"market-buy":      {loss: "market_sale"},
 	"market-proceeds": {gain: "market_sale"},
+	// So-Ok Survival Arena gold (port-only, sookarena.go,
+	// sookarena_chest.go): the run's payout, the payout a restart
+	// recovered, and a reward chest's gold. 204,060,000 gold reached the
+	// console as "Unattributed" before these were named.
+	"sook-payout":           {gain: "arena_reward"},
+	"sook-recovered-payout": {gain: "arena_reward"},
+	"sook-chest-take-item":  {gain: "arena_reward"},
+	// Trade goods found loose in a bag at load are taken back and their
+	// item price refunded (traderepair.go).
+	"bag-trade-goods-repair": {gain: "trade_goods_refund"},
 }
 
 // economyMemberReasons maps a settlement door whose label names its subject
@@ -337,6 +349,8 @@ var economyReasonKinds = map[string]string{
 	"trade_party_share":      EconomyKindMint,
 	"thief_den_sale":         EconomyKindMint,
 	"teleport_refund":        EconomyKindMint,
+	"arena_reward":           EconomyKindMint,
+	"trade_goods_refund":     EconomyKindMint,
 	"starting_gold":          EconomyKindMint,
 	"gm_grant":               EconomyKindMint,
 	// The credit side's kind; a debit burns instead (EconomyReasonKindAt).

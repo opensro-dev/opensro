@@ -36,12 +36,18 @@ import (
 // stackable whose only special property is the row's bound mark.
 const petBoundStoneCodename = "ITEM_ETC_PETBOUND_STONE"
 
+// petRecordBoundCodename is a record-bound mall row (canTrade 0), the
+// shape of a Devil's Spirit bought before the earned-Silk mark (#4133):
+// no mark of its own, and its reference row alone refuses it.
+const petRecordBoundCodename = "ITEM_MALL_PETBOUND_SPIRIT"
+
 /*
 ================
 boundPetGuildFixture
 
 A store-backed pair of guild members at a guild manager: the master
-holds a pickup-pet summoner and two stones, one bound; the member
+holds a pickup-pet summoner, two stones (one bound) and a
+record-bound mall row; the member
 waits to withdraw whatever reaches the chest.
 ================
 */
@@ -59,7 +65,7 @@ func boundPetGuildFixture(t *testing.T) (*Runtime, *enterworld.Character, *enter
 		Codename: "SUMMON_PICKUP", RefObjID: 901, TypeIDs: [4]int64{3, 2, 1, 2}, Country: 3,
 		AssociatedCharacterCodename: "PICKUP",
 		NativeFields: enterworld.NewNativeFields(map[string]float64{
-			"canUse": 1, "itemParam1_29c": 60, "canBorrow": 255, "keepingFee": 0}),
+			"canUse": 1, "itemParam1_29c": 60, "canBorrow": 255, "canTrade": 1, "keepingFee": 0}),
 	}
 	refs.characters["PICKUP"] = &enterworld.CharacterRef{
 		Codename: "PICKUP", RefObjID: 951, TidWord: 0x1c6 | 4<<11,
@@ -67,6 +73,11 @@ func boundPetGuildFixture(t *testing.T) (*Runtime, *enterworld.Character, *enter
 	}
 	refs.staticItemSource[petBoundStoneCodename] = &enterworld.ItemRef{
 		Codename: petBoundStoneCodename, RefObjID: 11460, TypeIDs: [4]int64{3, 3, 1, 1},
+		NativeFields: enterworld.NewNativeFields(map[string]float64{"canTrade": 1}),
+	}
+	refs.staticItemSource[petRecordBoundCodename] = &enterworld.ItemRef{
+		Codename: petRecordBoundCodename, RefObjID: 11461, TypeIDs: [4]int64{3, 3, 1, 1},
+		NativeFields: enterworld.NewNativeFields(map[string]float64{"canTrade": 0}),
 	}
 
 	master := testCharacter()
@@ -76,6 +87,8 @@ func boundPetGuildFixture(t *testing.T) (*Runtime, *enterworld.Character, *enter
 		{Slot: 20, RefObjID: 11460, Codename: petBoundStoneCodename,
 			TypeFlags: wire.PackTypeFlags(3, 3, 1, 1), StackCount: 1, ForgeBound: true},
 		{Slot: 21, RefObjID: 11460, Codename: petBoundStoneCodename,
+			TypeFlags: wire.PackTypeFlags(3, 3, 1, 1), StackCount: 1},
+		{Slot: 22, RefObjID: 11461, Codename: petRecordBoundCodename,
 			TypeFlags: wire.PackTypeFlags(3, 3, 1, 1), StackCount: 1},
 		{Slot: 23, RefObjID: 901, Codename: "SUMMON_PICKUP",
 			TypeFlags: refs.staticItemSource["SUMMON_PICKUP"].TypeFlags(), StackCount: 1},
@@ -300,7 +313,7 @@ TestBoundRowInsideASummonedPetNeverReachesTheGuildWarehouse
 
 The pet stays summoned: its live companion record holds the bound
 stone, and the guild door still refuses its summoner row
-(containerHoldsBoundRow reads ActiveCOS as well as the dormant copy).
+(petLoadTradeable reads ActiveCOS as well as the dormant copy).
 ================
 */
 func TestBoundRowInsideASummonedPetNeverReachesTheGuildWarehouse(t *testing.T) {
@@ -319,5 +332,34 @@ func TestBoundRowInsideASummonedPetNeverReachesTheGuildWarehouse(t *testing.T) {
 	}
 	if bagRowByCodename(a, "SUMMON_PICKUP") == nil {
 		t.Fatal("the refused deposit took the summoner row out of the master's bag")
+	}
+}
+
+/*
+================
+TestRecordBoundRowInsideAPetNeverReachesTheGuildWarehouse
+
+The player-reported leak: a mall row the reference refuses (canTrade
+0, such as a Devil's Spirit) carries no bound mark, so a door that
+scanned the load for the forge's mark alone let the pet in, and any
+member of the guild - another account's character - withdrew it and
+took the row out. The guild door now asks of the load what the
+exchange table asks.
+================
+*/
+func TestRecordBoundRowInsideAPetNeverReachesTheGuildWarehouse(t *testing.T) {
+	rt, a, _, refs := boundPetGuildFixture(t)
+	loadPetAndDismiss(t, rt, a, refs, 22)
+	if row := bagRowByCodename(a, "SUMMON_PICKUP"); row.Summon.Container.Rows[0].ForgeBound {
+		t.Fatal("the record-bound row carries the forge's mark; the test would prove nothing new")
+	}
+	openBoundPetGuildWarehouse(t, rt, a)
+	res := rt.applyGuildStorageMove(testDivision, a, wire.ItemMoveRequest{
+		MovementType: wire.MoveTypeGuildStorageDeposit, SourceSlot: 23, DestSlot: 0, NpcGID: guildManagerGid})
+	if len(res.Frames) != 1 || !bytes.Equal(res.Frames[0].Payload, []byte{2, errCodeInvalidStorageTarget}) {
+		t.Fatalf("guild deposit of a pet carrying a record-bound row = %+v, want the storage-target refusal", res.Frames)
+	}
+	if bagRowByCodename(a, "SUMMON_PICKUP") == nil {
+		t.Fatal("the refused deposit took the pet out of the master's bag")
 	}
 }

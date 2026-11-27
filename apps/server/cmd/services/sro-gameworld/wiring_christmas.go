@@ -28,15 +28,36 @@ wireChristmasEvent
 
 The Christmas events' share of the gameplay plane: SRO_CHRISTMAS_EVENT's
 switch and UTC window, So-Ok's Christmas Gift on the same switch
-(SRO_CHRISTMAS_EVENT_MODE=so_ok_2006), and the winter Server Missions,
+(SRO_CHRISTMAS_EVENT_MODE=so_ok_2006), the towns' decoration alone
+(mode decoration), and the winter Server Missions,
 whose rows the authority's metadata keeps across a restart.
 ================
 */
 func wireChristmasEvent(items *action.Runtime, refs enterworld.ItemRefSource, missions action.WinterMissionStore) {
 	items.Christmas = christmasEventFromEnv()
 	items.SoOkChristmas = sookChristmasFromEnv(refs)
+	items.ChristmasDecoration = christmasDecorationFromEnv()
 	items.WinterMissionStore = missions
 	items.WinterMissionGoals = winterMissionGoalsFromEnv()
+}
+
+/*
+================
+christmasDecorationFromEnv
+
+The composition read of the decoration-only mode, with its boot-log lines.
+================
+*/
+func christmasDecorationFromEnv() progression.ChristmasDecoration {
+	event := progression.ChristmasDecorationFromEnv()
+	if event.Enabled() && !event.WindowValid() {
+		log.Warnf("christmas: %s is on in mode decoration but %s is not a valid START/END UTC window; the towns stay undecorated",
+			progression.EnvChristmasEvent, progression.EnvChristmasEventWindow)
+	}
+	if event.Enabled() && event.WindowValid() {
+		log.Infof("christmas: the towns wear their Christmas decoration and play carols inside the configured window (%s, mode decoration)", progression.EnvChristmasEvent)
+	}
+	return event
 }
 
 /*
@@ -114,7 +135,7 @@ the event's defaults and says so: a typo never hands out nothing.
 func sookChristmasFromEnv(items enterworld.ItemRefSource) progression.SoOkChristmas {
 	mode := progression.ChristmasModeFromEnv()
 	if mode == progression.ChristmasModeUnknown {
-		log.Warnf("christmas: %s names no Christmas event (winter or so_ok_2006); no Christmas event runs", progression.EnvChristmasEventMode)
+		log.Warnf("christmas: %s names no Christmas event (winter, so_ok_2006 or decoration); no Christmas event runs", progression.EnvChristmasEventMode)
 	}
 	event := progression.SoOkChristmasFromEnv()
 	if mode != progression.ChristmasModeSoOk2006 {

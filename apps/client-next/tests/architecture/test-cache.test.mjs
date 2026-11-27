@@ -112,6 +112,27 @@ function recordsFileOf( suite ) {
 }
 
 describe( "the test runner", { concurrency: true }, () => {
+	test("every run says which input reran its files", async () => {
+		const suite = path.join( root, "temp", `test-cache-reasons-${process.pid}` );
+		fs.mkdirSync( suite, { recursive: true } );
+		try {
+			fs.writeFileSync( path.join( suite, "value.mjs" ), "export const value = 1;\n" );
+			fs.writeFileSync(
+				path.join( suite, "reads.test.mjs" ),
+				'import { test } from "node:test";\nimport { value } from "./value.mjs";\ntest( "reads", () => value );\n'
+			);
+			const first = await runRunner( suite );
+			assert.match( first.stdout, /tests rerun because: no recorded pass \(1\)/ );
+			const reused = await runRunner( suite );
+			assert.doesNotMatch( reused.stdout, /tests rerun because/ );
+			fs.writeFileSync( path.join( suite, "value.mjs" ), "export const value = 2;\n" );
+			const moved = await runRunner( suite );
+			assert.match( moved.stdout, /tests rerun because: [^\n]*value\.mjs \(1\)/ );
+		} finally {
+			fs.rmSync( suite, { recursive: true, force: true } );
+		}
+	});
+
 	test("a pass is reused until an input it read changes; a failure is never reused", async () => {
 		const suite = path.join( root, "temp", `test-cache-fixture-${process.pid}` );
 		fs.mkdirSync( suite, { recursive: true } );

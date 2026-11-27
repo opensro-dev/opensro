@@ -112,16 +112,18 @@ const TOWN_CAROLS_EVENT_GROUP = 2006;
 export const TOWN_CAROL_MUSIC_MODE = 4;
 // CAROL_TOWN_PROFILES are the ambient profiles (effectenvsnd.txt) of the
 // towns whose squares play the carols: Jangan, Donwhang, Hotan,
-// Samarkand, Constantinople and Alexandria (the later client's profile,
-// present when the shard carries it). The fortress and field profiles
-// beside them keep their own music.
+// Samarkand, Constantinople, and Alexandria and Baghdad (the later
+// client's profiles, present when the shard carries them) - every city
+// the Christmas decoration layer dresses. The fortress, field and
+// dungeon profiles beside them keep their own music.
 const CAROL_TOWN_PROFILES: readonly string[] = [
 	"장안",
 	"돈황",
 	"호탄",
 	"사마르칸트",
 	"콘스탄티노플",
-	"알렉산드리아"
+	"알렉산드리아",
+	"바그다드"
 ] as const;
 
 /*

@@ -259,6 +259,13 @@ func (rt *Runtime) exchangeOfferable(c *enterworld.Character, slot uint8) (inven
 	if !ok {
 		return inventory.Item{}, wire.ErrCodeInvalidRequest
 	}
+	// Tradeable below still owns the judgment; the door only names
+	// the refusal, and a summoned pet's item carries its own native
+	// refusal rather than the generic cannot-trade byte (#4490
+	// U18-01).
+	if item.Summon != nil && item.Summon.Summoned {
+		return inventory.Item{}, wire.ExchangeErrSummonedPet
+	}
 	if !rt.Tradeable(item.Codename, item.ForgeBound, item.EarnedBought, item.Summon) {
 		return inventory.Item{}, wire.ExchangeErrCannotTrade
 	}
@@ -339,31 +346,6 @@ func (rt *Runtime) carriedRowsTradeable(container *domain.COSContainer) bool {
 		}
 	}
 	return true
-}
-
-/*
-================
-cosContainerHoldsBoundRow
-
-Whether one COS container holds a bound row (the forge's mark,
-#1980). The doors judge a summoner row by what its pet carries as
-well as by its own mark - at the guild warehouse (#4479) and at the
-trade doors above (#4491) - because a bound row inside a pet changes
-hands with the pet unless the summoner row itself is refused.
-The guild warehouse door reads this same scan over a row's dormant
-record and its live companion together.
-================
-*/
-func cosContainerHoldsBoundRow(container *domain.COSContainer) bool {
-	if container == nil {
-		return false
-	}
-	for _, held := range container.Rows {
-		if held.ForgeBound {
-			return true
-		}
-	}
-	return false
 }
 
 /*

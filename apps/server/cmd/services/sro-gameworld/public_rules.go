@@ -21,6 +21,7 @@ import (
 	"time"
 
 	"opensro.online/server/internal/agent/publicstats"
+	"opensro.online/server/internal/data/store"
 	"opensro.online/server/internal/game/action"
 	"opensro.online/server/internal/game/caravan"
 	"opensro.online/server/internal/game/caravanai"
@@ -470,6 +471,10 @@ func publicRules() publicstats.RulesResponse {
 				Native: "A quick move into or out of storage takes the first empty slot.",
 				Now:    "A quick move lands on a matching stack with room first.",
 				Why:    "Owner decision: storage fills less with split stacks."},
+			{Flag: store.EnvQuickCharacterDelete, On: store.QuickCharacterDeleteFromEnv(),
+				Native: "A deleted character can be restored for seven days before it is gone.",
+				Now:    "A deleted character can be restored for one day before it is gone; the character select screen counts down that day.",
+				Why:    "Owner decision 2026-11-27: seven days held names and slots too long."},
 			{Flag: enterworld.EnvInventoryPages, On: enterworld.InventoryPagesFromEnv(),
 				Native: "A new character carries one page of 32 bag slots, and the six expansion quests add 16 more.",
 				Now:    "A new character carries two and a half pages (80 bag slots), and the expansion quests still add their 16, reaching the full three pages. Turning the rule off is native only for what new characters start with: a character already raised keeps its larger bag and every item in it.",
@@ -497,7 +502,7 @@ func publicRules() publicstats.RulesResponse {
 				Why:    "Beta balance: gold buys enhancement."},
 			{Flag: commerce.EnvJanganAlchemyShop, On: janganAlchemyOn,
 				Native: "Jangan's grocer is Grocery Trader Jinjin, her alchemy goods share one tab, and the smith sells the elixirs.",
-				Now:    "Jangan's grocer is OpenSRO Alchemy - Jangan: elixirs and powders, attribute stones and alchemy stones on three tabs of their own, the elixirs moved from the smith.",
+				Now:    "Jangan's grocer is OpenSRO Alchemy - Jangan: elixirs and powders, attribute stones, alchemy stones and degree-10 stones (at the degree-9 prices) on four tabs of their own, the elixirs moved from the smith.",
 				Why:    "A player's request: one alchemy shop in Jangan."},
 			{Flag: commerce.EnvJanganXLPotions, On: xlPotionsOn,
 				Native: "Jangan's potion merchant sells the two smallest HP and MP potions; X-Large potions sell only in Hotan.",
@@ -890,6 +895,12 @@ the winter event (Winter Princess and Knights), or So-Ok's Christmas Gift.
 */
 func christmasRule(now time.Time) publicstats.Rule {
 	native := "No Christmas event runs: the towns stay undecorated, no event snow falls and no winter monsters come."
+	if progression.ChristmasModeFromEnv() == progression.ChristmasModeDecoration {
+		return publicstats.Rule{Flag: progression.EnvChristmasEvent, On: progression.ChristmasDecorationFromEnv().ActiveAt(now),
+			Native: native,
+			Now:    "Christmas in the towns: while the season lasts, every city wears its Christmas decoration (trees, snowmen, wreaths and gift boxes) and plays Christmas carols. No event monsters, drops or snow come with it.",
+			Why:    "The later client's town decoration and the carols for the season, without an event."}
+	}
 	if progression.ChristmasModeFromEnv() == progression.ChristmasModeSoOk2006 {
 		return publicstats.Rule{Flag: progression.EnvChristmasEvent, On: progression.SoOkChristmasFromEnv().ActiveAt(now),
 			Native: native,

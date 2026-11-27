@@ -54,7 +54,7 @@ func TestHalloweenHelmetSealBothSettings(t *testing.T) {
 	if _, code := rt.exchangeOfferable(c, 20); code != wire.ExchangeErrCannotTrade {
 		t.Fatal("sealed helmet reached the trade table", code)
 	}
-	if _, code := rt.stallOfferable(testDivision, c, 20); code != wire.StallErrInvalidOp {
+	if _, code := rt.stallOfferable(testDivision, c, 20); code != wire.StallErrNotTradeable {
 		t.Fatal("sealed helmet reached the stall", code)
 	}
 

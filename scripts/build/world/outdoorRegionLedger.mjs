@@ -11,9 +11,14 @@ refuses bundles it does not (findStaleOutdoorRegions). It exists because
 reuse keyed on code alone kept Baghdad's 11-15 bundle after an 11-16 import
 renumbered its objects ("Missing navigation BSR 2631").
 
+Beside the digests, each region records a stat signature of its inputs and
+the ledger one whole-set key over them: an unchanged input set is
+recognised from stats alone, without re-reading or re-hashing a single
+region file (#4337 item 35).
+
 ===========================================================================
 */
-import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { mkdir, readFile, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { publicPathToFile } from "../shared/assetPaths.mjs";
 import { mapWithConcurrency } from "../shared/asyncUtils.mjs";
@@ -35,7 +40,11 @@ const TERRAIN_TILE_LEDGER_PATH = path.join( generatedRoot, "intermediate", "outd
 // reused region claims them without re-reading the bundle (2.4 GB in all).
 // v6: each region also records the digest of the inputs it was built from
 // (outdoorRegionInputDigest); a v5 ledger cannot vouch for any bundle.
-const TERRAIN_TILE_LEDGER_VERSION = 6;
+// v7: each region also records a stat signature of its inputs, and the
+// ledger the shared digest those digests were computed under plus one
+// whole-set key over the signatures, so an unchanged input set skips the
+// per-region pass entirely; a v6 ledger records no signatures.
+const TERRAIN_TILE_LEDGER_VERSION = 7;
 
 /*
 ================
@@ -50,44 +59,68 @@ export async function readTerrainTileLedger() {
 ================
 readRegionLedger
 
-The ledger's three maps by region id: the terrain tiles each bundle names,
-every public path it names (claimKeptOutput's input on reuse), and the
-digest of the inputs it was built from.
+The ledger's maps by region id: the terrain tiles each bundle names, every
+public path it names (claimKeptOutput's input on reuse), the digest of the
+inputs it was built from, and the stat signature of those inputs. Plus the
+shared digest every recorded input digest was computed under (null when a
+partial run left the set mixed) and the whole-set key over the signatures
+(null when no full run vouched for the set). A ledgerPath names another
+ledger (a test's fixture tree); the build's own ledger is the default.
 ================
 */
-export async function readRegionLedger() {
+export async function readRegionLedger( ledgerPath = TERRAIN_TILE_LEDGER_PATH ) {
 	try {
-		const ledger = JSON.parse( await readFile( TERRAIN_TILE_LEDGER_PATH, "utf8" ) );
+		const ledger = JSON.parse( await readFile( ledgerPath, "utf8" ) );
 		if (
-			ledger.version === TERRAIN_TILE_LEDGER_VERSION && ledger.regions && ledger.references && ledger.inputs
+			ledger.version === TERRAIN_TILE_LEDGER_VERSION && ledger.regions && ledger.references && ledger.inputs &&
+			ledger.inputStats
 		) {
 			return {
 				tiles: new Map( Object.entries( ledger.regions ) ),
 				references: new Map( Object.entries( ledger.references ) ),
-				inputs: new Map( Object.entries( ledger.inputs ) )
+				inputs: new Map( Object.entries( ledger.inputs ) ),
+				inputStats: new Map( Object.entries( ledger.inputStats ) ),
+				setKey: ledger.setKey ?? null,
+				sharedDigest: ledger.sharedDigest ?? null
 			};
 		}
 	} catch ( error ) {
 		if ( error.code !== "ENOENT" ) throw error;
 	}
-	return { tiles: new Map(), references: new Map(), inputs: new Map() };
+	return {
+		tiles: new Map(),
+		references: new Map(),
+		inputs: new Map(),
+		inputStats: new Map(),
+		setKey: null,
+		sharedDigest: null
+	};
 }
 
 /*
 ================
 writeTerrainTileLedger
+
+cache carries the reuse vouchers: inputStats (each region's stat
+signature), sharedDigest and setKey (outdoorInputSetKey) as readRegionLedger
+returns them. The defaults write an unvouched ledger: correct, just slower
+to re-check.
 ================
 */
-export async function writeTerrainTileLedger( tilesByRegion, referencesByRegion, inputsByRegion ) {
-	await mkdir( path.dirname( TERRAIN_TILE_LEDGER_PATH ), { recursive: true } );
+export async function writeTerrainTileLedger( tilesByRegion, referencesByRegion, inputsByRegion, cache = {} ) {
+	const ledgerPath = cache.ledgerPath ?? TERRAIN_TILE_LEDGER_PATH;
+	await mkdir( path.dirname( ledgerPath ), { recursive: true } );
 	const sorted = ( map ) => Object.fromEntries( [ ...map ].sort( ( [a], [b] ) => compareText( a, b ) ) );
 	await writeFile(
-		TERRAIN_TILE_LEDGER_PATH,
+		ledgerPath,
 		JSON.stringify( {
 			version: TERRAIN_TILE_LEDGER_VERSION,
 			regions: sorted( tilesByRegion ),
 			references: sorted( referencesByRegion ),
-			inputs: sorted( inputsByRegion )
+			inputs: sorted( inputsByRegion ),
+			inputStats: sorted( cache.inputStats ?? new Map() ),
+			setKey: cache.setKey ?? null,
+			sharedDigest: cache.sharedDigest ?? null
 		} )
 	);
 }
@@ -129,6 +162,49 @@ export async function outdoorRegionInputDigest( sector, sharedDigest ) {
 
 /*
 ================
+outdoorRegionInputSignature
+
+One sector's input files as stats alone: each file's size and mtime, or
+absent. Equal signatures mean the files the recorded digest was computed
+from still stand as they were, so the digest still describes them and the
+files are never read. The trust is the one fileHashCache.mjs documents: a
+content change preserving both size and mtime is invisible, and none of
+this pipeline's writers do that (extractors and builders always rewrite
+with fresh mtimes).
+================
+*/
+export async function outdoorRegionInputSignature( sector ) {
+	const parts = [];
+	for ( const file of outdoorRegionInputPaths( sector ) ) {
+		try {
+			const info = await stat( file );
+			parts.push( `${info.size}:${info.mtimeMs}` );
+		} catch ( error ) {
+			if ( error.code !== "ENOENT" ) throw error;
+			parts.push( "absent" );
+		}
+	}
+	return parts.join( ":" );
+}
+
+/*
+================
+outdoorInputSetKey
+
+One key for the whole input set: the shared digest over every region's
+stat signature, regions in id order. While it matches the ledger's, the
+recorded digests vouch for every bundle and the per-region pass never
+runs; on a miss it names the regions whose signatures moved.
+================
+*/
+export function outdoorInputSetKey( sharedDigest, signaturesByRegion ) {
+	const lines = [ ...signaturesByRegion ].sort( ( [a], [b] ) => compareText( a, b ) )
+		.map( ( [regionId, signature] ) => `${regionId}=${signature}` );
+	return sha256Hex( `${sharedDigest}:${lines.join( "\n" )}` );
+}
+
+/*
+================
 outdoorRegionInputPaths
 
 The files one sector's bundle is built from: discovery requires all four.
@@ -162,17 +238,43 @@ findStaleOutdoorRegions
 The sectors whose recorded input digest differs from their inputs now, or
 that the ledger does not vouch for at all. The resource build refuses them:
 a stale bundle loads, but names objects the published index may not hold.
+
+The unchanged case never hashes a region: one stat probe per input file
+rebuilds the whole-set key, and while it matches the ledger's every
+recorded digest stands. On a miss, only regions whose signature moved (or
+that the ledger does not know) are re-hashed — unless the shared digest
+moved, which is folded into every region's digest and moves them all.
+options.regionDigest replaces the digest computation (a test counts the
+calls to prove the unchanged case makes none).
 ================
 */
 export async function findStaleOutdoorRegions( options = {} ) {
 	const sourceExtractedRoot = options.extractedRoot ?? extractedRoot;
 	const sectors = options.sectors;
-	const { inputs } = await readRegionLedger();
+	const regionDigest = options.regionDigest ?? outdoorRegionInputDigest;
+	const ledger = await readRegionLedger( options.ledgerPath );
 	const sharedDigest = await outdoorSharedInputDigest( sourceExtractedRoot, options.publicRoot );
+	const signatures = new Map();
+	await mapWithConcurrency( sectors, options.jobs ?? 1, async ( sector ) => {
+		signatures.set( String( sector.id ), await outdoorRegionInputSignature( sector ) );
+	} );
+	if ( ledger.setKey !== null && outdoorInputSetKey( sharedDigest, signatures ) === ledger.setKey ) {
+		return [];
+	}
+	const sharedMoved = ledger.sharedDigest === null || ledger.sharedDigest !== sharedDigest;
 	const stale = [];
 	await mapWithConcurrency( sectors, options.jobs ?? 1, async ( sector ) => {
-		const recorded = inputs.get( String( sector.id ) );
-		if ( !recorded || recorded !== (await outdoorRegionInputDigest( sector, sharedDigest )) ) {
+		const recorded = ledger.inputs.get( String( sector.id ) );
+		if ( !recorded ) {
+			stale.push( sector.id );
+			return;
+		}
+		// The signature stands where the digest was recorded and the shared
+		// digest stands with it: these bytes are the digested bytes.
+		if ( !sharedMoved && signatures.get( String( sector.id ) ) === ledger.inputStats.get( String( sector.id ) ) ) {
+			return;
+		}
+		if ( recorded !== (await regionDigest( sector, sharedDigest )) ) {
 			stale.push( sector.id );
 		}
 	} );

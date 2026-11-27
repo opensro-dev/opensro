@@ -266,6 +266,22 @@ func (rt *Runtime) PlayerMotionLocked(division, name string) bool {
 
 /*
 ================
+PlayerMotionChangeLocked
+
+The motion-change lock the 0x7017 handler weighs (audit U8-17): while
+the casting instance is held - a cast preparing or casting, a chain -
+every motion-state request is ignored. The native getter also reads
+the item-cycle latch and the auto-command actor's committed front
+action; the port's item lane never holds its latch across a packet, and
+the front action has no port state yet.
+================
+*/
+func (rt *Runtime) PlayerMotionChangeLocked(division, name string) bool {
+	return rt.chainStageBlocked(division, name)
+}
+
+/*
+================
 playerTargetMotion
 
 The motion a player target presents to a hit's reqc test: 8 while down.

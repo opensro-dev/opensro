@@ -11,7 +11,7 @@ or renaming a callback must not change whether a regression detects silence.
 import "../helpers/native-source-loader.mjs";
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { sourceSoundCandidates, classifySoundRow, audit } from "../../tools/audit-audio-parity.mjs";
+import { sourceSoundCandidates, classifySoundRow, audit, soundResources } from "../../tools/audit-audio-parity.mjs";
 import { itemSoundSource } from "../../tools/generate-item-sounds.mjs";
 import fs from "node:fs";
 const { createGameplay } = await import(
@@ -240,4 +240,16 @@ test("whole-surface audit reports removed assets and generated selector drift wi
 	assert.ok( report.nativeCallsites.some( x => x.status === "declared-regression-not-run" ) );
 	assert.equal( report.nativeCallsites.some( x => x.status === "production-regression-covered" ), false );
 	assert.ok( report.open.nativeCallsites > 0 );
+});
+
+test("a sound resource is found at its key path, and a sibling's path never leaks into the next", () => {
+	const data = {
+		effects: { "a.efp": { stages: [ { sound: "snd/hit.wav" }, { image: "x.ddj" } ] } },
+		music: "bgm/town.MP3",
+		silent: { volume: 3, name: "town.wavx" }
+	};
+	assert.deepEqual( soundResources( data, "f.json" ), [
+		{ file: "f.json", location: "/effects/a.efp/stages/0/sound", value: "snd/hit.wav" },
+		{ file: "f.json", location: "/music", value: "bgm/town.MP3" }
+	] );
 });

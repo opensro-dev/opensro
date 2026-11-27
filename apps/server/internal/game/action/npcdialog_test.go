@@ -1,6 +1,7 @@
 package action
 
 import (
+	"bytes"
 	"errors"
 	"testing"
 
@@ -235,6 +236,77 @@ func TestNpcDialogQuestSessionIsSelectionBound(t *testing.T) {
 	accepted = ""
 	if _, refusal = rt.HandleNpcDialogResponse(testDivision, character, []byte{5}); refusal == "" || accepted != "" {
 		t.Fatalf("stale response refusal=%q accepted=%q", refusal, accepted)
+	}
+}
+
+/*
+================
+TestNpcDialogOfferAtTheQuestCapShowsTheMaxQuestRow
+
+At 33 quests under way the offer's confirmation is the single
+SN_TALK_COMMON_MAXQUEST row and nothing can be accepted; a hand-in at
+the cap still confirms.
+================
+*/
+func TestNpcDialogOfferAtTheQuestCapShowsTheMaxQuestRow(t *testing.T) {
+	character := testCharacter()
+	for i := 0; i < enterworld.MaxActiveQuests; i++ {
+		character.ActiveQuests = append(character.ActiveQuests, enterworld.ActiveQuestRecord{RefID: 900000 + uint32(i)})
+	}
+	rt := selectTestRuntime(character)
+	rt.NpcSpawn = enterworld.NpcSpawnConfig{Enabled: true, AtPlayer: true}
+	rt.NpcRoster[0].BaseSpeechSymbol = "NPC_BS"
+	rt.NpcRoster[0].QuestSpeechSymbol = "NPC_PS"
+	rt.NpcRoster[0].TalkFlags |= simulation.NpcTalkFlagTalk
+	gid := rt.NpcRoster[0].ObjectID
+	rt.Selected.Set(testDivision, character.Name, gid)
+
+	calls := 0
+	rt.NpcQuests = NpcQuestHooks{
+		Options: func(string, *enterworld.Character, string) []NpcQuestOption {
+			return []NpcQuestOption{
+				{Codename: "Q_NEW", TitleSymbol: "SN_Q_NEW", PromptSymbol: "SN_TALK_Q_NEW"},
+				{Codename: "Q_DONE", TitleSymbol: "SN_Q_DONE", PromptSymbol: "SN_TALK_Q_DONE", Complete: true},
+			}
+		},
+		Accept: func(_ *enterworld.Character, _ string) ([]wire.Frame, error) {
+			calls++
+			return nil, nil
+		},
+		Finish: func(_ *enterworld.Character, _ string, _ string) ([]wire.Frame, error) {
+			calls++
+			return []wire.Frame{{Opcode: 0x31ED, Payload: []byte{1}}}, nil
+		},
+	}
+
+	frames, refusal := rt.HandleNpcAction(testDivision, character, npcActionBody(gid, simulation.NpcTalkFlagTalk))
+	if refusal != "" || len(frames) != 1 || frames[0].Payload[0] != 4 {
+		t.Fatalf("talk open = frames %#v refusal %q, want kind-4", frames, refusal)
+	}
+	frames, refusal = rt.HandleNpcDialogResponse(testDivision, character, []byte{5})
+	if refusal != "" || len(frames) != 1 || frames[0].Payload[0] != 4 {
+		t.Fatalf("capped offer = frames %#v refusal %q, want kind-4 rows", frames, refusal)
+	}
+	if !bytes.Contains(frames[0].Payload, []byte(npcDialogMaxQuestRow)) {
+		t.Fatalf("capped offer rows = %x, want the max-quest row", frames[0].Payload)
+	}
+	if calls != 0 {
+		t.Fatal("a capped offer called the quest owner")
+	}
+	if _, exists := rt.NpcDialogs.Get(testDivision, character.Name); exists {
+		t.Fatal("the max-quest row left a live conversation")
+	}
+
+	// The second row is a hand-in: it still confirms at the cap.
+	rt.Selected.Set(testDivision, character.Name, gid)
+	_, _ = rt.HandleNpcAction(testDivision, character, npcActionBody(gid, simulation.NpcTalkFlagTalk))
+	frames, refusal = rt.HandleNpcDialogResponse(testDivision, character, []byte{6})
+	if refusal != "" || len(frames) != 1 || frames[0].Payload[0] != 3 {
+		t.Fatalf("capped hand-in = frames %#v refusal %q, want the confirm", frames, refusal)
+	}
+	frames, refusal = rt.HandleNpcDialogResponse(testDivision, character, []byte{2})
+	if refusal != "" || calls != 1 || len(frames) != 2 {
+		t.Fatalf("capped hand-in confirm = frames %#v refusal %q calls %d", frames, refusal, calls)
 	}
 }
 

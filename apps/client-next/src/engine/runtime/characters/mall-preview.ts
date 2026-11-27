@@ -28,6 +28,10 @@ import { compoundPart } from "@/engine/foundation/rendering/compound-part";
 
 // Above both the unsigned wire GID range and the party portrait range.
 export const MALL_PREVIEW_GID = 0x200000000;
+// The costume-free inventory doll's parts (presentation-finalize.ts
+// costumeFreeDoll): its body takes the local gid, its children this band,
+// clear of the mannequin's few children above MALL_PREVIEW_GID.
+export const COSTUME_DOLL_CHILD_GID = MALL_PREVIEW_GID + 0x10000;
 const APPEARANCE_EQUIPMENT_SLOTS = 9;
 // Character creation's body scale: 0.94 plus 0.03 a step.
 const SHAPE_SCALE_BASE = .94;
@@ -48,6 +52,8 @@ interface MallPreviewFrame {
 	readonly source?: CharacterActor;
 	// The skin change window's shape byte: height low, volume high.
 	readonly shape?: number;
+	// The body's gid; absent, the mannequin's MALL_PREVIEW_GID.
+	readonly gid?: number;
 }
 
 /*
@@ -65,9 +71,14 @@ export interface MallSkin {
 /*
 ================
 createMallPreview
+
+One dressed clone of the player. The Item Mall's mannequin presents it
+as MALL_PREVIEW_GID; the inventory doll's costume-free copy presents it
+under the frame's gid (the local player's) with its children from
+childBase.
 ================
 */
-export function createMallPreview() {
+export function createMallPreview( childBase = MALL_PREVIEW_GID ) {
 	let request: readonly number[] | null = null;
 	let skin: MallSkin | null = null;
 	let catalog: DressCatalog | undefined;
@@ -199,8 +210,9 @@ export function createMallPreview() {
 			// ready admits every missing source incrementally under the shared budget.
 			if ( planned.paths.map( path => resources.ready( path ) ).every( Boolean ) ) {
 				renderer.setCharacterAssembly( planned.model, frame.resource.glb, planned.assembly.parts );
+				const gid = frame.gid ?? MALL_PREVIEW_GID;
 				const actor: CharacterActor = {
-					gid: MALL_PREVIEW_GID,
+					gid,
 					model: planned.model,
 					pose: { regionId: 0, x: 0, y: 0, z: 0, yaw: radians( 0 ) },
 					clip: "stand",
@@ -223,8 +235,8 @@ export function createMallPreview() {
 				// parts cast no attachment shadow, so both arrive unset,
 				// exactly as the hand-built fields had them.
 				const children: CharacterActor[] = planned.assembly.auxiliary.map( ( { entry }, index ) => ({
-					...compoundPart( actor, MALL_PREVIEW_GID, entry.bone ),
-					gid: MALL_PREVIEW_GID + index + 1,
+					...compoundPart( actor, gid, entry.bone ),
+					gid: childBase + index + 1,
 					model: entry.glb,
 					clip: entry.clips.includes( "stand" ) ? "stand" : entry.clips[0]!,
 					time: frame.seconds
@@ -234,7 +246,7 @@ export function createMallPreview() {
 					paths: planned.paths,
 					particles: planned.assembly.particles
 				};
-				if ( state.gid === undefined ) state = { ...state, gid: MALL_PREVIEW_GID };
+				if ( state.gid === undefined ) state = { ...state, gid };
 			}
 			return committed?.actors ?? [];
 		},

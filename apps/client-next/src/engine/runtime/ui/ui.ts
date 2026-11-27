@@ -150,6 +150,7 @@ import { restoreSlotEntry } from "@/engine/foundation/gameplay/commerce";
 import { equipmentDropSlot } from "@/engine/foundation/gameplay/equipment-drop";
 import { flagWarTimerDigitTexture, flagWarTimerReading } from "@/engine/foundation/ui/flagwar-timer-plate";
 import { returnScrollBar } from "@/engine/foundation/ui/return-scroll";
+import { portShopTabCopy } from "@/engine/foundation/ui/port-shop-copy";
 import { nameColorRgba } from "@/engine/foundation/gameplay/name-color";
 import { containsPoint, topmostControlAt } from "@/engine/foundation/ui/hit-test";
 import { minimapZoomTarget, advanceMinimapZoom } from "@/engine/foundation/ui/minimap-zoom";
@@ -2569,6 +2570,9 @@ export function createUi( ports: UiPorts ) {
 		// The Styria Clash windows and manager rows (port-only, #3648).
 		const styriaCopy = STYRIA_COPY[key];
 		if ( styriaCopy ) return styriaCopy;
+		// The shop tabs the port synthesizes (port-only, port-shop-copy.ts).
+		const shopTabCopy = portShopTabCopy( key );
+		if ( shopTabCopy ) return shopTabCopy;
 		// Shipped / rebuilt text tables win; fall back to Magic Cube copy (#3906)
 		// when v1.150 textdataname.en.json lacks the later rows.
 		return hud.data()?.strings[key] || MAGIC_CUBE_COPY[key] || "";
@@ -4279,6 +4283,12 @@ export function createUi( ports: UiPorts ) {
 		}
 		if ( id.startsWith( "item-mall-tab-scroll:" ) ) {
 			itemMall.scrollTabs( Number( id.slice( "item-mall-tab-scroll:".length ) ) );
+			dirty = true;
+			return;
+		}
+		// Port-only, not native: the renewal window's gender filter (#4480).
+		if ( id.startsWith( "item-mall-gender:" ) ) {
+			itemMall.setGender( id.slice( "item-mall-gender:".length ) );
 			dirty = true;
 			return;
 		}
@@ -12404,8 +12414,8 @@ export function createUi( ports: UiPorts ) {
 				// tier's weight (noticeBannerRow); every other notice on
 				// this row keeps the native plate untouched. A reinforcement
 				// success wears the later client's violet plate (#3260)
-				// while its art is published, at that client's y 190
-				// (CENTRE_ROW_Y, BUG-100).
+				// while its art is published, on the same notice row as
+				// every other line (NOTICE_ROW_Y).
 				const noticeRow = noticeBannerRow(
 					notificationBanner,
 					centreBannerPaths.every( p => !!resources.size( p ) )

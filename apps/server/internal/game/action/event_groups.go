@@ -27,6 +27,10 @@ already: the entered tail lists the active event groups and 0x3347
     (progression/christmas_snow.go), so its snow and its start and end
     lines come and go with each one, as the client was built for.
 
+  - The decoration alone (the Christmas switch in mode decoration)
+    runs group 7 and the town carols' group the whole window, and
+    never group 1: no event snow and no start or end lines.
+
   - So-Ok's Christmas Gift (the Christmas switch in mode so_ok_2006)
     runs the same two: group 1 on the winter event's snowfall timetable
     (one weather rule for every Christmas event), group 7 the whole
@@ -124,6 +128,7 @@ const (
 	christmasWindow
 	sookChristmasSnowfall
 	sookChristmasWindow
+	christmasDecorationWindow
 )
 
 /*
@@ -143,6 +148,8 @@ func (rt *Runtime) seasonalSpanActive(span seasonalSpan, now time.Time) bool {
 		return rt.SoOkChristmas.SnowingAt(now)
 	case sookChristmasWindow:
 		return rt.SoOkChristmas.ActiveAt(now)
+	case christmasDecorationWindow:
+		return rt.ChristmasDecoration.ActiveAt(now)
 	}
 	return false
 }
@@ -155,8 +162,8 @@ Every seasonal event that drives event groups, in the order their
 changes go out.
 ================
 */
-func (rt *Runtime) seasonalGroups() [5]seasonalGroups {
-	return [5]seasonalGroups{
+func (rt *Runtime) seasonalGroups() [6]seasonalGroups {
+	return [6]seasonalGroups{
 		{enabled: rt.Halloween.Enabled(), span: halloweenWindow, groups: [2]uint32{HalloweenEventGroup}, count: 1, watch: &rt.halloweenGroups},
 		// The native group falls only during a snowfall (its snow and its
 		// start and end lines); the decoration stands the whole window.
@@ -167,6 +174,8 @@ func (rt *Runtime) seasonalGroups() [5]seasonalGroups {
 		// Christmas events never run together (progression/christmas_mode.go).
 		{enabled: rt.SoOkChristmas.Enabled(), span: sookChristmasSnowfall, groups: [2]uint32{ChristmasEventGroup}, count: 1, watch: &rt.sookChristmasSnow},
 		{enabled: rt.SoOkChristmas.Enabled(), span: sookChristmasWindow, groups: [2]uint32{ChristmasDecorationEventGroup, ChristmasTownCarolsEventGroup}, count: 2, watch: &rt.sookChristmasGroups},
+		// The decoration alone: the towns' layer and carols, no snow.
+		{enabled: rt.ChristmasDecoration.Enabled(), span: christmasDecorationWindow, groups: [2]uint32{ChristmasDecorationEventGroup, ChristmasTownCarolsEventGroup}, count: 2, watch: &rt.christmasDecorationGroups},
 	}
 }
 

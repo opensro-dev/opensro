@@ -114,6 +114,7 @@ test("only a staff sender's public lines take the role's chat colour", () => {
 	const pink = [ 0xff / 255, 0xae / 255, 0xc3 / 255, 1 ];
 	assert.deepEqual( staffChatColor( [ gm ], 1, "Hundred" ), pink );
 	assert.deepEqual( staffChatColor( [ gm ], 3, "hundred" ), pink );
+	assert.deepEqual( staffChatColor( [ gm ], 6, "Hundred" ), pink, "global is public chat on this shard" );
 	for ( const channel of [ 2, 4, 5, 7, 11 ] ) assert.equal( staffChatColor( [ gm ], channel, "Hundred" ), undefined );
 	assert.equal( staffChatColor( [ gm ], 1, "Other" ), undefined );
 	assert.equal( staffChatColor( undefined, 1, "Hundred" ), undefined );

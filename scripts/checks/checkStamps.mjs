@@ -30,7 +30,7 @@ torn or lost one only costs a rerun.
 */
 import { spawn, spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
-import { existsSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { serverGameDataRoot } from "../build/world/paths.mjs";
@@ -41,6 +41,8 @@ const stampDirectory = path.join( resolveMainCheckout( rebuildRoot ), ".state", 
 // Every worktree records into one list, so keep enough that switching
 // between a few branches still finds each one's pass.
 const RECENT_PASSES = 32;
+// How many results one gate keeps (recordResult): a result can be a megabyte.
+const RECENT_RESULTS = 4;
 // Checkout-relative names of the trees a worktree may read from elsewhere.
 const GENERATED_PREFIX = ".generated/";
 const SERVER_GAME_DATA_PREFIX = "apps/server/.generated/game-data/1.150/server/";
@@ -297,5 +299,63 @@ export function recordPass( name, key ) {
 			// a temporary that cannot be removed is litter, never a failed gate
 		}
 		console.log( `check stamp ${name}: not saved (${error.code ?? error.message})` );
+	}
+}
+
+/*
+================
+findResult
+
+The output a gate recorded for this fingerprint (recordResult), or
+undefined. A pass stamp says the inputs were checked; a result is what
+they produced, for a gate whose costly half (building) depends on fewer
+inputs than its cheap half (judging): the UI action census keeps its
+table and judges it again when only the committed census moved.
+Always undefined under SRO_CHECK_FORCE=1.
+================
+*/
+export function findResult( name, key ) {
+	if ( process.env.SRO_CHECK_FORCE === "1" ) return undefined;
+	try {
+		return readFileSync( path.join( stampDirectory, name, `${key}.txt` ), "utf8" );
+	} catch {
+		return undefined;
+	}
+}
+
+/*
+================
+recordResult
+
+Keeps text as the result of this fingerprint, written whole or not at
+all (a temporary renamed into place), and trims the gate's results to
+the RECENT_RESULTS newest: this one, and the newest of the others by
+mtime. The one just written is never a trim candidate, since results
+written within the clock's resolution tie and a tie could drop it (the
+checkStampsShared test failed so on CI, #4633). A result that cannot be
+saved costs a rebuild, never a failed gate.
+================
+*/
+export function recordResult( name, key, text ) {
+	const directory = path.join( stampDirectory, name );
+	const file = path.join( directory, `${key}.txt` ), temporary = `${file}.${process.pid}`;
+	try {
+		mkdirSync( directory, { recursive: true } );
+		writeFileSync( temporary, text );
+		renameSync( temporary, file );
+		const others = readdirSync( directory )
+			.filter( entry => entry.endsWith( ".txt" ) && entry !== `${key}.txt` )
+			.map( entry => ({ entry, at: statSync( path.join( directory, entry ) ).mtimeMs }) )
+			.sort( ( a, b ) => b.at - a.at );
+		for ( const { entry } of others.slice( RECENT_RESULTS - 1 ) ) {
+			rmSync( path.join( directory, entry ), { force: true } );
+		}
+	} catch ( error ) {
+		try {
+			rmSync( temporary, { force: true } );
+		} catch {
+			// a temporary that cannot be removed is litter, never a failed gate
+		}
+		console.log( `check result ${name}: not saved (${error.code ?? error.message})` );
 	}
 }

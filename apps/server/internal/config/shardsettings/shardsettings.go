@@ -290,7 +290,8 @@ var Settings = []Setting{
 	{Env: "SRO_EVENT_BOT", NomadVar: "event_bot", Default: "off"},
 	{Env: "SRO_CHRISTMAS_EVENT_WINDOW", NomadVar: "christmas_event_window", Default: ""},
 	// Port-only, not native: which Christmas event the switch runs,
-	// "winter" (Winter Princess and Knights) or "so_ok_2006" (So-Ok's Christmas Gift,
+	// "winter" (Winter Princess and Knights), "so_ok_2006" (So-Ok's Christmas Gift)
+	// or "decoration" (the towns' decoration and carols alone,
 	// progression/christmas_mode.go), and the 2006 event's box chance in
 	// percent and gift weights (CODENAME=WEIGHT,...; empty keeps the
 	// owner's table).
@@ -590,6 +591,11 @@ var Settings = []Setting{
 	// page the expansion quests then grow. On by the owner's call; "off"
 	// is native. Existing records keep whatever capacity they hold.
 	{Env: "SRO_INVENTORY_PAGES", NomadVar: "inventory_pages", Default: "on"},
+	// Owner, 2026-11-27: port-only, not native - a character deletion
+	// matures after one day instead of the native seven ("off" is native).
+	// The character list publishes the matured instant, so the select
+	// screen counts down the same day.
+	{Env: "SRO_QUICK_CHARACTER_DELETE", NomadVar: "quick_character_delete", Default: "off"},
 	// Unset keeps every level at the level-1 pace; our deployment's bands
 	// (#1606: 1-59 at the pace, 60-110 on one smooth curve) are in
 	// config/shard-settings.json. The catalogue prices quest rewards
@@ -604,8 +610,9 @@ var Settings = []Setting{
 	{Env: "SRO_SHOP_EXTRA_GOODS", NomadVar: "shop_extra_goods", Default: "on", Catalogue: true},
 	// Owner, 2026-10-28 (#1850): Jangan's grocer as "OpenSRO Alchemy -
 	// Jangan", the default list's alchemy goods on three tabs and the
-	// elixirs off the smith. On by default (it extends the extra goods);
-	// off restores the native name and tabs.
+	// elixirs off the smith; #4684 (awaiting the owner's approval), a
+	// fourth tab of degree 10 stones at the degree 9 prices. On by default
+	// (it extends the extra goods); off restores the native name and tabs.
 	{Env: "SRO_JANGAN_ALCHEMY_SHOP", NomadVar: "jangan_alchemy_shop", Default: "on", Catalogue: true},
 	// Owner, 2026-11-07 (#2771): X-Large HP/MP potions at Jangan's
 	// potion merchant, at Hotan's native price of 900. On by default;

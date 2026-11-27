@@ -30,7 +30,7 @@ import { createPresentationSamples } from "./presentation-samples";
 import { createPresentationState } from "./presentation-state";
 import { createPresentationActions } from "./presentation-actions";
 import { createPresentationEvents } from "./presentation-events";
-import { resolveDrawnPoses } from "./presentation-poses";
+import { holdSurvivesRevision, resolveDrawnPoses } from "./presentation-poses";
 import { createFootprints } from "./footprints";
 import { createSunDropMarkers } from "./sun-drop-markers";
 import { createCharacterStateIndex } from "./state-index";
@@ -42,7 +42,7 @@ import { createCharacterSelection, dungeonCharacterAdmission } from "@/engine/fo
 import { createCharacterEffects } from "./effects/effects";
 import { createCharacterSounds } from "./sounds/sounds";
 import { createCharacterResources } from "./resources/resources";
-import { createMallPreview } from "./mall-preview";
+import { COSTUME_DOLL_CHILD_GID, createMallPreview } from "./mall-preview";
 import type { CharacterRecord, SuitRuleFlags } from "@/engine/contracts/session";
 import type { AssetOwner } from "@/engine/contracts/assets";
 import type { RenderFrameProbe, Renderer } from "@/engine/contracts/runtime";
@@ -171,6 +171,9 @@ export function createCharacterPresentation(
 	};
 	const entityLod = createEntityLod();
 	const mallPreview = createMallPreview();
+	// Port-only (#4407): the inventory doll without a Spirit costume; its
+	// body takes the local gid (presentation-finalize.ts publishCharacters).
+	const costumeDoll = createMallPreview( COSTUME_DOLL_CHILD_GID );
 	let animationDelta = createModifierDelta();
 	const footprints = createFootprints( renderer, soundSurface );
 	const sunDropMarkers = createSunDropMarkers( renderer );
@@ -303,6 +306,7 @@ export function createCharacterPresentation(
 	*/
 	function teardown( mode: TeardownMode ) {
 		mallPreview.reset();
+		costumeDoll.reset();
 		if ( mode === "reset" ) skillObjects.reset();
 		else skillObjects.dispose();
 		footprints.clearFootprints();
@@ -623,9 +627,6 @@ export function createCharacterPresentation(
 			logicalPose,
 			localMover,
 			states,
-			castByActor,
-			actionLayersByActor,
-			waitingActors,
 			vitalsByGid,
 			health,
 			pendingDeaths: feedback.pendingDeaths( gameplay?.casts ?? [], health?.currentResult ),
@@ -657,11 +658,8 @@ export function createCharacterPresentation(
 			if ( state?.navigationHold ) {
 				if ( displaced || dead || entity?.mountedOn ) return undefined;
 				if ( state.navigationHold.revision === movementRevision ) return state.navigationHold.pose;
-				const pose = entity ? logicalPose( entity ) : undefined, hold = state.navigationHold.logical;
-				return !moving &&
-						(waiting || activeCast ||
-							(!!pose && hold.regionId === pose.regionId && hold.x === pose.x && hold.y === pose.y &&
-								hold.z === pose.z)) ?
+				const pose = entity ? logicalPose( entity ) : undefined;
+				return pose && holdSurvivesRevision( state.navigationHold.logical, pose, !!moving ) ?
 					state.navigationHold.pose :
 					undefined;
 			}
@@ -671,6 +669,14 @@ export function createCharacterPresentation(
 			return waiting || activeCast ?
 				state.lastDrawnPose :
 				undefined;
+		};
+		// The yaw a cast left on the body (actor-motion's cast facing, or
+		// the turn back from it), as last frame drew it; see castYaw in
+		// presentation-events.
+		const castYaw = ( gid: number ) => {
+			const state = states.get( gid );
+			const angle = state?.castFacing?.angle ?? state?.castYawRelease?.angle;
+			return angle === undefined ? undefined : Math.round( angle ) % 65536;
 		};
 		const heldPoses = new Map<number, Pose>();
 		for ( const entity of entities ) {
@@ -695,6 +701,7 @@ export function createCharacterPresentation(
 				triggers,
 				samples,
 				heldPoses,
+				castYaw,
 				localMover,
 				logicalPose,
 				appearanceRef,
@@ -955,7 +962,7 @@ export function createCharacterPresentation(
 			{ local, gameplay, next, seconds, blindHeld, modelParticles },
 			output,
 			published,
-			{ renderer, resources, mallPreview, portraitEmission }
+			{ renderer, resources, mallPreview, costumeDoll, portraitEmission }
 		);
 		probe?.detailEnd( "presentation-finalize" );
 	}

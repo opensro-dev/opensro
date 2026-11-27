@@ -12,6 +12,7 @@ import (
 	"fmt"
 	"testing"
 
+	"opensro.online/server/internal/domain"
 	"opensro.online/server/internal/game/enterworld"
 	"opensro.online/server/internal/game/item/wire"
 	"opensro.online/server/internal/game/world/simulation"
@@ -160,6 +161,30 @@ func TestExchangeRefusals(t *testing.T) {
 	}
 	if failed := lastFrame(t, pushed[b.Name], wire.OpExchangeFailed); !bytes.Equal(failed.Payload, []byte{wire.ExchangeErrCancelledByPeer}) {
 		t.Fatalf("partner heard % X", failed.Payload)
+	}
+}
+
+/*
+================
+TestExchangeSummonedPetItemRefused
+
+#4490 U18-01: a summoned pet's item offered to the table answers the
+pet refusal (the native word 0x18B6 in its low byte), not the
+generic cannot-trade byte an untradable item gets.
+================
+*/
+func TestExchangeSummonedPetItemRefused(t *testing.T) {
+	rt, a, b, _ := exchangeFixture(t)
+	rt.HandleExchangeRequest(testDivision, a, wire.NewWriter(4).U32(enterworld.ObjectIDForCharacter(b)).Payload())
+	rt.ExchangeConsent().ApplyConsent(nil, testDivision, b, 1, 1)
+	for i := range a.MissionInventory {
+		if a.MissionInventory[i].Slot == 20 {
+			a.MissionInventory[i].Summon = &domain.CharacterCOS{Summoned: true}
+		}
+	}
+	put := rt.HandleItemMove(testDivision, a, []byte{wire.MoveTypeExchangePut, 20})
+	if len(put.Frames) != 1 || !bytes.Equal(put.Frames[0].Payload, []byte{2, wire.ExchangeErrSummonedPet}) {
+		t.Fatalf("a summoned pet's item answered %+v, want the pet refusal", put.Frames)
 	}
 }
 

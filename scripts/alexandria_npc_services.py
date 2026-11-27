@@ -26,8 +26,6 @@ IDENTITY_TABLES = {"refshopgroup.txt", "refshop.txt", "refshoptabgroup.txt", "re
 RESTORED_STORE_NPCS = {"NPC_SD_M_AREA_ACCESSORY", "NPC_SD_T_AREA_ACCESSORY"}
 GOODS_TAB = 2
 GOODS_SLOT = 4
-# The largest tab the native tables ship (slots 0..44).
-MAX_TAB_SLOTS = 45
 
 
 # ================
@@ -47,7 +45,7 @@ def unique_slots(goods):
 	for row in goods:
 		tab, slot = row[GOODS_TAB], row[GOODS_SLOT]
 		if slot in seen[tab]:
-			free = next((str(s) for s in range(MAX_TAB_SLOTS) if str(s) not in used[tab]), None)
+			free = d10.lowest_free_slot(used[tab])
 			if free is None:
 				dropped.append(f"{tab}:{slot}:{row[3]}")
 				continue

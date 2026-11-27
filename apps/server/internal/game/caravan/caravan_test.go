@@ -102,6 +102,46 @@ func TestCargoValueScalesGoodsByLevelAndCapacity(t *testing.T) {
 
 /*
 ================
+TestTransportBagPlacesFollowsTheOwnerLevel
+
+The worked checks of the native rule: on a horse row (rarity 0, authored
+run 40, authored size 60) a level-1 owner (gold minimum 28) opens 7
+places, level 20 (95) opens 24, and the row's 60 caps the size from
+level 60 (235). The rarity classes, the mall divisor and both clamps
+hold beside them.
+================
+*/
+func TestTransportBagPlacesFollowsTheOwnerLevel(t *testing.T) {
+	cases := []struct {
+		rarity       uint8
+		authoredRun  int64
+		mall         bool
+		goldMinimum  int64
+		authoredSize int
+		want         int
+	}{
+		{0, 40, false, 28, 60, 7},   // level 1 on a horse row
+		{0, 40, false, 95, 60, 24},  // level 20
+		{0, 40, false, 235, 60, 60}, // level 60 reaches the authored size
+		{0, 40, false, 999, 60, 60}, // and never past it
+		{1, 999, false, 95, 60, 24}, // rarity 1 holds class 40
+		{2, 999, false, 95, 60, 32}, // rarity 2 holds class 30
+		{0, 40, true, 28, 60, 10},   // a mall COS divides the class by 1.4
+		{0, 40, false, 28, 5, 5},    // a small authored size caps lower
+		{0, 40, false, 0, 60, 1},    // no basis still opens one place
+		{0, 40, false, 28, 0, 0},    // no authored bag, no bag
+		{0, 0, false, 95, 42, 42},   // no class word: the authored size stands
+	}
+	for _, c := range cases {
+		if got := TransportBagPlaces(c.rarity, c.authoredRun, c.mall, c.goldMinimum, c.authoredSize); got != c.want {
+			t.Fatalf("bag places(rarity %d, run %d, mall %v, gold %d, size %d) = %d, want %d",
+				c.rarity, c.authoredRun, c.mall, c.goldMinimum, c.authoredSize, got, c.want)
+		}
+	}
+}
+
+/*
+================
 TestSpawnCountAddsOneOnHighDrawAndDoublesRarely
 ================
 */

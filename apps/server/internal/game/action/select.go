@@ -183,6 +183,23 @@ func (s *SelectionStore) FunctionOpen(divisionID, characterName string, gid uint
 
 /*
 ================
+AnyFunctionOpen
+
+AnyFunctionOpen answers whether the character holds an NPC's function
+window at all, whichever object it belongs to. The movement lane weighs
+it: the original's move handler will not walk a player whose NPC window
+is open.
+================
+*/
+func (s *SelectionStore) AnyFunctionOpen(divisionID, characterName string) bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	row, ok := s.byCharacter[selectionKey(divisionID, characterName)]
+	return ok && row.functionOpen
+}
+
+/*
+================
 selectionHolder
 
 One character holding a selection: its division, name and selected gid.

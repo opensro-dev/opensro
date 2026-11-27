@@ -83,6 +83,20 @@ func isBodyArmorTid3(tid3 uint8) bool {
 	return tid3 == 1 || tid3 == 2 || tid3 == 3 || tid3 == 9 || tid3 == 10 || tid3 == 11
 }
 
+// IsShieldTypeFlags reports whether the word names a shield of the
+// equipment lane: TypeIDs (3, 1, 4, 1 or 2). Arrow and bolt ammo
+// (3, 3, 4) lands in the same shield socket, but it is not a shield
+// for the tests that ask about the piece itself - the mid-cast hand
+// lock among them (#4490 U6-12).
+func IsShieldTypeFlags(typeFlags uint16) bool {
+	if typeFlags&0x02 != 0 || typeFlags&0x1C != 0x0C {
+		return false
+	}
+	return typeFlags&0x60 == 0x20 &&
+		typeFlagsTid3(typeFlags) == 4 &&
+		(typeFlagsTid4(typeFlags) == 1 || typeFlagsTid4(typeFlags) == 2)
+}
+
 // EquipSocketForTypeFlags resolves the equipment socket from the RefItemData
 // TypeID word exactly as the client's CIFEquipment_DispatchItemDropAction
 // routes it (cross-checked against the independent visual-side mapper
@@ -112,7 +126,7 @@ func EquipSocketForTypeFlags(typeFlags uint16) (uint8, bool) {
 	case equipment && tid3 == 6:
 		return SocketWeapon, true
 	// TID 3.1.4.{1,2} shields (CH/EU).
-	case equipment && tid3 == 4 && (tid4 == 1 || tid4 == 2):
+	case IsShieldTypeFlags(typeFlags):
 		return SocketShield, true
 	// TID 3.3.4 arrow/bolt ammo -> the SAME secondary socket. Slot 7 holds a
 	// shield for melee and a quiver/bolt case for bow/crossbow.

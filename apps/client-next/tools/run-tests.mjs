@@ -115,6 +115,14 @@ const TEST_SUITE_BUDGET_MS = Number( process.env.SRO_TEST_SUITE_BUDGET_MS ) || 0
 // profile (docs/agents/client-test-profile.md, #2929) can be written
 // straight from a CI log line.
 const SLOWEST_PRINTED = 30;
+
+// How many inputs the rerun line names. Every run says why its files ran,
+// counted by the first input that moved in each: r204n's release reran 156
+// of 234 asset-backed files and its log said nothing more, so the cause
+// could not be read once the next pass replaced the records (#4337).
+const RERUN_REASONS_PRINTED = 8;
+// The reason a file with no recorded pass runs.
+const NO_RECORD = "no recorded pass";
 // Named per-file caps replace the default for the files listed there
 // (fileBudgets below); the ledger only ever shrinks.
 const BUDGET_LEDGER = path.join( clientRoot, "tests", "architecture", "test-file-budgets.txt" );
@@ -457,20 +465,40 @@ function createFingerprints( index ) {
 
 /*
 ================
-valid
+rerunLine
+
+Why the run's files ran: each first moved input (or NO_RECORD) with how
+many files it reran, most first, RERUN_REASONS_PRINTED of them.
 ================
 */
-function valid( record, fingerprint, name ) {
+function rerunLine( rerunBecause ) {
+	const ranked = [ ...rerunBecause ].sort( ( a, b ) => b[1] - a[1] || (a[0] < b[0] ? -1 : 1) );
+	const named = ranked.slice( 0, RERUN_REASONS_PRINTED ).map( ( [id, count] ) =>
+		`${id.replaceAll( "\t", " " )} (${count})`
+	);
+	const rest = ranked.length - named.length;
+	return `tests rerun because: ${named.join( ", " )}${rest > 0 ? `, and ${rest} more inputs` : ""}`;
+}
+
+/*
+================
+movedInput
+
+The first recorded input of a passed file that no longer holds (its id),
+or null when every input still holds and the pass is reused.
+================
+*/
+function movedInput( record, fingerprint, name ) {
 	for ( const [id, value] of Object.entries( record.inputs ) ) {
 		const tab = id.indexOf( "\t" );
 		const target = decodeTarget( roots, id.slice( tab + 1 ) );
 		// A tree this run does not set cannot vouch for what the test read.
 		if ( target === null || fingerprint( id.slice( 0, tab ), target ) !== value ) {
 			if ( process.env.SRO_TEST_CACHE_EXPLAIN ) process.stdout.write( `rerun ${name}: ${id} changed\n` );
-			return false;
+			return id;
 		}
 	}
-	return true;
+	return null;
 }
 
 /*
@@ -539,9 +567,12 @@ async function main() {
 			).filter( ( [, target] ) => target !== null )
 		)
 	);
+	const rerunBecause = new Map();
 	const pending = files.filter( file => {
 		const record = index.records[path.relative( repoRoot, file )];
-		return !record || !valid( record, fingerprint, path.relative( clientRoot, file ) );
+		const moved = record ? movedInput( record, fingerprint, path.relative( clientRoot, file ) ) : NO_RECORD;
+		if ( moved !== null ) rerunBecause.set( moved, (rerunBecause.get( moved ) ?? 0) + 1 );
+		return moved !== null;
 	} );
 	const reused = files.length - pending.length;
 	const failed = new Set(), passed = new Set();
@@ -615,6 +646,7 @@ async function main() {
 	process.stdout.write(
 		`tests: ${files.length} files, ${reused} reused unchanged, ${pending.length} run, ${failed.size} failed in ${seconds}s\n`
 	);
+	if ( rerunBecause.size ) process.stdout.write( `${rerunLine( rerunBecause )}\n` );
 	// The slowest files name themselves every run, budgeted or not, so
 	// the next profile is a log line away (#2907, docs/agents/client-gates.md).
 	const slowest = [ ...fileSeconds ].sort( ( a, b ) => b[1] - a[1] );

@@ -13,6 +13,9 @@ Christmas event" on; SRO_CHRISTMAS_EVENT_MODE picks which one:
   - "so_ok_2006": So-Ok's Christmas Gift, the December 2006 event
     (sook_christmas.go): jewelry boxes from ordinary monsters, Santa
     So-Ok's random gifts, snowfalls on the winter event's timetable.
+  - "decoration": the towns' Christmas decoration and carols alone
+    (christmas_decoration.go), for the whole window. No event snow,
+    drops, gifts or Server Missions (owner, 2026-11-27).
 
 Each event reads the one mode and runs only in its own, so the two can
 never run at once. An unknown mode runs neither; the composition root
@@ -42,6 +45,8 @@ const (
 	ChristmasModeWinter ChristmasMode = "winter"
 	// ChristmasModeSoOk2006 is So-Ok's Christmas Gift (December 2006).
 	ChristmasModeSoOk2006 ChristmasMode = "so_ok_2006"
+	// ChristmasModeDecoration is the towns' decoration and carols alone.
+	ChristmasModeDecoration ChristmasMode = "decoration"
 	// ChristmasModeUnknown is any other value: no Christmas event runs.
 	ChristmasModeUnknown ChristmasMode = ""
 )
@@ -59,6 +64,8 @@ func ChristmasModeFromEnv() ChristmasMode {
 		return ChristmasModeWinter
 	case string(ChristmasModeSoOk2006):
 		return ChristmasModeSoOk2006
+	case string(ChristmasModeDecoration):
+		return ChristmasModeDecoration
 	}
 	return ChristmasModeUnknown
 }

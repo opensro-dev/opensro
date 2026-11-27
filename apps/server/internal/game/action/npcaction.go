@@ -117,6 +117,21 @@ func (rt *Runtime) HandleNpcAction(divisionID string, character *enterworld.Char
 	rt.deps.Update(character, "npc-action-hide", func() bool {
 		return rt.retireHide(divisionID, character, rt.Now().UnixMilli())
 	})
+	// Then, ahead of every test of the request itself, the native talk
+	// refuses IM_BUSY while the player's interaction state is busy: an
+	// exchange open, a stall kept, or a stall being visited (stallBusy,
+	// the same interaction state the movement lane reads). The hide is
+	// already retired above: the handler ends the active skill instance
+	// before it reads the interaction byte.
+	if rt.stallBusy(divisionID, character.Name) {
+		return npcFunctionRefusal(errCodeKeeperBusy), "an exchange, a stall or a stall visit is open"
+	}
+	// The reference server's second busy test (the PC's motion-change lock
+	// check): an attack lock or a committed front action answers the
+	// same IM_BUSY, so a talk mid-swing or mid-cast is refused.
+	if rt.PlayerAttackLocked(divisionID, character.Name) || rt.objectActionCommitted(divisionID, character.Name) {
+		return npcFunctionRefusal(errCodeKeeperBusy), "the player's motion is locked by an attack or a committed action"
+	}
 	if selected, ok := rt.Selected.Get(divisionID, character.Name); !ok || selected != gid {
 		// The named object is not the bound one, so the request resolves
 		// to no object: the native no-object answer (code 3).

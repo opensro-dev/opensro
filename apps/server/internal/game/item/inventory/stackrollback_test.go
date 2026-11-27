@@ -175,7 +175,8 @@ func TestStackRollbackFamilies(t *testing.T) {
 		typeID3, typeID4 uint8
 	}{
 		{"hp", 1, 1}, {"mp", 1, 2}, {"vigor", 1, 3},
-		{"pet", 1, 4}, {"pet-vigor", 1, 9}, {"elixir", 10, 1}, {"powder", 10, 2},
+		{"pet", 1, 4}, {"pet-vigor", 1, 9}, {"pet-cure", 2, 7},
+		{"purification-pill", 2, 1}, {"universal-pill", 2, 6}, {"elixir", 10, 1}, {"powder", 10, 2},
 	} {
 		t.Run(family.name, func(t *testing.T) {
 			// Package Data can populate Durability even on ordinary ETC rows.

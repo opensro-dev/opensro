@@ -166,6 +166,10 @@ func (rt *Runtime) applyCosGroundAt(division string, c *enterworld.Character, q 
 			}
 			return false
 		}
+		if !item.IsGold() && !rt.groundItemPickable(item) {
+			result = failureResult(wire.ErrCodeCannotBePicked)
+			return false
+		}
 		anim := wire.PickupAnim{Gid: q.CosGID, Heading: wire.HeadingByteFromAngle(at.Angle)}
 		var receipt []byte
 		var gold *wire.Frame

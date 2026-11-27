@@ -65,6 +65,11 @@ battle changes state+0xD, so only then is there a frame.
 ==================
 */
 func (rt *Runtime) enterBattleState(division string, c *enterworld.Character, nowMs int64) []wire.Frame {
+	// Natively both battle entries (striking and being struck) give up a
+	// suit move still on its dress bar.
+	// Natively both battle entries (striking and being struck) give up a
+	// suit move still on its dress bar.
+	rt.cancelJobDress(division, c)
 	entered := !inBattleState(c, nowMs)
 	c.BattleUntilMs = nowMs + battleStateMs
 	rt.battleActors.Store(simulation.WorldKey(division, c.Name), battleExpiry{division, c.Name, c.BattleUntilMs})

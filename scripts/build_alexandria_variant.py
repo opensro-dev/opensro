@@ -51,7 +51,6 @@ Build the variant with its own generated tree:
 import argparse
 import json
 import os
-import shutil
 import sys
 from pathlib import Path
 
@@ -70,6 +69,8 @@ import variant_gates  # noqa: E402
 import variant_settle  # noqa: E402
 import variant_stamp  # noqa: E402
 import variant_steps  # noqa: E402
+import build_progress  # noqa: E402
+import variant_reuse  # noqa: E402
 from build_parallelism import build_jobs  # noqa: E402
 from prepare_client_resources import write_atomically  # noqa: E402
 from sro_paths import EXTRACTED_ROOT  # noqa: E402
@@ -112,8 +113,9 @@ def clear_content(variant, native):
 	out = variant / "extracted"
 	if out.resolve() == Path(native).resolve() or Path(native).resolve() in out.resolve().parents:
 		raise SystemExit(f"{out} is inside the native extraction; refusing to clear it")
-	if out.exists():
-		shutil.rmtree(out)
+	# Moved aside, not deleted: base takes each unchanged file back
+	# (variant_reuse.py, #4337).
+	variant_reuse.stash_tree(variant, out.name)
 	for name in (VARIANT_MANIFEST,) + LINKED_FILES:
 		(variant / name).unlink(missing_ok=True)
 	return out
@@ -155,7 +157,7 @@ def build_variant(vsro_root, native, variant, imported_root=None, force=False, e
 	from cap110_skill_import import add_skills, add_skill_effects
 	from cap110_monsters import add_monsters
 	from cap110_rewards import add_rewards
-	from variant_later_layers import add_later_layers
+	import variant_later_layers
 	from title_import import add_titles
 	from roc_import import add_roc
 	import bandit_fortress_import
@@ -216,7 +218,11 @@ def build_variant(vsro_root, native, variant, imported_root=None, force=False, e
 	runner.register("rewards", add_rewards, (vsro_root, native, out,))
 	# The later sources' optional layers, in their load-bearing order
 	# (variant_later_layers.py owns the order and the manifest keys).
-	runner.register("later-layers", add_later_layers, (native, out,))
+	# Each layer is its own step, so a change to one reruns that layer
+	# alone: as one step, any layer's change reran all of them, 380-445 s
+	# in r204j/r204l (#4337 item 11).
+	for key, add in variant_later_layers.LATER_LAYERS:
+		runner.register(variant_later_layers.step_name(key), add, (native, out,))
 	# The later client's character title table (#3502): later-native,
 	# no switch, so it is a stage here rather than a layer - titles.txt
 	# joins the variant's server textdata after the layers merged
@@ -287,39 +293,42 @@ def build_variant(vsro_root, native, variant, imported_root=None, force=False, e
 		if not (variant / name).exists():
 			link_file(source, variant / name)
 
-	got["base"] = runner.result(0)
-	got["gates"] = runner.result(1)
+	def take(name):
+		return runner.result(runner.index(name))
+
+	got["base"] = take("base")
+	got["gates"] = take("gates")
 	gate_tables = got["gates"][1]
 	stranded = stage1.gates_without_terrain(gate_tables["teleportdata.txt"], variant_gates.GATE_CODES,
 		set(regions) | stage1.mfo_regions((native / "Data_extracted" / "navmesh" / "mapinfo.mfo").read_bytes()))
 	if stranded:
 		raise SystemExit(f"gates {', '.join(stranded)} stand on regions stage 1 did not import; rerun stage 1")
-	got["temple"] = runner.result(2)
-	got["map"] = runner.result(3)
-	got["npcs"] = runner.result(4)
-	got["items"] = runner.result(5)
-	got["avatars"] = runner.result(6)
-	got["avatars-v1696"] = runner.result(7)
-	got["avatars-archive"] = runner.result(8)
-	got["nasrun"] = runner.result(9)
-	got["pets"] = runner.result(10)
-	got["skills"] = runner.result(11)
-	got["skill-effects"] = runner.result(12)
-	got["nasrun-skills"] = runner.result(13)
-	got["monsters"] = runner.result(14)
-	got["rewards"] = runner.result(15)
-	got["later-layers"] = runner.result(16)
-	got["titles"] = runner.result(17)
-	got["roc"] = runner.result(18)
-	got["fortress-bandit"] = runner.result(19)
-	got["fortress-hotan"] = runner.result(20)
-	got["honor-goods"] = runner.result(21)
-	got["quest-layers"] = runner.result(22)
-	got["services"] = runner.result(23)
-	got["later-mall"] = runner.result(24)
-	got["world-layers"] = runner.result(25)
-	got["music"] = runner.result(26)
-	got["environment"] = runner.result(27)
+	got["temple"] = take("temple")
+	got["map"] = take("map")
+	got["npcs"] = take("npcs")
+	got["items"] = take("items")
+	got["avatars"] = take("avatars")
+	got["avatars-v1696"] = take("avatars-v1696")
+	got["avatars-archive"] = take("avatars-archive")
+	got["nasrun"] = take("nasrun")
+	got["pets"] = take("pets")
+	got["skills"] = take("skills")
+	got["skill-effects"] = take("skill-effects")
+	got["nasrun-skills"] = take("nasrun-skills")
+	got["monsters"] = take("monsters")
+	got["rewards"] = take("rewards")
+	got["later-layers"] = {key: take(variant_later_layers.step_name(key)) for key, _ in variant_later_layers.LATER_LAYERS}
+	got["titles"] = take("titles")
+	got["roc"] = take("roc")
+	got["fortress-bandit"] = take("fortress-bandit")
+	got["fortress-hotan"] = take("fortress-hotan")
+	got["honor-goods"] = take("honor-goods")
+	got["quest-layers"] = take("quest-layers")
+	got["services"] = take("services")
+	got["later-mall"] = take("later-mall")
+	got["world-layers"] = take("world-layers")
+	got["music"] = take("music")
+	got["environment"] = take("environment")
 
 	base = got["base"]
 	manifest = {
@@ -406,6 +415,46 @@ def port_stock_enabled(environ=None):
 # ================
 # main
 # ================
+# ================
+# stamped_build
+#
+# The build behind the stamp: skipped when the stamp says nothing moved,
+# else built, settled and stamped. Each part is a named, timed phase.
+# Returns the manifest, or None when skipped.
+# ================
+def stamped_build(args, vsro_root, imported, variant):
+	phases = build_progress.Phases("variant")
+	# Same code, flags and sources as the last successful build of this
+	# tree, and the tree untouched since: nothing to do (variant_stamp.py).
+	phases.enter("inputs")
+	inputs = variant_stamp.read_inputs(EXTRACTED_ROOT, imported, vsro_root, variant)
+	stale = ["--force"] if args.force else variant_stamp.stale_parts(variant, inputs, (VARIANT_MANIFEST,) + LINKED_FILES)
+	phases.done()
+	if not stale:
+		log(f"unchanged since the last build of {variant}; skipped (pass --force to rebuild)")
+		return None
+	log(f"rebuilding: {', '.join(stale[:8])}{' ...' if len(stale) > 8 else ''}")
+	variant_stamp.clear_stamp(variant)
+	phases.enter("steps")
+	manifest = build_variant(vsro_root, EXTRACTED_ROOT, variant, args.imported_root, force=args.force)
+	# Files the rebuild left byte-identical get their old mtime back, so the
+	# asset build's (size, mtime) caches still hit (variant_settle.py).
+	phases.enter("settle")
+	settled = variant_settle.settle(variant, build_jobs())
+	log(f"settle: {settled['files']} files, {settled['restored']} unchanged kept their time, "
+		f"{settled['changed']} changed, {settled['unread']} matched unread")
+	# Stamped with what the build read before it started; a source that
+	# moved under it leaves no stamp, so the next run rebuilds.
+	phases.enter("stamp")
+	moved = variant_stamp.differences(inputs, variant_stamp.read_inputs(EXTRACTED_ROOT, imported, vsro_root, variant))
+	if moved:
+		log(f"not stamped: {', '.join(moved)} changed during the build")
+	else:
+		variant_stamp.write_stamp(variant, inputs)
+	phases.done()
+	return manifest
+
+
 def main():
 	parser = argparse.ArgumentParser(description="Build the v1.150 + Alexandria game root (port-only, not native).")
 	parser.add_argument("--vsro-root", default=os.environ.get(stage1.ROOT_ENV), help="VSRO client folder")
@@ -429,28 +478,12 @@ def main():
 	if args.explain:
 		build_variant(vsro_root, EXTRACTED_ROOT, variant, args.imported_root, explain=True)
 		return
-	# Same code, flags and sources as the last successful build of this
-	# tree, and the tree untouched since: nothing to do (variant_stamp.py).
-	inputs = variant_stamp.read_inputs(EXTRACTED_ROOT, imported, vsro_root, variant)
-	stale = ["--force"] if args.force else variant_stamp.stale_parts(variant, inputs, (VARIANT_MANIFEST,) + LINKED_FILES)
-	if not stale:
-		log(f"unchanged since the last build of {variant}; skipped (pass --force to rebuild)")
+	# Every second of the build sits inside a named span, and a long one
+	# says it is alive (#4337, blind spots B3/B4).
+	with build_progress.Heartbeat():
+		manifest = stamped_build(args, vsro_root, imported, variant)
+	if manifest is None:
 		return
-	log(f"rebuilding: {', '.join(stale[:8])}{' ...' if len(stale) > 8 else ''}")
-	variant_stamp.clear_stamp(variant)
-	manifest = build_variant(vsro_root, EXTRACTED_ROOT, variant, args.imported_root, force=args.force)
-	# Files the rebuild left byte-identical get their old mtime back, so the
-	# asset build's (size, mtime) caches still hit (variant_settle.py).
-	settled = variant_settle.settle(variant, build_jobs())
-	log(f"settle: {settled['files']} files, {settled['restored']} unchanged kept their time, "
-		f"{settled['changed']} changed, {settled['unread']} matched unread")
-	# Stamped with what the build read before it started; a source that
-	# moved under it leaves no stamp, so the next run rebuilds.
-	moved = variant_stamp.differences(inputs, variant_stamp.read_inputs(EXTRACTED_ROOT, imported, vsro_root, variant))
-	if moved:
-		log(f"not stamped: {', '.join(moved)} changed during the build")
-	else:
-		variant_stamp.write_stamp(variant, inputs)
 	log(f"tile remap {manifest['tileRemap']}, {manifest['mapFilesAdded']} map files, {manifest['dataFilesAdded']} data files")
 	log(f"Next: SRO_GAME_ROOT={variant} SRO_GENERATED_ROOT={variant / '.generated'} pnpm assets build full")
 

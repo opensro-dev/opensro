@@ -79,6 +79,13 @@ const (
 	// snapshotTTL bounds how stale one computed snapshot may be:
 	// staff polling shares one load, like the observatory's capture.
 	snapshotTTL = 10 * time.Second
+	// publicCountsTTL bounds how stale the public pair may be. The
+	// public status route is polled by every site visitor, and each
+	// snapshot reloads the whole 30-day journal: on 2026-11-27 that
+	// reload cost 6% of a core and 0.74 GB of allocation every 30 s
+	// on the live GameWorld (#4587). Two counts on a website can lag
+	// two minutes; staff readings keep snapshotTTL.
+	publicCountsTTL = 2 * time.Minute
 )
 
 /*
@@ -255,6 +262,13 @@ type Service struct {
 	spans []Span
 	index *index
 	err   error
+
+	// The public pair's own answer, kept for publicCountsTTL so the
+	// public route never drives a snapshot reload by itself.
+	publicMu     sync.Mutex
+	publicAt     time.Time
+	publicPeople int
+	publicUnique int
 }
 
 // NewService builds the census over a row source; chat may be nil,
@@ -407,10 +421,16 @@ readings use. Counts only: nothing about any person - no names, no
 hashes - leaves through here, so the public status answer can carry
 them beside the staff readings they match. One snapshot serves both
 counts; the full readings (the online series, all three unique
-windows) stay staff-side.
+windows) stay staff-side. An answer is reused for publicCountsTTL; a
+failed read is never kept, so the next call retries.
 ================
 */
 func (s *Service) PublicCounts() (peopleNow int, uniquePeople7d int, err error) {
+	s.publicMu.Lock()
+	defer s.publicMu.Unlock()
+	if !s.publicAt.IsZero() && s.now().Sub(s.publicAt) < publicCountsTTL {
+		return s.publicPeople, s.publicUnique, nil
+	}
 	idx, err := s.snapshot()
 	if err != nil {
 		return 0, 0, err
@@ -418,6 +438,7 @@ func (s *Service) PublicCounts() (peopleNow int, uniquePeople7d int, err error) 
 	now := s.nowMs()
 	peopleNow = idx.peopleCount(distinctAccounts(idx.openSpans(now)))
 	uniquePeople7d = idx.peopleCount(distinctAccounts(idx.spansOverlapping(now-7*windowDayMs, now, now)))
+	s.publicAt, s.publicPeople, s.publicUnique = s.now(), peopleNow, uniquePeople7d
 	return peopleNow, uniquePeople7d, nil
 }
 

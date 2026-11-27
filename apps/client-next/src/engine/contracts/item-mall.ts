@@ -23,6 +23,18 @@ export type MallBadge = "new" | "hot" | "recommended";
 
 /*
 ================
+MallGender
+
+A package's wearer sex (port-only, issue #4480): the server reads it
+from a content item's own ReqGender (0 female, 1 male), never from a
+package or item name. Absent on ungendered packages and against
+servers predating the field.
+================
+*/
+export type MallGender = "male" | "female";
+
+/*
+================
 MallOffer
 ================
 */
@@ -42,6 +54,7 @@ export interface MallOffer {
 	readonly purchaseLimit: number;
 	readonly itemIds: readonly number[];
 	readonly badge?: MallBadge;
+	readonly gender?: MallGender;
 }
 
 /*

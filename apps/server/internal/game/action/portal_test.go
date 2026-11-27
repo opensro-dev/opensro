@@ -108,6 +108,133 @@ func TestPortalThiefSuitFerryAdmission(t *testing.T) {
 	}
 }
 
+/*
+================
+TestGateMurdererRefusedScope
+
+The 0x1C16 scope in port terms: a structure's gate, a murderer, the
+ordinary game world as destination, and the player in that world too
+- or the gate standing in the tomb region. An NPC's ferry and an
+instanced destination never refuse.
+================
+*/
+func TestGateMurdererRefusedScope(t *testing.T) {
+	murdererChar := func() *enterworld.Character {
+		c := &enterworld.Character{}
+		c.PK = &domain.PKRecord{Penalty: 1}
+		return c
+	}
+	building := portalDestination{building: true, world: 1, spawn: simulation.Spawn{RegionID: 25000}}
+	ordinary := portalDestination{world: 1, spawn: simulation.Spawn{RegionID: 25000}}
+	instanced := portalDestination{world: 2, spawn: simulation.Spawn{RegionID: 25000}}
+
+	if !gateMurdererRefused(murdererChar(), building, ordinary) {
+		t.Fatal("a murderer at a building gate into the ordinary world was admitted")
+	}
+	if gateMurdererRefused(murdererChar(), portalDestination{world: 1}, ordinary) {
+		t.Fatal("a murderer at an NPC's point was refused")
+	}
+	if gateMurdererRefused(murdererChar(), building, instanced) {
+		t.Fatal("a murderer bound for an instanced world was refused")
+	}
+	plain := &enterworld.Character{}
+	if gateMurdererRefused(plain, building, ordinary) {
+		t.Fatal("a player without penalty was refused")
+	}
+	// A player in an instanced world is outside the refusal, unless the
+	// gate stands in the tomb region.
+	away := murdererChar()
+	packed := uint32(instance.Pack(2, 1))
+	away.World = &domain.CharacterWorld{PackedInstance: &packed}
+	if gateMurdererRefused(away, building, ordinary) {
+		t.Fatal("a murderer standing in an instanced world was refused")
+	}
+	tombGate := portalDestination{building: true, world: 1, spawn: simulation.Spawn{RegionID: tombFloor6RegionID}}
+	if !gateMurdererRefused(away, tombGate, ordinary) {
+		t.Fatal("a murderer at a tomb-region gate was admitted")
+	}
+	// Natively the tomb clause stands whatever the destination world, as
+	// long as it is no fortress: a tomb floor's gate into the next floor
+	// (a world of its own) refuses a murderer too.
+	var siege, floor instance.DefinitionID
+	for _, row := range instance.Shipped() {
+		switch {
+		case row.Siege() && siege == 0:
+			siege = row.ID
+		case !row.Siege() && row.ID != ordinaryWorldID && floor == 0:
+			floor = row.ID
+		}
+	}
+	if siege == 0 || floor == 0 {
+		t.Fatalf("the shipped catalogue has no siege (%d) or other world (%d)", siege, floor)
+	}
+	if !gateMurdererRefused(away, tombGate, portalDestination{world: floor}) {
+		t.Fatal("a murderer at a tomb-region gate into another floor was admitted")
+	}
+	if gateMurdererRefused(murdererChar(), tombGate, portalDestination{world: siege}) {
+		t.Fatal("a murderer bound for a fortress world was refused")
+	}
+	if gateMurdererRefused(murdererChar(), building, portalDestination{world: floor, spawn: simulation.Spawn{RegionID: 25000}}) {
+		t.Fatal("a murderer at an ordinary gate into another world was refused")
+	}
+}
+
+/*
+================
+TestPortalMurdererGateRefusalOrder
+
+0x1C16 stands last in the gate use: a link restriction and the gold
+check both answer before it, a building gate refuses a clean murderer,
+and an NPC's ferry carries the same murderer through.
+================
+*/
+func TestPortalMurdererGateRefusalOrder(t *testing.T) {
+	newGate := func(building bool, link portalLink) (*Runtime, *enterworld.Character) {
+		rt, c, _, _ := returnFixture(t, 30000)
+		rt.NpcRoster = []simulation.NpcDef{{ObjectID: 2001, RefObjID: 2011, Codename: "NPC_GATE", TalkFlags: simulation.NpcTalkFlagTeleport,
+			Services:      simulation.NpcServices(0).With(simulation.NpcServiceTeleport),
+			AuthoredSpawn: true, Spawn: simulation.SeedWorldState(c).Spawn}}
+		rt.NpcSpawn.Enabled = true
+		rt.portals = &portalCatalog{
+			sources: map[uint32]uint32{2011: 1},
+			destinations: map[uint32]portalDestination{
+				1: {building: building, spawn: simulation.SeedWorldState(c).Spawn, world: instance.DefinitionID(1)},
+				2: {spawn: simulation.Spawn{RegionID: 25000, X: 100, Y: 30, Z: 200}, world: instance.DefinitionID(1)},
+			},
+			links: map[[2]uint32]portalLink{{1, 2}: link},
+		}
+		rt.Selected.Set(testDivision, c.Name, 2001)
+		// Past the free-fare watermark, so the gold check can answer.
+		c.MaxLevel = testInt64(30)
+		c.PK = &domain.PKRecord{Penalty: 100}
+		return rt, c
+	}
+	use := func(rt *Runtime, c *enterworld.Character) byte {
+		out := rt.HandlePortal(testDivision, c, wire.NewWriter(9).U32(2001).U8(2).U32(2).Payload())
+		if len(out.Frames) == 1 && out.Frames[0].Opcode == 0xb495 && len(out.Frames[0].Payload) == 2 && out.Frames[0].Payload[0] == 2 {
+			return out.Frames[0].Payload[1]
+		}
+		return 0
+	}
+
+	rt, c := newGate(true, portalLink{source: 1, target: 2, conditions: []portalCondition{{kind: 1, minimum: 50, maximum: 90}}})
+	if got := use(rt, c); got != 0x15 {
+		t.Fatalf("restricted murderer: %#x, want the link restriction", got)
+	}
+	rt, c = newGate(true, portalLink{source: 1, target: 2, fee: 1000000})
+	if got := use(rt, c); got != 7 {
+		t.Fatalf("broke murderer: %#x, want the gold refusal", got)
+	}
+	rt, c = newGate(true, portalLink{source: 1, target: 2})
+	if got := use(rt, c); got != errCodeMurdererGate {
+		t.Fatalf("clean murderer at a building gate: %#x, want %#x", got, errCodeMurdererGate)
+	}
+	rt, c = newGate(false, portalLink{source: 1, target: 2})
+	if got := use(rt, c); got == errCodeMurdererGate || got != 0 {
+		t.Fatalf("murderer at a ferry: %#x, want passage", got)
+	}
+}
+
 type portalRejectEntry struct{ Dependencies }
 
 func (portalRejectEntry) ReentryPackets(string, string) ([]enterworld.Packet, bool) {
@@ -116,6 +243,8 @@ func (portalRejectEntry) ReentryPackets(string, string) ([]enterworld.Packet, bo
 func TestPortalSelectedNpcTransactionAndRollback(t *testing.T) {
 	clientdata.RequireGameData(t)
 	rt, c, _, _ := returnFixture(t, 30000)
+	// A paying traveller: past the free-fare watermark (U8-10).
+	c.MaxLevel = testInt64(25)
 	dir := gamedatatest.TextdataDir(t)
 	rt.NpcRoster = []simulation.NpcDef{{ObjectID: 2001, RefObjID: 2011, Codename: "NPC_CH_FERRY", TalkFlags: 2}}
 	rt.NpcSpawn.Enabled = true
@@ -157,6 +286,8 @@ func TestPortalSelectedNpcTransactionAndRollback(t *testing.T) {
 func TestPortalStructureGrantAndDestinationTransaction(t *testing.T) {
 	clientdata.RequireGameData(t)
 	rt, c, _, _ := returnFixture(t, 30000)
+	// A paying traveller: past the free-fare watermark (U8-10).
+	c.MaxLevel = testInt64(25)
 	// The fixture gate stands at the player, inside its hit range.
 	rt.NpcSpawn.Enabled, rt.NpcSpawn.AtPlayer = true, true
 	rt.NpcRoster = []simulation.NpcDef{{ObjectID: 252094, RefObjID: 2094, Codename: "STORE_CH", Teleport: &simulation.TeleportGateBounds{Radius: 10, Height: 25, FortressID: 1}}}
@@ -277,6 +408,7 @@ func TestMuhanArenaSoloPartyAdmission(t *testing.T) {
 func TestFortressGateFeeTaxFillsTheTreasury(t *testing.T) {
 	clientdata.RequireGameData(t)
 	rt, c, _, _ := returnFixture(t, 30000)
+	c.MaxLevel = testInt64(25) // a paying traveller (free fares end at 20)
 	rt.NpcSpawn.Enabled, rt.NpcSpawn.AtPlayer = true, true
 	rt.NpcRoster = []simulation.NpcDef{{ObjectID: 252094, RefObjID: 2094, Codename: "STORE_CH", FortressID: 1,
 		Teleport: &simulation.TeleportGateBounds{Radius: 10, Height: 25, FortressID: 1}}}

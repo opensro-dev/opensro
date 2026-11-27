@@ -15,6 +15,7 @@ from variant_files import (
 	add_missing_files, enable_regions, link_tree, log, lower_paths, merge_object_catalog, merge_tile_catalog,
 	remap_terrain, replace_file
 )
+import variant_reuse
 import import_vsro_alexandria as stage1
 
 
@@ -33,7 +34,8 @@ def build_base(vsro_root, native, imported, out, regions, stage_manifest):
 	for folder in LINKED_FOLDERS + ("Map_extracted", "Data_extracted"):
 		if not (native / folder).is_dir():
 			raise SystemExit(f"{native / folder} is missing; run pnpm assets prepare for the v1.150 client first")
-		linked[folder] = link_tree(native / folder, out / folder)
+		reuse = variant_reuse.reuse_root(out.parent) / out.name / folder
+		linked[folder] = link_tree(native / folder, out / folder, reuse)
 		log(f"{folder}: {linked[folder]} files linked")
 
 	# Map: catalogs, remapped regions, tile textures.

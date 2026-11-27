@@ -1883,12 +1883,13 @@ export function createWorldRenderer(
 			}
 			// Smooth camera (port-only): the frame's step, 0 when it snaps.
 			const smoothStep = smoothCamera && camera.follow ?
-				beginCameraSmoothingFrame(
-					cameraSmoothing,
+				beginCameraSmoothingFrame( cameraSmoothing, {
 					seconds,
-					camera.originRegion ?? 0,
-					!!camera.follow.mounted
-				) :
+					space: camera.originRegion ?? 0,
+					mounted: !!camera.follow.mounted,
+					x: localCamera.target[0],
+					z: localCamera.target[2]
+				} ) :
 				0;
 			if ( smoothCamera && camera.follow ) {
 				localCamera = {

@@ -24,6 +24,7 @@ import os
 import sys
 import tempfile
 import unittest
+from unittest import mock
 from pathlib import Path
 
 import variant_settle
@@ -114,6 +115,43 @@ class VariantSteps(unittest.TestCase):
 		self.assertFalse((tree / "b.txt").exists())
 
 	# ================
+	# test_a_split_step_keeps_the_steps_in_front
+	#
+	# #4598 split one step into several, and the journal, required to
+	# name the same steps whole, was thrown away: r204n laid the whole
+	# variant down again (#4337). The steps in front of the change
+	# replay; the split step's old files are undone and the new steps
+	# and everything after them run. Removing the new steps again keeps
+	# the front too.
+	# ================
+	def test_a_split_step_keeps_the_steps_in_front(self):
+		counters: dict = {}
+		front = self.write_step(counters, "front", "front.txt", b"f", {"n": 1})
+		whole = self.write_step(counters, "whole", "whole.txt", b"w", {"n": 2})
+		after = self.write_step(counters, "after", "after.txt", b"a", {"n": 3})
+		run_build(self.variant, [front, whole, after])
+		tree = self.variant / "extracted"
+		self.assertEqual(counters, {"front": 1, "whole": 1, "after": 1})
+
+		left = self.write_step(counters, "left", "left.txt", b"l", {"n": 4})
+		right = self.write_step(counters, "right", "right.txt", b"r", {"n": 5})
+		output = io.StringIO()
+		with contextlib.redirect_stdout(output):
+			run_build(self.variant, [front, left, right, after])
+		self.assertEqual(counters, {"front": 1, "whole": 1, "after": 2, "left": 1, "right": 1})
+		self.assertFalse((tree / "whole.txt").exists())
+		self.assertEqual(sorted(p.name for p in tree.iterdir()), ["after.txt", "front.txt", "left.txt", "right.txt"])
+		self.assertIn("the step list changed after front: 1 of 4 steps keep their record", output.getvalue())
+
+		run_build(self.variant, [front, left, right, after])
+		self.assertEqual(counters, {"front": 1, "whole": 1, "after": 2, "left": 1, "right": 1})
+
+		with contextlib.redirect_stdout(io.StringIO()):
+			run_build(self.variant, [front, left])
+		self.assertEqual(counters, {"front": 1, "whole": 1, "after": 2, "left": 1, "right": 1})
+		self.assertEqual(sorted(p.name for p in tree.iterdir()), ["front.txt", "left.txt"])
+
+	# ================
 	# test_source_change_reruns_the_reader_and_changed_downstream_only
 	# ================
 	def test_source_change_reruns_the_reader_and_changed_downstream_only(self):
@@ -152,6 +190,41 @@ class VariantSteps(unittest.TestCase):
 		run_build(self.variant, steps, roots)
 		self.assertEqual(counters, {"reader": 3, "downstream": 2})
 		self.assertEqual((self.variant / "extracted" / "d.txt").read_bytes(), b"down:BB")
+
+	# ================
+	# test_a_rerun_linker_takes_its_files_back_from_rollback
+	#
+	# #4337 items 29/31: a base rerun copied the whole native tree again
+	# after rollback deleted it. Rollback now keeps what it removes, and
+	# the rerun lays every unchanged file back by rename: no copy, and
+	# nothing is left kept once the build ends.
+	# ================
+	def test_a_rerun_linker_takes_its_files_back_from_rollback(self):
+		import variant_files
+		import variant_reuse
+
+		native = Path(self.temp.name) / "native"
+		(native / "deep").mkdir(parents=True)
+		(native / "one.bin").write_bytes(b"1" * 64)
+		(native / "deep" / "two.bin").write_bytes(b"2" * 64)
+		knob = Path(self.temp.name) / "knob"
+		knob.mkdir()
+		(knob / "k.txt").write_bytes(b"a")
+
+		def linker():
+			(knob / "k.txt").read_bytes()
+			out = self.variant / "extracted"
+			return variant_files.link_tree(native, out / "tree", variant_reuse.reuse_root(self.variant) / "extracted" / "tree")
+
+		steps = [("linker", linker, ())]
+		with mock.patch.object(variant_files.os, "link", side_effect=OSError("cross-device")), 				contextlib.redirect_stdout(io.StringIO()):
+			run_build(self.variant, steps, (native, knob))
+			(knob / "k.txt").write_bytes(b"b")
+			with mock.patch.object(variant_files.shutil, "copy2", wraps=variant_files.shutil.copy2) as copy:
+				run_build(self.variant, steps, (native, knob))
+		self.assertEqual(copy.call_count, 0)
+		self.assertEqual((self.variant / "extracted" / "tree" / "deep" / "two.bin").read_bytes(), b"2" * 64)
+		self.assertFalse(variant_reuse.reuse_root(self.variant).exists())
 
 	# ================
 	# test_flag_change_reruns_only_steps_naming_it
@@ -301,15 +374,23 @@ class VariantSteps(unittest.TestCase):
 		self.assertFalse(variant_steps.journal_path(self.variant).exists())
 
 	# ================
-	# test_changed_step_list_starts_over
+	# test_a_removed_step_is_undone_and_the_rest_kept
+	#
+	# A step list that drops its last step keeps the record of the ones
+	# before it and takes the dropped step's files back. It used to start
+	# the record over (#3993), which made every step list change a whole
+	# rebuild (#4337).
 	# ================
-	def test_changed_step_list_starts_over(self):
+	def test_a_removed_step_is_undone_and_the_rest_kept(self):
 		counters: dict = {}
 		one = self.write_step(counters, "one", "1.txt", b"1", {"n": 1})
 		two = self.write_step(counters, "two", "2.txt", b"2", {"n": 2})
 		run_build(self.variant, [one, two])
-		run_build(self.variant, [one])
-		self.assertEqual(counters["one"], 2)
+		with contextlib.redirect_stdout(io.StringIO()):
+			run_build(self.variant, [one])
+		self.assertEqual(counters["one"], 1)
+		self.assertFalse((self.variant / "extracted" / "2.txt").exists())
+		self.assertEqual((self.variant / "extracted" / "1.txt").read_bytes(), b"1")
 
 	# ================
 	# load_module
@@ -472,6 +553,142 @@ class VariantSteps(unittest.TestCase):
 			self.assertEqual(edit("helper.py", "def used():\n\treturn 3\n"), 3)
 		finally:
 			for name in ("stepmod", "helper", "table"):
+				sys.modules.pop(name, None)
+
+	# ================
+	# test_a_sibling_function_the_step_never_called_is_not_code
+	#
+	# shared.py is a helper module many steps call into: this step calls
+	# shared.used and Table.read, never shared.other or Table.write. Keyed
+	# whole, an edit to either sibling made every step that called any
+	# shared helper stale: r204n reran 23 of 28 steps for 1850 s (#4337).
+	# The functions that started are the step's code, and nothing else in
+	# a file that ran.
+	# ================
+	def test_a_sibling_function_the_step_never_called_is_not_code(self):
+		repo = Path(self.temp.name) / "repo"
+		scripts = repo / "scripts"
+		scripts.mkdir(parents=True)
+		(scripts / "stepmod.py").write_text(
+			"import shared\n\nCALLS = {'n': 0}\n\n\n"
+			"def run(variant):\n"
+			"\tCALLS['n'] += 1\n"
+			"\tout = variant / 'extracted'\n"
+			"\tout.mkdir(parents=True, exist_ok=True)\n"
+			"\t(out / 'step.txt').write_text(str(shared.used() + shared.Table().read()))\n"
+			"\treturn {'n': 1}\n",
+			encoding="utf-8",
+		)
+
+		def shared(used=1, other=1, read=1, write=1):
+			return (
+				f"def used():\n\treturn {used}\n\n\n"
+				f"def other():\n\treturn {other}\n\n\n"
+				f"class Table:\n"
+				f"\tdef read(self):\n\t\treturn {read}\n\n"
+				f"\tdef write(self):\n\t\treturn {write}\n"
+			)
+
+		(scripts / "shared.py").write_text(shared(), encoding="utf-8")
+		stepmod = self.load_module(scripts, "stepmod")
+		steps = [("step", stepmod.run, (self.variant,))]
+
+		def edit(**values):
+			(scripts / "shared.py").write_text(shared(**values), encoding="utf-8")
+			run_build(self.variant, steps, repository_root=repo)
+			return stepmod.CALLS["n"]
+
+		try:
+			run_build(self.variant, steps, repository_root=repo)
+			self.assertEqual(edit(other=2), 1)
+			self.assertEqual(edit(other=2, write=2), 1)
+			self.assertEqual(edit(other=2, write=2, read=2), 2)
+			self.assertEqual(edit(other=2, write=2, read=2, used=2), 3)
+		finally:
+			for name in ("stepmod", "shared"):
+				sys.modules.pop(name, None)
+
+	# ================
+	# test_a_node_declaration_the_step_never_reaches_is_not_code
+	#
+	# The step's Python names tool.mjs, which calls one helper of
+	# world.mjs. #4596 added a constant and two helpers to the world
+	# modules for the outdoor key; keyed whole, that re-ran 17 variant
+	# steps whose scripts never call them (r204n, #4337). What the step
+	# can reach is its code (scriptReach.mjs): an unreached addition
+	# leaves it current, an edit to the helper it calls does not.
+	# ================
+	def test_a_node_declaration_the_step_never_reaches_is_not_code(self):
+		# Assembled, so this file names no script the real closure walk
+		# would have to resolve.
+		suffix = ".mjs"
+		TOOL_SCRIPT, WORLD_SCRIPT = "tool" + suffix, "world" + suffix
+		repo = Path(self.temp.name) / "repo"
+		scripts = repo / "scripts"
+		scripts.mkdir(parents=True)
+		(scripts / "stepmod.py").write_text(
+			"CALLS = {'n': 0}\n\n\n"
+			"def run(variant):\n"
+			"\tCALLS['n'] += 1\n"
+			f"\ttool = '{TOOL_SCRIPT}'\n"
+			"\tout = variant / 'extracted'\n"
+			"\tout.mkdir(parents=True, exist_ok=True)\n"
+			"\t(out / 'step.txt').write_text(tool)\n"
+			"\treturn {'n': 1}\n",
+			encoding="utf-8",
+		)
+		(scripts / TOOL_SCRIPT).write_text(
+			f'import {{ used }} from "./{WORLD_SCRIPT}";\nconsole.log( used() );\n', encoding="utf-8"
+		)
+		world = "export function used() {\n\treturn 1;\n}\n"
+		(scripts / WORLD_SCRIPT).write_text(world, encoding="utf-8")
+		stepmod = self.load_module(scripts, "stepmod")
+		steps = [("step", stepmod.run, (self.variant,))]
+
+		def edit(text):
+			(scripts / WORLD_SCRIPT).write_text(text, encoding="utf-8")
+			run_build(self.variant, steps, repository_root=repo)
+			return stepmod.CALLS["n"]
+
+		try:
+			run_build(self.variant, steps, repository_root=repo)
+			grown = world + "export const OUTDOOR_WORLD_AREA = 'outdoor';\nexport function more() {\n\treturn 2;\n}\n"
+			self.assertEqual(edit(grown), 1)
+			self.assertEqual(edit(grown.replace("return 1", "return 3")), 2)
+		finally:
+			sys.modules.pop("stepmod", None)
+
+	# ================
+	# test_a_journal_without_functions_keys_its_ran_files_whole
+	#
+	# A journal written before the functions were kept (the recorder
+	# below drops them) replays on unchanged code, so the upgrade itself
+	# reruns nothing, and keys each file its step ran whole, as it was
+	# keyed then: a new function beside the one that ran makes it stale.
+	# ================
+	def test_a_journal_without_functions_keys_its_ran_files_whole(self):
+		repo = Path(self.temp.name) / "repo"
+		scripts = self.write_repository(repo)
+		stepmod = self.load_module(scripts, "stepmod")
+		steps = [("step", stepmod.run, (self.variant,))]
+		classify = variant_steps.Runner.classify_reads
+
+		def without_functions(runner, reads, code=(), imported=(), functions=None):
+			recorded = classify(runner, reads, code, imported, functions)
+			recorded.pop("functions")
+			return recorded
+
+		try:
+			with mock.patch.object(variant_steps.Runner, "classify_reads", without_functions):
+				run_build(self.variant, steps, repository_root=repo)
+			run_build(self.variant, steps, repository_root=repo)
+			self.assertEqual(stepmod.CALLS["n"], 1)
+			helper = (scripts / "helper.py").read_text(encoding="utf-8")
+			(scripts / "helper.py").write_text(helper + "\n\ndef added():\n\treturn 1\n", encoding="utf-8")
+			run_build(self.variant, steps, repository_root=repo)
+			self.assertEqual(stepmod.CALLS["n"], 2)
+		finally:
+			for name in ("stepmod", "helper", "rarely"):
 				sys.modules.pop(name, None)
 
 	# ================

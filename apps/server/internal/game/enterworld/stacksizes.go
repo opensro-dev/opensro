@@ -41,18 +41,28 @@ const maxStackSize = 0xFFFF
 
 /*
 ================
+stackKind
+
+One itemdata TypeID3/TypeID4 pair under TypeID1/2 = 3/3 (stackable ETC).
+================
+*/
+type stackKind struct {
+	typeID3, typeID4 int64
+}
+
+/*
+================
 stackGroup
 
-One configurable family, selected by its itemdata TypeID3/TypeID4 under
-TypeID1/2 = 3/3 (stackable ETC). raisesSingles lets the group raise rows
-the original authored at cap 1; without it only rows that already stack
-are raised, so special single items in a potion family keep their cap.
+One configurable family, selected by its stackKinds. raisesSingles lets
+the group raise rows the original authored at cap 1; without it only rows
+that already stack are raised, so special single items in a potion family
+keep their cap.
 ================
 */
 type stackGroup struct {
 	name          string
-	typeID3       int64
-	typeID4s      []int64
+	kinds         []stackKind
 	raisesSingles bool
 }
 
@@ -60,21 +70,27 @@ type stackGroup struct {
 // attribute stones (3/3/11/2) carry their assimilation value in Plus, so
 // they merge only with an equal value (inventory.stackIdentityMatches,
 // #583). The 3/3/11/7 magic stones carry none and merge like elixirs.
+// inventory.retainedOversizedStack and the client's container-transfer.ts
+// list the same kinds.
 var stackGroups = []stackGroup{
-	{name: "potion", typeID3: 1, typeID4s: []int64{1, 2, 3}},
-	{name: "petpotion", typeID3: 1, typeID4s: []int64{4, 9}},
-	// Universal pills (ITEM_ETC_CURE_ALL_01..04, 3/3/2/6): native cap 50.
-	{name: "universalpill", typeID3: 2, typeID4s: []int64{6}},
-	{name: "elixir", typeID3: 10, typeID4s: []int64{1}, raisesSingles: true},
-	{name: "luckypowder", typeID3: 10, typeID4s: []int64{2}},
-	{name: "magicstone", typeID3: 11, typeID4s: []int64{1, 7}, raisesSingles: true},
-	{name: "attrstone", typeID3: 11, typeID4s: []int64{2}, raisesSingles: true},
+	{name: "potion", kinds: []stackKind{{1, 1}, {1, 2}, {1, 3}}},
+	// Pet HP and hunger potions (3/3/1/4, 3/3/1/9) and the pet abnormal
+	// state recovery potions (ITEM_COS_P_CURE_ALL_01..02, 3/3/2/7): native
+	// cap 50.
+	{name: "petpotion", kinds: []stackKind{{1, 4}, {1, 9}, {2, 7}}},
+	// Universal pills (ITEM_ETC_CURE_ALL_01..04, 3/3/2/6) and purification
+	// pills (ITEM_ETC_CURE_RANDOM_01..04, 3/3/2/1): native cap 50.
+	{name: "universalpill", kinds: []stackKind{{2, 6}, {2, 1}}},
+	{name: "elixir", kinds: []stackKind{{10, 1}}, raisesSingles: true},
+	{name: "luckypowder", kinds: []stackKind{{10, 2}}},
+	{name: "magicstone", kinds: []stackKind{{11, 1}, {11, 7}}, raisesSingles: true},
+	{name: "attrstone", kinds: []stackKind{{11, 2}}, raisesSingles: true},
 	// Arrows (ITEM_ETC_AMMO_ARROW_01 and _DEF, 3/3/4/1) and bolts
 	// (ITEM_ETC_AMMO_BOLT_01 and _DEF, 3/3/4/2): native cap 250. The
 	// quiver (equipment socket 7), its auto-reload and every shot's debit
 	// carry the count as u16 (ammunition.go, 0x3752).
-	{name: "arrow", typeID3: 4, typeID4s: []int64{1}},
-	{name: "bolt", typeID3: 4, typeID4s: []int64{2}},
+	{name: "arrow", kinds: []stackKind{{4, 1}}},
+	{name: "bolt", kinds: []stackKind{{4, 2}}},
 }
 
 /*
@@ -187,12 +203,10 @@ func stackGroupOf(ref *ItemRef) (stackGroup, bool) {
 	if ref.TypeIDs[0] != 3 || ref.TypeIDs[1] != 3 {
 		return stackGroup{}, false
 	}
+	kind := stackKind{ref.TypeIDs[2], ref.TypeIDs[3]}
 	for _, group := range stackGroups {
-		if ref.TypeIDs[2] != group.typeID3 {
-			continue
-		}
-		for _, typeID4 := range group.typeID4s {
-			if ref.TypeIDs[3] == typeID4 {
+		for _, member := range group.kinds {
+			if member == kind {
 				return group, true
 			}
 		}

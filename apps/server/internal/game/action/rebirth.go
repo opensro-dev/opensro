@@ -199,8 +199,12 @@ func (rt *Runtime) appointedRebirth(division string, character *enterworld.Chara
 	}
 	// A character that has never appointed a town is registered at its
 	// race's main-town gate; only a catalogue without that gate falls back
-	// to the starter position. INFERENCE: the server binary is not on this
-	// machine; the owner reports this from the original game.
+	// to the starter position. Natively the v1.188 shard's character
+	// creation stamps the appointment with the race's default teleport
+	// (STORE_EU_GATE for a European, STORE_CH_GATE for a Chinese
+	// character) and town recall reads only that id, so this fallback is
+	// the stamp's whole effect: point 20 GATE_EU, Constantinople - never
+	// Samarkand's GATE_CA (#4490 U8-04; the trail is in ../research).
 	if world.RebirthGateRefID == 0 && world.RebirthPoint == nil {
 		if point, ok := rt.recallDestination(raceTownGateRef(character)); ok {
 			return point
@@ -466,6 +470,10 @@ type rebirthPlan struct {
 	arrivalWorld     instance.ID
 }
 
+// beginnerRebirthMaxLevel is the highest level reached up to which the
+// death dialog's rise-where-you-fell choice still revives in place.
+const beginnerRebirthMaxLevel = 10
+
 /*
 ================
 planRebirth
@@ -504,8 +512,9 @@ func (rt *Runtime) planRebirth(
 	}
 	// Natively a team death (free-battle capes, arena) revives where
 	// it fell at any level, whatever the choice; otherwise the present point
-	// is a beginner's (level 10 or below). The shard may set the town
-	// rule for team deaths too (teamdeath.go).
+	// is a beginner's (highest level reached 10 or below - the native
+	// handler reads the record's level watermark, not the current level).
+	// The shard may set the town rule for team deaths too (teamdeath.go).
 	var camp *flagWarMatch
 	var arrival travelPoint
 	matchRebirth := false
@@ -526,7 +535,7 @@ func (rt *Runtime) planRebirth(
 	if inPlace && !forceTown {
 		choice = wire.RebirthAtPresentPoint
 	}
-	if choice == wire.RebirthAtPresentPoint && !inPlace && before.Level != nil && *before.Level > 10 {
+	if choice == wire.RebirthAtPresentPoint && !inPlace && highestLevelReached(before) > beginnerRebirthMaxLevel {
 		return nil, OpResult{}, false
 	}
 	destination := corpse.Spawn

@@ -3641,6 +3641,27 @@
 		},
 		{
 			"file": "src/engine/runtime/characters/presentation-finalize.ts",
+			"expression": "costumeDoll.request",
+			"function": "publishCharacters",
+			"kind": "callback",
+			"reason": "The parent costume-doll owner learns whether a Spirit costume is on before the portrait publication."
+		},
+		{
+			"file": "src/engine/runtime/characters/presentation-finalize.ts",
+			"expression": "costumeDoll.step",
+			"function": "publishCharacters",
+			"kind": "callback",
+			"reason": "The parent costume-doll owner builds the inventory doll's costume-free clone at the portrait publication point."
+		},
+		{
+			"file": "src/engine/runtime/characters/presentation-finalize.ts",
+			"expression": "costumeDoll.glow",
+			"function": "publishCharacters",
+			"kind": "callback",
+			"reason": "The parent costume-doll owner supplies the clone's glow holder at the same publication point."
+		},
+		{
+			"file": "src/engine/runtime/characters/presentation-finalize.ts",
 			"expression": "resources.ready",
 			"function": "publishCharacters",
 			"kind": "callback",
@@ -4471,6 +4492,13 @@
 			"function": "step",
 			"kind": "callback",
 			"reason": "Current frame presentation-sample owner lends this synchronous operation through characters.ts; effect and hit order remain unchanged."
+		},
+		{
+			"file": "src/engine/runtime/characters/presentation-events.ts",
+			"expression": "castYaw",
+			"function": "callback:map:0",
+			"kind": "callback",
+			"reason": "The actor-motion state owner lends the body yaw a cast left (castFacing / castYawRelease) through characters.ts; a mover spawns with the source object's yaw (#4599)."
 		},
 		{
 			"file": "src/engine/runtime/characters/presentation-events.ts",

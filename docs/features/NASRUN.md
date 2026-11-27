@@ -124,15 +124,27 @@ awakening (`internal/game/action/spiritextend.go`, `internal/game/nasrun/extensi
 With `SRO_NASRUN` on, each eligible contributor to a unique kill rolls a Devil's Spirit and Sabakun's jewel into
 their bag, beside the token award (`internal/game/action/nasrun_drops.go`, odds in `internal/game/nasrun/drops.go`):
 
-- A Spirit at 0.25 % on an easy unique and 0.5 % on a hard one; the jewel at 2 % on both. The families are the
-  token ones, below the level band and one per account, as for the tokens.
+- A Spirit at 10 % on an easy unique and 20 % on a hard one; the jewel at 90 % on both (owner, 2026-11-27).
+  The families are the token ones, below the level band and one per account, as for the tokens.
 - The Spirit is the plain A grade row of the winner's sex; the colours stay a shop choice.
 - No cap and nothing saved: the roll is per kill, and a full bag keeps neither prize - the notice travels only
   for an item that landed.
 
 ## The mall listing (#3456 step 5)
 
-With `SRO_NASRUN` on, Sabakun's jewel and the extension gear list in the Item Mall's Premium > Gears tab through
-the gears-stones layout (`internal/game/item/commerce/mallcategories.go`, `nasrunGoods`), at the tab's 30-silk
-tier, badged new - the silk door beside the token shop's honor tabs. The listing stands only while the system
-does: off, or with the items' rows unstaged, the catalogue is the shipped 91 offers exactly (#3331).
+The Devil's Spirit and Sabakun's jewel come from uniques only (owner, 2026-11-25; #4360): while the lucky drops
+run, the mall withholds every package holding a Spirit or the jewel (`action/itemmall.go`,
+`withholdUniqueOnlyGoods`), and a buy of one gets the existing refusal. The token shop keeps selling the Spirits,
+as its tokens are unique rewards too.
+
+| Goods | In the Item Mall | Where they come from |
+| --- | --- | --- |
+| The six A grade Spirits | withheld | unique kills (10 % / 20 %), the honor token shops |
+| Sabakun's jewel | withheld | unique kills (90 %), the honor token shops |
+| The extension gear | Premium > Gears, 50 silk, badged new | the mall, the honor token shops |
+
+- The listing itself stays in `internal/game/item/commerce/mallcategories.go` (`nasrunGoods`: Spirits 150, gear
+  50, jewel 30). The withholding removes the Spirit and jewel offers when the mall loads.
+- The S grade `_UNIQUE` pair is never listed: the later mall sells it only as a Premium Mall copy, and that shop is
+  never ported (owner decision on #4240).
+- Off, or with the items' rows unstaged, the catalogue is the shipped 91 offers exactly (#3331).

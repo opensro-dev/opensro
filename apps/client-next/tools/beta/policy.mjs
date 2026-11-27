@@ -17,6 +17,7 @@ import {
 	REQUIRED_RUNTIME_TEXT_ASSETS
 } from "../../../../scripts/build/assetPackOwnership.mjs";
 import { validateAssetPackIndex } from "../../../../scripts/build/assetPackIndexValidation.mjs";
+import { SOURCE_MAP_ROOT } from "../build-metadata.mjs";
 import {
 	ASSET_PACK_MAGIC,
 	ASSET_PACK_VERSION,
@@ -121,6 +122,10 @@ inspect
 */
 export function inspect( name, bytes, { application = false } = {} ) {
 	safeName( name );
+	if ( application && PUBLISHED_MAP.test( name ) ) {
+		inspectSourceMap( name, bytes );
+		return;
+	}
 	// Any SROPACK magic is a pack: an unknown version must fail here, never
 	// fall through to the plain-file rules and skip its members' inspection.
 	if ( bytes.subarray( 0, 7 ).toString() === ASSET_PACK_MAGIC.slice( 0, 7 ) ) {
@@ -163,14 +168,21 @@ export function inspect( name, bytes, { application = false } = {} ) {
 		const decoded = gunzipSync( bytes, { maxOutputLength: 128 << 20 } );
 		// Transport objects have digest filenames. Preserve inspection of JSON even
 		// after its authored extension has been replaced by the content-addressed name.
+		// A name that kept its extension (an encoded variant) is inspected as that.
+		const inner = name.slice( 0, -3 ), named = path.posix.extname( inner ) !== "";
 		return inspect(
-			name.slice( 0, -3 ) + (/^\s*[\[{]/.test( decoded.subarray( 0, 64 ).toString() ) ? ".json" : ""),
+			inner + (!named && /^\s*[\[{]/.test( decoded.subarray( 0, 64 ).toString() ) ? ".json" : ""),
 			decoded,
 			{ application }
 		);
 	}
 	if ( !/\.(?:js|mjs|css|html|json|txt|wgsl)$/.test( name ) ) return;
-	const text = bytes.toString( "utf8" );
+	let text = bytes.toString( "utf8" );
+	// A chunk may end by naming a sibling map by its bare file name (the
+	// map is inspected on its own, inspectSourceMap). A data URI, a path, a
+	// URL or a second reference stays an exposure. The name is not matched
+	// to the chunk's: a compressed variant carries a digest name (compression.mjs).
+	if ( application && /\.(?:js|mjs)$/.test( name ) ) text = text.replace( SIBLING_MAP_REFERENCE, "" );
 	const forbidden = [
 		/sourceMappingURL\s*=/,
 		/\bsourcesContent"?\s*:/,
@@ -178,8 +190,7 @@ export function inspect( name, bytes, { application = false } = {} ) {
 		/\/__client-next-dev-/,
 		/\/(?:src\/bootstrap|src\/engine)\b/,
 		/["'`](?:[A-Za-z]:[\\/]|file:\/\/\/)/,
-		/-----BEGIN (?:RSA |EC |OPENSSH )?PRIVATE KEY-----/,
-		/\bAKIA[0-9A-Z]{16}\b/,
+		...SECRET_PATTERNS,
 		/__(?:playableRuntime|worldProbe\w*|hitRenderer|guideProbe|characterResourceProbe)/
 	];
 	for ( const rule of forbidden ) {
@@ -189,6 +200,65 @@ export function inspect( name, bytes, { application = false } = {} ) {
 		throw Error( "Debugger instruction in " + name );
 	}
 }
+// A published source map sits beside its chunk under the application's
+// assets, or is its compressed variant: an application file, never data,
+// and only for a script.
+const PUBLISHED_MAP = /^(?:(?:application\/)?assets\/[A-Za-z0-9_.-]+\.m?js|encoded\/[a-f0-9]{64})\.map$/;
+// The one map reference a chunk may carry: its last line, a bare file name.
+const SIBLING_MAP_REFERENCE = /\n\/\/# sourceMappingURL=[A-Za-z0-9_-][A-Za-z0-9_.-]*\.m?js\.map\n?$/;
+// Secrets no published byte may carry, the source maps' readable source too.
+const SECRET_PATTERNS = [
+	/-----BEGIN (?:RSA |EC |OPENSSH )?PRIVATE KEY-----/,
+	/\bAKIA[0-9A-Z]{16}\b/
+];
+
+/*
+================
+inspectSourceMap
+
+The one shape a published source map may take (the client is AGPL source,
+public on purpose; NOTICE.md): a version 3 map whose every source is a
+client module under SOURCE_MAP_ROOT - no build machine path, no climb out
+of the client - with one readable text per source and no secret in any.
+frozen, when the builder passes its frozen inputs (name -> text), must
+hold each source with exactly that text: a map shows only what the
+release compiled from the tracked tree.
+================
+*/
+export function inspectSourceMap( name, bytes, frozen ) {
+	let map;
+	try {
+		map = JSON.parse( bytes.toString( "utf8" ) );
+	} catch {
+		throw Error( "Unreadable source map " + name );
+	}
+	const sources = map?.sources, contents = map?.sourcesContent;
+	if (
+		map?.version !== 3 || typeof map.mappings !== "string" || !Array.isArray( sources ) ||
+		sources.length === 0 || !Array.isArray( contents ) || contents.length !== sources.length
+	) throw Error( "Invalid source map " + name );
+	if ( map.sourceRoot !== undefined && map.sourceRoot !== "" ) throw Error( "Source map root in " + name );
+	for ( const [index, source] of sources.entries() ) {
+		const local = typeof source === "string" && source.startsWith( SOURCE_MAP_ROOT ) ?
+			source.slice( SOURCE_MAP_ROOT.length ) :
+			"";
+		if (
+			!/^src\/[A-Za-z0-9_.\/-]+$/.test( local ) ||
+			local.split( "/" ).some( part => part === ".." || part === "." )
+		) {
+			throw Error( "Source map " + name + " names an unpublished source: " + JSON.stringify( source ) );
+		}
+		const content = contents[index];
+		if ( typeof content !== "string" ) throw Error( "Source map " + name + " lacks the text of " + source );
+		if ( frozen && frozen[local] !== content ) {
+			throw Error( "Source map " + name + " differs from the frozen source of " + local );
+		}
+		for ( const rule of SECRET_PATTERNS ) {
+			if ( rule.test( content ) ) throw Error( "Secret exposure in " + name + " (" + local + ")" );
+		}
+	}
+}
+
 /*
 ================
 files
