@@ -1144,12 +1144,10 @@ test("a refused repair is not resent on its own answer", () => {
 });
 
 test("an upgrade leaves the player's in-flight skill save alone", () => {
-	const { sent, g } = macroWorld( { row: true, skillOn: 1, refs: [ NEXT_RANK ] } );
-	const edited = {
-		...g.take().sroMacro,
-		buff: []
-	};
-	g.command( { kind: "macro-save", macro: codec.MACRO_SKILL, settings: edited }, 0 );
+	const { sent, g, local, monster } = macroWorld( { row: true, skillOn: 1, refs: [ NEXT_RANK ] } );
+	const live = g.take()?.sroMacro;
+	assert.ok( live, "the replay published the settings" );
+	g.command( { kind: "macro-save", macro: codec.MACRO_SKILL, settings: { ...live, buff: [] } }, 0, monster, local );
 	assert.equal( macroSaves( sent ).length, 1, "the player's save went out" );
 	g.receive( { opcode: SKILL_LEARN_RESPONSE_OPCODE, payload: new Uint8Array( [ 1, ...u32le( ATTACK_NEXT ) ] ) }, 0 );
 	assert.equal( macroSaves( sent ).length, 1, "no repair replaced the pending save" );
