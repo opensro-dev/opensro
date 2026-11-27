@@ -287,17 +287,33 @@ function resolveNamed( literal, { file, directory, repositoryRoot, index } ) {
 ================
 codeHash
 
-The sha256 over the entry's closure (a file URL or path), keyed by
-repository-relative path: any byte change in it changes the hash, a
-checkout that only touches mtimes does not.
+The sha256 over what the entry (a file URL or path) can run, keyed by
+repository-relative path. A Node module counts by what the entry and the
+scripts its Python names can reach (scriptReach.mjs): a shared module
+gaining a declaration nothing reached names leaves the hash standing, and
+a module that reaches nothing leaves it. Other files (Python, the JSON
+beside a module) count by their bytes. A checkout that only touches
+mtimes changes nothing. Keyed on whole files, #4596's unused constant in
+world/constants.mjs reran the npc, title and interface lanes of r204n's
+no-op asset build (#4337).
 ================
 */
 export async function codeHash( entry, repositoryRoot = rebuildRoot ) {
 	const hash = createHash( "sha256" );
-	const entryFile = String( entry ).startsWith( "file:" ) ? fileURLToPath( entry ) : entry;
-	for ( const file of await codeClosure( entryFile, repositoryRoot ) ) {
+	const entryFile = path.resolve( String( entry ).startsWith( "file:" ) ? fileURLToPath( entry ) : entry );
+	const entries = new Set( [ entryFile ] );
+	const indexes = await sourceIndexes( repositoryRoot );
+	const files = await walkClosure( [ entryFile ], [], repositoryRoot, indexes, PYTHON_IMPORT, true, entries );
+	const reached = await scriptKeys( files, [ ...entries ] );
+	for ( const file of files ) {
 		const relative = path.relative( repositoryRoot, file ).split( path.sep ).join( "/" );
-		hash.update( relative ).update( "\0" ).update( await readFile( file ) ).update( "\0" );
+		if ( !Object.hasOwn( reached, file ) ) {
+			hash.update( relative ).update( "\0" ).update( await readFile( file ) ).update( "\0" );
+			continue;
+		}
+		const key = reached[file];
+		if ( key === null ) continue;
+		hash.update( relative ).update( "\0" ).update( key.digest ).update( key.flags.join( "," ) ).update( "\0" );
 	}
 	return hash.digest( "hex" );
 }

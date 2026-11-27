@@ -124,7 +124,7 @@ test("a statement that runs at load is keyed even when nothing names its module"
 	assert.notEqual( effect["writer.mjs"], base["writer.mjs"] );
 });
 
-test("a namespace import or a dynamic import reaches its module whole", async () => {
+test("a namespace import reaches its module whole", async () => {
 	const namespace = {
 		"entry.mjs": 'import * as shared from "./shared.mjs";\nconsole.log( shared.used( 1 ) );'
 	};
@@ -134,12 +134,42 @@ test("a namespace import or a dynamic import reaches its module whole", async ()
 		"shared.mjs": BASE["shared.mjs"] + "\nexport function more() {\n\treturn 1;\n}"
 	} );
 	assert.notEqual( grown["shared.mjs"], base["shared.mjs"] );
-	const dynamic = {
-		"shared.mjs": BASE["shared.mjs"] + "\nexport async function late() {\n\treturn import( './relay.mjs' );\n}"
+});
+
+test("an import( ) of a literal reaches its target whole, not the module that calls it", async () => {
+	const lazy = {
+		"shared.mjs": BASE["shared.mjs"] + "\nexport async function late() {\n\treturn import( './late.mjs' );\n}",
+		"late.mjs": "export function late() {\n\treturn 5;\n}"
 	};
-	const before = await keysOf( dynamic );
-	const after = await keysOf( {
-		"shared.mjs": dynamic["shared.mjs"] + "\nexport function more() {\n\treturn 1;\n}"
-	} );
-	assert.notEqual( after["shared.mjs"], before["shared.mjs"] );
+	const base = await keysOf( lazy );
+	const host = await keysOf( { ...lazy, "shared.mjs": lazy["shared.mjs"] + "\nexport const MORE = 1;" } );
+	assert.equal( host["shared.mjs"], base["shared.mjs"] );
+	const target = await keysOf( { ...lazy, "late.mjs": lazy["late.mjs"] + "\nexport const MORE = 1;" } );
+	assert.notEqual( target["late.mjs"], base["late.mjs"] );
+	// Destructured, only the names taken are reached.
+	const named = {
+		"shared.mjs": BASE["shared.mjs"] +
+			"\nexport async function late() {\n\tconst { late } = await import( './late.mjs' );\n\treturn late();\n}",
+		"late.mjs": lazy["late.mjs"]
+	};
+	const before = await keysOf( named );
+	const unused = await keysOf( { ...named, "late.mjs": named["late.mjs"] + "\nexport const MORE = 1;" } );
+	assert.equal( unused["late.mjs"], before["late.mjs"] );
+	const used = await keysOf( { ...named, "late.mjs": named["late.mjs"].replace( "return 5", "return 6" ) } );
+	assert.notEqual( used["late.mjs"], before["late.mjs"] );
+});
+
+test("a computed import( ) or an eval( ) reaches its module whole; one in a comment does not", async () => {
+	for ( const call of [ "import( name )", "eval( name )" ] ) {
+		const dynamic = {
+			"shared.mjs": BASE["shared.mjs"] + `\nexport async function late( name ) {\n\treturn ${call};\n}`
+		};
+		const before = await keysOf( dynamic );
+		const after = await keysOf( { "shared.mjs": dynamic["shared.mjs"] + "\nexport const MORE = 1;" } );
+		assert.notEqual( after["shared.mjs"], before["shared.mjs"], call );
+	}
+	const commented = { "shared.mjs": '/** @param {import("node:fs").Dirent} entry */\n' + BASE["shared.mjs"] };
+	const before = await keysOf( commented );
+	const after = await keysOf( { "shared.mjs": commented["shared.mjs"] + "\nexport const MORE = 1;" } );
+	assert.equal( after["shared.mjs"], before["shared.mjs"] );
 });

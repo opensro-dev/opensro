@@ -44,7 +44,6 @@ import ts from "typescript";
 const NAMESPACE = "*";
 // What a script's source must not hold to be reached by name: names there
 // are computed, so the module is reached whole.
-const DYNAMIC_CODE = /\bimport\s*\(|\beval\s*\(/;
 // The environment flags a reached text names (variant_code.py keys their
 // values): the same pattern the Python side scans.
 const FLAG_LITERAL = /SRO_[A-Z0-9_]+/g;
@@ -85,6 +84,69 @@ function bindingNames( name, names = [] ) {
 
 /*
 ================
+dynamicCode
+
+What the module's code (not its comments or strings) runs by name at run
+time, as { dynamic, lazy }. An import( ) of a relative string literal is
+lazy: { target, names }, names being what a destructuring
+`const { a, b } = await import( "./x.mjs" )` takes (followed like a
+static import), or null for any other use (the target is reached whole).
+An import( ) of anything else, or an eval( ), can run anything: dynamic,
+the module itself reached whole. A text match took fsUtils.mjs's JSDoc
+type import("node:fs").Dirent for code, and keying resolveCharRoster.mjs
+whole for its one import( "../world/paths.mjs" ) moved every lane that
+reads the roster on any edit to either.
+================
+*/
+function dynamicCode( source, target ) {
+	const found = { dynamic: false, lazy: [] };
+	const importCall = node =>
+		ts.isCallExpression( node ) && node.expression.kind === ts.SyntaxKind.ImportKeyword ? node : null;
+	const literalTarget = call => {
+		const [specifier] = call.arguments;
+		return specifier && ts.isStringLiteralLike( specifier ) ? { from: target( specifier.text ) } : null;
+	};
+	const destructured = node => {
+		if ( !ts.isVariableDeclaration( node ) || !ts.isObjectBindingPattern( node.name ) ) return null;
+		const awaited = node.initializer && ts.isAwaitExpression( node.initializer ) ?
+			node.initializer.expression :
+			null;
+		const call = awaited && importCall( awaited );
+		const literal = call && literalTarget( call );
+		if ( !literal?.from ) return null;
+		const names = [];
+		for ( const element of node.name.elements ) {
+			const name = element.propertyName ?? element.name;
+			if ( element.dotDotDotToken || !ts.isIdentifier( name ) ) return null;
+			names.push( name.text );
+		}
+		return { target: literal.from, names, call };
+	};
+	const visit = node => {
+		const named = destructured( node );
+		if ( named ) {
+			found.lazy.push( { target: named.target, names: named.names } );
+			ts.forEachChild( named.call, visit );
+			return;
+		}
+		const call = importCall( node );
+		if ( call ) {
+			const literal = literalTarget( call );
+			if ( literal?.from ) found.lazy.push( { target: literal.from, names: null } );
+			else if ( !literal ) found.dynamic = true;
+		} else if (
+			ts.isCallExpression( node ) && ts.isIdentifier( node.expression ) && node.expression.text === "eval"
+		) {
+			found.dynamic = true;
+		}
+		ts.forEachChild( node, visit );
+	};
+	visit( source );
+	return found;
+}
+
+/*
+================
 parseModule
 
 One script's top level: its statements, the names each declares, its
@@ -108,7 +170,7 @@ function parseModule( file, text ) {
 		stars: [],
 		// every module this one loads
 		loads: [],
-		dynamic: DYNAMIC_CODE.test( text )
+		...dynamicCode( source, target )
 	};
 	for ( const statement of source.statements ) {
 		const index = module.statements.length;
@@ -262,6 +324,11 @@ export async function reachScripts( files, entries ) {
 		if ( !module || loaded.has( file ) ) return;
 		loaded.add( file );
 		if ( module.dynamic ) reachAll( file );
+		for ( const { target, names } of module.lazy ) {
+			load( target );
+			if ( names ) names.forEach( name => reachExport( target, name ) );
+			else reachAll( target );
+		}
 		module.statements.forEach( ( statement, index ) => {
 			if ( statement.effect ) keep( file, index );
 		} );
