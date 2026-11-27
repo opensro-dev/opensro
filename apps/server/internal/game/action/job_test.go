@@ -215,6 +215,80 @@ func TestJobSuitDressCancelsOnMove(t *testing.T) {
 
 /*
 ================
+assertJobDressCancelled
+
+Starts a wear on the fixture and hands back the frame captures: the
+bar clear goes to the wearer and every observer, the wearer's held
+item move closes with the silent refusal, and the suit stays put.
+================
+*/
+func assertJobDressCancelled(t *testing.T, rt *Runtime, c *enterworld.Character, act func()) {
+	t.Helper()
+	wear := encodeMove(t, wire.ItemMoveRequest{MovementType: wire.MoveTypeInventory, SourceSlot: jobTestSuitSlot, DestSlot: jobSuitSlot, Quantity: 1})
+	if out := rt.HandleItemMove(testDivision, c, wear); len(out.Frames) != 1 || out.Frames[0].Opcode != opJobDressBar {
+		t.Fatalf("dress began with %+v", out.Frames)
+	}
+	var own, peers []wire.Frame
+	rt.PushCharacterFrames = func(_, _ string, frames []wire.Frame) { own = append(own, frames...) }
+	rt.PushDivisionPeerFrames = func(_, _ string, frames []wire.Frame) { peers = append(peers, frames...) }
+	act()
+	gid := wire.NewWriter(4).U32(enterworld.ObjectIDForCharacter(c)).Payload()
+	if len(own) != 2 || own[0].Opcode != opJobDressCancel || !bytes.Equal(own[0].Payload, gid) ||
+		own[1].Opcode != wire.OpItemMoveResponse || !bytes.Equal(own[1].Payload, wire.EncodeItemMoveError(jobDressErrCancelled)) {
+		t.Fatalf("wearer got %+v", own)
+	}
+	if len(peers) != 1 || peers[0].Opcode != opJobDressCancel || !bytes.Equal(peers[0].Payload, gid) {
+		t.Fatalf("observers got %+v", peers)
+	}
+	if _, ok := inventoryRowAt(c, jobTestSuitSlot); !ok {
+		t.Fatal("the suit left its bag slot")
+	}
+}
+
+/*
+================
+TestJobSuitDressCancelsOnBattleEntry
+
+Entering battle - striking or being struck - gives up a suit move
+still on its dress bar, and the timer never fires.
+================
+*/
+func TestJobSuitDressCancelsOnBattleEntry(t *testing.T) {
+	rt, clock, c := jobFixture(t)
+	c.Job = domain.CharacterJob{Type: domain.JobTrader, Grade: 1, Alias: "Merchant"}
+	assertJobDressCancelled(t, rt, c, func() {
+		rt.enterBattleState(testDivision, c, clock.NowMs())
+	})
+	clock.now = clock.now.Add(jobDressSeconds * time.Second)
+	rt.advanceJobDresses(clock.NowMs())
+	if enterworld.DressedJob(c) != 0 {
+		t.Fatal("the timer fired after the battle entry")
+	}
+}
+
+/*
+================
+TestJobSuitDressCancelsOnSkillCommand
+
+A skill command handled during the dress bar gives the suit move up,
+whatever becomes of the cast.
+================
+*/
+func TestJobSuitDressCancelsOnSkillCommand(t *testing.T) {
+	rt, clock, c := jobFixture(t)
+	c.Job = domain.CharacterJob{Type: domain.JobTrader, Grade: 1, Alias: "Merchant"}
+	assertJobDressCancelled(t, rt, c, func() {
+		rt.HandleTargetInteract(testDivision, c, wire.SkillAction{ActionId: 2}.Encode())
+	})
+	clock.now = clock.now.Add(jobDressSeconds * time.Second)
+	rt.advanceJobDresses(clock.NowMs())
+	if enterworld.DressedJob(c) != 0 {
+		t.Fatal("the timer fired after the skill command")
+	}
+}
+
+/*
+================
 TestThiefDenScrollRefusesAnyoneButADressedThief
 
 Natively THIEFDEN answers 0x186A to anyone not dressed as a thief.

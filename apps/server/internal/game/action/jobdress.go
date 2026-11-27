@@ -23,8 +23,8 @@ for job suits, notice category 1:
 
 Taking it off refuses in battle (0x48) or with a full bag (0x07). A
 player who dies or travels before the timer ends keeps the old outfit,
-and so does one who walks: an accepted move cancels the dress
-(cancelJobDressOnMove).
+and so does one who fights: an accepted move, entering battle either
+way, or a handled skill command cancels the dress (cancelJobDress).
 
 INFERENCE: v1.188 tests the suit's job grade from its own record layout;
 v1.150 carries it as requirement type 2..4 (the job grades the tooltip
@@ -427,22 +427,29 @@ func (rt *Runtime) beginJobDress(division string, c *enterworld.Character, reque
 
 /*
 ================
-cancelJobDressOnMove
+cancelJobDress
 
-The move event ends a suit move still waiting for its timer. The bar is
-cleared for every observer (0x3514) and the held item move is answered
-with the silent refusal, so the client's inventory lane closes and the
-suit stays where it was.
+Ends a suit move still waiting for its timer. The bar is cleared for
+every observer (0x3514) and the held item move is answered with the
+silent refusal, so the client's inventory lane closes and the suit
+stays where it was.
 
-INFERENCE: the reference server's move-event path was not traced to the
-state changer case 0xE. The v1.150 client carries the cancel for exactly
-this bar (0x3514, client 75D1E0, "Item unequip cancelled"), and the native
-state changers of the same family (the return scroll's cast) end when the
-caster walks; the dress is taken to end the same way. The caller holds
-the division lock.
+The reference server clears the same state from its move handler, from
+both battle entries (striking and being struck), and after a skill
+command is handled; the port calls this from the matching events: an
+accepted move (RetireMoveEffects), entering battle (enterBattleState)
+and a handled skill command (HandleTargetInteract).
+
+INFERENCE: the cancel's own frames - the v1.150 client carries 0x3514
+for exactly this bar (75D1E0, "Item unequip cancelled") - are the port's
+reading; the native event set above is traced. Callers hold the
+division lock or the character's own update door.
 ================
 */
-func (rt *Runtime) cancelJobDressOnMove(division string, c *enterworld.Character) {
+func (rt *Runtime) cancelJobDress(division string, c *enterworld.Character) {
+	if c == nil {
+		return
+	}
 	if _, ok := rt.jobDresses.LoadAndDelete(simulation.WorldKey(division, c.Name)); !ok {
 		return
 	}
