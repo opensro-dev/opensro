@@ -204,14 +204,19 @@ func (rt *Runtime) beginReturnScroll(division string, c *enterworld.Character, r
 	var destination *travelPoint
 	switch ref.ReturnDestination {
 	case "RESURRECT":
-		if mode != teleportModeBlocking || !rt.returnScrollAdmission(division, c, result) {
+		if mode != teleportModeBlocking || !rt.returnCastAdmission(division, c, result) {
 			return false
 		}
-		// After the shared checks, whose last speaking legs are the
-		// reference server's criminal-state and transport refusals, a
-		// Battle Arena world refuses the scroll before the cast starts:
-		// the cast must not leave a running match.
+		// After the cast checks (quest, casting, criminal state) and
+		// before the destination's own transport refusal, a Battle Arena
+		// world refuses the scroll (0x4A0380 tests the arena ahead of
+		// the destination string): the cast must not leave a running
+		// match, and a reader with a transport there hears 0x187A.
 		if rt.returnScrollArenaRefused(c, result) {
+			return false
+		}
+		if rt.townTravelTransportRefused(c) {
+			*result = itemUseFailure(0x5e)
 			return false
 		}
 	case "THIEFDEN":

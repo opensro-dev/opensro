@@ -65,6 +65,25 @@ func TestReturnScrollInBattleArenaWorldIsRefused(t *testing.T) {
 
 /*
 ================
+TestReturnScrollInBattleArenaWorldAnswersBeforeTransport
+
+The reference server tests the arena ahead of the destination string,
+so a reader with a summoned transport in the arena hears 0x187A, not
+the RESURRECT branch's transport refusal 0x185E.
+================
+*/
+func TestReturnScrollInBattleArenaWorldAnswersBeforeTransport(t *testing.T) {
+	rt, c, _, _ := returnFixture(t, 5000)
+	summonTestTransport(rt, c)
+	standInArena(t, c)
+	out := useReturn(rt, c)
+	if len(out.Frames) != 1 || !bytes.Equal(out.Frames[0].Payload, wire.EncodeItemUseError(errCodeScrollArena)) {
+		t.Fatalf("arena return with a transport answered %+v, want the 0x7a refusal", out.Frames)
+	}
+}
+
+/*
+================
 TestThiefDenScrollInBattleArenaWorldAnswersArenaFirst
 
 The den scroll's arena refusal precedes its own thief-only refusal: an
