@@ -563,6 +563,18 @@ class Runner:
 		})
 
 	# ================
+	# index
+	#
+	# A registered step's position, by name: the builder takes each
+	# result by name, so a step added or split never shifts the others.
+	# ================
+	def index(self, name: str) -> int:
+		for position, step in enumerate(self.steps):
+			if step["name"] == name:
+				return position
+		raise KeyError(f"no variant step {name}")
+
+	# ================
 	# load
 	#
 	# The journal is this build's when its arguments are this build's

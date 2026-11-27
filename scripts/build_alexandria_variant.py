@@ -157,7 +157,7 @@ def build_variant(vsro_root, native, variant, imported_root=None, force=False, e
 	from cap110_skill_import import add_skills, add_skill_effects
 	from cap110_monsters import add_monsters
 	from cap110_rewards import add_rewards
-	from variant_later_layers import add_later_layers
+	import variant_later_layers
 	from title_import import add_titles
 	from roc_import import add_roc
 	import bandit_fortress_import
@@ -218,7 +218,11 @@ def build_variant(vsro_root, native, variant, imported_root=None, force=False, e
 	runner.register("rewards", add_rewards, (vsro_root, native, out,))
 	# The later sources' optional layers, in their load-bearing order
 	# (variant_later_layers.py owns the order and the manifest keys).
-	runner.register("later-layers", add_later_layers, (native, out,))
+	# Each layer is its own step, so a change to one reruns that layer
+	# alone: as one step, any layer's change reran all of them, 380-445 s
+	# in r204j/r204l (#4337 item 11).
+	for key, add in variant_later_layers.LATER_LAYERS:
+		runner.register(variant_later_layers.step_name(key), add, (native, out,))
 	# The later client's character title table (#3502): later-native,
 	# no switch, so it is a stage here rather than a layer - titles.txt
 	# joins the variant's server textdata after the layers merged
@@ -289,39 +293,42 @@ def build_variant(vsro_root, native, variant, imported_root=None, force=False, e
 		if not (variant / name).exists():
 			link_file(source, variant / name)
 
-	got["base"] = runner.result(0)
-	got["gates"] = runner.result(1)
+	def take(name):
+		return runner.result(runner.index(name))
+
+	got["base"] = take("base")
+	got["gates"] = take("gates")
 	gate_tables = got["gates"][1]
 	stranded = stage1.gates_without_terrain(gate_tables["teleportdata.txt"], variant_gates.GATE_CODES,
 		set(regions) | stage1.mfo_regions((native / "Data_extracted" / "navmesh" / "mapinfo.mfo").read_bytes()))
 	if stranded:
 		raise SystemExit(f"gates {', '.join(stranded)} stand on regions stage 1 did not import; rerun stage 1")
-	got["temple"] = runner.result(2)
-	got["map"] = runner.result(3)
-	got["npcs"] = runner.result(4)
-	got["items"] = runner.result(5)
-	got["avatars"] = runner.result(6)
-	got["avatars-v1696"] = runner.result(7)
-	got["avatars-archive"] = runner.result(8)
-	got["nasrun"] = runner.result(9)
-	got["pets"] = runner.result(10)
-	got["skills"] = runner.result(11)
-	got["skill-effects"] = runner.result(12)
-	got["nasrun-skills"] = runner.result(13)
-	got["monsters"] = runner.result(14)
-	got["rewards"] = runner.result(15)
-	got["later-layers"] = runner.result(16)
-	got["titles"] = runner.result(17)
-	got["roc"] = runner.result(18)
-	got["fortress-bandit"] = runner.result(19)
-	got["fortress-hotan"] = runner.result(20)
-	got["honor-goods"] = runner.result(21)
-	got["quest-layers"] = runner.result(22)
-	got["services"] = runner.result(23)
-	got["later-mall"] = runner.result(24)
-	got["world-layers"] = runner.result(25)
-	got["music"] = runner.result(26)
-	got["environment"] = runner.result(27)
+	got["temple"] = take("temple")
+	got["map"] = take("map")
+	got["npcs"] = take("npcs")
+	got["items"] = take("items")
+	got["avatars"] = take("avatars")
+	got["avatars-v1696"] = take("avatars-v1696")
+	got["avatars-archive"] = take("avatars-archive")
+	got["nasrun"] = take("nasrun")
+	got["pets"] = take("pets")
+	got["skills"] = take("skills")
+	got["skill-effects"] = take("skill-effects")
+	got["nasrun-skills"] = take("nasrun-skills")
+	got["monsters"] = take("monsters")
+	got["rewards"] = take("rewards")
+	got["later-layers"] = {key: take(variant_later_layers.step_name(key)) for key, _ in variant_later_layers.LATER_LAYERS}
+	got["titles"] = take("titles")
+	got["roc"] = take("roc")
+	got["fortress-bandit"] = take("fortress-bandit")
+	got["fortress-hotan"] = take("fortress-hotan")
+	got["honor-goods"] = take("honor-goods")
+	got["quest-layers"] = take("quest-layers")
+	got["services"] = take("services")
+	got["later-mall"] = take("later-mall")
+	got["world-layers"] = take("world-layers")
+	got["music"] = take("music")
+	got["environment"] = take("environment")
 
 	base = got["base"]
 	manifest = {

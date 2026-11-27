@@ -8,9 +8,9 @@ independently optional layers on top of its own stage: each reads a
 later source (the v1.696 client, the ISRO-R nest extraction), has its
 own switch, and on its off path reaps what a previous on build of a
 reused variant root left behind. Each layer owns its import module;
-this module owns only their order and the variant manifest key each
-one's summary lands under, so the builder runs them in one call and a
-new layer is one row here, not another block in the builder.
+this module owns only their order, the variant manifest key each one's
+summary lands under and the variant step each runs as, so a new layer
+is one row here, not another block in the builder.
 
 The order is load-bearing: the Sky Temple's identity space and the
 catalogue merges come first, and every later layer merges after them.
@@ -107,11 +107,12 @@ LATER_LAYERS = (
 
 
 # ================
-# add_later_layers
+# step_name
 #
-# Every later layer in order; each one's summary under its manifest
-# key. A layer that is off returns its own off summary (and has reaped
-# a previous on build), so the result always names every layer.
+# The variant step a layer runs as (build_alexandria_variant registers
+# one step per layer, in this order, #4337). A layer that is off returns
+# its own off summary (and has reaped a previous on build), so the
+# manifest always names every layer.
 # ================
-def add_later_layers(native, out):
-	return {key: add(native, out) for key, add in LATER_LAYERS}
+def step_name(key):
+	return "later-" + key
