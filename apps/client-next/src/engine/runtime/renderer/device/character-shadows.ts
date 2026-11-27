@@ -29,7 +29,7 @@ export interface ShadowBinding {
 	readonly instances: GPUBufferBinding;
 	readonly material: GPUBufferBinding;
 	readonly skin: GPUBuffer;
-	readonly bones: GPUBuffer;
+	readonly bones: GPUBufferBinding;
 }
 /*
 ================
@@ -302,7 +302,7 @@ struct Out {@builtin(position) p:vec4f,@location(0) uv:vec2f};
 										{ binding: 1, resource: b.instances },
 										{ binding: 2, resource: b.material },
 										{ binding: 3, resource: { buffer: b.skin } },
-										{ binding: 4, resource: { buffer: b.bones } }
+										{ binding: 4, resource: b.bones }
 									]
 								} )
 							};

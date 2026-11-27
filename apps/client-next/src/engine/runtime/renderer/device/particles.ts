@@ -4,10 +4,17 @@
 particles.ts - batched GPU particle presentation and frame input ownership
 
 CPU tick records retain their dirty-range contract. Ordered staging copies
-update resident records before each batched dispatch. Geometry retains its
-draw buffers: initial copies preserve untouched hidden fields, then each pass
-returns its computed instances and palettes before drawing. Arenas and pass
-pages are partitioned by the actual device storage and dispatch limits.
+update resident records before each batched dispatch. A stream's draw reads
+its computed instances and palettes in place, from its slice of the arena
+output (ParticleBinding): one initial copy preserves the draw's untouched
+hidden fields, and nothing is copied back. Copying every stream's output
+into the draw's own buffers each frame was the GPU process's largest
+particle cost (#4692). Arenas and pass pages are partitioned by the actual
+device storage and dispatch limits.
+
+A slice is bound before the frame records its bundles, which is before
+encode: present allocates and grows the output and binds the stream, and
+encode only copies a grown arena's old contents across.
 
 A frame can encode twice around deferred visibility. Each encode owns a
 different input page, so queue writes cannot overwrite an earlier pass's
@@ -48,6 +55,7 @@ import { multiply } from "@/engine/foundation/math/pose-math";
 import { faceEffectMesh } from "@/engine/foundation/rendering/effect-billboard";
 import type { GpuWork } from "@/engine/foundation/rendering/gpu-work";
 import type { GeometryDraw, GpuTimingFrame, ParticlePresentation } from "../internal/gpu-contract";
+import { bindingOffsetAlignment, type BufferSlice } from "./buffer-slabs";
 import { particleShader } from "./particle-shader";
 import { destroyNow, type Retire } from "./retirement";
 
@@ -69,6 +77,29 @@ const cpuView = new Float32Array( 16 );
 
 /*
 ================
+ParticleBinding
+
+What a stream's draw binds for its instances and palettes: its slice of
+the arena output.
+================
+*/
+export type ParticleBinding = {
+	readonly instances: BufferSlice["binding"];
+	readonly bones: GPUBufferBinding;
+};
+
+/*
+================
+greatestDivisor
+================
+*/
+function greatestDivisor( a: number, b: number ): number {
+	while ( b ) [a, b] = [ b, a % b ];
+	return a;
+}
+
+/*
+================
 Stream
 
 Tick records copy only admitted dirty ranges. Frame parameters snapshot at
@@ -86,7 +117,15 @@ type Stream = {
 	readonly instances: GPUBuffer;
 	readonly bones: GPUBuffer;
 	readonly outputStart: number;
+	// The slots reserved at outputStart: rows * slots, rounded up so every
+	// slice starts on the binding offset alignment.
+	readonly outputSlots: number;
 	readonly arena: Arena;
+	// Points the draw at its slice; called again when the arena's output grows.
+	readonly bind: ( binding: ParticleBinding ) => void;
+	// The draw reads the arena output (false under the CPU fallback, which
+	// writes the draw's own buffers).
+	bound: boolean;
 	initialized: boolean;
 	dirtyStart: number;
 	dirtyEnd: number;
@@ -143,6 +182,9 @@ type Arena = {
 	// old generation, where only a full collection frees it).
 	pending: Set<Stream>;
 	output?: Output;
+	// The output a growth replaced: encode copies its contents into the new
+	// one before any dispatch or pass reads it (flushGrowth).
+	copyFrom?: Output;
 };
 
 /*
@@ -167,6 +209,12 @@ export function createParticlePresentation( device: GPUDevice, retire: Retire = 
 	);
 	const slotLimit = Math.floor( storageLimit / (PARTICLE_RECORD * 4) );
 	const groupLimit = device.limits.maxComputeWorkgroupsPerDimension ?? DEFAULT_WORKGROUP_LIMIT;
+	// The fewest slots whose instance and palette bytes are both whole
+	// multiples of the binding offset alignment (8 slots at 256 bytes).
+	const alignment = bindingOffsetAlignment( device );
+	const instanceStep = alignment / greatestDivisor( alignment, INSTANCE_BYTES );
+	const paletteStep = alignment / greatestDivisor( alignment, PALETTE_BYTES );
+	const slotAlignment = instanceStep / greatestDivisor( instanceStep, paletteStep ) * paletteStep;
 	const ready = Promise.resolve()
 		.then( () =>
 			device.createComputePipelineAsync( {
@@ -202,7 +250,8 @@ export function createParticlePresentation( device: GPUDevice, retire: Retire = 
 	allocateOutput
 	================
 	*/
-	function allocateOutput( count: number ): { arena: Arena; outputStart: number; } {
+	function allocateOutput( needed: number ): { arena: Arena; outputStart: number; outputSlots: number; } {
+		const count = Math.ceil( needed / slotAlignment ) * slotAlignment;
 		if ( count > slotLimit ) throw Error( "Particle stream exceeds device storage limit" );
 		for ( const arena of arenas ) {
 			const index = arena.free.findIndex( block => block[1] >= count );
@@ -211,17 +260,17 @@ export function createParticlePresentation( device: GPUDevice, retire: Retire = 
 			if ( index < 0 ) {
 				const outputStart = arena.top;
 				arena.top += count;
-				return { arena, outputStart };
+				return { arena, outputStart, outputSlots: count };
 			}
 			const block = arena.free[index]!, outputStart = block[0];
 			block[0] += count;
 			block[1] -= count;
 			if ( !block[1] ) arena.free.splice( index, 1 );
-			return { arena, outputStart };
+			return { arena, outputStart, outputSlots: count };
 		}
 		const arena: Arena = { top: count, live: 1, free: [], pending: new Set() };
 		arenas.push( arena );
-		return { arena, outputStart: 0 };
+		return { arena, outputStart: 0, outputSlots: count };
 	}
 
 	/*
@@ -254,15 +303,37 @@ export function createParticlePresentation( device: GPUDevice, retire: Retire = 
 
 	/*
 	================
-	ensureOutput
+	bindStream
 
-	The copy is encoded after previous deferred work, so it preserves that
-	work too. Old buffers survive until the next frame begins after submit.
+	Point the stream's draw at its slice of the arena's current output.
 	================
 	*/
-	function ensureOutput( encoder: GPUCommandEncoder, arena: Arena ): Output {
+	function bindStream( stream: Stream ) {
+		const output = stream.arena.output!, size = stream.rows * stream.slots;
+		stream.bind( {
+			instances: {
+				buffer: output.instances,
+				offset: stream.outputStart * INSTANCE_BYTES,
+				size: size * INSTANCE_BYTES
+			},
+			bones: { buffer: output.bones, offset: stream.outputStart * PALETTE_BYTES, size: size * PALETTE_BYTES }
+		} );
+	}
+
+	/*
+	================
+	growOutput
+
+	Give the arena an output that holds its slots, at presentation. The
+	replaced output stays readable until the next frame begins after submit
+	(passes already recorded this frame may name it), and encode copies its
+	contents across first (flushGrowth). Every stream of the arena moves to
+	the new output now, before the frame records its bundles.
+	================
+	*/
+	function growOutput( arena: Arena ) {
 		const output = arena.output;
-		if ( output && output.count >= arena.top ) return output;
+		if ( output && output.count >= arena.top ) return;
 		const count = Math.floor( capacity( arena.top * PARTICLE_RECORD * 4 ) / (PARTICLE_RECORD * 4) );
 		const usage = GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC | GPUBufferUsage.COPY_DST;
 		const instances = device.createBuffer( {
@@ -283,14 +354,36 @@ export function createParticlePresentation( device: GPUDevice, retire: Retire = 
 			bones?.destroy();
 			throw error;
 		}
+		// Two growths before one encode: the first replacement was never
+		// written, so the copy still comes from the older output.
 		if ( output ) {
-			encoder.copyBufferToBuffer( output.instances, 0, instances, 0, output.count * INSTANCE_BYTES );
-			encoder.copyBufferToBuffer( output.bones, 0, bones, 0, output.count * PALETTE_BYTES );
-			encoder.copyBufferToBuffer( output.records, 0, records, 0, output.count * PARTICLE_RECORD * 4 );
-			oldOutputs.push( output );
+			if ( arena.copyFrom ) oldOutputs.push( output );
+			else arena.copyFrom = output;
 		}
 		arena.output = { count, records, instances, bones };
-		return arena.output;
+		for ( const stream of streams.values() ) {
+			if ( stream.arena === arena && stream.bound ) bindStream( stream );
+		}
+	}
+
+	/*
+	================
+	flushGrowth
+
+	Copy a grown arena's earlier contents into its output, ahead of this
+	frame's dispatches and passes.
+	================
+	*/
+	function flushGrowth( encoder: GPUCommandEncoder, arena: Arena ): Output {
+		const output = arena.output!, old = arena.copyFrom;
+		if ( old ) {
+			encoder.copyBufferToBuffer( old.instances, 0, output.instances, 0, old.count * INSTANCE_BYTES );
+			encoder.copyBufferToBuffer( old.bones, 0, output.bones, 0, old.count * PALETTE_BYTES );
+			encoder.copyBufferToBuffer( old.records, 0, output.records, 0, old.count * PARTICLE_RECORD * 4 );
+			oldOutputs.push( old );
+			arena.copyFrom = undefined;
+		}
+		return output;
 	}
 
 	/*
@@ -376,7 +469,7 @@ export function createParticlePresentation( device: GPUDevice, retire: Retire = 
 		if ( !stream ) return;
 		stream.arena.pending.delete( stream );
 		if ( !stream.arena.pending.size ) pending.delete( stream.arena );
-		reclaimOutput( stream.arena, stream.outputStart, stream.rows * stream.slots );
+		reclaimOutput( stream.arena, stream.outputStart, stream.outputSlots );
 		streams.delete( draw );
 	}
 
@@ -470,23 +563,6 @@ export function createParticlePresentation( device: GPUDevice, retire: Retire = 
 		pass.setBindGroup( 0, page.binding );
 		pass.dispatchWorkgroups( groups );
 		pass.end();
-		for ( const stream of selected ) {
-			const size = stream.rows * stream.slots;
-			encoder.copyBufferToBuffer(
-				target.instances,
-				stream.outputStart * INSTANCE_BYTES,
-				stream.instances,
-				0,
-				size * INSTANCE_BYTES
-			);
-			encoder.copyBufferToBuffer(
-				target.bones,
-				stream.outputStart * PALETTE_BYTES,
-				stream.bones,
-				0,
-				size * PALETTE_BYTES
-			);
-		}
 		dispatches++;
 		slots += count;
 	}
@@ -646,7 +722,13 @@ export function createParticlePresentation( device: GPUDevice, retire: Retire = 
 		present
 		================
 		*/
-		present( draw: GeometryDraw, instances: GPUBuffer, bones: GPUBuffer, particles: ParticlePresentation ) {
+		present(
+			draw: GeometryDraw,
+			instances: GPUBuffer,
+			bones: GPUBuffer,
+			particles: ParticlePresentation,
+			bind: ( binding: ParticleBinding ) => void
+		) {
 			if ( disposed || (!pipeline && !failure) ) throw Error( "Particle presentation is not ready" );
 			const count = particles.rows * particles.slots;
 			if (
@@ -698,12 +780,19 @@ export function createParticlePresentation( device: GPUDevice, retire: Retire = 
 					instances,
 					bones,
 					...allocateOutput( count ),
+					bind,
+					bound: !!pipeline,
 					initialized: false,
 					dirtyStart: 0,
 					dirtyEnd: count,
 					empty: false
 				};
 				streams.set( draw, stream );
+				if ( stream.bound ) {
+					const output = stream.arena.output;
+					if ( output && output.count >= stream.arena.top ) bindStream( stream );
+					else growOutput( stream.arena );
+				}
 				start = 0;
 				end = count;
 			}
@@ -751,7 +840,7 @@ export function createParticlePresentation( device: GPUDevice, retire: Retire = 
 				return;
 			}
 			for ( const arena of pending ) {
-				const target = ensureOutput( encoder, arena );
+				const target = flushGrowth( encoder, arena );
 				let groups = 0, frameBytes = 0, materialBytes = 0;
 				for ( const stream of arena.pending ) {
 					const nextGroups = Math.ceil( stream.rows * stream.slots / WORKGROUP );
