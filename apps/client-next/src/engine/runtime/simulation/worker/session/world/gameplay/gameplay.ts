@@ -1598,12 +1598,14 @@ Port-only (#3907): moves the Auto-Skills lists off a rank the character
 no longer knows onto its learned successor (currentMacroSkills) and
 saves the change, as the hotbar's upgrade swap saves its slots. Runs
 after an upgrade and when the server sends the settings, so a list
-saved before an upgrade repairs itself.
+saved before an upgrade repairs itself. A skill save already in flight
+(the player's own edit) is left alone: the repair would replace its
+pending copy, and the next settings replay repairs what it commits.
 ================
 	*/
 	function refreshMacroSkills() {
 		const live = sroMacro.view();
-		if ( !live ) return;
+		if ( !live || sroMacro.saving( MACRO_SKILL ) ) return;
 		const next = currentMacroSkills( live, bindings.skills, skillGroups );
 		if ( next === live ) return;
 		const frame = sroMacro.saveFrame( MACRO_SKILL, next );

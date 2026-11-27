@@ -13,7 +13,7 @@ the Experimental row on and the server's Auto-Skills ON.
 import "../helpers/native-source-loader.mjs";
 import assert from "node:assert/strict";
 import test from "node:test";
-import { macroReplay } from "../helpers/sro-macro-frames.mjs";
+import { macroAnswer, macroReplay } from "../helpers/sro-macro-frames.mjs";
 
 const loop = await import( "../../src/engine/foundation/gameplay/sro-macro-skill.ts" );
 const codec = await import( "../../src/engine/foundation/gameplay/sro-macro.ts" );
@@ -1132,4 +1132,25 @@ test("a list saved before an upgrade repairs itself when the settings arrive", (
 	const saves = macroSaves( sent );
 	assert.equal( saves.length, 1, "the replay's stale rank was saved forward" );
 	assert.ok( Buffer.from( saves[0].payload ).includes( Buffer.from( u32le( ATTACK_NEXT ) ) ) );
+});
+
+test("a refused repair is not resent on its own answer", () => {
+	const { sent, g } = macroWorld( { row: true, skillOn: 1, refs: [ NEXT_RANK ], known: [ BUFF, ATTACK_NEXT ] } );
+	assert.equal( macroSaves( sent ).length, 1, "the replay's stale rank was saved forward" );
+	sent.length = 0;
+	// 0xB554: save (1), skill kind, a failed result.
+	g.receive( macroAnswer( codec.MACRO_ACTION_SAVE, codec.MACRO_SKILL, 0x02, 0x98 ), 0 );
+	assert.equal( macroSaves( sent ).length, 0, "the refusal sends no second save" );
+});
+
+test("an upgrade leaves the player's in-flight skill save alone", () => {
+	const { sent, g } = macroWorld( { row: true, skillOn: 1, refs: [ NEXT_RANK ] } );
+	const edited = {
+		...g.take().sroMacro,
+		buff: []
+	};
+	g.command( { kind: "macro-save", macro: codec.MACRO_SKILL, settings: edited }, 0 );
+	assert.equal( macroSaves( sent ).length, 1, "the player's save went out" );
+	g.receive( { opcode: SKILL_LEARN_RESPONSE_OPCODE, payload: new Uint8Array( [ 1, ...u32le( ATTACK_NEXT ) ] ) }, 0 );
+	assert.equal( macroSaves( sent ).length, 1, "no repair replaced the pending save" );
 });

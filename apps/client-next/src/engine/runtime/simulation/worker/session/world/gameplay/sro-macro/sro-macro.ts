@@ -137,6 +137,17 @@ kind's pending copy until the answer.
 		},
 		/*
 ================
+saving
+
+Whether a save of kind is in flight (its pending copy waits on the
+answer).
+================
+		*/
+		saving( kind: MacroKind ): boolean {
+			return pending[kind] !== undefined;
+		},
+		/*
+================
 takeNotice
 ================
 		*/
