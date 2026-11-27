@@ -199,12 +199,12 @@ func (rt *Runtime) appointedRebirth(division string, character *enterworld.Chara
 	}
 	// A character that has never appointed a town is registered at its
 	// race's main-town gate; only a catalogue without that gate falls back
-	// to the starter position. Natively the creation procedure writes the
-	// appointment (v1.188 shard _AddNewChar: AppointedTeleport =
-	// @DefaultTeleport, STORE_EU_GATE for a European, STORE_CH_GATE for a
-	// Chinese character) and town recall reads only that id (0x4E08A0,
-	// record +0xA4), so this fallback is the stamp's whole effect: point
-	// 20 GATE_EU, Constantinople - never Samarkand's GATE_CA (#4490 U8-04).
+	// to the starter position. Natively the v1.188 shard's character
+	// creation stamps the appointment with the race's default teleport
+	// (STORE_EU_GATE for a European, STORE_CH_GATE for a Chinese
+	// character) and town recall reads only that id, so this fallback is
+	// the stamp's whole effect: point 20 GATE_EU, Constantinople - never
+	// Samarkand's GATE_CA (#4490 U8-04; the trail is in ../research).
 	if world.RebirthGateRefID == 0 && world.RebirthPoint == nil {
 		if point, ok := rt.recallDestination(raceTownGateRef(character)); ok {
 			return point
