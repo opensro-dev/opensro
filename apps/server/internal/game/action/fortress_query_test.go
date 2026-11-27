@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"opensro.online/server/internal/domain"
+	"opensro.online/server/internal/game/enterworld"
 	"opensro.online/server/internal/game/item/wire"
 	"opensro.online/server/internal/game/siege"
 	"opensro.online/server/internal/game/world/fortress"
@@ -47,6 +48,109 @@ func TestFortressManagerQueriesExistingAuthority(t *testing.T) {
 	out = rt.HandleFortressInteraction(testDivision, c, request)
 	if len(out.Frames) != 1 || !bytes.Equal(out.Frames[0].Payload, []byte{siege.ActionSchedule, 2, fortressErrInvalid}) {
 		t.Fatalf("unselected manager accepted: %+v", out.Frames)
+	}
+}
+
+/*
+================
+scheduleGuilds
+
+A guild store that knows the named guilds (the one-guild stub cannot
+name two applicants).
+================
+*/
+type scheduleGuilds struct {
+	enterworld.GuildStore
+	records map[int64]domain.GuildRecord
+}
+
+/*
+================
+scheduleGuilds.Guild
+================
+*/
+func (g scheduleGuilds) Guild(_ string, id int64) (domain.GuildRecord, []domain.GuildMemberRecord, bool) {
+	record, ok := g.records[id]
+	return record, nil, ok
+}
+
+/*
+================
+TestFortressScheduleNamesAttackAndAllyKinds
+
+The v1.150 schedule reader (754A40) takes the two war times, a count
+and, per applicant, its name, level and kind - there is no separate
+"an applicant exists" byte on this wire, so the kind byte (0 an
+attack, 1 an ally) is what the jobs window reads. Both kinds reach it.
+================
+*/
+func TestFortressScheduleNamesAttackAndAllyKinds(t *testing.T) {
+	rt, c := merchantFixture(t)
+	rt.Selected.Set(testDivision, c.Name, 17)
+	rt.NpcRoster[0].Services = simulation.NpcServices(0).With(simulation.NpcServiceFortressManager)
+	rt.Fortresses = fortress.New([]fortress.Catalog{{ID: 1}})
+	rt.Fortresses.SetApplication(testDivision, 1, 41, fortress.RequestAlly, true)
+	rt.Fortresses.SetApplication(testDivision, 1, 42, fortress.RequestAttack, true)
+	rt.Guilds = scheduleGuilds{records: map[int64]domain.GuildRecord{
+		41: {ID: 41, Name: "Defenders", Level: 3},
+		42: {ID: 42, Name: "Attackers", Level: 5},
+	}}
+	previous := time.Date(2026, 9, 30, 20, 0, 0, 0, time.UTC)
+	next := previous.AddDate(0, 0, 7)
+	rt.FortressWarDates = func(int64) (time.Time, time.Time) { return previous, next }
+	request := wire.NewWriter(9).U32(17).U8(siege.ActionSchedule).U32(1).Payload()
+	out := rt.HandleFortressInteraction(testDivision, c, request)
+	want := wire.NewWriter(48).U8(siege.ActionSchedule).U8(1)
+	writeSystemTime(want, previous)
+	writeSystemTime(want, next)
+	want.U8(2).U16(9).Bytes([]byte("Defenders")).U8(3).U8(uint8(fortress.RequestAlly))
+	want.U16(9).Bytes([]byte("Attackers")).U8(5).U8(uint8(fortress.RequestAttack))
+	if len(out.Frames) != 1 || !bytes.Equal(out.Frames[0].Payload, want.Payload()) {
+		t.Fatalf("schedule answer %+v, want % x", out.Frames, want.Payload())
+	}
+}
+
+/*
+================
+TestFortressTaxRateBelongsToTheHolder
+
+During a war the captured fortress is held temporarily: the temporary
+holder's master sets the tax rate, the old owner's master hears the
+owner refusal - the levy door already judged it so.
+================
+*/
+func TestFortressTaxRateBelongsToTheHolder(t *testing.T) {
+	rt, c := merchantFixture(t)
+	rt.Selected.Set(testDivision, c.Name, 17)
+	rt.NpcRoster[0].Services = simulation.NpcServices(0).With(simulation.NpcServiceFortressManager)
+	rt.Fortresses = fortress.New([]fortress.Catalog{{ID: 1}})
+	owner := int64(41)
+	rt.Fortresses.Occupy(testDivision, 1, owner)
+	rt.Fortresses.SetPeriod(testDivision, fortress.PeriodTax, true)
+	if !rt.Fortresses.Capture(testDivision, 1, 42, 0) {
+		t.Fatal("the capture did not stand")
+	}
+	rate := func(value uint16) []byte {
+		return wire.NewWriter(11).U32(17).U8(siege.ActionTaxRate).U32(1).U16(value).Payload()
+	}
+	holder := int64(42)
+	c.GuildID = &holder
+	rt.Guilds = fortressGuilds{guild: domain.GuildRecord{ID: 42}, members: []domain.GuildMemberRecord{{CharID: c.ID, Grade: 0}}}
+	out := rt.HandleFortressInteraction(testDivision, c, rate(20))
+	if !bytes.Equal(out.Frames[0].Payload, []byte{siege.ActionTaxRate, 1, 20, 0}) {
+		t.Fatalf("the temporary holder's master answered %+v", out.Frames)
+	}
+	if record, _ := rt.Fortresses.Get(testDivision, 1); record.TaxRate != 20 {
+		t.Fatalf("the rate stands at %d", record.TaxRate)
+	}
+	c.GuildID = &owner
+	rt.Guilds = fortressGuilds{guild: domain.GuildRecord{ID: 41}, members: []domain.GuildMemberRecord{{CharID: c.ID, Grade: 0}}}
+	out = rt.HandleFortressInteraction(testDivision, c, rate(10))
+	if !bytes.Equal(out.Frames[0].Payload, []byte{siege.ActionTaxRate, 2, 0x06}) {
+		t.Fatalf("the old owner's master answered %+v", out.Frames)
+	}
+	if record, _ := rt.Fortresses.Get(testDivision, 1); record.TaxRate != 20 {
+		t.Fatalf("the refused rate moved to %d", record.TaxRate)
 	}
 }
 
