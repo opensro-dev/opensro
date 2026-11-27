@@ -600,8 +600,9 @@ var Settings = []Setting{
 	{Env: "SRO_SHOP_EXTRA_GOODS", NomadVar: "shop_extra_goods", Default: "on", Catalogue: true},
 	// Owner, 2026-10-28 (#1850): Jangan's grocer as "OpenSRO Alchemy -
 	// Jangan", the default list's alchemy goods on three tabs and the
-	// elixirs off the smith. On by default (it extends the extra goods);
-	// off restores the native name and tabs.
+	// elixirs off the smith; #4684 (awaiting the owner's approval), a
+	// fourth tab of degree 10 stones at the degree 9 prices. On by default
+	// (it extends the extra goods); off restores the native name and tabs.
 	{Env: "SRO_JANGAN_ALCHEMY_SHOP", NomadVar: "jangan_alchemy_shop", Default: "on", Catalogue: true},
 	// Owner, 2026-11-07 (#2771): X-Large HP/MP potions at Jangan's
 	// potion merchant, at Hotan's native price of 900. On by default;

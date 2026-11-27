@@ -497,7 +497,7 @@ func publicRules() publicstats.RulesResponse {
 				Why:    "Beta balance: gold buys enhancement."},
 			{Flag: commerce.EnvJanganAlchemyShop, On: janganAlchemyOn,
 				Native: "Jangan's grocer is Grocery Trader Jinjin, her alchemy goods share one tab, and the smith sells the elixirs.",
-				Now:    "Jangan's grocer is OpenSRO Alchemy - Jangan: elixirs and powders, attribute stones and alchemy stones on three tabs of their own, the elixirs moved from the smith.",
+				Now:    "Jangan's grocer is OpenSRO Alchemy - Jangan: elixirs and powders, attribute stones, alchemy stones and degree-10 stones (at the degree-9 prices) on four tabs of their own, the elixirs moved from the smith.",
 				Why:    "A player's request: one alchemy shop in Jangan."},
 			{Flag: commerce.EnvJanganXLPotions, On: xlPotionsOn,
 				Native: "Jangan's potion merchant sells the two smallest HP and MP potions; X-Large potions sell only in Hotan.",

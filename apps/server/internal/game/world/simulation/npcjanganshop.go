@@ -1,5 +1,3 @@
-package simulation
-
 /*
 ===========================================================================
 
@@ -8,11 +6,13 @@ npcjanganshop.go - Jangan's grocer as one alchemy shop (port-only, not native)
 #1850 (owner, 2026-10-28, a player's request): while SRO_JANGAN_ALCHEMY_SHOP
 is on (the default) and the extra-goods default list is in force, Jangan's
 grocer carries the name "OpenSRO Alchemy - Jangan" and her authored alchemy
-tab is replaced by the feature's three tabs, in their own tab group below
-the native ones. commerce stocks the same three tabs from the same goods
-tables (commerce/alchemyshop.go); the tab ids are the largest authored tab
-id + 1, + 2 and + 3 in tab order, derived here from the roster's tables
-and there from the shop catalogue's, so the two always agree. The off
+tab is replaced by the feature's four tabs (the fourth, the degree 10
+stones, #4684), in their own tab group below the native ones:
+four is the most tabs a shop group shows (client merchant-branches.ts).
+commerce stocks the same four tabs from the same goods tables
+(commerce/alchemyshop.go); the tab ids are the largest authored tab id
++ 1 to + 4 in tab order, derived here from the roster's tables and there
+from the shop catalogue's, so the two always agree. The off
 value of either setting restores the native name and tabs.
 
 The settings are read here, not in commerce, because the roster cannot
@@ -22,6 +22,7 @@ answers for every combination.
 
 ===========================================================================
 */
+package simulation
 
 import (
 	"os"
@@ -41,17 +42,33 @@ const janganGrocerCodename = "NPC_CH_ACCESSORY"
 // janganAlchemyName is the grocer's shop name while the feature is on.
 const janganAlchemyName = "OpenSRO Alchemy - Jangan"
 
-// The native alchemy tab's label, and the three tabs' own labels: the
+// The native alchemy tab's label, and the four tabs' own labels: the
 // game's category strings (the stall network's "Elixir", the item types'
-// "Attribute stone" and "Alchemy stone"), under a group of the same
-// "Alchemy" label.
+// "Attribute stone" and "Alchemy stone"), and for the degree 10 stones a
+// port label the client spells "10th degree" (v1.150's degree tab names,
+// SN_TAB_MAGICTABLET_n, stop at the 6th; client port-shop-copy.ts), under
+// a group of the same "Alchemy" label.
 const (
 	janganNativeAlchemyLabel = "SN_TAB_ALCHEMY"
 	janganAlchemyGroupLabel  = "SN_TAB_ALCHEMY"
 	janganElixirsLabel       = "UIIT_CTL_WK_ALCHEMY_ELIXIR"
 	janganAttrStonesLabel    = "UIIT_STT_ITEM_TYPE_ALCHEMY_ATTRSTONE"
 	janganMagicStonesLabel   = "UIIT_STT_ITEM_TYPE_ALCHEMY_MAGICSTONE"
+	janganD10StonesLabel     = "UIIT_PORT_ALCHEMY_D10_STONES"
 )
+
+// The synthesized tabs' ids above the largest authored tab id, in tab
+// order; commerce/alchemyshop.go numbers the catalogue's the same way.
+const (
+	janganElixirsOffset     = 1
+	janganAttrStonesOffset  = 2
+	janganMagicStonesOffset = 3
+	janganD10StonesOffset   = 4
+)
+
+// janganAlchemyGroupOffset puts the tabs' group above the largest authored
+// tab-group id.
+const janganAlchemyGroupOffset = 1
 
 /*
 ================
@@ -83,19 +100,21 @@ func janganAlchemyShopActive() bool {
 applyJanganAlchemyShop
 
 The grocer's row under the feature: the shop name, and every store
-group's native alchemy tab replaced by the three synthesized tabs (in
+group's native alchemy tab replaced by the four synthesized tabs (in
 tab order, one new group above the largest authored group id).
 ================
 */
 func applyJanganAlchemyShop(npc *NpcDef, maxTabID int32, maxGroupID int32) {
 	npc.Name = janganAlchemyName
 	synthesized := []NpcTalkStoreTab{
-		{TabID: maxTabID + 1, LabelSymbol: janganElixirsLabel,
-			GroupID: maxGroupID + 1, GroupLabelSymbol: janganAlchemyGroupLabel},
-		{TabID: maxTabID + 2, LabelSymbol: janganAttrStonesLabel,
-			GroupID: maxGroupID + 1, GroupLabelSymbol: janganAlchemyGroupLabel},
-		{TabID: maxTabID + 3, LabelSymbol: janganMagicStonesLabel,
-			GroupID: maxGroupID + 1, GroupLabelSymbol: janganAlchemyGroupLabel},
+		{TabID: maxTabID + janganElixirsOffset, LabelSymbol: janganElixirsLabel,
+			GroupID: maxGroupID + janganAlchemyGroupOffset, GroupLabelSymbol: janganAlchemyGroupLabel},
+		{TabID: maxTabID + janganAttrStonesOffset, LabelSymbol: janganAttrStonesLabel,
+			GroupID: maxGroupID + janganAlchemyGroupOffset, GroupLabelSymbol: janganAlchemyGroupLabel},
+		{TabID: maxTabID + janganMagicStonesOffset, LabelSymbol: janganMagicStonesLabel,
+			GroupID: maxGroupID + janganAlchemyGroupOffset, GroupLabelSymbol: janganAlchemyGroupLabel},
+		{TabID: maxTabID + janganD10StonesOffset, LabelSymbol: janganD10StonesLabel,
+			GroupID: maxGroupID + janganAlchemyGroupOffset, GroupLabelSymbol: janganAlchemyGroupLabel},
 	}
 	for gi := range npc.NpcTalkStoreGroups {
 		tabs := make([]NpcTalkStoreTab, 0, len(npc.NpcTalkStoreGroups[gi].Tabs)+len(synthesized))

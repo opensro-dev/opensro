@@ -4,8 +4,9 @@
 alchemyshop_test.go - Jangan's alchemy shop regroup (port-only, not native)
 
 The switch on regroups the default list's alchemy goods onto the grocer's
-three synthesized tabs at the same prices; off, an operator list, or the
-extra goods off each keep today's shops exactly.
+synthesized tabs at the same prices and adds the degree 10 stones tab at
+the degree 9 prices; off, an operator list, or the extra goods off each
+keep today's shops exactly.
 
 ===========================================================================
 */
@@ -70,11 +71,12 @@ func TestJanganAlchemyShopRegroupsTheDefaultList(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	// The same 74 goods the default list sells, regrouped: nothing on the
-	// smith's or grocer's authored tabs, 7 + 14 + 19 on the three new ones
-	// (the elixirs tab: four recipes and the degree 9-11 powders).
-	if len(goods) != 75 {
-		t.Fatalf("regrouped list = %d goods, want the default 75", len(goods))
+	// The default list's 75 goods regrouped, plus the 32 degree 10 stones
+	// with Steady 10 moved among them: nothing on the smith's or grocer's
+	// authored tabs, 7 + 14 + 19 + 32 on the four new ones (the elixirs
+	// tab: four recipes and the degree 9-11 powders).
+	if len(goods) != 75+31 {
+		t.Fatalf("regrouped list = %d goods, want the default 75 and 31 new", len(goods))
 	}
 	counts := map[string]int{}
 	for _, good := range goods {
@@ -83,7 +85,8 @@ func TestJanganAlchemyShopRegroupsTheDefaultList(t *testing.T) {
 		}
 		counts[good.Tab]++
 	}
-	if counts[janganElixirsTab] != 7 || counts[janganAttrStonesTab] != 14 || counts[janganMagicStonesTab] != 20 {
+	if counts[janganElixirsTab] != 7 || counts[janganAttrStonesTab] != 14 || counts[janganMagicStonesTab] != 19 ||
+		counts[janganD10StonesTab] != 32 {
 		t.Fatalf("tab goods = %v", counts)
 	}
 
@@ -95,17 +98,19 @@ func TestJanganAlchemyShopRegroupsTheDefaultList(t *testing.T) {
 	// The synthesized ids sit above every authored tab, in tab order.
 	var authoredMax int32
 	for name, id := range c.tabIDs {
-		if name != janganElixirsTab && name != janganAttrStonesTab && name != janganMagicStonesTab && id > authoredMax {
-			authoredMax = id
+		switch name {
+		case janganElixirsTab, janganAttrStonesTab, janganMagicStonesTab, janganD10StonesTab:
+			continue
 		}
+		authoredMax = max(authoredMax, id)
 	}
 	if c.tabIDs[janganElixirsTab] != authoredMax+1 || c.tabIDs[janganAttrStonesTab] != authoredMax+2 ||
-		c.tabIDs[janganMagicStonesTab] != authoredMax+3 {
-		t.Fatalf("synthesized ids = %d/%d/%d above authored %d",
-			c.tabIDs[janganElixirsTab], c.tabIDs[janganAttrStonesTab], c.tabIDs[janganMagicStonesTab], authoredMax)
+		c.tabIDs[janganMagicStonesTab] != authoredMax+3 || c.tabIDs[janganD10StonesTab] != authoredMax+4 {
+		t.Fatalf("synthesized ids = %d/%d/%d/%d above authored %d", c.tabIDs[janganElixirsTab],
+			c.tabIDs[janganAttrStonesTab], c.tabIDs[janganMagicStonesTab], c.tabIDs[janganD10StonesTab], authoredMax)
 	}
 	// The shipped tables' largest authored tab id is 2378; the roster
-	// projection pins the same synthesized ids (2379-2381).
+	// projection pins the same synthesized ids (2379-2382).
 	if authoredMax != 2378 {
 		t.Fatalf("authored tab maximum = %d, want the shipped 2378", authoredMax)
 	}
@@ -136,8 +141,10 @@ func TestJanganAlchemyShopRegroupsTheDefaultList(t *testing.T) {
 	if len(attr) != 14 || attr[0].Ref.Codename != "ITEM_ETC_ARCHEMY_ATTRSTONE_PA_09" || attr[0].Price != 2000000 {
 		t.Fatalf("attribute tab = %v", tabCodenames(attr))
 	}
+	// The alchemy stones tab is degree 9 alone: Steady 10 sells on the
+	// degree 10 tab.
 	magic := c.Tabs[authoredMax+3]
-	if len(magic) != 20 {
+	if len(magic) != 19 {
 		t.Fatalf("magic tab has %d offers", len(magic))
 	}
 	wantTail := []struct {
@@ -146,7 +153,6 @@ func TestJanganAlchemyShopRegroupsTheDefaultList(t *testing.T) {
 	}{
 		{"ITEM_ETC_ARCHEMY_MAGICSTONE_LUCK_09", 5000000},
 		{"ITEM_ETC_ARCHEMY_MAGICSTONE_SOLID_09", 5000000},
-		{"ITEM_ETC_ARCHEMY_MAGICSTONE_SOLID_10", 5000000},
 		{"ITEM_ETC_ARCHEMY_MAGICSTONE_ASTRAL_09", 50000000},
 		{"ITEM_ETC_ARCHEMY_MAGICSTONE_ATHANASIA_09", 25000000},
 		{"ITEM_ETC_ARCHEMY_MAGICSTONE_REPAIR_09", 5000000},
@@ -155,6 +161,40 @@ func TestJanganAlchemyShopRegroupsTheDefaultList(t *testing.T) {
 		offer := magic[14+i]
 		if offer.Ref.Codename != want.code || offer.Price != want.price {
 			t.Fatalf("magic offer %d = %s at %d", 14+i, offer.Ref.Codename, offer.Price)
+		}
+	}
+	checkJanganD10Tab(t, c.Tabs[authoredMax+4])
+}
+
+/*
+================
+checkJanganD10Tab
+
+The degree 10 stones tab: each degree 9 attribute and magic stone's
+degree 10 twin, in the degree 9 tabs' order, at the degree 9 twin's
+price, slots from 0. The degree 9 Repair stone has no twin.
+================
+*/
+func checkJanganD10Tab(t *testing.T, offers []Offer) {
+	t.Helper()
+	var want []janganGood
+	d9 := append(append(append([]janganGood{}, janganAttrStoneGoods...), janganGrocerMagicStones...),
+		janganSmithMagicStones...)
+	for _, good := range d9 {
+		if !strings.HasSuffix(good.codename, "_09") || good.codename == "ITEM_ETC_ARCHEMY_MAGICSTONE_REPAIR_09" {
+			continue
+		}
+		want = append(want, janganGood{strings.TrimSuffix(good.codename, "_09") + "_10", good.price})
+	}
+	if len(offers) != len(want) || len(want) != 32 {
+		t.Fatalf("degree 10 tab = %v, want %d stones", tabCodenames(offers), len(want))
+	}
+	for i, good := range want {
+		offer := offers[i]
+		if offer.Slot != uint8(i) || offer.Ref.Codename != good.codename || offer.Price != good.price ||
+			offer.Currency != PaymentGold {
+			t.Fatalf("degree 10 offer %d = %s at %d (slot %d), want %s at %d",
+				i, offer.Ref.Codename, offer.Price, offer.Slot, good.codename, good.price)
 		}
 	}
 }
@@ -176,8 +216,10 @@ func TestJanganAlchemyShopOffKeepsTodaysShops(t *testing.T) {
 		t.Fatal("switch off changed the default list")
 	}
 	c := janganCatalog(t)
-	if _, ok := c.tabIDs[janganElixirsTab]; ok {
-		t.Fatal("switch off registered the synthesized tabs")
+	for _, tab := range []string{janganElixirsTab, janganD10StonesTab} {
+		if _, ok := c.tabIDs[tab]; ok {
+			t.Fatalf("switch off registered the synthesized tab %s", tab)
+		}
 	}
 	if offers := c.Tabs[c.tabIDs[janganSmithTab]]; len(offers) != 1+10 {
 		t.Fatalf("smith tab 3 = %d offers, want its arrows and the 10 goods", len(offers))

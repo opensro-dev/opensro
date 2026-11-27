@@ -41,6 +41,7 @@ import { publishedPortraits } from "./publishedPortraits.mjs";
 const { createMagicTable, itemTooltipRows } = await import( "./siteTooltip.mjs" );
 const { writeTooltipBundle } = await import( "./tooltipBundle.mjs" );
 const { skillTooltip } = await import( "../../../apps/client-next/src/engine/foundation/ui/skill-tooltip.ts" );
+const { portShopTabCopy } = await import( "../../../apps/client-next/src/engine/foundation/ui/port-shop-copy.ts" );
 const { createTooltipSkillDecoder } = await import(
 	"../../../apps/client-next/src/engine/foundation/ui/skill-tooltip-catalog.ts"
 );
@@ -390,7 +391,9 @@ async function main() {
 		writeFileSync( path.join( out, "regions.json" ), JSON.stringify( regions ) + "\n" );
 		const npcs = readJSON( path.join( work, "npcs.json" ) );
 		for ( const tab of npcs.npcs.flatMap( npc => npc.tabs ) ) {
-			tab.label = text( tab.labelSymbol ) || tab.labelSymbol;
+			// A tab the port synthesizes has no text row; the shop window's
+			// port copy names it (port-shop-copy.ts).
+			tab.label = text( tab.labelSymbol ) || portShopTabCopy( tab.labelSymbol ) || tab.labelSymbol;
 		}
 		writeFileSync( path.join( out, "npcs.json" ), JSON.stringify( npcs ) + "\n" );
 		const search = readJSON( path.join( work, "search.json" ) );
