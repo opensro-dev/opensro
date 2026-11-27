@@ -12,6 +12,7 @@ credentials belong to ui.ts.
 */
 import { catalogMessage } from "@/engine/foundation/ui/catalog-message";
 import { renameCancelledText } from "@/engine/foundation/gameplay/name-change";
+import { deletionWindowMs } from "./deletion-window";
 import type { AssetOwner } from "@/engine/contracts/assets";
 import type { UiRect, UiControl, UiQuad } from "@/engine/contracts/ui";
 import type { FrontendSnapshot } from "@/engine/contracts/frontend";
@@ -587,8 +588,8 @@ export function createTitleUi(
 				if ( chosen?.deletePending ) {
 					const parent: UiRect = [ Math.trunc( (w - 328) / 2 ), bottom - 102, 328, 92 ];
 					picture( "GDR_STA_REMAINTIME", parent );
-					const total = 7 * 24 * 3600000,
-						start = Date.parse( chosen.deleteReservedAt ?? "" ),
+					const start = Date.parse( chosen.deleteReservedAt ?? "" ),
+						total = deletionWindowMs( start, Date.parse( chosen.deleteMaturesAt ?? "" ) ),
 						remaining = Number.isFinite( start ) ?
 							Math.max( 0, Math.min( total, start + total - Date.now() ) ) :
 							null;

@@ -3,6 +3,7 @@ package store
 import (
 	"encoding/json"
 	"fmt"
+	"os"
 	"strings"
 	"time"
 
@@ -12,7 +13,49 @@ import (
 
 // Mature deletion is one authority transaction: archive the victim, heal all
 // reciprocal social edges, then remove the live record.
+//
+// DeleteReservationWindow is the native wait: seven days.
 const DeleteReservationWindow = 7 * 24 * time.Hour
+
+// QuickDeleteReservationWindow is the port-only one-day wait
+// (SRO_QUICK_CHARACTER_DELETE).
+const QuickDeleteReservationWindow = 24 * time.Hour
+
+// EnvQuickCharacterDelete names the switch. Port-only, not native (owner,
+// 2026-11-27): "on" matures a deletion reservation after one day; unset or
+// "off" keeps the native seven days.
+const EnvQuickCharacterDelete = "SRO_QUICK_CHARACTER_DELETE"
+
+/*
+================
+QuickCharacterDeleteFromEnv
+
+The switch as the environment states it, read once into Options.
+================
+*/
+func QuickCharacterDeleteFromEnv() bool {
+	switch strings.ToLower(strings.TrimSpace(os.Getenv(EnvQuickCharacterDelete))) {
+	case "on", "1", "true":
+		return true
+	}
+	return false
+}
+
+/*
+================
+DeletionWindow
+
+How long this store's deletion reservations wait before the reaper archives
+the character. The character list publishes the matured instant from it,
+so the select screen's countdown and the reaper read one value.
+================
+*/
+func (s *Store) DeletionWindow() time.Duration {
+	if s.deleteWindow > 0 {
+		return s.deleteWindow
+	}
+	return DeleteReservationWindow
+}
 
 // ReapMaturedDeletions archives every character whose deletion
 // reservation matured (deleteReservedAt + DeleteReservationWindow <= now):
@@ -35,7 +78,7 @@ func (s *Store) ReapMaturedDeletions() []string {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	cutoff := s.now().Add(-DeleteReservationWindow)
+	cutoff := s.now().Add(-s.DeletionWindow())
 	var victims []reapVictim
 	for divisionID, records := range s.characters {
 		for _, c := range records {
