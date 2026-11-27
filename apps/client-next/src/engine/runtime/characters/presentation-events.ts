@@ -133,6 +133,13 @@ interface PresentationEventFrame {
 	// The pose actor-motion holds (or is about to hold on a cast-burst
 	// frame) for each character, so effects anchor to the drawn body.
 	readonly heldPoses: ReadonlyMap<number, Pose>;
+	// The body yaw (heading words) a cast turned the character to
+	// (8DC440 writes it through CICharactor_SetYaw, and it outlives the
+	// cast), or undefined while the body shows its logical heading. A
+	// mover takes the source object's yaw (+0x88) when it spawns, so a
+	// stage that fires after the cast stops animating still faces the
+	// target (#4599).
+	readonly castYaw?: ( gid: number ) => number | undefined;
 	readonly localMover: ( gid: number ) => boolean;
 	readonly logicalPose: ( entity: EntityState ) => Pose;
 	readonly appearanceRef: ( entity: EntityState ) => number;
@@ -198,6 +205,18 @@ interface PresentationEventFrame {
 createPresentationEvents
 ================
 */
+/*
+================
+noCastYaw
+
+A frame without actor-motion state (tests, tools): every body shows its
+logical heading.
+================
+*/
+function noCastYaw( _gid: number ): number | undefined {
+	return undefined;
+}
+
 export function createPresentationEvents() {
 	const state = { damageTexts: [] as DamageText[], environmentalSequence: 0 };
 	return {
@@ -224,6 +243,7 @@ export function createPresentationEvents() {
 				triggers,
 				samples,
 				heldPoses,
+				castYaw = noCastYaw,
 				localMover,
 				logicalPose,
 				appearanceRef,
@@ -299,11 +319,12 @@ export function createPresentationEvents() {
 						heading: held.angle
 					};
 				}
+				const turned = castYaw( entity.gid );
 				if (
 					(selectedGids && !selectedGids.has( entity.gid )) ||
 					!samples.has( entity.gid ) ||
 					!localMover( entity.gid ) && !entity.moving
-				) return entity;
+				) return turned === undefined ? entity : { ...entity, heading: turned };
 				const drawn = drawnPoses.get( entity.gid ) ?? logicalPose( entity );
 				if ( local ) {
 					drawnLocal = { ...gameplay!.pose!, regionId: drawn.regionId, x: drawn.x, y: drawn.y, z: drawn.z };
@@ -371,7 +392,7 @@ export function createPresentationEvents() {
 								x: sampled.x,
 								y: sampled.y,
 								z: sampled.z,
-								yaw: characterHeadingYaw( sampled.angle )
+								yaw: characterHeadingYaw( castYaw( actor.gid ) ?? sampled.angle )
 							} :
 							actor.pose;
 						const shifted = {

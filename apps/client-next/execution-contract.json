@@ -4495,6 +4495,13 @@
 		},
 		{
 			"file": "src/engine/runtime/characters/presentation-events.ts",
+			"expression": "castYaw",
+			"function": "callback:map:0",
+			"kind": "callback",
+			"reason": "The actor-motion state owner lends the body yaw a cast left (castFacing / castYawRelease) through characters.ts; a mover spawns with the source object's yaw (#4599)."
+		},
+		{
+			"file": "src/engine/runtime/characters/presentation-events.ts",
 			"expression": "effects.step",
 			"function": "step",
 			"kind": "callback",

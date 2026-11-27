@@ -670,6 +670,14 @@ export function createCharacterPresentation(
 				state.lastDrawnPose :
 				undefined;
 		};
+		// The yaw a cast left on the body (actor-motion's cast facing, or
+		// the turn back from it), as last frame drew it; see castYaw in
+		// presentation-events.
+		const castYaw = ( gid: number ) => {
+			const state = states.get( gid );
+			const angle = state?.castFacing?.angle ?? state?.castYawRelease?.angle;
+			return angle === undefined ? undefined : Math.round( angle ) % 65536;
+		};
 		const heldPoses = new Map<number, Pose>();
 		for ( const entity of entities ) {
 			const held = heldPose( entity.gid );
@@ -693,6 +701,7 @@ export function createCharacterPresentation(
 				triggers,
 				samples,
 				heldPoses,
+				castYaw,
 				localMover,
 				logicalPose,
 				appearanceRef,

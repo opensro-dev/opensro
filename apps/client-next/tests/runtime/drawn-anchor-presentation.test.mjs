@@ -25,6 +25,9 @@ const { selectCameraTarget } = await import(
 const { worldAudioPosition } = await import(
 	sourceFileUrl( "src/engine/foundation/world/world-space.ts" ).href
 );
+const { characterHeadingYaw } = await import(
+	sourceFileUrl( "src/engine/foundation/math/angles.ts" ).href
+);
 
 const REGION = 24744, SECONDS = 10;
 // The walk's logical pose (the movement owner's latest) and the pose the
@@ -63,9 +66,12 @@ One presentation-events step over a walking local player (gid 1) and a
 second player (gid 2), with one hit from the local player on gid 2. The
 frame's drawn poses trail the logical ones. Returns what the effect
 step received, the damage texts placed and the flush's position resolver.
+`cast` optionally supplies the
+frame's castYaw and the displayed actors a bone launch samples; the
+step's socket query then runs once for gid 2 and records its rows.
 ================
 */
-function driveEvents( heldPoses = new Map() ) {
+function driveEvents( heldPoses = new Map(), cast = {} ) {
 	const local = entity( 1, 40, 440 ), other = entity( 2, 120, 520 );
 	const entities = [ local, other ];
 	const gameplay = {
@@ -77,14 +83,20 @@ function driveEvents( heldPoses = new Map() ) {
 		inventory: [],
 		attachedEffects: []
 	};
-	/** @type {{ effectsPose: any, effectsEntities: any, effectsDrawn: any, resolve: any }} */
-	const seen = { effectsPose: null, effectsEntities: null, effectsDrawn: null, resolve: null };
+	/** @type {{ effectsPose: any, effectsEntities: any, effectsDrawn: any, resolve: any, socketRows: any }} */
+	const seen = { effectsPose: null, effectsEntities: null, effectsDrawn: null, resolve: null, socketRows: null };
 	const effects = {
 		step( rows, effectGameplay, ...rest ) {
 			seen.effectsEntities = rows;
 			seen.effectsPose = effectGameplay?.pose;
-			// The step's last argument is the frame's drawn poses (#1545).
+			// The step's last argument is the frame's drawn poses (#1545),
+			// the fifth after the gameplay view the socket query a bone
+			// launch samples.
 			seen.effectsDrawn = rest.at( -1 );
+			if ( cast.displayed ) {
+				const trigger = { cast: { token: 7, caster: 2 }, phase: "SHOT", event: 0, at: SECONDS };
+				rest[4]( 2, "Bip01 L Hand", [ 0, 0, 0 ], trigger );
+			}
 			return [];
 		},
 		attachedInstances: () => [],
@@ -115,6 +127,7 @@ function driveEvents( heldPoses = new Map() ) {
 			triggers: [],
 			samples: new Map( [ [ 1, {} ], [ 2, {} ] ] ),
 			heldPoses,
+			castYaw: cast.castYaw,
 			localMover: gid => gid === 1,
 			logicalPose: row =>
 				row.gid === 1 ?
@@ -135,7 +148,19 @@ function driveEvents( heldPoses = new Map() ) {
 			// The /id byte ships standing (0xCCB5D8).
 			damageNumbers: true,
 			resources: { ready: () => false, duration: () => 0 },
-			renderer: { characterSocket: () => null, characterMatrix: () => null, characterLocalMatrix: () => null },
+			renderer: {
+				/*
+				================
+				characterSocket
+				================
+				*/
+				characterSocket( rows ) {
+					seen.socketRows = rows;
+					return null;
+				},
+				characterMatrix: () => null,
+				characterLocalMatrix: () => null
+			},
 			feedback: {
 				take: () => [ {
 					cast: { token: "hit-1", caster: 1, target: 2, skill: 100 },
@@ -149,7 +174,7 @@ function driveEvents( heldPoses = new Map() ) {
 			health: undefined,
 			sounds
 		},
-		{ displayed: new Map() },
+		{ displayed: cast.displayed ?? new Map() },
 		{
 			catalog: new Map(),
 			tradeBandits: new Map(),
@@ -195,6 +220,32 @@ test("a held pose moves the effect step's local anchor, keeping the mover's head
 	// the movement owner's, not the held row's own angle.
 	assert.equal( pose.angle, LOGICAL.angle );
 	assert.notEqual( pose.angle, HELD.angle );
+});
+
+test("a mover spawned after the cast stops animating takes the yaw the cast left on the body (#4599)", () => {
+	// BR-261127-0018-210B: B505 requested the cast's cancellation at
+	// 11.234 s, so the body was no longer held, and the follower bolts
+	// at 11.35 s and 11.50 s read the logical heading. Natively each
+	// mover takes the source object's yaw (+0x88), which 8DC440 turned
+	// and which outlives the cast.
+	const TURNED = 16384;
+	const actor = {
+		gid: 2,
+		model: "body",
+		scale: 1,
+		clip: "",
+		time: 0,
+		loop: true,
+		pose: { regionId: REGION, x: 117, y: 10, z: 516, yaw: characterHeadingYaw( 0 ) }
+	};
+	const displayed = new Map( [ [ 2, actor ] ] );
+	const { seen } = driveEvents( new Map(), { castYaw: gid => gid === 2 ? TURNED : undefined, displayed } );
+	assert.equal( seen.effectsEntities.find( row => row.gid === 2 ).heading, TURNED );
+	assert.equal( seen.socketRows[0].pose.yaw, characterHeadingYaw( TURNED ) );
+	// With no cast yaw, both lanes keep the logical heading.
+	const plain = driveEvents( new Map(), { displayed } ).seen;
+	assert.equal( plain.effectsEntities.find( row => row.gid === 2 ).heading, 0 );
+	assert.equal( plain.socketRows[0].pose.yaw, characterHeadingYaw( 0 ) );
 });
 
 test("sounds at the walking local player sit on its presented pose", () => {
