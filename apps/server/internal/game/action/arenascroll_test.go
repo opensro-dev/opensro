@@ -145,3 +145,36 @@ func TestReverseScrollInBattleArenaWorldOrder(t *testing.T) {
 		})
 	}
 }
+
+/*
+================
+TestLimitedUseReturnsInBattleArenaWorldAreRefused
+
+A limited use runs the same return handlers without a bag row, so the
+arena refuses both its return and its reverse return with 0x187A and
+starts no cast.
+================
+*/
+func TestLimitedUseReturnsInBattleArenaWorldAreRefused(t *testing.T) {
+	rt, c, _, ref := returnFixture(t, 5000)
+	standInArena(t, c)
+	reverse := &enterworld.ItemRef{RefObjID: 3800, Codename: "ITEM_MALL_REVERSE_RETURN_SCROLL", Country: 3,
+		TypeIDs: [4]int64{3, 3, 3, 3}, ReturnDestination: "RESURRECT",
+		NativeFields: enterworld.NewNativeFields(map[string]float64{"canUse": 1, "itemParam1_29c": 5000, "itemParam2_2a0": 1})}
+	for _, tc := range []struct {
+		name string
+		ref  *enterworld.ItemRef
+	}{{"return", ref}, {"reverse return", reverse}} {
+		var result OpResult
+		var revived *revivedWhereDead
+		if rt.runLimitedUse(testDivision, c, tc.ref, reverseReturnLastRecall, rt.Now().UnixMilli(), &result, &revived) {
+			t.Fatalf("limited %s in the arena started", tc.name)
+		}
+		if len(result.Frames) != 1 || !bytes.Equal(result.Frames[0].Payload, wire.EncodeItemUseError(errCodeScrollArena)) {
+			t.Fatalf("limited %s answered %+v, want the 0x7a refusal", tc.name, result.Frames)
+		}
+		if c.NativeTeleportMode != 0 {
+			t.Fatalf("limited %s started the cast", tc.name)
+		}
+	}
+}

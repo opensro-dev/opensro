@@ -232,7 +232,7 @@ func (rt *Runtime) runLimitedUse(division string, c *enterworld.Character, ref *
 	switch limitedUseKindOf(ref) {
 	case limitedUseReturn:
 		duration, mode, ok := returnScrollTiming(ref)
-		if !ok || mode != teleportModeBlocking || !rt.returnScrollAdmission(division, c, result) {
+		if !ok || mode != teleportModeBlocking || !rt.resurrectScrollAdmission(division, c, result) {
 			return false
 		}
 		at := rt.liveSpawn(simulation.WorldKey(division, c.Name), c, now)
@@ -249,6 +249,11 @@ func (rt *Runtime) runLimitedUse(division string, c *enterworld.Character, ref *
 			return false
 		}
 		if rt.jobRefusesScroll(tunables.JobBlockReverseReturnScroll, c, result) {
+			return false
+		}
+		// The reverse handler (0x4A00C0) refuses a Battle Arena world
+		// ahead of the shared checks, as the bag's reverse scroll does.
+		if rt.returnScrollArenaRefused(c, result) {
 			return false
 		}
 		duration, ok := returnScrollDuration(ref)

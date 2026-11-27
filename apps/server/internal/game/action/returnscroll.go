@@ -186,6 +186,28 @@ func (rt *Runtime) returnScrollArenaRefused(c *enterworld.Character, result *OpR
 
 /*
 ================
+resurrectScrollAdmission
+
+The ordinary (RESURRECT) return's admission, from the bag or as a
+limited use: the cast checks (quest, casting, criminal state), then the
+Battle Arena refusal, then the destination's transport refusal. 0x4A0380
+tests the arena ahead of the destination string, so a reader with a
+transport in the arena hears 0x187A, not 0x185E.
+================
+*/
+func (rt *Runtime) resurrectScrollAdmission(division string, c *enterworld.Character, result *OpResult) bool {
+	if !rt.returnCastAdmission(division, c, result) || rt.returnScrollArenaRefused(c, result) {
+		return false
+	}
+	if rt.townTravelTransportRefused(c) {
+		*result = itemUseFailure(0x5e)
+		return false
+	}
+	return true
+}
+
+/*
+================
 beginReturnScroll
 
 Inside the item-use character mutation door. The v1.188 item use
@@ -204,19 +226,7 @@ func (rt *Runtime) beginReturnScroll(division string, c *enterworld.Character, r
 	var destination *travelPoint
 	switch ref.ReturnDestination {
 	case "RESURRECT":
-		if mode != teleportModeBlocking || !rt.returnCastAdmission(division, c, result) {
-			return false
-		}
-		// After the cast checks (quest, casting, criminal state) and
-		// before the destination's own transport refusal, a Battle Arena
-		// world refuses the scroll (0x4A0380 tests the arena ahead of
-		// the destination string): the cast must not leave a running
-		// match, and a reader with a transport there hears 0x187A.
-		if rt.returnScrollArenaRefused(c, result) {
-			return false
-		}
-		if rt.townTravelTransportRefused(c) {
-			*result = itemUseFailure(0x5e)
+		if mode != teleportModeBlocking || !rt.resurrectScrollAdmission(division, c, result) {
 			return false
 		}
 	case "THIEFDEN":
