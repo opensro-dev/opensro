@@ -65,6 +65,10 @@ import sro_pk2
 from prepare_client_resources import safe_target, write_atomically
 
 FLAG = "SRO_CHRISTMAS_EVENT"
+# Which Christmas event the switch runs; the winter event (blank or
+# "winter") and So-Ok's Christmas Gift are the two that spawn these kinds.
+MODE_ENV = "SRO_CHRISTMAS_EVENT_MODE"
+SPAWNING_MODES = ("", "winter", "so_ok_2006")
 ROOT_ENV = "SRO_V1696_ROOT"
 MARKER = ".opensro-winter-event.json"
 # The 240000 identity band: 210000 is the Constantinople fortress's,
@@ -111,9 +115,16 @@ SPEC = later_world_import.WorldImport(
 
 # ================
 # flag_enabled
+#
+# The switch on in a mode that spawns these kinds, read the way the
+# server reads it (progression/christmas_mode.go: case-insensitive, a
+# blank mode is the winter event). The decoration mode (#4676) and an
+# unknown mode spawn none, so the import stays off for them.
 # ================
 def flag_enabled(env=os.environ):
-	return env.get(FLAG, "").strip().lower() in tables.FLAG_ON
+	if env.get(FLAG, "").strip().lower() not in tables.FLAG_ON:
+		return False
+	return env.get(MODE_ENV, "").strip().lower() in SPAWNING_MODES
 
 
 # ================

@@ -59,6 +59,30 @@ NATIVE_SOUND = "\tMOB_CH_TIGER\tSND_STAND\t-\t-\t-\t-\t0\tCommon\\\ttiger.wav\t8
 
 
 # ================
+# WinterSwitchTest
+#
+# The kinds import only in a mode that spawns them: the decoration mode
+# (#4676) and an unknown mode leave them out, and such a build reaps a
+# previous import before it reads any archive.
+# ================
+class WinterSwitchTest(unittest.TestCase):
+	def test_the_kinds_follow_the_modes_that_spawn_them(self):
+		for mode, on in (("", True), ("winter", True), (" So_Ok_2006 ", True), ("decoration", False), ("snow", False)):
+			with self.subTest(mode=mode):
+				self.assertEqual(winter.flag_enabled({winter.FLAG: "on", winter.MODE_ENV: mode}), on)
+		self.assertFalse(winter.flag_enabled({winter.FLAG: "off", winter.MODE_ENV: "winter"}))
+
+	def test_the_decoration_mode_reaps_without_reading_an_archive(self):
+		with tempfile.TemporaryDirectory() as folder:
+			root = Path(folder)
+			native, out = root / "native", root / "out"
+			native.mkdir()
+			out.mkdir()
+			env = {winter.FLAG: "on", winter.MODE_ENV: "decoration", winter.ROOT_ENV: str(root / "no-such-client")}
+			self.assertEqual(winter.add_winter_monsters(native, out, env), {"enabled": False, "reason": "off"})
+
+
+# ================
 # WinterAdmitsTest
 # ================
 class WinterAdmitsTest(unittest.TestCase):
