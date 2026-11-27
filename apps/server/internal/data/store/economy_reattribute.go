@@ -91,7 +91,7 @@ func reattributeLedger(db *sql.DB) (int, error) {
 	if err != nil {
 		return 0, err
 	}
-	defer tx.Rollback()
+	defer func() { _ = tx.Rollback() }()
 	for _, r := range renames {
 		if _, err := tx.Exec(`UPDATE economy_ledger SET reason = ? WHERE seq = ?`, r.reason, r.seq); err != nil {
 			return 0, fmt.Errorf("reattribute row %d: %w", r.seq, err)
