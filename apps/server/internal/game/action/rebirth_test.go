@@ -452,10 +452,9 @@ func TestRecallAppointmentSurvivesAuthorityReopen(t *testing.T) {
 ================
 TestFreshCharacterAppointedRebirthUsesRaceTownGate
 
-A character that has never appointed a town returns to the gate its race
-is registered at on creation: the Jangan gate for a Chinese character
-and the Samarkand gate for a European one - not the European main town
-Constantinople, and not the starter position it entered the world at.
+A character that has never appointed a town returns to its race main-town
+gate: the Jangan gate for a Chinese character and the Constantinople gate
+for a European one, not the starter position it entered the world at.
 ================
 */
 func TestFreshCharacterAppointedRebirthUsesRaceTownGate(t *testing.T) {
@@ -466,7 +465,7 @@ func TestFreshCharacterAppointedRebirthUsesRaceTownGate(t *testing.T) {
 		ref   uint32
 	}{
 		{"chinese", "CHAR_CH_MAN_ADVENTURER", janganTownGateRef},
-		{"european", "CHAR_EU_MAN_ADVENTURER", samarkandTownGateRef},
+		{"european", "CHAR_EU_MAN_ADVENTURER", constantinopleTownGateRef},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {

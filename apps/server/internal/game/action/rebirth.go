@@ -108,32 +108,28 @@ func defaultRebirthPoint(character *enterworld.Character) simulation.Spawn {
 	return simulation.ChinaStartProfile()
 }
 
-// The gates a character is registered at before it appoints one. The
-// original stamps the appointment at creation: the Jangan gate for a
-// Chinese character and the Samarkand gate for a European one - not the
-// European main town's gate, which a European reaches only by appointing
-// it like any other town. teleportbuilding rows STORE_CH_GATE (RefObj
-// 2094), STORE_EU_GATE (19074) and STORE_CA_GATE (19075) name the
-// teleportdata rows GATE_CH, GATE_EU and GATE_CA, all recall-eligible.
-// The spawns themselves come from the loaded catalogue.
+// The race main-town gates a character returns to before it appoints one.
+// teleportbuilding rows STORE_CH_GATE (RefObj 2094) and STORE_EU_GATE
+// (RefObj 19074) name the teleportdata rows GATE_CH (id 1, Jangan, region
+// 25000) and GATE_EU (id 25, Constantinople, region 26959), both
+// recall-eligible. The spawns themselves come from the loaded catalogue.
 const (
 	janganTownGateRef         uint32 = 2094
 	constantinopleTownGateRef uint32 = 19074
-	samarkandTownGateRef      uint32 = 19075
 )
 
 /*
 ================
-raceDefaultGateRef
+raceTownGateRef
 
-The gate of the character's creation registration: Samarkand's for a
-CHAR_EU model and Jangan's otherwise, the same race split
-defaultRebirthPoint uses.
+The gate of the character's race main town: the European Constantinople
+gate for a CHAR_EU model and the Chinese Jangan gate otherwise, the same
+race split defaultRebirthPoint uses.
 ================
 */
-func raceDefaultGateRef(character *enterworld.Character) uint32 {
+func raceTownGateRef(character *enterworld.Character) uint32 {
 	if europeanModel(character) {
-		return samarkandTownGateRef
+		return constantinopleTownGateRef
 	}
 	return janganTownGateRef
 }
@@ -182,8 +178,7 @@ appointedRebirth
 The appointed town and the world it lies in. The native town-recall position
 reads the appointed teleport's spawn coordinates,
 which also yields the teleport's GenWorldID. Before the first appointment
-that point is the race's creation-registered gate (Jangan for a Chinese
-character, Samarkand for a European), never the
+that point is the race main-town gate (Jangan or Constantinople), never the
 starter position; the stored fallback is a field position. During a
 fortress war a PC inside a fortress world revives where that world says
 instead (siege vtable +0x90, fortress_revival.go).
@@ -203,11 +198,15 @@ func (rt *Runtime) appointedRebirth(division string, character *enterworld.Chara
 		return point
 	}
 	// A character that has never appointed a town is registered at its
-	// race's creation gate; the original stamps that appointment at
-	// creation, so this branch is its whole pre-appointment life. Only a
-	// catalogue without that gate falls back to the starter position.
+	// race's main-town gate; only a catalogue without that gate falls back
+	// to the starter position. Natively the creation procedure writes the
+	// appointment (v1.188 shard _AddNewChar: AppointedTeleport =
+	// @DefaultTeleport, STORE_EU_GATE for a European, STORE_CH_GATE for a
+	// Chinese character) and town recall reads only that id (0x4E08A0,
+	// record +0xA4), so this fallback is the stamp's whole effect: point
+	// 20 GATE_EU, Constantinople - never Samarkand's GATE_CA (#4490 U8-04).
 	if world.RebirthGateRefID == 0 && world.RebirthPoint == nil {
-		if point, ok := rt.recallDestination(raceDefaultGateRef(character)); ok {
+		if point, ok := rt.recallDestination(raceTownGateRef(character)); ok {
 			return point
 		}
 	}
