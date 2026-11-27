@@ -144,9 +144,14 @@ def copy_asset_closure(equipment, native, output, archives, worn=True):
 #
 # Copies each (archive, path) in pending and everything it references,
 # native files first, then the later archives. Shared by the equipment
-# import and the world layer import (world_layer_import.py).
+# import and the world layer import (world_layer_import.py). posture is
+# the importer's declared audit posture for a later model
+# (cap110_asset_dependencies.mjs): None refuses sound tracks and
+# non-equipment particle sets, as equipment does; {"sounds": "data",
+# "particles": "all"} walks both (the pets, whose models keep their
+# authored sounds and ambient particles, like the Sky Temple monsters).
 # ================
-def copy_resource_closure(pending, native, output, archives):
+def copy_resource_closure(pending, native, output, archives, posture=None):
 	native_paths = {name: {
 		normalized_path(path.relative_to(native / folder).as_posix()): path
 		for path in (native / folder).rglob("*") if path.is_file()
@@ -178,7 +183,8 @@ def copy_resource_closure(pending, native, output, archives):
 			write_atomically(safe_target(output / FOLDERS[archive_name], name), raw)
 			records.append({"archive": archive_name, "path": name, "source": origin, "sha256": sro_pk2.digest(raw)})
 			if name.endswith(PARSED_EXTENSIONS):
-				requests.append({"path": name, "bytes": base64.b64encode(raw).decode("ascii"), "native": origin == "native"})
+				requests.append({"path": name, "bytes": base64.b64encode(raw).decode("ascii"), "native": origin == "native",
+					**(posture or {})})
 		if requests:
 			for names in resource_dependencies(requests):
 				pending.update(
