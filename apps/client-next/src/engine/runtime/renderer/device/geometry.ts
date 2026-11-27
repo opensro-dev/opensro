@@ -367,7 +367,8 @@ export function createGeometryResources(
 			label: "geometry-default-bones",
 			size: 64,
 			usage: GPUBufferUsage.STORAGE
-		} );
+		} ),
+		defaultBonesBinding: GPUBufferBinding = Object.freeze( { buffer: defaultBones } );
 	/*
 	================
 	SharedPalette
@@ -451,7 +452,7 @@ export function createGeometryResources(
 		clampedSampling: boolean,
 		image?: ImageDraw,
 		skin = defaultSkin,
-		bones = defaultBones,
+		bones: GPUBufferBinding = defaultBonesBinding,
 		environmentImage?: ImageDraw,
 		capture = false
 	) => {
@@ -480,7 +481,7 @@ export function createGeometryResources(
 				},
 				{ binding: 5, resource: { buffer: environment } },
 				{ binding: 6, resource: { buffer: skin } },
-				{ binding: 7, resource: { buffer: bones } },
+				{ binding: 7, resource: bones },
 				{
 					binding: 8,
 					resource: (environmentImage ? images.texture( environmentImage ) : white).createView( {
@@ -519,6 +520,12 @@ export function createGeometryResources(
 		vertexFloats: number;
 		skin: GPUBuffer;
 		bones: GPUBuffer;
+		// What every pass of the draw binds for its instances and palette
+		// (bindings 1 and 7, and the shadow casters): the draw's own
+		// buffers, or a particle stream's slice of its arena output
+		// (particles.ts ParticleBinding). CPU writes keep going to
+		// instances and bones. Stable objects: binding caches compare them.
+		drawn: { instances: Binding; bones: GPUBufferBinding; };
 		// A cloth mesh's vertex count, where its slot map starts in the skin
 		// table, its stream starting at twice that (cloth-stream.ts); 0 for
 		// any other draw.
@@ -542,6 +549,30 @@ export function createGeometryResources(
 		// The draw handle itself, which this owner updates in place.
 		selection: DeviceDraw;
 	}>();
+	type DrawMeta = typeof metadata extends Map<GeometryDraw, infer Meta> ? Meta : never;
+	/*
+	================
+	drawBinding
+
+	A draw's bind group against pipeline, from what it draws (meta.drawn):
+	the one place a live draw's binding is built.
+	================
+	*/
+	function drawBinding( meta: DrawMeta, pipeline: GPURenderPipeline, capture = false ) {
+		return geometryBinding(
+			meta.uniform,
+			meta.drawn.instances,
+			meta.material,
+			meta.rowStates,
+			pipeline,
+			meta.clampedSampling,
+			meta.image,
+			meta.skin,
+			meta.drawn.bones,
+			meta.environmentImage,
+			capture
+		);
+	}
 	let shadows: ReturnType<typeof createCharacterShadows> | undefined;
 	// The experimental sun cascade: created on first use (the renderer
 	// prepares it once the stage is on), borrowing each caster's buffers
@@ -556,10 +587,10 @@ export function createGeometryResources(
 				const meta = metadata.get( draw ), buffers = geometryBuffers.get( draw );
 				return meta && buffers ?
 					{
-						instances: meta.instances,
+						instances: meta.drawn.instances,
 						material: meta.material,
 						skin: meta.skin,
-						bones: meta.bones,
+						bones: meta.drawn.bones,
 						image: meta.image ? images.texture( meta.image ) : undefined
 					} :
 					undefined;
@@ -579,18 +610,7 @@ export function createGeometryResources(
 		for ( const [draw, meta] of metadata ) {
 			DeviceDraw.rebind(
 				meta.selection,
-				geometryBinding(
-					meta.uniform,
-					meta.instances,
-					meta.material,
-					meta.rowStates,
-					draw.pipeline,
-					meta.clampedSampling,
-					meta.image,
-					meta.skin,
-					meta.bones,
-					meta.environmentImage
-				)
+				drawBinding( meta, draw.pipeline )
 			);
 		}
 	}
@@ -618,18 +638,7 @@ export function createGeometryResources(
 				draw: {
 					...draw,
 					pipeline,
-					binding: geometryBinding(
-						meta.uniform,
-						meta.instances,
-						meta.material,
-						meta.rowStates,
-						pipeline,
-						meta.clampedSampling,
-						meta.image,
-						meta.skin,
-						meta.bones,
-						meta.environmentImage
-					)
+					binding: drawBinding( meta, pipeline )
 				}
 			};
 			bindings.set( draw, cached );
@@ -686,18 +695,7 @@ export function createGeometryResources(
 				for ( const [draw, meta] of metadata ) {
 					DeviceDraw.rebind(
 						meta.selection,
-						geometryBinding(
-							meta.uniform,
-							meta.instances,
-							meta.material,
-							meta.rowStates,
-							draw.pipeline,
-							meta.clampedSampling,
-							meta.image,
-							meta.skin,
-							meta.bones,
-							meta.environmentImage
-						)
+						drawBinding( meta, draw.pipeline )
 					);
 				}
 			}
@@ -713,19 +711,7 @@ export function createGeometryResources(
 						{ sceneFloat: floatScene, msaa: msaaScene },
 						!!meta.rowStates
 					);
-					const binding = geometryBinding(
-						meta.uniform,
-						meta.instances,
-						meta.material,
-						meta.rowStates,
-						pipeline,
-						meta.clampedSampling,
-						meta.image,
-						meta.skin,
-						meta.bones,
-						meta.environmentImage,
-						true
-					);
+					const binding = drawBinding( meta, pipeline, true );
 					cached = {
 						source: draw.binding,
 						draw: {
@@ -767,7 +753,12 @@ export function createGeometryResources(
 				draw => {
 					const meta = metadata.get( draw ), buffers = geometryBuffers.get( draw );
 					return meta && buffers ?
-						{ instances: meta.instances, material: meta.material, skin: meta.skin, bones: meta.bones } :
+						{
+							instances: meta.drawn.instances,
+							material: meta.material,
+							skin: meta.skin,
+							bones: meta.drawn.bones
+						} :
 						undefined;
 				},
 				// The receiver draws land in the scene target: the getters
@@ -838,7 +829,12 @@ export function createGeometryResources(
 				throw Error( "Particle presentation must draw one instance a slot" );
 			}
 			if ( !meta.stores.owned ) throw Error( "Particle presentation requires owned instances" );
-			particles.present( draw, meta.instances.buffer, meta.bones, presentation );
+			particles.present( draw, meta.instances.buffer, meta.bones, presentation, drawn => {
+				meta.drawn = drawn;
+				DeviceDraw.rebind( meta.selection, drawBinding( meta, draw.pipeline ) );
+				shadows?.forget( draw );
+				sunShadows?.forget( draw );
+			} );
 		},
 		/*
 		================
@@ -1079,22 +1075,19 @@ export function createGeometryResources(
 					try {
 						rows = meta.stores.rowStates ? rowStateStore( capacity ) : undefined;
 						writeStream( storage.binding.buffer, storage.binding.offset, packed, meta.cpuUploads );
+						// A particle stream's draw keeps reading its slice.
+						const drawn = meta.drawn.instances === meta.instances ?
+							{ instances: storage.binding, bones: meta.drawn.bones } :
+							meta.drawn;
 						DeviceDraw.rebind(
 							meta.selection,
-							geometryBinding(
-								meta.uniform,
-								storage.binding,
-								meta.material,
-								rows?.binding ?? meta.rowStates,
-								draw.pipeline,
-								meta.clampedSampling,
-								meta.image,
-								meta.skin,
-								meta.bones,
-								meta.environmentImage
+							drawBinding(
+								{ ...meta, rowStates: rows?.binding ?? meta.rowStates, drawn },
+								draw.pipeline
 							),
 							capacity
 						);
+						meta.drawn = drawn;
 						shadows?.forget( draw );
 						sunShadows?.forget( draw );
 						// The frame's recorded passes may still read the old storage.
@@ -1493,6 +1486,9 @@ export function createGeometryResources(
 						!!data.rowStates
 					),
 					clampedSampling = !!(mat?.lightmap || mat?.decal) && !mat?.groundDecal;
+				const bonesBinding: GPUBufferBinding = boneBuffer === defaultBones ?
+					defaultBonesBinding :
+					Object.freeze( { buffer: boneBuffer } );
 				const binding = geometryBinding(
 					uniform,
 					storage.binding,
@@ -1502,7 +1498,7 @@ export function createGeometryResources(
 					clampedSampling,
 					image,
 					skinBuffer,
-					boneBuffer,
+					bonesBinding,
 					environmentImage
 				);
 				const draw = new DeviceDraw(
@@ -1555,6 +1551,7 @@ export function createGeometryResources(
 					vertexFloats: data.positions.length / 3 * 14,
 					skin: skinBuffer,
 					bones: boneBuffer,
+					drawn: { instances: storage.binding, bones: bonesBinding },
 					clothBase,
 					clothSlots,
 					boneBytes: boneBuffer.size,
@@ -1715,18 +1712,7 @@ export function createGeometryResources(
 			for ( const [draw, meta] of metadata ) {
 				DeviceDraw.rebind(
 					meta.selection,
-					geometryBinding(
-						meta.uniform,
-						meta.instances,
-						meta.material,
-						meta.rowStates,
-						draw.pipeline,
-						meta.clampedSampling,
-						meta.image,
-						meta.skin,
-						meta.bones,
-						meta.environmentImage
-					)
+					drawBinding( meta, draw.pipeline )
 				);
 			}
 		},
@@ -1769,18 +1755,7 @@ export function createGeometryResources(
 				DeviceDraw.repipeline(
 					meta.selection,
 					pipeline,
-					geometryBinding(
-						meta.uniform,
-						meta.instances,
-						meta.material,
-						meta.rowStates,
-						pipeline,
-						meta.clampedSampling,
-						meta.image,
-						meta.skin,
-						meta.bones,
-						meta.environmentImage
-					)
+					drawBinding( meta, pipeline )
 				);
 			}
 		},

@@ -255,6 +255,8 @@ for ( const storageBudget of [ undefined, 65536 ] ) {
 							usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC | GPUBufferUsage.COPY_DST
 						} );
 					const key = {};
+					// The draw reads its slice of the arena output (bind).
+					let slice;
 					const run = async ( forceDispatch = false ) => {
 						owner.beginFrame();
 						particles.live = 0;
@@ -265,7 +267,8 @@ for ( const storageBudget of [ undefined, 65536 ] ) {
 							key,
 							instances,
 							bones,
-							forceDispatch ? { ...particles, live: undefined } : particles
+							forceDispatch ? { ...particles, live: undefined } : particles,
+							binding => slice = binding
 						);
 						const read = device.createBuffer( {
 							size: count * 224,
@@ -273,8 +276,20 @@ for ( const storageBudget of [ undefined, 65536 ] ) {
 						} );
 						const encoder = device.createCommandEncoder();
 						owner.encode( encoder );
-						encoder.copyBufferToBuffer( instances, 0, read, 0, count * 160 );
-						encoder.copyBufferToBuffer( bones, 0, read, count * 160, count * 64 );
+						encoder.copyBufferToBuffer(
+							slice.instances.buffer,
+							slice.instances.offset,
+							read,
+							0,
+							count * 160
+						);
+						encoder.copyBufferToBuffer(
+							slice.bones.buffer,
+							slice.bones.offset,
+							read,
+							count * 160,
+							count * 64
+						);
 						device.queue.submit( [ encoder.finish() ] );
 						await read.mapAsync( GPUMapMode.READ );
 						const data = new Float32Array( read.getMappedRange().slice( 0 ) );
@@ -347,7 +362,7 @@ for ( const storageBudget of [ undefined, 65536 ] ) {
 					if ( resumedBytes.some( ( word, i ) => word !== repeatedBytes[i] ) ) {
 						throw Error( "Reactivated stream differs from forced dispatch bits" );
 					}
-					live.push( { key, instances, bones, run, particles } );
+					live.push( { key, instances, bones, run, particles, slice: () => slice } );
 				}
 				for ( const stream of live.slice( 0, 3 ) ) await stream.run();
 				// The same diverse streams must agree when queued together. Distinct
@@ -364,7 +379,8 @@ for ( const storageBudget of [ undefined, 65536 ] ) {
 					usage: GPUBufferUsage.COPY_DST | GPUBufferUsage.MAP_READ
 				} );
 				for ( const stream of live ) {
-					owner.present( stream.key, stream.instances, stream.bones, stream.particles );
+					// The stream exists: its binding stays the one run's callback keeps.
+					owner.present( stream.key, stream.instances, stream.bones, stream.particles, () => {} );
 				}
 				owner.encode( batchEncoder );
 				const batchDispatches = owner.stats().dispatches - beforeBatch;
@@ -374,10 +390,17 @@ for ( const storageBudget of [ undefined, 65536 ] ) {
 				let batchOffset = 0;
 				for ( const stream of live ) {
 					const count = stream.particles.rows * stream.particles.slots;
-					batchEncoder.copyBufferToBuffer( stream.instances, 0, batchRead, batchOffset, count * 160 );
+					const { instances, bones } = stream.slice();
 					batchEncoder.copyBufferToBuffer(
-						stream.bones,
-						0,
+						instances.buffer,
+						instances.offset,
+						batchRead,
+						batchOffset,
+						count * 160
+					);
+					batchEncoder.copyBufferToBuffer(
+						bones.buffer,
+						bones.offset,
 						batchRead,
 						batchOffset + count * 160,
 						count * 64
@@ -526,7 +549,13 @@ test(
 					let floats = 0;
 					for ( const stream of streams ) {
 						const input = stream.particles, count = input.rows * input.slots;
-						owner.present( stream.key, stream.instances, stream.bones, input );
+						owner.present(
+							stream.key,
+							stream.instances,
+							stream.bones,
+							input,
+							binding => stream.drawn = binding
+						);
 						for ( let slot = 0; slot < count; slot++ ) {
 							const value = presentSlot( input, input.records, slot ), at = slot * 40;
 							if ( !value ) {
@@ -553,8 +582,15 @@ test(
 					for ( const stream of streams ) {
 						const count = stream.particles.rows * stream.particles.slots;
 						expected.set( stream.expected, at );
-						encoder.copyBufferToBuffer( stream.instances, 0, read, at * 4, count * 160 );
-						encoder.copyBufferToBuffer( stream.bones, 0, read, at * 4 + count * 160, count * 64 );
+						const { instances, bones } = stream.drawn;
+						encoder.copyBufferToBuffer( instances.buffer, instances.offset, read, at * 4, count * 160 );
+						encoder.copyBufferToBuffer(
+							bones.buffer,
+							bones.offset,
+							read,
+							at * 4 + count * 160,
+							count * 64
+						);
 						at += count * 56;
 					}
 					return { read, expected: new Uint32Array( expected.buffer ) };

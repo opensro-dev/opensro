@@ -42,7 +42,7 @@ export interface ShadowBinding {
 	readonly instances: GPUBufferBinding;
 	readonly material: GPUBufferBinding;
 	readonly skin: GPUBuffer;
-	readonly bones: GPUBuffer;
+	readonly bones: GPUBufferBinding;
 	// The draw's bound albedo, already resolved to its GPU texture; the
 	// caster alpha-tests the same pages its receiver shades.
 	readonly image: GPUTexture | undefined;
@@ -285,7 +285,7 @@ struct Out {@builtin(position) position:vec4f,@location(0) uv:vec2f}
 								},
 								{ binding: 5, resource: { buffer: environment } },
 								{ binding: 6, resource: { buffer: source.skin } },
-								{ binding: 7, resource: { buffer: source.bones } }
+								{ binding: 7, resource: source.bones }
 							]
 						} )
 					};

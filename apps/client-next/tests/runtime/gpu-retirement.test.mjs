@@ -56,6 +56,8 @@ const {
 } = await load( "src/engine/foundation/animation/particle-records.ts" );
 const { presentSlot } = await load( "tests/helpers/particle-reference.mjs" );
 
+// A caller that does not read the draw's binding.
+const ignoreBinding = () => {};
 const identity = () => Float32Array.of( 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1 );
 
 test("empty particle streams clear once and retain pending work until encoding", async () => {
@@ -83,24 +85,117 @@ test("empty particle streams clear once and retain pending work until encoding",
 		particles.encode( encoder );
 		gpu.device.queue.submit( [ encoder.finish() ] );
 	};
-	particles.present( draw, instances, bones, input );
-	particles.present( draw, instances, bones, input );
+	particles.present( draw, instances, bones, input, ignoreBinding );
+	particles.present( draw, instances, bones, input, ignoreBinding );
 	encode();
 	assert.equal( particles.stats().dispatches, 1, "repeated empty presentation keeps its initial clear" );
-	particles.present( draw, instances, bones, input );
+	particles.present( draw, instances, bones, input, ignoreBinding );
 	encode();
 	assert.equal( particles.stats().dispatches, 1 );
 	input.live = 1;
-	particles.present( draw, instances, bones, input );
+	particles.present( draw, instances, bones, input, ignoreBinding );
 	encode();
 	assert.equal( particles.stats().dispatches, 2 );
 	input.live = 0;
-	particles.present( draw, instances, bones, input );
+	particles.present( draw, instances, bones, input, ignoreBinding );
 	encode();
 	assert.equal( particles.stats().dispatches, 3, "a previously live stream clears again" );
 	particles.dispose();
 	instances.destroy();
 	bones.destroy();
+});
+
+test("a particle draw reads its aligned slice of the arena output, rebound on growth before encode, with no copy back", async () => {
+	const gpu = createStrictGpu(), particles = createParticlePresentation( gpu.device );
+	await particles.ready;
+	const stream = slots => {
+		const entry = {
+			instances: gpu.device.createBuffer( { label: "own-instances", size: slots * 160 } ),
+			bones: gpu.device.createBuffer( { label: "own-bones", size: slots * 64 } ),
+			input: {
+				rows: 1,
+				slots,
+				live: 1,
+				graph: false,
+				view: 0,
+				lifetime: 1,
+				loop: false,
+				records: new Float32Array( slots * PARTICLE_RECORD ),
+				actors: new Float32Array( PARTICLE_ACTOR ),
+				axes: new Float32Array( 12 ),
+				dirtyStart: 0,
+				dirtyEnd: slots
+			},
+			bindings: /** @type {any[]} */ ([])
+		};
+		entry.present = () =>
+			particles.present(
+				entry,
+				entry.instances,
+				entry.bones,
+				entry.input,
+				binding => entry.bindings.push( binding )
+			);
+		return entry;
+	};
+	const encode = () => {
+		const encoder = gpu.device.createCommandEncoder( { label: "particles" } ), copies = [];
+		// The five-argument form the arena records; the overloads narrow it.
+		const copy = /** @type {( ...args: any[] ) => void} */ (encoder.copyBufferToBuffer);
+		encoder.copyBufferToBuffer = ( source, sourceOffset, target, targetOffset, size ) => {
+			copies.push( { source, target, size } );
+			copy( source, sourceOffset, target, targetOffset, size );
+		};
+		particles.encode( encoder );
+		gpu.device.queue.submit( [ encoder.finish() ] );
+		return copies;
+	};
+	const first = stream( 3 ), second = stream( 5 );
+	particles.beginFrame();
+	first.present();
+	second.present();
+	const [a] = first.bindings, [b] = second.bindings;
+	assert.ok( a && b, "presenting a stream binds its draw" );
+	assert.equal( a.instances.buffer, b.instances.buffer, "streams of one arena share its output" );
+	for ( const binding of [ a, b ] ) {
+		assert.equal( binding.instances.offset % 256, 0, "instance slice on the binding alignment" );
+		assert.equal( binding.bones.offset % 256, 0, "palette slice on the binding alignment" );
+	}
+	assert.equal( a.instances.size, 3 * 160 );
+	assert.equal( b.bones.size, 5 * 64 );
+	assert.ok( b.instances.offset >= a.instances.offset + a.instances.size, "slices do not overlap" );
+	const own = new Set( [ first.instances, first.bones, second.instances, second.bones ] );
+	const firstFrame = encode();
+	assert.ok( !firstFrame.some( copy => own.has( copy.target ) ), "nothing is copied back into a draw's buffers" );
+	assert.equal(
+		firstFrame.filter( copy => own.has( copy.source ) ).length,
+		4,
+		"one initial copy of each draw's buffers"
+	);
+	particles.beginFrame();
+	first.present();
+	second.present();
+	const later = encode();
+	assert.equal( later.length, 2, "a later frame copies only each stream's dirty records" );
+	assert.ok( later.every( copy => !own.has( copy.target ) && !own.has( copy.source ) ) );
+	// A stream larger than the arena's output grows it: the earlier streams
+	// move to the new output at presentation, before any bundle is recorded.
+	particles.beginFrame();
+	const third = stream( 4096 );
+	third.present();
+	const moved = first.bindings.at( -1 );
+	assert.ok( moved, "growth rebinds an earlier stream" );
+	assert.equal( first.bindings.length, 2, "growth rebinds an earlier stream once" );
+	assert.notEqual( moved.instances.buffer, a.instances.buffer );
+	assert.equal( moved.instances.buffer, third.bindings[0].instances.buffer );
+	assert.equal( moved.instances.offset, a.instances.offset, "a stream keeps its slots across growth" );
+	const grown = encode();
+	assert.ok(
+		grown.some( copy => copy.source === a.instances.buffer && copy.target === moved.instances.buffer ),
+		"encode copies the old output into the grown one"
+	);
+	assert.ok( !grown.some( copy => own.has( copy.target ) ) );
+	particles.dispose();
 });
 
 test("a resource retired inside a frame is destroyed when the frame closes, outside one at once", () => {
@@ -156,7 +251,7 @@ async function encodeDeferredParticles( gpu, retire ) {
 		const instances = gpu.device.createBuffer( { label: "instances", size: rows * 160 } );
 		const bones = gpu.device.createBuffer( { label: "bones", size: rows * 64 } );
 		buffers.push( instances, bones );
-		particles.present( {}, instances, bones, presentation( rows ) );
+		particles.present( {}, instances, bones, presentation( rows ), ignoreBinding );
 	};
 	particles.beginFrame();
 	const encoder = gpu.device.createCommandEncoder( { label: "frame" } );
@@ -210,7 +305,7 @@ test("particle frame pages and resident slots remain bounded during stream repla
 			axes: new Float32Array( 12 ),
 			dirtyStart: 0,
 			dirtyEnd: count
-		} );
+		}, ignoreBinding );
 		const encoder = gpu.device.createCommandEncoder();
 		particles.encode( encoder );
 		gpu.device.queue.submit( [ encoder.finish() ] );
@@ -269,7 +364,7 @@ test("particle batching obeys aggregate storage, material and workgroup limits",
 						windows: new Float32Array( sample.materialFloats )
 					} :
 					undefined
-			} );
+			}, ignoreBinding );
 		}
 		const encoder = gpu.device.createCommandEncoder();
 		particles.encode( encoder );
@@ -666,7 +761,9 @@ test("particle presentation falls back to CPU uploads when compute pipeline crea
 			windows: Float32Array.of( 0.5, 0.5, 0, 0, 0.5, 0.5, 0.5, 0 )
 		}
 	};
-	particles.present( draw, instances, bones, input );
+	let bound = false;
+	particles.present( draw, instances, bones, input, () => bound = true );
+	assert.equal( bound, false, "the CPU fallback draws from the draw's own buffers" );
 	const encoder = gpu.device.createCommandEncoder( { label: "degraded-particles" } );
 	particles.encode( encoder );
 	const expected = presentSlot( input, records, 0 );
