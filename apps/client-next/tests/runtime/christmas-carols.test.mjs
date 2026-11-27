@@ -61,10 +61,10 @@ test("the town carols group plays the carols in the towns only, snow or not", ()
 		TOWN_CAROL_MUSIC_MODE,
 		"the snow does not spread them to the fields"
 	);
-	for ( const profile of [ "장안", "돈황", "호탄", "사마르칸트", "콘스탄티노플", "알렉산드리아" ] ) {
+	for ( const profile of [ "장안", "돈황", "호탄", "사마르칸트", "콘스탄티노플", "알렉산드리아", "바그다드" ] ) {
 		assert.equal( regionMusicMode( town, profile ), 1, profile );
 	}
-	for ( const profile of [ "장안필드", "요새_장안", "돈황필드", "호탄필드", "중앙아시아", "동유럽", "델타지역" ] ) {
+	for ( const profile of [ "장안필드", "요새_장안", "돈황필드", "호탄필드", "중앙아시아", "동유럽", "델타지역", "바그다드던젼" ] ) {
 		assert.equal( regionMusicMode( town, profile ), 0, "outside the towns: " + profile + "'s own music" );
 	}
 	assert.equal( regionMusicMode( town, null ), 0 );

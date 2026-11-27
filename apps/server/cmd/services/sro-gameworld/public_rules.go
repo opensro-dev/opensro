@@ -891,6 +891,12 @@ the winter event (Winter Princess and Knights), or So-Ok's Christmas Gift.
 */
 func christmasRule(now time.Time) publicstats.Rule {
 	native := "No Christmas event runs: the towns stay undecorated, no event snow falls and no winter monsters come."
+	if progression.ChristmasModeFromEnv() == progression.ChristmasModeDecoration {
+		return publicstats.Rule{Flag: progression.EnvChristmasEvent, On: progression.ChristmasDecorationFromEnv().ActiveAt(now),
+			Native: native,
+			Now:    "Christmas in the towns: while the season lasts, every city wears its Christmas decoration (trees, snowmen, wreaths and gift boxes) and plays Christmas carols. No event monsters, drops or snow come with it.",
+			Why:    "The later client's town decoration and the carols for the season, without an event."}
+	}
 	if progression.ChristmasModeFromEnv() == progression.ChristmasModeSoOk2006 {
 		return publicstats.Rule{Flag: progression.EnvChristmasEvent, On: progression.SoOkChristmasFromEnv().ActiveAt(now),
 			Native: native,
