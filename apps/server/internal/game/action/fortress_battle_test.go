@@ -104,6 +104,96 @@ func TestFortressFatalAttackCreditsOnce(t *testing.T) {
 
 /*
 ================
+TestFortressDeathOutsideAFortressWorldCountsNothing
+
+The battle record belongs to the fortress of the victim's world (the
+world's slot 32): the same kill in the field, between two of the war's
+guilds, writes no record - and neither does a fortress-world death
+once the war period ends.
+================
+*/
+func TestFortressDeathOutsideAFortressWorldCountsNothing(t *testing.T) {
+	rt, clock, killer, victim, id := fortressBattlePair(t)
+	killer.World.PackedInstance = nil
+	victim.World.PackedInstance = nil
+	rt.recordFortressDeath(testDivision, victim, killer, clock.NowMs())
+	if _, ok := rt.Fortresses.BattleRecord(testDivision, id, killer.ID); ok {
+		t.Fatal("a field kill was recorded")
+	}
+	if _, ok := rt.Fortresses.BattleRecord(testDivision, id, victim.ID); ok {
+		t.Fatal("a field death was recorded")
+	}
+	packed := uint32(instance.Pack(2, 1))
+	killer.World.PackedInstance = &packed
+	victim.World.PackedInstance = &packed
+	rt.Fortresses.SetPeriod(testDivision, fortress.PeriodWar, false)
+	rt.recordFortressDeath(testDivision, victim, killer, clock.NowMs())
+	if _, ok := rt.Fortresses.BattleRecord(testDivision, id, killer.ID); ok {
+		t.Fatal("a peace-time kill was recorded")
+	}
+}
+
+/*
+================
+TestFortressRankSixNoticeAudience
+
+Ranks one to five are told to the player alone in the self form. Rank
+six is told once, in the other-player form, to his union if he has one
+(else his guild) standing in the fortress world - nothing apart to
+himself: he hears it as a member like the rest.
+================
+*/
+func TestFortressRankSixNoticeAudience(t *testing.T) {
+	rt, _, killer, victim, _ := fortressBattlePair(t)
+	rt.Unions = union.New()
+	if _, err := rt.Unions.Join(testDivision, 77, 88); err != nil {
+		t.Fatal(err)
+	}
+	own, allied, stranger := int64(77), int64(88), int64(99)
+	killer.GuildID = &own
+	packed := uint32(instance.Pack(2, 1))
+	deps := rt.deps.(*enterworld.Deps)
+	stand := func(id int64, name string, guild *int64) {
+		member := *victim
+		member.ID, member.Name = id, name
+		member.GuildID = guild
+		world := *victim.World
+		world.PackedInstance = &packed
+		member.World = &world
+		fixtureCharacters(deps.Characters)[testDivision] = append(fixtureCharacters(deps.Characters)[testDivision], &member)
+	}
+	stand(21, "ally", &allied)
+	stand(22, "stranger", &stranger)
+	heard := map[string][][]byte{}
+	rt.PushCharacterFrames = func(_, name string, frames []wire.Frame) {
+		for _, f := range frames {
+			if f.Opcode == opFortressWarState && len(f.Payload) > 0 && f.Payload[0] == 0x0e {
+				heard[name] = append(heard[name], f.Payload)
+			}
+		}
+	}
+	rt.publishFortressRankNotice(testDivision, killer, 3)
+	if len(heard[killer.Name]) != 1 || !bytes.Equal(heard[killer.Name][0], []byte{0x0e, 1, 3}) {
+		t.Fatalf("rank three heard %+v", heard)
+	}
+	if len(heard) != 1 {
+		t.Fatalf("rank three reached %+v", heard)
+	}
+	heard = map[string][][]byte{}
+	rt.publishFortressRankNotice(testDivision, killer, fortress.MaxBattleRank)
+	want := wire.NewWriter(16).U8(0x0e).U8(0).U16(uint16(len(killer.Name))).Bytes([]byte(killer.Name)).U8(fortress.MaxBattleRank).Payload()
+	for _, name := range []string{killer.Name, "ally"} {
+		if len(heard[name]) != 1 || !bytes.Equal(heard[name][0], want) {
+			t.Fatalf("rank six heard by %s: %+v", name, heard)
+		}
+	}
+	if len(heard["stranger"]) != 0 || len(heard) != 2 {
+		t.Fatalf("rank six reached %+v", heard)
+	}
+}
+
+/*
+================
 TestFortressPartyCreditRequiresLivingSameWorldAndRange
 ================
 */
