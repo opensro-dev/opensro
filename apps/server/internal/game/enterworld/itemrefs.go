@@ -337,11 +337,15 @@ func buildCharacterRef(fields []string, names map[string]string) *CharacterRef {
 	if !capacityOK || capacity < 0 || capacity > math.MaxUint8 {
 		return nil
 	}
+	canSell, _ := textdataInt(fields[17])
+	sellPrice, _ := textdataInt(fields[31])
 	nameStrID := strings.TrimSpace(fields[5])
 	return &CharacterRef{
 		InventoryCapacity:          uint8(capacity),
 		SatietyMinutes:             satietyMinutes,
 		CanRide:                    canRide != 0,
+		CanSell:                    canSell != 0,
+		SellPrice:                  sellPrice,
 		Parameters:                 monster.CharacterParameters(fields),
 		RefObjID:                   uint32(refObjID),
 		TidWord:                    tidWord,
