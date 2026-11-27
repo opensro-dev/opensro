@@ -12,9 +12,34 @@ package enterworld
 
 import (
 	"fmt"
-	"opensro.online/server/internal/game/item/wire"
 	"strconv"
+
+	"opensro.online/server/internal/game/caravan"
+	"opensro.online/server/internal/game/item/wire"
 )
+
+/*
+================
+NativeTransportBagCapacity
+
+The capacity byte a transport's 0x3158 record carries when its owner is
+ownerLevel: not the row's authored size but the owner's-level size
+(caravan.TransportBagPlaces, #4490 U11-01). The row's rarity is the low
+nibble of its monster-type parameter word, the read caravanCargoValue
+already makes; the v1.150 transport rows carry rarity 0 there, so the
+class falls back to the row's authored run. goldMinimum is the owner's
+level gold minimum (the withdrawal gold basis). A row authoring no bag
+sizes to 0.
+================
+*/
+func NativeTransportBagCapacity(ref *CharacterRef, goldMinimum int64) uint8 {
+	if ref == nil || ref.InventoryCapacity == 0 {
+		return 0
+	}
+	return uint8(caravan.TransportBagPlaces(
+		uint8(ref.Parameters.MonsterType&0x0f), int64(ref.RunSpeed), isMallTransport(ref),
+		goldMinimum, int(ref.InventoryCapacity)))
+}
 
 /*
 ================

@@ -306,6 +306,37 @@ func (rt *Runtime) caravanCargoValue(c *enterworld.Character) uint32 {
 
 /*
 ================
+transportBagCapacity
+
+The native size of a transport's cargo bag for its owner (#4490 U11-01):
+the owner's-level size of the row, before the pet-inventory-pages
+deviation raises it. Without the level gold basis the authored size
+stands, as it did before the rule was ported.
+================
+*/
+func (rt *Runtime) transportBagCapacity(c *enterworld.Character, ref *enterworld.CharacterRef) uint8 {
+	if ref == nil || ref.InventoryCapacity == 0 {
+		return 0
+	}
+	levels, ok := rt.deps.LevelData().(interface {
+		WithdrawalGoldBasis(level int64) (int64, bool)
+	})
+	if !ok {
+		return ref.InventoryCapacity
+	}
+	level := int64(1)
+	if c != nil && c.Level != nil {
+		level = *c.Level
+	}
+	gold, found := levels.WithdrawalGoldBasis(level)
+	if !found {
+		return ref.InventoryCapacity
+	}
+	return enterworld.NativeTransportBagCapacity(ref, gold)
+}
+
+/*
+================
 vehicleCarriesGoods
 
 The reference server's vehicle check: a summoned transport (isVehicleCOS) whose

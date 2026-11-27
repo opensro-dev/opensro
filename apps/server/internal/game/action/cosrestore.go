@@ -122,9 +122,9 @@ func (rt *Runtime) restoreCharacterCOS(division, name string) {
 		}
 		// A transport summoned before summons kept the reference capacity
 		// (itemuse.go) was saved without its cargo bag; it
-		// comes back with the authored one.
+		// comes back with the owner's-level size creation would give it.
 		if pet.Container == nil && ref.InventoryCapacity > 0 {
-			pet.Container = &domain.COSContainer{Capacity: rt.PetInventoryPages.TransportCapacity(ref.InventoryCapacity)}
+			pet.Container = &domain.COSContainer{Capacity: rt.PetInventoryPages.TransportCapacity(rt.transportBagCapacity(c, ref))}
 			changed = true
 		} else if pet.Container != nil {
 			if raised := rt.PetInventoryPages.TransportCapacity(pet.Container.Capacity); raised != pet.Container.Capacity {

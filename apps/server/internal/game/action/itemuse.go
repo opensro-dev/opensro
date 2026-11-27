@@ -730,11 +730,12 @@ func (rt *Runtime) handleItemUse(
 			// Natively the summoned vehicle is bound ridden; the ride owner
 			// sets it (cosmount.go).
 			rideNewVehicle(pet)
-			// The creation arm keeps the reference capacity
-			// (+0x224) for everything but pets, so a transport carries a
-			// cargo bag of its authored size; a riding horse authors none.
+			// The creation arm keeps a bag for everything but pets, sized
+			// by the owner's level (#4490 U11-01), not the row's authored
+			// size; a riding horse authors none. The pages deviation
+			// raises the native size as before.
 			if cosRef.InventoryCapacity > 0 {
-				pet.Container = &domain.COSContainer{Capacity: rt.PetInventoryPages.TransportCapacity(cosRef.InventoryCapacity)}
+				pet.Container = &domain.COSContainer{Capacity: rt.PetInventoryPages.TransportCapacity(rt.transportBagCapacity(character, cosRef))}
 			}
 			// Validate the complete private record before inventory debit. Native
 			// summoning automatically binds both riding and transport vehicles.
