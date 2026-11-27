@@ -1,10 +1,12 @@
 /*
 ===========================================================================
 
-interactionlock_test.go - a ground command at a stall or in an exchange
+interactionlock_test.go - a ground command under the interaction gate
 
-While the player keeps a stall, visits one or trades, its ground command
-is dropped silently until the stall or exchange closes (#3433).
+While the installed gate holds (the action lane wires keeping a stall,
+visiting one or holding an NPC's window; an open exchange walks), the
+ground command is dropped silently until it releases (#3433, #4490
+U8-16).
 
 ===========================================================================
 */
