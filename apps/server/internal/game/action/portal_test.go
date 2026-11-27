@@ -153,6 +153,30 @@ func TestGateMurdererRefusedScope(t *testing.T) {
 	if !gateMurdererRefused(away, tombGate, ordinary) {
 		t.Fatal("a murderer at a tomb-region gate was admitted")
 	}
+	// Natively the tomb clause stands whatever the destination world, as
+	// long as it is no fortress: a tomb floor's gate into the next floor
+	// (a world of its own) refuses a murderer too.
+	var siege, floor instance.DefinitionID
+	for _, row := range instance.Shipped() {
+		switch {
+		case row.Siege() && siege == 0:
+			siege = row.ID
+		case !row.Siege() && row.ID != ordinaryWorldID && floor == 0:
+			floor = row.ID
+		}
+	}
+	if siege == 0 || floor == 0 {
+		t.Fatalf("the shipped catalogue has no siege (%d) or other world (%d)", siege, floor)
+	}
+	if !gateMurdererRefused(away, tombGate, portalDestination{world: floor}) {
+		t.Fatal("a murderer at a tomb-region gate into another floor was admitted")
+	}
+	if gateMurdererRefused(murdererChar(), tombGate, portalDestination{world: siege}) {
+		t.Fatal("a murderer bound for a fortress world was refused")
+	}
+	if gateMurdererRefused(murdererChar(), building, portalDestination{world: floor, spawn: simulation.Spawn{RegionID: 25000}}) {
+		t.Fatal("a murderer at an ordinary gate into another world was refused")
+	}
 }
 
 /*
