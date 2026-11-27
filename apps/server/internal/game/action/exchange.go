@@ -74,13 +74,37 @@ func (rt *Runtime) HandleExchangeRequest(division string, c *enterworld.Characte
 		return refuse(wire.ExchangeErrInvalidTarget)
 	}
 	nowMs := rt.Now().UnixMilli()
-	if rt.Exchanges.Trading(division, c.Name) || rt.Exchanges.Trading(division, target.Name) ||
-		rt.Exchanges.Pending(division, target.Name, nowMs) ||
-		rt.ProposalPending != nil && rt.ProposalPending(division, target.Name) {
-		return refuse(wire.ExchangeErrBusy)
+	// The asker's own interaction state, ahead of the reach (the
+	// native door's order): a dead asker, and one keeping a stall of
+	// their own, is busy; a stall visitor gets the stall refusal; an
+	// asker already inside an exchange hears nothing at all; and an
+	// asker with an ask still out cancels it and asks again. An NPC
+	// window or the Open Market would refuse here too, but the port
+	// keeps no such per-player window state to judge.
+	if !enterworld.CharacterAlive(c) || rt.Stalls.Keeping(division, c.Name) {
+		return refuse(wire.ExchangeErrAskerBusy)
 	}
+	if _, visiting := rt.Stalls.Visiting(division, c.Name); visiting {
+		return refuse(wire.ExchangeErrStallVisit)
+	}
+	if rt.Exchanges.Trading(division, c.Name) {
+		return OpResult{}
+	}
+	rt.Exchanges.DropOutgoingRequest(division, c.Name, nowMs)
 	if !rt.exchangeInReach(division, c, target) {
 		return refuse(wire.ExchangeErrTooFar)
+	}
+	// The asked side the same, answered with the busy code: trading,
+	// already asked, holding a party proposal, or sitting in a stall
+	// of their own or another's.
+	if rt.Exchanges.Trading(division, target.Name) ||
+		rt.Exchanges.Pending(division, target.Name, nowMs) ||
+		rt.ProposalPending != nil && rt.ProposalPending(division, target.Name) ||
+		rt.Stalls.Keeping(division, target.Name) {
+		return refuse(wire.ExchangeErrBusy)
+	}
+	if _, visiting := rt.Stalls.Visiting(division, target.Name); visiting {
+		return refuse(wire.ExchangeErrBusy)
 	}
 	rt.Exchanges.Propose(division, c.Name, target.Name, nowMs)
 	prompt := wire.NewWriter(5).U8(exchangePromptKind).U32(enterworld.ObjectIDForCharacter(c)).Payload()
