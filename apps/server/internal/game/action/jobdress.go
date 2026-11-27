@@ -440,9 +440,9 @@ command is handled; the port calls this from the matching events: an
 accepted move (RetireMoveEffects), entering battle (enterBattleState)
 and a handled skill command (HandleTargetInteract).
 
-INFERENCE: the cancel's own frames - the v1.150 client carries 0x3514
-for exactly this bar (75D1E0, "Item unequip cancelled") - are the port's
-reading; the native event set above is traced. Callers hold the
+INFERENCE: the cancel's own frames are the port's reading; the v1.150
+client carries 0x3514 for exactly this bar (75D1E0, "Item unequip
+cancelled"). The native event set above is traced. Callers hold the
 division lock or the character's own update door.
 ================
 */
