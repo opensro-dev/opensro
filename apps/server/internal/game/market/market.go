@@ -43,8 +43,10 @@ const (
 	// FeePercent is the seller's fee on a sale, rounded down (a sale
 	// under 100 pays none).
 	FeePercent = 1
-	// ListingDuration is how long a listing stays open.
-	ListingDuration = 24 * time.Hour
+	// ListingDuration is how long a listing stays open: one week (owner,
+	// 2026-11-27; it was 24 hours). A listing keeps the expiry it was
+	// listed with, so only listings made after the change run a week.
+	ListingDuration = 7 * 24 * time.Hour
 	// OpenListingCap bounds one account's open listings.
 	OpenListingCap = 20
 	// OpenOfferCap bounds one account's open offers.
