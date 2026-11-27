@@ -375,6 +375,10 @@ type Runtime struct {
 	// tick (fortress_capture.go).
 	structureDeathsMu sync.Mutex
 	structureDeaths   []structureDeath
+	// questKillTurns are the party kill shares' rotations, per
+	// (party, quest): the native DivideType-0 share (reward.go).
+	questKillTurnsMu sync.Mutex
+	questKillTurns   map[questKillTurnKey]questKillTurnEntry
 	// FortressStore keeps the fortress structures' rows (fortress_persist.go).
 	FortressStore     enterworld.FortressStore
 	fortressPersistMu sync.Mutex
@@ -854,6 +858,29 @@ type Runtime struct {
 		monsterCodename string,
 		rarity uint8,
 	) ([]wire.Frame, bool)
+	// UpdateQuestKillFor credits one kill to the named quests of a
+	// character only (the party kill share, reward.go). Nil disables
+	// sharing; the solo kill always runs through UpdateQuestKill.
+	UpdateQuestKillFor func(
+		character *enterworld.Character,
+		monsterCodename string,
+		rarity uint8,
+		only map[uint32]bool,
+	) []wire.Frame
+	// NoteQuestKillChains runs the authored chains' kill watchers for
+	// the killer alone (they never follow a shared credit).
+	NoteQuestKillChains func(character *enterworld.Character, monsterCodename string) []wire.Frame
+	// QuestKillTakers lists the quests of a character that take one kill
+	// of (codename, rarity): RefID, the quest's DivideType and whether it
+	// gathers from the kill. Nil disables sharing.
+	QuestKillTakers func(
+		character *enterworld.Character,
+		monsterCodename string,
+		rarity uint8,
+	) []QuestKillTaker
+	// QuestMonsterDropsFor is QuestMonsterDrops restricted to the named
+	// quests: a shared kill's gather drops roll for the credited member.
+	QuestMonsterDropsFor func(*enterworld.Character, string, uint8, func() (uint32, error), map[uint32]bool) []inventory.ItemAmount
 	// UpdateQuestTeleport reports a successful 0x7495 teleport use to
 	// the quest lane (the used-a-teleport event: the use kind and the
 	// gate's gid), raised once the move has landed, before the success
