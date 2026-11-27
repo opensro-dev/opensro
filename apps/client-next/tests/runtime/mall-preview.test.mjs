@@ -123,6 +123,27 @@ test("mannequin replaces one avatar family without mutating equipment and retain
 	assert.ok( f.assemblies.at( -1 ).parts.some( p => p.model === "garment-1" ) );
 });
 
+test("the mannequin and the costume doll keep disjoint child gids, each on its own body (#4407)", () => {
+	// Both lanes present at once: the Item Mall open while a Spirit costume
+	// is on. The portrait index keeps one actor per gid, so a shared child
+	// gid would hand one lane's wings to the other's body.
+	const mall = fixture(), doll = fixture();
+	doll.owner = createMallPreview( COSTUME_DOLL_CHILD_GID );
+	const LOCAL = 42;
+	mall.owner.request( [ 2 ] );
+	doll.owner.request( [ 2 ] );
+	const mannequin = mall.owner.step( mall.frame, mall.resources, mall.renderer );
+	const clone = doll.owner.step( { ...doll.frame, gid: LOCAL }, doll.resources, doll.renderer );
+	assert.equal( mannequin.length, 2 );
+	assert.equal( clone.length, 2 );
+	assert.equal( mannequin[0].gid, MALL_PREVIEW_GID );
+	assert.equal( clone[0].gid, LOCAL );
+	assert.equal( mannequin[1].attachment?.gid, MALL_PREVIEW_GID );
+	assert.equal( clone[1].attachment?.gid, LOCAL );
+	const gids = [ ...mannequin, ...clone ].map( actor => actor.gid );
+	assert.equal( new Set( gids ).size, gids.length, `child gids collide: ${gids}` );
+});
+
 test("the mannequin carries the world's enchant sparks answer, on and off (#3145)", () => {
 	// The mannequin clones the player (gameplay.inventory), so the
 	// player's own weapon must wear the same glow tier and sparks as
