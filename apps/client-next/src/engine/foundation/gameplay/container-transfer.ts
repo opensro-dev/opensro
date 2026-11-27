@@ -23,6 +23,9 @@ const MP_POTION_TYPE = 0x10ec;
 const VIGOR_POTION_TYPE = 0x18ec;
 const PET_POTION_TYPE = 0x20ec;
 const PET_VIGOR_POTION_TYPE = 0x48ec;
+const PURIFICATION_PILL_TYPE = 0x096c;
+const UNIVERSAL_PILL_TYPE = 0x316c;
+const PET_CURE_POTION_TYPE = 0x396c;
 const LUCKY_POWDER_TYPE = 0x156c;
 const MAGIC_STONE_TYPE = 0x0dec;
 const ATTRIBUTE_STONE_TYPE = 0x15ec;
@@ -52,6 +55,9 @@ function retainedOversizedStack( item: InventoryItem, cap: number ): boolean {
 		case VIGOR_POTION_TYPE:
 		case PET_POTION_TYPE:
 		case PET_VIGOR_POTION_TYPE:
+		case PURIFICATION_PILL_TYPE:
+		case UNIVERSAL_PILL_TYPE:
+		case PET_CURE_POTION_TYPE:
 		case LUCKY_POWDER_TYPE:
 			return true;
 		default:
