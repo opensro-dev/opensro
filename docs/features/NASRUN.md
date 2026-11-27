@@ -57,15 +57,16 @@ These are inferences and port choices, not native evidence:
 ## Nasrun alchemy (#3456 step 3c)
 
 With `SRO_NASRUN` on, Sabakun's jewel reinforces a Spirit in the bag through the native alchemy window, one plus
-at a time up to +6 (`internal/game/item/alchemy/nasrun.go`):
+at a time up to +10 (`internal/game/item/alchemy/nasrun.go`):
 
-| Attempt | +0→+1 | +1→+2 | +2→+3 | +3→+4 | +4→+5 | +5→+6 |
-| --- | --- | --- | --- | --- | --- | --- |
-| Chance | 70 % | 60 % | 50 % | 40 % | 30 % | 20 % |
+| Attempt | +0→+1 | +1→+2 | +2→+3 | +3→+4 | +4→+5 | +5→+6 | +6→+7 | +7→+8 | +8→+9 | +9→+10 |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| Chance | 70 % | 60 % | 50 % | 40 % | 30 % | 20 % | 15 % | 10 % | 7 % | 5 % |
 
-- A failure spends the jewel and keeps the plus: no break, no curse, no reset (the owner's rule, 2026-11-16).
+- A failure spends the jewel. At +5 or below the Spirit keeps its plus. Above +5 it drops back to +5. From +8 up a
+  failure also destroys the Spirit 30 % of the time (the owner's rule, 2026-11-28; it was +6 with no loss before).
 - The chance is the table alone: Lucky options, avatar luck and the shard's rate table do not change it.
-- Refusals use the native codes: a lucky powder staged with the jewel (0x0a), a Spirit at +6 (0x0f), a native
+- Refusals use the native codes: a lucky powder staged with the jewel (0x0a), a Spirit at +10 (0x0f), a native
   elixir on a Spirit or the jewel on native gear (0x09). Off, a Spirit is no target (0x10).
 - The token shop sells the jewel for 20 tokens beside the Spirits.
 

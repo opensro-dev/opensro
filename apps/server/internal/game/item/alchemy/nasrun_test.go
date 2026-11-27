@@ -64,34 +64,89 @@ func spiritResult(t *testing.T, r Outcome) (spirit, jewel inventory.Item) {
 ================
 TestSpiritJewelRollsTheOwnersChances
 
-At each plus, a draw under the chance raises the Spirit one plus and a
-draw at the chance keeps it; either way one jewel is spent.
+At each plus, a draw under the chance raises the Spirit one plus. A draw
+at the chance fails: at +5 or below the plus stays, above +5 it drops to
++5, and from +8 up a second draw at SpiritDestroyPercent spares it. Either
+way one jewel is spent.
 ================
 */
 func TestSpiritJewelRollsTheOwnersChances(t *testing.T) {
-	for plus, chance := range []uint32{70, 60, 50, 40, 30, 20} {
+	for plus, chance := range []uint32{70, 60, 50, 40, 30, 20, 15, 10, 7, 5} {
 		for _, tc := range []struct {
-			draw    uint32
+			draws   []uint32
 			success bool
-		}{{chance - 1, true}, {chance, false}} {
+		}{{[]uint32{chance - 1}, true}, {[]uint32{chance, SpiritDestroyPercent}, false}} {
 			c, items := spiritFixture(true)
 			items[3].Plus = uint8(plus)
-			r, err := c.Reinforce(items, []uint8{16, 17}, 0, sequence(t, tc.draw))
+			draws := tc.draws
+			if !tc.success && plus < 8 {
+				draws = draws[:1]
+			}
+			r, err := c.Reinforce(items, []uint8{16, 17}, 0, sequence(t, draws...))
 			if err != nil {
-				t.Fatalf("+%d draw %d: %v", plus, tc.draw, err)
+				t.Fatalf("+%d draws %v: %v", plus, draws, err)
 			}
 			spirit, jewel := spiritResult(t, r)
 			want := uint8(plus)
-			if tc.success {
+			switch {
+			case tc.success:
 				want++
+			case plus > 5:
+				want = 5
 			}
 			if r.Success != tc.success || r.Destroyed || spirit.Plus != want || r.From != uint8(plus) {
-				t.Fatalf("+%d draw %d: outcome %+v, Spirit +%d, want +%d", plus, tc.draw, r, spirit.Plus, want)
+				t.Fatalf("+%d draws %v: outcome %+v, Spirit +%d, want +%d", plus, draws, r, spirit.Plus, want)
 			}
 			if jewel.Quantity != 1 {
-				t.Fatalf("+%d draw %d: %d jewels left, want 1", plus, tc.draw, jewel.Quantity)
+				t.Fatalf("+%d draws %v: %d jewels left, want 1", plus, draws, jewel.Quantity)
 			}
 		}
+	}
+}
+
+/*
+================
+TestSpiritJewelDestroysFromRiskPlus
+
+A failure from +8 or +9 whose second draw falls under SpiritDestroyPercent
+destroys the Spirit and still spends the jewel; the result frame then
+carries the destroy flag and no item body. A failure at +7 never draws a
+second time (sequence fails on an extra draw), so it cannot break.
+================
+*/
+func TestSpiritJewelDestroysFromRiskPlus(t *testing.T) {
+	// The owner's rule in numbers, not the constants under test.
+	for _, plus := range []uint8{8, 9} {
+		c, items := spiritFixture(true)
+		items[3].Plus = plus
+		chance, _ := SpiritChance(plus)
+		r, err := c.Reinforce(items, []uint8{16, 17}, 0, sequence(t, uint32(chance), SpiritDestroyPercent-1))
+		if err != nil {
+			t.Fatalf("+%d: %v", plus, err)
+		}
+		if r.Success || !r.Destroyed {
+			t.Fatalf("+%d: outcome %+v, want destroyed", plus, r)
+		}
+		for _, item := range r.Items {
+			if item.Slot == 16 {
+				t.Fatalf("+%d: the destroyed Spirit is still in the bag: %+v", plus, item)
+			}
+			if item.Slot == 17 && item.Quantity != 1 {
+				t.Fatalf("+%d: %d jewels left, want 1", plus, item.Quantity)
+			}
+		}
+		frames := ReinforceFrames(items, r)
+		last := frames[len(frames)-1].Payload
+		if len(last) != 4 || last[1] != 0 || last[3] != 1 {
+			t.Fatalf("+%d: result frame % x, want failure with the destroy flag and no body", plus, last)
+		}
+	}
+	c, items := spiritFixture(true)
+	items[3].Plus = 7
+	chance, _ := SpiritChance(7)
+	r, err := c.Reinforce(items, []uint8{16, 17}, 0, sequence(t, uint32(chance)))
+	if err != nil || r.Destroyed {
+		t.Fatalf("+7 failure: %+v, %v; want a drop to +5 with no destruction draw", r, err)
 	}
 }
 
@@ -132,7 +187,7 @@ func TestSpiritJewelRefusals(t *testing.T) {
 		want  Refusal
 	}{
 		{"switch off: a Spirit is no target", false, 0, []uint8{16, 17}, Refusal(0x10)},
-		{"at +6", true, SpiritMaxPlus, []uint8{16, 17}, Refusal(0x0f)},
+		{"at +10", true, SpiritMaxPlus, []uint8{16, 17}, Refusal(0x0f)},
 		{"a lucky powder staged", true, 0, []uint8{16, 17, 15}, Refusal(0x0a)},
 		{"a native elixir on a Spirit", true, 0, []uint8{16, 14}, Refusal(9)},
 		{"the jewel on native gear", true, 0, []uint8{13, 17}, Refusal(9)},
