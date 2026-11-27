@@ -191,6 +191,7 @@
     "src/engine/runtime/ui/hud/window-placement.ts": "src/engine/runtime/ui/ui.ts",
     "src/engine/runtime/renderer/readback/readback.ts": "src/engine/runtime/renderer/renderer.ts",
     "src/engine/runtime/simulation/worker/session/world/gameplay/training/training.ts": "src/engine/runtime/simulation/worker/session/world/gameplay/gameplay.ts",
+    "src/engine/runtime/ui/title/deletion-window.ts": "src/engine/runtime/ui/title/title.ts",
     "src/engine/runtime/ui/title/resources.ts": "src/engine/runtime/ui/title/title.ts",
     "src/engine/runtime/frontend/dialog/dialog.ts": "src/engine/runtime/frontend/frontend.ts",
     "src/engine/runtime/frontend/creation/creation.ts": "src/engine/runtime/frontend/frontend.ts",

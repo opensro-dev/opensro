@@ -256,6 +256,9 @@ export interface CharacterRecord {
 	readonly currentHp?: number;
 	readonly currentMp?: number;
 	readonly deleteReservedAt?: string;
+	// The instant the server archives the character (its deletion window,
+	// native seven days or the shard's SRO_QUICK_CHARACTER_DELETE day).
+	readonly deleteMaturesAt?: string;
 	readonly visualLoadout: Readonly<{
 		modelCodename: string;
 		// Worn items (slot from the item record) and avatar items.
