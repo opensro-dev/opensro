@@ -250,6 +250,9 @@ func (rt *Runtime) handleItemUse(
 	// names a pet (petItemVisualTarget).
 	var visualGID uint32
 	var mercenaryContext domain.MercenaryContext
+	// Read before the door: the guild read inside it would deadlock
+	// (admitContext.FortressRole).
+	fortressRole := rt.guildFortressRole(divisionID, character)
 	update := func() bool {
 		if character.DeletePending || rt.deps.ItemReferences() == nil ||
 			!inventory.IsBagSlot(request.Slot, inventory.BagEnd(character)) {
@@ -358,7 +361,7 @@ func (rt *Runtime) handleItemUse(
 			return rt.usePandoraBox(persistentSummonUse{division: divisionID, character: character, ref: ref, row: rowIndex, request: request, nowMs: nowMs}, &result)
 		}
 		if family == itemUseStructureRepair {
-			return rt.useStructureRepair(character, skillItemUse{division: divisionID, ref: ref, row: rowIndex, request: request, nowMs: nowMs}, tail, &result)
+			return rt.useStructureRepair(character, skillItemUse{division: divisionID, ref: ref, row: rowIndex, request: request, nowMs: nowMs, fortressRole: fortressRole}, tail, &result)
 		}
 		if family == itemUseQuestTool {
 			if len(tail) != 0 || rt.UseQuestItem == nil || character.NativeTeleportMode != 0 {
@@ -599,7 +602,7 @@ func (rt *Runtime) handleItemUse(
 			if len(tail) != 0 {
 				return false
 			}
-			return rt.useMonsterCapsule(divisionID, character, ref, rowIndex, request, nowMs, &result)
+			return rt.useMonsterCapsule(divisionID, character, ref, rowIndex, request, nowMs, fortressRole, &result)
 		}
 
 		if family == itemUsePetSkill {
