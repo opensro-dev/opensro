@@ -83,6 +83,11 @@ type divisionMonsterState struct {
 	uniqueAnchors map[uniqueAnchor]uint32
 	// lifetimes holds the native monster tick timers (monsterlifetime.go).
 	lifetimes map[uint32]monsterLifetime
+	// vitals holds the natural-recovery records of hurt or latched
+	// monsters (monsterstate_vitals.go); nextVitalScanMs throttles the
+	// hurt scan that creates them.
+	vitals          map[uint32]*monsterVitalRecord
+	nextVitalScanMs int64
 	// byRegion indexes generated spawn regions for nest/lifecycle queries
 	// and non-mover interest fallback. Movers own their live spatial index.
 	byRegion map[uint16][]uint32
