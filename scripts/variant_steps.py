@@ -59,6 +59,7 @@ import time
 from pathlib import Path
 
 import state_document
+import build_progress
 import variant_settle
 import variant_stamp
 from prepare_client_resources import file_digest, write_atomically
@@ -889,7 +890,11 @@ class Runner:
 	# ================
 	def result(self, index: int):
 		started = time.perf_counter()
-		value, how = self.settle_step(index)
+		build_progress.begin_step(self.steps[index]["name"])
+		try:
+			value, how = self.settle_step(index)
+		finally:
+			build_progress.end_step()
 		# One line a step, so a slow build names the step that cost it (#4251).
 		print(f"step {self.steps[index]['name']}: {how} in {time.perf_counter() - started:.1f} s", flush=True)
 		return value
