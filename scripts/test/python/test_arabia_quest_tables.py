@@ -200,6 +200,21 @@ class ArabiaQuestTablesTest(unittest.TestCase):
 		self.assertEqual(quest_tables.project_later_row(plain), plain)
 
 	# ================
+	# test_a_row_broken_over_lines_is_not_padded
+	#
+	# SN_PAYCON_QNO_AR_071's English holds raw newlines, so the archive's
+	# first line of it is 10 columns ending mid-sentence with its markup
+	# open. Padded to 17 it shipped as a quest text that every guide
+	# layout refused (r204n). It keeps the old path: a fragment, as it
+	# came.
+	# ================
+	def test_a_row_broken_over_lines_is_not_padded(self):
+		fragment = ["1", "1460", "SN_PAYCON_QNO_AR_071", "<sml2><font color=\"1,2,3,4\">원문</font></sml2>"] + \
+			["0"] * 5 + ["<sml2><font color=\"1,2,3,4\"><strong>Scenario</strong><br>Long time no see"]
+		self.assertEqual(len(fragment), 10)
+		self.assertEqual(quest_tables.project_later_row(fragment), fragment)
+
+	# ================
 	# test_the_recovered_talk_lines_are_carried
 	#
 	# The twelve quests' thirteen lines (owner, 2026-11-26): each names

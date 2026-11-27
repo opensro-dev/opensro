@@ -347,18 +347,31 @@ def check_guide_text(guide, texts, variant_text):
 # quests and took the length rule's path out of the build: the
 # 4-column stub rows (key and Korean only), whose English QUEST_ENGLISH
 # carries, become a blank-English row so complete_english fills them;
-# a quest row a column short or long (SN_TALK_QNO_AR_026_03 at 15,
-# SN_PAYCON_QNO_AR_002 at 18) is padded or cut to 17 first, so its
+# a quest row a column or two short or long (SN_TALK_QNO_AR_026_03 at
+# 15, SN_PAYCON_QNO_AR_002 at 18) is padded or cut to 17 first, so its
 # English cell lands where the projection reads it. Any other short
 # row keeps today's path, untouched.
+#
+# Only that slip, never more: SN_PAYCON_QNO_AR_071 is broken over
+# three physical lines by raw newlines in its English text, so its
+# first line is 10 columns ending mid-sentence ("Long time no see").
+# Padded to 17 it shipped that cut text with its <font> and <sml2>
+# left open, and every window that lays out quest guide text threw
+# "Unbalanced guide markup" (r204n's client check, 88 tests). A row
+# that far off is a fragment, not a row a cell short.
 # ================
+LATER_TEXT_COLUMNS = 17
+MAX_COLUMN_SLIP = 2
+
+
 def project_later_row(row):
-	if len(row) == 17:
+	if len(row) == LATER_TEXT_COLUMNS:
 		return map_tables.later_text_row(row)
 	if len(row) > 3 and row[1].strip().isdigit() and QUEST_CODE.search(row[2]):
 		if len(row) == 4:
 			return [row[0], row[2], row[3]] + [""] * 12
-		return map_tables.later_text_row((row + ["0"] * 17)[:17])
+		if abs(len(row) - LATER_TEXT_COLUMNS) <= MAX_COLUMN_SLIP:
+			return map_tables.later_text_row((row + ["0"] * LATER_TEXT_COLUMNS)[:LATER_TEXT_COLUMNS])
 	return row
 
 
