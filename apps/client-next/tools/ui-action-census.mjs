@@ -46,9 +46,7 @@ import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 
 import { CLIENT_PUBLIC_ROOT } from "../../../scripts/lib/generatedRoot.mjs";
-import { EXPANDED_BUILD } from "../../../scripts/lib/expandedBuild.mjs";
-import { lostNativeRow } from "./census-expanded.mjs";
-import { replacedWindows } from "./replaced-windows.mjs";
+import { censusText, censusVerdict } from "./census-verdict.mjs";
 import "../tests/helpers/native-source-loader.mjs";
 import { censusWorkerCount } from "./censusWorkers.mjs";
 import { root } from "./project.mjs";
@@ -640,21 +638,6 @@ function runSceneWorker( name ) {
 
 /*
 ================
-canonical
-================
-*/
-function canonical( value ) {
-	if ( Array.isArray( value ) ) return value.map( canonical );
-	if ( value && typeof value === "object" ) {
-		const out = {};
-		for ( const key of Object.keys( value ).sort() ) out[key] = canonical( value[key] );
-		return out;
-	}
-	return value;
-}
-
-/*
-================
 main
 ================
 */
@@ -666,47 +649,26 @@ async function main() {
 		process.stdout.write( JSON.stringify( censusScene( name ) ) );
 		return;
 	}
-	const table = canonical( await buildTable( sceneNames() ) );
-	const text = JSON.stringify( table, null, "\t" ) + "\n";
-	const sceneCount = Object.keys( table.scenes ).length;
-	const rowCount = Object.values( table.scenes )
-		.reduce( ( sum, scene ) => sum + Object.keys( scene.rows ).length, 0 );
+	const text = censusText( await buildTable( sceneNames() ) );
+	// --out <file>: build only, for the gate, which judges the table itself
+	// (census-verdict.mjs) and keeps it for a rerun on the same inputs.
+	const outAt = args.indexOf( "--out" );
+	if ( outAt >= 0 ) {
+		fs.writeFileSync( args[outAt + 1], text );
+		return;
+	}
 	if ( args.includes( "--write" ) ) {
 		fs.writeFileSync( CENSUS_PATH, text );
-		console.log( `ui-action-census: wrote ${sceneCount} scenes, ${rowCount} control rows` );
+		const table = JSON.parse( text );
+		const rowCount = Object.values( table.scenes )
+			.reduce( ( sum, scene ) => sum + Object.keys( scene.rows ).length, 0 );
+		console.log( `ui-action-census: wrote ${Object.keys( table.scenes ).length} scenes, ${rowCount} control rows` );
 		return;
 	}
 	const current = fs.existsSync( CENSUS_PATH ) ? fs.readFileSync( CENSUS_PATH, "utf8" ) : "";
-	if ( current === text ) {
-		console.log( `ui-action-census: up to date (${sceneCount} scenes, ${rowCount} control rows)` );
-		return;
-	}
-	// A build that replaces a native window with a later client's is checked
-	// as an expanded one: the window defines its own controls (#3971).
-	const replaced = replacedWindows().map( window => window.controlPrefix );
-	if ( current && (EXPANDED_BUILD || replaced.length > 0) ) {
-		const lost = lostNativeRow( JSON.parse( current ), table, canonical, replaced );
-		if ( lost === undefined ) {
-			console.log( `ui-action-census: every native row survives the expanded build (${rowCount} control rows)` );
-			return;
-		}
-		console.error( `ui-action-census: expanded build: ${lost}` );
-		process.exit( 1 );
-	}
-	console.error(
-		"ui-action-census: tests/runtime/ui-action-census.json is stale or differs; " +
-			"run node tools/ui-action-census.mjs --write and review the row diff"
-	);
-	if ( current ) {
-		const before = JSON.parse( current );
-		for ( const name of Object.keys( table.scenes ) ) {
-			if ( JSON.stringify( canonical( before.scenes?.[name] ) ) !== JSON.stringify( table.scenes[name] ) ) {
-				console.error( `first differing scene: ${name}` );
-				break;
-			}
-		}
-	}
-	process.exit( 1 );
+	const verdict = censusVerdict( current, text );
+	for ( const line of verdict.lines ) (verdict.ok ? console.log : console.error)( line );
+	if ( !verdict.ok ) process.exit( 1 );
 }
 
 await main();

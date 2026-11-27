@@ -22,8 +22,10 @@ import {
 	ACTION_CENSUS_FILES,
 	actionCensusClosure,
 	actionCensusInputSet,
-	actionCensusKey
+	actionCensusKey,
+	censusGate
 } from "../../tools/ui-action-census-gate.mjs";
+import { censusText, censusVerdict } from "../../tools/census-verdict.mjs";
 
 const SOURCE = `
 export function createUi( assets, commands ) {
@@ -203,8 +205,9 @@ test("action gate closure: a missing root fails loudly instead of unwatched", ()
 test("action gate key: moves with a watched input, stands for an unrelated one", () => {
 	const closure = actionCensusClosure( actionFixtureModel() );
 	const inputSet = actionCensusInputSet( closure );
-	// The committed census and the tool are watched alongside the closure.
-	assert.equal( inputSet.has( "apps/client-next/tests/runtime/ui-action-census.json" ), true );
+	// The tool is watched alongside the closure; the committed census is
+	// not a build input, only what the table is judged against.
+	assert.equal( inputSet.has( "apps/client-next/tests/runtime/ui-action-census.json" ), false );
 	assert.equal( ACTION_CENSUS_FILES.includes( "apps/client-next/tools/ui-action-census.mjs" ), true );
 	assert.equal( inputSet.has( "apps/client-next/src/engine/runtime/world/world.ts" ), false );
 	const entries = [
@@ -224,4 +227,57 @@ test("action gate key: moves with a watched input, stands for an unrelated one",
 		inputSet
 	);
 	assert.notEqual( watched, key );
+});
+
+// A two-scene table, as the tool writes it, with one row in each scene.
+function censusTable( shopRow = "buy" ) {
+	return censusText( {
+		about: "fixture",
+		scenes: {
+			Shop: { controls: [ "shop-buy" ], rows: { "shop-buy": shopRow } },
+			System: { controls: [ "system-close" ], rows: { "system-close": null } }
+		}
+	} );
+}
+
+test("census verdict: equal passes, a moved row fails and names its scene, an expanded build may add", () => {
+	const table = censusTable();
+	assert.equal( censusVerdict( table, table, false, [] ).ok, true );
+	const moved = censusVerdict( censusTable( "sell" ), table, false, [] );
+	assert.equal( moved.ok, false );
+	assert.ok( moved.lines.includes( "first differing scene: Shop" ), moved.lines.join( "\n" ) );
+	const grown = JSON.parse( table );
+	grown.scenes.Shop.controls.push( "shop-extra" );
+	grown.scenes.Shop.rows["shop-extra"] = null;
+	assert.equal( censusVerdict( table, censusText( grown ), true, [] ).ok, true, "added rows pass when expanded" );
+	assert.equal( censusVerdict( table, censusText( grown ), false, [] ).ok, false, "but not on a native build" );
+});
+
+test("census gate: a changed committed census is judged against the kept table, never rebuilt", async () => {
+	const kept = new Map();
+	let builds = 0;
+	const cache = { find: key => kept.get( key ), record: ( key, text ) => kept.set( key, text ) };
+	const build = async () => {
+		builds++;
+		return censusTable();
+	};
+	const verdict = ( current, text ) => censusVerdict( current, text, false, [] );
+	const first = await censusGate( { key: "k", committed: censusTable(), cache, build, verdict } );
+	assert.deepEqual( [ first.code, first.built, builds ], [ 0, true, 1 ] );
+	// The committed census moves (a refresh commit): same inputs, no build.
+	const stale = await censusGate( { key: "k", committed: censusTable( "sell" ), cache, build, verdict } );
+	assert.deepEqual( [ stale.code, stale.built, builds ], [ 1, false, 1 ] );
+	const refreshed = await censusGate( { key: "k", committed: censusTable(), cache, build, verdict } );
+	assert.deepEqual( [ refreshed.code, refreshed.built, builds ], [ 0, false, 1 ] );
+	// A build input moves: a new key builds again.
+	const moved = await censusGate( { key: "k2", committed: censusTable(), cache, build, verdict } );
+	assert.deepEqual( [ moved.code, moved.built, builds ], [ 0, true, 2 ] );
+});
+
+test("census gate: a failed build fails the gate and records nothing", async () => {
+	const kept = new Map();
+	const cache = { find: key => kept.get( key ), record: ( key, text ) => kept.set( key, text ) };
+	const result = await censusGate( { key: "k", committed: "", cache, build: async () => undefined } );
+	assert.equal( result.code, 1 );
+	assert.equal( kept.size, 0 );
 });
