@@ -23,9 +23,14 @@ removed. A step's key covers what the step reads:
 	its sources     the source roots its last run opened files under,
 	                fingerprinted as variant_stamp fingerprints them,
 	                plus any loose file it opened outside those roots
-	the tree before the accumulated effect of every earlier step,
-	                chained by hash, so a step whose inputs came back
-	                byte-identical is current again
+	the tree before what it read of the tree the earlier steps left -
+	                each file it opened, each path it tested, each
+	                directory it listed (variant_tree_reads.py), so a
+	                step whose reads came back the same is current
+	                however the rest moved; a step whose reads cannot be
+	                recorded (it starts a process, runs package code) is
+	                keyed by the accumulated effect of every earlier
+	                step instead, chained by hash
 
 A build whose journal still matches runs nothing: the tree is verified
 against the journal (a file an outsider changed names its owning step).
@@ -60,6 +65,7 @@ import build_progress
 import variant_settle
 import variant_stamp
 import variant_reuse
+import variant_tree_reads
 from variant_code import code_key, code_location, code_path, frozen_functions, is_installed_code
 from prepare_client_resources import file_digest, write_atomically
 from sro_paths import REPO_ROOT, tree_state_root
@@ -144,7 +150,7 @@ def lay_blob(variant_root: Path, sha: str, target: Path) -> None:
 # The read log: what a run opened, and what that costs next time
 #============================================================================
 
-_recording: dict = {"reads": None}
+_recording: dict = {"reads": None, "tree": None}
 _hook_installed = False
 
 
@@ -156,6 +162,9 @@ _hook_installed = False
 # business (the tree diff sees them however they were made).
 # ================
 def audit_hook(event, args):
+	tree = _recording["tree"]
+	if tree is not None:
+		tree.audit(event, args)
 	if event != "open":
 		return
 	reads = _recording["reads"]
@@ -178,7 +187,8 @@ def audit_hook(event, args):
 #
 # Run one step with the recorders on; returns (result, the paths it
 # opened for reading, the source files of the code it ran, those of the
-# modules it only imported).
+# modules it only imported, the functions it started, and what it read
+# of variant_root's tree: variant_tree_reads' record, None without one).
 #
 # The code is what ran, not what its modules could reach: the static
 # import closure of any importer was nearly the whole build (160 files,
@@ -191,7 +201,7 @@ def audit_hook(event, args):
 # ran: module_closures takes the scripts a file names only from files
 # that ran.
 # ================
-def record_run(run):
+def record_run(run, variant_root: Path | None = None):
 	global _hook_installed
 	if not _hook_installed:
 		sys.addaudithook(audit_hook)
@@ -220,13 +230,20 @@ def record_run(run):
 	# Code a previous step already reported was switched off; this step
 	# must see it again.
 	monitoring.restart_events()
+	tree = None if variant_root is None else variant_tree_reads.Recorder(variant_root, variant_settle.CONTENT_ROOT)
 	_recording["reads"] = reads
+	_recording["tree"] = tree
 	builtins.__import__ = recording_import
+	if tree is not None:
+		tree.start()
 	try:
 		value = run()
 	finally:
+		if tree is not None:
+			tree.stop()
 		builtins.__import__ = original_import
 		_recording["reads"] = None
+		_recording["tree"] = None
 		monitoring.set_events(CODE_TOOL, 0)
 		monitoring.register_callback(CODE_TOOL, monitoring.events.PY_START, None)
 		monitoring.free_tool_id(CODE_TOOL)
@@ -242,7 +259,10 @@ def record_run(run):
 		resolved = str(Path(path).resolve())
 		if resolved in code:
 			functions.setdefault(resolved, set()).update(names)
-	return value, reads, sorted(code), sorted(modules), {path: sorted(names) for path, names in functions.items()}
+	if tree is not None:
+		tree.ran_code(ran)
+	functions_ran = {path: sorted(names) for path, names in functions.items()}
+	return value, reads, sorted(code), sorted(modules), functions_ran, None if tree is None else tree.reads()
 
 
 #============================================================================
@@ -429,6 +449,9 @@ class Runner:
 		self.fresh = True
 		self.first = 0
 		self.state = EMPTY_STATE
+		# The tree the settled steps' effects leave, moved with state
+		# (advance): what a step read is looked up in it.
+		self.tree = variant_tree_reads.TreeView()
 		self.records: list[dict] = []
 		self._root_fingerprints: dict[str, str] = {}
 		self._code_keys: dict[tuple[str, ...], str] = {}
@@ -646,10 +669,12 @@ class Runner:
 	#
 	# What a step's key is made of, by name, so a stale step can say which
 	# part moved (explain): its arguments, those an earlier step's result
-	# supplied (later_key), its code, its sources, and the chain state in
-	# front of it.
+	# supplied (later_key), its code, its sources, and what it read of the
+	# tree in front of it (tree), or the chain state for a step whose
+	# reads are not recorded.
 	# ================
-	def key_parts(self, step: dict, recorded_reads: dict | None, state: str, later_key: str = "") -> dict:
+	def key_parts(self, step: dict, recorded_reads: dict | None, state: str, later_key: str = "",
+			tree: variant_tree_reads.TreeView | None = None) -> dict:
 		if recorded_reads is not None and step["roots"]:
 			recorded_reads = {
 				**recorded_reads,
@@ -659,9 +684,12 @@ class Runner:
 			recorded_reads.get("code", []), recorded_reads.get("imported", []), recorded_reads.get("functions"),
 			recorded_reads.get("keying") == REACH_KEYING
 		)
+		read = None if tree is None or recorded_reads is None else variant_tree_reads.tree_key(
+			tree, recorded_reads.get("tree")
+		)
 		return {
 			"arguments": step["argumentsKey"], "later": later_key, "code": code,
-			"sources": self.sources_key(recorded_reads), "state": state,
+			"sources": self.sources_key(recorded_reads), "state": state if read is None else read,
 		}
 
 	# ================
@@ -669,8 +697,9 @@ class Runner:
 	#
 	# The key a step must match to skip: its name and its key parts.
 	# ================
-	def key_of(self, step: dict, recorded_reads: dict | None, state: str, later_key: str = "") -> str:
-		return parts_key(step["name"], self.key_parts(step, recorded_reads, state, later_key))
+	def key_of(self, step: dict, recorded_reads: dict | None, state: str, later_key: str = "",
+			tree: variant_tree_reads.TreeView | None = None) -> str:
+		return parts_key(step["name"], self.key_parts(step, recorded_reads, state, later_key, tree))
 
 	# ================
 	# explain
@@ -686,10 +715,10 @@ class Runner:
 		if self.journal is None:
 			return [(step["name"], "no usable journal: every step runs") for step in self.steps]
 		lines = []
-		state = EMPTY_STATE
+		state, tree = EMPTY_STATE, variant_tree_reads.TreeView()
 		self.key_journal_code()
 		for step, entry in zip(self.steps[:self.matched], self.journal):
-			now = self.key_parts(step, entry.get("reads"), state, entry.get("laterKey", ""))
+			now = self.key_parts(step, entry.get("reads"), state, entry.get("laterKey", ""), tree)
 			if parts_key(step["name"], now) == entry.get("key"):
 				lines.append((step["name"], "current"))
 			else:
@@ -697,6 +726,7 @@ class Runner:
 				moved = [name for name in now if was.get(name) != now[name]] if was else ["result not journaled"]
 				lines.append((step["name"], "stale: " + ", ".join(moved)))
 			state = chain(state, entry["effect"])
+			tree.apply(entry["effect"])
 		lines += [(step["name"], "new in the step list: runs") for step in self.steps[self.matched:]]
 		return lines
 
@@ -718,21 +748,33 @@ class Runner:
 		# A changed step list ends what can replay at the last shared
 		# step; the rollback below undoes every recorded step from there.
 		first = self.matched if self.matched < len(self.steps) or self.matched < len(self.journal) else len(self.steps)
-		state = EMPTY_STATE
+		state, tree = EMPTY_STATE, variant_tree_reads.TreeView()
+		started = time.perf_counter()
 		self.key_journal_code()
+		coded = time.perf_counter()
 		for index, (step, entry) in enumerate(zip(self.steps[:self.matched], self.journal)):
 			# Over a prefix that still matches, every earlier result is the
 			# journal's, so the arguments they supplied are the recorded ones.
-			if entry.get("key") != self.key_of(step, entry.get("reads"), state, entry.get("laterKey", "")):
+			if entry.get("key") != self.key_of(step, entry.get("reads"), state, entry.get("laterKey", ""), tree):
 				first = index
 				break
 			state = chain(state, entry["effect"])
+			tree.apply(entry["effect"])
+		keyed = time.perf_counter()
 		dirty = self.dirty_step()
 		if dirty is not None and dirty < first:
 			first = dirty
 		self.first = first
+		verified = time.perf_counter()
 		if first < len(self.journal):
 			self.rollback(first)
+		# Said, not silent: r204n's try 8 spent about 59 s before its first
+		# step with nothing naming the part (#4337).
+		print(
+			f"variant: begin: code keys {coded - started:.1f} s, step keys {keyed - coded:.1f} s, "
+			f"tree check {verified - keyed:.1f} s, rollback {time.perf_counter() - verified:.1f} s",
+			flush=True,
+		)
 
 	# ================
 	# final_state
@@ -851,13 +893,13 @@ class Runner:
 		step = self.steps[index]
 		entry = None if self.fresh or index >= self.matched else self.journal[index]
 		if entry is not None and index < self.first:
-			self.records.append(self.reached_entry(step, entry, self.state))
-			self.state = chain(self.state, entry["effect"])
+			self.records.append(self.reached_entry(step, entry))
+			self.advance(entry["effect"])
 			return decode_result(entry["result"], self.variant), "current"
 		# Every earlier step is settled, so their results are in hand.
 		later = tuple(step["later"]()) if step["later"] else ()
 		later_key = arguments_digest(later) if later else ""
-		now = None if entry is None else self.key_parts(step, entry.get("reads"), self.state, later_key)
+		now = None if entry is None else self.key_parts(step, entry.get("reads"), self.state, later_key, self.tree)
 		if now is not None and entry.get("key") == parts_key(step["name"], now):
 			for relative, sha in entry["effect"]:
 				target = self.variant / relative
@@ -865,8 +907,8 @@ class Runner:
 					target.unlink(missing_ok=True)
 				else:
 					lay_blob(self.variant, sha, target)
-			self.records.append(self.reached_entry(step, entry, self.state))
-			self.state = chain(self.state, entry["effect"])
+			self.records.append(self.reached_entry(step, entry))
+			self.advance(entry["effect"])
 			return decode_result(entry["result"], self.variant), "replayed"
 		if now is not None:
 			# Said, not silent: r204l's rebuild reran avatars-v1696 with no
@@ -876,19 +918,21 @@ class Runner:
 			print(f"step {step['name']}: stale: {', '.join(moved)}", flush=True)
 		arguments = step["arguments"] + later
 		before = snapshot(self.variant)
-		value, reads, code, imported, functions = record_run(lambda: step["function"](*arguments))
+		value, reads, code, imported, functions, tree_reads = record_run(
+			lambda: step["function"](*arguments), self.variant
+		)
 		effect = effect_between(self.variant, before, snapshot(self.variant))
-		classified = self.classify_reads(reads, code, imported, functions)
+		classified = {**self.classify_reads(reads, code, imported, functions), "tree": tree_reads}
 		try:
 			encoded = encode_result(value, self.variant)
-			parts = self.key_parts(step, classified, self.state, later_key)
+			parts = self.key_parts(step, classified, self.state, later_key, self.tree)
 			key = parts_key(step["name"], parts)
 		except Unrecordable as refusal:
 			# Said, not silent: the skills step reran on every build for an
 			# int-keyed summary nobody saw (#4251).
 			print(f"step {step['name']}: not journaled ({refusal}); it runs on every build", flush=True)
 			encoded, key, parts = None, None, None
-		self.state = chain(self.state, effect)
+		self.advance(effect)
 		self.records.append({
 			"name": step["name"], "key": key, "parts": parts, "reads": classified, "effect": effect,
 			"result": encoded, "laterKey": later_key,
@@ -905,13 +949,24 @@ class Runner:
 	# build after the change re-ran every step behind a script: the
 	# format, not the code, would have moved their keys.
 	# ================
-	def reached_entry(self, step: dict, entry: dict, state: str) -> dict:
+	def reached_entry(self, step: dict, entry: dict) -> dict:
 		reads = entry.get("reads")
 		if reads is None or entry.get("key") is None or reads.get("keying") == REACH_KEYING:
 			return entry
 		reached = {**reads, "keying": REACH_KEYING}
-		parts = self.key_parts(step, reached, state, entry.get("laterKey", ""))
+		parts = self.key_parts(step, reached, self.state, entry.get("laterKey", ""), self.tree)
 		return {**entry, "reads": reached, "parts": parts, "key": parts_key(step["name"], parts)}
+
+	# ================
+	# advance
+	#
+	# One settled step's effect onto the chain state and the tree view:
+	# the two always move together, so a later step's key never sees one
+	# without the other.
+	# ================
+	def advance(self, effect: list[list]):
+		self.state = chain(self.state, effect)
+		self.tree.apply(effect)
 
 	# ================
 	# finish
