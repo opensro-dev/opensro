@@ -242,6 +242,11 @@ func (rt *Runtime) resolvePlayerImpactBehindWall(division, name string, skill en
 	if rt.fortressArmed(division, name) {
 		return split, err
 	}
+	// A hit on a fortress structure is the target-side hit group's
+	// amount alone; no imbue share joins it.
+	if defender.Structure {
+		return split, err
+	}
 	imbue, imbueAbnormal := rt.activeWeaponImbue(division, name, nowMs)
 	if !imbue.Pinned {
 		return split, nil
