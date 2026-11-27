@@ -62,7 +62,9 @@ export const ACTION_CENSUS_ROOTS = [
 // afresh every run (census-verdict.mjs).
 export const ACTION_CENSUS_FILES = [
 	"apps/client-next/tools/ui-action-census.mjs",
+	"apps/client-next/tools/census-verdict.mjs",
 	"apps/client-next/tools/census-expanded.mjs",
+	"apps/client-next/tools/censusWorkers.mjs",
 	"apps/client-next/tools/replaced-windows.mjs",
 	"scripts/lib/expandedBuild.mjs",
 	"apps/client-next/tools/ui-action-census-gate.mjs",
@@ -70,6 +72,8 @@ export const ACTION_CENSUS_FILES = [
 	"apps/client-next/tests/helpers/native-source-loader.mjs",
 	"scripts/checks/checkStamps.mjs",
 	"scripts/lib/generatedRoot.mjs",
+	"scripts/build/shared/assetPaths.mjs",
+	"scripts/build/world/paths.mjs",
 	"pnpm-lock.yaml"
 ];
 
@@ -83,7 +87,7 @@ const SNAPSHOT_PATHS = [ "apps/client-next/src", ...ACTION_CENSUS_FILES ];
 export const ACTION_CENSUS_KEYS = [
 	"@node,--version",
 	"!.generated/client-public/assets/packs/manifest.json",
-	"=ui-action-census-gate-2"
+	"=ui-action-census-gate-3"
 ];
 
 const CLIENT_PREFIX = "apps/client-next/";

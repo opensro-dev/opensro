@@ -26,6 +26,8 @@ import {
 	censusGate
 } from "../../tools/ui-action-census-gate.mjs";
 import { censusText, censusVerdict } from "../../tools/census-verdict.mjs";
+import path from "node:path";
+import { codeClosure } from "../../../../scripts/build/shared/codeStamp.mjs";
 
 const SOURCE = `
 export function createUi( assets, commands ) {
@@ -280,4 +282,21 @@ test("census gate: a failed build fails the gate and records nothing", async () 
 	const result = await censusGate( { key: "k", committed: "", cache, build: async () => undefined } );
 	assert.equal( result.code, 1 );
 	assert.equal( kept.size, 0 );
+});
+
+// Every module the census tool can run outside src/ (which the closure
+// keys itself) must be a key input: census-verdict.mjs shapes the
+// recorded bytes, and a module missing here would let an edit to it
+// replay a stale table (#4616 review).
+test("action gate key: every module the census tool runs is a key input", async () => {
+	const repository = path.resolve( import.meta.dirname, "../../../.." );
+	const closure = await codeClosure(
+		path.join( repository, "apps/client-next/tools/ui-action-census.mjs" ),
+		repository
+	);
+	const outside = [ ...closure ]
+		.map( file => path.relative( repository, file ).split( path.sep ).join( "/" ) )
+		.filter( file => !file.startsWith( "apps/client-next/src/" ) );
+	assert.ok( outside.includes( "apps/client-next/tools/census-verdict.mjs" ) );
+	assert.deepEqual( outside.filter( file => !ACTION_CENSUS_FILES.includes( file ) ), [] );
 });
