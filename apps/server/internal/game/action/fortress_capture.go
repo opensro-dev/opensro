@@ -8,8 +8,8 @@ it stood with its destroyed state, and the fortress world hears it
 (the native structure state broadcast, 0x3887 subtype 0x0B). The
 last guard tower's fall starts the stone's countdown (0x0A); the fort
 stone's fall hands the fortress to the guild that dealt it the most
-damage, reinstalls every structure for that guild, sends everyone else in
-the fortress to the town gate and tells the shard (subtype 8). A war's end
+damage, reinstalls every structure for that guild, sends the attackers in
+the fortress back to its gate and tells the shard (subtype 8). A war's end
 settles the holder as the occupying guild and reinstalls the structures
 again. The capture rules live in the fortress authority (capture.go).
 
@@ -183,8 +183,10 @@ captureFortress
 
 The native fort-stone break, through the temporary owner's
 result: the guild holds the fortress, its structures stand again for it,
-the shard hears the conquest, and the fortress world keeps only the new
-holder (the native capture).
+the shard hears the conquest, and the fortress world resets: the new
+holder's side stays where it stands and hears the new fortress list,
+while every attacker (the old owner included) is sent back to the
+fortress's own gate point.
 ================
 */
 func (rt *Runtime) captureFortress(division string, record fortress.Record, world instance.ID, guild int64, nowMs int64) []simulation.DivisionFrames {
@@ -194,19 +196,60 @@ func (rt *Runtime) captureFortress(division string, record fortress.Record, worl
 	rt.Monsters.ReinstallStructures(division, world, nowMs)
 	rt.forceFortressSave(division)
 	rt.pushStructureRoster(division, record.ID, world)
-	gate, haveGate := rt.fortressTownGate(record.TownGate)
+	fresh, _ := rt.Fortresses.Get(division, record.ID)
+	gate, haveGate := rt.randomGate(rt.worldGates(world.Definition(), gateKindFortressGate))
 	for _, c := range rt.worldResidents(division, world) {
-		if c.GuildID != nil && *c.GuildID == guild {
+		switch rt.captureSide(division, record, fresh, c) {
+		case captureSideDefender:
 			if rt.FortressList != nil && rt.PushCharacterFrames != nil {
 				rt.PushCharacterFrames(division, c.Name, []wire.Frame{{Opcode: opFortressWarState, Payload: rt.FortressList(guild)}})
 			}
-			continue
-		}
-		if haveGate {
-			rt.relocateCharacter(division, c, "fortress-capture-expel", func() (travelPoint, bool) { return gate, true })
+		case captureSideAttacker:
+			if haveGate {
+				rt.relocateCharacter(division, c, "fortress-capture-reset", func() (travelPoint, bool) { return gate, true })
+			}
 		}
 	}
 	return rt.conquestFrames(division, record.ID, guild)
+}
+
+// Which side of a capture a resident of the fortress world stands on.
+const (
+	captureSideOutside uint8 = iota
+	captureSideDefender
+	captureSideAttacker
+)
+
+/*
+================
+captureSide
+
+The native capture's two sets, judged on the fortress as it stood
+before the capture (record: its owner and applicants) and after it
+(fresh: its holder the capturing guild). The defenders are the new
+holder and the applied guilds of its union; the attackers are every
+other applied guild and the old owner, applied or not. Anyone else in
+the world stands outside the war and keeps their place.
+================
+*/
+func (rt *Runtime) captureSide(division string, record fortress.Record, fresh fortress.Record, c *enterworld.Character) uint8 {
+	if c.GuildID == nil || *c.GuildID == 0 {
+		return captureSideOutside
+	}
+	guild := *c.GuildID
+	if guild == fresh.Holder() {
+		return captureSideDefender
+	}
+	if guild == record.GuildID {
+		return captureSideAttacker
+	}
+	if _, applied := record.Applicants[guild]; !applied {
+		return captureSideOutside
+	}
+	if rt.fortressDefender(division, fresh, guild) {
+		return captureSideDefender
+	}
+	return captureSideAttacker
 }
 
 /*
