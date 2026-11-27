@@ -35,6 +35,7 @@ import { buildStatePath } from "../../lib/generatedRoot.mjs";
 import { parseCharacterBsr } from "./formats.mjs";
 import { loadEquipmentRecords } from "./equipmentVisualRecords.mjs";
 import { loadVisualChanges, NASRUN_SKILL_MARKER } from "./visualChanges.mjs";
+import { laterTransformAuras, loadLaterAnimationSources } from "./laterAnimationSets.mjs";
 import { wornEffectRows } from "./equipmentParticles.mjs";
 import { equipmentGlowCatalog, equipmentGlowModelIds, equipmentGlowGlb } from "./equipmentGlowMetadata.mjs";
 import { publishEquipmentParticleMetadata } from "./equipmentParticles.mjs";
@@ -275,16 +276,21 @@ costumeEffects
 
 Port-only (SRO_NASRUN, #4407): each costume piece that names an effect
 set carries that set's steady auras as a worn avatar's (avatarEffects),
-read from the Nasrun skill import's marker.
+read from the Nasrun skill import's marker, then its animation set's
+transformation auras (laterTransformAuras: keep03), so they stand, walk
+and run with the costume and leave with it. Only the piece that names
+the effect set (the body) carries them, so each aura is worn once.
 ================
 */
 function costumeEffects( pieces ) {
 	const marker = path.join( extractedRoot, NASRUN_SKILL_MARKER );
 	if ( !pieces.length || !existsSync( marker ) ) return {};
 	const sets = JSON.parse( readFileSync( marker, "utf8" ) ).costumeEffects ?? {}, out = {};
+	const auras = laterTransformAuras( loadLaterAnimationSources( extractedRoot ) );
 	for ( const piece of pieces ) {
-		const rows = piece.effectSet ? sets[piece.effectSet] : undefined;
-		if ( rows?.length ) out[piece.id] = wornEffectRows( piece.effectSet, rows );
+		if ( !piece.effectSet ) continue;
+		const rows = [ ...(sets[piece.effectSet] ?? []), ...(auras[piece.animation.toLowerCase()] ?? []) ];
+		if ( rows.length ) out[piece.id] = wornEffectRows( piece.effectSet, rows );
 	}
 	return out;
 }
