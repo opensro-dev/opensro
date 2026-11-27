@@ -23,6 +23,7 @@ import { assembleAvatar, primSlot } from "./buildAvatar.mjs";
 import { avatarToGlb } from "./exportGlb.mjs";
 import { parseCompound } from "../world/objects/compound.mjs";
 import { parseJmxResourceBsr } from "../world/objects/formats.mjs";
+import { materialBsrModifiers } from "../shared/bsrModifiers.mjs";
 import { parseAttachPartLink, parseBsk, parseCharacterBsr } from "./formats.mjs";
 import { characterMaterialVariants } from "./materialVariants.mjs";
 import { loadDataAsset } from "../shared/jmxAssetIO.mjs";
@@ -144,6 +145,11 @@ export async function buildItemSetGlb(
 	const materialSetPaths = [];
 	const partByMesh = new Map();
 	const environmentByMesh = new Map();
+	// Per-mesh material, texture and multi-texture modifiers of the item's own
+	// BSR (CRTModMtrl and its texture kin), as an entity BSR publishes them
+	// (compileBsrVisual): a material-pass record drives only its BMT subset, as
+	// the Devil's Spirit robe's alpha-blended, scrolling smoke (#4407).
+	const modifiersByMesh = new Map();
 	// Per-mesh view of the ITEM's OWN skeleton (.bsk): parent links for the ancestor
 	// walk, full bones (incl. bind world) for bind-pose validation. Native item bone
 	// hierarchies resolve inside the item's own CRTBranch only - a wearer bone with the
@@ -192,6 +198,8 @@ export async function buildItemSetGlb(
 			meshPaths.push( meshPath );
 			partByMesh.set( meshPath, part );
 			environmentByMesh.set( meshPath, itemBsr.modifiers?.environmentModifiers ?? [] );
+			const modifiers = materialBsrModifiers( itemBsr.modifiers );
+			if ( Object.values( modifiers ).some( list => list.length ) ) modifiersByMesh.set( meshPath, modifiers );
 			if ( itemSkelInfo ) itemSkelByMesh.set( meshPath, itemSkelInfo );
 			if ( attachBone ) attachByMesh.set( meshPath, attachBone );
 		}
@@ -218,6 +226,7 @@ export async function buildItemSetGlb(
 		meshPaths,
 		materialSetPaths,
 		environmentModifiersForMesh: meshPath => environmentByMesh.get( meshPath ) ?? [],
+		bsrModifiersForMesh: meshPath => modifiersByMesh.get( meshPath ),
 		noClips: true,
 		// A direct name match is only genuine if the item's own .bsk agrees with the
 		// donor on that bone's BIND POSE (same rig family). Item-private bones with
