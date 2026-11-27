@@ -69,6 +69,7 @@ import variant_gates  # noqa: E402
 import variant_settle  # noqa: E402
 import variant_stamp  # noqa: E402
 import variant_steps  # noqa: E402
+import build_progress  # noqa: E402
 import variant_reuse  # noqa: E402
 from build_parallelism import build_jobs  # noqa: E402
 from prepare_client_resources import write_atomically  # noqa: E402
@@ -407,6 +408,46 @@ def port_stock_enabled(environ=None):
 # ================
 # main
 # ================
+# ================
+# stamped_build
+#
+# The build behind the stamp: skipped when the stamp says nothing moved,
+# else built, settled and stamped. Each part is a named, timed phase.
+# Returns the manifest, or None when skipped.
+# ================
+def stamped_build(args, vsro_root, imported, variant):
+	phases = build_progress.Phases("variant")
+	# Same code, flags and sources as the last successful build of this
+	# tree, and the tree untouched since: nothing to do (variant_stamp.py).
+	phases.enter("inputs")
+	inputs = variant_stamp.read_inputs(EXTRACTED_ROOT, imported, vsro_root, variant)
+	stale = ["--force"] if args.force else variant_stamp.stale_parts(variant, inputs, (VARIANT_MANIFEST,) + LINKED_FILES)
+	phases.done()
+	if not stale:
+		log(f"unchanged since the last build of {variant}; skipped (pass --force to rebuild)")
+		return None
+	log(f"rebuilding: {', '.join(stale[:8])}{' ...' if len(stale) > 8 else ''}")
+	variant_stamp.clear_stamp(variant)
+	phases.enter("steps")
+	manifest = build_variant(vsro_root, EXTRACTED_ROOT, variant, args.imported_root, force=args.force)
+	# Files the rebuild left byte-identical get their old mtime back, so the
+	# asset build's (size, mtime) caches still hit (variant_settle.py).
+	phases.enter("settle")
+	settled = variant_settle.settle(variant, build_jobs())
+	log(f"settle: {settled['files']} files, {settled['restored']} unchanged kept their time, "
+		f"{settled['changed']} changed, {settled['unread']} matched unread")
+	# Stamped with what the build read before it started; a source that
+	# moved under it leaves no stamp, so the next run rebuilds.
+	phases.enter("stamp")
+	moved = variant_stamp.differences(inputs, variant_stamp.read_inputs(EXTRACTED_ROOT, imported, vsro_root, variant))
+	if moved:
+		log(f"not stamped: {', '.join(moved)} changed during the build")
+	else:
+		variant_stamp.write_stamp(variant, inputs)
+	phases.done()
+	return manifest
+
+
 def main():
 	parser = argparse.ArgumentParser(description="Build the v1.150 + Alexandria game root (port-only, not native).")
 	parser.add_argument("--vsro-root", default=os.environ.get(stage1.ROOT_ENV), help="VSRO client folder")
@@ -430,28 +471,12 @@ def main():
 	if args.explain:
 		build_variant(vsro_root, EXTRACTED_ROOT, variant, args.imported_root, explain=True)
 		return
-	# Same code, flags and sources as the last successful build of this
-	# tree, and the tree untouched since: nothing to do (variant_stamp.py).
-	inputs = variant_stamp.read_inputs(EXTRACTED_ROOT, imported, vsro_root, variant)
-	stale = ["--force"] if args.force else variant_stamp.stale_parts(variant, inputs, (VARIANT_MANIFEST,) + LINKED_FILES)
-	if not stale:
-		log(f"unchanged since the last build of {variant}; skipped (pass --force to rebuild)")
+	# Every second of the build sits inside a named span, and a long one
+	# says it is alive (#4337, blind spots B3/B4).
+	with build_progress.Heartbeat():
+		manifest = stamped_build(args, vsro_root, imported, variant)
+	if manifest is None:
 		return
-	log(f"rebuilding: {', '.join(stale[:8])}{' ...' if len(stale) > 8 else ''}")
-	variant_stamp.clear_stamp(variant)
-	manifest = build_variant(vsro_root, EXTRACTED_ROOT, variant, args.imported_root, force=args.force)
-	# Files the rebuild left byte-identical get their old mtime back, so the
-	# asset build's (size, mtime) caches still hit (variant_settle.py).
-	settled = variant_settle.settle(variant, build_jobs())
-	log(f"settle: {settled['files']} files, {settled['restored']} unchanged kept their time, "
-		f"{settled['changed']} changed, {settled['unread']} matched unread")
-	# Stamped with what the build read before it started; a source that
-	# moved under it leaves no stamp, so the next run rebuilds.
-	moved = variant_stamp.differences(inputs, variant_stamp.read_inputs(EXTRACTED_ROOT, imported, vsro_root, variant))
-	if moved:
-		log(f"not stamped: {', '.join(moved)} changed during the build")
-	else:
-		variant_stamp.write_stamp(variant, inputs)
 	log(f"tile remap {manifest['tileRemap']}, {manifest['mapFilesAdded']} map files, {manifest['dataFilesAdded']} data files")
 	log(f"Next: SRO_GAME_ROOT={variant} SRO_GENERATED_ROOT={variant / '.generated'} pnpm assets build full")
 

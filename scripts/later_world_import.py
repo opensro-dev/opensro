@@ -40,6 +40,7 @@ through skytemple_import; they take no WorldImport spec.
 
 ===========================================================================
 """
+import build_progress
 import contextlib
 import json
 import mmap
@@ -581,6 +582,9 @@ def merge_world(spec, native, out, v1696_root, regions, build_monsters):
 	import variant_files as variant
 	native, out = Path(native), Path(out)
 	v1696_root = Path(v1696_root)
+	# Each pass is a named, timed phase: r204l spent minutes here with no
+	# line printed (#4337, blind spot B3).
+	phases = build_progress.Phases(f"{spec.label} merge")
 	# The temple sets' named interiors are dungeon regions (bit 15):
 	# no sector terrain exists for them - their geometry is the DOF
 	# tree the Data pass below copies, published into the client's
@@ -594,6 +598,7 @@ def merge_world(spec, native, out, v1696_root, regions, build_monsters):
 	prior_record = prior.get("regionMerge") or {}
 	written = set(prior_record.get("files", []))
 
+	phases.enter("map")
 	# Map: the regions' files, their terrain remapped onto the catalog
 	# the Alexandria merge left, and the ground textures they paint.
 	map_path, map_handle, map_data = tables.open_archive(v1696_root, "Map")
@@ -645,6 +650,7 @@ def merge_world(spec, native, out, v1696_root, regions, build_monsters):
 		map_data.close()
 		map_handle.close()
 
+	phases.enter("data")
 	# Data: every file the native tree lacks (the regions' objects and
 	# the monsters' models), the regions' navmesh, their availability.
 	data_root = out / "Data_extracted"
@@ -678,14 +684,17 @@ def merge_world(spec, native, out, v1696_root, regions, build_monsters):
 	finally:
 		data_data.close()
 		data_handle.close()
+	phases.enter("availability")
 	mapinfo = out / "Data_extracted" / "navmesh" / "mapinfo.mfo"
 	variant.replace_file(mapinfo, variant.enable_regions(mapinfo.read_bytes(), sectors))
 
+	phases.enter("particles")
 	# Particles: the effect programs the merged models name, and what
 	# those programs use. The Data pass above copies the models alone.
 	particles = particle_closure(native, out, v1696_root, written)
 	written |= set(particles["added"])
 
+	phases.enter("media")
 	# Media: the regions' minimap tiles and their code and zone rows.
 	media_path, media_handle, media_data = tables.open_archive(v1696_root, "Media")
 	try:
@@ -720,7 +729,9 @@ def merge_world(spec, native, out, v1696_root, regions, build_monsters):
 	for name, content in merged_tables.items():
 		variant.replace_file(out / textdata / name, content)
 
+	phases.enter("monsters")
 	monsters = build_monsters()
+	phases.done()
 	record = {
 		"files": sorted(written),
 		"sectors": sorted({tuple(sector) for sector in prior_record.get("sectors", [])} | set(sectors)),
