@@ -4,24 +4,22 @@
 chat-history.ts - the chat log the browser keeps across a reload
 
 Port-only, not native (default by owner decision 2026-11-26): the chat
-window remembers the last CHAT_HISTORY_KEPT lines of each character, so a
-page reload no longer wipes the conversation. The page stores one book
+window remembers each character's log, every tab's last lines as the
+window keeps them (chat-tabs.ts chatLogKept), so a page reload no longer wipes the conversation. The page stores one book
 (scope to lines) in its local storage; the worker never touches storage.
 A scope names one character on one shard (the world's division), because
 names are unique within a shard, not across shards.
 
 Only the plain facts of a line are stored: channel, sender, text, whether
-it was the player's own, its gid and when it was said. Item links and
+it was the player's own, its gid, when it was said and which tabs file
+it (the event and everyTab marks). Item links and
 notice decorations are live-session presentations of bag state, so they
 are not written down and a restored line never shows a stale item.
 
 ===========================================================================
 */
 import type { ChatLine } from "@/engine/contracts/gameplay";
-
-// The lines of one character the browser remembers: the 101st line drops
-// the oldest, in the window and in the record alike.
-export const CHAT_HISTORY_KEPT = 100;
+import { chatLogKept } from "./chat-tabs";
 
 /*
 ================
@@ -37,6 +35,8 @@ export interface StoredChatLine {
 	readonly text: string;
 	readonly outgoing: boolean;
 	readonly sentAt: number;
+	readonly event?: boolean;
+	readonly everyTab?: boolean;
 }
 
 /*
@@ -55,18 +55,19 @@ export function chatHistoryScope( division: string, name: string ): string {
 ================
 storedChatLines
 
-The lines worth writing down, oldest first, capped at CHAT_HISTORY_KEPT.
+The lines worth writing down, oldest first: the ones some tab still keeps.
 ================
 */
 export function storedChatLines( lines: readonly ChatLine[] ): readonly StoredChatLine[] {
-	const kept = lines.slice( -CHAT_HISTORY_KEPT );
-	return kept.map( line => ({
+	return chatLogKept( lines ).map( line => ({
 		channel: line.channel,
 		name: line.name,
 		...(line.gid !== undefined ? { gid: line.gid } : {}),
 		text: line.text,
 		outgoing: line.outgoing,
-		sentAt: line.sentAt ?? 0
+		sentAt: line.sentAt ?? 0,
+		...(line.event ? { event: true } : {}),
+		...(line.everyTab ? { everyTab: true } : {})
 	}) );
 }
 
@@ -93,7 +94,9 @@ function storedChatLine( value: unknown ): StoredChatLine | null {
 		...(typeof row.gid === "number" && Number.isInteger( row.gid ) ? { gid: row.gid } : {}),
 		text: row.text,
 		outgoing: row.outgoing,
-		sentAt: row.sentAt
+		sentAt: row.sentAt,
+		...(row.event === true ? { event: true } : {}),
+		...(row.everyTab === true ? { everyTab: true } : {})
 	};
 }
 
@@ -102,7 +105,7 @@ function storedChatLine( value: unknown ): StoredChatLine | null {
 chatHistoryLines
 
 The lines one scope's record holds, read leniently: unparseable rows are
-dropped and the record is capped at CHAT_HISTORY_KEPT.
+dropped and the record keeps what some tab still keeps.
 ================
 */
 export function chatHistoryLines( value: unknown ): readonly StoredChatLine[] {
@@ -112,7 +115,7 @@ export function chatHistoryLines( value: unknown ): readonly StoredChatLine[] {
 		const line = storedChatLine( row );
 		if ( line ) out.push( line );
 	}
-	return out.slice( -CHAT_HISTORY_KEPT );
+	return chatLogKept( out );
 }
 
 /*
