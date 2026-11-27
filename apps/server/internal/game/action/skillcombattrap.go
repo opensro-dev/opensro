@@ -31,13 +31,13 @@ import (
 acceptCombatTrap
 
 Admission and preparation follow the timed self-effect owner. The release
-debits the prepared cost and plants the object; a planter keeps at most the
-authored number of live traps per link group, retiring the oldest first.
-A trap field has no lnks: no board instance and no live-trap cap.
+debits the prepared cost and plants the object; admission refuses a cast
+past the authored live-trap count for the link group, so planting never
+ends an older trap. A trap field has no lnks: no board instance and no
+live-trap cap.
 ================
 */
 func (rt *Runtime) acceptCombatTrap(division string, c, snapshot *enterworld.Character, cast wire.SkillAction, skill enterworld.SkillRow, now int64, pending *pendingProjectileCast, doors characterDoors) (OpResult, skillCastDecision) {
-	trap := skill.CombatTrap
 	program, planted := plantedTrapProgram(skill)
 	if !planted {
 		return OpResult{DiagnosticRefusal: "combat-trap-admission-refused"}, skillCastRefused
@@ -81,11 +81,6 @@ func (rt *Runtime) acceptCombatTrap(division string, c, snapshot *enterworld.Cha
 			}
 		}
 		rt.commitOffensivePhaseCost(division, c, skill, cost, now, true)
-		// The cap's retire tears down the planter's buff (skill jobs, body
-		// status, stored HP/MP), so it runs in this door (#1836).
-		if trap.Pinned {
-			rt.retireExcessCombatTraps(division, c, trap, now)
-		}
 		return true
 	}) {
 		if refusal != 0 {
@@ -121,31 +116,6 @@ func plantedTrapProgram(skill enterworld.SkillRow) (skillobject.Program, bool) {
 			Radius: field.Radius, Select: uint32(field.Select), MaxTargets: field.MaxTargets, Pulse: true, PulseMs: field.PulseMs}, true
 	}
 	return skillobject.Program{}, false
-}
-
-/*
-================
-retireExcessCombatTraps
-
-lnks' third word caps the planter's live traps in one link group. Snapshot
-order is creation order, so the newest traps survive. The caller holds c's
-door.
-================
-*/
-func (rt *Runtime) retireExcessCombatTraps(division string, c *enterworld.Character, trap enterworld.SkillCombatTrap, now int64) {
-	owner := enterworld.ObjectIDForCharacter(c)
-	var live []skillobject.Object
-	for _, object := range rt.SkillObjects.Snapshot() {
-		if object.Division == division && object.OwnerGID == owner && object.Program.Combat && object.Program.LinkGroup == trap.LinkGroup {
-			live = append(live, object)
-		}
-	}
-	for len(live) > int(trap.MaxLive) {
-		if rt.SkillObjects.Remove(live[0].Spawn.GID) && live[0].OwnerEffect != 0 {
-			rt.publishEndedEffects(division, c, rt.effects.RetireInstances(division, c.Name, []uint32{live[0].OwnerEffect}), now)
-		}
-		live = live[1:]
-	}
 }
 
 /*

@@ -207,6 +207,14 @@ func (rt *Runtime) contextSkillAdmission(division string, c *enterworld.Characte
 		}
 	}
 
+	// Natively a planted trap at its link group's live cap refuses the
+	// cast; the oldest trap is not ended to make room (0x59DC80).
+	if skill.CombatTrap.Pinned {
+		if code := rt.trapCountRefusal(division, c, skill); code != 0 {
+			return code
+		}
+	}
+
 	// The native msch gate.
 	if skill.CastGate.MschPresent {
 		if code := rt.mschRefusal(division, c, skill.CastGate.MschMode, context.TransformRef, now); code != 0 {
@@ -553,6 +561,36 @@ func (rt *Runtime) qestRefusal(division string, c *enterworld.Character, radius 
 		}
 	}
 	return 0
+}
+
+/*
+==================
+trapCountRefusal
+
+The native outgoing-linked-effects walk counts the caster's live objects
+in the incoming skill's link group and refuses at the authored cap
+(the lnks third word): 0x3029, or 0x3037 when the row carries both the
+qest (+0x49C) and trap (+0x4A0) words. The count is the planter's own
+traps in this division: another division's traps never count, and no
+live trap is retired to admit the new cast.
+==================
+*/
+func (rt *Runtime) trapCountRefusal(division string, c *enterworld.Character, skill enterworld.SkillRow) uint16 {
+	trap := skill.CombatTrap
+	owner := enterworld.ObjectIDForCharacter(c)
+	live := 0
+	for _, object := range rt.SkillObjects.Snapshot() {
+		if object.Division == division && object.OwnerGID == owner && object.Program.Combat && object.Program.LinkGroup == trap.LinkGroup {
+			live++
+		}
+	}
+	if uint32(live) < trap.MaxLive {
+		return 0
+	}
+	if skill.CastGate.Qest && skill.CastGate.TrapPresent {
+		return 0x3037
+	}
+	return 0x3029
 }
 
 /*
