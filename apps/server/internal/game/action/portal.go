@@ -633,22 +633,34 @@ const portalFareFreeMaxLevel = 20
 
 /*
 ================
+highestLevelReached
+
+The character record's level watermark: the highest level the character
+has ever reached, which the native level gates read. A record without
+the watermark reads its current level.
+================
+*/
+func highestLevelReached(c *enterworld.Character) int64 {
+	if c.MaxLevel != nil {
+		return *c.MaxLevel
+	}
+	if c.Level != nil {
+		return *c.Level
+	}
+	return 0
+}
+
+/*
+================
 portalFareFree
 
 Natively a character whose highest level reached is 20 or less pays no
 gate or ferry fare (the same test stands before the gold check in the
-gate body and in the NPC teleport handler). A record without the
-watermark reads its current level.
+gate body and in the NPC teleport handler).
 ================
 */
 func portalFareFree(c *enterworld.Character) bool {
-	maxLevel := int64(0)
-	if c.MaxLevel != nil {
-		maxLevel = *c.MaxLevel
-	} else if c.Level != nil {
-		maxLevel = *c.Level
-	}
-	return maxLevel <= portalFareFreeMaxLevel
+	return highestLevelReached(c) <= portalFareFreeMaxLevel
 }
 
 // Reference server: the quest bit blocks buildings and the route into the
