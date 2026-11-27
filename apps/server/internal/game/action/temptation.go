@@ -196,6 +196,9 @@ func (rt *Runtime) monsterHitMonster(division string, instance, target monster.I
 		public = append(public, settlement.public...)
 		rt.queueMonsterLegRecipients(division, settlement.others)
 	}
+	// The swing has landed: a caster that queued a deferred vital
+	// instruction at engage takes it now (monsterdeferred.go).
+	public = append(public, rt.applyMonsterDeferredSelfHit(division, instance, skill, nowMs)...)
 	result.Frames = simFrames(public)
 	result.Accepted = true
 	result.TargetAlive = !fatal
