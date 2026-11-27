@@ -40,6 +40,7 @@ import { createOrbs } from "./orbs/orbs";
 import { CHARACTER_ACTORS } from "@/engine/foundation/animation/character-budget";
 import { createCharacterSelection, dungeonCharacterAdmission } from "@/engine/foundation/animation/character-selection";
 import { createCharacterEffects } from "./effects/effects";
+import { spiritEffectRecord } from "@/engine/foundation/gameplay/spirit-effects";
 import { createCharacterSounds } from "./sounds/sounds";
 import { createCharacterResources } from "./resources/resources";
 import { COSTUME_DOLL_CHILD_GID, createMallPreview } from "./mall-preview";
@@ -1091,7 +1092,25 @@ export function createCharacterPresentation(
 			for ( const event of events ) {
 				if ( event.kind === "pet-crow-effect" ) effects.crowEffect( event.source, event.cue, event.book );
 				else if ( event.kind === "item-effect" ) effects.item( event );
-				else if ( event.kind === "level-up" ) {
+				else if ( event.kind === "spirit-effect" ) {
+					// Port-only (SRO_NASRUN): the Spirit's record for this transition
+					// (spirit-effects.ts), played as the item effects are.
+					const source = entities.find( e => e.gid === event.gid ),
+						record = spiritEffectRecord(
+							published.dress?.spiritItemEffects,
+							published.items[String( event.item )]?.codename,
+							event.transition
+						);
+					if ( source && record ) {
+						effects.item( {
+							kind: "item-effect",
+							source,
+							item: event.item,
+							typeFlags: event.typeFlags,
+							record
+						} );
+					}
+				} else if ( event.kind === "level-up" ) {
 					const entity = entities.find( e => e.gid === event.gid );
 					if ( entity ) effects.system( event.gid, entity.kind === "cos" ? -2147483614 : -2147483642 );
 				} else if ( event.kind === "system-effect" ) {

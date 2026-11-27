@@ -453,3 +453,40 @@ class SkillEffectMergeTest(unittest.TestCase):
 		# Off: the previous rows leave, the native ones stay.
 		off, _ = nasrun.merge_skill_effects(merged, "", set(), keys)
 		self.assertEqual(off, self.TREE)
+
+
+class ItemEffectTest(unittest.TestCase):
+	"""The Spirits' presentation rows of the later itemeffect.txt."""
+
+	CODES = {"ITEM_MALL_AVATAR_M_NASRUN"}
+	TABLE = "\n".join([
+		"//item presentation\t\t\t",
+		"#section\titemcodename\t\t",
+		"//SkillEffect Codename\tSkillEffect Codename\tstate\t",
+		"ITEM_MALL_AVATAR_M_NASRUN\tITEMSKILL_MALL_AVATAR_NASRUN_AWAKE\t2\t",
+		"ITEM_EVENT_AVATAR_M_NASRUN\tITEMSKILL_EVENT_AVATAR_NASRUN_EQUIP\t\t",
+		"ITEM_MALL_AVATAR_M_NASRUN\tITEMSKILL_MALL_AVATAR_NASRUN_EQUIP\t\t",
+		"ITEM_MALL_AVATAR_M_NASRUN\tITEMSKILL_MALL_AVATAR_NASRUN_TIMEOUT\t3\t",
+		"ITEM_MALL_AVATAR_M_NASRUN\tITEMSKILL_MALL_AVATAR_NASRUN_UNEQUIP\t1\t",
+		"#section\titemtypeid\t\t\t\t\t",
+		"//  TID 1\tTID 2\tTID 3\tTID 4\tSkillEffect Codename\tstate",
+	])
+
+	def test_each_spirit_names_its_four_transitions(self):
+		self.assertEqual(nasrun.item_effects(self.TABLE, self.CODES), {
+			"ITEM_MALL_AVATAR_M_NASRUN": {
+				"equip": "ITEMSKILL_MALL_AVATAR_NASRUN_EQUIP",
+				"unequip": "ITEMSKILL_MALL_AVATAR_NASRUN_UNEQUIP",
+				"awake": "ITEMSKILL_MALL_AVATAR_NASRUN_AWAKE",
+				"expire": "ITEMSKILL_MALL_AVATAR_NASRUN_TIMEOUT",
+			},
+		})
+
+	def test_a_partial_repeated_or_unknown_row_refuses(self):
+		partial = self.TABLE.replace("ITEM_MALL_AVATAR_M_NASRUN\tITEMSKILL_MALL_AVATAR_NASRUN_TIMEOUT\t3\t\n", "")
+		with self.assertRaises(ValueError):
+			nasrun.item_effects(partial, self.CODES)
+		with self.assertRaises(ValueError):
+			nasrun.item_effects(self.TABLE.replace("NASRUN_AWAKE\t2", "NASRUN_AWAKE\t9"), self.CODES)
+		with self.assertRaises(ValueError):
+			nasrun.item_effects(self.TABLE.replace("NASRUN_AWAKE\t2", "NASRUN_AWAKE\t1"), self.CODES)

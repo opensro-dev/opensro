@@ -85,6 +85,9 @@ export interface DressCatalog {
 	// Port-only (SRO_NASRUN, #4407): each lent Spirit skill's costume
 	// pieces, avatar records of equipment by reserved id (visual-changes.ts).
 	visualChanges?: Record<string, readonly number[]>;
+	// Port-only (SRO_NASRUN): each Spirit's presentation record by transition,
+	// by item codename (spirit-effects.ts).
+	spiritItemEffects?: Record<string, Readonly<Record<string, string>>>;
 }
 
 export interface AppearanceResource {

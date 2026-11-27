@@ -295,6 +295,24 @@ function costumeEffects( pieces ) {
 	return out;
 }
 
+/*
+================
+spiritItemEffects
+
+Port-only (SRO_NASRUN): each Devil's Spirit's presentation records by
+transition, { codename: { equip, unequip, awake, expire: record name } },
+as the later client's itemeffect.txt names them (the Nasrun skill
+import's marker, nasrun_import.item_effects). The records themselves
+join the named effect table with the import's skilleffect rows. Empty
+without the import.
+================
+*/
+function spiritItemEffects() {
+	const marker = path.join( extractedRoot, NASRUN_SKILL_MARKER );
+	if ( !existsSync( marker ) ) return {};
+	return JSON.parse( readFileSync( marker, "utf8" ) ).itemEffects ?? {};
+}
+
 export async function buildEquipmentVisuals( dress, options = {} ) {
 	dress.defaultWearLanguage = defaultWearLanguage();
 	const rows = loadEquipmentRecords( retailTextdataRoot ),
@@ -380,6 +398,7 @@ export async function buildEquipmentVisuals( dress, options = {} ) {
 	// Port-only (SRO_NASRUN, #4407): the lent Spirit skills' costume pieces,
 	// avatar records under reserved ids (visualChanges.mjs).
 	dress.visualChanges = {};
+	dress.spiritItemEffects = spiritItemEffects();
 	const visualPieces = loadVisualChanges( retailTextdataRoot );
 	for ( const piece of visualPieces ) {
 		const record = { ...piece.record, model: piece.models.M, bodies: {} };
