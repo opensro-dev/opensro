@@ -69,6 +69,16 @@ const DOWNLOAD_RETRY_DELAYS_MS = [ 250, 1000 ] as const;
 // (PartialRead, #3354), and an attempt that carried the read further than
 // any before it spends no retry: a path that delivers in bursts finishes,
 // one that never delivers still fails after the three attempts above.
+// The window's size is measured, not guessed (report BR-261126-2140-3BE8,
+// #4580): that link averaged about 75 KB/s with whole-pipe silences of 30 s
+// and 60 s between bursts, while a healthy 1 MiB block on such a link sends
+// its first chunk in about a second. 15 s sits far past a healthy gap and
+// well inside the pathological silences, so a stuck request dies and is
+// retried while a slow one is left alone. On an HTTP/2 connection every
+// stream shares the socket: abandoning a stream is what a client can do -
+// the browser re-pools the connection for the retry, and if the socket
+// itself is dead every stream's window closes together and the attempts
+// fail as one transport fault instead of holding the slots for minutes.
 const DOWNLOAD_NO_PROGRESS_MS = 15000;
 const TRANSIENT_HTTP_STATUS = new Set( [ 408, 429, 500, 502, 503, 504 ] );
 // Stands in for a world bundle's bytes once they are parsed.
@@ -165,6 +175,27 @@ export function createLoader( send: ( result: AssetWorkerMessage, transfer: Tran
 	// in-flight window restarts (syncWork) - the parked time was never
 	// silence a download could have used (#2862).
 	const stallWindows = new Set<() => void>();
+	// Finished download attempts not yet flushed to the owner (#4580):
+	// each record is one HTTP attempt's first byte and duration, so a
+	// report can tell a slow link from a stalled request. Bounded: if the
+	// progress beat is somehow starved, the oldest records are dropped -
+	// the report needs the shape of recent requests, not every one.
+	const timingBacklog: import("@/engine/contracts/assets").AssetRequestTiming[] = [];
+	const TIMING_BACKLOG_MAX = 128;
+	/*
+	================
+	noteRequestTiming
+
+	Queue one finished attempt for the next progress publication.
+	================
+	*/
+	function noteRequestTiming( record: import("@/engine/contracts/assets").AssetRequestTiming ) {
+		timingBacklog.push( record );
+		if ( timingBacklog.length > TIMING_BACKLOG_MAX ) timingBacklog.shift();
+		// A stall is exactly when no chunk is left to call progress(): the
+		// record itself schedules the beat that flushes it.
+		progress();
+	}
 	let received = 0, lastReceived = 0, lastProgress = performance.now(), speed = 0;
 	let progressTimer: ReturnType<typeof setTimeout> | null = null;
 	/*
@@ -318,6 +349,11 @@ export function createLoader( send: ( result: AssetWorkerMessage, transfer: Tran
 				job.sent = job.bytes;
 				send( { kind: "job-progress", id: job.id, bytes: job.bytes }, [] );
 			}
+			// The finished attempts ride it too (#4580): one batched message
+			// per beat, never one per request.
+			if ( timingBacklog.length ) {
+				send( { kind: "request-timings", records: timingBacklog.splice( 0 ) }, [] );
+			}
 		}
 	}
 	/*
@@ -395,7 +431,7 @@ export function createLoader( send: ( result: AssetWorkerMessage, transfer: Tran
 		const mirrored = mirror.url( url );
 		if ( mirrored !== null ) {
 			try {
-				return await downloadAttempt( { url: mirrored, limit, signal, range, partial } );
+				return await downloadAttempt( { url: mirrored, limit, signal, range, partial }, undefined, false );
 			} catch ( error ) {
 				signal.throwIfAborted();
 				mirror.missed( error );
@@ -469,7 +505,11 @@ export function createLoader( send: ( result: AssetWorkerMessage, transfer: Tran
 	immediately; manifest, hash and decoder validation stay with their owners.
 	================
 	*/
-	async function downloadAttempt( read: DownloadRead, observeValidator?: ( validator: string | null ) => void ) {
+	async function downloadAttempt(
+		read: DownloadRead,
+		observeValidator?: ( validator: string | null ) => void,
+		timed = true
+	) {
 		const { url, signal } = read;
 		// The attempt aborts on the caller's cancellation or on its own stall
 		// timer; only the stall becomes NoProgressError (transient). Every
@@ -492,9 +532,51 @@ export function createLoader( send: ( result: AssetWorkerMessage, transfer: Tran
 			timer = setTimeout( () => attempt.abort( stalled ), DOWNLOAD_NO_PROGRESS_MS );
 		};
 		stallWindows.add( restart );
+		// The attempt's own measure for the report (#4580): when its headers
+		// landed and how long it ran, kept per attempt so a retried stall
+		// stays visible next to the attempt that finally delivered. The
+		// caller's own cancellation is the caller's fact, not the link's:
+		// those attempts are never recorded.
+		const startedAt = performance.now(), keptAtStart = read.partial.size;
+		let firstByteAt = -1;
+		/*
+		================
+		recordTiming
+
+		Close the attempt's measure into the report backlog.
+		================
+		*/
+		const recordTiming = ( outcome: "ok" | "stall" | "http" | "error", status?: number ) => {
+			// The launcher's local copy is not a network request: it never
+			// enters the link's measure.
+			if ( !timed ) return;
+			noteRequestTiming( {
+				path: new URL( url ).pathname,
+				firstByteMs: firstByteAt < 0 ? -1 : Math.round( firstByteAt - startedAt ),
+				durationMs: Math.round( performance.now() - startedAt ),
+				bytes: read.partial.size - keptAtStart,
+				outcome,
+				...(status === undefined ? {} : { status })
+			} );
+		};
 		try {
-			return await downloadBytes( { ...read, signal: attempt.signal }, restart, observeValidator );
+			const bytes = await downloadBytes(
+				{ ...read, signal: attempt.signal },
+				restart,
+				observeValidator,
+				() => {
+					if ( firstByteAt < 0 ) firstByteAt = performance.now();
+				}
+			);
+			recordTiming( "ok" );
+			return bytes;
 		} catch ( error ) {
+			if ( !signal.aborted ) {
+				const status = error instanceof Error && "status" in error ? Number( error.status ) : NaN;
+				if ( attempt.signal.reason === stalled ) recordTiming( "stall" );
+				else if ( Number.isFinite( status ) ) recordTiming( "http", status );
+				else recordTiming( "error" );
+			}
 			// The caller's cancellation wins whatever else ended the attempt: a
 			// cancel racing the stall must surface its own reason, not the stall.
 			signal.throwIfAborted();
@@ -510,13 +592,15 @@ export function createLoader( send: ( result: AssetWorkerMessage, transfer: Tran
 	downloadBytes
 
 	One HTTP read under the attempt's signal; progressed runs on the headers
-	and on every body chunk.
+	and on every body chunk, onHeaders once when the headers land (the
+	attempt's first byte, #4580).
 	================
 	*/
 	async function downloadBytes(
 		read: DownloadRead,
 		progressed: () => void,
-		observeValidator?: ( validator: string | null ) => void
+		observeValidator?: ( validator: string | null ) => void,
+		onHeaders?: () => void
 	) {
 		const { url, limit, signal, range, partial } = read;
 		const offset = partial.size;
@@ -547,6 +631,7 @@ export function createLoader( send: ( result: AssetWorkerMessage, transfer: Tran
 				undefined
 		} );
 		progressed();
+		if ( onHeaders ) onHeaders();
 		if ( response.ok && observeValidator ) observeValidator( response.headers.get( "etag" ) );
 		if ( offset > 0 && response.status === 416 ) {
 			// The kept bytes no longer fit the object (it changed under the

@@ -215,9 +215,10 @@ for ( const dispose of [ false, true ] ) {
 		} );
 		const loader = createLoader( message => {
 			if (
-				![ "progress", "job-progress", "job-decoding", "job-fetching", "hd-availability" ].includes(
-					message.kind
-				)
+				![ "progress", "job-progress", "job-decoding", "job-fetching", "hd-availability", "request-timings" ]
+					.includes(
+						message.kind
+					)
 			) {
 				messages.push( message );
 			}
@@ -269,7 +270,8 @@ test("invalid range is a transient transport failure even when response cleanup 
 	} );
 	const loader = createLoader( message => {
 		if (
-			![ "progress", "job-progress", "job-decoding", "job-fetching", "hd-availability" ].includes( message.kind )
+			![ "progress", "job-progress", "job-decoding", "job-fetching", "hd-availability", "request-timings" ]
+				.includes( message.kind )
 		) {
 			messages.push( message );
 		}
@@ -559,9 +561,10 @@ test(
 		} );
 		const loader = createLoader( message => {
 			if (
-				![ "progress", "job-progress", "job-decoding", "job-fetching", "hd-availability" ].includes(
-					message.kind
-				)
+				![ "progress", "job-progress", "job-decoding", "job-fetching", "hd-availability", "request-timings" ]
+					.includes(
+						message.kind
+					)
 			) {
 				messages.push( message );
 			}
@@ -715,7 +718,8 @@ test("a middlebox answering a ranged read with 200 is a transient transport fail
 	} );
 	const loader = createLoader( message => {
 		if (
-			![ "progress", "job-progress", "job-decoding", "job-fetching", "hd-availability" ].includes( message.kind )
+			![ "progress", "job-progress", "job-decoding", "job-fetching", "hd-availability", "request-timings" ]
+				.includes( message.kind )
 		) {
 			messages.push( message );
 		}
@@ -757,7 +761,8 @@ test("a pack block shorter than its claimed range is a transient transport failu
 	} );
 	const loader = createLoader( message => {
 		if (
-			![ "progress", "job-progress", "job-decoding", "job-fetching", "hd-availability" ].includes( message.kind )
+			![ "progress", "job-progress", "job-decoding", "job-fetching", "hd-availability", "request-timings" ]
+				.includes( message.kind )
 		) {
 			messages.push( message );
 		}
@@ -784,7 +789,8 @@ test("a decoder failure on unverified bytes is a transient transport failure", a
 	t.mock.method( globalThis, "fetch", async () => new Response( Uint8Array.of( 1, 2, 3 ) ) );
 	const loader = createLoader( message => {
 		if (
-			![ "progress", "job-progress", "job-decoding", "job-fetching", "hd-availability" ].includes( message.kind )
+			![ "progress", "job-progress", "job-decoding", "job-fetching", "hd-availability", "request-timings" ]
+				.includes( message.kind )
 		) {
 			messages.push( message );
 		}
@@ -852,7 +858,8 @@ test("a decoder failure on verified bytes stays permanent", async t => {
 	);
 	const loader = createLoader( message => {
 		if (
-			![ "progress", "job-progress", "job-decoding", "job-fetching", "hd-availability" ].includes( message.kind )
+			![ "progress", "job-progress", "job-decoding", "job-fetching", "hd-availability", "request-timings" ]
+				.includes( message.kind )
 		) {
 			messages.push( message );
 		}
