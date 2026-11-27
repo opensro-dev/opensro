@@ -124,7 +124,7 @@ func (s *MonsterState) AdvanceMonsterVitals(nowMs int64) {
 		}
 		s.discoverHurtMonsters(state, nowMs)
 		for gid, rec := range state.vitals {
-			s.advanceMonsterVital(state, gid, rec, nowMs)
+			s.advanceMonsterVital(state, key.division, gid, rec, nowMs)
 		}
 	}
 }
@@ -176,7 +176,7 @@ One record's pass: latch restores first, then the due heal. Returns
 with the record dropped when nothing remains for it to do.
 ================
 */
-func (s *MonsterState) advanceMonsterVital(state *divisionMonsterState, gid uint32, rec *monsterVitalRecord, nowMs int64) {
+func (s *MonsterState) advanceMonsterVital(state *divisionMonsterState, division string, gid uint32, rec *monsterVitalRecord, nowMs int64) {
 	if rec.hpRestoreMs != 0 && nowMs >= rec.hpRestoreMs {
 		rec.hpLatch, rec.hpRestoreMs = true, 0
 	}
@@ -185,7 +185,7 @@ func (s *MonsterState) advanceMonsterVital(state *divisionMonsterState, gid uint
 	}
 	if nowMs >= rec.nextRecoveryMs {
 		rec.nextRecoveryMs += monsterRecoveryIntervalMs
-		s.recoverMonster(state, gid, rec, nowMs)
+		s.recoverMonster(state, division, gid, rec, nowMs)
 	}
 	if rec.hpLatch && rec.mpLatch && rec.hpRestoreMs == 0 && rec.mpRestoreMs == 0 {
 		if hp, maxHP, ok := s.monsterVitalHP(state, gid); ok && hp >= maxHP {
@@ -217,11 +217,14 @@ func (s *MonsterState) monsterVitalHP(state *divisionMonsterState, gid uint32) (
 recoverMonster
 
 One due heal under the gates. The hot tier republishes through the
-storage's set; the cold tier's archived HP is written in place so the
-monster stays dormant.
+storage's set and notes the change for the tick's 0x33A6 with the
+natural-recovery cause: the native setter (0x4A87D0) ORs the cause 0x10
+its recovery tick passes into the vitals word the periodic sync sends,
+so a holder's HP bar rises with each heal. The cold tier's archived HP
+is written in place so the monster stays dormant; nobody holds it.
 ================
 */
-func (s *MonsterState) recoverMonster(state *divisionMonsterState, gid uint32, rec *monsterVitalRecord, nowMs int64) {
+func (s *MonsterState) recoverMonster(state *divisionMonsterState, division string, gid uint32, rec *monsterVitalRecord, nowMs int64) {
 	if !rec.hpLatch {
 		return
 	}
@@ -237,6 +240,7 @@ func (s *MonsterState) recoverMonster(state *divisionMonsterState, gid uint32, r
 		}
 		instance.CurrentHP += min(amount, maxHP-instance.CurrentHP)
 		state.instances.set(gid, instance)
+		s.noteVitalsLocked(division, gid, VitalsSourceNaturalRecovery)
 		return
 	}
 	if cold, ok := state.instances.cold[gid]; ok {

@@ -77,18 +77,31 @@ func TestStandingMonsterRecoversEveryFourSeconds(t *testing.T) {
 	if got := vitalsHP(t, s, "vitals", m.Gid); got != 70 {
 		t.Fatalf("HP before the period = %d, want 70", got)
 	}
+	s.DrainChangedVitals(nil) // the hit's own publication
 	s.AdvanceMonsterVitals(now + 4000)
 	if got := vitalsHP(t, s, "vitals", m.Gid); got != 80 {
 		t.Fatalf("HP after one period = %d, want 80", got)
+	}
+	// The heal publishes the new HP with the natural-recovery cause.
+	changed := s.DrainChangedVitals(nil)
+	if len(changed) != 1 || changed[0].Gid != m.Gid {
+		t.Fatalf("published %+v after the heal, want one 0x33A6 for the monster", changed)
+	}
+	if want := MonsterVitalsPayload(monster.Instance{Gid: m.Gid, CurrentHP: 80}, VitalsSourceNaturalRecovery); string(changed[0].Payload) != string(want) {
+		t.Fatalf("heal payload % x, want % x", changed[0].Payload, want)
 	}
 	s.AdvanceMonsterVitals(now + 8000)
 	s.AdvanceMonsterVitals(now + 12000)
 	if got := vitalsHP(t, s, "vitals", m.Gid); got != 100 {
 		t.Fatalf("HP after three periods = %d, want 100 (clamped at max)", got)
 	}
+	s.DrainChangedVitals(nil)
 	s.AdvanceMonsterVitals(now + 16000) // record dropped; stays full
 	if got := vitalsHP(t, s, "vitals", m.Gid); got != 100 {
 		t.Fatalf("HP after the record dropped = %d, want 100", got)
+	}
+	if changed := s.DrainChangedVitals(nil); len(changed) != 0 {
+		t.Fatalf("a full monster published %+v", changed)
 	}
 }
 
