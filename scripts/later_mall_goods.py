@@ -285,8 +285,19 @@ def goods_rows(later, tree, rent_rows=None, item_by_id=None):
 		if row and row[0] == mall.SERVICE_ON and len(row) > mall.MALL_PRICE_AMOUNT and row[3] in MALL_CURRENCIES:
 			prices[row[2]].append(row)
 	current = tree.mall_rows
-	have = {row[PACKAGE_CODE] for row in current["refpackageitem.txt"] if len(row) > PACKAGE_CODE}
-	have |= {row[GOODS_PACKAGE] for row in current["refshopgoods.txt"] if len(row) > GOODS_PACKAGE}
+	packaged = {row[PACKAGE_CODE] for row in current["refpackageitem.txt"] if len(row) > PACKAGE_CODE}
+	have = packaged | {row[GOODS_PACKAGE] for row in current["refshopgoods.txt"] if len(row) > GOODS_PACKAGE}
+	# A package the tree already holds but sells in no mall tab (the
+	# degree 10-11 Immortal and Astral stones, Alexandria's gold goods)
+	# joins the mall on its own package: only the goods row and the
+	# mall prices it lacks are added (#4658).
+	in_mall = {row[GOODS_PACKAGE] for row in current["refshopgoods.txt"]
+		if len(row) > GOODS_PACKAGE and row[GOODS_TAB].startswith(MALL_TAB)}
+	joinable = packaged - in_mall
+	tree_currencies = collections.defaultdict(set)
+	for row in current["refpricepolicyofitem.txt"]:
+		if len(row) > 3:
+			tree_currencies[row[2]].add(row[3])
 	used_ids = {int(row[PACKAGE_ID]) for row in current["refpackageitem.txt"] if len(row) > PACKAGE_ID and row[PACKAGE_ID].isdigit()}
 	next_id = max(used_ids | {int(row[PACKAGE_ID]) for row in package_row.values() if row[PACKAGE_ID].isdigit()}, default=0) + 1
 	next_slot = collections.Counter()
@@ -294,13 +305,13 @@ def goods_rows(later, tree, rent_rows=None, item_by_id=None):
 		if len(row) > GOODS_SLOT and row[GOODS_SLOT].isdigit():
 			next_slot[row[GOODS_TAB]] = max(next_slot[row[GOODS_TAB]], int(row[GOODS_SLOT]) + 1)
 	sold = sorted((row for row in later["refshopgoods.txt"] if row and row[0] == mall.SERVICE_ON and len(row) > GOODS_SLOT
-		and row[GOODS_TAB].startswith(("MALL_", "PRE_MALL_")) and row[GOODS_PACKAGE] not in have),
+		and row[GOODS_TAB].startswith(("MALL_", "PRE_MALL_")) and (row[GOODS_PACKAGE] not in have or row[GOODS_PACKAGE] in joinable)),
 		key=lambda row: (row[GOODS_TAB], int(row[GOODS_SLOT]) if row[GOODS_SLOT].isdigit() else 0))
 	rows = {name: [] for name, _ in mall.MALL_TABLES}
 	rows[RENT_TABLE] = []
 	listed, unlisted = [], collections.Counter()
 	rent_terms, rentals = set(), 0
-	remapped = {}
+	remapped, joined = {}, {}
 	for row in sold:
 		package = row[GOODS_PACKAGE]
 		tab = TAB_REMAP.get(row[GOODS_TAB], row[GOODS_TAB])
@@ -311,6 +322,17 @@ def goods_rows(later, tree, rent_rows=None, item_by_id=None):
 		reason = unlisted_reason(tab, package, (package_row, scraps, prices, rent_rows, item_by_id), tree)
 		if reason is not None:
 			unlisted[reason.split(":")[0]] += 1
+			continue
+		if package in joinable:
+			added = [price for price in prices[package] if price[3] not in tree_currencies[package]]
+			if not added:
+				unlisted["no mall price the package lacks"] += 1
+				continue
+			rows["refpricepolicyofitem.txt"].extend(mall.converted_price(price) for price in added)
+			rows["refshopgoods.txt"].append(mall.goods_row(tab, package, next_slot[tab]))
+			joined[package] = sorted(price[3] for price in added)
+			next_slot[tab] += 1
+			listed.append(package)
 			continue
 		package_id = None
 		if int(package_row[package][PACKAGE_ID]) in used_ids:
@@ -360,10 +382,41 @@ def goods_rows(later, tree, rent_rows=None, item_by_id=None):
 	# A carried tab the step must write: one a listed good landed in
 	# that the tree itself does not have.
 	carried = sorted({row[GOODS_TAB] for row in rows["refshopgoods.txt"]} & set(tree.carry_tabs))
-	return rows, {"packages": listed, "listed": len(listed), "rentals": rentals + staged_rentals,
+	return rows, {"packages": [package for package in listed if package not in joined], "joined": joined, "listed": len(listed), "rentals": rentals + staged_rentals,
 		"rentTerms": sorted(rent_terms), "unstage": sorted(unstage), "tabs": carried,
 		"remapped": {package: remapped[package] for package in listed if package in remapped},
 		"unlisted": dict(sorted(unlisted.items()))}
+
+
+# ================
+# strip_joined
+#
+# Undoes a previous run's joined listings: the mall goods rows and the
+# mall price rows (by currency) added to packages the tree already held.
+# The package and its other rows, such as a gold shop's, stay.
+# ================
+def strip_joined(output, joined):
+	if not joined:
+		return
+	for name in ("refshopgoods.txt", "refpricepolicyofitem.txt"):
+		path = safe_target(output / TEXT_ROOT, name)
+		if not path.exists():
+			continue
+		lines = tables.decode_table(path.read_bytes()).splitlines()
+		kept = [line for line in lines if not joined_row(name, line.split("\t"), joined)]
+		if len(kept) != len(lines):
+			write_atomically(path, b"\xff\xfe" + ("\r\n".join(kept) + "\r\n").encode("utf-16-le"))
+
+
+# ================
+# joined_row
+#
+# Whether a goods or price row is one a joined listing added.
+# ================
+def joined_row(name, cells, joined):
+	if name == "refshopgoods.txt":
+		return len(cells) > GOODS_PACKAGE and cells[GOODS_PACKAGE] in joined and cells[GOODS_TAB].startswith(MALL_TAB)
+	return len(cells) > 3 and cells[3] in joined.get(cells[2], ())
 
 
 # ================
@@ -472,6 +525,7 @@ def add_goods(later_root, native, output):
 	if marker.exists():
 		previous = json.loads(marker.read_text(encoding="utf-8"))
 		mall.strip_mall(output, set(previous.get("packages", [])))
+		strip_joined(output, previous.get("joined", {}))
 		strip_rent(output, set(previous.get("rentTerms", [])))
 		avatars.strip_tabs(output, set(previous.get("tabs", [])))
 		avatars.strip_text_rows(output, set(previous.get("tabLabels", [])))

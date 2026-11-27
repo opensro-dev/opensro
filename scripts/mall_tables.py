@@ -96,6 +96,29 @@ class LaterPackage:
 		self.silk, self.package_id = silk, package_id
 
 
+# ================
+# goods_row
+#
+# A refshopgoods row listing package in tab at slot.
+# ================
+def goods_row(tab, package, slot):
+	return ["1", NATIVE_SOURCE, tab, package, str(slot)] + ["-1", items.UNUSED] * 4
+
+
+# ================
+# converted_price
+#
+# A later refpricepolicyofitem row in v1.150's layout: the native source
+# id, and the amount one column to the left. silk, when given, replaces
+# a silk row's amount.
+# ================
+def converted_price(price, silk=None):
+	converted = price[:1] + [NATIVE_SOURCE] + price[2:MALL_PRICE_AMOUNT - 1] + price[MALL_PRICE_AMOUNT:]
+	if silk is not None and converted[3] == SILK_CURRENCY:
+		converted[4] = silk
+	return converted
+
+
 def copy_later_package(rows, later, listing):
 	package = listing.package_row[3]
 	package_cells = list(listing.package_row)
@@ -107,8 +130,5 @@ def copy_later_package(rows, later, listing):
 		if scrap[0] == SERVICE_ON and len(scrap) >= 20 and scrap[2] == package:
 			rows["refscrapofpackageitem.txt"].append(scrap[:1] + [NATIVE_SOURCE] + scrap[2:])
 	for price in listing.prices:
-		converted = price[:1] + [NATIVE_SOURCE] + price[2:MALL_PRICE_AMOUNT - 1] + price[MALL_PRICE_AMOUNT:]
-		if listing.silk is not None and converted[3] == SILK_CURRENCY:
-			converted[4] = listing.silk
-		rows["refpricepolicyofitem.txt"].append(converted)
-	rows["refshopgoods.txt"].append(["1", NATIVE_SOURCE, listing.tab, package, str(listing.slot)] + ["-1", items.UNUSED] * 4)
+		rows["refpricepolicyofitem.txt"].append(converted_price(price, listing.silk))
+	rows["refshopgoods.txt"].append(goods_row(listing.tab, package, listing.slot))

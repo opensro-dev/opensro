@@ -17,6 +17,8 @@ second-currency copy).
 """
 import script_paths  # noqa: F401  (puts scripts/ and its build folders on sys.path, #3410)
 import unittest
+from pathlib import Path
+import tempfile
 
 import later_mall_goods as goods  # noqa: E402
 
@@ -89,6 +91,55 @@ class LaterMallGoodsTest(unittest.TestCase):
 		self.assertEqual(rows["refshopgoods.txt"][0][2:5], ["MALL_ARCHEMY_ATHANASIA", package, "9"])
 		self.assertEqual([(row[3], row[4]) for row in rows["refpricepolicyofitem.txt"]], [("2", "57"), ("4", "0")])
 		self.assertEqual(rows["refpackageitem.txt"][0][2], "20113")
+
+	# ================
+	# test_a_gold_shop_package_joins_the_mall_on_its_own_package
+	#
+	# Alexandria's accessory shop sells the D10 Immortal stone for gold, so
+	# the tree already holds its package. v1.696 also lists it in the mall
+	# at 57 silk: the listing adds the mall goods row and the silk price
+	# only, never a second package, scrap or gold row.
+	# ================
+	def test_a_gold_shop_package_joins_the_mall_on_its_own_package(self):
+		current = empty()
+		later_good(current, "MALL_ARCHEMY_ATHANASIA", "ITEM_ETC_ARCHEMY_MAGICSTONE_ATHANASIA_09", 8, "51", 20112)
+		package = later_good(current, "STORE_SD_ACCESSORY_EU_TAB3", "ITEM_ETC_ARCHEMY_MAGICSTONE_ATHANASIA_10", 12, "0", 202517,
+			payments=("16",))
+		later = empty()
+		later_good(later, "MALL_ARCHEMY_ATHANASIA", "ITEM_ETC_ARCHEMY_MAGICSTONE_ATHANASIA_10", 9, "57", 20113,
+			payments=("2", "16"))
+		rows, summary = goods.goods_rows(later, tree_of({"ITEM_ETC_ARCHEMY_MAGICSTONE_ATHANASIA_10"}, current=current))
+		self.assertEqual(summary["listed"], 1)
+		self.assertEqual(summary["packages"], [])
+		self.assertEqual(summary["joined"], {package: ["2"]})
+		self.assertEqual(rows["refpackageitem.txt"], [])
+		self.assertEqual(rows["refscrapofpackageitem.txt"], [])
+		self.assertEqual([row[2:5] for row in rows["refshopgoods.txt"]], [["MALL_ARCHEMY_ATHANASIA", package, "9"]])
+		self.assertEqual([(row[3], row[4]) for row in rows["refpricepolicyofitem.txt"]], [("2", "57")])
+
+	# ================
+	# test_a_joined_listing_strips_without_touching_the_gold_shop
+	#
+	# A rerun first undoes the previous run's joined rows: the mall goods
+	# row and the silk price go, the gold shop's goods and price stay.
+	# ================
+	def test_a_joined_listing_strips_without_touching_the_gold_shop(self):
+		package = "PACKAGE_ITEM_ETC_ARCHEMY_MAGICSTONE_ATHANASIA_10"
+		rows = [
+			["1", "11", "STORE_SD_ACCESSORY_EU_TAB3", package, "12"],
+			["1", "11", "MALL_ARCHEMY_ATHANASIA", package, "9"],
+		]
+		prices = [["1", "11", package, "16", "225750"], ["1", "11", package, "2", "57"]]
+		with tempfile.TemporaryDirectory() as root:
+			text = Path(root) / goods.TEXT_ROOT
+			text.mkdir(parents=True)
+			for name, table in (("refshopgoods.txt", rows), ("refpricepolicyofitem.txt", prices)):
+				(text / name).write_bytes(b"\xff\xfe" + "".join("\t".join(row) + "\r\n" for row in table).encode("utf-16-le"))
+			goods.strip_joined(Path(root), {package: ["2"]})
+			left = {name: (text / name).read_bytes()[2:].decode("utf-16-le").split("\r\n")[:-1]
+				for name in ("refshopgoods.txt", "refpricepolicyofitem.txt")}
+		self.assertEqual(left["refshopgoods.txt"], ["\t".join(rows[0])])
+		self.assertEqual(left["refpricepolicyofitem.txt"], ["\t".join(prices[0])])
 
 	# ================
 	# test_a_good_the_tree_cannot_serve_stays_out
