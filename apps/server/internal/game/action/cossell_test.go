@@ -9,6 +9,7 @@ package action
 
 import (
 	"bytes"
+	"math"
 	"testing"
 
 	"opensro.online/server/internal/domain"
@@ -239,5 +240,27 @@ func TestStableKeeperHoldsThePriceInBand(t *testing.T) {
 		if goldOf(c)-before != tc.want {
 			t.Fatalf("price %d paid %d, want %d", tc.price, goldOf(c)-before, tc.want)
 		}
+	}
+}
+
+/*
+================
+TestStableKeeperCreditSaturates
+
+The sale still lands at the top of the balance: the credit saturates
+at the largest balance instead of wrapping it negative.
+================
+*/
+func TestStableKeeperCreditSaturates(t *testing.T) {
+	rt, c, _ := stableFixture(t)
+	standVehicle(t, c, rt, 3910, "COS_T_DONKEY")
+	full := int64(math.MaxInt64 - 100)
+	c.Gold = &full
+	out := rt.HandleCosSell(testDivision, c, sellRequest(stableNpcGid, 3))
+	if last := out.Frames[len(out.Frames)-1]; !bytes.Equal(last.Payload, []byte{1, 3}) {
+		t.Fatalf("a saturating sale answered % X", last.Payload)
+	}
+	if goldOf(c) != uint64(math.MaxInt64) || c.ActiveCOS != nil {
+		t.Fatalf("gold %d, vehicle %+v", goldOf(c), c.ActiveCOS)
 	}
 }
