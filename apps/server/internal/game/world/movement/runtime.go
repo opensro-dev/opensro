@@ -119,6 +119,10 @@ type Runtime struct {
 	// MotionLocked is the move handler's motion gate: a knocked-down player (motion 8)
 	// drops its ground command. Nil admits.
 	MotionLocked func(divisionID, characterName string) bool
+	// MotionChangeLocked is the motion-state handler's cast gate: while a
+	// cast is preparing or casting, or a chain holds the casting instance,
+	// every 0x7017 request is ignored (#4490 U8-17). Nil admits.
+	MotionChangeLocked func(divisionID, characterName string) bool
 	// InteractionLocked is the move handler's interaction gate: a player
 	// keeping a stall, visiting one or trading drops its ground command
 	// until the stall or exchange closes (#3433). Nil admits.
