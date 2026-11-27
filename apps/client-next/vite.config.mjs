@@ -5,10 +5,12 @@ vite.config.mjs - the development server, preview and local build
 
 The /api and shard proxies, tunnel hosts, optional TLS, and the build's own
 stamp (the commit it is built from). Beta delivery has its own builder.
+The local build ships like a release does: the license banner on every
+chunk and source maps with the readable source (build-metadata.mjs).
 
 ===========================================================================
 */
-import { clientBuildDefinitions } from "./tools/build-metadata.mjs";
+import { clientBuildDefinitions, clientStamp, releaseSourceOutput } from "./tools/build-metadata.mjs";
 import { fileURLToPath } from "node:url";
 import { defineConfig, loadEnv } from "vite";
 import basicSsl from "@vitejs/plugin-basic-ssl";
@@ -47,6 +49,11 @@ export default defineConfig( ( { mode } ) => {
 	// client. Release bundles drop it on purpose: page scripts get no runtime.
 	// A bench bundle has its own output folder and is never deployed.
 	const bench = mode === "bench";
+	// The banner and the published source paths, for page and worker chunks alike.
+	const sourceOutput = releaseSourceOutput(
+		fileURLToPath( new URL( ".", import.meta.url ) ),
+		clientStamp().revision
+	);
 	return {
 		publicDir: false,
 		define: clientBuildDefinitions(),
@@ -57,6 +64,7 @@ export default defineConfig( ( { mode } ) => {
 			warmup: { clientFiles: [ "./src/bootstrap.ts" ] }
 		},
 		preview: { proxy, ...hosts, ...(certificate ? { https: certificate } : {}) },
+		worker: bench ? {} : { rolldownOptions: { output: sourceOutput } },
 		build: bench ?
 			{
 				outDir: "temp/artifacts/dist-bench",
@@ -79,13 +87,17 @@ export default defineConfig( ( { mode } ) => {
 			} :
 			{
 				outDir: "temp/artifacts/dist",
+				// The client is AGPL source: a built copy carries the notice and its
+				// readable source wherever it is hosted (NOTICE.md).
+				sourcemap: true,
 				// viewer.html is the embeddable 3D viewer (docs/guides/VIEWER.md), a second
 				// page beside the game's.
 				rolldownOptions: {
 					input: {
 						index: fileURLToPath( new URL( "./index.html", import.meta.url ) ),
 						viewer: fileURLToPath( new URL( "./viewer.html", import.meta.url ) )
-					}
+					},
+					output: sourceOutput
 				}
 			},
 		plugins: [ devUpdates(), publishedAssets(), ...(https && !certificate ? [ basicSsl() ] : []) ],

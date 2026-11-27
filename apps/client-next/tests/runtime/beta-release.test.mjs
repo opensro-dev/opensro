@@ -14,7 +14,16 @@ import { mkdtemp, mkdir, writeFile, readFile, rm } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { gzipSync } from "node:zlib";
-import { inspect, safeName, sha, verifyDirectory, publicIndex, releaseIdentity } from "../../tools/beta/policy.mjs";
+import {
+	inspect,
+	inspectSourceMap,
+	safeName,
+	sha,
+	verifyDirectory,
+	publicIndex,
+	releaseIdentity
+} from "../../tools/beta/policy.mjs";
+import { SOURCE_MAP_ROOT, licenseBanner } from "../../tools/build-metadata.mjs";
 import { projectMember } from "../../tools/beta/public-data.mjs";
 import { archiveRelease, verifyArchive } from "../../tools/beta/archive.mjs";
 import { serveBeta } from "../../tools/beta/serve.mjs";
@@ -48,6 +57,98 @@ test("beta gates reject exposed source and opaque compressed leaks", () => {
 	}
 	assert.doesNotThrow( () =>
 		inspect( "assets/a.js", Buffer.from( "const q=x?a:/^\\d+$/.test(r);" ), { application: true } )
+	);
+});
+/*
+================
+TestPublishedSourceMaps
+
+A release publishes its chunks' source maps with the readable source
+(NOTICE.md), and only that: every source a client module under the
+published root, never a build machine path, a climb out of the client, a
+secret, or text that differs from the frozen source. A chunk may name its
+own map, never another file's or a data URI.
+================
+*/
+test("a published source map shows only the client's frozen source", () => {
+	const text = "export const a = 1;\n";
+	const map = ( sources, contents = sources.map( () => text ) ) =>
+		Buffer.from( JSON.stringify( { version: 3, sources, sourcesContent: contents, mappings: "AAAA", names: [] } ) );
+	const good = map( [ SOURCE_MAP_ROOT + "src/main.ts" ] );
+	assert.doesNotThrow( () => inspect( "assets/main-1.js.map", good, { application: true } ) );
+	assert.doesNotThrow( () => inspect( "application/assets/main-1.js.map", good, { application: true } ) );
+	assert.doesNotThrow( () => inspectSourceMap( "assets/main-1.js.map", good, { "src/main.ts": text } ) );
+	assert.throws( () => inspectSourceMap( "assets/main-1.js.map", good, { "src/main.ts": "other" } ), /differs/ );
+	assert.throws( () => inspectSourceMap( "assets/main-1.js.map", good, {} ), /differs/ );
+	// A map is an application file: as data it is still a forbidden artifact.
+	assert.throws( () => inspect( "assets/main-1.js.map", good ), /Forbidden release artifact/ );
+	for (
+		const sources of [
+			[ "../../src/main.ts" ],
+			[ "H:/work/src/main.ts" ],
+			[ SOURCE_MAP_ROOT + "src/../tools/beta/build.mjs" ],
+			[ SOURCE_MAP_ROOT + "tools/beta/build.mjs" ],
+			[ SOURCE_MAP_ROOT + "src/a b.ts" ]
+		]
+	) {
+		assert.throws(
+			() => inspect( "assets/main-1.js.map", map( sources ), { application: true } ),
+			/unpublished source/
+		);
+	}
+	assert.throws(
+		() =>
+			inspect(
+				"assets/main-1.js.map",
+				map( [ SOURCE_MAP_ROOT + "src/key.ts" ], [ "-----BEGIN PRIVATE KEY-----" ] ),
+				{
+					application: true
+				}
+			),
+		/Secret exposure/
+	);
+	assert.throws( () =>
+		inspect( "assets/main-1.js.map", map( [ SOURCE_MAP_ROOT + "src/a.ts" ], [] ), { application: true } )
+	);
+	const chunk = licenseBanner( "abc" ) + "\nconsole.log(1);\n//# sourceMappingURL=";
+	assert.doesNotThrow( () =>
+		inspect( "assets/main-1.js", Buffer.from( chunk + "main-1.js.map\n" ), { application: true } )
+	);
+	assert.doesNotThrow( () =>
+		inspect( "application/assets/main-1.js", Buffer.from( chunk + "main-1.js.map" ), { application: true } )
+	);
+	// A compressed variant has a digest name, so the reference is a bare
+	// sibling name, not this file's own.
+	assert.doesNotThrow( () =>
+		inspect( "encoded/" + "a".repeat( 64 ) + ".js", Buffer.from( chunk + "main-1.js.map\n" ), {
+			application: true
+		} )
+	);
+	for (
+		const reference of [
+			"data:application/json;base64,AAA",
+			"../main-1.js.map",
+			"https://example.invalid/main-1.js.map",
+			"main-1.json"
+		]
+	) {
+		assert.throws(
+			() => inspect( "assets/main-1.js", Buffer.from( chunk + reference ), { application: true } ),
+			reference
+		);
+	}
+	assert.throws( () =>
+		inspect( "assets/main-1.js", Buffer.from( chunk + "a.js.map\n//# sourceMappingURL=b.js.map" ), {
+			application: true
+		} )
+	);
+	// The compressed map is inspected as a map, and only as an application file.
+	const encodedMap = gzipSync( good ), encodedName = "encoded/" + "b".repeat( 64 ) + ".map.gz";
+	assert.doesNotThrow( () => inspect( encodedName, encodedMap, { application: true } ) );
+	assert.throws( () => inspect( encodedName, encodedMap ), /Forbidden release artifact/ );
+	assert.throws(
+		() => inspect( encodedName, gzipSync( map( [ "../../src/main.ts" ] ) ), { application: true } ),
+		/unpublished source/
 	);
 });
 test("group policy rejects unclassified additions and removes developer artifacts", () => {
@@ -302,7 +403,7 @@ test("pack manifest revalidates on its issued ETag and packs stay immutable", as
 	await partial.arrayBuffer();
 });
 
-test("compiler keeps main and worker maps private, drops beta branches and excludes environment secrets", async t => {
+test("compiler publishes main and worker maps with their source, keeps private copies, drops beta branches and excludes environment secrets", async t => {
 	const { buildApplication } = await import( "../../tools/beta/build.mjs" );
 	const { symbolicate } = await import( "../../tools/beta/symbolicate.mjs" );
 	const base = await mkdtemp( path.join( os.tmpdir(), "sro-beta-compile-" ) );
@@ -334,8 +435,22 @@ test("compiler keeps main and worker maps private, drops beta branches and exclu
 	assert.ok( maps.size >= 2 );
 	for ( const n of names ) {
 		const s = await readFile( path.join( directory, n ), "utf8" );
-		assert.ok( !n.endsWith( ".map" ) );
-		assert.doesNotMatch( s, /DEV_ONLY_MARKER|NEVER_SHIP_THIS_SECRET|sourceMappingURL/ );
+		assert.doesNotMatch( s, /NEVER_SHIP_THIS_SECRET/ );
+		if ( !n.endsWith( ".js" ) ) continue;
+		// Each chunk carries the notice and names its own published map,
+		// which is the private copy byte for byte and shows the frozen source.
+		assert.doesNotMatch( s, /DEV_ONLY_MARKER/ );
+		assert.ok(
+			s.includes( "OpenSRO client" ) && s.includes( "Source: https://github.com/opensro-dev/opensro" ),
+			n
+		);
+		assert.ok( s.trimEnd().endsWith( "//# sourceMappingURL=" + path.posix.basename( n ) + ".map" ), n );
+		const published = await readFile( path.join( directory, n + ".map" ) );
+		assert.equal( published.toString(), Buffer.from( maps.get( n + ".map" ) ).toString() );
+		const map = JSON.parse( published.toString() );
+		for ( const [index, name] of map.sources.entries() ) {
+			assert.equal( map.sourcesContent[index], source[name.slice( SOURCE_MAP_ROOT.length )], name );
+		}
 	}
 	const privateRoot = path.join( base, "release/private" );
 	await mkdir( path.join( privateRoot, "maps/assets" ), { recursive: true } );
