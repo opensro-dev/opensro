@@ -126,7 +126,7 @@ test("a particle draw reads its aligned slice of the arena output, rebound on gr
 				dirtyStart: 0,
 				dirtyEnd: slots
 			},
-			bindings: []
+			bindings: /** @type {any[]} */ ([])
 		};
 		entry.present = () =>
 			particles.present(
@@ -140,7 +140,8 @@ test("a particle draw reads its aligned slice of the arena output, rebound on gr
 	};
 	const encode = () => {
 		const encoder = gpu.device.createCommandEncoder( { label: "particles" } ), copies = [];
-		const copy = encoder.copyBufferToBuffer;
+		// The five-argument form the arena records; the overloads narrow it.
+		const copy = /** @type {( ...args: any[] ) => void} */ (encoder.copyBufferToBuffer);
 		encoder.copyBufferToBuffer = ( source, sourceOffset, target, targetOffset, size ) => {
 			copies.push( { source, target, size } );
 			copy( source, sourceOffset, target, targetOffset, size );
@@ -183,6 +184,7 @@ test("a particle draw reads its aligned slice of the arena output, rebound on gr
 	const third = stream( 4096 );
 	third.present();
 	const moved = first.bindings.at( -1 );
+	assert.ok( moved, "growth rebinds an earlier stream" );
 	assert.equal( first.bindings.length, 2, "growth rebinds an earlier stream once" );
 	assert.notEqual( moved.instances.buffer, a.instances.buffer );
 	assert.equal( moved.instances.buffer, third.bindings[0].instances.buffer );
