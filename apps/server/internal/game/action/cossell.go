@@ -34,8 +34,6 @@ request whenever it comes.
 package action
 
 import (
-	"math"
-
 	"opensro.online/server/internal/game/enterworld"
 	"opensro.online/server/internal/game/item/wire"
 	"opensro.online/server/internal/game/world/simulation"
@@ -143,18 +141,11 @@ func (rt *Runtime) HandleCosSell(division string, c *enterworld.Character, paylo
 			(live.Container != nil && len(live.Container.Rows) > 0) {
 			return false
 		}
-		// The credit saturates instead of wrapping the persisted balance,
-		// the quest gold authority's rule (a negative balance heals to 0).
-		gold := int64(goldOf(c))
-		if gold < 0 {
-			gold = 0
-		}
-		if gold > math.MaxInt64-price {
-			gold = math.MaxInt64
-		} else {
-			gold += price
-		}
-		c.Gold = &gold
+		// goldOf reads a negative balance as 0 and setGold saturates at the
+		// largest balance, so the credit never wraps. The sum cannot wrap
+		// uint64: the balance is at most MaxInt64 and price is clamped
+		// to cosSellPriceMax.
+		setGold(c, goldOf(c)+uint64(price))
 		c.ActiveCOS = nil
 		return true
 	}) {
