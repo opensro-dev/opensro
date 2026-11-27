@@ -593,3 +593,127 @@ func TestTrainingCampGraduationHonorFormulasAndTierBoundaries(t *testing.T) {
 		}
 	}
 }
+
+/*
+================
+TestTrainingCampGraduationReadsTheHighestLevelReached
+
+The graduation level tests read the highest level reached, not the
+current level (an apprentice 40, an assistant 60, compulsory 41): a
+member who reached the mark and lost a level to a death penalty still
+graduates, and one who has not reached it does not, whatever the current
+level says. An assistant's graduation gives nothing.
+================
+*/
+func TestTrainingCampGraduationReadsTheHighestLevelReached(t *testing.T) {
+	t.Parallel()
+	dir, clock := t.TempDir(), newTestClock()
+	s := openTest(t, dir, clock)
+
+	master := guildTestCharacter("watermaster")
+	apprReached := guildTestCharacter("waterappra")
+	apprShort := guildTestCharacter("waterapprb")
+	assistant := guildTestCharacter("waterasst")
+	apprForced := guildTestCharacter("waterapprc")
+	apprForcedShort := guildTestCharacter("waterapprd")
+	for i, c := range []*domain.Character{master, apprReached, apprShort, assistant, apprForced, apprForcedShort} {
+		acct := "test-account"
+		if i >= 4 {
+			acct = "test-account-2"
+		}
+		if err := s.CreateCharacter(testDivision, acct, c); err != nil {
+			t.Fatal(err)
+		}
+	}
+	setLevels := func(c *domain.Character, level, highest int64) {
+		s.MutateCharacter(c, "test-level", func() {
+			c.Level = &level
+			c.MaxLevel = &highest
+		})
+	}
+	setLevels(master, 60, 60)
+
+	now0 := clock.Now().UnixMilli()
+	opened, refusal := s.TrainingCamps().OpenCamp(testDivision, domain.TrainingCampOpening{
+		MasterCharID: master.ID,
+		MinLevel:     60,
+		Fee:          0,
+		NowMs:        now0,
+	})
+	if refusal != domain.TrainingCampOpenAccepted {
+		t.Fatalf("open camp refused: %d", refusal)
+	}
+	honorOf := func(deltas []domain.TrainingCampHonorDelta, charID int64) (uint32, bool) {
+		for _, delta := range deltas {
+			if delta.CharID == charID {
+				return delta.HonorPoints, true
+			}
+		}
+		return 0, false
+	}
+
+	setLevels(apprReached, 10, 10)
+	setLevels(apprShort, 20, 20)
+	setLevels(assistant, 25, 25)
+	setLevels(apprForced, 30, 30)
+	setLevels(apprForcedShort, 30, 30)
+	for _, st := range []*domain.Character{apprReached, apprShort, assistant, apprForced, apprForcedShort} {
+		if _, ok := s.TrainingCamps().AdmitStudent(testDivision, domain.TrainingCampAdmission{
+			MasterCharID:    master.ID,
+			StudentCharID:   st.ID,
+			ExpectedCampID:  opened.Camp.ID,
+			MasterMinLevel:  60,
+			StudentMaxLevel: 59,
+			StudentLimit:    5,
+			NowMs:           now0,
+		}); !ok {
+			t.Fatalf("admit %s failed", st.Name)
+		}
+	}
+	// Stage the assistant as Kind 1, as the formulas test does.
+	for i, member := range s.campMembers[testDivision][opened.Camp.ID] {
+		if member.CharID == assistant.ID {
+			s.campMembers[testDivision][opened.Camp.ID][i].Kind = 1
+		}
+	}
+
+	// The apprentice reached 40 and died back to 39: graduates, with the
+	// master's 30 honor (joined at 10) and the assistant's tenth.
+	setLevels(apprReached, 39, 40)
+	grad := s.TrainingCamps().Graduate(testDivision, apprReached.ID, 4, now0+1000)
+	if grad.Refusal != domain.TrainingCampGraduateAccepted || !grad.AwardedExp || grad.Camp.GraduateCount != 1 {
+		t.Fatalf("reached-40 graduate = %+v", grad)
+	}
+	if got, ok := honorOf(grad.HonorDeltas, master.ID); !ok || got != 30 {
+		t.Fatalf("master honor = %d, %v", got, ok)
+	}
+
+	// At 40 now but never past 39 reached: refused as level-low.
+	setLevels(apprShort, 40, 39)
+	if res := s.TrainingCamps().Graduate(testDivision, apprShort.ID, 4, now0+2000); res.Refusal != domain.TrainingCampGraduateLevelLow {
+		t.Fatalf("never-40 graduate = %+v, want TrainingCampGraduateLevelLow", res)
+	}
+
+	// The assistant reached 60 and sits at 59: graduates and gives
+	// nothing - no honor, no evaluation, no graduate count, no bonus EXP.
+	setLevels(assistant, 59, 60)
+	evalBefore, countBefore := grad.Camp.EvaluationPoints, grad.Camp.GraduateCount
+	assistantGrad := s.TrainingCamps().Graduate(testDivision, assistant.ID, 4, now0+3000)
+	if assistantGrad.Refusal != domain.TrainingCampGraduateAccepted || assistantGrad.AwardedExp ||
+		len(assistantGrad.HonorDeltas) != 0 || assistantGrad.Camp.EvaluationPoints != evalBefore ||
+		assistantGrad.Camp.GraduateCount != countBefore {
+		t.Fatalf("assistant graduate = %+v", assistantGrad)
+	}
+
+	// Compulsory: reached 41 and sits at 40 passes; at 41 without having
+	// reached it refuses.
+	setLevels(apprForced, 40, 41)
+	forced := s.TrainingCamps().CompulsoryGraduate(testDivision, master.ID, apprForced.Name, now0+4000)
+	if forced.Refusal != domain.TrainingCampGraduateAccepted || forced.AwardedExp || forced.Camp.GraduateCount != countBefore+1 {
+		t.Fatalf("reached-41 compulsory = %+v", forced)
+	}
+	setLevels(apprForcedShort, 41, 40)
+	if res := s.TrainingCamps().CompulsoryGraduate(testDivision, master.ID, apprForcedShort.Name, now0+5000); res.Refusal != domain.TrainingCampGraduateCompulsoryLevelLow {
+		t.Fatalf("never-41 compulsory = %+v, want TrainingCampGraduateCompulsoryLevelLow", res)
+	}
+}
