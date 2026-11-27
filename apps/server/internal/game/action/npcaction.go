@@ -92,6 +92,27 @@ func (rt *Runtime) routeNpcAction(divisionID string, character *enterworld.Chara
 
 /*
 ================
+npcTalkBusy
+
+The native talk's busy state for this character: an exchange is open,
+a stall is kept, or a stall is being visited - the states that set the
+interaction byte the talk handler reads first. A pending exchange
+request is not busy: the byte is set when the exchange opens.
+================
+*/
+func (rt *Runtime) npcTalkBusy(divisionID string, c *enterworld.Character) bool {
+	if rt.Exchanges.Trading(divisionID, c.Name) {
+		return true
+	}
+	if rt.Stalls.Keeping(divisionID, c.Name) {
+		return true
+	}
+	_, visiting := rt.Stalls.Visiting(divisionID, c.Name)
+	return visiting
+}
+
+/*
+================
 HandleNpcAction
 
 HandleNpcAction applies the ordinary talk/shop subset whose server and
@@ -112,6 +133,12 @@ func (rt *Runtime) HandleNpcAction(divisionID string, character *enterworld.Char
 
 	unlock := rt.lockDivision(divisionID)
 	defer unlock()
+	// The native talk refuses before anything else while the player's
+	// interaction state is busy: an exchange open, a stall kept, or a
+	// stall being visited (the IM_BUSY refusal).
+	if rt.npcTalkBusy(divisionID, character) {
+		return npcFunctionRefusal(errCodeKeeperBusy), "an exchange, a stall or a stall visit is open"
+	}
 	// Natively an NPC function request ends the requester's hide first,
 	// whatever becomes of the request.
 	rt.deps.Update(character, "npc-action-hide", func() bool {

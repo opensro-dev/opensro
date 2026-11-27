@@ -62,7 +62,8 @@ const errCodeInvalidStorageTarget uint8 = 0x43
 
 // errCodeKeeperBusy is the B338 refusal UIIT_MSG_INTERACTION_FAIL_IM_BUSY
 // (category 13, code 0x0B): the account's warehouse is open for another of
-// its characters (accountStorageHolder).
+// its characters (accountStorageHolder), or the talk's own busy state
+// (npcTalkBusy).
 const errCodeKeeperBusy uint8 = 0x0b
 
 // storageOpen is one character's open warehouse. account names the
