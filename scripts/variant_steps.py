@@ -59,8 +59,10 @@ import time
 from pathlib import Path
 
 import state_document
+import build_progress
 import variant_settle
 import variant_stamp
+import variant_reuse
 from prepare_client_resources import file_digest, write_atomically
 from sro_paths import REPO_ROOT, tree_state_root
 
@@ -561,6 +563,18 @@ class Runner:
 		})
 
 	# ================
+	# index
+	#
+	# A registered step's position, by name: the builder takes each
+	# result by name, so a step added or split never shifts the others.
+	# ================
+	def index(self, name: str) -> int:
+		for position, step in enumerate(self.steps):
+			if step["name"] == name:
+				return position
+		raise KeyError(f"no variant step {name}")
+
+	# ================
 	# load
 	#
 	# The journal is this build's when its arguments are this build's
@@ -772,6 +786,8 @@ class Runner:
 	# journal-less build starts from the cleared tree instead.
 	# ================
 	def begin(self, force: bool = False):
+		# What an earlier build kept and never took back is stale now.
+		variant_reuse.clear(self.variant)
 		self.fresh = force or self.journal is None
 		if self.fresh:
 			self.first = 0
@@ -865,7 +881,9 @@ class Runner:
 				before = befores[index][relative]
 				target = self.variant / relative
 				if before is None:
-					target.unlink(missing_ok=True)
+					# Kept, not deleted: a rerun step that lays the same file
+					# again takes it back (variant_reuse.py, #4337).
+					variant_reuse.stash(self.variant, relative)
 				else:
 					lay_blob(self.variant, before, target)
 		# Directories the undone steps leave empty go with them.
@@ -889,7 +907,11 @@ class Runner:
 	# ================
 	def result(self, index: int):
 		started = time.perf_counter()
-		value, how = self.settle_step(index)
+		build_progress.begin_step(self.steps[index]["name"])
+		try:
+			value, how = self.settle_step(index)
+		finally:
+			build_progress.end_step()
 		# One line a step, so a slow build names the step that cost it (#4251).
 		print(f"step {self.steps[index]['name']}: {how} in {time.perf_counter() - started:.1f} s", flush=True)
 		return value
@@ -962,3 +984,4 @@ class Runner:
 		# over the tree the journal now describes (the build's own settle
 		# in main() afterwards finds nothing left to do).
 		variant_settle.settle(self.variant)
+		variant_reuse.clear(self.variant)

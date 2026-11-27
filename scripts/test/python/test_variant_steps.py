@@ -24,6 +24,7 @@ import os
 import sys
 import tempfile
 import unittest
+from unittest import mock
 from pathlib import Path
 
 import variant_settle
@@ -152,6 +153,41 @@ class VariantSteps(unittest.TestCase):
 		run_build(self.variant, steps, roots)
 		self.assertEqual(counters, {"reader": 3, "downstream": 2})
 		self.assertEqual((self.variant / "extracted" / "d.txt").read_bytes(), b"down:BB")
+
+	# ================
+	# test_a_rerun_linker_takes_its_files_back_from_rollback
+	#
+	# #4337 items 29/31: a base rerun copied the whole native tree again
+	# after rollback deleted it. Rollback now keeps what it removes, and
+	# the rerun lays every unchanged file back by rename: no copy, and
+	# nothing is left kept once the build ends.
+	# ================
+	def test_a_rerun_linker_takes_its_files_back_from_rollback(self):
+		import variant_files
+		import variant_reuse
+
+		native = Path(self.temp.name) / "native"
+		(native / "deep").mkdir(parents=True)
+		(native / "one.bin").write_bytes(b"1" * 64)
+		(native / "deep" / "two.bin").write_bytes(b"2" * 64)
+		knob = Path(self.temp.name) / "knob"
+		knob.mkdir()
+		(knob / "k.txt").write_bytes(b"a")
+
+		def linker():
+			(knob / "k.txt").read_bytes()
+			out = self.variant / "extracted"
+			return variant_files.link_tree(native, out / "tree", variant_reuse.reuse_root(self.variant) / "extracted" / "tree")
+
+		steps = [("linker", linker, ())]
+		with mock.patch.object(variant_files.os, "link", side_effect=OSError("cross-device")), 				contextlib.redirect_stdout(io.StringIO()):
+			run_build(self.variant, steps, (native, knob))
+			(knob / "k.txt").write_bytes(b"b")
+			with mock.patch.object(variant_files.shutil, "copy2", wraps=variant_files.shutil.copy2) as copy:
+				run_build(self.variant, steps, (native, knob))
+		self.assertEqual(copy.call_count, 0)
+		self.assertEqual((self.variant / "extracted" / "tree" / "deep" / "two.bin").read_bytes(), b"2" * 64)
+		self.assertFalse(variant_reuse.reuse_root(self.variant).exists())
 
 	# ================
 	# test_flag_change_reruns_only_steps_naming_it
