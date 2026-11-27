@@ -261,3 +261,57 @@ func TestReadCharactersHandsOutACopy(t *testing.T) {
 		t.Fatalf("the retained slice was rewritten by the reap's compaction: %v", captured)
 	}
 }
+
+/*
+================
+TestQuickDeleteMaturesAfterOneDay
+
+Port-only SRO_QUICK_CHARACTER_DELETE: with the one-day window a
+reservation matures a day later, while the native window still holds it.
+================
+*/
+func TestQuickDeleteMaturesAfterOneDay(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		name   string
+		window time.Duration
+		reaped int
+	}{
+		{"native seven days", 0, 0},
+		{"quick one day", QuickDeleteReservationWindow, 1},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			clock := newTestClock()
+			s := openTest(t, t.TempDir(), clock)
+			s.deleteWindow = tc.window
+			c := &enterworld.Character{Name: "quickdoomed"}
+			if err := s.CreateCharacter(testDivision, "test-account", c); err != nil {
+				t.Fatal(err)
+			}
+			s.MutateCharacter(c, "delete-reserve", func() {
+				c.DeletePending = true
+				c.DeleteReservedAt = clock.Now().UTC().Format(time.RFC3339)
+			})
+			clock.Advance(QuickDeleteReservationWindow + time.Hour)
+			if reaped := s.ReapMaturedDeletions(); len(reaped) != tc.reaped {
+				t.Fatalf("reaped %v after 25 h, want %d", reaped, tc.reaped)
+			}
+		})
+	}
+}
+
+/*
+================
+TestQuickCharacterDeleteFromEnv
+
+"on" selects the one-day window; unset and "off" keep the native seven.
+================
+*/
+func TestQuickCharacterDeleteFromEnv(t *testing.T) {
+	for value, want := range map[string]time.Duration{"on": QuickDeleteReservationWindow, "off": 0, "": 0} {
+		t.Setenv(EnvQuickCharacterDelete, value)
+		if got := OptionsFromEnv().DeleteReservationWindow; got != want {
+			t.Fatalf("%s=%q: window %v, want %v", EnvQuickCharacterDelete, value, got, want)
+		}
+	}
+}
