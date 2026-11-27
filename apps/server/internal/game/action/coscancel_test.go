@@ -117,15 +117,15 @@ func TestCosCancellationPreservesDurablePetAndRetiresPickup(t *testing.T) {
 
 /*
 ================
-TestCosCancelRefusesDeadOwnerAndPickupPetInBattle
+TestCosCancelRefusesDeadOwnerNotAFightingPickupPet
 
-#4490 U11-03, the native admission's missing bytes: a dead owner is
-answered 0x11, and a pickup pet cannot be put away while the fight is
-on (the plain code 2) - the owner's death is named first, as natively.
-The pet's own death refuses nothing.
+#4490 U11-03, the native admission: a dead owner is answered 0x11,
+while a pickup pet in a fight is put away as natively (the handler's
+code 2 tests actor absence, not battle). The pet's own death refuses
+nothing.
 ================
 */
-func TestCosCancelRefusesDeadOwnerAndPickupPetInBattle(t *testing.T) {
+func TestCosCancelRefusesDeadOwnerNotAFightingPickupPet(t *testing.T) {
 	c := testCharacter()
 	refs := testCosSource(testItems())
 	refs.characters["PET"] = &enterworld.CharacterRef{Codename: "PET", RefObjID: 9, TidWord: 0x21c6, RunSpeed: 80}
@@ -137,27 +137,20 @@ func TestCosCancelRefusesDeadOwnerAndPickupPetInBattle(t *testing.T) {
 	rt.BindPetSession(testDivision, c, 101)
 	payload := wire.NewWriter(4).U32(gid).Payload()
 
-	// In battle: the plain code 2, and nothing is retired.
+	// A dead owner is answered 0x11, in battle or not, and nothing is
+	// retired.
 	c.BattleUntilMs = clock.NowMs() + 60_000
-	before := c.Snapshot()
-	result := rt.HandleCosCancel(testDivision, c, payload)
-	if !bytes.Equal(result.Frames[0].Payload, []byte{2, 2}) || !reflect.DeepEqual(before, c.Snapshot()) {
-		t.Fatal("pickup pet was put away mid-fight", result)
-	}
-
-	// A dead owner is answered 0x11, ahead of the battle refusal.
 	hp := int64(0)
 	c.CurrentHP = &hp
-	before = c.Snapshot()
-	result = rt.HandleCosCancel(testDivision, c, payload)
+	before := c.Snapshot()
+	result := rt.HandleCosCancel(testDivision, c, payload)
 	if !bytes.Equal(result.Frames[0].Payload, []byte{2, 0x11}) || !reflect.DeepEqual(before, c.Snapshot()) {
 		t.Fatal("dead owner was not refused with 0x11", result)
 	}
 
-	// Alive and out of battle the dismissal goes through, and the
-	// pet's own death is no refusal either.
+	// Alive and still in the fight, the dismissal goes through, and
+	// the pet's own death is no refusal either.
 	hp = 100
-	c.BattleUntilMs = 0
 	c.ActiveCOS.CurrentHP = 0
 	result = rt.HandleCosCancel(testDivision, c, payload)
 	if result.Frames[0].Payload[0] != 1 || c.ActiveCOS.Summoned {

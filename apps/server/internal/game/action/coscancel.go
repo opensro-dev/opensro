@@ -53,8 +53,7 @@ attackPetSummonBlocked
 
 The owner/pet battle test: the owner's battle state, attack lock or
 combat intent, or any summoned pet in combat. Scrolls and toolbar
-dismissal share it for the port-only attack-pet delay, and the cancel
-handler's native battle gate tests a pickup pet with it (#4490 U11-03).
+dismissal share it for the port-only attack-pet delay.
 ================
 */
 func (rt *Runtime) attackPetSummonBlocked(division string, c *enterworld.Character, now int64) bool {
@@ -114,13 +113,11 @@ func (rt *Runtime) HandleCosCancel(division string, c *enterworld.Character, pay
 		!(simulation.WorldDistance2D(owner, pet) < cosCancelRange) {
 		return cosCancelResult(4)
 	}
-	// The native battle gate closes the admission (#4490 U11-03): a
-	// pickup pet engaged in a fight cannot be put away mid-fight, and
-	// the native answer is the plain code 2. The attack-pet expansion's
-	// delay above keeps its own byte.
-	if ref.TidWord>>11 == cosBandPickupPet && rt.attackPetSummonBlocked(division, snapshot, now) {
-		return cosCancelResult(2)
-	}
+	// The native handler's last refusal is the preset code 2 when the
+	// COS has no live world actor (a registry find by its gid, erased
+	// at actor retirement), never a battle test: a fighting pickup pet
+	// is put away natively. The port's retained-corpse dismissal stays
+	// as pinned (#4490 U11-03, the actor-absence code 2 left open).
 	var cancelled *enterworld.CharacterCOS
 	if !rt.deps.Update(c, "cos-cancel", func() bool {
 		cos := c.CompanionByGID(gid)
