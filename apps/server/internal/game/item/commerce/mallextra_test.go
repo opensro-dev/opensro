@@ -211,3 +211,62 @@ func TestMallExtraGoodsStatRecallPreset(t *testing.T) {
 		}
 	}
 }
+
+// laterPetsSilk is the "laterpets" preset's price per package (#4661).
+var laterPetsSilk = map[string]uint32{
+	"PACKAGE_ITEM_COS_P_RACCOONDOG_SCROLL": 88,
+	"PACKAGE_ITEM_COS_P_FLUTE_SILK":        99,
+	"PACKAGE_ITEM_COS_C_WILDPIG_SCROLL":    1,
+}
+
+/*
+================
+TestMallExtraGoodsLaterPetsPreset
+
+"laterpets" lists the three pet scrolls the later native mall sells:
+each an authored silk package selling exactly its own scroll at the
+ISRO-R price. Without the preset none is listed.
+================
+*/
+func TestMallExtraGoodsLaterPetsPreset(t *testing.T) {
+	tier.Long(t, "the laterpets preset authors the pet scrolls on the shipped mall")
+	dir := gamedatatest.TextdataDir(t)
+	items := enterworld.NewTextdataItems(dir)
+	for _, setting := range []string{"on,statrecall", "on,statrecall,laterpets"} {
+		goods, err := ParseMallExtraGoods(setting)
+		if err != nil {
+			t.Fatalf("%q: %v", setting, err)
+		}
+		catalog, err := LoadMall(dir, goods, false, items)
+		if err != nil {
+			t.Fatalf("%q: %v", setting, err)
+		}
+		if err := catalog.Hydrate(items); err != nil {
+			t.Fatalf("%q: %v", setting, err)
+		}
+		found := map[string]MallPackage{}
+		for _, offer := range catalog.Offers {
+			if _, ok := laterPetsSilk[offer.Code]; ok {
+				found[offer.Code] = offer
+			}
+		}
+		want := 0
+		if strings.Contains(setting, "laterpets") {
+			want = len(laterPetsSilk)
+		}
+		if len(found) != want {
+			t.Fatalf("%q: %d pet offers, want %d", setting, len(found), want)
+		}
+		for code, offer := range found {
+			item := "ITEM" + strings.TrimPrefix(code, "PACKAGE_ITEM")
+			ref, ok := items.ItemRefByCodename(item)
+			if !ok {
+				t.Fatalf("%s: no item %s", code, item)
+			}
+			if offer.Silk != laterPetsSilk[code] || len(offer.ItemIDs) != 1 || offer.ItemIDs[0] != ref.RefObjID {
+				t.Errorf("%s: silk %d items %v, want silk %d selling %d", code, offer.Silk, offer.ItemIDs,
+					laterPetsSilk[code], ref.RefObjID)
+			}
+		}
+	}
+}

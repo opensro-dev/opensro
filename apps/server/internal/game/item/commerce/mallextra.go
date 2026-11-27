@@ -27,6 +27,8 @@ The list may name presets: "on" (the avatar outfits) and "statrecall" (the
 stat point recall scroll's six level tiers, owner 2026-10-25, #1609), so
 "on,statrecall" (the deployment default since 2026-11-14) sells the
 avatars and the scrolls, and "on" alone is the avatar-only mall.
+"laterpets" (2026-11-27, #4661) adds the three pet scrolls the later
+native mall sells and v1.150's does not.
 
 ===========================================================================
 */
@@ -88,6 +90,17 @@ var mallStatRecallPreset = strings.Join([]string{
 	"MALL_CONSUME_SCROLL:PACKAGE_ITEM_MALL_STATS_POINT_RECALL_81LV:ITEM_MALL_STATS_POINT_RECALL_81LV:250",
 }, ",")
 
+// mallLaterPetsPreset is "laterpets": the three v1.150 pet and vehicle
+// scrolls whose items, creatures and icons ship but which no v1.150
+// mall lists. The later native mall sells each (ISRO-R SR_GameRefData
+// refshopgoods/refpricepolicyofitem): the Raccoon Dog at 88 silk, the
+// silk wolf flute at 99 and the Wild Pig vehicle at 1, in its tabs.
+var mallLaterPetsPreset = strings.Join([]string{
+	"MALL_PET_B_SILK:PACKAGE_ITEM_COS_P_RACCOONDOG_SCROLL:ITEM_COS_P_RACCOONDOG_SCROLL:88",
+	"MALL_PET_A_GROWTH:PACKAGE_ITEM_COS_P_FLUTE_SILK:ITEM_COS_P_FLUTE_SILK:99",
+	"MALL_PET_C_VEHICLE:PACKAGE_ITEM_COS_C_WILDPIG_SCROLL:ITEM_COS_C_WILDPIG_SCROLL:1",
+}, ",")
+
 // maxAuthoredSilk bounds an authored price: the 1500-silk bank cap many
 // times over, far below the wire's u32.
 const maxAuthoredSilk = 100000
@@ -113,8 +126,8 @@ ParseMallExtraGoods
 
 "" and "off" are the shipped mall (nil); "on", "1" and "true" are
 mallExtraGoodsDefault. Otherwise a comma list of tab:package listings,
-tab:package:item:silk authored packages and the presets "on" and
-"statrecall".
+tab:package:item:silk authored packages and the presets "on",
+"statrecall" and "laterpets".
 ================
 */
 func ParseMallExtraGoods(text string) ([]MallExtraGood, error) {
@@ -132,6 +145,8 @@ func ParseMallExtraGoods(text string) ([]MallExtraGood, error) {
 			fields = append(fields, strings.Split(mallExtraGoodsDefault, ",")...)
 		case "statrecall":
 			fields = append(fields, strings.Split(mallStatRecallPreset, ",")...)
+		case "laterpets":
+			fields = append(fields, strings.Split(mallLaterPetsPreset, ",")...)
 		default:
 			fields = append(fields, field)
 		}
