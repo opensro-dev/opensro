@@ -605,6 +605,8 @@ const SKILL_RUN_UP_MARGIN = 20;
 // native field for action range carries the same reach the server fights
 // with (the item tooltip renders it as metres; the fight reads it raw).
 const WEAPON_SOCKET = 6;
+// The equipment socket a shield or an ammunition stack sits in.
+const SHIELD_SOCKET = 7;
 // The equipment socket a free-battle cape sits in (594980's drop target).
 const CAPE_SOCKET = 8;
 // Bare-handed, the server's reach is 6.
@@ -1658,6 +1660,18 @@ pending copy, and the next settings replay repairs what it commits.
 	let sroMacroEnabled = false;
 	let macroPotionQueue = emptyMacroPotionQueue();
 	let macroSkillLoop = emptyMacroSkillLoop();
+	// Port-only (#4697): per skill, the worn loadout (the refObjIds on the
+	// weapon and shield sockets) at the moment the Auto-Skills swap went
+	// out for it. A swap the server refuses never changes the bag, and the
+	// pick's rewind would send it again every 2000 ms forever: the buff
+	// pass never finishes, the attack step never runs, and the hunt stands
+	// idle at its monster. While the loadout still reads the same, the
+	// entry is refused instead of re-swapped; a landed swap, a manual
+	// re-equip, or the entry's own cast clears the wait.
+	let macroSwapWaits = new Map<
+		number,
+		{ readonly weapon: number | undefined; readonly shield: number | undefined; }
+	>();
 	let macroHuntStartedAtMs = 0;
 	let macroHuntWasOn = false;
 	// The last Auto-Hunt request and when it went out: one request per
@@ -2143,6 +2157,7 @@ clears it when another character enters.
 		sroMacro.clear();
 		macroPotionQueue = emptyMacroPotionQueue();
 		macroSkillLoop = emptyMacroSkillLoop();
+		macroSwapWaits.clear();
 		macroHuntStartedAtMs = 0;
 		macroHuntWasOn = false;
 		macroHuntLastAction = "";
@@ -7360,6 +7375,7 @@ runs (native 00687520).
 		const settings = sroMacro.view();
 		if ( !live || !sroMacroEnabled || !settings?.skillOn || !potionFacts.alive || !local ) {
 			macroSkillLoop = emptyMacroSkillLoop();
+			macroSwapWaits.clear();
 			return;
 		}
 		// selectionIntent: the clicked monster even before its B45A grant, as
@@ -7446,6 +7462,16 @@ runs (native 00687520).
 		// check so a useless shield equip cannot clear a weaponKinds
 		// refuse and oscillate.
 		if ( admission.kind === "refuse" && macroSkillSwapHelps( admission.code ) ) {
+			// A swap already went out for this entry and the worn loadout
+			// reads exactly as it did then, so the swap never landed (the
+			// server refused it, #4697). Re-issuing it cannot clear this
+			// refusal, and the rewind below would wedge the whole step
+			// table on this entry forever. Refuse the entry for as long as
+			// the loadout stays as it is.
+			const wornWeapon = bag.find( row => row.slot === WEAPON_SOCKET )?.refObjId;
+			const wornShield = bag.find( row => row.slot === SHIELD_SOCKET )?.refObjId;
+			const wait = macroSwapWaits.get( skillId );
+			if ( wait && wait.weapon === wornWeapon && wait.shield === wornShield ) return;
 			for ( const swap of macroSkillSwapCandidates( settings.skillFlags, bag ) ) {
 				const after = pressAdmission( {
 					admit: metadata.admit,
@@ -7473,6 +7499,7 @@ runs (native 00687520).
 				}
 				// Native does not advance the list cursor on a swap
 				// (00687af5); rewind the picker's already-advanced entry.
+				macroSwapWaits.set( skillId, { weapon: wornWeapon, shield: wornShield } );
 				const cursor = pick.list === "attack" ?
 					{ attack: Math.max( 0, macroSkillLoop.attack - 1 ) } :
 					{ buff: Math.max( 0, macroSkillLoop.buff - 1 ) };
@@ -7502,6 +7529,7 @@ runs (native 00687520).
 			return;
 		}
 		macroSkillLoop = macroSkillCast( macroSkillLoop, now, metadata.actionMs ?? 0 );
+		macroSwapWaits.delete( skillId );
 		dirty = true;
 	}
 	/*

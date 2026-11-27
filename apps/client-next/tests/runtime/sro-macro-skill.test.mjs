@@ -830,6 +830,172 @@ test("a wrong-weapon attack equips the bound bag weapon once, then casts without
 	g.dispose();
 });
 
+test("a swap that never lands is not re-issued, and the attack step still runs (#4697)", () => {
+	/** @type {{ opcode: number, payload: Uint8Array }[]} */
+	const sent = [];
+	const entities = new Map();
+	const local = {
+		gid: LOCAL_GID,
+		refObjId: 1907,
+		kind: /** @type {const} */ ("local-player"),
+		name: "macro",
+		countryByte9c: 0,
+		regionId: 257,
+		x: 0,
+		y: 0,
+		z: 0,
+		heading: 0,
+		appearanceState: [ 1, 0, 0 ]
+	};
+	const monster = {
+		gid: MONSTER_GID,
+		refObjId: 2000,
+		kind: /** @type {const} */ ("monster"),
+		name: "mob",
+		regionId: 257,
+		x: 10,
+		y: 0,
+		z: 0,
+		heading: 0,
+		appearanceState: [ 1, 0, 0 ]
+	};
+	entities.set( LOCAL_GID, local );
+	entities.set( MONSTER_GID, monster );
+	const g = createGameplay( f => sent.push( f ), () => {}, () => {}, gid => entities.get( gid ) );
+	g.bootstrap( {
+		character: {
+			hp: 100,
+			mp: 100,
+			maxHp: 100,
+			maxMp: 100,
+			skills: [ BUFF, ATTACK ],
+			autoPotion: { hp: 0x3211, mp: 0x3212, cure: 0x13, timing: 0x8a }
+		},
+		refSkillSnapshot: [
+			skillRef( BUFF, { actionMs: 100, admit: SWORD_ADMIT } ),
+			skillRef( ATTACK, { targetRequired: true, actionMs: 100 } )
+		],
+		refItemSnapshot: [
+			{ refObjId: WEAPON_REF, typeFlags: WEAPON_TYPE, nativeFields: {} },
+			{ refObjId: OTHER_WEAPON_REF, typeFlags: OTHER_WEAPON_TYPE, nativeFields: {} }
+		],
+		// Wrong weapon worn; the bound bag slot holds the buff's sword.
+		equipItems: [
+			{ slot: 6, refObjId: OTHER_WEAPON_REF, body: weaponBody( OTHER_WEAPON_REF ) },
+			{ slot: 14, refObjId: WEAPON_REF, body: weaponBody( WEAPON_REF ) }
+		]
+	} );
+	g.worldReady();
+	g.seed( monster );
+	g.seed( local );
+	g.experimental( experimentalGameplay( experimentalOptions( { sroMacro: true } ) ) );
+	g.receive(
+		macroReplay( {
+			skillOn: 1,
+			skillFlags: [ 0, 0, 14, 0 ],
+			buff: [ { slot: 0, skill: BUFF } ],
+			attack: [ { slot: 0, skill: ATTACK } ]
+		} ),
+		0
+	);
+	g.command( { kind: "select", gid: MONSTER_GID }, 0, monster, local );
+	const grant = new Uint8Array( 11 );
+	grant[0] = 1;
+	new DataView( grant.buffer ).setUint32( 1, MONSTER_GID, true );
+	g.receive( { opcode: 0xb45a, payload: grant }, 0 );
+	sent.length = 0;
+	g.step( 0, local );
+	assert.equal( sent.filter( frame => frame.opcode === ITEM_MOVE_OPCODE ).length, 1, "one swap" );
+	// The server refuses the swap (the cast-lock row): the bag never changes.
+	g.receive( { opcode: 0xb06d, payload: Uint8Array.of( 2, 0x34 ) }, 1 );
+	sent.length = 0;
+	g.step( 2000, local );
+	assert.equal( sent.filter( frame => frame.opcode === ITEM_MOVE_OPCODE ).length, 0, "no second swap" );
+	assert.equal( sent.filter( frame => frame.opcode === SKILL_PRESS_OPCODE ).length, 0, "buff not cast" );
+	for ( let t = 2100; t <= 6000; t += 100 ) g.step( t, local );
+	assert.equal( sent.filter( frame => frame.opcode === ITEM_MOVE_OPCODE ).length, 0, "still no swap" );
+	const presses = sent.filter( frame => frame.opcode === SKILL_PRESS_OPCODE );
+	for ( const frame of presses ) {
+		const view = new DataView( frame.payload.buffer, frame.payload.byteOffset, frame.payload.byteLength );
+		assert.equal( view.getUint32( 2, true ), ATTACK, "the refused buff must not starve the attack step" );
+	}
+	assert.ok( presses.length >= 1, "the attack step still runs" );
+	g.dispose();
+});
+
+test("a bound weapon swap for a buff lands and the buff casts (#4697)", () => {
+	/** @type {{ opcode: number, payload: Uint8Array }[]} */
+	const sent = [];
+	const entities = new Map();
+	const local = {
+		gid: LOCAL_GID,
+		refObjId: 1907,
+		kind: /** @type {const} */ ("local-player"),
+		name: "macro",
+		countryByte9c: 0,
+		regionId: 257,
+		x: 0,
+		y: 0,
+		z: 0,
+		heading: 0,
+		appearanceState: [ 1, 0, 0 ]
+	};
+	entities.set( LOCAL_GID, local );
+	const g = createGameplay( f => sent.push( f ), () => {}, () => {}, gid => entities.get( gid ) );
+	g.bootstrap( {
+		character: {
+			hp: 100,
+			mp: 100,
+			maxHp: 100,
+			maxMp: 100,
+			skills: [ BUFF ],
+			autoPotion: { hp: 0x3211, mp: 0x3212, cure: 0x13, timing: 0x8a }
+		},
+		refSkillSnapshot: [
+			skillRef( BUFF, { actionMs: 100, admit: SWORD_ADMIT } )
+		],
+		refItemSnapshot: [
+			{ refObjId: WEAPON_REF, typeFlags: WEAPON_TYPE, nativeFields: {} },
+			{ refObjId: OTHER_WEAPON_REF, typeFlags: OTHER_WEAPON_TYPE, nativeFields: {} }
+		],
+		equipItems: [
+			{ slot: 6, refObjId: OTHER_WEAPON_REF, body: weaponBody( OTHER_WEAPON_REF ) },
+			{ slot: 14, refObjId: WEAPON_REF, body: weaponBody( WEAPON_REF ) }
+		]
+	} );
+	g.worldReady();
+	g.seed( local );
+	g.experimental( experimentalGameplay( experimentalOptions( { sroMacro: true } ) ) );
+	g.receive(
+		macroReplay( {
+			skillOn: 1,
+			skillFlags: [ 0, 0, 14, 0 ],
+			buff: [ { slot: 0, skill: BUFF } ],
+			attack: []
+		} ),
+		0
+	);
+	sent.length = 0;
+	g.step( 0, local );
+	assert.equal( sent.filter( frame => frame.opcode === ITEM_MOVE_OPCODE ).length, 1, "one swap" );
+	// Equip confirmed: sword on socket 6, previous weapon back in the bag slot.
+	g.receive( { opcode: 0xb06d, payload: Uint8Array.of( 1, 0, 14, 6, 0, 0, 0 ) }, 1 );
+	sent.length = 0;
+	g.step( 1999, local );
+	assert.equal( sent.filter( frame => frame.opcode === SKILL_PRESS_OPCODE ).length, 0, "2000 ms re-arm" );
+	g.step( 2000, local );
+	const presses = sent.filter( frame => frame.opcode === SKILL_PRESS_OPCODE );
+	assert.equal( presses.length, 1, "buff casts after the swap" );
+	const view = new DataView(
+		presses[0].payload.buffer,
+		presses[0].payload.byteOffset,
+		presses[0].payload.byteLength
+	);
+	assert.equal( view.getUint32( 2, true ), BUFF );
+	assert.equal( sent.filter( frame => frame.opcode === ITEM_MOVE_OPCODE ).length, 0, "no second swap" );
+	g.dispose();
+});
+
 test("a bound Shield is not equipped for a weaponKinds wrong-weapon refusal", () => {
 	/** @type {{ opcode: number, payload: Uint8Array }[]} */
 	const sent = [];
