@@ -18,7 +18,7 @@ removed. A step's key covers what the step reads:
 	                module level, the Node scripts they name and the pin
 	                data beside them (codeStamp's moduleClosure), each
 	                by checkout-relative path, so a fresh freeze
-	                checkout keys the same
+	                checkout keys the same (variant_code.py)
 	its flags       the SRO_* variables named in that code, by value
 	its sources     the source roots its last run opened files under,
 	                fingerprinted as variant_stamp fingerprints them,
@@ -46,15 +46,12 @@ place would rewrite the other.
 """
 from __future__ import annotations
 
-import ast
 import builtins
 import hashlib
 import json
 import os
-import re
 import shutil
 import sys
-import sysconfig
 import time
 from pathlib import Path
 
@@ -63,6 +60,7 @@ import build_progress
 import variant_settle
 import variant_stamp
 import variant_reuse
+from variant_code import code_key, code_location, code_path, frozen_functions, is_installed_code
 from prepare_client_resources import file_digest, write_atomically
 from sro_paths import REPO_ROOT, tree_state_root
 
@@ -73,16 +71,11 @@ JOURNAL_FORMAT = "sro-variant-steps"
 JOURNAL_VERSION = 2
 JOURNAL_NAME = "variant-steps.json"
 BLOB_ROOT = "variant-blobs"
-FLAG_LITERAL = re.compile(r"SRO_[A-Z0-9_]+")
 # The chain every build starts from: the empty tree, in this format.
 EMPTY_STATE = hashlib.sha256(f"sro-variant-steps/{JOURNAL_VERSION}".encode("ascii")).hexdigest()
 # The sys.monitoring tool slot the code recorder takes while a step runs
 # (0-2 and 5 are the debugger, coverage, profiler and optimizer slots).
 CODE_TOOL = 4
-# Where interpreter and package code lives: never a step's own code.
-INSTALLED_CODE = tuple(
-	str(Path(path).resolve()) for path in {sysconfig.get_path(name) for name in ("stdlib", "platstdlib", "purelib", "platlib")}
-)
 
 
 # ================
@@ -145,119 +138,6 @@ def lay_blob(variant_root: Path, sha: str, target: Path) -> None:
 
 
 #============================================================================
-# A step's code: what it ran, and what that code names
-#============================================================================
-
-
-# ================
-# is_installed_code
-#
-# A file of the interpreter or of an installed package: pinned by the
-# toolchain, never a step's own code.
-# ================
-def is_installed_code(path: str) -> bool:
-	return path.startswith("<") or path.startswith(INSTALLED_CODE)
-
-
-# ================
-# code_location
-#
-# How the journal names one code file: repository-relative inside the
-# checkout, so a release built from a fresh freeze checkout keys every
-# step exactly as the last one did (r204i: each new rel-<sha> checkout
-# moved every key, #4251); absolute outside it.
-# ================
-def code_location(path: Path, repository_root: Path) -> str:
-	try:
-		return path.resolve().relative_to(repository_root.resolve()).as_posix()
-	except ValueError:
-		return str(path.resolve())
-
-
-# ================
-# code_path
-#
-# The file a recorded code location names under this checkout.
-# ================
-def code_path(location: str, repository_root: Path) -> Path:
-	path = Path(location)
-	return path if path.is_absolute() else repository_root / location
-
-
-# ================
-# code_key
-#
-# A digest of the step's code files, each by its location and content,
-# and of the SRO_* flags they name: the step reruns when its code changes
-# or when a flag it names moves. A file that is gone keys as gone.
-#
-# A Python file keys by its syntax tree (code_content), not its bytes: a
-# comment or a blank line is not code. ran names the files whose code the
-# step ran (record_run); every other Python file in the closure was only
-# imported, so its function bodies key as empty. The smoke's one-comment
-# edit to alexandria_npcs.py had made 22 of 28 steps stale (#4251).
-# ================
-def code_key(files: list[Path], repository_root: Path, environ, ran: frozenset[str] = frozenset()) -> str:
-	digest = hashlib.sha256()
-	flags: dict[str, str] = {}
-	for path in sorted(files, key=lambda item: code_location(item, repository_root)):
-		location = code_location(path, repository_root)
-		digest.update(location.encode("utf-8") + b"\0")
-		try:
-			content = path.read_bytes()
-		except OSError:
-			digest.update(b"gone\n")
-			continue
-		keyed = code_content(path, content, location in ran)
-		digest.update(hashlib.sha256(keyed).hexdigest().encode("ascii") + b"\n")
-		for name in FLAG_LITERAL.findall(content.decode("utf-8", "ignore")):
-			value = environ.get(name)
-			flags[name] = hashlib.sha256(value.encode("utf-8")).hexdigest() if value is not None else ""
-	for name in sorted(flags):
-		digest.update(f"flag\0{name}\0{flags[name]}\n".encode("utf-8"))
-	return digest.hexdigest()
-
-
-# ================
-# BodyStripper
-#
-# Empties every function body, leaving the def itself: its name, its
-# decorators and the defaults its arguments evaluate when the module
-# loads, which is all a module the step never ran a function of can do.
-# ================
-class BodyStripper(ast.NodeTransformer):
-	def visit_FunctionDef(self, node):
-		node.body = [ast.Pass()]
-		return node
-
-	visit_AsyncFunctionDef = visit_FunctionDef
-
-
-# ================
-# code_content
-#
-# What a code file keys by. A Python file is its syntax tree, which
-# drops comments, blank lines and layout; when its code did not run in
-# the step, the tree has its function bodies emptied (BodyStripper). The
-# recorder sees every function that starts (record_run), so a body it
-# did not see start cannot have touched the step; no step runs Python in
-# a child process (the children are Node scripts and ffmpeg, keyed as
-# bytes). A file that does not parse, and every other file, keys by its
-# bytes.
-# ================
-def code_content(path: Path, content: bytes, ran: bool) -> bytes:
-	if path.suffix != ".py":
-		return content
-	try:
-		tree = ast.parse(content)
-	except (SyntaxError, ValueError):
-		return content
-	if not ran:
-		tree = BodyStripper().visit(tree)
-	return ast.dump(tree).encode("utf-8")
-
-
-#============================================================================
 # The read log: what a run opened, and what that costs next time
 #============================================================================
 
@@ -315,11 +195,13 @@ def record_run(run):
 		_hook_installed = True
 	reads: set[str] = set()
 	ran: set[str] = set()
+	started_functions: dict[str, set[str]] = {}
 	imported: set[str] = set()
 	monitoring = sys.monitoring
 
 	def started(code, offset):
 		ran.add(code.co_filename)
+		started_functions.setdefault(code.co_filename, set()).add(code.co_qualname)
 		return monitoring.DISABLE
 
 	original_import = builtins.__import__
@@ -352,7 +234,12 @@ def record_run(run):
 
 	code = own_code(ran)
 	modules = own_code(getattr(sys.modules.get(name), "__file__", None) for name in imported) - code
-	return value, reads, sorted(code), sorted(modules)
+	functions: dict[str, set[str]] = {}
+	for path, names in started_functions.items():
+		resolved = str(Path(path).resolve())
+		if resolved in code:
+			functions.setdefault(resolved, set()).update(names)
+	return value, reads, sorted(code), sorted(modules), {path: sorted(names) for path, names in functions.items()}
 
 
 #============================================================================
@@ -615,8 +502,8 @@ class Runner:
 	# (variant_stamp.module_closures). Steps with the same record share one
 	# closure computation.
 	# ================
-	def recorded_code_key(self, ran: list[str], imported: list[str] = ()) -> str:
-		key = (tuple(ran), tuple(imported))
+	def recorded_code_key(self, ran: list[str], imported: list[str] = (), functions: dict | None = None) -> str:
+		key = (tuple(ran), tuple(imported), frozen_functions(functions))
 		if key not in self._code_keys:
 			self.key_code([key])
 		return self._code_keys[key]
@@ -630,7 +517,7 @@ class Runner:
 	# ================
 	def key_code(self, keys: list[tuple]):
 		records = []
-		for ran, imported in keys:
+		for ran, imported, _ in keys:
 			records.append((
 				[code_path(location, self.code_root) for location in ran],
 				[code_path(location, self.code_root) for location in imported],
@@ -641,7 +528,8 @@ class Runner:
 		)
 		for key, (ran, imported), closure in zip(keys, records, closures):
 			files = set(closure) | set(ran) | set(imported)
-			self._code_keys[key] = code_key(sorted(files), self.code_root, self.environ, frozenset(key[0]))
+			functions = None if key[2] is None else dict(key[2])
+			self._code_keys[key] = code_key(sorted(files), self.code_root, self.environ, frozenset(key[0]), functions)
 
 	# ================
 	# key_journal_code
@@ -653,7 +541,7 @@ class Runner:
 		keys = []
 		for entry in self.journal or []:
 			reads = entry.get("reads") or {}
-			key = (tuple(reads.get("code", [])), tuple(reads.get("imported", [])))
+			key = (tuple(reads.get("code", [])), tuple(reads.get("imported", [])), frozen_functions(reads.get("functions")))
 			if key not in self._code_keys and key not in keys:
 				keys.append(key)
 		if keys:
@@ -690,7 +578,8 @@ class Runner:
 	# keep. Compiled caches (__pycache__) follow their source and are not
 	# recorded.
 	# ================
-	def classify_reads(self, reads: set[str], code: list[str] = (), imported: list[str] = ()) -> dict:
+	def classify_reads(self, reads: set[str], code: list[str] = (), imported: list[str] = (),
+			functions: dict[str, list[str]] | None = None) -> dict:
 		own = str(self.variant.resolve())
 		checkout = self.code_root.resolve()
 		roots: set[str] = set()
@@ -715,9 +604,13 @@ class Runner:
 					(modules if path.suffix == ".py" else locations).add(code_location(path, checkout))
 			elif path.is_file():
 				files[text] = variant_stamp.file_key(path, True)
+		started = {
+			code_location(Path(path), checkout): sorted(names)
+			for path, names in (functions or {}).items() if Path(path).suffix == ".py"
+		}
 		return {
 			"roots": sorted(roots), "code": sorted(locations), "imported": sorted(modules - locations),
-			"files": files,
+			"files": files, "functions": dict(sorted(started.items())),
 		}
 
 	# ================
@@ -735,7 +628,7 @@ class Runner:
 				"roots": sorted(set(recorded_reads.get("roots", [])) | set(step["roots"])),
 			}
 		code = "unrecorded" if recorded_reads is None else self.recorded_code_key(
-			recorded_reads.get("code", []), recorded_reads.get("imported", [])
+			recorded_reads.get("code", []), recorded_reads.get("imported", []), recorded_reads.get("functions")
 		)
 		return {
 			"arguments": step["argumentsKey"], "later": later_key, "code": code,
@@ -951,9 +844,9 @@ class Runner:
 			print(f"step {step['name']}: stale: {', '.join(moved)}", flush=True)
 		arguments = step["arguments"] + later
 		before = snapshot(self.variant)
-		value, reads, code, imported = record_run(lambda: step["function"](*arguments))
+		value, reads, code, imported, functions = record_run(lambda: step["function"](*arguments))
 		effect = effect_between(self.variant, before, snapshot(self.variant))
-		classified = self.classify_reads(reads, code, imported)
+		classified = self.classify_reads(reads, code, imported, functions)
 		try:
 			encoded = encode_result(value, self.variant)
 			parts = self.key_parts(step, classified, self.state, later_key)
