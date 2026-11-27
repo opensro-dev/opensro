@@ -115,18 +115,24 @@ func TestDropGoldRefusals(t *testing.T) {
 	}
 }
 
-// A request past the ceiling is clamped first, so it is then measured against
-// the balance as the clamped amount rather than refused outright.
-func TestDropGoldClampsBeforeCheckingTheBalance(t *testing.T) {
-	balance, dropped, fault := DropGold(uint64(wire.MaxGold)+5000, wire.MaxGold+5000)
+// A request past the one-drop ceiling refuses outright, however much
+// the character holds (#4490 U6-15); exactly the ceiling drops.
+func TestDropGoldRefusesPastTheCeiling(t *testing.T) {
+	held := uint64(wire.MaxGold) + 5000
+	balance, dropped, fault := DropGold(held, wire.MaxGold+1)
+	if fault == nil || fault.Reason != "goldAmountAboveCeiling" {
+		t.Fatalf("DropGold(past the ceiling) fault = %v, want goldAmountAboveCeiling", fault)
+	}
+	if balance != held || dropped != 0 {
+		t.Fatalf("the refused drop left balance %d, dropped %d; want %d and 0", balance, dropped, held)
+	}
+
+	balance, dropped, fault = DropGold(uint64(wire.MaxGold), wire.MaxGold)
 	if fault != nil {
-		t.Fatalf("DropGold refused: %v", fault)
+		t.Fatalf("DropGold(exactly the ceiling) refused: %v", fault)
 	}
-	if dropped != wire.MaxGold {
-		t.Fatalf("dropped = %d, want the clamped %d", dropped, wire.MaxGold)
-	}
-	if balance != 5000 {
-		t.Fatalf("balance = %d, want 5000", balance)
+	if dropped != wire.MaxGold || balance != 0 {
+		t.Fatalf("the ceiling drop left balance %d, dropped %d; want 0 and %d", balance, dropped, wire.MaxGold)
 	}
 }
 

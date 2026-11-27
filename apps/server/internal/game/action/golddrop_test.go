@@ -61,6 +61,54 @@ func TestGoldDropMissingTierRowKeepsTheBalance(t *testing.T) {
 	})
 }
 
+/*
+================
+TestGoldDropPastTheCeilingRefuses
+
+One drop may not pass the native ceiling: asking for more refuses
+with the generic code, the balance is untouched and no heap spawns,
+however much the character holds. Exactly the ceiling drops
+(#4490 U6-15).
+================
+*/
+func TestGoldDropPastTheCeilingRefuses(t *testing.T) {
+	character := testCharacter()
+	*character.Gold = 200_000_000
+	items := testItems()
+	items["ITEM_ETC_GOLD_03"] = items["ITEM_ETC_GOLD_02"]
+	items["ITEM_ETC_GOLD_03"].RefObjID = 63
+	items["ITEM_ETC_GOLD_03"].Codename = "ITEM_ETC_GOLD_03"
+	items["ITEM_ETC_GOLD_03"].TypeIDs = [4]int64{3, 3, 5, 3}
+	rt, _ := newTestRuntime(character, items)
+
+	// Raw bytes: the client encoder clamps at the ceiling, so only a
+	// composed packet ever asks for more.
+	overCap := wire.NewWriter(5).U8(wire.MoveTypeGoldDrop).U32(wire.MaxGold + 1).Payload()
+	result := rt.HandleItemMove(testDivision, character, overCap)
+	assertOpcodes(t, result.Frames, wire.OpItemMoveResponse)
+	if got := result.Frames[0].Payload; got[0] != 0x02 || got[1] != wire.ErrCodeInvalidRequest {
+		t.Fatalf("refusal = % X, want [02 02] invalid-request", got)
+	}
+	if *character.Gold != 200_000_000 {
+		t.Fatalf("gold = %d, want the untouched 200000000", *character.Gold)
+	}
+	if rt.Ground.Count(testDivision) != 0 {
+		t.Fatal("a refused gold drop spawned a heap")
+	}
+
+	result = rt.HandleItemMove(testDivision, character, encodeMove(t, wire.ItemMoveRequest{
+		MovementType: wire.MoveTypeGoldDrop,
+		GoldAmount:   wire.MaxGold,
+	}))
+	if got := result.Frames[0].Payload; got[0] != 0x01 {
+		t.Fatalf("the ceiling drop answered % X, want success", got)
+	}
+	if *character.Gold != 100_000_000 || rt.Ground.Count(testDivision) != 1 {
+		t.Fatalf("after the ceiling drop: gold %d, heaps %d; want 100000000 and 1",
+			*character.Gold, rt.Ground.Count(testDivision))
+	}
+}
+
 func TestGroundIdentityExhaustionDoesNotDebitCharacter(t *testing.T) {
 	tests := []struct {
 		name    string
