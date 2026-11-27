@@ -12,7 +12,7 @@ older server that names no maturity keeps the native seven days.
 import "../helpers/native-source-loader.mjs";
 import { test } from "node:test";
 import assert from "node:assert/strict";
-const { deletionWindowMs } = await import( "../../src/engine/runtime/ui/title/title.ts" );
+const { deletionWindowMs } = await import( "../../src/engine/runtime/ui/title/deletion-window.ts" );
 
 const DAY_MS = 24 * 3600000;
 
