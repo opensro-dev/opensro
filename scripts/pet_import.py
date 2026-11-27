@@ -62,6 +62,8 @@ import cap110_items as items
 import import_vsro_alexandria as tables
 import published_ids
 import later_world_import
+import mall_avatar_import as mall_authoring
+import mall_tables as mall
 import skilldata_enc as skill_tables
 from pin_file import read_pin_field
 from prepare_client_resources import safe_target, write_atomically
@@ -107,6 +109,15 @@ ARCHIVE_SOURCE = {"name": "archive", "char_shard": "characterdata_150000.txt", "
 SOURCES = (VSRO_SOURCE, V1696_SOURCE, ARCHIVE_SOURCE)
 
 EXCLUDED_PREFIXES = ("COS_GUARD_", "COS_GUILD_")
+# The Item Mall tab each lane's summon scrolls list on: v1.150's own pet
+# tabs (refshoptab). Fellows fight like attack pets and share their tab.
+# Owner 2026-11-27: every new pet sells, native or not.
+MALL_TAB = {
+	"pickup": "MALL_PET_B_SILK", "attack": "MALL_PET_A_GROWTH", "fellow": "MALL_PET_A_GROWTH",
+	"transport": "MALL_PET_D_CART", "vehicle": "MALL_PET_C_VEHICLE",
+}
+# Event copies are rewards, not goods: their scrolls never list.
+EVENT_SCROLL_PREFIX = "ITEM_EVENT_"
 LEVEL_SUFFIX = re.compile(r"_\d+$")
 # Kinds the server's COS lanes already run (the summoning, pickup, growth,
 # transport, riding and fellow lanes); anything else defers until its
@@ -425,6 +436,7 @@ def _drop_manifest_line(output, manifest_name, shard):
 
 def remove_import(output, source):
 	text_root = Path(output) / TEXT_ROOT
+	mall.strip_mall(Path(output), set(read_marker(output, source).get("mall", {}).get("packages", [])))
 	for manifest_name, shard in (("characterdata.txt", source["char_shard"]), ("itemdata.txt", source["item_shard"])):
 		_drop_manifest_line(output, manifest_name, shard)
 		(text_root / shard).unlink(missing_ok=True)
@@ -531,6 +543,81 @@ def _merge_name_text(output, char_rows, item_rows, later_text, report):
 	report["missingNameText"] = sorted(wanted - {row[1] for row in texts})
 
 
+# ================
+# tab_price
+#
+# The silk price most of a tab's goods carry in the built tree: an
+# imported pet takes the price its own tab already asks (inferred: no
+# mall lists these pets natively, so the tab's common price is the one
+# a player of that tab expects). None when the tab sells nothing.
+# ================
+def tab_price(current, tab):
+	packages = {row[3] for row in current["refshopgoods.txt"] if len(row) > 3 and row[2] == tab}
+	prices = collections.Counter(
+		row[mall.MALL_PRICE_AMOUNT - 1] for row in current["refpricepolicyofitem.txt"]
+		if len(row) > mall.MALL_PRICE_AMOUNT - 1 and row[2] in packages and row[3] == mall.SILK_CURRENCY
+	)
+	return prices.most_common(1)[0][0] if prices else None
+
+
+# ================
+# _list_in_mall
+#
+# The imported summon scrolls in the Item Mall: one authored package per
+# scroll on its lane's pet tab, at the tab's price, in slots past the
+# tab's last. A rebuild first strips what this source listed before
+# (its marker's mall packages). A scroll some package already sells, an
+# event copy, a full tab or a tab without a price is reported unlisted.
+# ================
+def _list_in_mall(output, native, item_rows, report, prior):
+	output = Path(output)
+	mall.strip_mall(output, set(prior.get("mall", {}).get("packages", [])))
+	files = {name: safe_target(output / TEXT_ROOT, name) for name, _ in mall.MALL_TABLES}
+
+	def raw(name):
+		if files[name].exists():
+			return files[name].read_bytes()
+		path = Path(native) / TEXT_ROOT / name
+		return path.read_bytes() if path.exists() else None
+
+	if any(raw(name) is None for name, _ in mall.MALL_TABLES):
+		report["mall"] = {"packages": [], "listed": 0, "unlisted": [], "note": "no mall tables in the tree"}
+		return
+	current = {name: tables.table_rows(raw(name)) for name, _ in mall.MALL_TABLES}
+	kind_of_scroll = {code: added["kind"] for added in report.get("added", []) for code in added.get("scrolls", [])}
+	sold = {row[3] for row in current["refscrapofpackageitem.txt"] if len(row) > 3}
+	slots = collections.defaultdict(lambda: -1)
+	for row in current["refshopgoods.txt"]:
+		if len(row) > 4 and row[4].lstrip("-").isdigit():
+			slots[row[2]] = max(slots[row[2]], int(row[4]))
+	rows = {name: [] for name, _ in mall.MALL_TABLES}
+	ids = mall_authoring.AuthoredIds(
+		{name: [] for name, _ in mall.MALL_TABLES}, current,
+		{int(row[2]) for row in current["refpackageitem.txt"] if len(row) > 2 and row[2].isdigit()})
+	packages, unlisted = [], []
+	for row in sorted(item_rows, key=lambda row: row[items.CODENAME]):
+		code = row[items.CODENAME]
+		tab = MALL_TAB.get(kind_of_scroll.get(code, ""))
+		price = tab_price(current, tab) if tab else None
+		if code.startswith(EVENT_SCROLL_PREFIX):
+			unlisted.append({"code": code, "reason": "event copy"})
+		elif code in sold:
+			unlisted.append({"code": code, "reason": "already sold"})
+		elif price is None:
+			unlisted.append({"code": code, "reason": f"no priced tab for {kind_of_scroll.get(code, 'its kind')}"})
+		elif slots[tab] + 1 >= mall.MALL_SLOTS:
+			unlisted.append({"code": code, "reason": f"{tab} is full"})
+		else:
+			slots[tab] += 1
+			package = mall_authoring.author_package(rows, row, ids, price)
+			rows["refshopgoods.txt"].append(["1", mall.NATIVE_SOURCE, tab, package, str(slots[tab])] + ["-1", items.UNUSED] * 4)
+			packages.append(package)
+	for name, _ in mall.MALL_TABLES:
+		if rows[name]:
+			write_atomically(files[name], characters.append_rows(raw(name), rows[name]))
+	report["mall"] = {"packages": packages, "listed": len(packages), "unlisted": unlisted}
+
+
 def _write_pass(output, source, char_rows, item_rows, report):
 	text_root = Path(output) / TEXT_ROOT
 	if char_rows:
@@ -611,6 +698,7 @@ def add_pets(root, native, output, source=VSRO_SOURCE, earlier_codes=(), env=os.
 		_merge_name_text(output, char_rows, item_rows, later_text, report)
 	report["_prior"] = prior
 	_copy_icons(root, native, output, char_rows + item_rows, report)
+	_list_in_mall(output, native, item_rows, report, prior)
 	return _write_pass(output, source, char_rows, item_rows, report)
 
 
@@ -674,6 +762,7 @@ def add_archive_pets(native, output, earlier_codes=(), env=os.environ):
 			target = safe_target(output / "Data_extracted", data_index[key].path)
 			if not target.exists():
 				write_atomically(target, sro_pk2.payload(data, data_index[key]))
+	_list_in_mall(output, native, item_rows, report, prior)
 	return _write_pass(output, ARCHIVE_SOURCE, char_rows, item_rows, report)
 
 

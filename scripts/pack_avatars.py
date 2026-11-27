@@ -1,7 +1,7 @@
 """
 ===========================================================================
 
-pack_avatars.py - pack a newer client's exported avatars into one archive
+pack_avatars.py - pack a newer client's exported avatars and pets into one archive
 
 Port-only, not native (owner ask #3254). Reads an already-extracted client
 export (tables and resources on disk, nothing executed) and writes the
@@ -20,6 +20,14 @@ or when any file of the model's closure is missing. Only files the
 native tree lacks are packed; the build resolves the rest natively, so
 the same archive serves every build of this client.
 
+The export's pets ride the same archive (owner 2026-11-27: every new pet,
+native or not). pet_import.py's own selection decides which kinds
+qualify, so the packer and the importer never disagree; the packer then
+keeps those kinds' original rows - character rows, summon scrolls, the
+skill rows their DefaultSkillIDs name and their name texts - and leaves
+the identities to the importer. A kind whose resource closure fails is
+dropped and reported, like an avatar.
+
 ===========================================================================
 """
 import argparse
@@ -36,6 +44,8 @@ import cap110_item_import as shared
 import cap110_items as items
 import import_vsro_alexandria as tables
 import mall_avatar_import as importer
+import pet_import as pets
+import skilldata_enc as skill_tables
 import sro_pk2
 from sro_paths import EXTRACTED_ROOT, REPO_ROOT
 
@@ -44,6 +54,12 @@ TEXT_TABLES = ("textdata_equip&skill.txt", "textdata_object.txt", "textdata_new.
 # The top-level folders an avatar's closure can touch in the flattened
 # export tree; effect programs (.efp) are indexed wherever they sit.
 RESOURCE_FOLDERS = ("res", "prim", "icon", "icon64", "server_dep", "effect", "slot_effect")
+# The pet shards, clear of the importer's own outputs (pet_import
+# ARCHIVE_SOURCE writes the *_150000 shards) and named so each manifest
+# reader accepts them (skilldata_enc.SHARD_NAME).
+PET_CHAR_SHARD = "characterdata_150001.txt"
+PET_ITEM_SHARD = "itemdata_150001.txt"
+PET_SKILL_SHARD = "skilldata_150001.txt"
 
 
 # ================
@@ -341,6 +357,83 @@ def table_bytes(rows):
 
 
 # ================
+# model_path
+#
+# A character row's model cell as a res/ path (the cells use backslashes).
+# ================
+def model_path(row):
+	return row[pets.CHAR_MODEL].replace("\\", "/").lower() if len(row) > pets.CHAR_MODEL else ""
+
+
+# ================
+# pack_pets
+#
+# The export's pets, as pet_import selects them: (character rows, scroll
+# rows, skill rows, resource entries, report). Selection runs on the
+# export's own tables against the native tree; each chosen family's
+# original rows are kept, and its model and scroll icons are closed over
+# like an avatar's, one family at a time so one broken closure drops one
+# family. closure is a seam for tests.
+# ================
+def pack_pets(archives, native, closure=None):
+	closure = closure or shared.copy_resource_closure
+	media, index = archives["Media"]
+	_data, data_index = archives["Data"]
+	if tables.TEXTDATA + "characterdata.txt" not in index:
+		return [], [], [], {}, {"families": [], "excluded": []}
+	later_chars, later_items, _text = pets.later_tables_from_media(media, index, object_text_required=False)
+	native_chars, native_items = pets.native_tables(native)
+
+	def missing(family, rows):
+		for row in rows:
+			model = model_path(row)
+			if not model or not ((Path(native) / "Data_extracted" / "res" / model).exists() or f"res/{model}" in data_index):
+				return ["model"]
+		return []
+
+	_rows, _items, selection = pets.select_pets(native_chars, native_items, set(), later_chars, later_items, missing=missing)
+	char_rows, item_rows, entries, families, excluded = [], [], {}, [], list(selection["skipped"])
+	for added in selection["added"]:
+		family = added["family"]
+		rows = [row for row in later_chars if len(row) > pets.CHAR_CODE and pets.family_of(row[pets.CHAR_CODE]) == family]
+		codes = set(added["scrolls"])
+		scrolls = [normalize_item_row(row) for row in later_items if row[items.CODENAME] in codes]
+		if any(row is None for row in scrolls):
+			excluded.append({"family": family, "missing": ["scroll row wider than the native layout"]})
+			continue
+		pending = {("Data", "res/" + model_path(row)) for row in rows}
+		pending |= items.direct_assets(scrolls)
+		try:
+			with tempfile.TemporaryDirectory() as staging:
+				records = closure(pending, native, Path(staging), archives)
+				found = {
+					f"{record['archive'].lower()}/{record['path']}":
+						(Path(staging) / shared.FOLDERS[record["archive"]] / record["path"]).read_bytes()
+					for record in records if record["source"] == "later"
+				}
+		except ValueError as error:
+			excluded.append({"family": family, "missing": [str(error)]})
+			continue
+		entries.update(found)
+		char_rows += rows
+		item_rows += scrolls
+		families.append(family)
+	needed = {
+		value for row in char_rows for value in row[pets.CHAR_DEFAULT_SKILL1:pets.CHAR_DEFAULT_SKILL_N + 1]
+		if value.isdigit() and int(value)
+	}
+	skill_rows = []
+	if needed:
+		def read(name):
+			return tables.table_text(media, index, name.lower())
+
+		def has(name):
+			return tables.TEXTDATA + name.lower() in index
+		skill_rows = [row for row in skill_tables.client_skill_rows(read, has) if len(row) > 3 and row[1] in needed]
+	return char_rows, item_rows, skill_rows, entries, {"families": families, "excluded": excluded}
+
+
+# ================
 # pack
 #
 # The whole pack: select, screen, close over the resources, then write
@@ -398,6 +491,7 @@ def pack(export_root, native, output, screen=screen_models, completeness=closure
 	surviving, dropped = completeness(surviving, archives, natives)
 	excluded += dropped
 	final = surviving
+	pet_chars, pet_items, pet_skills, pet_entries, pet_report = pack_pets(archives, native)
 	with tempfile.TemporaryDirectory() as staging:
 		records = shared.copy_asset_closure(final, native, Path(staging), archives)
 		entries = {}
@@ -406,14 +500,24 @@ def pack(export_root, native, output, screen=screen_models, completeness=closure
 				continue
 			raw = (Path(staging) / shared.FOLDERS[record["archive"]] / record["path"]).read_bytes()
 			entries[f"{record['archive'].lower()}/{record['path']}"] = raw
-	wanted = {row[column] for row in final for column in (items.NAME_KEY, items.DESCRIPTION_KEY)} - {items.UNUSED, ""}
+	entries.update(pet_entries)
+	wanted = {row[column] for row in final + pet_items for column in (items.NAME_KEY, items.DESCRIPTION_KEY)}
+	wanted |= {row[pets.CHAR_NAME_KEY] for row in pet_chars if len(row) > pets.CHAR_NAME_KEY}
+	wanted -= {items.UNUSED, ""}
 	per_table = {name: [] for name in TEXT_TABLES}
 	for key in sorted(wanted):
 		if key in texts:
 			name, converted = texts[key]
 			per_table[name].append(converted)
-	entries["media/" + tables.TEXTDATA + "itemdata.txt"] = table_bytes([[SHARD_NAME]])
+	entries["media/" + tables.TEXTDATA + "itemdata.txt"] = table_bytes([[SHARD_NAME]] + ([[PET_ITEM_SHARD]] if pet_items else []))
 	entries["media/" + tables.TEXTDATA + SHARD_NAME] = table_bytes(final)
+	if pet_chars:
+		entries["media/" + tables.TEXTDATA + PET_ITEM_SHARD] = table_bytes(pet_items)
+		entries["media/" + tables.TEXTDATA + "characterdata.txt"] = table_bytes([[PET_CHAR_SHARD]])
+		entries["media/" + tables.TEXTDATA + PET_CHAR_SHARD] = table_bytes(pet_chars)
+	if pet_skills:
+		entries["media/" + tables.TEXTDATA + skill_tables.PLAIN_MANIFEST] = table_bytes([[PET_SKILL_SHARD]])
+		entries["media/" + tables.TEXTDATA + PET_SKILL_SHARD] = table_bytes(pet_skills)
 	for name in TEXT_TABLES:
 		entries["media/" + tables.TEXTDATA + name] = table_bytes(per_table[name])
 	output = Path(output)
@@ -422,6 +526,7 @@ def pack(export_root, native, output, screen=screen_models, completeness=closure
 	return {
 		"format": "opensro-avatars-pack-v1", "portOnly": True,
 		"rows": len(final), "excluded": sorted(excluded, key=lambda entry: entry["code"]),
+		"pets": pet_report["families"], "petsExcluded": pet_report["excluded"],
 		"files": len(entries), "bytes": output.stat().st_size,
 		"sha256": sro_pk2.digest(output.read_bytes()),
 	}
@@ -439,6 +544,9 @@ def main():
 	args = parser.parse_args()
 	report = pack(args.export_root, args.native_extracted, args.output)
 	print(f"Avatars packed: {report['rows']}; excluded: {len(report['excluded'])}")
+	print(f"Pets packed: {len(report['pets'])}; excluded: {len(report['petsExcluded'])}")
+	for entry in report["petsExcluded"]:
+		print(f"  excluded pet {entry['family']}: {', '.join(entry['missing'])}")
 	for entry in report["excluded"]:
 		print(f"  excluded {entry['code']}: {', '.join(entry['missing'])}")
 	print(f"Archive: {args.output} ({report['files']} entries, {report['bytes']} bytes)")

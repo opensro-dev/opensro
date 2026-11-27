@@ -20,11 +20,15 @@ from unittest.mock import patch
 import zipfile
 
 import cap110_items as items  # noqa: E402
+import hashlib
+import os
+import pet_import  # noqa: E402
 import mall_avatar_import as importer  # noqa: E402
 import pack_avatars as packer  # noqa: E402
 import sro_pk2  # noqa: E402
 from test_cap110_items import utf16  # noqa: E402
 from test_mall_avatar_import import avatar, native_row  # noqa: E402
+from test_pet_import import char_row, native_wolf, scroll  # noqa: E402
 
 FIRST_ID = 24371
 GOOD = "ITEM_CREDDY_AVATAR_M_SUIT"
@@ -230,6 +234,123 @@ class PackTests(unittest.TestCase):
 			with self.assertRaises(SystemExit):
 				packer.avatar_archive.open_archive(output, pin)
 			self.assertEqual(sro_pk2.digest(output.read_bytes()), report["sha256"])
+
+
+# ================
+# fake_pet_closure
+#
+# Stands in for the resource closure: the model each request names is
+# a later file, except a family whose model is "cos\\cat.bsr", whose
+# closure fails as a missing texture would.
+# ================
+def fake_pet_closure(pending, native, staging, archives):
+	if ("Data", "res/cos/cat.bsr") in pending:
+		raise ValueError("missing Data resource: res/cos/cat.ddj")
+	records = []
+	for archive, path in sorted(pending):
+		if archive != "Data" or not path.endswith(".bsr"):
+			continue
+		target = staging / packer.shared.FOLDERS[archive] / path
+		target.parent.mkdir(parents=True, exist_ok=True)
+		target.write_bytes(b"model")
+		records.append({"archive": archive, "path": path, "source": "later", "sha256": "x"})
+	return records
+
+
+class PetPackTests(unittest.TestCase):
+	# ================
+	# stage
+	#
+	# The avatar export plus four pet kinds: a fresh dog, a cat whose
+	# closure fails, a bird with no model in either tree, and the native
+	# wolf. The native tree carries the wolf.
+	# ================
+	def stage(self, root):
+		export, native = PackTests.stage(self, root)
+		text_root = export / "server_dep" / "silkroad" / "textdata"
+		(export / "res" / "cos").mkdir(parents=True)
+		(export / "res" / "cos" / "newpet.bsr").write_bytes(b"dog")
+		(export / "res" / "cos" / "cat.bsr").write_bytes(b"cat")
+		chars = [
+			char_row("COS_P_DOG", 9001),
+			char_row("COS_P_CAT", 9003, model="cos\\cat.bsr"),
+			char_row("COS_P_BIRD", 9005, model="cos\\bird.bsr"),
+			char_row("COS_P_WOLF_001", 6106),
+		]
+		scrolls = [scroll("ITEM_PET_DOG", 9002, "COS_P_DOG"), scroll("ITEM_PET_CAT", 9004, "COS_P_CAT"),
+			scroll("ITEM_PET_BIRD", 9006, "COS_P_BIRD"), scroll("ITEM_PET_WOLF", 3000, "COS_P_WOLF")]
+		(text_root / "characterdata.txt").write_bytes(utf16([["CharacterData_5000.txt"]]))
+		(text_root / "CharacterData_5000.txt").write_bytes(utf16(chars))
+		(text_root / "itemdata.txt").write_bytes(utf16([["ItemData_5000.txt"], ["ItemData_9000.txt"]]))
+		(text_root / "ItemData_9000.txt").write_bytes(utf16(scrolls))
+		texts = importer.tables.table_rows((text_root / "textdata_object.txt").read_bytes())
+		texts += [export_text("SN_" + code, code.title()) for code in ("COS_P_DOG", "ITEM_PET_DOG", "COS_P_CAT", "ITEM_PET_CAT")]
+		(text_root / "textdata_object.txt").write_bytes(utf16(texts))
+		wolf_chars, wolf_items = native_wolf()
+		base = native / importer.TEXT_ROOT
+		(base / "characterdata.txt").write_bytes(utf16([["characterdata_5000.txt"]]))
+		(base / "characterdata_5000.txt").write_bytes(utf16(wolf_chars))
+		rows = importer.tables.table_rows((base / "itemdata_5000.txt").read_bytes())
+		(base / "itemdata_5000.txt").write_bytes(utf16(rows + wolf_items))
+		return export, native
+
+	# ================
+	# pack
+	# ================
+	def pack(self, folder):
+		export, native = self.stage(Path(folder))
+		output = Path(folder) / "opensro_avatars.zip"
+		with patch.object(packer.shared, "copy_asset_closure", fake_copy), \
+				patch.object(packer.shared, "copy_resource_closure", fake_pet_closure):
+			report = packer.pack(export, native, output, screen=fake_screen(set()), completeness=fake_completeness())
+		return native, output, report
+
+	# ================
+	# test_pets_ride_the_archive_as_the_importer_selects_them
+	# ================
+	def test_pets_ride_the_archive_as_the_importer_selects_them(self):
+		with tempfile.TemporaryDirectory() as folder:
+			_native, output, report = self.pack(folder)
+			self.assertEqual(report["pets"], ["COS_P_DOG"])
+			excluded = {entry["family"]: entry["missing"] for entry in report["petsExcluded"]}
+			self.assertEqual(excluded["COS_P_CAT"], ["missing Data resource: res/cos/cat.ddj"])
+			self.assertEqual(excluded["COS_P_BIRD"], ["model"])
+			self.assertNotIn("COS_P_WOLF", excluded)
+			text = "media/" + importer.tables.TEXTDATA
+			with zipfile.ZipFile(output) as archive:
+				names = archive.namelist()
+				chars = importer.tables.table_rows(archive.read(text + packer.PET_CHAR_SHARD))
+				scrolls = importer.tables.table_rows(archive.read(text + packer.PET_ITEM_SHARD))
+				manifest = importer.tables.table_rows(archive.read(text + "itemdata.txt"))
+				texts = importer.tables.table_rows(archive.read(text + "textdata_object.txt"))
+			self.assertEqual([row[pet_import.CHAR_CODE] for row in chars], ["COS_P_DOG"])
+			# The original identity rides; the importer assigns the built one.
+			self.assertEqual(chars[0][pet_import.CHAR_ID], "9001")
+			self.assertEqual([row[items.CODENAME] for row in scrolls], ["ITEM_PET_DOG"])
+			self.assertEqual([row[0] for row in manifest], [packer.SHARD_NAME, packer.PET_ITEM_SHARD])
+			self.assertIn("data/res/cos/newpet.bsr", names)
+			self.assertNotIn("data/res/cos/cat.bsr", names)
+			self.assertTrue({"SN_COS_P_DOG", "SN_ITEM_PET_DOG"} <= {row[1] for row in texts})
+
+	# ================
+	# test_the_importer_takes_the_packed_pet
+	#
+	# End to end: the packed archive, pinned, is what pet_import's archive
+	# pass reads, and it imports the dog.
+	# ================
+	def test_the_importer_takes_the_packed_pet(self):
+		with tempfile.TemporaryDirectory() as folder:
+			native, output, _report = self.pack(folder)
+			pin = Path(folder) / "pins.json"
+			pin.write_text(json.dumps({"format": importer.AVATARS_PIN_FORMAT,
+				"sha256": hashlib.sha256(output.read_bytes()).hexdigest()}), encoding="utf-8")
+			staged = Path(folder) / "staged"
+			staged.mkdir()
+			with patch.object(pet_import, "AVATARS_PIN_FILE", pin), \
+					patch.dict(os.environ, {pet_import.AVATARS_ENV: str(output)}, clear=True):
+				imported = pet_import.add_archive_pets(native, staged)
+			self.assertEqual([kind["family"] for kind in imported["added"]], ["COS_P_DOG"])
+			self.assertTrue((staged / "Data_extracted" / "res" / "cos" / "newpet.bsr").exists())
 
 
 if __name__ == "__main__":

@@ -264,6 +264,67 @@ class ArchiveTests(unittest.TestCase):
 			self.assertFalse(removed["enabled"])
 			self.assertFalse((text_root / importer.ARCHIVE_SOURCE["char_shard"]).exists())
 
+	# ================
+	# _mall
+	#
+	# A native mall whose pickup tab sells two goods at 88 silk and whose
+	# growth tab one at 130: an imported pet lists at its tab's price.
+	# ================
+	def _mall(self, root):
+		text_root = root / importer.TEXT_ROOT
+		none = ["-1", items.UNUSED] * 4
+		goods = [["1", "11", "MALL_PET_B_SILK", "PACKAGE_A", "4"] + none,
+			["1", "11", "MALL_PET_B_SILK", "PACKAGE_B", "7"] + none,
+			["1", "11", "MALL_PET_A_GROWTH", "PACKAGE_C", "0"] + none]
+		prices = [["1", "11", "PACKAGE_A", "2", "88"] + none, ["1", "11", "PACKAGE_B", "2", "88"] + none,
+			["1", "11", "PACKAGE_C", "2", "130"] + none]
+		packages = [["1", "11", str(500 + n), name, "0"] + none for n, name in enumerate(("PACKAGE_A", "PACKAGE_B", "PACKAGE_C"))]
+		scraps = [["1", "11", name, "ITEM_" + name] + none for name in ("PACKAGE_A", "PACKAGE_B", "PACKAGE_C")]
+		for name, rows in (("refshopgoods.txt", goods), ("refpricepolicyofitem.txt", prices),
+				("refpackageitem.txt", packages), ("refscrapofpackageitem.txt", scraps)):
+			(text_root / name).write_bytes(importer._encode(rows))
+
+	# ================
+	# test_an_imported_pet_sells_on_its_tab_and_leaves_with_the_import
+	#
+	# Owner 2026-11-27: every new pet sells. The dog's scroll lists on
+	# the pickup tab past its last slot at the tab's price; the event copy
+	# of the same pet does not; unsetting the archive takes the listing
+	# out again.
+	# ================
+	def test_an_imported_pet_sells_on_its_tab_and_leaves_with_the_import(self):
+		with tempfile.TemporaryDirectory() as folder:
+			base = Path(folder)
+			native, output = base / "native", base / "out"
+			self._tree(native, *native_wolf())
+			self._mall(native)
+			output.mkdir()
+			zip_path, pin_path = self._archive(base, self._entries(
+				[char_row("COS_P_DOG", 9001)],
+				[scroll("ITEM_PET_DOG", 9002, "COS_P_DOG"), scroll("ITEM_EVENT_PET_DOG", 9003, "COS_P_DOG")]))
+			report = self._run(zip_path, pin_path, native, output)
+			self.assertEqual(report["added"][0]["kind"], "pickup")
+			self.assertEqual(report["mall"]["packages"], ["PACKAGE_ITEM_PET_DOG"])
+			self.assertEqual(report["mall"]["unlisted"], [{"code": "ITEM_EVENT_PET_DOG", "reason": "event copy"}])
+			text_root = output / importer.TEXT_ROOT
+
+			def rows(name):
+				return importer.tables.table_rows((text_root / name).read_bytes())
+
+			listed = [row for row in rows("refshopgoods.txt") if row[3] == "PACKAGE_ITEM_PET_DOG"]
+			self.assertEqual([row[2] for row in listed], ["MALL_PET_B_SILK"])
+			self.assertEqual(listed[0][4], "8")
+			price = [row for row in rows("refpricepolicyofitem.txt") if row[2] == "PACKAGE_ITEM_PET_DOG"]
+			self.assertEqual([(row[3], row[4]) for row in price], [("2", "88")])
+			scrap = [row for row in rows("refscrapofpackageitem.txt") if row[2] == "PACKAGE_ITEM_PET_DOG"]
+			self.assertEqual([row[3] for row in scrap], ["ITEM_PET_DOG"])
+			# A rebuild lists it once, not twice.
+			self._run(zip_path, pin_path, native, output)
+			self.assertEqual(len([row for row in rows("refshopgoods.txt") if row[3] == "PACKAGE_ITEM_PET_DOG"]), 1)
+			self._run(zip_path, pin_path, native, output, env={})
+			self.assertFalse([row for row in rows("refshopgoods.txt") if row[3] == "PACKAGE_ITEM_PET_DOG"])
+			self.assertEqual(len(rows("refshopgoods.txt")), 3)
+
 	def test_an_archive_with_the_wrong_sha256_is_refused(self):
 		with tempfile.TemporaryDirectory() as folder:
 			base = Path(folder)
