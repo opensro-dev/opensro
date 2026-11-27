@@ -21,7 +21,6 @@ apps/client-next/src/engine/foundation/animation/impact-source.ts
 apps/client-next/src/engine/foundation/animation/item-effect-clock.ts
 apps/client-next/src/engine/foundation/animation/locomotion-blend.ts
 apps/client-next/src/engine/foundation/animation/model-animation.ts
-apps/client-next/src/engine/foundation/animation/native-clip.ts
 apps/client-next/src/engine/foundation/animation/one-shot-layers.ts
 apps/client-next/src/engine/foundation/animation/orb-mover.ts
 apps/client-next/src/engine/foundation/animation/palette-bindings.ts
@@ -322,6 +321,5 @@ scripts/test/mission/minimapArtCoverage.test.mjs
 scripts/test/mission/missionMinimapBuild.test.mjs
 scripts/test/suites/cif.mjs
 scripts/test/suites/index.mjs
-scripts/test/suites/region.mjs
 scripts/test/world/authoredWorldRegionResources.test.mjs
 scripts/test/world/worldMapImageReferences.test.mjs

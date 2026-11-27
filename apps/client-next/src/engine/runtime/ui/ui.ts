@@ -12382,8 +12382,8 @@ export function createUi( ports: UiPorts ) {
 				// tier's weight (noticeBannerRow); every other notice on
 				// this row keeps the native plate untouched. A reinforcement
 				// success wears the later client's violet plate (#3260)
-				// while its art is published, at that client's y 190
-				// (CENTRE_ROW_Y, BUG-100).
+				// while its art is published, on the same notice row as
+				// every other line (NOTICE_ROW_Y).
 				const noticeRow = noticeBannerRow(
 					notificationBanner,
 					centreBannerPaths.every( p => !!resources.size( p ) )

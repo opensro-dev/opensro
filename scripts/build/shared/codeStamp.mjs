@@ -31,6 +31,7 @@ import { fileURLToPath } from "node:url";
 import { generatedPath } from "../../lib/generatedRoot.mjs";
 import { writeStateFile } from "./stateFile.mjs";
 import { rebuildRoot } from "../world/paths.mjs";
+import { scriptKeys } from "./scriptReach.mjs";
 
 // Static and dynamic imports with a relative specifier.
 const RELATIVE_IMPORT = /(?:\bfrom\s*|\bimport\s*\(\s*|\bimport\s+)["'](\.{1,2}\/[^"']+)["']/g;
@@ -125,6 +126,35 @@ export async function moduleClosures( records, repositoryRoot = rebuildRoot ) {
 
 /*
 ================
+moduleClosureKeys
+
+moduleClosures with what each closure's Node scripts can reach
+(scriptReach.mjs): per record, { files, scripts }, scripts mapping a
+script to its reached digest and flags, or null when the step reaches
+none of it. The scripts the step's Python names are its entries.
+================
+*/
+export async function moduleClosureKeys( records, repositoryRoot = rebuildRoot ) {
+	const indexes = await sourceIndexes( repositoryRoot );
+	const keys = [];
+	for ( const [ranFiles, importedFiles] of records ) {
+		const entries = new Set();
+		const files = await walkClosure(
+			ranFiles,
+			importedFiles,
+			repositoryRoot,
+			indexes,
+			PYTHON_MODULE_IMPORT,
+			false,
+			entries
+		);
+		keys.push( { files, scripts: await scriptKeys( files, [ ...entries ] ) } );
+	}
+	return keys;
+}
+
+/*
+================
 sourceIndexes
 
 The Python and script indexes one walk resolves names against.
@@ -143,9 +173,19 @@ walked in full; importedFiles, and with importsRun false the Python modules
 any file imports, are walked without the scripts they name. pythonImport is
 the pattern a Python file's followed imports match. A file reached first
 by import and later as run code is walked again for its scripts.
+entries, when given, collects the Node scripts a Python file that ran
+names: the scripts the closure's code may run.
 ================
 */
-async function walkClosure( ranFiles, importedFiles, repositoryRoot, { python, scripts }, pythonImport, importsRun ) {
+async function walkClosure(
+	ranFiles,
+	importedFiles,
+	repositoryRoot,
+	{ python, scripts },
+	pythonImport,
+	importsRun,
+	entries = new Set()
+) {
 	// file -> whether it was walked as code that ran.
 	const seen = new Map();
 	const pending = [
@@ -167,10 +207,9 @@ async function walkClosure( ranFiles, importedFiles, repositoryRoot, { python, s
 			const code = text.replace( PYTHON_COMMENT, "" );
 			if ( ran ) {
 				for ( const match of code.matchAll( SCRIPT_LITERAL ) ) {
-					pending.push( [
-						resolveNamed( match[1], { file, directory, repositoryRoot, index: scripts } ),
-						true
-					] );
+					const script = resolveNamed( match[1], { file, directory, repositoryRoot, index: scripts } );
+					entries.add( script );
+					pending.push( [ script, true ] );
 				}
 			}
 			for ( const match of code.matchAll( DATA_LITERAL ) ) {
@@ -248,17 +287,33 @@ function resolveNamed( literal, { file, directory, repositoryRoot, index } ) {
 ================
 codeHash
 
-The sha256 over the entry's closure (a file URL or path), keyed by
-repository-relative path: any byte change in it changes the hash, a
-checkout that only touches mtimes does not.
+The sha256 over what the entry (a file URL or path) can run, keyed by
+repository-relative path. A Node module counts by what the entry and the
+scripts its Python names can reach (scriptReach.mjs): a shared module
+gaining a declaration nothing reached names leaves the hash standing, and
+a module that reaches nothing leaves it. Other files (Python, the JSON
+beside a module) count by their bytes. A checkout that only touches
+mtimes changes nothing. Keyed on whole files, #4596's unused constant in
+world/constants.mjs reran the npc, title and interface lanes of r204n's
+no-op asset build (#4337).
 ================
 */
 export async function codeHash( entry, repositoryRoot = rebuildRoot ) {
 	const hash = createHash( "sha256" );
-	const entryFile = String( entry ).startsWith( "file:" ) ? fileURLToPath( entry ) : entry;
-	for ( const file of await codeClosure( entryFile, repositoryRoot ) ) {
+	const entryFile = path.resolve( String( entry ).startsWith( "file:" ) ? fileURLToPath( entry ) : entry );
+	const entries = new Set( [ entryFile ] );
+	const indexes = await sourceIndexes( repositoryRoot );
+	const files = await walkClosure( [ entryFile ], [], repositoryRoot, indexes, PYTHON_IMPORT, true, entries );
+	const reached = await scriptKeys( files, [ ...entries ] );
+	for ( const file of files ) {
 		const relative = path.relative( repositoryRoot, file ).split( path.sep ).join( "/" );
-		hash.update( relative ).update( "\0" ).update( await readFile( file ) ).update( "\0" );
+		if ( !Object.hasOwn( reached, file ) ) {
+			hash.update( relative ).update( "\0" ).update( await readFile( file ) ).update( "\0" );
+			continue;
+		}
+		const key = reached[file];
+		if ( key === null ) continue;
+		hash.update( relative ).update( "\0" ).update( key.digest ).update( key.flags.join( "," ) ).update( "\0" );
 	}
 	return hash.digest( "hex" );
 }

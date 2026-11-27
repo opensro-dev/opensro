@@ -124,8 +124,8 @@ awakening (`internal/game/action/spiritextend.go`, `internal/game/nasrun/extensi
 With `SRO_NASRUN` on, each eligible contributor to a unique kill rolls a Devil's Spirit and Sabakun's jewel into
 their bag, beside the token award (`internal/game/action/nasrun_drops.go`, odds in `internal/game/nasrun/drops.go`):
 
-- A Spirit at 0.25 % on an easy unique and 0.5 % on a hard one; the jewel at 2 % on both. The families are the
-  token ones, below the level band and one per account, as for the tokens.
+- A Spirit at 10 % on an easy unique and 20 % on a hard one; the jewel at 90 % on both (owner, 2026-11-27).
+  The families are the token ones, below the level band and one per account, as for the tokens.
 - The Spirit is the plain A grade row of the winner's sex; the colours stay a shop choice.
 - No cap and nothing saved: the roll is per kill, and a full bag keeps neither prize - the notice travels only
   for an item that landed.

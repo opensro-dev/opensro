@@ -6,7 +6,9 @@ test_webp_pool.py - the catalogue's WebP pool encodes each image once
 webp_pool.encode_pairs must write every target with the encoder's exact
 bytes, encode identical sources once (two workers once raced on one cache
 entry and Windows refused the second rename), answer a second run from the
-cache, and encode again when the settings change.
+cache, encode again when the settings change, and place each target as a
+hard link to its entry (a copy where links fail) without ever writing
+through an existing link into the cache.
 
 	py -3 -B -m unittest discover -s scripts/test/python
 
@@ -100,6 +102,38 @@ class WebpPoolTest(unittest.TestCase):
 			self.assertEqual(Path(target).read_bytes(), self.expected(source), target)
 		leftovers = [name for _, _, names in os.walk(self.root / "out") for name in names if name.startswith("tmp")]
 		self.assertEqual(leftovers, [])
+
+	def test_targets_are_the_cache_entry_on_one_volume(self):
+		cache = self.root / "cache"
+		webp_pool.encode_pairs(self.pairs, encode_lossless, "lossless", str(cache))
+		entries = [cache / name for name in os.listdir(cache)]
+		for _, target in self.pairs:
+			self.assertTrue(any(os.path.samefile(target, entry) for entry in entries), target)
+
+	def test_placing_over_a_linked_target_leaves_the_entry_alone(self):
+		entry, other, target = self.root / "entry.webp", self.root / "other.webp", self.root / "target.webp"
+		entry.write_bytes(b"entry")
+		other.write_bytes(b"other")
+		os.link(entry, target)
+		webp_pool.place(str(other), str(target))
+		self.assertEqual(entry.read_bytes(), b"entry")
+		self.assertEqual(target.read_bytes(), b"other")
+
+	def test_a_volume_without_links_gets_a_copy(self):
+		entry, target = self.root / "entry.webp", self.root / "target.webp"
+		entry.write_bytes(b"entry")
+		original = os.link
+
+		def refuse(source, destination):
+			raise OSError(18, "cross-device link")
+
+		os.link = refuse
+		try:
+			webp_pool.place(str(entry), str(target))
+		finally:
+			os.link = original
+		self.assertEqual(target.read_bytes(), b"entry")
+		self.assertFalse(os.path.samefile(entry, target))
 
 
 if __name__ == "__main__":

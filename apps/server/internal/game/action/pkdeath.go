@@ -213,6 +213,13 @@ func (rt *Runtime) dropOnDeathInDoor(division string, c *enterworld.Character, k
 	if rt.CombatRoll == nil {
 		return cost
 	}
+	// While an exchange is open or the player runs his own stall, the
+	// original latches every item of the inventory against the penalty
+	// drop (the storage-wide protection the exchange and stall states
+	// broadcast), so a death in that state drops nothing (#4490 U6-08).
+	if rt.Exchanges.Trading(division, c.Name) || rt.Stalls.Keeping(division, c.Name) {
+		return cost
+	}
 	roll := pk.DropRoll(rt.CombatRoll)
 	drops, err := pk.RollsDrop(penalty, roll)
 	if err != nil || !drops {
@@ -261,8 +268,11 @@ deathDropSlots
 
 The inventory as the native death-drop slot selection sees it. An item may drop:
 not an event item (TID 3/3/9), not a cash item, RefObj CanDrop bit 1, not
-a COS summoner (TID 3/2), not equipment of rarity 2 or 6. The in-use
-latch (+0x15C) never overlaps a death: item use here is synchronous.
+a COS summoner (TID 3/2), not equipment of rarity 2 or 6. The item latch
+the original sets while an item is used, and on every item while an
+exchange or the player's own stall is open, never overlaps a death here:
+item use is synchronous, and the drop entry refuses the open states
+outright (dropOnDeathInDoor).
 ================
 */
 func (rt *Runtime) deathDropSlots(c *enterworld.Character) []pk.DropSlot {

@@ -371,6 +371,13 @@ func (rt *Runtime) StartQuest(character *enterworld.Character, codename string) 
 			refusal = fmt.Errorf("quest start: %s (id %d) is already active", codename, def.RefID)
 			return false
 		}
+		// Natively an offer's Accept row becomes SN_TALK_COMMON_MAXQUEST
+		// at 33 quests under way, so no 34th can start; the door refuses
+		// a forged acceptance the talk never offered.
+		if len(character.ActiveQuests) >= enterworld.MaxActiveQuests {
+			refusal = fmt.Errorf("quest start: active quest limit reached")
+			return false
+		}
 		// The native login sections carry u8 counts. Never accept a record
 		// which would disappear behind the login composer's 255-row boundary.
 		if len(character.ActiveQuests) >= maxQuestWireRecords {

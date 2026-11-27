@@ -4,7 +4,9 @@
 resourceBuildGraph.test.mjs - producer entry points and the build fingerprint
 
 Character producers expose their entry points without starting a build on
-import, and the resource fingerprint records every ownership root. The full
+import, and the resource fingerprint records every ownership root. What
+keys the server's part of it is resourceFingerprintServer.test.mjs, a
+file of its own so the two run side by side. The full
 build's dependency order is run with stub steps in
 scripts/test/pipeline/resourceBuildOrder.test.mjs.
 
@@ -15,10 +17,25 @@ import fs from "node:fs";
 import path from "node:path";
 import test from "node:test";
 import { pathToFileURL } from "node:url";
-import { computeResourceBuildFingerprint, movedRoots } from "../../build/shared/resourceBuildFingerprint.mjs";
+import { computeResourceBuildFingerprint } from "../../build/shared/resourceBuildFingerprint.mjs";
 import { STUB_FINGERPRINT_KEYS } from "../helpers/fingerprintKeys.mjs";
 
 const rebuildRoot = path.resolve( "." );
+
+// One fingerprint of the tree, shared by the cases that read it: each
+// computation scans every root (about 147,000 files, 5 to 10 s), and seven
+// of them held this file near 50 s (#4337).
+let shared;
+
+/*
+================
+treeFingerprint
+================
+*/
+function treeFingerprint() {
+	shared ??= computeResourceBuildFingerprint( STUB_FINGERPRINT_KEYS );
+	return shared;
+}
 
 test("character producers expose their entry points without starting a build", async () => {
 	for (
@@ -45,7 +62,7 @@ test("native animation registry is pipeline-owned and fingerprinted with the bui
 });
 
 test("resource fingerprint reports every ownership root independently", async () => {
-	const fingerprint = await computeResourceBuildFingerprint( STUB_FINGERPRINT_KEYS );
+	const fingerprint = await treeFingerprint();
 	const labels = fingerprint.roots.map( ( root ) => root.label );
 
 	assert.equal( new Set( labels ).size, labels.length, "fingerprint root labels must be unique" );
@@ -81,7 +98,7 @@ test("resource fingerprint reports every ownership root independently", async ()
 });
 
 test("resource fingerprint covers the code the build runs outside scripts/build", async () => {
-	const labels = (await computeResourceBuildFingerprint( STUB_FINGERPRINT_KEYS )).roots.map( ( root ) => root.label );
+	const labels = (await treeFingerprint()).roots.map( ( root ) => root.label );
 	// A converter change once matched the old fingerprint and skipped the build.
 	for (
 		const file of [
@@ -97,22 +114,8 @@ test("resource fingerprint covers the code the build runs outside scripts/build"
 	}
 });
 
-test("the server's exports, not its Go sources, key the resource fingerprint", async () => {
-	// A server change that leaves every export's bytes alone keeps the
-	// fingerprint; one that moves an export misses it (#4337).
-	const same = await computeResourceBuildFingerprint( STUB_FINGERPRINT_KEYS );
-	const again = await computeResourceBuildFingerprint( STUB_FINGERPRINT_KEYS );
-	const moved = await computeResourceBuildFingerprint( { serverExports: () => "a moved roster" } );
-	assert.equal( again.hash, same.hash );
-	assert.notEqual( moved.hash, same.hash );
-	assert.deepEqual(
-		movedRoots( same, moved ).filter( ( label ) => !label.startsWith( "code:" ) ),
-		[ "server-exports" ]
-	);
-});
-
 test("a pack-layout baseline changes the resource fingerprint", async ( t ) => {
-	const before = await computeResourceBuildFingerprint( STUB_FINGERPRINT_KEYS );
+	const before = await treeFingerprint();
 	const saved = process.env.SRO_ASSET_PACK_BASELINE;
 	t.after( () => {
 		if ( saved === undefined ) delete process.env.SRO_ASSET_PACK_BASELINE;

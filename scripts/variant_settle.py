@@ -43,6 +43,7 @@ from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 import state_document
+import tree_scan
 from import_vsro_optional_teleport import OUTPUT_FOLDER as OPTIONAL_TELEPORT_FOLDER
 from prepare_client_resources import file_digest
 from sro_paths import tree_state_root
@@ -86,19 +87,15 @@ def write_ledger(path: Path, entries: dict[str, list]) -> None:
 # content_files
 #
 # (relative posix path, absolute path, stat) for every file under the
-# content root, in walk order.
+# content root, sorted by path, relative to the variant root. The stat
+# comes with the directory listing (tree_scan.py).
 # ================
 def content_files(variant_root: Path) -> list[tuple[str, Path, os.stat_result]]:
-	base = Path(variant_root)
-	content = base / CONTENT_ROOT
-	found = []
-	for directory, folders, names in os.walk(content):
-		if Path(directory) == content:
-			folders[:] = [folder for folder in folders if folder not in ASSET_BUILD_FOLDERS]
-		for name in names:
-			absolute = Path(directory, name)
-			found.append((absolute.relative_to(base).as_posix(), absolute, os.stat(absolute)))
-	return found
+	content = Path(variant_root) / CONTENT_ROOT
+	return [
+		(f"{CONTENT_ROOT}/{relative}", absolute, stat)
+		for relative, absolute, stat in tree_scan.scan_files(content, ASSET_BUILD_FOLDERS)
+	]
 
 
 # ================

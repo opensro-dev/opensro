@@ -48,8 +48,8 @@ import { existsSync, readFileSync } from "node:fs";
 import { CLIENT_PUBLIC_ROOT } from "../../../../scripts/lib/generatedRoot.mjs";
 import { EXPANDED_BUILD } from "./expanded-build.mjs";
 import { vsroItemGlowRoot } from "../../../../scripts/build/char/equipmentGlowMetadata.mjs";
-import { createCatalogEffects } from "./effect-programs.mjs";
-import { readEffectCatalogSync } from "../../../../scripts/lib/effectCatalog.mjs";
+import { decodePublishedEffect } from "./effect-programs.mjs";
+import { readEffectIndexSync } from "../../../../scripts/lib/effectCatalog.mjs";
 
 const SOURCE = new URL( "../../src/engine/", import.meta.url );
 
@@ -469,17 +469,19 @@ tickDigests
 
 { path: "S1 S2 S3" } for the catalogue effects with a particle graph,
 in catalogue order; one shard's when shard is 0-based, all of them when
-it is negative. The shard is chosen by path before the effect decodes,
-so a shard pays only for its own effects.
+it is negative. The shard is chosen by path from the closure's index, and
+only its own effects' files are read: a shard read the whole catalogue,
+so one changed effect reran all PARTICLE_TICK_SHARD_COUNT files
+(r204n: 20 shards of 27 to 80 s each, #4337).
 ================
 */
 function tickDigests( shard ) {
-	const published = readEffectCatalogSync( CLIENT_PUBLIC_ROOT );
-	const decoder = createCatalogEffects(), table = particleRandomTable(), values = createValues();
+	const index = readEffectIndexSync( CLIENT_PUBLIC_ROOT );
+	const table = particleRandomTable(), values = createValues();
 	const scenarios = SCENARIOS.map( scenarioCalls ), digests = {};
-	for ( const path of Object.keys( published.effects ) ) {
+	for ( const path of index.effects ) {
 		if ( shard >= 0 && particleTickShardIndex( path ) !== shard ) continue;
-		const model = decoder.decode( published, path ).model;
+		const model = decodePublishedEffect( path, CLIENT_PUBLIC_ROOT ).model;
 		if ( !model.particleGraph?.length ) continue;
 		digests[path] = scenarios.map( scenario => scenarioDigest( model, path, scenario, table, values ) ).join( " " );
 	}

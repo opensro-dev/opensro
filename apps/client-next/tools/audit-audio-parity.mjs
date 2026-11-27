@@ -23,6 +23,9 @@ import { gameRoot } from "../../../scripts/build/world/paths.mjs";
 import { pythonExecutable } from "../../../scripts/build/shared/pythonRun.mjs";
 import { readEffectCatalogSync } from "../../../scripts/lib/effectCatalog.mjs";
 import { EFFECT_PROGRAM_INDEX } from "../src/engine/foundation/assets/effect-programs.ts";
+
+// A published sound resource, as the authored data names one.
+const SOUND_FILE = /\.(wav|mp3|ogg)$/i;
 export const root = path.resolve( import.meta.dirname, ".." );
 const hash = b => createHash( "sha256" ).update( b ).digest( "hex" );
 // resolve, not join: the asset paths are absolute (CLIENT_PUBLIC_ROOT).
@@ -45,7 +48,7 @@ behavioural proof.
 export function sourceSoundCandidates( source, file ) {
 	const tree = ts.createSourceFile( file, source, ts.ScriptTarget.Latest, true ), out = [];
 	function visit( n ) {
-		if ( ts.isStringLiteralLike( n ) && (/^(SND_|VOC_)/i.test( n.text ) || /\.(wav|mp3|ogg)$/i.test( n.text )) ) {
+		if ( ts.isStringLiteralLike( n ) && (/^(SND_|VOC_)/i.test( n.text ) || SOUND_FILE.test( n.text )) ) {
 			// The producing shapes the runtime actually uses: a call argument
 			// (play('SND_X')), a value returned to the caller (the worker
 			// owners return their cue arrays), or a played file path. A bare
@@ -88,7 +91,7 @@ export function sourceSoundCandidates( source, file ) {
 				call,
 				returned,
 				assigned,
-				wav: /\.(wav|mp3|ogg)$/i.test( n.text )
+				wav: SOUND_FILE.test( n.text )
 			} );
 		}
 		ts.forEachChild( n, visit );
@@ -163,6 +166,38 @@ export function classifySoundRow( row, { itemCategories, uiHandles, animationCue
 	if ( !row.publicPath ) reasons.push( row.folder === "-" ? "native-placeholder" : "unresolved-asset" );
 	return { lane, reasons };
 }
+/*
+================
+soundResources
+
+Every sound file value in a parsed data file, with its key path:
+[{ file, location, value }]. The path is joined only for a sound value:
+the effect closure alone is millions of nodes (#4337).
+================
+*/
+export function soundResources( value, file ) {
+	const found = [], keys = [];
+	function visit( node ) {
+		if ( typeof node === "string" ) {
+			if ( SOUND_FILE.test( node ) ) {
+				found.push( {
+					file,
+					location: keys.map( k => "/" + k ).join( "" ),
+					value: node
+				} );
+			}
+		} else if ( node && typeof node === "object" ) {
+			for ( const key of Object.keys( node ) ) {
+				keys.push( key );
+				visit( node[key] );
+				keys.pop();
+			}
+		}
+	}
+	visit( value );
+	return found;
+}
+
 /*
 ================
 audit
@@ -261,19 +296,12 @@ export async function audit(
 			CLIENT_PUBLIC_ROOT + "/assets/audio/catalog.json"
 		]
 	) {
-		// The effect programs are one file per effect: walk the whole closure.
-		const bytes = file === EFFECT_PROGRAMS ?
-			Buffer.from( JSON.stringify( readEffectCatalogSync( CLIENT_PUBLIC_ROOT ) ) ) :
-			read( file );
+		// The effect programs are one file per effect: walk the whole closure,
+		// as the value the reader already parsed (no text round trip).
+		const catalogValue = file === EFFECT_PROGRAMS ? readEffectCatalogSync( CLIENT_PUBLIC_ROOT ) : undefined;
+		const bytes = catalogValue ? Buffer.from( JSON.stringify( catalogValue ) ) : read( file );
 		inputs[file] = hash( bytes );
-		function visit( value, location ) {
-			if ( typeof value === "string" && /\.(wav|mp3|ogg)$/i.test( value ) ) {
-				resources.push( { file, location, value } );
-			} else if ( value && typeof value === "object" ) {
-				for ( const [key, v] of Object.entries( value ) ) visit( v, location + "/" + key );
-			}
-		}
-		visit( JSON.parse( bytes ), "" );
+		for ( const found of soundResources( catalogValue ?? JSON.parse( bytes ), file ) ) resources.push( found );
 	}
 	const nativeSites = native.strings.map( s => ({
 		value: s.value,

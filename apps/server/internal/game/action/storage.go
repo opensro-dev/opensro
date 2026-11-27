@@ -14,6 +14,9 @@ Admission rules:
   - a deposited item must be storable: CanBorrow (itemdata token 19,
     RefObjData+0xA7) has bit 0x80, or the client's own check raises
     UIIT_MSG_STRGERR_INVALID_TARGET_STORAGE (1:0x43, CIFStorage_OnSlotTransfer);
+  - the guild warehouse judges by its own rule instead (the same code
+    answers): the CanBorrow guild bit 0x40, never a quest-shaped row
+    (TypeIDs 3/3/9), and only a tradeable one (CanTrade, token 16);
   - a deposit charges KeepingFee (token 30) per unit. INFERENCE: the column
     is authored per unit (potion 1, a 890-gold sword 21).
 
@@ -48,6 +51,11 @@ import (
 
 // storableFlag is the CanBorrow bit that admits an item to the warehouse.
 const storableFlag = 0x80
+
+// guildStorableFlag is the CanBorrow bit the guild warehouse tests
+// instead: the column byte's 0x40, where the account room tests 0x80
+// (the server packs the two into its row flags word as bits 13 and 12).
+const guildStorableFlag = 0x40
 
 // errCodeInvalidStorageTarget is UIIT_MSG_STRGERR_INVALID_TARGET_STORAGE.
 const errCodeInvalidStorageTarget uint8 = 0x43
@@ -385,6 +393,42 @@ func (rt *Runtime) storableItem(item inventory.Item) bool {
 
 /*
 ================
+guildStorableItem
+
+The guild warehouse's deposit admission, read in the v1.188 server:
+where the account room tests the CanBorrow account bit, the guild door
+tests the guild bit, and adds two more refusals of its own - a
+quest-shaped row (TypeIDs 3/3/9, however borrowable or tradeable its
+columns read: shipped quest rows carry 255 and CanTrade 1) never
+enters, and neither does an untradeable one. Every failure answers the
+same 0x43 the account room uses. The port-only bars storableItem
+carries (a sealed helmet, the mall copy) hold here too.
+================
+*/
+func (rt *Runtime) guildStorableItem(item inventory.Item) bool {
+	if rt.HalloweenHelmetSeal.Sealed(item.Codename) {
+		return false
+	}
+	if nasrun.StorableMallCopy(item.TypeFlags, item.ForgeBound, item.EarnedBought) {
+		return true
+	}
+	ref, ok := rt.deps.ItemReferences().ItemRefByCodename(item.Codename)
+	if !ok || ref == nil {
+		return false
+	}
+	borrow, present := ref.NativeFields.Lookup("canBorrow")
+	if !present || int64(borrow)&guildStorableFlag == 0 {
+		return false
+	}
+	if ref.TypeIDs[0] == 3 && ref.TypeIDs[1] == 3 && ref.TypeIDs[2] == 9 {
+		return false
+	}
+	trade, present := ref.NativeFields.Lookup("canTrade")
+	return present && int64(trade) != 0
+}
+
+/*
+================
 keepingFee
 ================
 */
@@ -435,7 +479,7 @@ func (rt *Runtime) applyStorageMove(divisionID string, character *enterworld.Cha
 		}
 	}
 	var questFrames []wire.Frame
-	_, err := rt.storageAuthority.TransactStorage(character, rt.storageMutation(q.MovementType, q))
+	_, err := rt.storageAuthority.TransactStorage(character, rt.storageMutation(q.MovementType, q, false))
 	var refusal storageRefusal
 	if errors.As(err, &refusal) {
 		return failureResult(uint8(refusal))
@@ -461,10 +505,12 @@ storageMutation
 
 One warehouse move on detached copies of the character and a room: the
 five personal types, which the guild warehouse's five stand for
-(wire.PersonalStorageMove).
+(wire.PersonalStorageMove). guild says which room is served, because
+a deposit is judged by the room's own admission (storableItem for the
+account room, guildStorableItem for the guild's).
 ================
 */
-func (rt *Runtime) storageMutation(movement uint8, q wire.ItemMoveRequest) func(next *domain.Character, storage *domain.AccountStorage) error {
+func (rt *Runtime) storageMutation(movement uint8, q wire.ItemMoveRequest, guild bool) func(next *domain.Character, storage *domain.AccountStorage) error {
 	return func(next *domain.Character, storage *domain.AccountStorage) error {
 		room, fault := inventory.NewStorageRoom(invItemsFromRowsWithin(storage.Rows, storage.Capacity), uint8(storage.Capacity))
 		if fault != nil {
@@ -489,7 +535,11 @@ func (rt *Runtime) storageMutation(movement uint8, q wire.ItemMoveRequest) func(
 			if !present || !inventory.IsBagSlot(q.SourceSlot, inventory.BagEnd(next)) {
 				return storageRefusal(wire.ErrCodeInvalidRequest)
 			}
-			if !rt.storableItem(item) {
+			admitted := rt.storableItem(item)
+			if guild {
+				admitted = rt.guildStorableItem(item)
+			}
+			if !admitted {
 				return storageRefusal(errCodeInvalidStorageTarget)
 			}
 			fee, ok := rt.keepingFee(item)
@@ -513,10 +563,15 @@ func (rt *Runtime) storageMutation(movement uint8, q wire.ItemMoveRequest) func(
 			}
 		case wire.MoveTypeStorageGoldDeposit:
 			amount := int64(q.GoldAmount)
+			// No amount is the original's own refusal, before any cap
+			// (#4490 U6-16); too little gold keeps its code below.
+			if amount <= 0 {
+				return storageRefusal(wire.ErrCodePositiveNumberOnly)
+			}
 			// The client caps a deposit at 100,000,000 natively (59A430);
 			// SRO_RAISED_GOLD_CAPS raises both sides, to 1,000,000,000 or
 			// to the shard's chosen value (goldcaps.go).
-			if amount <= 0 || uint64(amount) > rt.storageGoldDepositLimit() {
+			if uint64(amount) > rt.storageGoldDepositLimit() {
 				return storageRefusal(wire.ErrCodeInvalidRequest)
 			}
 			if amount > gold {
@@ -529,7 +584,10 @@ func (rt *Runtime) storageMutation(movement uint8, q wire.ItemMoveRequest) func(
 			storage.Gold += amount
 		case wire.MoveTypeStorageGoldWithdraw:
 			amount := int64(q.GoldAmount)
-			if amount <= 0 || amount > storage.Gold {
+			if amount <= 0 {
+				return storageRefusal(wire.ErrCodePositiveNumberOnly)
+			}
+			if amount > storage.Gold {
 				return storageRefusal(wire.ErrCodeNotEnoughGold)
 			}
 			if gold > math.MaxInt64-amount {

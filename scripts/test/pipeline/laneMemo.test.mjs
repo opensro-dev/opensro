@@ -5,17 +5,22 @@ laneMemo.test.mjs - a lane replays only while nothing it read has changed
 
 The lane memo (scripts/build/shared/laneMemo.mjs) skips a resource-build
 lane on a whole-build fingerprint miss. A replay must return the recorded
-result and re-claim the lane's files; any change to its code, its upstream
-or one of its outputs must run it again instead.
+result and re-claim the lane's files; any change to its code, to what it
+read (a file, a listing, a probe of an absent file) or to one of its
+outputs must run it again instead. A lane that starts a child process is
+keyed on its whole upstream, as every lane was before reads were recorded.
 
 ===========================================================================
 */
 import assert from "node:assert/strict";
+import { spawnSync } from "node:child_process";
+import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { mkdtemp, rm, utimes, writeFile, mkdir } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
 
+import { noteRead, trackReads } from "../../build/graph/reads.mjs";
 import { createLaneMemo, decodeResult, encodeResult } from "../../build/shared/laneMemo.mjs";
 import { abandonPublication, beginPublication, claimPublicPaths } from "../../build/shared/publicationLedger.mjs";
 
@@ -43,7 +48,7 @@ async function withLane( run ) {
 		createLaneMemo( { upstream, entry, publicRoot, memoRoot, log: line => logs.push( line ) } );
 	beginPublication( "lane-memo-test", { complete: false } );
 	try {
-		await run( { memo, module, output, logs } );
+		await run( { memo, module, output, logs, root } );
 	} finally {
 		abandonPublication();
 		await rm( root, { recursive: true, force: true } );
@@ -65,6 +70,48 @@ function produce( counter ) {
 	};
 }
 
+/*
+================
+runLine
+
+The last line that says why a lane ran.
+================
+*/
+function runLine( logs ) {
+	return logs.findLast( line => line.includes( ": runs (" ) );
+}
+
+/*
+================
+produceOpaque
+
+produce, after starting a child process: a lane whose reads the scope
+cannot see, keyed on its whole upstream.
+================
+*/
+function produceOpaque( counter ) {
+	const lane = produce( counter );
+	return async () => {
+		spawnSync( process.execPath, [ "-e", "" ] );
+		return lane();
+	};
+}
+
+/*
+================
+produceReading
+
+produce, after reading( ) does the lane's reads.
+================
+*/
+function produceReading( counter, reading ) {
+	const lane = produce( counter );
+	return async () => {
+		reading();
+		return lane();
+	};
+}
+
 test("plain results round-trip with their Maps and Sets; anything else is not recorded", () => {
 	const value = { a: 1, list: [ 1, "x" ], set: new Set( [ "y" ] ), map: new Map( [ [ "k", { v: 2 } ] ] ) };
 	assert.deepEqual( decodeResult( encodeResult( value ) ), value );
@@ -72,35 +119,35 @@ test("plain results round-trip with their Maps and Sets; anything else is not re
 	assert.equal( encodeResult( new Date( 0 ) ), undefined );
 });
 
-test("an unchanged lane replays its result; code, upstream and output changes run it", async () => {
+test("an opaque lane replays its result; code, upstream and output changes run it", async () => {
 	await withLane( async ( { memo, module, output, logs } ) => {
 		const counter = { runs: 0 }, inputs = { modules: [ module ] };
 		const first = memo();
-		await first.lane( "lane", inputs, produce( counter ) );
+		await first.lane( "lane", inputs, produceOpaque( counter ) );
 		await first.commit();
 		assert.equal( counter.runs, 1 );
 
-		const replayed = await memo().lane( "lane", inputs, produce( counter ) );
+		const replayed = await memo().lane( "lane", inputs, produceOpaque( counter ) );
 		assert.equal( counter.runs, 1, "an unchanged lane must not run" );
 		assert.deepEqual( replayed, { count: 3, files: new Set( [ OUTPUT ] ), byName: new Map( [ [ "a", 1 ] ] ) } );
 
 		const moved = memo( { data: { extracted: "b" }, startup: "s" } );
-		await moved.lane( "lane", inputs, produce( counter ) );
+		await moved.lane( "lane", inputs, produceOpaque( counter ) );
 		assert.equal( counter.runs, 2 );
-		assert.match( logs.at( -1 ), /data extracted changed/ );
+		assert.match( runLine( logs ), /data extracted changed/ );
 		await moved.commit();
 
 		await writeFile( module, "export const step = 2;\n" );
 		const edited = memo( { data: { extracted: "b" }, startup: "s" } );
-		await edited.lane( "lane", inputs, produce( counter ) );
+		await edited.lane( "lane", inputs, produceOpaque( counter ) );
 		assert.equal( counter.runs, 3 );
-		assert.match( logs.at( -1 ), /code .*step\.mjs changed/ );
+		assert.match( runLine( logs ), /code .*step\.mjs changed/ );
 		await edited.commit();
 
 		await utimes( output, new Date( 2000, 0, 1 ), new Date( 2000, 0, 1 ) );
-		await memo( { data: { extracted: "b" }, startup: "s" } ).lane( "lane", inputs, produce( counter ) );
+		await memo( { data: { extracted: "b" }, startup: "s" } ).lane( "lane", inputs, produceOpaque( counter ) );
 		assert.equal( counter.runs, 4 );
-		assert.match( logs.at( -1 ), /output \/assets\/lane-memo-test\/out\.json changed/ );
+		assert.match( runLine( logs ), /output \/assets\/lane-memo-test\/out\.json changed/ );
 	} );
 });
 
@@ -127,14 +174,14 @@ test("a record written before folder keys replays and learns them; a moved folde
 	await withLane( async ( { memo, module, logs } ) => {
 		const counter = { runs: 0 }, inputs = { modules: [ module ] };
 		const first = memo( { data: { extracted: "a" }, startup: "s" } );
-		await first.lane( "lane", inputs, produce( counter ) );
+		await first.lane( "lane", inputs, produceOpaque( counter ) );
 		await first.commit();
 		assert.equal( counter.runs, 1 );
 
 		// The same root hash, now carrying per-folder keys beside it:
 		// keys the record predates are instrumentation, not a change.
 		const widened = memo( { data: { extracted: "a", "extracted/A": "f1", "extracted/B": "f2" }, startup: "s" } );
-		await widened.lane( "lane", inputs, produce( counter ) );
+		await widened.lane( "lane", inputs, produceOpaque( counter ) );
 		assert.equal( counter.runs, 1, "folder keys a record predates must not rerun the lane" );
 
 		// A folder that actually moves reruns the lane and names itself.
@@ -142,9 +189,9 @@ test("a record written before folder keys replays and learns them; a moved folde
 			data: { extracted: "a", "extracted/A": "f1", "extracted/B": "f3" },
 			startup: "s"
 		} );
-		await movedFolder.lane( "lane", inputs, produce( counter ) );
+		await movedFolder.lane( "lane", inputs, produceOpaque( counter ) );
 		assert.equal( counter.runs, 2 );
-		assert.match( logs.at( -1 ), /data extracted\/B changed/ );
+		assert.match( runLine( logs ), /data extracted\/B changed/ );
 	} );
 });
 
@@ -152,7 +199,7 @@ test("a data root the record never held reruns the lane; only a recorded root's 
 	await withLane( async ( { memo, module, logs } ) => {
 		const counter = { runs: 0 }, inputs = { modules: [ module ] };
 		const first = memo( { data: { extracted: "a" }, startup: "s" } );
-		await first.lane( "lane", inputs, produce( counter ) );
+		await first.lane( "lane", inputs, produceOpaque( counter ) );
 		await first.commit();
 
 		// A new root, or a folder key under a root the record lacks, is new
@@ -160,17 +207,17 @@ test("a data root the record never held reruns the lane; only a recorded root's 
 		await memo( { data: { extracted: "a", textdata: "t" }, startup: "s" } ).lane(
 			"lane",
 			inputs,
-			produce( counter )
+			produceOpaque( counter )
 		);
 		assert.equal( counter.runs, 2 );
-		assert.match( logs.at( -1 ), /data textdata changed/ );
+		assert.match( runLine( logs ), /data textdata changed/ );
 		await memo( { data: { extracted: "a", "textdata/A": "t1" }, startup: "s" } ).lane(
 			"lane",
 			inputs,
-			produce( counter )
+			produceOpaque( counter )
 		);
 		assert.equal( counter.runs, 3 );
-		assert.match( logs.at( -1 ), /data textdata\/A changed/ );
+		assert.match( runLine( logs ), /data textdata\/A changed/ );
 	} );
 });
 
@@ -180,5 +227,81 @@ test("a record is only written by commit", async () => {
 		await memo().lane( "lane", inputs, produce( counter ) );
 		await memo().lane( "lane", inputs, produce( counter ) );
 		assert.equal( counter.runs, 2, "an uncommitted run (a failed build) is never replayed" );
+	} );
+});
+
+test("a read-keyed lane replays across upstream moves and reruns on the file it read", async () => {
+	await withLane( async ( { memo, module, logs, root } ) => {
+		const counter = { runs: 0 }, inputs = { modules: [ module ] };
+		const table = path.join( root, "table.txt" ), other = path.join( root, "other.txt" );
+		await writeFile( table, "a" );
+		await writeFile( other, "x" );
+		const lane = () => produceReading( counter, () => readFileSync( table ) );
+		const first = memo();
+		await first.lane( "lane", inputs, lane() );
+		await first.commit();
+
+		await memo( { data: { extracted: "moved" }, startup: "moved" } ).lane( "lane", inputs, lane() );
+		assert.equal( counter.runs, 1, "a data root the lane did not read must not rerun it" );
+		await writeFile( other, "y" );
+		await memo().lane( "lane", inputs, lane() );
+		assert.equal( counter.runs, 1, "a file the lane did not read must not rerun it" );
+
+		await writeFile( table, "b" );
+		await memo().lane( "lane", inputs, lane() );
+		assert.equal( counter.runs, 2 );
+		assert.match( logs.at( -1 ), /read .*table\.txt changed/ );
+	} );
+});
+
+test("a listing and a probe of an absent file are inputs of the lane", async () => {
+	await withLane( async ( { memo, module, logs, root } ) => {
+		const counter = { runs: 0 }, inputs = { modules: [ module ] };
+		const folder = path.join( root, "folder" ), absent = path.join( root, "absent.txt" );
+		await mkdir( folder );
+		const lane = () => produceReading( counter, () => readdirSync( folder ) && existsSync( absent ) );
+		const first = memo();
+		await first.lane( "lane", inputs, lane() );
+		await first.commit();
+
+		await writeFile( path.join( folder, "new.txt" ), "n" );
+		const listed = memo();
+		await listed.lane( "lane", inputs, lane() );
+		assert.equal( counter.runs, 2 );
+		assert.match( logs.at( -1 ), /read list:.*folder changed/ );
+		await listed.commit();
+
+		await writeFile( absent, "now here" );
+		await memo().lane( "lane", inputs, lane() );
+		assert.equal( counter.runs, 3 );
+		assert.match( logs.at( -1 ), /read .*absent\.txt changed/ );
+	} );
+});
+
+test("a read an inner scope notes counts for the lane; the fs hooks feed only complete scopes", async () => {
+	await withLane( async ( { memo, module, logs, root } ) => {
+		const counter = { runs: 0 }, inputs = { modules: [ module ] };
+		const noted = path.join( root, "noted.txt" ), hooked = path.join( root, "hooked.txt" );
+		await writeFile( noted, "a" );
+		await writeFile( hooked, "a" );
+		let inner;
+		const lane = () =>
+			produceReading( counter, async () => {
+				inner = await trackReads( async () => {
+					noteRead( noted );
+					readFileSync( hooked );
+				} );
+			} );
+		const first = memo();
+		await first.lane( "lane", inputs, async () => {
+			await lane()();
+			assert.deepEqual( [ ...inner.reads ], [ path.resolve( noted ) ], "an action sees only what it noted" );
+			return { count: 1 };
+		} );
+		await first.commit();
+
+		await writeFile( noted, "b" );
+		await memo().lane( "lane", inputs, lane() );
+		assert.match( logs.at( -1 ), /read .*noted\.txt changed/ );
 	} );
 });

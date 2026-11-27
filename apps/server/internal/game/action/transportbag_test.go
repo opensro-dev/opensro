@@ -175,3 +175,67 @@ func TestTransportBagFollowsPetInventoryPages(t *testing.T) {
 		t.Fatalf("the larger authored bag became %+v, want 177 slots", wide.ActiveCOS.Container)
 	}
 }
+
+// transportBagLevels is the level gold basis the sizing rule reads:
+// level 1 minimum 28, level 20 minimum 95.
+func transportBagLevels() jobKillLevels {
+	return jobKillLevels{gold: map[int64]int64{1: 28, 20: 95}}
+}
+
+/*
+================
+TestTransportBagSizedByOwnerLevel
+
+#4490 U11-01: creation sizes a transport's bag by its owner's level -
+7 places at level 1, 24 at level 20 on the fixture horse row (authored
+101, so neither is the cap) - and the pet-inventory-pages deviation
+still raises the native size on top. A bagless restore takes the same
+level size creation would give it.
+================
+*/
+func TestTransportBagSizedByOwnerLevel(t *testing.T) {
+	summon := func(level int64, pages companion.PetInventoryPages) *enterworld.Character {
+		c := testCharacter()
+		ownerLevel := level
+		c.Level = &ownerLevel
+		c.MaxLevel = &ownerLevel
+		dressTrader(c)
+		c.MissionInventory = append(c.MissionInventory, enterworld.InventoryRow{Slot: 22, RefObjID: 3905, Codename: "ITEM_COS_T_DHORSE3",
+			TypeFlags: wire.PackTypeFlags(3, 3, 3, 2), StackCount: 1})
+		refs := testCosSource(testItems())
+		refs.characters["COS_T_DHORSE3"].InventoryCapacity = transportCargoSlots
+		rt, _ := newTestRuntime(c, refs)
+		rt.deps.(*enterworld.Deps).Levels = transportBagLevels()
+		rt.PetInventoryPages = pages
+		rt.BindPetSession(testDivision, c, 101)
+		rt.HandleItemUse(testDivision, c, []byte{22, 0xEC, 0x11})
+		if c.ActiveCOS == nil || c.ActiveCOS.Container == nil {
+			t.Fatalf("level %d: the transport has no bag", level)
+		}
+		return c
+	}
+	if got := summon(1, companion.PetInventoryPages{}).ActiveCOS.Container.Capacity; got != 7 {
+		t.Fatalf("a level-1 owner's transport bag is %d slots, want the native 7", got)
+	}
+	if got := summon(20, companion.PetInventoryPages{}).ActiveCOS.Container.Capacity; got != 24 {
+		t.Fatalf("a level-20 owner's transport bag is %d slots, want the native 24", got)
+	}
+	if got := summon(1, companion.PetInventoryPages{Transport: 5}).ActiveCOS.Container.Capacity; got != companion.PetInventorySlots {
+		t.Fatalf("the pages deviation over a level-sized bag is %d slots, want %d", got, companion.PetInventorySlots)
+	}
+
+	restored := testCharacter()
+	restoredLevel := int64(20)
+	restored.Level = &restoredLevel
+	restored.MaxLevel = &restoredLevel
+	gid, _ := enterworld.CosObjectIDForCharacter(restored)
+	restored.ActiveCOS = &enterworld.CharacterCOS{GID: gid, RefObjID: 3914, Codename: "COS_T_DHORSE3", CurrentHP: 100, Summoned: true, StateFlags: 3}
+	refs := testCosSource(testItems())
+	refs.characters["COS_T_DHORSE3"].InventoryCapacity = transportCargoSlots
+	rt, _ := newTestRuntime(restored, refs)
+	rt.deps.(*enterworld.Deps).Levels = transportBagLevels()
+	rt.restoreCharacterCOS(testDivision, restored.Name)
+	if restored.ActiveCOS.Container == nil || restored.ActiveCOS.Container.Capacity != 24 {
+		t.Fatalf("the bagless restored transport's bag is %+v, want the owner's level-20 size 24", restored.ActiveCOS.Container)
+	}
+}

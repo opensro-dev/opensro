@@ -4,8 +4,8 @@
 buildOutdoorWorldRegionResources.mjs - the outdoor world's region bundles and routing
 
 Builds one bundle per outdoor sector (terrain, textures, objects, navmesh)
-with the shared render and object stores, then publishes the region index
-and catalog once every bundle exists. A region whose bundle already exists
+with the shared render and object stores (outdoorSharedStores.mjs), then
+publishes the region index and catalog once every bundle exists. A region whose bundle already exists
 is reused, and its terrain tiles are re-published from the terrain tile
 ledger, so reuse never leaves a bundle naming images that are gone.
 
@@ -25,59 +25,57 @@ import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { buildJobs } from "../shared/buildParallelism.mjs";
 import { codeHash, invalidateStamp, stampIsCurrent, writeStamp } from "../shared/codeStamp.mjs";
-import { claimKeptOutput, claimPublicFile, detachedString, namedPublicPaths } from "../shared/publicationLedger.mjs";
+import { claimKeptOutput, detachedString, namedPublicPaths } from "../shared/publicationLedger.mjs";
 import {
+	OUTDOOR_WORLD_AREA,
 	OUTDOOR_WORLD_OBJECT_INDEX_PUBLIC_PATH,
 	OUTDOOR_WORLD_SHARED_RENDER_PUBLIC_PATH,
-	REGION_SIZE,
-	WATER_NORMAL_FRAME_DURATION_MS
+	REGION_SIZE
 } from "./constants.mjs";
+import { buildOutdoorSharedObjectResources, buildOutdoorSharedRenderResources } from "./outdoorSharedStores.mjs";
 import {
 	findStaleOutdoorRegions,
+	outdoorInputSetKey,
 	outdoorRegionInputDigest,
+	outdoorRegionInputSignature,
 	outdoorSharedInputDigest,
 	readRegionLedger,
 	writeTerrainTileLedger
 } from "./outdoorRegionLedger.mjs";
-import { copyReferencedSkyImages, resolveSkyTextures } from "./assets/copySkyImages.mjs";
-
 import {
 	copyReferencedTerrainTileImages,
 	migrateCachedTerrainTileReferences,
 	terrainTileReferencesCurrent
 } from "./assets/copyTerrainTileImages.mjs";
-import { copyReferencedWaterImages, resolveWaterTextures } from "./assets/copyWaterImages.mjs";
 import { OUTDOOR_WORLD_REGION_CATALOG_PUBLIC_PATH, overlayWorldRegionCatalog } from "./buildWorldRegionCatalog.mjs";
 import { normalizeAssetPath, publicPathToFile } from "../shared/assetPaths.mjs";
 import { mapWithConcurrency } from "../shared/asyncUtils.mjs";
 import { sha256Hex } from "../shared/hash.mjs";
 import { refreshPrecompressedSidecars } from "../generatedManifestSidecars.mjs";
-import { exists, writeJson } from "./io.mjs";
-import { writeIntoPublicTree } from "../shared/publicWrite.mjs";
+import { exists, writeCompactJson, writeJson } from "./io.mjs";
 
-const NEWLINE_BYTE = 0x0a;
-import { parseJmxMapObjectPlacementO2, readJmxMapObjectInfo, readJmxMapTileCatalog } from "./jmx/index.mjs";
+import { readJmxMapObjectInfo, readJmxMapTileCatalog } from "./jmx/index.mjs";
 import { buildJmxWorldRegionBundle } from "./maploader/buildMapLoaderRegionBundle.mjs";
 import { WORLD_LAYER_TABLE } from "./maploader/worldLayers.mjs";
-import { buildTitleSectorObjectResources } from "./objects/buildTitleSectorObjectResources.mjs";
 import { extractedRoot, gameRoot, normalizeRegionId, publicRoot, toHex16 } from "./paths.mjs";
 
-export const OUTDOOR_WORLD_AREA = "outdoor";
 export const OUTDOOR_WORLD_SOURCE_NAME = "mission-outdoor-global";
 export const OUTDOOR_WORLD_INDEX_PUBLIC_PATH = "/assets/world/outdoor/world-regions.json";
 export const OUTDOOR_WORLD_BUNDLE_PATH_TEMPLATE = "/assets/world/outdoor/regions/region-{id}.json";
-export const OUTDOOR_WORLD_OBJECT_MESH_ROOT_PUBLIC_PATH = "/assets/world/outdoor/object-meshes";
-export { OUTDOOR_WORLD_OBJECT_INDEX_PUBLIC_PATH, OUTDOOR_WORLD_SHARED_RENDER_PUBLIC_PATH } from "./constants.mjs";
+export {
+	OUTDOOR_WORLD_AREA,
+	OUTDOOR_WORLD_OBJECT_INDEX_PUBLIC_PATH,
+	OUTDOOR_WORLD_SHARED_RENDER_PUBLIC_PATH
+} from "./constants.mjs";
 export {
 	findStaleOutdoorRegions,
 	outdoorRegionInputDigest,
 	outdoorSharedInputDigest,
 	readTerrainTileLedger
 } from "./outdoorRegionLedger.mjs";
+export { outdoorObjectIndexMatchesDefinitions } from "./outdoorSharedStores.mjs";
 
 const OUTDOOR_WORLD_INDEX_PATH = publicPathToFile( OUTDOOR_WORLD_INDEX_PUBLIC_PATH, publicRoot );
-const OUTDOOR_WORLD_OBJECT_INDEX_PATH = publicPathToFile( OUTDOOR_WORLD_OBJECT_INDEX_PUBLIC_PATH, publicRoot );
-const OUTDOOR_WORLD_SHARED_RENDER_PATH = publicPathToFile( OUTDOOR_WORLD_SHARED_RENDER_PUBLIC_PATH, publicRoot );
 // Names the code stamp of every outdoor reuse cache (regions, shared indexes).
 const OUTDOOR_CODE_STAMP = "outdoor-world";
 
@@ -275,7 +273,8 @@ export async function loadOutdoorWorldRegionResourceGroup( options = {} ) {
 			extractedRoot: options.extractedRoot,
 			sectors,
 			jobs: normalizeJobs( options.jobs ),
-			publicRoot: options.publicRoot
+			publicRoot: options.publicRoot,
+			ledgerPath: options.ledgerPath
 		} );
 		if ( stale.length > 0 ) {
 			throw new Error(
@@ -414,13 +413,32 @@ export async function buildOutdoorWorldRegionResources( options = {} ) {
 
 	let built = 0;
 	let reused = 0;
-	const { tiles: tilesByRegion, references: referencesByRegion, inputs: inputsByRegion } = await readRegionLedger();
+	const {
+		tiles: tilesByRegion,
+		references: referencesByRegion,
+		inputs: inputsByRegion,
+		inputStats: inputStatsByRegion,
+		sharedDigest: ledgerSharedDigest
+	} = await readRegionLedger();
 	// After the shared stores above: their published bytes join every digest.
 	const sharedDigest = await outdoorSharedInputDigest( sourceExtractedRoot, publicRoot );
+	// This run's signatures, the whole-set key's input: the ledger map may
+	// still name sectors discovery no longer finds, the key must not.
+	const runSignatures = new Map();
 	await mapWithConcurrency( selectedSectors, jobs, async ( sector, index ) => {
 		const publicPath = outdoorRegionBundlePublicPath( sector.id );
 		const outputPath = publicPathToFile( publicPath, publicRoot );
-		const inputDigest = await outdoorRegionInputDigest( sector, sharedDigest );
+		// A region whose input files kept their size and mtime since its
+		// digest was recorded is not re-read or re-hashed: the recorded
+		// digest stands, while the shared digest it was folded under stands.
+		const recordedSignature = inputStatsByRegion.get( String( sector.id ) );
+		const signature = await outdoorRegionInputSignature( sector );
+		inputStatsByRegion.set( String( sector.id ), signature );
+		runSignatures.set( String( sector.id ), signature );
+		const inputDigest = !force && ledgerSharedDigest === sharedDigest &&
+				signature === recordedSignature && inputsByRegion.has( String( sector.id ) ) ?
+			inputsByRegion.get( String( sector.id ) ) :
+			await outdoorRegionInputDigest( sector, sharedDigest );
 		if ( !force && inputsByRegion.get( String( sector.id ) ) === inputDigest && (await exists( outputPath )) ) {
 			// Reuse keeps the bundle, not a promise that its images still exist.
 			let tiles = tilesByRegion.get( String( sector.id ) );
@@ -487,7 +505,18 @@ export async function buildOutdoorWorldRegionResources( options = {} ) {
 		} );
 	} );
 
-	await writeTerrainTileLedger( tilesByRegion, referencesByRegion, inputsByRegion );
+	// The whole-set key vouches for the input set only when this run saw
+	// every sector (the same gate as the code stamp below); a partial run
+	// refreshes the signatures it touched and leaves the key unwritten. The
+	// recorded shared digest stands only while every recorded input digest
+	// was computed under it: a partial run under a moved shared digest
+	// leaves the set mixed and records none.
+	const fullRun = selectedSectors.length === sectors.length;
+	await writeTerrainTileLedger( tilesByRegion, referencesByRegion, inputsByRegion, {
+		inputStats: inputStatsByRegion,
+		setKey: fullRun ? outdoorInputSetKey( sharedDigest, runSignatures ) : null,
+		sharedDigest: fullRun || ledgerSharedDigest === sharedDigest ? sharedDigest : null
+	} );
 	const missingBundlePaths = await findMissingBundlePaths( descriptor.regions, jobs );
 	let published = false;
 	let catalog;
@@ -524,218 +553,6 @@ export async function buildOutdoorWorldRegionResources( options = {} ) {
 		},
 		sharedRenderPublicPath: OUTDOOR_WORLD_SHARED_RENDER_PUBLIC_PATH,
 		catalog
-	};
-}
-
-/*
-================
-buildOutdoorSharedRenderResources
-================
-*/
-async function buildOutdoorSharedRenderResources( options = {} ) {
-	if ( !options.force && (await exists( OUTDOOR_WORLD_SHARED_RENDER_PATH )) ) {
-		const existing = JSON.parse( await readFile( OUTDOOR_WORLD_SHARED_RENDER_PATH, "utf8" ) );
-		validateSharedRenderResources( existing );
-		// The kept resources claim the sky and water textures they name.
-		await claimKeptOutput( OUTDOOR_WORLD_SHARED_RENDER_PATH );
-		return existing;
-	}
-
-	const sky = resolveSkyTextures();
-	const waterTextures = resolveWaterTextures();
-	await Promise.all( [ copyReferencedSkyImages( sky ), copyReferencedWaterImages( waterTextures ) ] );
-	const shared = {
-		format: "sro-world-shared-render-resources",
-		version: 1,
-		sky,
-		water: {
-			normalBlockCondition: {
-				type: 0,
-				nonzeroWaveType: true
-			},
-			normalFrameDurationMs: WATER_NORMAL_FRAME_DURATION_MS,
-			normalFramePublicPaths: waterTextures.normalFramePublicPaths,
-			reflectionBumpPublicPath: waterTextures.reflectionBumpPublicPath,
-			specialTexturePublicPath: waterTextures.specialTexturePublicPath,
-			waveTexturePublicPaths: waterTextures.waveTexturePublicPaths
-		}
-	};
-	await writeJson( OUTDOOR_WORLD_SHARED_RENDER_PATH, shared );
-	return shared;
-}
-
-/*
-================
-buildOutdoorSharedObjectResources
-================
-*/
-async function buildOutdoorSharedObjectResources( options ) {
-	const objectInfoPath = path.join( options.extractedRoot, "Map_extracted", "object.ifo" );
-	const objectInfo = await readJmxMapObjectInfo( objectInfoPath );
-	const usage = await collectOutdoorObjectUsage( options.sectors, {
-		extractedRoot: options.extractedRoot,
-		jobs: options.jobs
-	} );
-	const missingObjectIds = usage.objectIds.filter(
-		( objectId ) => !objectInfo.entriesById[String( objectId )]
-	);
-	if ( missingObjectIds.length > 0 ) {
-		throw new Error(
-			`Outdoor MAPO2 sectors reference missing object.ifo ids: ${missingObjectIds.join( ", " )}`
-		);
-	}
-
-	const objectDefinitions = usage.objectIds.map( ( objectId ) => {
-		const entry = objectInfo.entriesById[String( objectId )];
-		return {
-			objectId,
-			flags: entry.flags,
-			sourcePath: entry.sourcePath,
-			placementCount: usage.placementCountsByObjectId.get( objectId )
-		};
-	} );
-	if ( !options.force && (await exists( OUTDOOR_WORLD_OBJECT_INDEX_PATH )) ) {
-		const index = JSON.parse( await readFile( OUTDOOR_WORLD_OBJECT_INDEX_PATH, "utf8" ) );
-		validateObjectResourceIndex( index );
-		// Code stamps cannot notice added source sectors. Check their complete
-		// object usage before trusting a shared index from an earlier region set.
-		if ( outdoorObjectIndexMatchesDefinitions( index, objectDefinitions ) ) {
-			await claimKeptOutput( OUTDOOR_WORLD_OBJECT_INDEX_PATH );
-			return { index, collisionResources: collisionResourcesFromIndex( index ) };
-		}
-	}
-	const resources = await buildTitleSectorObjectResources( {
-		area: OUTDOOR_WORLD_AREA,
-		extractedRoot: options.extractedRoot,
-		gameRoot: options.gameRoot,
-		objectDefinitions,
-		placements: [],
-		placementCountsByObjectId: usage.placementCountsByObjectId
-	} );
-
-	const meshes = resources.meshes;
-	const collisionMeshes = [];
-	const meshFiles = [];
-	for ( let index = 0; index < meshes.length; index += 1 ) {
-		const mesh = meshes[index];
-		const wrapper = {
-			format: "sro-world-object-mesh-resource",
-			version: 1,
-			mesh
-		};
-		const bytes = Buffer.from( `${JSON.stringify( wrapper )}\n`, "utf8" );
-		const sha256 = sha256Hex( bytes );
-		const publicPath = `${OUTDOOR_WORLD_OBJECT_MESH_ROOT_PUBLIC_PATH}/${sha256}.json`;
-		const outputPath = publicPathToFile( publicPath, publicRoot );
-		// Content-addressed: a forced rebuild still leaves identical bytes alone,
-		// so their mtimes, sidecars and pack hashes stay fresh.
-		if ( options.force || !(await exists( outputPath )) ) {
-			await writeIntoPublicTree( outputPath, publishedJson( bytes ) );
-		} else claimPublicFile( outputPath );
-
-		meshFiles.push( {
-			sourcePath: mesh.sourcePath,
-			publicPath,
-			sha256,
-			byteLength: mesh.byteLength,
-			vertexCount: mesh.vertexCount,
-			triangleCount: mesh.triangleCount,
-			bounds: mesh.bounds
-		} );
-		collisionMeshes.push( {
-			sourcePath: mesh.sourcePath,
-			bounds: mesh.bounds
-		} );
-		// Deliberate memory release once the mesh is serialized; the JSDoc cast keeps the
-		// array's element type intact for the reads above (the loop never revisits an index).
-		meshes[index] = /** @type {any} */ (undefined);
-	}
-
-	const { meshes: _discardedMeshes, ...resourceIndexFields } = resources;
-	const index = {
-		...resourceIndexFields,
-		format: "sro-world-object-resource-index",
-		version: 1,
-		meshFiles
-	};
-	await writeJson( OUTDOOR_WORLD_OBJECT_INDEX_PATH, index );
-
-	return {
-		index,
-		collisionResources: {
-			...resources,
-			meshes: collisionMeshes
-		}
-	};
-}
-
-/*
-================
-outdoorObjectIndexMatchesDefinitions
-
-A retained resource index must describe every currently used object, with
-the same catalog identity and placement count. Added regions can introduce
-objects without changing any builder code or the existing index's shape.
-================
-*/
-export function outdoorObjectIndexMatchesDefinitions( index, definitions ) {
-	const resources = new Map( index.bsr.map( ( resource ) => [ resource.objectId, resource ] ) );
-	// The same count both ways: an index that still holds the objects of sectors
-	// since removed is as stale as one missing a new object.
-	return resources.size === index.bsr.length && resources.size === definitions.length &&
-		definitions.every( ( definition ) => {
-			const resource = resources.get( definition.objectId );
-			return resource !== undefined && resource.objectFlags === definition.flags &&
-				resource.placementCount === definition.placementCount &&
-				normalizeAssetPath( resource.sourcePath ) === normalizeAssetPath( definition.sourcePath );
-		} );
-}
-
-/*
-================
-collectOutdoorObjectUsage
-================
-*/
-async function collectOutdoorObjectUsage( sectors, options ) {
-	const objectIds = new Set();
-	const placementCountsByObjectId = new Map();
-
-	await mapWithConcurrency( sectors, options.jobs, async ( sector ) => {
-		const o2Path = path.join(
-			options.extractedRoot,
-			"Map_extracted",
-			String( sector.sectorY ),
-			`${sector.sectorX}.o2`
-		);
-		const placements = parseJmxMapObjectPlacementO2( await readFile( o2Path ), o2Path );
-		for ( const placement of placements.placements ) {
-			objectIds.add( placement.objectId );
-			placementCountsByObjectId.set(
-				placement.objectId,
-				(placementCountsByObjectId.get( placement.objectId ) ?? 0) + 1
-			);
-		}
-	} );
-
-	return {
-		objectIds: [ ...objectIds ].sort( ( left, right ) => left - right ),
-		placementCountsByObjectId
-	};
-}
-
-/*
-================
-collisionResourcesFromIndex
-================
-*/
-function collisionResourcesFromIndex( index ) {
-	return {
-		...index,
-		format: "sro-title-sector-object-resources",
-		meshes: index.meshFiles.map( ( mesh ) => ({
-			sourcePath: mesh.sourcePath,
-			bounds: mesh.bounds
-		}) )
 	};
 }
 
@@ -833,81 +650,12 @@ function validateOutdoorIndex( descriptor ) {
 
 /*
 ================
-validateSharedRenderResources
-================
-*/
-function validateSharedRenderResources( resources ) {
-	if (
-		resources?.format !== "sro-world-shared-render-resources" ||
-		!resources.sky ||
-		!resources.water
-	) {
-		throw new Error( `${OUTDOOR_WORLD_SHARED_RENDER_PUBLIC_PATH} has an invalid format` );
-	}
-}
-
-/*
-================
-validateObjectResourceIndex
-================
-*/
-function validateObjectResourceIndex( index ) {
-	if (
-		index?.format !== "sro-world-object-resource-index" ||
-		!Array.isArray( index.bsr ) ||
-		!Array.isArray( index.materialSets ) ||
-		!Array.isArray( index.meshFiles ) ||
-		index.meshFiles.some(
-			( mesh ) =>
-				typeof mesh.sourcePath !== "string" ||
-				typeof mesh.publicPath !== "string" ||
-				!/^[0-9a-f]{64}$/.test( mesh.sha256 ?? "" ) ||
-				!Object.hasOwn( mesh, "bounds" )
-		)
-	) {
-		throw new Error( `${OUTDOOR_WORLD_OBJECT_INDEX_PUBLIC_PATH} has an invalid format` );
-	}
-}
-
-/*
-================
 outdoorRegionBundlePublicPath
 ================
 */
 export function outdoorRegionBundlePublicPath( id ) {
 	const hex = normalizeRegionId( id ).slice( 2 );
 	return OUTDOOR_WORLD_BUNDLE_PATH_TEMPLATE.replace( "{id}", hex );
-}
-
-/*
-================
-publishedJson
-
-The bytes the JSON pass leaves on disk for one of this builder's records
-(jsonAssetCompression.mjs minifyJsonBytes): JSON.stringify output loses only
-its trailing newline. Writing that form directly stops every rebuild from
-rewriting 16k files the pass then rewrites and regzips again.
-
-The names and descriptors still hash the newline form, as they always have
-(a mesh file's sha256 is not its name's); renaming every mesh would be a
-data release of its own.
-================
-*/
-function publishedJson( bytes ) {
-	return bytes.at( -1 ) === NEWLINE_BYTE ? bytes.subarray( 0, -1 ) : bytes;
-}
-
-/*
-================
-writeCompactJson
-================
-*/
-async function writeCompactJson( outputPath, value ) {
-	const text = `${JSON.stringify( value )}\n`;
-	// An unchanged bundle keeps its mtime: a rebuild of all 2123 regions
-	// otherwise sent every one back through the JSON gzip pass.
-	await writeIntoPublicTree( outputPath, publishedJson( Buffer.from( text, "utf8" ) ) );
-	return text;
 }
 
 /*
