@@ -16,7 +16,15 @@ test("all four retail angel/devil rows retain separate wing resource, animation 
 		overrides = loadAvatarVisualOverrides( path.join( clientV150ResinfoRoot, "avataritemdata.txt" ), rows );
 	const roster = JSON.parse( fs.readFileSync( path.join( publicRoot, "assets/char/roster.json" ), "utf8" ) );
 	assert.equal( Object.keys( overrides ).length, 4 );
-	assert.deepEqual( roster.dress.avatarVisualOverrides, overrides );
+	// The four retail rows publish exactly; a later row beside them (the
+	// Devil's Spirit transformation, #4441) overrides the animation only
+	// and carries no wing model of its own.
+	for ( const [id, override] of Object.entries( overrides ) ) {
+		assert.deepEqual( roster.dress.avatarVisualOverrides[id], override );
+	}
+	for ( const [id, override] of Object.entries( roster.dress.avatarVisualOverrides ) ) {
+		if ( !Object.hasOwn( overrides, id ) ) assert.equal( override.additionalBsr, "", id );
+	}
 	for ( const [id, override] of Object.entries( overrides ) ) {
 		assert.equal( override.animation, "avatar_wing" );
 		assert.equal( override.priority, 50 );
@@ -83,6 +91,8 @@ test("devil wing environment-map payload survives character parsing and publicat
 	const { parseModDataSection } = await import( "../../../../scripts/build/shared/bsrModifiers.mjs" );
 	const roster = JSON.parse( fs.readFileSync( path.join( publicRoot, "assets/char/roster.json" ), "utf8" ) );
 	for ( const [id, row] of Object.entries( roster.dress.avatarVisualOverrides ) ) {
+		// A row with no wing model of its own (#4441) has no payload to keep.
+		if ( !row.additionalBsr ) continue;
 		const bytes = await loadDataAsset( row.additionalBsr ),
 			raw = parseModDataSection( bytes, bytes.readUInt32LE( 0x24 ) ),
 			parsed = parseCharacterBsr( bytes );
