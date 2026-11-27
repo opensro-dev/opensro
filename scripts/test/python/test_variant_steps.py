@@ -511,6 +511,92 @@ class VariantSteps(unittest.TestCase):
 				sys.modules.pop(name, None)
 
 	# ================
+	# test_a_sibling_function_the_step_never_called_is_not_code
+	#
+	# shared.py is a helper module many steps call into: this step calls
+	# shared.used and Table.read, never shared.other or Table.write. Keyed
+	# whole, an edit to either sibling made every step that called any
+	# shared helper stale: r204n reran 23 of 28 steps for 1850 s (#4337).
+	# The functions that started are the step's code, and nothing else in
+	# a file that ran.
+	# ================
+	def test_a_sibling_function_the_step_never_called_is_not_code(self):
+		repo = Path(self.temp.name) / "repo"
+		scripts = repo / "scripts"
+		scripts.mkdir(parents=True)
+		(scripts / "stepmod.py").write_text(
+			"import shared\n\nCALLS = {'n': 0}\n\n\n"
+			"def run(variant):\n"
+			"\tCALLS['n'] += 1\n"
+			"\tout = variant / 'extracted'\n"
+			"\tout.mkdir(parents=True, exist_ok=True)\n"
+			"\t(out / 'step.txt').write_text(str(shared.used() + shared.Table().read()))\n"
+			"\treturn {'n': 1}\n",
+			encoding="utf-8",
+		)
+
+		def shared(used=1, other=1, read=1, write=1):
+			return (
+				f"def used():\n\treturn {used}\n\n\n"
+				f"def other():\n\treturn {other}\n\n\n"
+				f"class Table:\n"
+				f"\tdef read(self):\n\t\treturn {read}\n\n"
+				f"\tdef write(self):\n\t\treturn {write}\n"
+			)
+
+		(scripts / "shared.py").write_text(shared(), encoding="utf-8")
+		stepmod = self.load_module(scripts, "stepmod")
+		steps = [("step", stepmod.run, (self.variant,))]
+
+		def edit(**values):
+			(scripts / "shared.py").write_text(shared(**values), encoding="utf-8")
+			run_build(self.variant, steps, repository_root=repo)
+			return stepmod.CALLS["n"]
+
+		try:
+			run_build(self.variant, steps, repository_root=repo)
+			self.assertEqual(edit(other=2), 1)
+			self.assertEqual(edit(other=2, write=2), 1)
+			self.assertEqual(edit(other=2, write=2, read=2), 2)
+			self.assertEqual(edit(other=2, write=2, read=2, used=2), 3)
+		finally:
+			for name in ("stepmod", "shared"):
+				sys.modules.pop(name, None)
+
+	# ================
+	# test_a_journal_without_functions_keys_its_ran_files_whole
+	#
+	# A journal written before the functions were kept (the recorder
+	# below drops them) replays on unchanged code, so the upgrade itself
+	# reruns nothing, and keys each file its step ran whole, as it was
+	# keyed then: a new function beside the one that ran makes it stale.
+	# ================
+	def test_a_journal_without_functions_keys_its_ran_files_whole(self):
+		repo = Path(self.temp.name) / "repo"
+		scripts = self.write_repository(repo)
+		stepmod = self.load_module(scripts, "stepmod")
+		steps = [("step", stepmod.run, (self.variant,))]
+		classify = variant_steps.Runner.classify_reads
+
+		def without_functions(runner, reads, code=(), imported=(), functions=None):
+			recorded = classify(runner, reads, code, imported, functions)
+			recorded.pop("functions")
+			return recorded
+
+		try:
+			with mock.patch.object(variant_steps.Runner, "classify_reads", without_functions):
+				run_build(self.variant, steps, repository_root=repo)
+			run_build(self.variant, steps, repository_root=repo)
+			self.assertEqual(stepmod.CALLS["n"], 1)
+			helper = (scripts / "helper.py").read_text(encoding="utf-8")
+			(scripts / "helper.py").write_text(helper + "\n\ndef added():\n\treturn 1\n", encoding="utf-8")
+			run_build(self.variant, steps, repository_root=repo)
+			self.assertEqual(stepmod.CALLS["n"], 2)
+		finally:
+			for name in ("stepmod", "helper", "rarely"):
+				sys.modules.pop(name, None)
+
+	# ================
 	# test_a_summary_keyed_by_numbers_replays
 	#
 	# The skill import's summary counts by mastery id: an int-keyed dict
