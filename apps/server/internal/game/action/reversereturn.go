@@ -75,6 +75,9 @@ const (
 	errCodeReverseWorld uint8 = 0xf5
 	errCodeReverseJob   uint8 = 0xe9
 	errCodeReverseWar   uint8 = 0xf2
+	// errCodeScrollArena is 0x187A, the low byte both scroll uses answer
+	// when the reader stands in a Battle Arena world.
+	errCodeScrollArena uint8 = 0x7a
 )
 
 /*
@@ -250,6 +253,30 @@ type reverseReturnTarget struct {
 
 /*
 ================
+reverseWorldRefused
+
+The reverse handler's world tests, shared by the bag's scroll
+and the limited use (the limited-use work calls the same handler): the
+current world's reference type (+0x20) must be zero, else 0x18F5; then
+a Battle Arena world refuses 0x187A, so the cast cannot take a player
+out of a running match. Sets *result and returns true when it refuses.
+================
+*/
+func reverseWorldRefused(c *enterworld.Character, result *OpResult) bool {
+	here, known := instance.Lookup(instance.ID(domain.CharacterWorldInstance(c)).Definition())
+	if !known || here.NativeType != 0 {
+		*result = itemUseFailure(errCodeReverseWorld)
+		return true
+	}
+	if here.BattleArena() {
+		*result = itemUseFailure(errCodeScrollArena)
+		return true
+	}
+	return false
+}
+
+/*
+================
 beginReverseReturnScroll
 
 The reference server's reverse return: the scroll in bag row `row` starts its cast to the chosen point.
@@ -260,9 +287,7 @@ func (rt *Runtime) beginReverseReturnScroll(division string, c *enterworld.Chara
 	if rt.jobRefusesScroll(tunables.JobBlockReverseReturnScroll, c, result) {
 		return false
 	}
-	// The reference server requires the current world's reference type (+0x20) to be zero.
-	if here, ok := instance.Lookup(instance.ID(domain.CharacterWorldInstance(c)).Definition()); !ok || here.NativeType != 0 {
-		*result = itemUseFailure(errCodeReverseWorld)
+	if reverseWorldRefused(c, result) {
 		return false
 	}
 	var destination travelPoint

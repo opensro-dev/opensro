@@ -168,6 +168,46 @@ func (rt *Runtime) returnCastAdmission(division string, c *enterworld.Character,
 
 /*
 ================
+returnScrollArenaRefused
+
+The reference server refuses both return scrolls in a Battle Arena world
+(the world manager's battle-arena test: the world class's slot-30
+answer) with 0x187A. Sets *result and returns true when it refuses.
+================
+*/
+func (rt *Runtime) returnScrollArenaRefused(c *enterworld.Character, result *OpResult) bool {
+	here, ok := instance.Lookup(instance.ID(domain.CharacterWorldInstance(c)).Definition())
+	if !ok || !here.BattleArena() {
+		return false
+	}
+	*result = itemUseFailure(errCodeScrollArena)
+	return true
+}
+
+/*
+================
+resurrectScrollAdmission
+
+The ordinary (RESURRECT) return's admission, from the bag or as a
+limited use: the cast checks (quest, casting, criminal state), then the
+Battle Arena refusal, then the destination's transport refusal. The reference server
+tests the arena ahead of the destination string, so a reader with a
+transport in the arena hears 0x187A, not 0x185E.
+================
+*/
+func (rt *Runtime) resurrectScrollAdmission(division string, c *enterworld.Character, result *OpResult) bool {
+	if !rt.returnCastAdmission(division, c, result) || rt.returnScrollArenaRefused(c, result) {
+		return false
+	}
+	if rt.townTravelTransportRefused(c) {
+		*result = itemUseFailure(0x5e)
+		return false
+	}
+	return true
+}
+
+/*
+================
 beginReturnScroll
 
 Inside the item-use character mutation door. The v1.188 item use
@@ -186,13 +226,17 @@ func (rt *Runtime) beginReturnScroll(division string, c *enterworld.Character, r
 	var destination *travelPoint
 	switch ref.ReturnDestination {
 	case "RESURRECT":
-		if mode != teleportModeBlocking || !rt.returnScrollAdmission(division, c, result) {
+		if mode != teleportModeBlocking || !rt.resurrectScrollAdmission(division, c, result) {
 			return false
 		}
 	case "THIEFDEN":
 		// Reference server: only a thief in job mode (job state 2) returns to the den,
 		// at the gate Param4 names.
 		if !rt.returnCastAdmission(division, c, result) {
+			return false
+		}
+		// The arena refusal precedes the destination string's own checks.
+		if rt.returnScrollArenaRefused(c, result) {
 			return false
 		}
 		if enterworld.DressedJob(c) != domain.JobThief {

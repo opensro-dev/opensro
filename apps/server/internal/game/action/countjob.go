@@ -232,7 +232,7 @@ func (rt *Runtime) runLimitedUse(division string, c *enterworld.Character, ref *
 	switch limitedUseKindOf(ref) {
 	case limitedUseReturn:
 		duration, mode, ok := returnScrollTiming(ref)
-		if !ok || mode != teleportModeBlocking || !rt.returnScrollAdmission(division, c, result) {
+		if !ok || mode != teleportModeBlocking || !rt.resurrectScrollAdmission(division, c, result) {
 			return false
 		}
 		at := rt.liveSpawn(simulation.WorldKey(division, c.Name), c, now)
@@ -249,6 +249,11 @@ func (rt *Runtime) runLimitedUse(division string, c *enterworld.Character, ref *
 			return false
 		}
 		if rt.jobRefusesScroll(tunables.JobBlockReverseReturnScroll, c, result) {
+			return false
+		}
+		// The same reverse handler as the bag's scroll: its
+		// world tests run ahead of the shared checks.
+		if reverseWorldRefused(c, result) {
 			return false
 		}
 		duration, ok := returnScrollDuration(ref)
