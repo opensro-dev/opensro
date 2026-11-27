@@ -218,7 +218,7 @@ recoverMonster
 
 One due heal under the gates. The hot tier republishes through the
 storage's set and notes the change for the tick's 0x33A6 with the
-natural-recovery cause: the native setter (0x4A87D0) ORs the cause 0x10
+natural-recovery cause: the reference server's setter ORs the cause 0x10
 its recovery tick passes into the vitals word the periodic sync sends,
 so a holder's HP bar rises with each heal. The cold tier's archived HP
 is written in place so the monster stays dormant; nobody holds it.
