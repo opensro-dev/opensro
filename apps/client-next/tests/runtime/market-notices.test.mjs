@@ -19,7 +19,7 @@ const { createGameplay } = await import(
 );
 const { MARKET_CONTROL } = await import( "../../src/engine/foundation/gameplay/commerce-controls.ts" );
 const { MARKET_NOTICE_ARGB } = await import( "../../src/engine/foundation/gameplay/market.ts" );
-const { chatTabShows } = await import( "../../src/engine/foundation/ui/chat-layout.ts" );
+const { chatTabShows } = await import( "../../src/engine/foundation/gameplay/chat-tabs.ts" );
 
 // The four native chat tabs (All, Party, Guild, Ally).
 const NATIVE_TABS = [ 0, 1, 2, 3 ];

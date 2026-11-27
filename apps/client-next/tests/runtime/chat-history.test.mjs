@@ -17,8 +17,8 @@ import assert from "node:assert/strict";
 const { createGameplay } = await import(
 	"../../src/engine/runtime/simulation/worker/session/world/gameplay/gameplay.ts"
 );
+const { CHAT_TAB_LINES } = await import( "../../src/engine/foundation/gameplay/chat-tabs.ts" );
 const {
-	CHAT_HISTORY_KEPT,
 	chatHistoryBook,
 	chatHistorySavedBook,
 	chatHistoryScope,
@@ -65,11 +65,11 @@ test("the 101st line drops the oldest", () => {
 	const f = fixture();
 	try {
 		f.enter( "Local" );
-		for ( let i = 1; i <= CHAT_HISTORY_KEPT + 1; i++ ) f.say( GLOBAL, "Peer", "line " + i );
+		for ( let i = 1; i <= CHAT_TAB_LINES + 1; i++ ) f.say( GLOBAL, "Peer", "line " + i );
 		const texts = f.texts();
-		assert.equal( texts.length, CHAT_HISTORY_KEPT );
+		assert.equal( texts.length, CHAT_TAB_LINES );
 		assert.equal( texts[0], "line 2", "the first line said is the one dropped" );
-		assert.equal( texts[CHAT_HISTORY_KEPT - 1], "line " + (CHAT_HISTORY_KEPT + 1) );
+		assert.equal( texts[CHAT_TAB_LINES - 1], "line " + (CHAT_TAB_LINES + 1) );
 	} finally {
 		f.game.dispose();
 		mock.restoreAll();
@@ -127,7 +127,7 @@ test("another character's history stays apart", () => {
 });
 
 test("only plain line facts are written down, capped at the kept count", () => {
-	const many = Array.from( { length: CHAT_HISTORY_KEPT + 5 }, ( _, i ) => ({
+	const many = Array.from( { length: CHAT_TAB_LINES + 5 }, ( _, i ) => ({
 		channel: GLOBAL,
 		name: "Peer",
 		text: "line " + i,
@@ -137,7 +137,7 @@ test("only plain line facts are written down, capped at the kept count", () => {
 		notice: { name: "Peer" }
 	}) );
 	const stored = storedChatLines( many );
-	assert.equal( stored.length, CHAT_HISTORY_KEPT );
+	assert.equal( stored.length, CHAT_TAB_LINES );
 	assert.equal( stored[0].text, "line 5", "the oldest five are dropped" );
 	assert.ok( stored.every( line => !("links" in line) && !("notice" in line) ), "no live decorations persist" );
 	assert.equal( stored[0].sentAt, NOON_UTC + 5 );

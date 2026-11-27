@@ -17,7 +17,7 @@ import type { UiQuad, UiRect, UiControl } from "@/engine/contracts/ui";
 import type { AuthoredLayout } from "./authored-layout";
 import { chatScrollbar } from "./chat-scrollbar";
 import { textLines } from "./text-lines";
-import { STALL_CHAT_CHANNEL } from "@/engine/foundation/gameplay/stall";
+import { CHAT_TAB_LINES, chatTabShows } from "@/engine/foundation/gameplay/chat-tabs";
 import { type NoticeRowLink, noticeWrappedLinks, projectSpans } from "@/engine/foundation/gameplay/notice-links";
 import { CHAT_LINK_MARKER, chatLinkSpans, replaceChatMarkers } from "@/engine/foundation/gameplay/chat-item-links";
 import {
@@ -96,61 +96,6 @@ export function chatLeadSpans(
 	if ( contributor ) spans.push( { text: CONTRIBUTOR_TAG, color: CONTRIBUTOR_TAG_COLOR } );
 	if ( staff?.tag ) spans.push( { text: chatTagText( staff.tag ), color: CONTRIBUTOR_TAG_COLOR } );
 	return spans;
-}
-
-/*
-================
-EVERY_TAB_CHAT_CHANNELS
-
-The chat types that land on every native chat tab, never only on All:
-the native viewer files each incoming line into the All block, and
-these types into the Party, Guild and Ally blocks as well
-(CIFChatViewer_AppendLineByType 6ad280: after the type table at 6ad5d8,
-the branch on type 2, 0xff, 0xa or 3 appends to this+0x44c/0x450/0x454;
-ClientChat_PresentChannelMessage 752800 presents by raw type). Type 2
-is the whisper (#3356) and type 3 the GM's chat (#3370), so switching
-tabs must not hide a conversation or a GM line. Types 10 and 0xff are
-filed the same way; this port's chat decoder does not produce them
-today, and the rule holds for them the moment it does. The channel
-tabs otherwise keep filtering to their own channel alone. The
-port-only Event tab stays notice-only, as it is for every other
-channel.
-================
-*/
-const EVERY_TAB_CHAT_CHANNELS: readonly number[] = [ 2, 3, 0xa, 0xff ] as const;
-
-// The channel each native tab files beside the every-tab types: All
-// (general chat), Party, Guild and Ally.
-const CHAT_TAB_CHANNELS: readonly number[] = [ 1, 4, 5, 11 ] as const;
-
-/*
-================
-chatTabShows
-
-Whether a line of the given chat channel shows on the given tab. Stall
-lines belong to the stall window's own chat box. With the port-only
-Event tab offered (tab 4), it lists every channel-7 notice, and the
-port-only event notices (event: job kills, drops, plus results, breaks)
-live only there: All skips them and the native tabs never carried them.
-A native type-7 server notice, such as the operator's restart warning,
-is meant for every player, so All keeps it too (owner 2026-11-14).
-Port-only: a line marked everyTab (the consignment market's notices,
-#3529) shows on every native tab, as the native every-tab types do; a
-native notice stays on All.
-================
-*/
-export function chatTabShows(
-	channel: number,
-	tab: number,
-	eventTab: boolean,
-	event = false,
-	everyTab = false
-): boolean {
-	if ( channel === STALL_CHAT_CHANNEL ) return false;
-	if ( everyTab && !(eventTab && tab === 4) ) return true;
-	if ( eventTab && tab === 4 ) return channel === 7;
-	if ( tab === 0 ) return !eventTab || !event;
-	return channel === CHAT_TAB_CHANNELS[tab] || EVERY_TAB_CHAT_CHANNELS.includes( channel );
 }
 
 /*
@@ -276,9 +221,9 @@ export interface ChatLayoutInput {
 }
 // The kind prefix of an item-link span (chat-item-links.ts chatLinkSpans).
 const CHAT_ITEM_KIND = "chat-item:";
-// The wraps one cache holds at most (#3176): the log keeps 128 lines, so
-// this holds several widths' worth of the whole log before the oldest
-// wraps age out.
+// The wraps one cache holds at most (#3176): a tab draws at most
+// CHAT_TAB_LINES lines, so this holds several widths' worth of a whole
+// tab before the oldest wraps age out.
 const CHAT_WRAP_CACHE_MAX = 512;
 
 /*
@@ -461,7 +406,10 @@ button
 		}
 		const clip: UiRect = [ 27, y + 28, textWidth, rows * 56 + 7 ];
 		const all = [
-			...(activeTab === 0 && lines.length < 128 ?
+			// The welcome heads the All tab. Its old "log under 128 lines" gate
+			// dates from a 128-line log; the 100-line log always passed it, and
+			// a log that keeps every tab's lines must not hide it either.
+			...(activeTab === 0 ?
 				chatWrappedLines(
 					state.wrapCache,
 					welcome,
@@ -482,7 +430,10 @@ button
 					sequence: undefined as number | undefined
 				}) ) :
 				[]),
+			// Each native tab list keeps its own last CHAT_TAB_LINES (6ac81e);
+			// the shared log may hold more for the other tabs (chatLogKept).
 			...lines.filter( l => chatTabShows( l.channel, activeTab, !!state.eventTab, !!l.event, !!l.everyTab ) )
+				.slice( -CHAT_TAB_LINES )
 				.flatMap(
 					l => {
 						const sun = isSunDropChatLine( l ),

@@ -18,7 +18,7 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import { defined } from "../helpers/defined.mjs";
 const { createChat } = await import( "../../src/engine/runtime/simulation/worker/session/world/gameplay/chat/chat.ts" ),
-	{ CHAT_HISTORY_KEPT } = await import( "../../src/engine/foundation/gameplay/chat-history.ts" ),
+	{ CHAT_TAB_LINES } = await import( "../../src/engine/foundation/gameplay/chat-tabs.ts" ),
 	{ createQuests, MAX_QUESTS } = await import(
 		"../../src/engine/runtime/simulation/worker/session/world/gameplay/quests/quests.ts"
 	),
@@ -119,10 +119,10 @@ test("chat broadcasts reject truncated packets atomically, bound history and sup
 	}
 	assert.equal( chat.state().lines.length, 0 );
 	for ( let i = 0; i < 150; i++ ) chat.receive( { opcode: 0x3667, payload: p }, 1 );
-	assert.equal( chat.state().lines.length, CHAT_HISTORY_KEPT );
+	assert.equal( chat.state().lines.length, CHAT_TAB_LINES );
 	assert.equal( chat.state().lines[0].text, "hi" );
 	chat.receive( { opcode: 0x3667, payload: p }, 2 );
-	assert.equal( chat.state().lines.length, CHAT_HISTORY_KEPT );
+	assert.equal( chat.state().lines.length, CHAT_TAB_LINES );
 	assert.throws( () => chat.request( 1, "a".repeat( 101 ), "", 0 ) );
 	assert.throws( () => chat.request( 2, "hi", "", 0 ) );
 });

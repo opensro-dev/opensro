@@ -36,7 +36,8 @@ import {
 	stripChatMarkers
 } from "@/engine/foundation/gameplay/chat-item-links";
 import { CHAT_HISTORY_CONTROL } from "@/engine/foundation/gameplay/commerce-controls";
-import { CHAT_HISTORY_KEPT, type StoredChatLine } from "@/engine/foundation/gameplay/chat-history";
+import type { StoredChatLine } from "@/engine/foundation/gameplay/chat-history";
+import { chatLogKept } from "@/engine/foundation/gameplay/chat-tabs";
 import { NO_JOB_CLASS } from "@/engine/foundation/gameplay/job-guild";
 import { partyActiveJob } from "@/engine/foundation/gameplay/party-matching";
 import { CHAT_ACK_TIMEOUT_MS, uiTuningFrom } from "@/engine/foundation/ui/ui-tuning";
@@ -47,8 +48,6 @@ import {
 	WHISPER_BLOCK_ACK_OPCODE
 } from "@/engine/contracts/opcodes";
 import { viewOf } from "@/engine/foundation/binary/byte-view";
-// The window keeps the last CHAT_HISTORY_KEPT lines (chat-history.ts):
-// the 101st drops the oldest, live and across a reload alike.
 const CHAT_FEEDBACK_LIMIT = 100;
 const CHAT_TEXT_LIMIT = 100;
 const CHAT_NAME_LIMIT = 128;
@@ -312,14 +311,17 @@ A received line's item links, decoded through the bag's own presentation.
 append
 
 Live lines are stamped on arrival; replayed history keeps the server's time.
+Each chat tab keeps its own last lines, as the native lists do
+(chat-tabs.ts chatLogKept), so a line only some tabs show never pushes
+another tab's lines out.
 ================
 	*/
 	function append( line: ChatLine ) {
-		lines = [ ...lines.slice( 1 - CHAT_HISTORY_KEPT ), {
+		lines = chatLogKept( [ ...lines, {
 			...line,
 			sequence: ++sequence,
 			sentAt: line.sentAt ?? Date.now()
-		} ];
+		} ] );
 	}
 	/*
 ================
