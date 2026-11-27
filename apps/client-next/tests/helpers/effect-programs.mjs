@@ -6,7 +6,9 @@ effect-programs.mjs - compile effects from a catalogue-shaped value in tests
 The worker reads one published effect file and its meshes (#3951) and
 compiles them with program.ts. Tests hold effects as one catalogue-shaped
 value instead: a small fixture written by hand, or the whole published
-closure (scripts/lib/effectCatalog.mjs readEffectCatalogSync). This helper
+closure (scripts/lib/effectCatalog.mjs readEffectCatalogSync); a test
+that needs only some published effects reads each one's own file
+(decodePublishedEffect), so it depends on those files alone. This helper
 turns one effect of that value into the published per-effect bytes and runs
 the worker's own parse and compile on them, so every test exercises the
 shipped decoder and none spells the file layout.
@@ -14,7 +16,7 @@ shipped decoder and none spells the file layout.
 ===========================================================================
 */
 import "./native-source-loader.mjs";
-import { effectProgramFromCatalog } from "../../../../scripts/lib/effectCatalog.mjs";
+import { effectProgramFromCatalog, readEffectProgramSync } from "../../../../scripts/lib/effectCatalog.mjs";
 
 const { compileEffectProgram, parseEffectProgram } = await import(
 	"../../src/engine/runtime/assets/worker/effects/program/program.ts"
@@ -48,4 +50,17 @@ export function createCatalogEffects() {
 			return compileEffectProgram( parseEffectProgram( bytes ), meshes, path );
 		}
 	};
+}
+
+/*
+================
+decodePublishedEffect
+
+One published effect compiled from its own file and the meshes it names,
+as the worker reads them (effectCatalog.mjs readEffectProgramSync).
+================
+*/
+export function decodePublishedEffect( path, publicRoot ) {
+	const { bytes, meshes } = readEffectProgramSync( path, publicRoot );
+	return compileEffectProgram( parseEffectProgram( bytes ), meshes, path );
 }
