@@ -329,8 +329,11 @@ recordResult
 
 Keeps text as the result of this fingerprint, written whole or not at
 all (a temporary renamed into place), and trims the gate's results to
-the RECENT_RESULTS newest. A result that cannot be saved costs a rebuild,
-never a failed gate.
+the RECENT_RESULTS newest: this one, and the newest of the others by
+mtime. The one just written is never a trim candidate, since results
+written within the clock's resolution tie and a tie could drop it (the
+checkStampsShared test failed so on CI, #4633). A result that cannot be
+saved costs a rebuild, never a failed gate.
 ================
 */
 export function recordResult( name, key, text ) {
@@ -340,11 +343,11 @@ export function recordResult( name, key, text ) {
 		mkdirSync( directory, { recursive: true } );
 		writeFileSync( temporary, text );
 		renameSync( temporary, file );
-		const kept = readdirSync( directory )
-			.filter( entry => entry.endsWith( ".txt" ) )
+		const others = readdirSync( directory )
+			.filter( entry => entry.endsWith( ".txt" ) && entry !== `${key}.txt` )
 			.map( entry => ({ entry, at: statSync( path.join( directory, entry ) ).mtimeMs }) )
 			.sort( ( a, b ) => b.at - a.at );
-		for ( const { entry } of kept.slice( RECENT_RESULTS ) ) {
+		for ( const { entry } of others.slice( RECENT_RESULTS - 1 ) ) {
 			rmSync( path.join( directory, entry ), { force: true } );
 		}
 	} catch ( error ) {
