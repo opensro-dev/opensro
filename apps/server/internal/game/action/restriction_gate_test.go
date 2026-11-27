@@ -128,6 +128,11 @@ func TestTradeRestrictionDropsTheGatedRequests(t *testing.T) {
 	if calls.Load() != 1 {
 		t.Fatal("a bag move was gated as a drop")
 	}
+	for _, f := range frames {
+		if f.Opcode == wire.OpGMRestrictionNotice {
+			t.Fatal("a bag move drew the restriction notice")
+		}
+	}
 	frames = h.fire(t, conn, wire.OpItemMoveRequest, []byte{wire.MoveTypeGoldDrop, 1, 0, 0, 0, 0, 0, 0, 0})
 	if calls.Load() != 2 {
 		t.Fatal("a gold drop was gated as an item drop")
