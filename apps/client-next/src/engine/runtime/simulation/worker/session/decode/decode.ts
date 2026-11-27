@@ -169,6 +169,7 @@ export function createSessionDecoder() {
 			weaponSelected: boolean( v.weaponSelected ),
 			deletePending: boolean( v.deletePending ),
 			...(v.deleteReservedAt !== undefined ? { deleteReservedAt: string( v.deleteReservedAt ) } : {}),
+			...(v.deleteMaturesAt !== undefined ? { deleteMaturesAt: string( v.deleteMaturesAt ) } : {}),
 			visualLoadout: Object.freeze( {
 				modelCodename: string( loadout.modelCodename ),
 				animationSetName: string( loadout.animationSetName ),

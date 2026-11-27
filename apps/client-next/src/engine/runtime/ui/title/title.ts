@@ -39,6 +39,26 @@ const NARROW_VERSION_BOTTOM = 45;
 createTitleUi
 ================
 */
+
+// The native deletion wait: the countdown's span when the server names no
+// matured instant (an older server).
+const NATIVE_DELETION_WINDOW_MS = 7 * 24 * 3600000;
+
+/*
+================
+deletionWindowMs
+
+The select screen's countdown span: from the reservation to the instant
+the server archives the character (deleteMaturesAt), which follows the
+shard's deletion window; the native seven days without one.
+================
+*/
+export function deletionWindowMs( reservedAt: number, maturesAt: number ): number {
+	return Number.isFinite( reservedAt ) && Number.isFinite( maturesAt ) && maturesAt > reservedAt ?
+		maturesAt - reservedAt :
+		NATIVE_DELETION_WINDOW_MS;
+}
+
 export function createTitleUi(
 	assets: Pick<AssetOwner, "available" | "request" | "take" | "cancel">,
 	base: string
@@ -587,8 +607,8 @@ export function createTitleUi(
 				if ( chosen?.deletePending ) {
 					const parent: UiRect = [ Math.trunc( (w - 328) / 2 ), bottom - 102, 328, 92 ];
 					picture( "GDR_STA_REMAINTIME", parent );
-					const total = 7 * 24 * 3600000,
-						start = Date.parse( chosen.deleteReservedAt ?? "" ),
+					const start = Date.parse( chosen.deleteReservedAt ?? "" ),
+						total = deletionWindowMs( start, Date.parse( chosen.deleteMaturesAt ?? "" ) ),
 						remaining = Number.isFinite( start ) ?
 							Math.max( 0, Math.min( total, start + total - Date.now() ) ) :
 							null;

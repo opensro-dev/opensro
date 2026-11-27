@@ -82,6 +82,9 @@ type Options struct {
 	// list shows a new character dressed before its first world entry. It is
 	// optional: without it the first enter-world bootstrap grants them.
 	DefaultInventory InventorySeedFunc
+	// DeleteReservationWindow is how long a deletion reservation waits;
+	// 0 is the native DeleteReservationWindow (character_deletion.go).
+	DeleteReservationWindow time.Duration
 	// InventoryPages stamps the port-only 2.5-page base on a new record
 	// (SRO_INVENTORY_PAGES, #2769); false is the native 45.
 	InventoryPages bool
@@ -116,7 +119,11 @@ type QuestSeedFunc func(raceKey string) ([]domain.ActiveQuestRecord, error)
 
 // OptionsFromEnv builds the production Options from the environment.
 func OptionsFromEnv() Options {
-	return Options{RequireStore: os.Getenv(EnvRequireStore) == "1", AsyncCommit: asyncCommitEnabled()}
+	opts := Options{RequireStore: os.Getenv(EnvRequireStore) == "1", AsyncCommit: asyncCommitEnabled()}
+	if QuickCharacterDeleteFromEnv() {
+		opts.DeleteReservationWindow = QuickDeleteReservationWindow
+	}
+	return opts
 }
 
 // Health is the store's observable write condition: runtime
@@ -375,6 +382,8 @@ type Store struct {
 	defaultQuests QuestSeedFunc
 	// defaultInventory is Options.DefaultInventory, used only at creation.
 	defaultInventory InventorySeedFunc
+	// deleteWindow is Options.DeleteReservationWindow (DeletionWindow).
+	deleteWindow time.Duration
 	// inventoryPages is Options.InventoryPages, used only at creation.
 	inventoryPages bool
 	// storagePages is Options.StoragePages: every warehouse read and the
@@ -457,6 +466,7 @@ func Open(dir string, opts Options) (*Store, error) {
 		defaultQuests:    opts.DefaultQuests,
 		defaultInventory: opts.DefaultInventory,
 		inventoryPages:   opts.InventoryPages,
+		deleteWindow:     opts.DeleteReservationWindow,
 		storagePages:     opts.StoragePages,
 		requireStore:     opts.RequireStore,
 		asyncCommit:      opts.AsyncCommit,
