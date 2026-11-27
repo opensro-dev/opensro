@@ -131,9 +131,10 @@ function spearCast() {
 		angle: 0
 	};
 	const logicalWord = movementHeading( casterAt, logicalAt );
+	/** @type {import("../../src/engine/contracts/world.ts").EntityState[]} */
 	const entities = [
-		{ gid: 1, kind: "local-player", regionId: 257, x: 0, y: 0, z: 0, heading: logicalWord },
-		{ gid: 2, kind: "monster", regionId: 257, x: TARGET.x, y: 0, z: TARGET.z, heading: 0 }
+		{ gid: 1, refObjId: 0, name: "", kind: "local-player", regionId: 257, x: 0, y: 0, z: 0, heading: logicalWord },
+		{ gid: 2, refObjId: 0, name: "", kind: "monster", regionId: 257, x: TARGET.x, y: 0, z: TARGET.z, heading: 0 }
 	];
 	const cast = {
 		token: 1,
@@ -143,12 +144,12 @@ function spearCast() {
 		receivedAtMs: 0,
 		results: [ { target: 2, impacts: [ { damage: 10 } ] } ]
 	};
-	const game = {
+	const game = /** @type {any} */ ({
 		localGid: 1,
 		pose: { regionId: 257, x: 0, y: 0, z: 0, angle: logicalWord },
 		inventory: [],
 		casts: [ cast ]
-	};
+	});
 	// The drawn body 8DC440 turned onto the target: its presented row is
 	// what the mover's Initialize reads in this port.
 	const presented = [ {
@@ -168,13 +169,13 @@ function spearCast() {
 			() => true,
 			() => 10,
 			events,
-			gid => ({
+			/** @type {any} */ (gid => ({
 				regionId: 257,
 				x: gid === 1 ? 0 : TARGET.x,
 				y: 0,
 				z: gid === 1 ? 0 : TARGET.z,
 				yaw: 0
-			}),
+			})),
 			presented,
 			2
 		);
