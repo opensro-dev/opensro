@@ -30,6 +30,9 @@ type skillItemUse struct {
 	row      int
 	request  wire.ItemUseRequest
 	nowMs    int64
+	// fortressRole is read before the item-use door opens
+	// (admitContext.FortressRole).
+	fortressRole uint8
 }
 
 /*
