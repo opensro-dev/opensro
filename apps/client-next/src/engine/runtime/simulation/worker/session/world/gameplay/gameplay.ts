@@ -12,6 +12,9 @@ commands and cannot bypass actor eligibility.
 // CGInterface_ExecuteActionCommand 695420: 1000 + 6 asks the selected
 // player to trade.
 const ACTION_EXCHANGE = 1006;
+// The guild level the guild warehouse opens at: the server's rule
+// (domain.GuildStorageMinLevel) and the menu row's "(level 2 or above)".
+const GUILD_STORAGE_MIN_LEVEL = 2;
 import { defaultUiTuning, type UiTuning, uiTuningFrom } from "@/engine/foundation/ui/ui-tuning";
 import { EVENT_EXCHANGE_FUNCTION } from "@/engine/foundation/ui/npc-talk";
 import { guildBanRefused, guildSoldierRefusal } from "@/engine/foundation/gameplay/guild-manager";
@@ -3146,15 +3149,21 @@ state here before a command can claim a native wire conversation.
 					throw Error( "Select a guild manager" );
 				}
 				// 5DA1B0 @5da261: with the 0x4000 capability proven by the
-				// row above, a guild under level 3 prints the limit on the
+				// row above, a guild under the level prints the limit on the
 				// guide and the centre banner (67a600 @5db134, 67d030
-				// @5da2ae) and sends nothing.
-				if ( social.guild && social.guild.level < 3 ) {
+				// @5da2ae) and sends nothing. Native bug, fixed: the v1.150
+				// client compares with 3 ("must be 3 or higher") while its own
+				// menu row says level 2 (UIIT_CTL_GUILD_WAREHOUSE) and the
+				// server admits level 2 (domain.GuildStorageMinLevel, a 30-slot
+				// warehouse), so a level 2 guild was offered storage and then
+				// refused. The gate follows the server, with the client's own
+				// level 2 line (BR-261127-1322-3980).
+				if ( social.guild && social.guild.level < GUILD_STORAGE_MIN_LEVEL ) {
 					npcConversation.showWindow();
 					notices = [
 						...notices.slice( -99 ),
 						{
-							key: "UIIT_MSG_GUILD_STORE_LIMIT",
+							key: "UIIT_MSG_GUILD_WAREHOUSE_LIMIT",
 							value: 0,
 							nativeType: 0,
 							notificationBanner: true,
