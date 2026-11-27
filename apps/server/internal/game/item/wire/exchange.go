@@ -53,9 +53,17 @@ const (
 
 // Category 1 notice codes the exchange answers with.
 const (
-	ExchangeErrInvalidTarget   uint8 = 0x03
-	ExchangeErrTooFar          uint8 = 0x04
-	ExchangeErrBusy            uint8 = 0x1E
+	ExchangeErrInvalidTarget uint8 = 0x03
+	ExchangeErrTooFar        uint8 = 0x04
+	// ExchangeErrAskerBusy refuses the asker for their own
+	// interaction state (dead, or a window the port tracks as a
+	// stall kept of their own); the asked side answers
+	// ExchangeErrBusy instead.
+	ExchangeErrAskerBusy uint8 = 0x1D
+	ExchangeErrBusy      uint8 = 0x1E
+	// ExchangeErrStallVisit refuses an asker who is visiting
+	// another player's stall.
+	ExchangeErrStallVisit      uint8 = 0x33
 	ExchangeErrBayFull         uint8 = 0x21
 	ExchangeErrInventoryFull   uint8 = 0x22
 	ExchangeErrDenied          uint8 = 0x28
