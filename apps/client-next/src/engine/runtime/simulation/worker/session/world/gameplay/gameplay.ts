@@ -2601,7 +2601,7 @@ next 0x3AC5 status-5 row throw "Unknown academy member status" (#2876).
 			combat.clear();
 			combat.restoreCooldowns( value, nextCatalog, receivedAtMs );
 			combat.references( b.refSkillSnapshot ?? [] );
-			inventory.bootstrap( value, receivedAtMs );
+			inventory.bootstrap( value, receivedAtMs, continued );
 			journalBagChange( receivedAtMs, INVENTORY_JOURNAL_ENTRY, NO_PAYLOAD );
 			guide = queueGuide( guide, [
 				...guideInventoryEvents(

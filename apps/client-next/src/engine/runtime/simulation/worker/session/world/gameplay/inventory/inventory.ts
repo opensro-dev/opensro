@@ -225,6 +225,25 @@ preview
 	}
 	/*
 ================
+applyReference
+
+One reference row into the item tables, and into the ledger that
+re-applies it after every re-entry bootstrap (receivedReferences).
+================
+	*/
+	function applyReference(
+		row: import("@/engine/foundation/gameplay/commerce").CommerceItemReference
+	) {
+		refs.set( row.refObjId, row.typeFlags );
+		if ( row.rent ) rentRefs.add( row.refObjId );
+		names.set( row.refObjId, row.name );
+		if ( row.codename !== undefined ) codenames.set( row.refObjId, row.codename );
+		if ( row.icon !== undefined ) icons.set( row.refObjId, row.icon );
+		if ( row.tooltip ) tooltipRefs.set( row.refObjId, row.tooltip );
+		receivedReferences.set( row.refObjId, row );
+	}
+	/*
+================
 presentShop
 ================
 	*/
@@ -295,6 +314,18 @@ as natively; a good with no reference row never marks the page.
 	const icons = new Map<number, string>();
 	const codenames = new Map<number, string>();
 	const tooltipRefs = new Map<number, ItemTooltipReference>();
+	// Every reference row a delta taught this session (the commerce seed,
+	// ground drops, stalls, exchanges), held until a new login retires
+	// it. A row is game-data constant, so a continued entry (a world
+	// transfer, a resumed transport) re-applies the ledger after its
+	// snapshot feed: that snapshot carries only the published tables
+	// and the character's rows, and without the ledger a shop-only item
+	// would lose the only reference it ever gets - the seed is
+	// published once per session and never again (#4698).
+	const receivedReferences = new Map<
+		number,
+		import("@/engine/foundation/gameplay/commerce").CommerceItemReference
+	>();
 	// The Magic Pang window's twelve prizes with the reference icons, rebuilt when references change.
 	let gachaRows: {
 		iconCount: number;
@@ -940,14 +971,9 @@ references
 				}
 			}
 			for ( const row of rows ) {
-				refs.set( row.refObjId, row.typeFlags );
-				if ( row.rent ) rentRefs.add( row.refObjId );
-				names.set( row.refObjId, row.name );
 				// An item bought after login (a switch scroll) is known by
 				// the delta's codename, as a bootstrap row is by its own.
-				if ( row.codename !== undefined ) codenames.set( row.refObjId, row.codename );
-				if ( row.icon !== undefined ) icons.set( row.refObjId, row.icon );
-				if ( row.tooltip ) tooltipRefs.set( row.refObjId, row.tooltip );
+				applyReference( row );
 			}
 			published = null;
 			presentations = new WeakMap();
@@ -959,7 +985,7 @@ references
 bootstrap
 ================
 		*/
-		bootstrap( value: unknown, receivedAtMs = 0 ) {
+		bootstrap( value: unknown, receivedAtMs = 0, continued = false ) {
 			bindingMoves = [];
 			raisedGoldCaps = (value as { raisedGoldCaps?: unknown; } | null)?.raisedGoldCaps === true;
 			itemCooldowns = [];
@@ -1056,6 +1082,20 @@ bootstrap
 				refs.set( r.refObjId, r.typeFlags );
 				if ( typeof r.name === "string" ) names.set( r.refObjId, r.name );
 				if ( typeof r.codename === "string" ) codenames.set( r.refObjId, r.codename );
+			}
+			// A continued entry (a world transfer, a resumed transport)
+			// keeps the references a delta taught (#4698): its snapshot
+			// carries only the published tables and the character's own
+			// rows, so without this pass a shop-only item's icon would
+			// vanish at the first transfer and never return - the
+			// commerce seed that taught it is published once per
+			// session, and the server's mark assumes a held answer
+			// keeps its tables. A new login retires the ledger instead:
+			// its tables are the new snapshot's alone.
+			if ( continued ) {
+				for ( const row of receivedReferences.values() ) applyReference( row );
+			} else {
+				receivedReferences.clear();
 			}
 			// Item groups still cooling down at entry (a teleport re-enters the world):
 			// the server keeps refusing them, so the icons keep their sweep. The sweep's
