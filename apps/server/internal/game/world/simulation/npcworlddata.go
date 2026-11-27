@@ -118,7 +118,7 @@ func LoadNpcWorldRoster(textdataDir string) []NpcDef {
 		roster = append(roster, row)
 	}
 	// Port-only, not native (#1850): Jangan's grocer under her alchemy
-	// shop name, her alchemy tab replaced by its three tabs. Off (or the
+	// shop name, her alchemy tab replaced by its four tabs. Off (or the
 	// extra goods not in force) leaves the roster exactly as authored.
 	if janganAlchemyShopActive() {
 		for i := range roster {

@@ -12,15 +12,26 @@ already-on SRO_SHOP_EXTRA_GOODS default list: it acts only while that list
 is in force, so the switch off, the extra goods off, or an operator's own
 extra-goods list each keep today's arrangement (the native name, the mixed
 alchemy tab, the elixirs at the smith). The goods tables below are the one
-source for both shapes: the extra-goods default entries and the three tabs
+source for both shapes: the extra-goods default entries and the shop's tabs
 are built from them, so the two can never drift apart.
 
-The three tabs are synthesized at load, never authored: their ids are the
-largest authored tab id + 1, + 2 and + 3 (in tab order), which the roster
+A fourth tab (#4684, requested 2026-11-27, awaiting the owner's
+approval) sells the degree 10 stones at the degree 9 prices: the 14
+attribute stones, then the 14 grocer magic stones and the Luck, Steady,
+Astral and Athanasia stones (no degree 10 Repair stone exists). The degree 10 Steady stone the smith's list
+carries moves to it, so the alchemy stones tab is degree 9 alone. The
+tab exists only in the regrouped shape: the switch off sells no degree
+10 stone beyond today's.
+
+The four tabs are synthesized at load, never authored: their ids are the
+largest authored tab id + 1 to + 4 (in tab order), which the roster
 projection in simulation derives from the same tables, and their names in
 the extra-goods list are reserved names no authored table can carry. The
-tab labels are the game's own category strings (the stall network's
-"Elixir", the item types' "Attribute stone" and "Alchemy stone").
+first three tab labels are the game's own category strings (the stall
+network's "Elixir", the item types' "Attribute stone" and "Alchemy
+stone"); v1.150 has no degree 10 tab name (its SN_TAB_MAGICTABLET_n rows
+stop at "6th degree"), so the fourth carries a port label the client
+spells "10th degree" (port-shop-copy.ts).
 
 ===========================================================================
 */
@@ -37,13 +48,24 @@ import (
 const EnvJanganAlchemyShop = "SRO_JANGAN_ALCHEMY_SHOP"
 
 // The extra-goods tabs the feature regroups, and the reserved tab names
-// its three synthesized tabs travel under in an extra-goods list.
+// its four synthesized tabs travel under in an extra-goods list.
 const (
 	janganSmithTab       = "STORE_CH_SMITH_TAB3"
 	janganGrocerTab      = "STORE_CH_ACCESSORY_TAB3"
 	janganElixirsTab     = "OPENSRO_JANGAN_ELIXIRS"
 	janganAttrStonesTab  = "OPENSRO_JANGAN_ATTRSTONES"
 	janganMagicStonesTab = "OPENSRO_JANGAN_MAGICSTONES"
+	janganD10StonesTab   = "OPENSRO_JANGAN_D10STONES"
+)
+
+// The synthesized tabs' ids above the largest authored tab id, in tab
+// order. The roster projection (simulation/npcjanganshop.go) uses the
+// same offsets.
+const (
+	janganElixirsOffset     = 1
+	janganAttrStonesOffset  = 2
+	janganMagicStonesOffset = 3
+	janganD10StonesOffset   = 4
 )
 
 /*
@@ -120,7 +142,8 @@ var janganGrocerMagicStones = []janganGood{
 
 // The smith's stones (owner 2026-10-13, prices 2026-10-18; the degree 10
 // Steady stone owner 2026-11-25 at the degree 9 price); they move
-// to the grocer's alchemy stones tab behind hers, at the same prices.
+// to the grocer's alchemy stones tab behind hers, at the same prices,
+// but for the degree 10 Steady stone, which the degree 10 tab sells.
 var janganSmithMagicStones = []janganGood{
 	{"ITEM_ETC_ARCHEMY_MAGICSTONE_LUCK_09", 5000000},
 	{"ITEM_ETC_ARCHEMY_MAGICSTONE_SOLID_09", 5000000},
@@ -128,6 +151,48 @@ var janganSmithMagicStones = []janganGood{
 	{"ITEM_ETC_ARCHEMY_MAGICSTONE_ASTRAL_09", 50000000},
 	{"ITEM_ETC_ARCHEMY_MAGICSTONE_ATHANASIA_09", 25000000},
 	{"ITEM_ETC_ARCHEMY_MAGICSTONE_REPAIR_09", 5000000},
+}
+
+// The degree 10 stones tab (#4684, awaiting the owner's approval): every
+// degree 10 stone the item table prices, at its degree 9 twin's price above
+// (attribute and grocer magic stones 2,000,000; Luck and Steady 5,000,000;
+// Astral 50,000,000; Athanasia 25,000,000). The table's other degree 10 magic stone rows
+// (ABYSS, DEVIL, GUARD, HEAT, IRONWALL, SHARP, STRONGMIND, STUPOR) are
+// priced 1, which no shop good is (their textdataname rows also leave the
+// English name empty), and no degree 10 Repair stone exists.
+var janganD10StoneGoods = []janganGood{
+	{"ITEM_ETC_ARCHEMY_ATTRSTONE_PA_10", 2000000},
+	{"ITEM_ETC_ARCHEMY_ATTRSTONE_PASTR_10", 2000000},
+	{"ITEM_ETC_ARCHEMY_ATTRSTONE_MA_10", 2000000},
+	{"ITEM_ETC_ARCHEMY_ATTRSTONE_MAINT_10", 2000000},
+	{"ITEM_ETC_ARCHEMY_ATTRSTONE_CRITICAL_10", 2000000},
+	{"ITEM_ETC_ARCHEMY_ATTRSTONE_HR_10", 2000000},
+	{"ITEM_ETC_ARCHEMY_ATTRSTONE_PD_10", 2000000},
+	{"ITEM_ETC_ARCHEMY_ATTRSTONE_PDSTR_10", 2000000},
+	{"ITEM_ETC_ARCHEMY_ATTRSTONE_MD_10", 2000000},
+	{"ITEM_ETC_ARCHEMY_ATTRSTONE_MDINT_10", 2000000},
+	{"ITEM_ETC_ARCHEMY_ATTRSTONE_ER_10", 2000000},
+	{"ITEM_ETC_ARCHEMY_ATTRSTONE_BR_10", 2000000},
+	{"ITEM_ETC_ARCHEMY_ATTRSTONE_PAR_10", 2000000},
+	{"ITEM_ETC_ARCHEMY_ATTRSTONE_MAR_10", 2000000},
+	{"ITEM_ETC_ARCHEMY_MAGICSTONE_STR_10", 2000000},
+	{"ITEM_ETC_ARCHEMY_MAGICSTONE_INT_10", 2000000},
+	{"ITEM_ETC_ARCHEMY_MAGICSTONE_DUR_10", 2000000},
+	{"ITEM_ETC_ARCHEMY_MAGICSTONE_HR_10", 2000000},
+	{"ITEM_ETC_ARCHEMY_MAGICSTONE_EVADE_BLOCK_10", 2000000},
+	{"ITEM_ETC_ARCHEMY_MAGICSTONE_EVADE_CRITICAL_10", 2000000},
+	{"ITEM_ETC_ARCHEMY_MAGICSTONE_ER_10", 2000000},
+	{"ITEM_ETC_ARCHEMY_MAGICSTONE_HP_10", 2000000},
+	{"ITEM_ETC_ARCHEMY_MAGICSTONE_MP_10", 2000000},
+	{"ITEM_ETC_ARCHEMY_MAGICSTONE_FROSTBITE_10", 2000000},
+	{"ITEM_ETC_ARCHEMY_MAGICSTONE_ESHOCK_10", 2000000},
+	{"ITEM_ETC_ARCHEMY_MAGICSTONE_BURN_10", 2000000},
+	{"ITEM_ETC_ARCHEMY_MAGICSTONE_POISON_10", 2000000},
+	{"ITEM_ETC_ARCHEMY_MAGICSTONE_ZOMBIE_10", 2000000},
+	{"ITEM_ETC_ARCHEMY_MAGICSTONE_LUCK_10", 5000000},
+	{"ITEM_ETC_ARCHEMY_MAGICSTONE_SOLID_10", 5000000},
+	{"ITEM_ETC_ARCHEMY_MAGICSTONE_ASTRAL_10", 50000000},
+	{"ITEM_ETC_ARCHEMY_MAGICSTONE_ATHANASIA_10", 25000000},
 }
 
 /*
@@ -228,12 +293,18 @@ func janganGrocerDefault() string {
 ================
 janganAlchemyTabGoods
 
-The three tabs' custom goods as extra goods on the reserved tab names:
-the elixir recipes and the powders, the attribute stones, and the magic
-stones (the grocer's, then the smith's at their prices).
+The four tabs' custom goods as extra goods on the reserved tab names:
+the elixir recipes and the powders, the attribute stones, the magic
+stones (the grocer's, then the smith's at their prices) and the degree
+10 stones. A smith's stone the degree 10 tab sells (Steady 10) is sold
+there alone.
 ================
 */
 func janganAlchemyTabGoods() []ExtraGood {
+	onD10Tab := make(map[string]bool, len(janganD10StoneGoods))
+	for _, good := range janganD10StoneGoods {
+		onD10Tab[good.codename] = true
+	}
 	var goods []ExtraGood
 	for _, good := range append(append([]janganGood{}, janganElixirGoods...), janganPowderGoods...) {
 		goods = append(goods, ExtraGood{Tab: janganElixirsTab, Codename: good.codename, Price: good.price})
@@ -242,7 +313,13 @@ func janganAlchemyTabGoods() []ExtraGood {
 		goods = append(goods, ExtraGood{Tab: janganAttrStonesTab, Codename: good.codename, Price: good.price})
 	}
 	for _, good := range append(append([]janganGood{}, janganGrocerMagicStones...), janganSmithMagicStones...) {
+		if onD10Tab[good.codename] {
+			continue
+		}
 		goods = append(goods, ExtraGood{Tab: janganMagicStonesTab, Codename: good.codename, Price: good.price})
+	}
+	for _, good := range janganD10StoneGoods {
+		goods = append(goods, ExtraGood{Tab: janganD10StonesTab, Codename: good.codename, Price: good.price})
 	}
 	return goods
 }
@@ -253,7 +330,8 @@ regroupJanganAlchemy
 
 The default list regrouped: the smith's and grocer's alchemy entries
 come out (the grocer's powder with them; the other grocers keep theirs)
-and the three tabs' goods go in. The goods sold are the same goods.
+and the four tabs' goods go in: the same goods, Steady 10 moved to the
+degree 10 tab, and the degree 10 stones that tab adds.
 ================
 */
 func regroupJanganAlchemy(goods []ExtraGood) []ExtraGood {
@@ -278,7 +356,7 @@ default list does).
 func hasJanganAlchemyGoods(goods []ExtraGood) bool {
 	for _, good := range goods {
 		switch good.Tab {
-		case janganElixirsTab, janganAttrStonesTab, janganMagicStonesTab:
+		case janganElixirsTab, janganAttrStonesTab, janganMagicStonesTab, janganD10StonesTab:
 			return true
 		}
 	}
@@ -289,7 +367,7 @@ func hasJanganAlchemyGoods(goods []ExtraGood) bool {
 ================
 registerJanganAlchemyTabs
 
-Gives the catalogue the three synthesized tabs: ids above every authored
+Gives the catalogue the four synthesized tabs: ids above every authored
 tab (the roster derives the same ids) and the elixirs tab seeded with
 the grocer's authored alchemy offers, renumbered from slot 0 in authored
 order, so the native goods keep their prices at the head of the tab.
@@ -306,14 +384,15 @@ func (c *Catalog) registerJanganAlchemyTabs() error {
 			maxID = id
 		}
 	}
-	c.tabIDs[janganElixirsTab] = maxID + 1
-	c.tabIDs[janganAttrStonesTab] = maxID + 2
-	c.tabIDs[janganMagicStonesTab] = maxID + 3
+	c.tabIDs[janganElixirsTab] = maxID + janganElixirsOffset
+	c.tabIDs[janganAttrStonesTab] = maxID + janganAttrStonesOffset
+	c.tabIDs[janganMagicStonesTab] = maxID + janganMagicStonesOffset
+	c.tabIDs[janganD10StonesTab] = maxID + janganD10StonesOffset
 	authored := append([]Offer(nil), c.Tabs[grocer]...)
 	sort.Slice(authored, func(i, j int) bool { return authored[i].Slot < authored[j].Slot })
 	for i := range authored {
 		authored[i].Slot = uint8(i)
 	}
-	c.Tabs[maxID+1] = authored
+	c.Tabs[maxID+janganElixirsOffset] = authored
 	return nil
 }

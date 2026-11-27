@@ -150,6 +150,7 @@ import { restoreSlotEntry } from "@/engine/foundation/gameplay/commerce";
 import { equipmentDropSlot } from "@/engine/foundation/gameplay/equipment-drop";
 import { flagWarTimerDigitTexture, flagWarTimerReading } from "@/engine/foundation/ui/flagwar-timer-plate";
 import { returnScrollBar } from "@/engine/foundation/ui/return-scroll";
+import { portShopTabCopy } from "@/engine/foundation/ui/port-shop-copy";
 import { nameColorRgba } from "@/engine/foundation/gameplay/name-color";
 import { containsPoint, topmostControlAt } from "@/engine/foundation/ui/hit-test";
 import { minimapZoomTarget, advanceMinimapZoom } from "@/engine/foundation/ui/minimap-zoom";
@@ -2562,6 +2563,9 @@ export function createUi( ports: UiPorts ) {
 		// The Styria Clash windows and manager rows (port-only, #3648).
 		const styriaCopy = STYRIA_COPY[key];
 		if ( styriaCopy ) return styriaCopy;
+		// The shop tabs the port synthesizes (port-only, port-shop-copy.ts).
+		const shopTabCopy = portShopTabCopy( key );
+		if ( shopTabCopy ) return shopTabCopy;
 		// Shipped / rebuilt text tables win; fall back to Magic Cube copy (#3906)
 		// when v1.150 textdataname.en.json lacks the later rows.
 		return hud.data()?.strings[key] || MAGIC_CUBE_COPY[key] || "";
