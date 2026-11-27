@@ -42,7 +42,7 @@ import { createCharacterSelection, dungeonCharacterAdmission } from "@/engine/fo
 import { createCharacterEffects } from "./effects/effects";
 import { createCharacterSounds } from "./sounds/sounds";
 import { createCharacterResources } from "./resources/resources";
-import { createMallPreview } from "./mall-preview";
+import { COSTUME_DOLL_CHILD_GID, createMallPreview } from "./mall-preview";
 import type { CharacterRecord, SuitRuleFlags } from "@/engine/contracts/session";
 import type { AssetOwner } from "@/engine/contracts/assets";
 import type { RenderFrameProbe, Renderer } from "@/engine/contracts/runtime";
@@ -171,6 +171,9 @@ export function createCharacterPresentation(
 	};
 	const entityLod = createEntityLod();
 	const mallPreview = createMallPreview();
+	// Port-only (#4407): the inventory doll without a Spirit costume; its
+	// body takes the local gid (presentation-finalize.ts publishCharacters).
+	const costumeDoll = createMallPreview( COSTUME_DOLL_CHILD_GID );
 	let animationDelta = createModifierDelta();
 	const footprints = createFootprints( renderer, soundSurface );
 	const sunDropMarkers = createSunDropMarkers( renderer );
@@ -303,6 +306,7 @@ export function createCharacterPresentation(
 	*/
 	function teardown( mode: TeardownMode ) {
 		mallPreview.reset();
+		costumeDoll.reset();
 		if ( mode === "reset" ) skillObjects.reset();
 		else skillObjects.dispose();
 		footprints.clearFootprints();
@@ -949,7 +953,7 @@ export function createCharacterPresentation(
 			{ local, gameplay, next, seconds, blindHeld, modelParticles },
 			output,
 			published,
-			{ renderer, resources, mallPreview, portraitEmission }
+			{ renderer, resources, mallPreview, costumeDoll, portraitEmission }
 		);
 		probe?.detailEnd( "presentation-finalize" );
 	}
