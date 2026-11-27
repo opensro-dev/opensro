@@ -287,13 +287,16 @@ def goods_rows(later, tree, rent_rows=None, item_by_id=None):
 	current = tree.mall_rows
 	packaged = {row[PACKAGE_CODE] for row in current["refpackageitem.txt"] if len(row) > PACKAGE_CODE}
 	have = packaged | {row[GOODS_PACKAGE] for row in current["refshopgoods.txt"] if len(row) > GOODS_PACKAGE}
-	# A package the tree already holds but sells in no mall tab (the
-	# degree 10-11 Immortal and Astral stones, Alexandria's gold goods)
-	# joins the mall on its own package: only the goods row and the
-	# mall prices it lacks are added (#4658).
+	# A package a gold shop of the tree sells, but no mall tab (the
+	# degree 10-11 Immortal and Astral stones, Alexandria's accessory
+	# goods), joins the mall on its own package: only the goods row and
+	# the mall prices it lacks are added (#4658). A package no shop
+	# lists (the Kangaroo and Pegasus scrolls) is the server's mall
+	# category layout's to sell (commerce/mallcategories.go), never here.
 	in_mall = {row[GOODS_PACKAGE] for row in current["refshopgoods.txt"]
 		if len(row) > GOODS_PACKAGE and row[GOODS_TAB].startswith(MALL_TAB)}
-	joinable = packaged - in_mall
+	in_shop = {row[GOODS_PACKAGE] for row in current["refshopgoods.txt"] if len(row) > GOODS_PACKAGE}
+	joinable = (packaged & in_shop) - in_mall
 	tree_currencies = collections.defaultdict(set)
 	for row in current["refpricepolicyofitem.txt"]:
 		if len(row) > 3:

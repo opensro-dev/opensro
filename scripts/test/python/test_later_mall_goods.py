@@ -118,6 +118,24 @@ class LaterMallGoodsTest(unittest.TestCase):
 		self.assertEqual([(row[3], row[4]) for row in rows["refpricepolicyofitem.txt"]], [("2", "57")])
 
 	# ================
+	# test_a_package_no_shop_lists_stays_the_layouts
+	#
+	# The Pegasus scroll's package is in the tree with no goods row: the
+	# server's mall category layout sells it, so the import must not list
+	# it a second time.
+	# ================
+	def test_a_package_no_shop_lists_stays_the_layouts(self):
+		current = empty()
+		later_good(current, "MALL_PET_C_VEHICLE", "ITEM_COS_C_PEGASUS_SCROLL", 0, "0", 22543, payments=())
+		current["refshopgoods.txt"].clear()
+		later = empty()
+		later_good(later, "MALL_PET_C_VEHICLE", "ITEM_COS_C_PEGASUS_SCROLL", 4, "500", 3)
+		rows, summary = goods.goods_rows(later, tree_of({"ITEM_COS_C_PEGASUS_SCROLL"}, creatures=("COS_C_PEGASUS",),
+			tabs=("MALL_PET_C_VEHICLE",), current=current))
+		self.assertEqual(summary["listed"], 0)
+		self.assertEqual(rows["refshopgoods.txt"], [])
+
+	# ================
 	# test_a_joined_listing_strips_without_touching_the_gold_shop
 	#
 	# A rerun first undoes the previous run's joined rows: the mall goods
