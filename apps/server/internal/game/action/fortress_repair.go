@@ -77,7 +77,7 @@ func (rt *Runtime) structureRepairTarget(c *enterworld.Character, use skillItemU
 	if holder := record.Holder(); holder != 0 && holder != guildID {
 		return none, repairWrongGuild
 	}
-	if rt.guildFortressRole(use.division, c)&uint8(use.ref.NativeFields.Get("itemParam5_2ac")) == 0 {
+	if use.fortressRole&uint8(use.ref.NativeFields.Get("itemParam5_2ac")) == 0 {
 		return none, repairWrongRole
 	}
 	if _, sameWorld := rt.characterMonster(use.division, c, gid); !sameWorld {
@@ -120,7 +120,9 @@ func (rt *Runtime) useStructureRepair(c *enterworld.Character, use skillItemUse,
 	if rt.playerMotionState(use.division, c, use.nowMs) == simulation.MotionPostureNow || rt.repairPreparingAction(use.division, c.Name) {
 		return false
 	}
-	if code := rt.skillAdmission(use.division, c, skill, use.nowMs, &admitTarget{at: rt.monsterSpawn(use.division, target.Gid, use.nowMs)}, nil, 0x1f); code != 0 {
+	// Inside the item-use door: the role read before it (admitContext.FortressRole).
+	at := &admitTarget{at: rt.monsterSpawn(use.division, target.Gid, use.nowMs)}
+	if code := rt.contextSkillAdmission(use.division, c, skill, use.nowMs, at, nil, 0x1f, admitContext{FortressRole: use.fortressRole, RoleRead: true}); code != 0 {
 		return rt.consumeRefusedRepair(c, use, code, result)
 	}
 	cost, code16 := rt.offensivePhaseCost(use.division, c, skill, use.nowMs, nil)

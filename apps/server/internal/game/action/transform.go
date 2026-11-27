@@ -179,7 +179,7 @@ On success the hide ends and the mask is spent. The indirect
 skill's cast broadcast is not sent, as for every item skill here.
 ==================
 */
-func (rt *Runtime) useMonsterCapsule(division string, c *enterworld.Character, ref *enterworld.ItemRef, rowIndex int, request wire.ItemUseRequest, now int64, result *OpResult) bool {
+func (rt *Runtime) useMonsterCapsule(division string, c *enterworld.Character, ref *enterworld.ItemRef, rowIndex int, request wire.ItemUseRequest, now int64, role uint8, result *OpResult) bool {
 	skin := c.MissionInventory[rowIndex].Data
 	if c.NativeBodyStatus == 4 || skin == 0 || ref.AssociatedSkillCodename == "" {
 		*result = itemUseFailure(wire.ErrCodeInvalidRequest)
@@ -195,7 +195,7 @@ func (rt *Runtime) useMonsterCapsule(division string, c *enterworld.Character, r
 		*result = OpResult{Frames: append(offensiveRefusal(code).Frames, failure.Frames...)}
 		return false
 	}
-	if code := rt.contextSkillAdmission(division, c, skill, now, nil, nil, admitExecution, admitContext{Indirect: true, TransformRef: skin}); code != 0 {
+	if code := rt.contextSkillAdmission(division, c, skill, now, nil, nil, admitExecution, admitContext{Indirect: true, TransformRef: skin, FortressRole: role, RoleRead: true}); code != 0 {
 		return refused(code)
 	}
 	token := atomic.AddUint32(&rt.castTokenCounter, 1)
