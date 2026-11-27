@@ -8,7 +8,7 @@ mall-preview.test.mjs - try-on isolation, complete assembly and preview lifetime
 import "../helpers/native-source-loader.mjs";
 import assert from "node:assert/strict";
 import test from "node:test";
-const { createMallPreview, MALL_PREVIEW_GID } = await import(
+const { createMallPreview, MALL_PREVIEW_GID, COSTUME_DOLL_CHILD_GID } = await import(
 	"../../src/engine/runtime/characters/mall-preview.ts"
 );
 const { createPortrait } = await import( "../../src/engine/runtime/renderer/characters/portrait.ts" );
@@ -121,6 +121,27 @@ test("mannequin replaces one avatar family without mutating equipment and retain
 	f.owner.request( [] );
 	assert.equal( f.owner.step( f.frame, f.resources, f.renderer ).length, 1 );
 	assert.ok( f.assemblies.at( -1 ).parts.some( p => p.model === "garment-1" ) );
+});
+
+test("the mannequin and the costume doll keep disjoint child gids, each on its own body (#4407)", () => {
+	// Both lanes present at once: the Item Mall open while a Spirit costume
+	// is on. The portrait index keeps one actor per gid, so a shared child
+	// gid would hand one lane's wings to the other's body.
+	const mall = fixture(), doll = fixture();
+	doll.owner = createMallPreview( COSTUME_DOLL_CHILD_GID );
+	const LOCAL = 42;
+	mall.owner.request( [ 2 ] );
+	doll.owner.request( [ 2 ] );
+	const mannequin = mall.owner.step( mall.frame, mall.resources, mall.renderer );
+	const clone = doll.owner.step( { ...doll.frame, gid: LOCAL }, doll.resources, doll.renderer );
+	assert.equal( mannequin.length, 2 );
+	assert.equal( clone.length, 2 );
+	assert.equal( mannequin[0].gid, MALL_PREVIEW_GID );
+	assert.equal( clone[0].gid, LOCAL );
+	assert.equal( mannequin[1].attachment?.gid, MALL_PREVIEW_GID );
+	assert.equal( clone[1].attachment?.gid, LOCAL );
+	const gids = [ ...mannequin, ...clone ].map( actor => actor.gid );
+	assert.equal( new Set( gids ).size, gids.length, `child gids collide: ${gids}` );
 });
 
 test("the mannequin carries the world's enchant sparks answer, on and off (#3145)", () => {
@@ -541,6 +562,7 @@ async function tryOnAvatars( avatars ) {
 			},
 			resources: { ready: () => true, plan: () => true, retainWanted() {} },
 			portraitEmission: { step: () => [] },
+			costumeDoll: { request() {}, glow: () => null, step: () => [] },
 			mallPreview: {
 				skin: () => null,
 				glow: () => null,
@@ -566,4 +588,76 @@ test("the try-on dresses the worn avatars without the Devil's Spirit (#4384)", a
 	// The mannequin throws "Missing mannequin avatar slot" on a Spirit,
 	// which has no worn model; the world actor drops it the same way.
 	assert.deepEqual( await tryOnAvatars( [ hat, spirit ] ), [ hat ] );
+});
+
+// A lent Spirit skill and its costume's one piece (visual-changes.ts).
+const LENT_SKILL = 500;
+const COSTUME_PIECE = 2_000_000_000;
+
+/*
+================
+dollPortraits
+
+The portrait actors publishCharacters presents for local gid 1 with the
+given attached effects, dressed in a worn avatar, the try-on closed.
+================
+*/
+async function dollPortraits( attachedEffects ) {
+	const { publishCharacters } = await import( "../../src/engine/runtime/characters/presentation-finalize.ts" );
+	const f = fixture();
+	const dress = {
+		...f.frame.dress,
+		equipment: { ...f.frame.dress.equipment, [COSTUME_PIECE]: { ...f.frame.dress.equipment[3], avatarSlot: 0 } },
+		visualChanges: { [LENT_SKILL]: [ COSTUME_PIECE ] }
+	};
+	let portraits = [];
+	publishCharacters(
+		{
+			local: /** @type {any} */ ({
+				gid: 1,
+				refObjId: 10,
+				avatars: [ { slot: 0, refObjId: 1, typeFlags: 0, plus: 0 } ]
+			}),
+			gameplay: /** @type {any} */ ({ inventory: [], attachedEffects }),
+			next: new Map(),
+			seconds: 0,
+			blindHeld: false,
+			modelParticles: 0
+		},
+		{ displayed: new Map() },
+		/** @type {any} */ ({
+			catalog: new Map( [ [ 10, f.frame.resource ] ] ),
+			dress,
+			manifest: 3
+		}),
+		/** @type {any} */ ({
+			renderer: {
+				...f.renderer,
+				setCharacterActors( _world, value ) {
+					portraits = value;
+				},
+				vHidesCompanions: () => false
+			},
+			resources: { ...f.resources, retainWanted() {} },
+			portraitEmission: { step: () => [] },
+			costumeDoll: createMallPreview( COSTUME_DOLL_CHILD_GID ),
+			mallPreview: { skin: () => null, glow: () => null, step: () => [] }
+		})
+	);
+	return { portraits, assemblies: f.assemblies };
+}
+
+test("a worn Spirit costume stays out of the inventory doll (#4407)", async () => {
+	const { portraits, assemblies } = await dollPortraits( [ { gid: 1, skill: LENT_SKILL } ] );
+	const doll = portraits.find( actor => actor.gid === 1 );
+	assert.ok( doll, "the costume-free clone presents under the local gid" );
+	const parts = assemblies.find( row => row.name === doll.model ).parts.map( part => part.model );
+	assert.ok( parts.includes( "garment-1" ), "the doll wears the worn avatar" );
+	assert.ok( !parts.includes( "garment-3" ), "the doll does not wear the costume piece" );
+	assert.ok( portraits.every( actor => actor.gid !== MALL_PREVIEW_GID ), "the mannequin's gid stays free" );
+});
+
+test("without a costume the doll reads the world actor", async () => {
+	const { portraits } = await dollPortraits( [ { gid: 1, skill: LENT_SKILL + 1 } ] );
+	assert.ok( portraits.every( actor => actor.gid !== 1 ) );
 });

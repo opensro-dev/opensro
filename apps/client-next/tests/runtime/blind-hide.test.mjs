@@ -91,6 +91,7 @@ function fixture( { blindHeld, vHidesCompanions = false } ) {
 				return [];
 			}
 		},
+		costumeDoll: { request() {}, glow: () => null, step: () => [] },
 		mallPreview: {
 			skin: () => null,
 			glow: () => null,

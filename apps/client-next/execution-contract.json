@@ -3641,6 +3641,27 @@
 		},
 		{
 			"file": "src/engine/runtime/characters/presentation-finalize.ts",
+			"expression": "costumeDoll.request",
+			"function": "publishCharacters",
+			"kind": "callback",
+			"reason": "The parent costume-doll owner learns whether a Spirit costume is on before the portrait publication."
+		},
+		{
+			"file": "src/engine/runtime/characters/presentation-finalize.ts",
+			"expression": "costumeDoll.step",
+			"function": "publishCharacters",
+			"kind": "callback",
+			"reason": "The parent costume-doll owner builds the inventory doll's costume-free clone at the portrait publication point."
+		},
+		{
+			"file": "src/engine/runtime/characters/presentation-finalize.ts",
+			"expression": "costumeDoll.glow",
+			"function": "publishCharacters",
+			"kind": "callback",
+			"reason": "The parent costume-doll owner supplies the clone's glow holder at the same publication point."
+		},
+		{
+			"file": "src/engine/runtime/characters/presentation-finalize.ts",
 			"expression": "resources.ready",
 			"function": "publishCharacters",
 			"kind": "callback",
