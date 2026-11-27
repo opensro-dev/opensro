@@ -69,7 +69,7 @@ draw at the chance keeps it; either way one jewel is spent.
 ================
 */
 func TestSpiritJewelRollsTheOwnersChances(t *testing.T) {
-	for plus, chance := range []uint32{70, 60, 50, 40, 30, 20} {
+	for plus, chance := range []uint32{70, 60, 50, 40, 30, 20, 15, 10, 8, 5} {
 		for _, tc := range []struct {
 			draw    uint32
 			success bool
@@ -132,7 +132,7 @@ func TestSpiritJewelRefusals(t *testing.T) {
 		want  Refusal
 	}{
 		{"switch off: a Spirit is no target", false, 0, []uint8{16, 17}, Refusal(0x10)},
-		{"at +6", true, SpiritMaxPlus, []uint8{16, 17}, Refusal(0x0f)},
+		{"at +10", true, SpiritMaxPlus, []uint8{16, 17}, Refusal(0x0f)},
 		{"a lucky powder staged", true, 0, []uint8{16, 17, 15}, Refusal(0x0a)},
 		{"a native elixir on a Spirit", true, 0, []uint8{16, 14}, Refusal(9)},
 		{"the jewel on native gear", true, 0, []uint8{13, 17}, Refusal(9)},

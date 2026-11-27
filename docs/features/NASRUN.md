@@ -57,15 +57,15 @@ These are inferences and port choices, not native evidence:
 ## Nasrun alchemy (#3456 step 3c)
 
 With `SRO_NASRUN` on, Sabakun's jewel reinforces a Spirit in the bag through the native alchemy window, one plus
-at a time up to +6 (`internal/game/item/alchemy/nasrun.go`):
+at a time up to +10 (`internal/game/item/alchemy/nasrun.go`):
 
-| Attempt | +0→+1 | +1→+2 | +2→+3 | +3→+4 | +4→+5 | +5→+6 |
-| --- | --- | --- | --- | --- | --- | --- |
-| Chance | 70 % | 60 % | 50 % | 40 % | 30 % | 20 % |
+| Attempt | +0→+1 | +1→+2 | +2→+3 | +3→+4 | +4→+5 | +5→+6 | +6→+7 | +7→+8 | +8→+9 | +9→+10 |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| Chance | 70 % | 60 % | 50 % | 40 % | 30 % | 20 % | 15 % | 10 % | 8 % | 5 % |
 
 - A failure spends the jewel and keeps the plus: no break, no curse, no reset (the owner's rule, 2026-11-16).
 - The chance is the table alone: Lucky options, avatar luck and the shard's rate table do not change it.
-- Refusals use the native codes: a lucky powder staged with the jewel (0x0a), a Spirit at +6 (0x0f), a native
+- Refusals use the native codes: a lucky powder staged with the jewel (0x0a), a Spirit at +10 (0x0f), a native
   elixir on a Spirit or the jewel on native gear (0x09). Off, a Spirit is no target (0x10).
 - The token shop sells the jewel for 20 tokens beside the Spirits.
 
@@ -79,7 +79,7 @@ With `SRO_NASRUN` on, a Spirit worn in avatar slot 4 gives its abilities while i
 | --- | --- | --- | --- |
 | +0 to +2 | the colour's Eccentric Demon | +15 % + plus | 0 |
 | +3 to +5 | the colour's Devil's Confusion, Monster Defence Ignore 1 | +15 % + plus | 1 |
-| +6 | the colour's Destroy the Devil, Monster Defence Ignore 2 | +15 % + plus | 2 |
+| +6 to +10 | the colour's Destroy the Devil, Monster Defence Ignore 2 | +15 % + plus | 2 |
 
 The Unique lends the red skills, with +20 % + plus and one more block. The v1.188 export puts the top tier at +5 with
 smaller percents; it is a private-server set, so the official shard wins.
