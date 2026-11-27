@@ -569,7 +569,7 @@ def tab_price(current, tab):
 # (its marker's mall packages). A scroll some package already sells, an
 # event copy, a full tab or a tab without a price is reported unlisted.
 # ================
-def _list_in_mall(output, native, item_rows, report, prior):
+def _list_in_mall(output, native, item_rows, report, prior, source):
 	output = Path(output)
 	mall.strip_mall(output, set(prior.get("mall", {}).get("packages", [])))
 	files = {name: safe_target(output / TEXT_ROOT, name) for name, _ in mall.MALL_TABLES}
@@ -584,6 +584,14 @@ def _list_in_mall(output, native, item_rows, report, prior):
 		report["mall"] = {"packages": [], "listed": 0, "unlisted": [], "note": "no mall tables in the tree"}
 		return
 	current = {name: tables.table_rows(raw(name)) for name, _ in mall.MALL_TABLES}
+	# A later source's listings from the previous build are stale: it strips
+	# and re-lists them after this pass. They leave the tables this pass
+	# counts, so neither the slots nor the authored ids walk upward a
+	# rebuild at a time (mall_avatar_import.py does the same for avatars).
+	stale = set()
+	for later in SOURCES[SOURCES.index(source) + 1:]:
+		stale |= set(read_marker(output, later).get("mall", {}).get("packages", []))
+	current = mall.without_packages(current, stale)
 	kind_of_scroll = {code: added["kind"] for added in report.get("added", []) for code in added.get("scrolls", [])}
 	sold = {row[3] for row in current["refscrapofpackageitem.txt"] if len(row) > 3}
 	slots = collections.defaultdict(lambda: -1)
@@ -698,7 +706,7 @@ def add_pets(root, native, output, source=VSRO_SOURCE, earlier_codes=(), env=os.
 		_merge_name_text(output, char_rows, item_rows, later_text, report)
 	report["_prior"] = prior
 	_copy_icons(root, native, output, char_rows + item_rows, report)
-	_list_in_mall(output, native, item_rows, report, prior)
+	_list_in_mall(output, native, item_rows, report, prior, source)
 	return _write_pass(output, source, char_rows, item_rows, report)
 
 
@@ -762,7 +770,7 @@ def add_archive_pets(native, output, earlier_codes=(), env=os.environ):
 			target = safe_target(output / "Data_extracted", data_index[key].path)
 			if not target.exists():
 				write_atomically(target, sro_pk2.payload(data, data_index[key]))
-	_list_in_mall(output, native, item_rows, report, prior)
+	_list_in_mall(output, native, item_rows, report, prior, ARCHIVE_SOURCE)
 	return _write_pass(output, ARCHIVE_SOURCE, char_rows, item_rows, report)
 
 

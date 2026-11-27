@@ -325,6 +325,44 @@ class ArchiveTests(unittest.TestCase):
 			self.assertFalse([row for row in rows("refshopgoods.txt") if row[3] == "PACKAGE_ITEM_PET_DOG"])
 			self.assertEqual(len(rows("refshopgoods.txt")), 3)
 
+	# ================
+	# test_two_sources_rebuilt_on_a_kept_tree_keep_their_slots
+	#
+	# Each source strips only its own earlier listings; a later source's
+	# previous listings must not count toward this pass's slots or ids,
+	# or every rebuild moves both sources up a slot (pc3's #4672 probe).
+	# ================
+	def test_two_sources_rebuilt_on_a_kept_tree_keep_their_slots(self):
+		with tempfile.TemporaryDirectory() as folder:
+			base = Path(folder)
+			native, output = base / "native", base / "out"
+			self._tree(native, *native_wolf())
+			self._mall(native)
+			output.mkdir()
+			(output / importer.TEXT_ROOT).mkdir(parents=True)
+			passes = ((importer.VSRO_SOURCE, "ITEM_PET_CAT", 9101), (importer.ARCHIVE_SOURCE, "ITEM_PET_DOG", 9102))
+
+			def build():
+				listed = []
+				for source, code, identity in passes:
+					prior = importer.read_marker(output, source)
+					report = {"added": [{"kind": "pickup", "scrolls": [code]}]}
+					importer._list_in_mall(output, native, [scroll(code, identity, "COS_P_X")], report, prior, source)
+					(output / source["report"]).write_text(json.dumps({"mall": report["mall"]}), encoding="utf-8")
+				text_root = output / importer.TEXT_ROOT
+				goods = importer.tables.table_rows((text_root / "refshopgoods.txt").read_bytes())
+				packages = importer.tables.table_rows((text_root / "refpackageitem.txt").read_bytes())
+				for _, code, _ in passes:
+					package = "PACKAGE_" + code
+					listed.append(([row[4] for row in goods if row[3] == package],
+						[row[2] for row in packages if row[3] == package]))
+				return listed
+
+			first = build()
+			self.assertEqual([slots for slots, _ in first], [["8"], ["9"]])
+			self.assertEqual(build(), first)
+			self.assertEqual(build(), first)
+
 	def test_an_archive_with_the_wrong_sha256_is_refused(self):
 		with tempfile.TemporaryDirectory() as folder:
 			base = Path(folder)
