@@ -786,6 +786,14 @@ func (s *Store) adoptDB(db *sql.DB, loaded *loadedDB) {
 	// (configureDB); the background checkpointer copies its WAL
 	// instead (#2142 slice 0).
 	s.checkpoints = startWALCheckpointer(s.dbPath)
+	// Gold rows whose door the reason table has since named take that
+	// reason before the fold lane reads them (economy_reattribute.go).
+	// A failure costs only the console's labels, never the boot.
+	if changed, err := reattributeLedger(db); err != nil {
+		log.WithError(err).Warn("economy ledger: reattributing unattributed rows failed")
+	} else if changed > 0 {
+		log.WithField("rows", changed).Info("economy ledger: unattributed rows given their reason")
+	}
 	// The economy fold lane (#3187) folds the ledger's old rows into
 	// the hourly buckets and deletes them in bounded batches.
 	s.economyFold = startEconomyFold(s)
