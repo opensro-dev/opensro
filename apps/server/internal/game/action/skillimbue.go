@@ -24,11 +24,12 @@ instantActivitySkill
 
 A skill the press runs at once through acceptInstantSelfEffect, before the
 command queue (natively non-attack activity skills dispatch first): an
-instant self effect or a weapon imbue.
+instant self effect, a weapon imbue, or an instant ignore-defense buff.
 ================
 */
 func instantActivitySkill(skill enterworld.SkillRow) bool {
-	return skill.InstantSelfEffectPinned || skill.Imbue.Pinned
+	return skill.InstantSelfEffectPinned || skill.Imbue.Pinned ||
+		skill.TimedEffect.Pinned && skill.TimedEffect.IgnoreDefense != 0 && !skill.QueuedActivity()
 }
 
 // A zero-action-duration skill still owns admission, MP, cooldown, an accepted
@@ -95,7 +96,7 @@ func (rt *Runtime) acceptInstantSelfEffect(division string, character, snapshot 
 			return false
 		}
 		var ok bool
-		effects, ok = rt.commitCharacterEffect(division, character, skill, effectToken, statuseffect.StateActive, false, EffectPresentation{Phase: 2, Rider: rider}, now)
+		effects, ok = rt.commitCharacterEffect(division, character, skill, effectToken, statuseffect.StateActive, false, EffectPresentation{Phase: 1, Rider: rider}, now)
 		if !ok {
 			return false
 		}

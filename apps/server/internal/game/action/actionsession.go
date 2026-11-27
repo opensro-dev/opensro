@@ -105,7 +105,7 @@ func (rt *Runtime) queueObjectAction(division string, c *enterworld.Character, p
 			return OpResult{}, false
 		}
 		skill, exists := rt.deps.SkillData().SkillByID(cast.ActionId)
-		if !exists || skill.InstantSelfEffectPinned || skill.Imbue.Pinned {
+		if !exists || instantActivitySkill(skill) {
 			return OpResult{}, false
 		}
 	default:
@@ -195,7 +195,7 @@ not a skill press.
 */
 func (rt *Runtime) graceReadyAtMs(snapshot *enterworld.Character, payload []byte) int64 {
 	skill, ok := rt.queuedSkill(snapshot, payload)
-	if !ok || skill.InstantSelfEffectPinned || skill.Imbue.Pinned {
+	if !ok || instantActivitySkill(skill) {
 		return 0
 	}
 	now := rt.Now().UnixMilli()
