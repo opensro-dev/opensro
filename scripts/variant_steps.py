@@ -62,6 +62,7 @@ import state_document
 import build_progress
 import variant_settle
 import variant_stamp
+import variant_reuse
 from prepare_client_resources import file_digest, write_atomically
 from sro_paths import REPO_ROOT, tree_state_root
 
@@ -773,6 +774,8 @@ class Runner:
 	# journal-less build starts from the cleared tree instead.
 	# ================
 	def begin(self, force: bool = False):
+		# What an earlier build kept and never took back is stale now.
+		variant_reuse.clear(self.variant)
 		self.fresh = force or self.journal is None
 		if self.fresh:
 			self.first = 0
@@ -866,7 +869,9 @@ class Runner:
 				before = befores[index][relative]
 				target = self.variant / relative
 				if before is None:
-					target.unlink(missing_ok=True)
+					# Kept, not deleted: a rerun step that lays the same file
+					# again takes it back (variant_reuse.py, #4337).
+					variant_reuse.stash(self.variant, relative)
 				else:
 					lay_blob(self.variant, before, target)
 		# Directories the undone steps leave empty go with them.
@@ -967,3 +972,4 @@ class Runner:
 		# over the tree the journal now describes (the build's own settle
 		# in main() afterwards finds nothing left to do).
 		variant_settle.settle(self.variant)
+		variant_reuse.clear(self.variant)
