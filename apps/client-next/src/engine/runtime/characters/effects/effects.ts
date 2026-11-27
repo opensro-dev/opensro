@@ -226,12 +226,41 @@ function importedProjectileBasis(
 	const basis = projectileBasis( start, end, verticalFallback );
 	if ( basis ) return importedModelBasis( basis );
 	if ( spawnYaw === undefined ) return undefined;
-	// 8D8E30 Initialize: 879250's path length is fcomp'ed against 0.0 at
-	// 8D921D, and a zero-length path returns at 8D922D before the travel
-	// basis write (8D9233), so the mover keeps its caller's fYaw. Only
-	// the AT_TARGET caller (8DE74C) gives -pi/2; the other stage callers
-	// give the source object's yaw ([obj+0x88]). Build the kept facing's
-	// rows with projectileBasis's convention: back = (-sin, 0, cos).
+	return importedModelBasis( spawnYawBasis( spawnYaw ) );
+}
+/*
+================
+nativeFlightBasis
+
+The spawn basis of a flying mover, in the native rows of its own space:
+8D8E30's travel basis (8D9233) when the path has length, else the fYaw
+its Initialize caller gave it, kept verbatim (8D922D). An imported mesh
+turns these rows over (importedProjectileBasis); an .efp program's
+model stands in native space as authored, so it takes them as they are.
+================
+*/
+function nativeFlightBasis(
+	start: Parameters<typeof projectileBasis>[0],
+	end: Parameters<typeof projectileBasis>[1],
+	spawnYaw?: number
+): CharacterActor["effectBasis"] {
+	const basis = projectileBasis( start, end, true );
+	if ( basis ) return basis;
+	return spawnYaw === undefined ? undefined : spawnYawBasis( spawnYaw );
+}
+/*
+================
+spawnYawBasis
+
+The kept fYaw as a basis: 8D8E30 Initialize fcomp'es 879250's path
+length against 0.0 at 8D921D, and a zero-length path returns at 8D922D
+before the travel basis write (8D9233), so the mover keeps its caller's
+fYaw. Only the AT_TARGET caller (8DE74C) gives -pi/2; the other stage
+callers give the source object's yaw ([obj+0x88]). Rows follow
+projectileBasis's convention: back = (-sin, 0, cos).
+================
+*/
+function spawnYawBasis( spawnYaw: number ): NonNullable<CharacterActor["effectBasis"]> {
 	const f = Math.fround,
 		x = f( -Math.sin( spawnYaw ) ),
 		z = f( Math.cos( spawnYaw ) ),
@@ -239,7 +268,7 @@ function importedProjectileBasis(
 		inverse = length ? f( 1 / length ) : 0,
 		backX = f( x * inverse ),
 		backZ = f( z * inverse );
-	return importedModelBasis( [ backZ, 0, f( -backX ), 0, 1, 0, backX, 0, backZ ] );
+	return [ backZ, 0, f( -backX ), 0, 1, 0, backX, 0, backZ ];
 }
 /** One decoded stage binding; see stageBinding. */
 type StageBinding = {
@@ -1839,7 +1868,7 @@ export function createCharacterEffects(
 								const commandRotation = stage.native?.rotation ?
 									projectNativeCommandRotation( stage.native.rotation ) :
 									undefined;
-								// A flying .bsr keeps the 8D9233 travel basis (effectBasis).
+								// A flying mover keeps its 8D9233 travel basis (effectBasis, at spawn below).
 								const effectRotation = flying && targetLocal && stage.resource?.endsWith( ".efp" ) ?
 									TARGET_MOVER_PITCH :
 									rotation?.rotation ?? commandRotation;
@@ -2288,8 +2317,14 @@ export function createCharacterEffects(
 												{ kind: "world" },
 										actor: {
 											gid,
-											effectBasis: flight && resource?.endsWith( ".bsr" ) ?
-												importedProjectileBasis( source, destination, true, spawnYaw ) :
+											// 8D8E30 writes the travel basis (8D9233) for
+											// every mover whose path has length, whatever
+											// its resource: only the rows' space differs
+											// (imported mesh rows turn over, .efp native).
+											effectBasis: flight ?
+												(resource?.endsWith( ".bsr" ) ?
+													importedProjectileBasis( source, destination, true, spawnYaw ) :
+													nativeFlightBasis( source, destination, spawnYaw )) :
 												undefined,
 											effectRotation,
 											pickable: false,
