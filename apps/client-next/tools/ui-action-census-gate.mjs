@@ -44,6 +44,7 @@ import { findResult, fingerprintOf, recordResult, snapshot } from "../../../scri
 import { MISSING_DIGEST } from "../../../scripts/build/graph/action.mjs";
 import { openFileHashCache } from "../../../scripts/build/shared/fileHashCache.mjs";
 import { buildStatePath, CLIENT_PUBLIC_ROOT } from "../../../scripts/lib/generatedRoot.mjs";
+import { pngSizeDigest } from "./census-reads.mjs";
 import { censusTable, censusText, censusVerdict } from "./census-verdict.mjs";
 import { imports, project, resolve, root } from "./project.mjs";
 
@@ -72,6 +73,7 @@ export const ACTION_CENSUS_ROOTS = [
 export const ACTION_CENSUS_FILES = [
 	"apps/client-next/tools/ui-action-census.mjs",
 	"apps/client-next/tools/census-verdict.mjs",
+	"apps/client-next/tools/census-reads.mjs",
 	"apps/client-next/tools/census-expanded.mjs",
 	"apps/client-next/tools/censusWorkers.mjs",
 	"apps/client-next/tools/replaced-windows.mjs",
@@ -92,7 +94,7 @@ const SNAPSHOT_PATHS = [ "apps/client-next/src", ...ACTION_CENSUS_FILES ];
 
 // Non-path key parts: the Node that strips the types and this gate's
 // format salt. The published files are keyed per scene, by what it read.
-export const ACTION_CENSUS_KEYS = [ "@node,--version", "=ui-action-census-gate-4" ];
+export const ACTION_CENSUS_KEYS = [ "@node,--version", "=ui-action-census-gate-5" ];
 // The gate's own (path -> sha256) cache of the published files the scenes
 // read: one owner per cache file.
 const HASH_CACHE_PATH = buildStatePath( "census-file-hash-cache.json" );
@@ -260,14 +262,16 @@ export async function censusGate( { key, committed, cache, build, digest, verdic
 ================
 publishedDigest
 
-A digest function over the published tree: a file's sha256 through the
-gate's hash cache, MISSING_DIGEST for one the fixture could not read
-(the census treats any read failure as absent).
+A digest function over the published tree: what the fixture sees of a
+file (a PNG's size, census-reads.mjs; any other file's sha256 through
+the gate's hash cache), MISSING_DIGEST for one the fixture could not
+read (the census treats any read failure as absent).
 ================
 */
 function publishedDigest( hashes ) {
 	return async file => {
 		try {
+			if ( file.endsWith( ".png" ) ) return pngSizeDigest( CLIENT_PUBLIC_ROOT + file );
 			return await hashes.hashFile( CLIENT_PUBLIC_ROOT + file );
 		} catch {
 			return MISSING_DIGEST;

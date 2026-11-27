@@ -26,6 +26,8 @@ import {
 	censusGate
 } from "../../tools/ui-action-census-gate.mjs";
 import { censusTable as censusTableOf, censusText, censusVerdict } from "../../tools/census-verdict.mjs";
+import { pngSize, pngSizeDigest } from "../../tools/census-reads.mjs";
+import os from "node:os";
 import path from "node:path";
 import { codeClosure } from "../../../../scripts/build/shared/codeStamp.mjs";
 
@@ -362,4 +364,37 @@ test("action gate key: every module the census tool runs is a key input", async 
 		.filter( file => !file.startsWith( "apps/client-next/src/" ) );
 	assert.ok( outside.includes( "apps/client-next/tools/census-verdict.mjs" ) );
 	assert.deepEqual( outside.filter( file => !ACTION_CENSUS_FILES.includes( file ) ), [] );
+});
+
+test("a PNG read is keyed by the size the fixture reports, not by its pixels", () => {
+	const directory = fs.mkdtempSync( path.join( os.tmpdir(), "census-png-" ) );
+	try {
+		// The signature, an IHDR length and type, then width and height.
+		const header = ( width, height, pixels ) => {
+			const bytes = Buffer.alloc( 40, pixels );
+			Buffer.from( [ 0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0, 0, 0, 13, 0x49, 0x48, 0x44, 0x52 ] ).copy(
+				bytes
+			);
+			bytes.writeUInt32BE( width, 16 );
+			bytes.writeUInt32BE( height, 20 );
+			return bytes;
+		};
+		const file = name => path.join( directory, name );
+		fs.writeFileSync( file( "a.png" ), header( 64, 32, 1 ) );
+		fs.writeFileSync( file( "reskin.png" ), header( 64, 32, 2 ) );
+		fs.writeFileSync( file( "resized.png" ), header( 64, 33, 1 ) );
+		fs.writeFileSync( file( "short.png" ), Buffer.alloc( 10 ) );
+		assert.deepEqual( pngSize( header( 64, 32, 1 ) ), { width: 64, height: 32 } );
+		assert.equal( pngSizeDigest( file( "a.png" ) ), "png 64x32" );
+		assert.equal(
+			pngSizeDigest( file( "reskin.png" ) ),
+			pngSizeDigest( file( "a.png" ) ),
+			"same size, new pixels"
+		);
+		assert.notEqual( pngSizeDigest( file( "resized.png" ) ), pngSizeDigest( file( "a.png" ) ) );
+		assert.throws( () => pngSizeDigest( file( "short.png" ) ), RangeError );
+		assert.throws( () => pngSizeDigest( file( "absent.png" ) ), { code: "ENOENT" } );
+	} finally {
+		fs.rmSync( directory, { recursive: true, force: true } );
+	}
 });

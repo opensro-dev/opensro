@@ -46,6 +46,7 @@ import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 
 import { CLIENT_PUBLIC_ROOT } from "../../../scripts/lib/generatedRoot.mjs";
+import { pngSize } from "./census-reads.mjs";
 import { censusTable, censusText, censusVerdict } from "./census-verdict.mjs";
 import "../tests/helpers/native-source-loader.mjs";
 import { censusWorkerCount } from "./censusWorkers.mjs";
@@ -118,8 +119,7 @@ function censusFixture( commands ) {
 					} else if ( path.endsWith( ".png" ) ) {
 						pending.set( id, {
 							image: {
-								width: bytes.readUInt32BE( 16 ),
-								height: bytes.readUInt32BE( 20 ),
+								...pngSize( bytes ),
 								/*
 								================
 								close
