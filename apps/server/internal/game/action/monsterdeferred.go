@@ -164,10 +164,12 @@ landed, and return the frames its death publishes. A kill by this hit
 belongs to nobody: the settlement runs with no credited actor, exactly
 as a monster killed by another monster settles (temptation.go).
 
-The latch the executor clears dies with the only carrier the shipped
-data has (its hit is its whole current HP); a retained per-actor latch
-store and its recovery readers land with the monster recovery tick,
-which reads the same latch. The caller holds the division door.
+The latches the executor reads and clears are the monster's vital
+record's (simulation's monsterstate_vitals.go): after a successful
+commit a latch cleared here stays down on the record until the
+instruction's duration elapses, which is what stops the carrier
+recovering while its own instruction stands. The caller holds the
+division door.
 ================
 */
 func (rt *Runtime) applyMonsterDeferredSelfHit(division string, instance monster.Instance, skill enterworld.SkillRow, now int64) []wire.Frame {
@@ -187,7 +189,8 @@ func (rt *Runtime) applyMonsterDeferredSelfHit(division string, instance monster
 	descriptor.Parameters[0] = &block
 	descriptor.StartedAt = uint32(now)
 	host := &monsterDeferredHost{rt: rt, division: division, gid: instance.Gid, hp: live.CurrentHP, nowMs: now}
-	latches := combat.NewDeferredVitalLatches()
+	hpLatch, mpLatch := rt.Monsters.MonsterVitalLatches(division, instance.Gid)
+	latches := combat.DeferredVitalLatches{HP: hpLatch, MP: mpLatch}
 	descriptor.Advance(host, &latches)
 	if host.damage <= 0 {
 		return nil
@@ -213,6 +216,9 @@ func (rt *Runtime) applyMonsterDeferredSelfHit(division string, instance monster
 		}
 	} else if !rt.deps.UpdateManyDeferred(roster.characters, "monster-deferred-self-hit", commit) {
 		return nil
+	}
+	if hpLatch && !latches.HP {
+		rt.Monsters.SetMonsterVitalLatches(division, instance.Gid, latches.HP, latches.MP, now+int64(skill.DeferredVital.DurationMs), 0, now)
 	}
 	if !fatal {
 		return nil
