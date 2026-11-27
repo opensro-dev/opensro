@@ -54,9 +54,13 @@ Identities come from published_ids, above every object (items) and
 skill row of the tree, marker-kept so a rebuild keeps them; a row
 either family already has refuses. The shards are this import's own
 (itemdata_330000.txt, skilldata_330000.txt): one importer owns one
-shard, and the off path unlinks them. Names and descriptions are the
-later client's own English (cap110 merge_texts), and icons ride the
-cap110 asset closure. A build without the v1.696 client reaps
+shard, and the off path unlinks them. One native column is the
+exception: the v1.150 20% damage scroll takes the later overlap word
+(OVERLAP_CODES, #4690) in the output copy of its shard, and the marker
+keeps the native word for the off path to put back. Names and
+descriptions are the later client's own English (cap110 merge_texts),
+and icons ride the cap110 asset closure. A build without the v1.696
+client reaps
 exactly what the marker records.
 
 ===========================================================================
