@@ -1,5 +1,10 @@
 package domain
 
+// MaxActiveQuests is the native count of quests under way at which an
+// offer's Accept row becomes SN_TALK_COMMON_MAXQUEST (the talk writer's
+// option pass reads the active count and swaps at 0x21).
+const MaxActiveQuests = 33
+
 // ActiveQuestRecord is one persisted in-progress quest. Optional fields are
 // emitted by the quest wire layer according to Flags, so zero values remain
 // meaningful when their flag is present.

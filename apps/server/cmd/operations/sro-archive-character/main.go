@@ -68,7 +68,7 @@ func main() {
 	}
 
 	matured := time.Now().
-		Add(-store.DeleteReservationWindow - time.Second).
+		Add(-authority.DeletionWindow() - time.Second).
 		UTC().
 		Format(time.RFC3339)
 	if !authority.ReserveCharacterDeletion(selected, matured) {

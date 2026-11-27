@@ -397,6 +397,9 @@ func (rt *Runtime) HandlePortal(division string, c *enterworld.Character, payloa
 		}
 		collected = int64(fee) - link.fee
 		link.fee = int64(fee)
+		if portalFareFree(c) {
+			collected, link.fee = 0, 0
+		}
 		transport := rt.hasSummonedTransportCOS(c)
 		traveller := portalTraveller{questMask: mask, intoDen: arrival.code == denGateCode, transportCOS: transport, transportFar: transport && rt.transportBeyond(division, c, gateTransportRange),
 			transportAdmitted: rt.JobGoodsTeleport}
@@ -622,6 +625,30 @@ type portalTraveller struct {
 	// transportAdmitted is the port-only SRO_JOB_GOODS_TELEPORT rule: a
 	// town gate's Restrict kind 2 lets the transport through.
 	transportAdmitted bool
+}
+
+// portalFareFreeMaxLevel is the highest level reached a character may
+// have and still ride gates and ferries free.
+const portalFareFreeMaxLevel = 20
+
+/*
+================
+portalFareFree
+
+Natively a character whose highest level reached is 20 or less pays no
+gate or ferry fare (the same test stands before the gold check in the
+gate body and in the NPC teleport handler). A record without the
+watermark reads its current level.
+================
+*/
+func portalFareFree(c *enterworld.Character) bool {
+	maxLevel := int64(0)
+	if c.MaxLevel != nil {
+		maxLevel = *c.MaxLevel
+	} else if c.Level != nil {
+		maxLevel = *c.Level
+	}
+	return maxLevel <= portalFareFreeMaxLevel
 }
 
 // Reference server: the quest bit blocks buildings and the route into the

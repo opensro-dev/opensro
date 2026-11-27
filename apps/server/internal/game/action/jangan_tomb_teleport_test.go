@@ -118,6 +118,7 @@ func TestJanganTombTeleportTravel(t *testing.T) {
 	}
 
 	level = 70
+	c.MaxLevel = &level
 	result := rt.HandlePortal(testDivision, c, request)
 	if len(result.Frames) == 0 || result.Frames[0].Opcode != enterworld.OpcodeResetClient {
 		t.Fatalf("gate travel: %+v", result)

@@ -22,8 +22,14 @@ import {
 	ACTION_CENSUS_FILES,
 	actionCensusClosure,
 	actionCensusInputSet,
-	actionCensusKey
+	actionCensusKey,
+	censusGate
 } from "../../tools/ui-action-census-gate.mjs";
+import { censusTable as censusTableOf, censusText, censusVerdict } from "../../tools/census-verdict.mjs";
+import { pngSize, pngSizeDigest } from "../../tools/census-reads.mjs";
+import os from "node:os";
+import path from "node:path";
+import { codeClosure } from "../../../../scripts/build/shared/codeStamp.mjs";
 
 const SOURCE = `
 export function createUi( assets, commands ) {
@@ -203,8 +209,9 @@ test("action gate closure: a missing root fails loudly instead of unwatched", ()
 test("action gate key: moves with a watched input, stands for an unrelated one", () => {
 	const closure = actionCensusClosure( actionFixtureModel() );
 	const inputSet = actionCensusInputSet( closure );
-	// The committed census and the tool are watched alongside the closure.
-	assert.equal( inputSet.has( "apps/client-next/tests/runtime/ui-action-census.json" ), true );
+	// The tool is watched alongside the closure; the committed census is
+	// not a build input, only what the table is judged against.
+	assert.equal( inputSet.has( "apps/client-next/tests/runtime/ui-action-census.json" ), false );
 	assert.equal( ACTION_CENSUS_FILES.includes( "apps/client-next/tools/ui-action-census.mjs" ), true );
 	assert.equal( inputSet.has( "apps/client-next/src/engine/runtime/world/world.ts" ), false );
 	const entries = [
@@ -224,4 +231,170 @@ test("action gate key: moves with a watched input, stands for an unrelated one",
 		inputSet
 	);
 	assert.notEqual( watched, key );
+});
+
+// A two-scene table, as the tool writes it, with one row in each scene.
+function censusTable( shopRow = "buy" ) {
+	return censusText( {
+		about: "fixture",
+		scenes: {
+			Shop: { controls: [ "shop-buy" ], rows: { "shop-buy": shopRow } },
+			System: { controls: [ "system-close" ], rows: { "system-close": null } }
+		}
+	} );
+}
+
+test("census verdict: equal passes, a moved row fails and names its scene, an expanded build may add", () => {
+	const table = censusTable();
+	assert.equal( censusVerdict( table, table, false, [] ).ok, true );
+	const moved = censusVerdict( censusTable( "sell" ), table, false, [] );
+	assert.equal( moved.ok, false );
+	assert.ok( moved.lines.includes( "first differing scene: Shop" ), moved.lines.join( "\n" ) );
+	const grown = JSON.parse( table );
+	grown.scenes.Shop.controls.push( "shop-extra" );
+	grown.scenes.Shop.rows["shop-extra"] = null;
+	assert.equal( censusVerdict( table, censusText( grown ), true, [] ).ok, true, "added rows pass when expanded" );
+	assert.equal( censusVerdict( table, censusText( grown ), false, [] ).ok, false, "but not on a native build" );
+});
+
+// The two fixture scenes as the tool's --parts build gives them: Shop
+// read shop.json, System read system.json and probed an absent file.
+const SCENE_READS = { Shop: [ "/shop.json" ], System: [ "/absent.json", "/system.json" ] };
+
+/*
+================
+partsBuilder
+
+A --parts build over the fixture scenes (all when names is undefined),
+counting the scenes each call built.
+================
+*/
+function partsBuilder( shopRow = "buy" ) {
+	const table = JSON.parse( censusTable( shopRow ) );
+	const builds = [];
+	const build = async names => {
+		const wanted = names ?? Object.keys( table.scenes );
+		builds.push( wanted );
+		const scenes = {};
+		for ( const name of wanted ) scenes[name] = { census: table.scenes[name], reads: SCENE_READS[name] };
+		return { names: Object.keys( table.scenes ), scenes };
+	};
+	return { build, builds };
+}
+
+test("census gate: a changed committed census is judged against the kept scenes, never rebuilt", async () => {
+	const kept = new Map(), files = { "/shop.json": "a", "/system.json": "b" };
+	const cache = { find: key => kept.get( key ), record: ( key, text ) => kept.set( key, text ) };
+	const digest = async file => files[file] ?? "missing";
+	const { build, builds } = partsBuilder();
+	const verdict = ( current, text ) => censusVerdict( current, text, false, [] );
+	const gate = ( key, committed ) => censusGate( { key, committed, cache, build, digest, verdict } );
+	const fixture = text => censusText( { ...JSON.parse( text ), about: censusAbout() } );
+	const first = await gate( "k", fixture( censusTable() ) );
+	assert.deepEqual( [ first.code, first.built, builds.length ], [ 0, [ "Shop", "System" ], 1 ] );
+	// The committed census moves (a refresh commit): same inputs, no build.
+	const stale = await gate( "k", fixture( censusTable( "sell" ) ) );
+	assert.deepEqual( [ stale.code, stale.built, builds.length ], [ 1, [], 1 ] );
+	const refreshed = await gate( "k", fixture( censusTable() ) );
+	assert.deepEqual( [ refreshed.code, refreshed.built, builds.length ], [ 0, [], 1 ] );
+	// A code input moves: a new key builds every scene again.
+	const moved = await gate( "k2", fixture( censusTable() ) );
+	assert.deepEqual( [ moved.code, moved.built, builds.length ], [ 0, [ "Shop", "System" ], 2 ] );
+});
+
+test("census gate: only a scene whose read file moved is rebuilt, an absent file appearing included", async () => {
+	const kept = new Map(), files = { "/shop.json": "a", "/system.json": "b", "/other.json": "c" };
+	const cache = { find: key => kept.get( key ), record: ( key, text ) => kept.set( key, text ) };
+	const digest = async file => files[file] ?? "missing";
+	const { build, builds } = partsBuilder();
+	const verdict = ( current, text ) => censusVerdict( current, text, false, [] );
+	const committed = censusText( { ...JSON.parse( censusTable() ), about: censusAbout() } );
+	const gate = () => censusGate( { key: "k", committed, cache, build, digest, verdict } );
+	await gate();
+	files["/other.json"] = "c2";
+	const unrelated = await gate();
+	assert.deepEqual( [ unrelated.code, unrelated.built ], [ 0, [] ], "a file no scene read rebuilds nothing" );
+	files["/shop.json"] = "a2";
+	const shop = await gate();
+	assert.deepEqual( [ shop.code, shop.built, builds.at( -1 ) ], [ 0, [ "Shop" ], [ "Shop" ] ] );
+	assert.match( shop.lines[0], /rebuilt 1 of 2 scenes \(Shop: \/shop\.json\)/ );
+	files["/absent.json"] = "now";
+	const appeared = await gate();
+	assert.deepEqual( appeared.built, [ "System" ] );
+	assert.equal( (await gate()).built.length, 0, "the rebuilt scenes were recorded with their new digests" );
+});
+
+test("census gate: a failed build fails the gate and records nothing", async () => {
+	const kept = new Map();
+	const cache = { find: key => kept.get( key ), record: ( key, text ) => kept.set( key, text ) };
+	const result = await censusGate( {
+		key: "k",
+		committed: "",
+		cache,
+		build: async () => undefined,
+		digest: async () => "missing"
+	} );
+	assert.equal( result.code, 1 );
+	assert.equal( kept.size, 0 );
+});
+
+/*
+================
+censusAbout
+
+The about line census-verdict.mjs's censusTable writes.
+================
+*/
+function censusAbout() {
+	return censusTableOf( [], {} ).about;
+}
+
+// Every module the census tool can run outside src/ (which the closure
+// keys itself) must be a key input: census-verdict.mjs shapes the
+// recorded bytes, and a module missing here would let an edit to it
+// replay a stale table (#4616 review).
+test("action gate key: every module the census tool runs is a key input", async () => {
+	const repository = path.resolve( import.meta.dirname, "../../../.." );
+	const closure = await codeClosure(
+		path.join( repository, "apps/client-next/tools/ui-action-census.mjs" ),
+		repository
+	);
+	const outside = [ ...closure ]
+		.map( file => path.relative( repository, file ).split( path.sep ).join( "/" ) )
+		.filter( file => !file.startsWith( "apps/client-next/src/" ) );
+	assert.ok( outside.includes( "apps/client-next/tools/census-verdict.mjs" ) );
+	assert.deepEqual( outside.filter( file => !ACTION_CENSUS_FILES.includes( file ) ), [] );
+});
+
+test("a PNG read is keyed by the size the fixture reports, not by its pixels", () => {
+	const directory = fs.mkdtempSync( path.join( os.tmpdir(), "census-png-" ) );
+	try {
+		// The signature, an IHDR length and type, then width and height.
+		const header = ( width, height, pixels ) => {
+			const bytes = Buffer.alloc( 40, pixels );
+			Buffer.from( [ 0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0, 0, 0, 13, 0x49, 0x48, 0x44, 0x52 ] ).copy(
+				bytes
+			);
+			bytes.writeUInt32BE( width, 16 );
+			bytes.writeUInt32BE( height, 20 );
+			return bytes;
+		};
+		const file = name => path.join( directory, name );
+		fs.writeFileSync( file( "a.png" ), header( 64, 32, 1 ) );
+		fs.writeFileSync( file( "reskin.png" ), header( 64, 32, 2 ) );
+		fs.writeFileSync( file( "resized.png" ), header( 64, 33, 1 ) );
+		fs.writeFileSync( file( "short.png" ), Buffer.alloc( 10 ) );
+		assert.deepEqual( pngSize( header( 64, 32, 1 ) ), { width: 64, height: 32 } );
+		assert.equal( pngSizeDigest( file( "a.png" ) ), "png 64x32" );
+		assert.equal(
+			pngSizeDigest( file( "reskin.png" ) ),
+			pngSizeDigest( file( "a.png" ) ),
+			"same size, new pixels"
+		);
+		assert.notEqual( pngSizeDigest( file( "resized.png" ) ), pngSizeDigest( file( "a.png" ) ) );
+		assert.throws( () => pngSizeDigest( file( "short.png" ) ), RangeError );
+		assert.throws( () => pngSizeDigest( file( "absent.png" ) ), { code: "ENOENT" } );
+	} finally {
+		fs.rmSync( directory, { recursive: true, force: true } );
+	}
 });

@@ -135,9 +135,13 @@ func (rt *Runtime) handleMuhanChangeTalk(division string, c *enterworld.Characte
 	}
 	var frames []wire.Frame
 	refusal := ""
+	// Read before the door: the guild read inside it would deadlock
+	// (admitContext.FortressRole).
+	role := rt.guildFortressRole(division, c)
 	rt.deps.Update(c, "muhan-change", func() bool {
 		now := rt.Now().UnixMilli()
-		if code := rt.contextSkillAdmission(division, c, change.skill, now, nil, nil, admitExecution, admitContext{Indirect: true, TransformRef: change.form.RefObjID}); code != 0 {
+		context := admitContext{Indirect: true, TransformRef: change.form.RefObjID, FortressRole: role, RoleRead: true}
+		if code := rt.contextSkillAdmission(division, c, change.skill, now, nil, nil, admitExecution, context); code != 0 {
 			frames = append(offensiveRefusal(code).Frames, npcFunctionRefusal(npcFunctionNotOffered)...)
 			refusal = fmt.Sprintf("change %s refused 0x%04X", change.skill.Codename, code)
 			return false

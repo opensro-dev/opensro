@@ -151,6 +151,14 @@ type admitContext struct {
 	Indirect bool
 	// TransformRef is +0x20, the RefObj msch word 1 reads.
 	TransformRef uint32
+	// FortressRole is the caster's guild fortress role, read before the
+	// caller opened a character door (RoleRead). Inside a door the guild
+	// read would take the store lock the door already holds, and the
+	// store's RWMutex is not re-entrant: r204n's GameWorld hung on it
+	// (tick stalls 2026-11-27 09:06 and 09:08). A caller outside every
+	// door leaves RoleRead false and admission reads the role itself.
+	FortressRole uint8
+	RoleRead     bool
 }
 
 /*
@@ -271,7 +279,11 @@ func (rt *Runtime) contextSkillAdmission(division string, c *enterworld.Characte
 	}
 
 	if mask&admitEquipment != 0 {
-		if code := skillEquipmentRefusal(c, rt.statCatalogs().Items, skill, rt.guildFortressRole(division, c)); code != 0 {
+		role := context.FortressRole
+		if !context.RoleRead {
+			role = rt.guildFortressRole(division, c)
+		}
+		if code := skillEquipmentRefusal(c, rt.statCatalogs().Items, skill, role); code != 0 {
 			return code
 		}
 	}

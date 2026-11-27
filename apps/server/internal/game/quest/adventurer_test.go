@@ -118,3 +118,29 @@ func TestYellowEggsAlonePayDemetri(t *testing.T) {
 		t.Fatal("completion kept the eggs or the moss", c.MissionInventory)
 	}
 }
+
+/*
+================
+TestQuestStartRefusesAtTheNativeCap
+
+At 33 quests under way a new quest cannot start (its talk Accept row is
+the max-quest row instead); at 32 it still can.
+================
+*/
+func TestQuestStartRefusesAtTheNativeCap(t *testing.T) {
+	clientdata.RequireGameData(t)
+	rt := expansionRuntime(t)
+	def := mustQuest(t, rt, adventurerQuest)
+	level, gold := int64(20), int64(0)
+	c := &enterworld.Character{ID: 9, Name: "egg", ModelCodename: "CHAR_EU_MAN_NOBLE", Level: &level, Gold: &gold}
+	for i := 0; i < enterworld.MaxActiveQuests; i++ {
+		c.ActiveQuests = append(c.ActiveQuests, enterworld.ActiveQuestRecord{RefID: 900000 + uint32(i)})
+	}
+	if _, err := rt.StartQuest(c, def.Codename); err == nil {
+		t.Fatal("a 34th quest started")
+	}
+	c.ActiveQuests = c.ActiveQuests[:enterworld.MaxActiveQuests-1]
+	if _, err := rt.StartQuest(c, def.Codename); err != nil {
+		t.Fatalf("the 33rd quest refused: %v", err)
+	}
+}

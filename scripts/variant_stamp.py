@@ -55,6 +55,7 @@ import subprocess
 from pathlib import Path
 
 import state_document
+import tree_scan
 import variant_settle
 from prepare_client_resources import file_digest
 from sro_paths import REPO_ROOT, tree_state_root, trees_overlap
@@ -150,12 +151,17 @@ def code_closure(entry: Path = BUILDER, repository_root: Path | None = None) -> 
 # codeStamp's moduleClosures: for each (ran, imported) record of a step,
 # what it ran and imported, their module-level imports and the pins beside
 # them, and the scripts the files that ran name - every record in one Node
-# start.
+# start. Each closure comes with what its Node scripts can reach
+# (scriptReach.mjs): {absolute path: {digest, flags} or None}, None for a
+# script the step reaches none of.
 # ================
-def module_closures(records: list[tuple], repository_root: Path | None = None) -> list[list[Path]]:
+def module_closures(records: list[tuple], repository_root: Path | None = None) -> list[tuple[list[Path], dict]]:
 	if not records:
 		return []
-	return [[Path(file) for file in closure] for closure in code_stamp("moduleClosures", records, repository_root)]
+	return [
+		([Path(file) for file in closure["files"]], closure["scripts"])
+		for closure in code_stamp("moduleClosureKeys", records, repository_root)
+	]
 
 
 # ================
@@ -199,10 +205,10 @@ def source_roots(native: Path, imported: Path, vsro_root: Path, variant: Path, e
 # One file's part of a fingerprint: its sha256 when content counts, else
 # its size and mtime.
 # ================
-def file_key(path: Path, content: bool) -> str:
+def file_key(path: Path, content: bool, stat: os.stat_result | None = None) -> str:
 	if content:
 		return file_digest(path)
-	stat = path.stat()
+	stat = path.stat() if stat is None else stat
 	return f"{stat.st_size}\0{stat.st_mtime_ns}"
 
 
@@ -228,22 +234,16 @@ def native_skipped() -> tuple[str, ...]:
 #
 # sha256 over (relative path, file key) of a file or of every file under a
 # folder. A single file up to SMALL_FILE is always taken by content. skip
-# names top folders of root left out (native_skipped).
+# names top folders of root left out (native_skipped). The stat comes with
+# the directory listing (tree_scan.py): 58k native files in 0.2 s, not 7 s.
 # ================
 def tree_fingerprint(root: Path, content: bool = False, skip: tuple[str, ...] = ()) -> str:
 	digest = hashlib.sha256()
 	if root.is_file():
 		digest.update(file_key(root, content or root.stat().st_size <= SMALL_FILE).encode())
 		return digest.hexdigest()
-	rows = []
-	for directory, folders, names in os.walk(root):
-		if skip and Path(directory) == root:
-			folders[:] = [folder for folder in folders if folder not in skip]
-		for name in names:
-			absolute = Path(directory, name)
-			rows.append(f"{absolute.relative_to(root).as_posix()}\0{file_key(absolute, content)}")
-	for row in sorted(rows):
-		digest.update(row.encode("utf-8") + b"\n")
+	for relative, absolute, stat in tree_scan.scan_files(root, skip):
+		digest.update(f"{relative}\0{file_key(absolute, content, stat)}".encode("utf-8") + b"\n")
 	return digest.hexdigest()
 
 

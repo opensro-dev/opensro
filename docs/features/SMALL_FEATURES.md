@@ -221,3 +221,13 @@ Eight pages (240 slots) is the most either can hold: the storage list carries
 its capacity, row count and every slot number in one byte each. A raised
 account warehouse is saved at its new size and never shrinks, so lowering the
 setting later never strands an item. This shard deploys 8 for both.
+
+## One-day character deletion
+
+Port-only, not native. `SRO_QUICK_CHARACTER_DELETE` (shard setting, default
+`off`; our shard `on`, owner 2026-11-27) shortens the wait before a deleted
+character is archived from the native seven days to one day. The store owns
+the window (`store.DeletionWindow`); the reaper and the character list read
+it, and the list sends `deleteMaturesAt`, so the select screen's countdown
+spans the same day. A client that gets no `deleteMaturesAt` (an older
+server) counts down the native seven days. Off is native.

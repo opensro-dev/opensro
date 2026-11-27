@@ -28,6 +28,8 @@ const (
 	VisualFlagBeginner   = domain.VisualFlagBeginner
 	VisualFlagHelper     = domain.VisualFlagHelper
 	VisualFlagsKnownMask = domain.VisualFlagsKnownMask
+
+	MaxActiveQuests = domain.MaxActiveQuests
 )
 
 type InventoryRow = domain.InventoryRow

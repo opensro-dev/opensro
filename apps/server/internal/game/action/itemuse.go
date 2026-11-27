@@ -250,6 +250,9 @@ func (rt *Runtime) handleItemUse(
 	// names a pet (petItemVisualTarget).
 	var visualGID uint32
 	var mercenaryContext domain.MercenaryContext
+	// Read before the door: the guild read inside it would deadlock
+	// (admitContext.FortressRole).
+	fortressRole := rt.guildFortressRole(divisionID, character)
 	update := func() bool {
 		if character.DeletePending || rt.deps.ItemReferences() == nil ||
 			!inventory.IsBagSlot(request.Slot, inventory.BagEnd(character)) {
@@ -358,7 +361,7 @@ func (rt *Runtime) handleItemUse(
 			return rt.usePandoraBox(persistentSummonUse{division: divisionID, character: character, ref: ref, row: rowIndex, request: request, nowMs: nowMs}, &result)
 		}
 		if family == itemUseStructureRepair {
-			return rt.useStructureRepair(character, skillItemUse{division: divisionID, ref: ref, row: rowIndex, request: request, nowMs: nowMs}, tail, &result)
+			return rt.useStructureRepair(character, skillItemUse{division: divisionID, ref: ref, row: rowIndex, request: request, nowMs: nowMs, fortressRole: fortressRole}, tail, &result)
 		}
 		if family == itemUseQuestTool {
 			if len(tail) != 0 || rt.UseQuestItem == nil || character.NativeTeleportMode != 0 {
@@ -599,7 +602,7 @@ func (rt *Runtime) handleItemUse(
 			if len(tail) != 0 {
 				return false
 			}
-			return rt.useMonsterCapsule(divisionID, character, ref, rowIndex, request, nowMs, &result)
+			return rt.useMonsterCapsule(divisionID, character, ref, rowIndex, request, nowMs, fortressRole, &result)
 		}
 
 		if family == itemUsePetSkill {
@@ -730,11 +733,12 @@ func (rt *Runtime) handleItemUse(
 			// Natively the summoned vehicle is bound ridden; the ride owner
 			// sets it (cosmount.go).
 			rideNewVehicle(pet)
-			// The creation arm keeps the reference capacity
-			// (+0x224) for everything but pets, so a transport carries a
-			// cargo bag of its authored size; a riding horse authors none.
+			// The creation arm keeps a bag for everything but pets, sized
+			// by the owner's level (#4490 U11-01), not the row's authored
+			// size; a riding horse authors none. The pages deviation
+			// raises the native size as before.
 			if cosRef.InventoryCapacity > 0 {
-				pet.Container = &domain.COSContainer{Capacity: rt.PetInventoryPages.TransportCapacity(cosRef.InventoryCapacity)}
+				pet.Container = &domain.COSContainer{Capacity: rt.PetInventoryPages.TransportCapacity(rt.transportBagCapacity(character, cosRef))}
 			}
 			// Validate the complete private record before inventory debit. Native
 			// summoning automatically binds both riding and transport vehicles.

@@ -3499,7 +3499,7 @@ test("Options resizes all five pages without moving the window origin", () => {
 		assert.deepEqual( result.controls.filter( c => c.id.startsWith( "option-tab:" ) ).map( c => c.label ), [
 			"Video",
 			"Audio",
-			"Set time",
+			"View",
 			"Set input",
 			"Set game"
 		] );

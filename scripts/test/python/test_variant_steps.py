@@ -609,6 +609,56 @@ class VariantSteps(unittest.TestCase):
 				sys.modules.pop(name, None)
 
 	# ================
+	# test_a_node_declaration_the_step_never_reaches_is_not_code
+	#
+	# The step's Python names tool.mjs, which calls one helper of
+	# world.mjs. #4596 added a constant and two helpers to the world
+	# modules for the outdoor key; keyed whole, that re-ran 17 variant
+	# steps whose scripts never call them (r204n, #4337). What the step
+	# can reach is its code (scriptReach.mjs): an unreached addition
+	# leaves it current, an edit to the helper it calls does not.
+	# ================
+	def test_a_node_declaration_the_step_never_reaches_is_not_code(self):
+		# Assembled, so this file names no script the real closure walk
+		# would have to resolve.
+		suffix = ".mjs"
+		TOOL_SCRIPT, WORLD_SCRIPT = "tool" + suffix, "world" + suffix
+		repo = Path(self.temp.name) / "repo"
+		scripts = repo / "scripts"
+		scripts.mkdir(parents=True)
+		(scripts / "stepmod.py").write_text(
+			"CALLS = {'n': 0}\n\n\n"
+			"def run(variant):\n"
+			"\tCALLS['n'] += 1\n"
+			f"\ttool = '{TOOL_SCRIPT}'\n"
+			"\tout = variant / 'extracted'\n"
+			"\tout.mkdir(parents=True, exist_ok=True)\n"
+			"\t(out / 'step.txt').write_text(tool)\n"
+			"\treturn {'n': 1}\n",
+			encoding="utf-8",
+		)
+		(scripts / TOOL_SCRIPT).write_text(
+			f'import {{ used }} from "./{WORLD_SCRIPT}";\nconsole.log( used() );\n', encoding="utf-8"
+		)
+		world = "export function used() {\n\treturn 1;\n}\n"
+		(scripts / WORLD_SCRIPT).write_text(world, encoding="utf-8")
+		stepmod = self.load_module(scripts, "stepmod")
+		steps = [("step", stepmod.run, (self.variant,))]
+
+		def edit(text):
+			(scripts / WORLD_SCRIPT).write_text(text, encoding="utf-8")
+			run_build(self.variant, steps, repository_root=repo)
+			return stepmod.CALLS["n"]
+
+		try:
+			run_build(self.variant, steps, repository_root=repo)
+			grown = world + "export const OUTDOOR_WORLD_AREA = 'outdoor';\nexport function more() {\n\treturn 2;\n}\n"
+			self.assertEqual(edit(grown), 1)
+			self.assertEqual(edit(grown.replace("return 1", "return 3")), 2)
+		finally:
+			sys.modules.pop("stepmod", None)
+
+	# ================
 	# test_a_journal_without_functions_keys_its_ran_files_whole
 	#
 	# A journal written before the functions were kept (the recorder

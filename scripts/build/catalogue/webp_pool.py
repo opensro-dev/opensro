@@ -9,9 +9,11 @@
 # encode_pairs groups [source, target] pairs by content, encodes each
 # distinct image once on SRO_BUILD_JOBS processes, and keeps the result in
 # a content cache keyed by the source's bytes, the encoder's settings and
-# Pillow's version: an unchanged image is a file copy. A cache entry is
-# written through a temporary file and a rename, so a killed build never
-# leaves a partial entry behind.
+# Pillow's version: an unchanged image is a hard link to its entry (a copy
+# across volumes). A cache entry is written through a temporary file and a
+# rename and never written in place, so a killed build never leaves a
+# partial entry behind and a target linked to an older entry keeps its
+# bytes.
 #
 # ===========================================================================
 #
@@ -46,10 +48,31 @@ def cache_key( settings, payload ):
 
 #
 # ================
+# place
+#
+# target as the file entry names: a hard link when both are on one
+# volume, else a copy. A link is the file the cache already holds, so the
+# release's tar reads it as a file the scanner has seen: a fresh copy cost
+# 5.8 ms on its first read on the release PC, a link 0.12 ms, over the
+# catalogue's 19,170 files (opensro #4337). An existing target is removed
+# first: copying onto a target that is itself a link to an entry would
+# write through into the cache.
+# ================
+#
+def place( entry, target ):
+	if os.path.lexists( target ):
+		os.remove( target )
+	try:
+		os.link( entry, target )
+	except OSError:
+		shutil.copyfile( entry, target )
+
+#
+# ================
 # encode_one
 #
 # One distinct image, in a worker: the cached result when there is one,
-# else the encode, stored in the cache, then copied to every target that
+# else the encode, stored in the cache, then placed at every target that
 # shares its bytes. encode_pairs hands each cache entry to exactly one
 # worker, so no two workers ever write or read the same entry at once
 # (Windows refuses a rename onto a file another process holds open).
@@ -77,7 +100,7 @@ def encode_one( job ):
 			raise
 	for target in targets:
 		if target != entry:
-			shutil.copyfile( entry, target )
+			place( entry, target )
 	return hit
 
 #

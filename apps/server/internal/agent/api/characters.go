@@ -14,6 +14,7 @@ import (
 	"errors"
 	"net/http"
 	"strings"
+	"time"
 
 	log "github.com/sirupsen/logrus"
 	"opensro.online/server/internal/data/store"
@@ -691,6 +692,12 @@ func (api *API) createdCharacterJSON(c *domain.Character) map[string]interface{}
 	out["maxMp"] = charactervitals.DerivedMaxMP(c)
 	if c.DeleteReservedAt != "" {
 		out["deleteReservedAt"] = c.DeleteReservedAt
+		// The instant the reaper archives the character, from the store's
+		// one window (native seven days, or SRO_QUICK_CHARACTER_DELETE's
+		// one day), so the select screen's countdown never assumes it.
+		if reserved, err := time.Parse(time.RFC3339, c.DeleteReservedAt); err == nil {
+			out["deleteMaturesAt"] = reserved.Add(api.store.DeletionWindow()).UTC().Format(time.RFC3339)
+		}
 	}
 	if c.World != nil {
 		out["world"] = characterWorldJSON(c.World)

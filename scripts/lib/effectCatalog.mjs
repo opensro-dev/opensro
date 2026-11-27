@@ -55,6 +55,7 @@ its value) and the meshes it names, as the worker reads them.
 export function readEffectProgramSync( path, publicRoot = CLIENT_PUBLIC_ROOT ) {
 	const bytes = readPublishedAssetBytesSync( effectProgramFile( path ), publicRoot );
 	const file = JSON.parse( bytes.toString( "utf8" ) );
+	/** @type {Record<string, import("../../apps/client-next/src/engine/runtime/assets/worker/effects/program/program.ts").EffectMesh>} */
 	const meshes = {};
 	for ( const key of file.meshes ?? [] ) {
 		meshes[key] = readPublishedAssetJsonSync( effectMeshFile( key ), publicRoot );
