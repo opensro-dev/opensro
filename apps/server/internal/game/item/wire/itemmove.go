@@ -555,22 +555,6 @@ func (q ItemMoveRequest) Encode() ([]byte, error) {
 // payload that ends after the quantity is well-formed and yields no SubMoves.
 /*
 ================
-ItemMoveType
-
-The request's movement type alone, for a door that must know the kind
-of move before the whole request is read (the trade restriction's
-drop gate). The full decode stays DecodeItemMoveRequest's.
-================
-*/
-func ItemMoveType(payload []byte) (uint8, bool) {
-	if len(payload) == 0 {
-		return 0, false
-	}
-	return payload[0], true
-}
-
-/*
-================
 DecodeItemMoveRequest
 ================
 */

@@ -5,11 +5,12 @@ restriction_gate_test.go - the command-restriction gates at the door
 
 A session carrying the trade restriction loses the exchange request,
 the stall create and visit, the Open Market opening and the item
-move's drop arms at the message door: the operation never runs and
+move's ground drop at the message door: the operation never runs and
 the one answer is the restriction notice. The chat kind does not gate
-them, a bag move is not a drop, and a cleared restriction lets the
-request through again. A restriction on the hub's by-character record
-is on the session from the bind (the entry load).
+them, a bag move is not a drop (and the gold drop never takes the
+check), and a cleared restriction lets the request through again. A
+restriction on the hub's by-character record is on the session from
+the bind (the entry load).
 
 ===========================================================================
 */
@@ -120,12 +121,21 @@ func TestTradeRestrictionDropsTheGatedRequests(t *testing.T) {
 	assertGate(t, h.fire(t, conn, wire.OpStallVisit, []byte{0}), calls)
 	assertGate(t, h.fire(t, conn, wire.OpStallNetworkSearch, []byte{0}), calls)
 	assertGate(t, h.fire(t, conn, wire.OpItemMoveRequest, []byte{wire.MoveTypeGroundDrop, 20}), calls)
-	assertGate(t, h.fire(t, conn, wire.OpItemMoveRequest, []byte{wire.MoveTypeGoldDrop, 1, 0, 0, 0, 0, 0, 0, 0}), calls)
 
-	// A bag move is not a drop: the same request stays open.
+	// A bag move is not a drop, and the gold drop never takes the
+	// restriction check: both stay open under the same restriction.
 	frames := h.fire(t, conn, wire.OpItemMoveRequest, []byte{0, 20, 21})
 	if calls.Load() != 1 {
 		t.Fatal("a bag move was gated as a drop")
+	}
+	frames = h.fire(t, conn, wire.OpItemMoveRequest, []byte{wire.MoveTypeGoldDrop, 1, 0, 0, 0, 0, 0, 0, 0})
+	if calls.Load() != 2 {
+		t.Fatal("a gold drop was gated as an item drop")
+	}
+	for _, f := range frames {
+		if f.Opcode == wire.OpGMRestrictionNotice {
+			t.Fatal("a gold drop drew the restriction notice")
+		}
 	}
 	answered := false
 	for _, f := range frames {
@@ -200,16 +210,19 @@ func TestRegisteredTradeGatesDropAtTheDoor(t *testing.T) {
 		{wire.OpStallVisit, []byte{0}},
 		{wire.OpStallNetworkSearch, []byte{0}},
 		{wire.OpItemMoveRequest, []byte{wire.MoveTypeGroundDrop, 20}},
-		{wire.OpItemMoveRequest, []byte{wire.MoveTypeGoldDrop, 1, 0, 0, 0, 0, 0, 0, 0}},
 	} {
 		if got := notices(h.fire(t, conn, tc.opcode, tc.payload)); got != 1 {
 			t.Fatalf("opcode 0x%04X drew %d notices, want one", tc.opcode, got)
 		}
 	}
-	// A bag move through the same registration draws none.
+	// A bag move, and a gold drop, through the same registration draw none.
 	frames := h.fire(t, conn, wire.OpItemMoveRequest, []byte{0, 20, 21})
 	if got := notices(frames); got != 0 {
 		t.Fatalf("a bag move drew %d notices, want none", got)
+	}
+	frames = h.fire(t, conn, wire.OpItemMoveRequest, []byte{wire.MoveTypeGoldDrop, 1, 0, 0, 0, 0, 0, 0, 0})
+	if got := notices(frames); got != 0 {
+		t.Fatalf("a gold drop drew %d notices, want none", got)
 	}
 }
 

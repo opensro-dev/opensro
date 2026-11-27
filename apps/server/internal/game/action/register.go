@@ -210,18 +210,20 @@ func (rt *Runtime) restrictedHandler(hub *transport.Hub, kind uint8, op opFunc) 
 ================
 dropRestrictedHandler
 
-The item move's restriction gate: only the ground and gold drop arms
-answer to the trade kind - the bag, storage and companion moves the
-same request carries stay open. The move kind is the wire's own peek
-(wire.ItemMoveType); an unreadable request falls through to the
-handler, which refuses it as it refuses every malformed move.
+The item move's restriction gate: only the ground drop arm answers
+to the trade kind - the gold drop the same request carries stays
+open (the native gold-drop routine never makes the restriction
+check), as do the bag, storage and companion moves. The move kind is
+the wire's own peek (wire.ItemMoveType); an unreadable request falls
+through to the handler, which refuses it as it refuses every
+malformed move.
 ================
 */
 func (rt *Runtime) dropRestrictedHandler(hub *transport.Hub, op opFunc) transport.HandlerFunc {
 	inner := rt.hubHandler(hub, op)
 	return func(s *transport.Session, opcode uint16, payload []byte) {
 		if moveType, ok := wire.ItemMoveType(payload); ok &&
-			(moveType == wire.MoveTypeGroundDrop || moveType == wire.MoveTypeGoldDrop) &&
+			moveType == wire.MoveTypeGroundDrop &&
 			restriction.Report(s, transport.CommandRestrictionTrade) {
 			return
 		}
