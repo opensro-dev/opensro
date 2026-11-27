@@ -181,6 +181,34 @@ func TestTradeNeedsOpenShopNotDistance(t *testing.T) {
 
 /*
 ================
+TestGateHitRangeIs800PlainNpcIs300
+
+A gate structure is used from up to 800 (3D), a plain NPC's
+functions from up to 300 (#4490 U8-14): the class range of the
+target's object, applied at the interaction gate.
+================
+*/
+func TestGateHitRangeIs800PlainNpcIs300(t *testing.T) {
+	rt, c := merchantFixture(t)
+	base := rt.NpcRoster[0].Spawn.X
+	rt.NpcRoster[0].Spawn.X = base + 400
+	if rt.npcWithinHitRange(testDivision, c, rt.NpcRoster[0]) {
+		t.Fatal("a plain NPC at 400 was admitted")
+	}
+	gate := rt.NpcRoster[0]
+	gate.Teleport = &simulation.TeleportGateBounds{Radius: 100, Height: 200}
+	if !rt.npcWithinHitRange(testDivision, c, gate) {
+		t.Fatal("a gate at 400 was refused")
+	}
+	rt.NpcRoster[0].Spawn.X = base + teleportHitRange + 10
+	gate.Spawn = rt.NpcRoster[0].Spawn
+	if rt.npcWithinHitRange(testDivision, c, gate) {
+		t.Fatal("a gate beyond 800 was admitted")
+	}
+}
+
+/*
+================
 TestNpcTalkSightSparesTeleportGates
 
 #4125: the talk sight test is the NPC class's, not the gate class's. A
