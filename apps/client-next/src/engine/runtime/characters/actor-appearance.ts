@@ -11,7 +11,8 @@ the per-actor loop: a loop `continue` is `return null` here.
 ===========================================================================
 */
 import { dressedAvatars } from "@/engine/foundation/gameplay/avatar-socket";
-import { visualChangeAvatars } from "@/engine/foundation/animation/visual-changes";
+import { costumeHidesWeapon, visualChangeAvatars } from "@/engine/foundation/animation/visual-changes";
+import { castAnimating } from "@/engine/foundation/animation/auxiliary-motion";
 import { fortressAppearance } from "@/engine/foundation/animation/fortress-appearance";
 import { isGoldHeapType, isSurvivalPowerEgg } from "@/engine/foundation/gameplay/ground-item";
 import { defaultWearFrozen } from "@/engine/foundation/animation/default-wear-policy";
@@ -113,6 +114,28 @@ export function createActorAppearance( owner: ActorOwner ) {
 		}
 		return text;
 	}
+	/*
+	================
+	costumeWeaponHidden
+
+	Whether the Devil's Spirit costume puts the entity's weapon away this
+	frame: while no skill animates (#4407, visual-changes.ts
+	costumeHidesWeapon). The stamp and the resolve both add it to the
+	effects' hidden weapon, so a cast starting or ending redresses.
+	================
+	*/
+	function costumeWeaponHidden( entity: EntityState, frame: ActorFrame ): boolean {
+		const costumed = visualChangeAvatars(
+			entity.gid,
+			frame.gameplay?.attachedEffects,
+			owner.published.dress.visualChanges
+		) !== undefined;
+		const casting = castAnimating(
+			frame.castByActor.get( entity.gid ),
+			frame.actionLayersByActor.get( entity.gid )?.length ?? 0
+		);
+		return costumeHidesWeapon( costumed, casting );
+	}
 	// The stamp resolve fills each frame; a due entity's is copied before
 	// resolve, and only a steady resolve retains the copy.
 	const scratch = {} as StampScratch<AppearanceStamp>;
@@ -145,7 +168,7 @@ export function createActorAppearance( owner: ActorOwner ) {
 		stamp.disguise = referenceAppearances.get( entity.gid );
 		stamp.skin = activeSkin( entity );
 		stamp.local = entity.gid === gameplay?.localGid;
-		stamp.weaponHidden = effects.appearance( entity.gid ).weaponHidden;
+		stamp.weaponHidden = effects.appearance( entity.gid ).weaponHidden || costumeWeaponHidden( entity, frame );
 		stamp.emoteHidden = !!presentationState.idleStates.get( entity.gid )?.attachmentsHidden;
 		stamp.dead = !!state?.dead;
 		stamp.fortressIndex = state?.fortressIndex;
@@ -416,7 +439,8 @@ export function createActorAppearance( owner: ActorOwner ) {
 					published.manifest >= 3
 				) {
 					const equipment = wornEquipment( entity, gameplay );
-					const weaponHidden = effects.appearance( entity.gid ).weaponHidden;
+					const hidden = effects.appearance( entity.gid ).weaponHidden ||
+						costumeWeaponHidden( entity, frame );
 					const hwanHair = entity.appearanceState?.[2] === 1 &&
 						resource.codename.startsWith( "CHAR_CH_" );
 					const freezeWear = defaultWearFrozen(
@@ -457,7 +481,7 @@ export function createActorAppearance( owner: ActorOwner ) {
 					const signature = fortressIndex + ":" + Number( freezeWear ) + ":" + Number( enchantSparks ) + ":" +
 						Number( jobSuitHidesArmor ) + ":" + Number( moonlitThiefSuit ) + ":" +
 						Number( entity.mountedOn !== undefined ) + ":" + Number( hwanHair ) + ":" +
-						Number( weaponHidden ) + ":" +
+						Number( hidden ) + ":" +
 						Number( attachmentsHidden ) + ":" +
 						wornSignature( equipment ) + "|" + avatarSignature( avatars ) +
 						(entity.gid === gameplay?.localGid ? "|" + suitBagKey( equipment ) : "");
@@ -476,7 +500,7 @@ export function createActorAppearance( owner: ActorOwner ) {
 							avatars,
 							hwanHair,
 							mounted: entity.mountedOn !== undefined,
-							weaponHidden,
+							weaponHidden: hidden,
 							attachmentsHidden,
 							fortressIndex,
 							player,
@@ -504,7 +528,7 @@ export function createActorAppearance( owner: ActorOwner ) {
 									avatars,
 									hwanHair,
 									mounted: entity.mountedOn !== undefined,
-									weaponHidden,
+									weaponHidden: hidden,
 									attachmentsHidden,
 									fortressIndex,
 									player,
