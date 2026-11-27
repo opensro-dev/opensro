@@ -227,19 +227,27 @@ func admittedItemUseFamily(ref *enterworld.ItemRef) itemUseFamily {
 	// above (ITEM_MALL_HWAN 9259); 2 is the stat point recall
 	// (ITEM_MALL_(STR|INT)_RECALL 9253..9258, progression/statrecall.go);
 	// 5 is the port's skill reset scroll.
-	// The family read Param1 or it sends a Hwan to the recall, which
-	// spends it resetting a player's stat points.
+	// Param1 3 (ITEM_MALL_AUTO_POTION_TICKET 9260) and 4
+	// (ITEM_MALL_FRIEND_RETURN_SCROLL 9261) ship with the same type. The
+	// v1.188 server has no handler for them: its special-consumable
+	// switch answers every TID4 13 with a refusal before it reads Param1
+	// (research/findings/item-use-13-13-param1.md has the trail). They
+	// stay unsupported (refused, nothing
+	// spent), as does any other Param1. Only Param1 2 reaches the
+	// recall, which spends the scroll resetting a player's stat points.
 	if ref.TypeIDs == [4]int64{3, 3, 13, 13} {
 		param1, _ := ref.NativeFields.Lookup("itemParam1_29c")
-		if param1 == 1 {
+		switch param1 {
+		case 1:
 			return itemUseBerserk
-		}
-		// Param1 5 is the v1.696 skill reset (port-only, not native:
-		// progression/skillrecall.go); it must not reach the stat recall.
-		if param1 == 5 {
+		case 2:
+			return itemUseStatRecall
+		case 5:
+			// The v1.696 skill reset (port-only, not native:
+			// progression/skillrecall.go).
 			return itemUseSkillRecall
 		}
-		return itemUseStatRecall
+		return itemUseUnsupported
 	}
 	// The composite scroll (UIU1 param jobs).
 	if ref.TypeIDs == [4]int64{3, 3, 13, 14} {

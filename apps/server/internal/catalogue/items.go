@@ -380,7 +380,7 @@ var etcGroups = map[[2]int64]string{
 	{12, 1}: "guild-soldier", {12, 2}: "guild-crest", {12, 3}: "guild-recall",
 	{13, 0}: "skill-restoration", {13, 1}: "mall-scroll", {13, 4}: "premium-ticket", {13, 5}: "skill-time-ticket",
 	{13, 6}: "resurrection-scroll", {13, 7}: "repair-hammer", {13, 8}: "gender-change", {13, 9}: "skin-change",
-	{13, 10}: "warehouse-ticket", {13, 11}: "reinforce-scroll", {13, 12}: "pet-extension", {13, 13}: "stat-recall",
+	{13, 10}: "warehouse-ticket", {13, 11}: "reinforce-scroll", {13, 12}: "pet-extension", {13, 13}: "special-scroll",
 	{13, 14}: "premium-time", {13, 15}: "pet-item",
 	{14, 1}: "gacha-card", {14, 2}: "gacha-result",
 	{15, 1}: "monster-box", {15, 2}: "party-summon",
