@@ -59,7 +59,7 @@ func boundPetGuildFixture(t *testing.T) (*Runtime, *enterworld.Character, *enter
 		Codename: "SUMMON_PICKUP", RefObjID: 901, TypeIDs: [4]int64{3, 2, 1, 2}, Country: 3,
 		AssociatedCharacterCodename: "PICKUP",
 		NativeFields: enterworld.NewNativeFields(map[string]float64{
-			"canUse": 1, "itemParam1_29c": 60, "canBorrow": 255, "keepingFee": 0}),
+			"canUse": 1, "itemParam1_29c": 60, "canBorrow": 255, "canTrade": 1, "keepingFee": 0}),
 	}
 	refs.characters["PICKUP"] = &enterworld.CharacterRef{
 		Codename: "PICKUP", RefObjID: 951, TidWord: 0x1c6 | 4<<11,

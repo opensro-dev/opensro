@@ -47,10 +47,32 @@ func TestEconomyRowReasonSplitsASettlement(t *testing.T) {
 		{"guild-level-up 1/7", 42, false, "guild_fee"},
 		{"quest-reward", 42, true, "quest_reward"},
 		{"quest-reward", 42, false, "quest_fee"},
+		// Doors that moved gold as "unattributed" on the live shard.
+		{"sook-payout", 42, true, "arena_reward"},
+		{"sook-recovered-payout", 42, true, "arena_reward"},
+		{"sook-chest-take-item", 42, true, "arena_reward"},
+		{"bag-trade-goods-repair", 42, true, "trade_goods_refund"},
+		{"fortress-structure-upgrade", 42, false, "fortress_fee"},
 	}
 	for _, tc := range cases {
 		if got := EconomyRowReason(tc.label, tc.charID, tc.gain); got != tc.want {
 			t.Fatalf("EconomyRowReason(%q, %d, %v) = %q, want %q", tc.label, tc.charID, tc.gain, got, tc.want)
+		}
+	}
+}
+
+/*
+================
+TestArenaAndRefundReasonsMint
+
+The arena's gold and the trade-goods refund add gold to the shard, so the
+console counts them as mints, not as unknown.
+================
+*/
+func TestArenaAndRefundReasonsMint(t *testing.T) {
+	for _, reason := range []string{"arena_reward", "trade_goods_refund"} {
+		if kind := EconomyReasonKind(reason); kind != EconomyKindMint {
+			t.Fatalf("EconomyReasonKind(%q) = %q, want mint", reason, kind)
 		}
 	}
 }

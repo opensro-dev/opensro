@@ -581,6 +581,22 @@ forever. The mall's open request rides the same stream and holds with it.
 	}
 	/*
 ================
+detachAnswer
+
+Taking a worn item off is a detach, not a swap: the server puts it in the
+bag's first free place whatever bag place was asked, and its answer names
+the place it took (SR_GameServer, #4625 / #4490 U6-09). That answer still
+settles the request. Without this the bag applied the move but stayed busy
+until the inbound hold ran out (BR-261127-1019-4DC6).
+================
+	*/
+	function detachAnswer( request: NonNullable<typeof pending>, destination: number ): boolean {
+		const bagStart = equipmentSlotCount ?? 13;
+		return request.source < bagStart && request.destination !== undefined && request.destination >= bagStart &&
+			destination >= bagStart && (inventorySlotCount === undefined || destination < inventorySlotCount);
+	}
+	/*
+================
 busy
 
 A Magic Pang roll does not hold the bag: native reads its busy byte only
@@ -2877,7 +2893,8 @@ receive
 					pending.source === p[1] :
 					pending.movementType === p[1] && (p[1] === 10 ?
 						pending.amount === v.getUint32( 2, true ) :
-						pending.source === p[2] && (p[1] !== 0 || pending.destination === p[3]));
+						pending.source === p[2] &&
+						(p[1] !== 0 || pending.destination === p[3] || detachAnswer( pending, p[3]! )));
 				if ( matches ) pending = null;
 			}
 			if ( op === 0xb5bd ) {

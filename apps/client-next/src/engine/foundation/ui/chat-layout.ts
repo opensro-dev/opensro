@@ -63,8 +63,12 @@ const CONTRIBUTOR_TAG_STYLE = { fontStyle: 2 } as const;
 chatLeadSpans
 
 The coloured tags that lead a chat line, in order: the Contributor tag,
-then a staff role's tag (staff-roster.ts) in the role's name colour, the
-colour its holder's overhead name takes. Both draw in the outline face.
+then a staff role's tag (staff-roster.ts). Both draw in the outline face
+and the one tag colour (CONTRIBUTOR_TAG_COLOR), and each ends in a space,
+so a line reads "[GM] Name:" as it reads "[Contributor] Name:" (owner,
+2026-11-27: "[GM]HarryBotter" ran the tag into the name, in a different
+gold from [Contributor]). The role's name colour stays on the overhead
+board (name-color.ts).
 Port-only, not native: the native client tags a GM only by a name that
 starts with [GM].
 ================
@@ -77,14 +81,20 @@ export interface ChatLeadSpan {
 
 const noLeadSpans = [] as const;
 
+// A role tag is console data ("[GM]", "[MOD]"): its chat span gets the
+// separating space CONTRIBUTOR_TAG carries, unless the tag already has one.
+function chatTagText( tag: string ): string {
+	return tag.endsWith( " " ) ? tag : tag + " ";
+}
+
 export function chatLeadSpans(
 	contributor: boolean,
-	staff: { readonly tag: string; readonly nameColor: number; } | undefined
+	staff: { readonly tag: string; } | undefined
 ): readonly ChatLeadSpan[] {
 	if ( !contributor && !staff?.tag ) return noLeadSpans;
 	const spans: ChatLeadSpan[] = [];
 	if ( contributor ) spans.push( { text: CONTRIBUTOR_TAG, color: CONTRIBUTOR_TAG_COLOR } );
-	if ( staff?.tag ) spans.push( { text: staff.tag, color: staff.nameColor & 0xffffff } );
+	if ( staff?.tag ) spans.push( { text: chatTagText( staff.tag ), color: CONTRIBUTOR_TAG_COLOR } );
 	return spans;
 }
 
@@ -485,8 +495,8 @@ button
 							// before a rostered sender, notices (channel 7)
 							// carry no sender and are never tagged.
 							// Port-only, not native (#4415): a staff sender's role tag
-							// is a lead span too, in the role's name colour, so [GM]
-							// gets the same emphasis as [Contributor].
+							// is a lead span too, drawn exactly as [Contributor] is
+							// (chatLeadSpans).
 							lead = chatLeadSpans(
 								l.channel !== 7 && l.name !== "" && !!state.contributorTitles?.includes( l.name ),
 								staff && l.name ? staff : undefined

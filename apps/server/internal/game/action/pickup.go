@@ -17,6 +17,7 @@ import (
 
 	"opensro.online/server/internal/domain"
 	"opensro.online/server/internal/game/enterworld"
+	"opensro.online/server/internal/game/item/gacha"
 	"opensro.online/server/internal/game/item/grounditem"
 	"opensro.online/server/internal/game/item/inventory"
 	"opensro.online/server/internal/game/item/wire"
@@ -166,9 +167,18 @@ Whether a ground row may be picked up at all: the item's authored
 pickup permission (itemdata canPick) clear refuses with
 ErrCodeCannotBePicked. An absent permission passes, so a degraded
 reference load never invents a refusal (#4490, U6-10).
+
+Port-only, not native: the Magic Pop ticket is authored canPick 0, but
+SRO_UNIQUE_POP_TICKET puts one on the ground at every unique kill, and
+the gate would strand it there for players and pets alike. While that
+flag runs, a ticket on the ground (the unique's, a GM's or a player's own
+drop) is pickable like any item. Off, the native refusal stands.
 ================
 */
 func (rt *Runtime) groundItemPickable(item grounditem.Item) bool {
+	if rt.UniqueRules.PopTicket && pickupExempt(item.Codename) {
+		return true
+	}
 	refs := rt.deps.ItemReferences()
 	if refs == nil {
 		return true
@@ -179,6 +189,18 @@ func (rt *Runtime) groundItemPickable(item grounditem.Item) bool {
 	}
 	pick, ok := ref.NativeFields.Lookup("canPick")
 	return !ok || int64(pick) != 0
+}
+
+/*
+================
+pickupExempt
+
+The codenames groundItemPickable admits whatever their canPick says
+while SRO_UNIQUE_POP_TICKET runs.
+================
+*/
+func pickupExempt(codename string) bool {
+	return strings.EqualFold(codename, gacha.CardCodename)
 }
 
 /*
