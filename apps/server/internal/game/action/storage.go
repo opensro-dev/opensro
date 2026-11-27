@@ -513,10 +513,15 @@ func (rt *Runtime) storageMutation(movement uint8, q wire.ItemMoveRequest) func(
 			}
 		case wire.MoveTypeStorageGoldDeposit:
 			amount := int64(q.GoldAmount)
+			// No amount is the original's own refusal, before any cap
+			// (#4490 U6-16); too little gold keeps its code below.
+			if amount <= 0 {
+				return storageRefusal(wire.ErrCodePositiveNumberOnly)
+			}
 			// The client caps a deposit at 100,000,000 natively (59A430);
 			// SRO_RAISED_GOLD_CAPS raises both sides, to 1,000,000,000 or
 			// to the shard's chosen value (goldcaps.go).
-			if amount <= 0 || uint64(amount) > rt.storageGoldDepositLimit() {
+			if uint64(amount) > rt.storageGoldDepositLimit() {
 				return storageRefusal(wire.ErrCodeInvalidRequest)
 			}
 			if amount > gold {
@@ -529,7 +534,10 @@ func (rt *Runtime) storageMutation(movement uint8, q wire.ItemMoveRequest) func(
 			storage.Gold += amount
 		case wire.MoveTypeStorageGoldWithdraw:
 			amount := int64(q.GoldAmount)
-			if amount <= 0 || amount > storage.Gold {
+			if amount <= 0 {
+				return storageRefusal(wire.ErrCodePositiveNumberOnly)
+			}
+			if amount > storage.Gold {
 				return storageRefusal(wire.ErrCodeNotEnoughGold)
 			}
 			if gold > math.MaxInt64-amount {
