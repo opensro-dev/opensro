@@ -159,6 +159,29 @@ func (rt *Runtime) grantPickup(
 }
 
 /*
+================
+groundItemPickable
+
+Whether a ground row may be picked up at all: the item's authored
+pickup permission (itemdata canPick) clear refuses with
+ErrCodeCannotBePicked. An absent permission passes, so a degraded
+reference load never invents a refusal (#4490, U6-10).
+================
+*/
+func (rt *Runtime) groundItemPickable(item grounditem.Item) bool {
+	refs := rt.deps.ItemReferences()
+	if refs == nil {
+		return true
+	}
+	ref, ok := refs.ItemRefByCodename(item.Codename)
+	if !ok || ref == nil {
+		return true
+	}
+	pick, ok := ref.NativeFields.Lookup("canPick")
+	return !ok || int64(pick) != 0
+}
+
+/*
 ==================
 pickupGrant
 
@@ -191,6 +214,9 @@ func (rt *Runtime) grantPickupTo(g pickupGrant, doors characterDoors) (result Op
 	// the character that forged it.
 	if groundItem.ForgeBound && !strings.EqualFold(groundItem.DroppedBy, character.Name) {
 		return pickupRefusal(wire.ErrCodeLockedByOther)
+	}
+	if !rt.groundItemPickable(groundItem) {
+		return pickupRefusal(wire.ErrCodeCannotBePicked)
 	}
 	defer func() {
 		result = rt.routeSharedPickup(result, g)

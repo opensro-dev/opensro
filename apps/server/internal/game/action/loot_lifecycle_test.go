@@ -88,6 +88,39 @@ func pickupPublishedLoot(t *testing.T, rt *Runtime, c *enterworld.Character, ref
 
 /*
 ================
+refuseUnpickableLoot
+
+A published loot identity whose pickup permission is clear: the drop
+plan lands, the pickup answers the cannot-be-picked byte, and the drop
+stays on the ground with no row entering the bag.
+================
+*/
+func refuseUnpickableLoot(t *testing.T, rt *Runtime, c *enterworld.Character, ref *enterworld.ItemRef) {
+	t.Helper()
+	at := rt.liveSpawn(simulation.WorldKey(testDivision, c.Name), c, rt.Now().UnixMilli())
+	drop, ok := rt.prepareSelectedDrop(loot.DropItem{Codename: ref.Codename, Count: 1}, at, c.Name, rt.Now())
+	if !ok {
+		t.Fatal("drop planning refused")
+	}
+	drop.OwnerJID = enterworld.ObjectIDForCharacter(c)
+	stored := rt.Ground.Add(testDivision, drop)
+	result := rt.HandleTargetInteract(testDivision, c, wire.TargetInteract{Gid: stored.Gid}.Encode())
+	if len(result.Frames) == 0 || result.Frames[0].Opcode != wire.OpItemMoveResponse ||
+		!reflect.DeepEqual(result.Frames[0].Payload, wire.EncodeItemMoveError(wire.ErrCodeCannotBePicked)) {
+		t.Fatalf("unpickable loot refusal: %+v", result.Frames)
+	}
+	if rt.Ground.Count(testDivision) != 1 {
+		t.Fatalf("unpickable loot left the ground: %d", rt.Ground.Count(testDivision))
+	}
+	for _, row := range c.MissionInventory {
+		if row.RefObjID == ref.RefObjID {
+			t.Fatalf("unpickable loot reached the bag: %+v", row)
+		}
+	}
+}
+
+/*
+================
 TestPublishedLootPickupAndActivation
 ================
 */
@@ -119,6 +152,13 @@ func TestPublishedLootPickupAndActivation(t *testing.T) {
 			rt, _ := newTestRuntime(c, items)
 			rt.deps.(*enterworld.Deps).MagicOptions = magic
 			rt.DropRoll = func() (uint32, error) { return 0, nil }
+			// A loot row whose authored pickup permission is clear is
+			// refused on the ground with the cannot-be-picked notice
+			// (#4490, U6-10) instead of entering the bag.
+			if pick, ok := ref.NativeFields.Lookup("canPick"); ok && int64(pick) == 0 {
+				refuseUnpickableLoot(t, rt, c, ref)
+				return
+			}
 			row := pickupPublishedLoot(t, rt, c, ref, 1)
 			if socket, equip := inventory.EquipSocketForTypeFlags(ref.TypeFlags()); equip {
 				expectedItems := 1

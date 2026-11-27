@@ -413,6 +413,9 @@ var itemdataRecordColumns = []itemdataRecordColumn{
 	// Token 19 (RefObjData+0xA7): bit 0x80 admits the item to the warehouse
 	// (CIFStorage_OnSlotTransfer; 0 refuses with notice 1:0x43).
 	{19, "canBorrow", "int"},
+	// The authored pickup permission: 0 on a ground row refuses the pickup
+	// with the cannot-be-picked notice (action/pickup.go).
+	{21, "canPick", "int"},
 	// Token 22 (server ref +0x8C bit 6, client RefObjData+0xAA): itemdata
 	// CanRepair, read by the server's repair check for NPC and hammer repair.
 	{22, "canRepair", "int"},
