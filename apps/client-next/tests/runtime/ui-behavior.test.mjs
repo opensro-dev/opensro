@@ -6227,6 +6227,56 @@ test("the Bandit Den gate's return point row sends 0x7495 type 1 and nothing els
 	}
 });
 
+test("capability 0x20000000 adds reverse-return rows on CICNPC (5D95AD) and never on CITeleportGate", () => {
+	const sent = [], f = uiFixture( c => sent.push( c.command ) );
+	try {
+		f.state.gameplay = {
+			...f.state.gameplay,
+			pose: { ...f.state.gameplay.pose, regionId: 25000 },
+			target: 18,
+			targetCapabilities: 0x20000080,
+			npcConversation: { phase: "menu", gid: 18 }
+		};
+		f.state.entities.push( {
+			...f.state.entities[0],
+			gid: 18,
+			refObjId: 19519,
+			kind: "npc",
+			name: "Guide Riise"
+		} );
+		f.state.entities.push( {
+			...f.state.entities[0],
+			gid: 19,
+			refObjId: 2094,
+			kind: "teleport",
+			name: "Jangan Gate"
+		} );
+		let output, now = 0;
+		const draw = () => {
+			for ( let i = 0; i < 40; i++ ) output = f.ui.step( { ...f.state }, now++ ) ?? output;
+		};
+		draw();
+		const npcIds = defined( output ).controls.map( c => c.id );
+		assert.ok( npcIds.includes( "npc-reverse-return:2" ) && npcIds.includes( "npc-reverse-return:3" ) );
+		f.ui.event( { kind: "activate", id: "npc-reverse-return:2" } );
+		draw();
+		assert.deepEqual( sent.splice( 0 ), [ { kind: "travel-gate", gid: 18, type: 5, target: 2 } ] );
+
+		f.state.gameplay = {
+			...f.state.gameplay,
+			target: 19,
+			targetCapabilities: 0x20000080,
+			npcConversation: { phase: "menu", gid: 19 }
+		};
+		draw();
+		const gateIds = defined( output ).controls.map( c => c.id );
+		assert.ok( gateIds.includes( "npc-portal-open" ) );
+		assert.ok( !gateIds.includes( "npc-reverse-return:2" ) && !gateIds.includes( "npc-reverse-return:3" ) );
+	} finally {
+		f.dispose();
+	}
+});
+
 test("a quest exit gate draws its rows and a row click sends 0x7495 type 3", () => {
 	const sent = [], f = uiFixture( c => sent.push( c.command ) );
 	try {

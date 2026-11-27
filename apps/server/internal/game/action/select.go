@@ -410,7 +410,7 @@ func (rt *Runtime) HandleObjectSelect(divisionID string, character *enterworld.C
 	outcome := SelectOutcome{Selected: gid}
 	var flags uint32
 	if target.npc != nil {
-		flags = target.npc.TalkFlags | rt.reverseReturnCapability(*target.npc, character)
+		flags = target.npc.TalkFlags
 	}
 	if target.npc != nil {
 		// npcExtra is the native event byte (the reference server's event writer): only the Capture
