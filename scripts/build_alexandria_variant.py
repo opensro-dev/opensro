@@ -51,7 +51,6 @@ Build the variant with its own generated tree:
 import argparse
 import json
 import os
-import shutil
 import sys
 from pathlib import Path
 
@@ -70,6 +69,7 @@ import variant_gates  # noqa: E402
 import variant_settle  # noqa: E402
 import variant_stamp  # noqa: E402
 import variant_steps  # noqa: E402
+import variant_reuse  # noqa: E402
 from build_parallelism import build_jobs  # noqa: E402
 from prepare_client_resources import write_atomically  # noqa: E402
 from sro_paths import EXTRACTED_ROOT  # noqa: E402
@@ -112,8 +112,9 @@ def clear_content(variant, native):
 	out = variant / "extracted"
 	if out.resolve() == Path(native).resolve() or Path(native).resolve() in out.resolve().parents:
 		raise SystemExit(f"{out} is inside the native extraction; refusing to clear it")
-	if out.exists():
-		shutil.rmtree(out)
+	# Moved aside, not deleted: base takes each unchanged file back
+	# (variant_reuse.py, #4337).
+	variant_reuse.stash_tree(variant, out.name)
 	for name in (VARIANT_MANIFEST,) + LINKED_FILES:
 		(variant / name).unlink(missing_ok=True)
 	return out

@@ -23,6 +23,7 @@ from pathlib import Path
 
 import import_vsro_alexandria as stage1
 import sro_pk2
+import variant_reuse
 from prepare_client_resources import log, safe_target, write_atomically
 
 
@@ -175,28 +176,39 @@ def enable_regions(mapinfo, regions):
 # ================
 # link_tree
 # ================
-def link_tree(source, target):
+def link_tree(source, target, reuse=None):
 	"""
 	Hard-link every file of source under target (copy if links are refused);
 	returns how many were laid down. A tree on another volume than its
 	source cannot link at all: the r204 staging on D: copied all of the
 	native H: tree's ~48k files (2.6 GB), every fresh build (#4251), so the
-	copies are reported rather than taken silently.
+	copies are reported rather than taken silently. reuse is the folder
+	that holds the copies the last build laid here (variant_reuse.py): a
+	file whose source is unchanged since is renamed back, not copied
+	again (#4337).
 	"""
-	count = copied = 0
+	count = copied = reused = 0
 	for folder, _, names in os.walk(source):
-		destination = target / Path(folder).relative_to(source)
+		relative = Path(folder).relative_to(source)
+		destination = target / relative
 		destination.mkdir(parents=True, exist_ok=True)
 		for name in names:
 			link = destination / name
 			if link.exists():
 				continue
+			origin = Path(folder) / name
+			if reuse is not None and variant_reuse.take(reuse / relative / name, origin.stat(), link):
+				reused += 1
+				count += 1
+				continue
 			try:
-				os.link(Path(folder) / name, link)
+				os.link(origin, link)
 			except OSError:
-				shutil.copy2(Path(folder) / name, link)
+				shutil.copy2(origin, link)
 				copied += 1
 			count += 1
+	if reused:
+		log(f"{target.name}: {reused} of {count} files kept from the last build (source unchanged)")
 	if copied:
 		log(f"{target.name}: {copied} of {count} files copied, not linked (links refused, as across volumes)")
 	return count
