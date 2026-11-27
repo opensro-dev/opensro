@@ -217,13 +217,14 @@ var laterPetsSilk = map[string]uint32{
 	"PACKAGE_ITEM_COS_P_RACCOONDOG_SCROLL": 88,
 	"PACKAGE_ITEM_COS_P_FLUTE_SILK":        99,
 	"PACKAGE_ITEM_COS_C_WILDPIG_SCROLL":    1,
+	"PACKAGE_ITEM_COS_T_DONKEY":            2,
 }
 
 /*
 ================
 TestMallExtraGoodsLaterPetsPreset
 
-"laterpets" lists the three pet scrolls the later native mall sells:
+"laterpets" lists the pets, vehicle and cart v1.150 ships unsold:
 each an authored silk package selling exactly its own scroll at the
 ISRO-R price. Without the preset none is listed.
 ================
