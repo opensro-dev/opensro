@@ -295,6 +295,18 @@ func TestMostWantedStripKeepsTheStreak(t *testing.T) {
 		t.Fatal("a suited level-2 holder has no writes")
 	}
 
+	// The suit's identity, for finding where the detach lands it below.
+	suitRow := -1
+	for i := range c.MissionInventory {
+		if c.MissionInventory[i].Slot == int64(jobSuitSlot) {
+			suitRow = i
+		}
+	}
+	if suitRow < 0 {
+		t.Fatal("no suit on the mannequin")
+	}
+	suitRef := c.MissionInventory[suitRow].RefObjID
+
 	strip := encodeMove(t, wire.ItemMoveRequest{MovementType: wire.MoveTypeInventory, SourceSlot: jobSuitSlot, DestSlot: jobTestSuitSlot, Quantity: 1})
 	rt.HandleItemMove(testDivision, c, strip)
 	clock.now = clock.now.Add(jobDressSeconds * time.Second)
@@ -308,7 +320,19 @@ func TestMostWantedStripKeepsTheStreak(t *testing.T) {
 		t.Fatalf("after the strip: state %+v sent %v, want level 2 unsuited", state, sent)
 	}
 
-	wear := encodeMove(t, wire.ItemMoveRequest{MovementType: wire.MoveTypeInventory, SourceSlot: jobTestSuitSlot, DestSlot: jobSuitSlot, Quantity: 1})
+	// The detach puts the suit in the bag's first free place (server
+	// 0x5255E0; #4490 U6-09), not necessarily the place asked: wear it
+	// back from wherever it landed.
+	suitSlot := uint8(0)
+	for i := range c.MissionInventory {
+		if c.MissionInventory[i].RefObjID == suitRef && c.MissionInventory[i].Slot >= 13 {
+			suitSlot = uint8(c.MissionInventory[i].Slot)
+		}
+	}
+	if suitSlot == 0 {
+		t.Fatal("the stripped suit is nowhere in the bag")
+	}
+	wear := encodeMove(t, wire.ItemMoveRequest{MovementType: wire.MoveTypeInventory, SourceSlot: suitSlot, DestSlot: jobSuitSlot, Quantity: 1})
 	rt.HandleItemMove(testDivision, c, wear)
 	clock.now = clock.now.Add(jobDressSeconds * time.Second)
 	pushed = nil

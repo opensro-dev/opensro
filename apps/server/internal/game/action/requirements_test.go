@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"opensro.online/server/internal/game/enterworld"
+	"opensro.online/server/internal/game/item/inventory"
 	"opensro.online/server/internal/game/item/wire"
 )
 
@@ -427,11 +428,13 @@ func TestEquipRequirementOrderMatchesNativeMask(t *testing.T) {
 	})
 }
 
-func TestEquipSwapBackRunsRequirementGates(t *testing.T) {
+// TestUnequipOntoAnOccupiedSlotDetachesToTheFirstFreePlace: the
+// original's kind-0 worn-to-bag path is a detach (server 0x5255E0) -
+// the worn piece lands in the bag's first free place whatever place
+// was asked, never a swap, so the occupant of the asked place stays
+// in the bag and runs no requirement gate at all (#4490 U6-09).
+func TestUnequipOntoAnOccupiedSlotDetachesToTheFirstFreePlace(t *testing.T) {
 	items := requirementTestItems()
-	// Unequipping the worn sword onto a bag slot holding an under-leveled
-	// sword seats that occupant in the socket - the swap-back leg runs the
-	// same gates against it.
 	character := requirementTestCharacter(5, []enterworld.InventoryRow{
 		{Slot: 6, RefObjID: items["ITEM_CH_SWORD_01_A"].RefObjID, Codename: "ITEM_CH_SWORD_01_A",
 			TypeFlags: items["ITEM_CH_SWORD_01_A"].TypeFlags(), VarianceBits: "0", StackCount: 1},
@@ -439,10 +442,56 @@ func TestEquipSwapBackRunsRequirementGates(t *testing.T) {
 	})
 	rt, _ := newTestRuntime(character, items)
 
-	code, refused := moveRefusalCode(t, rt, character, 6, 20)
-	if !refused || code != wire.ErrCodeLevelRequired {
-		t.Fatalf("swap-back seating a level-16 sword at level 5 = refused=%v code=0x%02X, want [02 10]", refused, code)
+	result := rt.HandleItemMove(testDivision, character, encodeMove(t, wire.ItemMoveRequest{
+		MovementType: wire.MoveTypeInventory, SourceSlot: 6, DestSlot: 20, Quantity: 1,
+	}))
+	decoded, problem := wire.DecodeItemMoveResult(result.Frames[0].Payload, 0)
+	if problem != nil {
+		t.Fatalf("decode the unequip answer: %v", problem)
 	}
+	if decoded.Result != 1 || decoded.SourceSlot != 6 || decoded.DestSlot != 13 {
+		t.Fatalf("taking the sword off answered %+v, want success naming 6 -> 13, the first free bag place", decoded)
+	}
+	slotOf := map[int64]string{}
+	for _, row := range character.MissionInventory {
+		if row.Codename != "" {
+			slotOf[row.Slot] = row.Codename
+		}
+	}
+	if slotOf[13] != "ITEM_CH_SWORD_01_A" {
+		t.Fatalf("the sword sits in %v, want slot 13", slotOf)
+	}
+	if slotOf[20] != "ITEM_CH_SWORD_03_A" {
+		t.Fatalf("the bag sword moved: %v", slotOf)
+	}
+	if _, worn := slotOf[6]; worn {
+		t.Fatal("the socket still holds a row after the detach")
+	}
+}
+
+// TestUnequipIntoAFullBagRefusesStorageFull: with no free bag place the
+// detach scan comes up empty and the original answers 0x1807; the worn
+// piece stays on (server 0x5255E0; #4490 U6-09).
+func TestUnequipIntoAFullBagRefusesStorageFull(t *testing.T) {
+	items := requirementTestItems()
+	character := requirementTestCharacter(5, []enterworld.InventoryRow{
+		bagRow(6, items, "ITEM_CH_SWORD_01_A"),
+	})
+	for slot := int64(inventory.EquipmentSlotEnd); slot < int64(inventory.BagEnd(character)); slot++ {
+		character.MissionInventory = append(character.MissionInventory, bagRow(slot, items, "ITEM_CH_SWORD_01_A"))
+	}
+	rt, _ := newTestRuntime(character, items)
+
+	code, refused := moveRefusalCode(t, rt, character, 6, 20)
+	if !refused || code != wire.ErrCodeStorageFull {
+		t.Fatalf("taking the sword off into a full bag = refused=%v code=0x%02X, want [02 07]", refused, code)
+	}
+	for _, row := range character.MissionInventory {
+		if row.Slot == 6 && row.Codename == "ITEM_CH_SWORD_01_A" {
+			return
+		}
+	}
+	t.Fatal("the refused detach moved the worn sword")
 }
 
 func TestEquipRefusesStrengthBelowRequirement(t *testing.T) {

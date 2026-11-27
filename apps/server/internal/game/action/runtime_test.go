@@ -550,7 +550,7 @@ func TestM1VisualsAlwaysRideBehindSocketTransfers(t *testing.T) {
 		}
 	})
 
-	t.Run("weapon swap through the bag pushes the new occupant", func(t *testing.T) {
+	t.Run("taking a worn weapon off over an occupied bag slot detaches to the first free place", func(t *testing.T) {
 		rt, character := newRT()
 		character.MissionInventory = append(character.MissionInventory, enterworld.InventoryRow{
 			Slot: 6, RefObjID: 11460, Codename: "ITEM_CH_SWORD_02_A_RARE",
@@ -559,12 +559,31 @@ func TestM1VisualsAlwaysRideBehindSocketTransfers(t *testing.T) {
 		result := rt.HandleItemMove(testDivision, character, encodeMove(t, wire.ItemMoveRequest{
 			MovementType: wire.MoveTypeInventory, SourceSlot: 6, DestSlot: 20, Quantity: 1,
 		}))
-		assertOpcodes(t, result.Frames, wire.OpItemMoveResponse, opCommerceItemReferences, wire.OpEquipVisual, wire.OpBaseStats)
-		assertOpcodes(t, result.Broadcast, opCommerceItemReferences, wire.OpEquipVisual)
+		// The original's worn-to-bag path is a detach (server 0x5255E0):
+		// the worn sword goes to the bag's first free place and the held
+		// sword stays in the bag, so viewers see the socket clear, not
+		// an equip of the occupant (#4490 U6-09).
+		assertOpcodes(t, result.Frames, wire.OpItemMoveResponse, wire.OpUnequipVisual, wire.OpBaseStats)
+		assertOpcodes(t, result.Broadcast, wire.OpUnequipVisual)
 
-		visual, _ := wire.DecodeEquipVisual(result.Broadcast[1].Payload, equipWord)
-		if visual.RefObjID != 11459 || visual.OptLevel != 5 {
-			t.Fatalf("viewer visual = %+v, want the swapped-in 11459 opt 5", visual)
+		decoded, problem := wire.DecodeItemMoveResult(result.Frames[0].Payload, 0)
+		if problem != nil {
+			t.Fatalf("decode the detach answer: %v", problem)
+		}
+		if decoded.DestSlot != 13 {
+			t.Fatalf("the answer names place %d, want 13, the first free bag place", decoded.DestSlot)
+		}
+		slotOf := map[int64]uint32{}
+		for _, row := range character.MissionInventory {
+			if row.Codename != "" {
+				slotOf[row.Slot] = row.RefObjID
+			}
+		}
+		if slotOf[13] != 11460 {
+			t.Fatalf("the worn sword sits in %v, want slot 13", slotOf)
+		}
+		if slotOf[20] != 11459 {
+			t.Fatalf("the held bag sword moved: %v", slotOf)
 		}
 	})
 
