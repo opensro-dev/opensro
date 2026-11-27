@@ -1665,12 +1665,17 @@ pending copy, and the next settings replay repairs what it commits.
 	// out for it. A swap the server refuses never changes the bag, and the
 	// pick's rewind would send it again every 2000 ms forever: the buff
 	// pass never finishes, the attack step never runs, and the hunt stands
-	// idle at its monster. While the loadout still reads the same, the
-	// entry is refused instead of re-swapped; a landed swap, a manual
-	// re-equip, or the entry's own cast clears the wait.
+	// idle at its monster. While the loadout still reads the same, that
+	// same swap (the same bag slot) is not sent again; a landed swap, a
+	// manual re-equip, or the entry's own cast clears the wait. A rebound
+	// Weapon/Shield bind names another bag slot, so its swap still goes out.
 	let macroSwapWaits = new Map<
 		number,
-		{ readonly weapon: number | undefined; readonly shield: number | undefined; }
+		{
+			readonly weapon: number | undefined;
+			readonly shield: number | undefined;
+			readonly source: number;
+		}
 	>();
 	let macroHuntStartedAtMs = 0;
 	let macroHuntWasOn = false;
@@ -7464,15 +7469,20 @@ runs (native 00687520).
 		if ( admission.kind === "refuse" && macroSkillSwapHelps( admission.code ) ) {
 			// A swap already went out for this entry and the worn loadout
 			// reads exactly as it did then, so the swap never landed (the
-			// server refused it, #4697). Re-issuing it cannot clear this
-			// refusal, and the rewind below would wedge the whole step
-			// table on this entry forever. Refuse the entry for as long as
-			// the loadout stays as it is.
+			// server refused it, #4697). Re-issuing that swap cannot clear
+			// this refusal, and the rewind below would wedge the whole step
+			// table on this entry forever, so its bag slot is skipped for as
+			// long as the loadout stays as it is. A candidate from another
+			// slot (the player rebound the Weapon/Shield bind) is judged
+			// as usual.
 			const wornWeapon = bag.find( row => row.slot === WEAPON_SOCKET )?.refObjId;
 			const wornShield = bag.find( row => row.slot === SHIELD_SOCKET )?.refObjId;
 			const wait = macroSwapWaits.get( skillId );
-			if ( wait && wait.weapon === wornWeapon && wait.shield === wornShield ) return;
+			const refusedSource = wait && wait.weapon === wornWeapon && wait.shield === wornShield ?
+				wait.source :
+				undefined;
 			for ( const swap of macroSkillSwapCandidates( settings.skillFlags, bag ) ) {
+				if ( swap.source === refusedSource ) continue;
 				const after = pressAdmission( {
 					admit: metadata.admit,
 					needsFooting: metadata.needsFooting,
@@ -7499,7 +7509,7 @@ runs (native 00687520).
 				}
 				// Native does not advance the list cursor on a swap
 				// (00687af5); rewind the picker's already-advanced entry.
-				macroSwapWaits.set( skillId, { weapon: wornWeapon, shield: wornShield } );
+				macroSwapWaits.set( skillId, { weapon: wornWeapon, shield: wornShield, source: swap.source } );
 				const cursor = pick.list === "attack" ?
 					{ attack: Math.max( 0, macroSkillLoop.attack - 1 ) } :
 					{ buff: Math.max( 0, macroSkillLoop.buff - 1 ) };

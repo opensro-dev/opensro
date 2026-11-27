@@ -830,7 +830,16 @@ test("a wrong-weapon attack equips the bound bag weapon once, then casts without
 	g.dispose();
 });
 
-test("a swap that never lands is not re-issued, and the attack step still runs (#4697)", () => {
+/*
+================
+startRefusedSwapHunt
+
+A hunting macro whose buff needs the sword bound in bag slot 14 while
+another weapon is worn; extraBag adds bag rows. Returns the session, its
+sent frames and the local player, ready for the first step.
+================
+*/
+function startRefusedSwapHunt( extraBag = [] ) {
 	/** @type {{ opcode: number, payload: Uint8Array }[]} */
 	const sent = [];
 	const entities = new Map();
@@ -882,7 +891,8 @@ test("a swap that never lands is not re-issued, and the attack step still runs (
 		// Wrong weapon worn; the bound bag slot holds the buff's sword.
 		equipItems: [
 			{ slot: 6, refObjId: OTHER_WEAPON_REF, body: weaponBody( OTHER_WEAPON_REF ) },
-			{ slot: 14, refObjId: WEAPON_REF, body: weaponBody( WEAPON_REF ) }
+			{ slot: 14, refObjId: WEAPON_REF, body: weaponBody( WEAPON_REF ) },
+			...extraBag
 		]
 	} );
 	g.worldReady();
@@ -903,6 +913,11 @@ test("a swap that never lands is not re-issued, and the attack step still runs (
 	grant[0] = 1;
 	new DataView( grant.buffer ).setUint32( 1, MONSTER_GID, true );
 	g.receive( { opcode: 0xb45a, payload: grant }, 0 );
+	return { g, sent, local };
+}
+
+test("a swap that never lands is not re-issued, and the attack step still runs (#4697)", () => {
+	const { g, sent, local } = startRefusedSwapHunt();
 	sent.length = 0;
 	g.step( 0, local );
 	assert.equal( sent.filter( frame => frame.opcode === ITEM_MOVE_OPCODE ).length, 1, "one swap" );
@@ -920,6 +935,31 @@ test("a swap that never lands is not re-issued, and the attack step still runs (
 		assert.equal( view.getUint32( 2, true ), ATTACK, "the refused buff must not starve the attack step" );
 	}
 	assert.ok( presses.length >= 1, "the attack step still runs" );
+	g.dispose();
+});
+
+test("a refused swap does not hold back the swap a rebound Weapon bind names (#4697)", () => {
+	const { g, sent, local } = startRefusedSwapHunt( [
+		{ slot: 15, refObjId: WEAPON_REF, body: weaponBody( WEAPON_REF ) }
+	] );
+	sent.length = 0;
+	g.step( 0, local );
+	g.receive( { opcode: 0xb06d, payload: Uint8Array.of( 2, 0x34 ) }, 1 );
+	g.step( 2000, local );
+	// The player rebinds the Weapon bind to the second sword in slot 15.
+	g.receive(
+		macroReplay( {
+			skillOn: 1,
+			skillFlags: [ 0, 0, 15, 0 ],
+			buff: [ { slot: 0, skill: BUFF } ],
+			attack: [ { slot: 0, skill: ATTACK } ]
+		} ),
+		2001
+	);
+	sent.length = 0;
+	for ( let t = 2100; t <= 6000; t += 100 ) g.step( t, local );
+	const swaps = sent.filter( frame => frame.opcode === ITEM_MOVE_OPCODE );
+	assert.equal( swaps.length, 1, "the rebound swap goes out once" );
 	g.dispose();
 });
 
