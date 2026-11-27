@@ -833,6 +833,15 @@ test("cast WAIT holds the drawn pose when the stop and the cast arrive in one bu
 		}
 	}
 	assert.ok( chainedGroundSeen, "the chained cast's ground effect is presented at the held pose" );
+	// BR-261127-0952-B0CA: a correction that MOVES the actor during a cast
+	// (a unique casting back to back while the server repositions it) ends
+	// the hold. Absorbing it left the Tiger Girl at her old drawn spot until
+	// the hold ended and she jumped metres in one frame.
+	let moved = frame( 140, 1.6, 2, false, 5, 24000 );
+	for ( let step = 1; step <= 60 && Math.abs( moved.x - 140 ) > 0.5; step++ ) {
+		moved = frame( 140, 1.6 + step * 0.05, 2, false, 5, 24000 );
+	}
+	assert.ok( Math.abs( moved.x - 140 ) <= 0.5, `a moving correction mid-cast is followed (${moved.x})` );
 	f.dispose();
 });
 
