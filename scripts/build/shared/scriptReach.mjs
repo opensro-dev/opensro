@@ -99,6 +99,7 @@ reads the roster on any edit to either.
 ================
 */
 function dynamicCode( source, target ) {
+	/** @type {{ dynamic: boolean, lazy: { target: string, names: string[] | null }[] }} */
 	const found = { dynamic: false, lazy: [] };
 	const importCall = node =>
 		ts.isCallExpression( node ) && node.expression.kind === ts.SyntaxKind.ImportKeyword ? node : null;
@@ -111,9 +112,9 @@ function dynamicCode( source, target ) {
 		const awaited = node.initializer && ts.isAwaitExpression( node.initializer ) ?
 			node.initializer.expression :
 			null;
-		const call = awaited && importCall( awaited );
-		const literal = call && literalTarget( call );
-		if ( !literal?.from ) return null;
+		const call = awaited ? importCall( awaited ) : null;
+		const literal = call ? literalTarget( call ) : null;
+		if ( !call || !literal?.from ) return null;
 		const names = [];
 		for ( const element of node.name.elements ) {
 			const name = element.propertyName ?? element.name;
@@ -157,9 +158,18 @@ names, null for a package (pinned by the lockfile, not followed).
 function parseModule( file, text ) {
 	const source = ts.createSourceFile( file, text, ts.ScriptTarget.Latest, true, ts.ScriptKind.JS );
 	const directory = path.dirname( file );
+	/** @type {( specifier: string ) => string | null} */
 	const target = specifier => specifier.startsWith( "." ) ? path.resolve( directory, specifier ) : null;
+	// A relative string-literal specifier's file; a package, or anything not
+	// a literal (never in a static import), is not followed.
+	/** @type {( node: ts.Expression | undefined ) => string | null} */
+	const literalFile = node => node && ts.isStringLiteral( node ) ? target( node.text ) : null;
 	const module = {
+		/** @type {ts.Statement[]} */
 		statements: [],
+		// indexes of the statements that run whenever the module loads
+		/** @type {Set<number>} */
+		effects: new Set(),
 		// local name -> statement index
 		declared: new Map(),
 		// local name -> { statement, target, imported }
@@ -167,8 +177,10 @@ function parseModule( file, text ) {
 		// exported name -> { statement, local } | { statement, target, imported }
 		exports: new Map(),
 		// star re-export targets
+		/** @type {string[]} */
 		stars: [],
 		// every module this one loads
+		/** @type {string[]} */
 		loads: [],
 		...dynamicCode( source, target )
 	};
@@ -176,7 +188,7 @@ function parseModule( file, text ) {
 		const index = module.statements.length;
 		module.statements.push( statement );
 		if ( ts.isImportDeclaration( statement ) ) {
-			const from = target( statement.moduleSpecifier.text );
+			const from = literalFile( statement.moduleSpecifier );
 			if ( from ) module.loads.push( from );
 			const clause = statement.importClause;
 			if ( !clause ) continue;
@@ -198,7 +210,7 @@ function parseModule( file, text ) {
 			continue;
 		}
 		if ( ts.isExportDeclaration( statement ) ) {
-			const from = statement.moduleSpecifier ? target( statement.moduleSpecifier.text ) : null;
+			const from = literalFile( statement.moduleSpecifier );
 			if ( from ) module.loads.push( from );
 			const clause = statement.exportClause;
 			if ( !clause ) {
@@ -229,7 +241,7 @@ function parseModule( file, text ) {
 			for ( const declaration of statement.declarationList.declarations ) bindingNames( declaration.name, names );
 		} else {
 			// Not a declaration: it runs whenever the module loads.
-			module.statements[index].effect = true;
+			module.effects.add( index );
 			continue;
 		}
 		for ( const name of names ) module.declared.set( name, index );
@@ -329,9 +341,7 @@ export async function reachScripts( files, entries ) {
 			if ( names ) names.forEach( name => reachExport( target, name ) );
 			else reachAll( target );
 		}
-		module.statements.forEach( ( statement, index ) => {
-			if ( statement.effect ) keep( file, index );
-		} );
+		for ( const index of module.effects ) keep( file, index );
 		for ( const target of module.loads ) load( target );
 	};
 	for ( const entry of entries ) {
@@ -354,7 +364,7 @@ export async function reachScripts( files, entries ) {
 	}
 	const reached = new Map();
 	for ( const [file, module] of modules ) {
-		const indexes = [ ...kept.get( file ) ].sort( ( a, b ) => a - b );
+		const indexes = [ ...(kept.get( file ) ?? []) ].sort( ( a, b ) => a - b );
 		reached.set( file, indexes.map( index => module.statements[index].getText() ).join( "\n" ) );
 	}
 	return reached;
