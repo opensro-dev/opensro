@@ -1,5 +1,19 @@
+/*
+===========================================================================
+
+serverGameDataArchive.mjs - the server game-data archive (.srogz)
+
+The one owner of the archive format the GameWorld boots from: a gzip of
+"SROGDB1
+", a file count, and (path, size, bytes) records with a
+manifest.json naming every file's digest. build writes it, read parses and
+checks it in full, validate and extract are built on read.
+
+===========================================================================
+*/
+
 import { createWriteStream } from "node:fs";
-import { mkdir, readFile, readdir, rename, rm, stat } from "node:fs/promises";
+import { mkdir, readFile, readdir, rename, rm, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { once } from "node:events";
 import { finished } from "node:stream/promises";
@@ -61,7 +75,16 @@ export async function buildServerGameDataArchive( bundleRoot, archivePath = `${b
 	};
 }
 
-export async function validateServerGameDataArchive( archivePath ) {
+/*
+================
+readServerGameDataArchive
+
+The archive parsed and checked in full (magic, records, manifest, every
+digest): the one reader of the format, which validate and extract share.
+Returns the records by lower-cased path.
+================
+*/
+export async function readServerGameDataArchive( archivePath ) {
 	const compressed = await readFile( archivePath );
 	const raw = gunzipSync( compressed );
 	let offset = 0;
@@ -113,7 +136,39 @@ export async function validateServerGameDataArchive( archivePath ) {
 			fail( `archive digest mismatch for ${descriptor.path}` );
 		}
 	}
-	return { fileCount: count, expandedBytes: raw.length };
+	return { records, fileCount: count, expandedBytes: raw.length };
+}
+
+/*
+================
+validateServerGameDataArchive
+================
+*/
+export async function validateServerGameDataArchive( archivePath ) {
+	const { fileCount, expandedBytes } = await readServerGameDataArchive( archivePath );
+	return { fileCount, expandedBytes };
+}
+
+/*
+================
+extractServerGameDataArchive
+
+Writes the checked archive's files under outRoot, only those whose path
+starts with prefix when one is given (the published-id pin reads the
+served textdata/ of a release, #4337). Returns the files written.
+================
+*/
+export async function extractServerGameDataArchive( archivePath, outRoot, prefix = "" ) {
+	const { records } = await readServerGameDataArchive( archivePath );
+	let written = 0;
+	for ( const { relativePath, contents } of records.values() ) {
+		if ( !relativePath.startsWith( prefix ) ) continue;
+		const target = path.join( outRoot, ...relativePath.split( "/" ) );
+		await mkdir( path.dirname( target ), { recursive: true } );
+		await writeFile( target, contents );
+		written += 1;
+	}
+	return written;
 }
 
 async function listRelativeFiles( root ) {
