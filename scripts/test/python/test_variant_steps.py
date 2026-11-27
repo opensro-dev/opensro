@@ -115,6 +115,43 @@ class VariantSteps(unittest.TestCase):
 		self.assertFalse((tree / "b.txt").exists())
 
 	# ================
+	# test_a_split_step_keeps_the_steps_in_front
+	#
+	# #4598 split one step into several, and the journal, required to
+	# name the same steps whole, was thrown away: r204n laid the whole
+	# variant down again (#4337). The steps in front of the change
+	# replay; the split step's old files are undone and the new steps
+	# and everything after them run. Removing the new steps again keeps
+	# the front too.
+	# ================
+	def test_a_split_step_keeps_the_steps_in_front(self):
+		counters: dict = {}
+		front = self.write_step(counters, "front", "front.txt", b"f", {"n": 1})
+		whole = self.write_step(counters, "whole", "whole.txt", b"w", {"n": 2})
+		after = self.write_step(counters, "after", "after.txt", b"a", {"n": 3})
+		run_build(self.variant, [front, whole, after])
+		tree = self.variant / "extracted"
+		self.assertEqual(counters, {"front": 1, "whole": 1, "after": 1})
+
+		left = self.write_step(counters, "left", "left.txt", b"l", {"n": 4})
+		right = self.write_step(counters, "right", "right.txt", b"r", {"n": 5})
+		output = io.StringIO()
+		with contextlib.redirect_stdout(output):
+			run_build(self.variant, [front, left, right, after])
+		self.assertEqual(counters, {"front": 1, "whole": 1, "after": 2, "left": 1, "right": 1})
+		self.assertFalse((tree / "whole.txt").exists())
+		self.assertEqual(sorted(p.name for p in tree.iterdir()), ["after.txt", "front.txt", "left.txt", "right.txt"])
+		self.assertIn("the step list changed after front: 1 of 4 steps keep their record", output.getvalue())
+
+		run_build(self.variant, [front, left, right, after])
+		self.assertEqual(counters, {"front": 1, "whole": 1, "after": 2, "left": 1, "right": 1})
+
+		with contextlib.redirect_stdout(io.StringIO()):
+			run_build(self.variant, [front, left])
+		self.assertEqual(counters, {"front": 1, "whole": 1, "after": 2, "left": 1, "right": 1})
+		self.assertEqual(sorted(p.name for p in tree.iterdir()), ["front.txt", "left.txt"])
+
+	# ================
 	# test_source_change_reruns_the_reader_and_changed_downstream_only
 	# ================
 	def test_source_change_reruns_the_reader_and_changed_downstream_only(self):
@@ -337,15 +374,23 @@ class VariantSteps(unittest.TestCase):
 		self.assertFalse(variant_steps.journal_path(self.variant).exists())
 
 	# ================
-	# test_changed_step_list_starts_over
+	# test_a_removed_step_is_undone_and_the_rest_kept
+	#
+	# A step list that drops its last step keeps the record of the ones
+	# before it and takes the dropped step's files back. It used to start
+	# the record over (#3993), which made every step list change a whole
+	# rebuild (#4337).
 	# ================
-	def test_changed_step_list_starts_over(self):
+	def test_a_removed_step_is_undone_and_the_rest_kept(self):
 		counters: dict = {}
 		one = self.write_step(counters, "one", "1.txt", b"1", {"n": 1})
 		two = self.write_step(counters, "two", "2.txt", b"2", {"n": 2})
 		run_build(self.variant, [one, two])
-		run_build(self.variant, [one])
-		self.assertEqual(counters["one"], 2)
+		with contextlib.redirect_stdout(io.StringIO()):
+			run_build(self.variant, [one])
+		self.assertEqual(counters["one"], 1)
+		self.assertFalse((self.variant / "extracted" / "2.txt").exists())
+		self.assertEqual((self.variant / "extracted" / "1.txt").read_bytes(), b"1")
 
 	# ================
 	# load_module
