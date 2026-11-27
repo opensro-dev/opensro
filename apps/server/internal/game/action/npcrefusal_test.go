@@ -103,6 +103,65 @@ func TestNpcTalkWithBrokenQuestRowIsRefused(t *testing.T) {
 
 /*
 ================
+TestNpcTalkWhileBusyIsRefused
+
+While an exchange is open, a stall is kept, a stall is being visited, or
+the player's motion is locked by an open cast, the talk refuses IM_BUSY
+before anything else; a pending exchange request alone does not make the
+player busy.
+================
+*/
+func TestNpcTalkWhileBusyIsRefused(t *testing.T) {
+	shop := npcActionBody(17, simulation.NpcTalkFlagShop)
+	busy := []struct {
+		name string
+		open func(t *testing.T, rt *Runtime, c *enterworld.Character)
+	}{
+		{"exchange open", func(t *testing.T, rt *Runtime, c *enterworld.Character) {
+			rt.Exchanges.Open(testDivision, c.Name, "partner")
+		}},
+		{"stall kept", func(t *testing.T, rt *Runtime, c *enterworld.Character) {
+			if err := rt.Stalls.Open(testDivision, c.Name, "wares", 0); err != nil {
+				t.Fatal(err)
+			}
+		}},
+		{"stall visited", func(t *testing.T, rt *Runtime, c *enterworld.Character) {
+			if err := rt.Stalls.Open(testDivision, "keeper", "wares", 0); err != nil {
+				t.Fatal(err)
+			}
+			if _, err := rt.Stalls.Enter(testDivision, c.Name, "keeper"); err != nil {
+				t.Fatal(err)
+			}
+		}},
+		// The motion-change lock: a skill cast still open.
+		{"mid-cast", func(t *testing.T, rt *Runtime, c *enterworld.Character) {
+			rt.pendingSkillFinalizes = append(rt.pendingSkillFinalizes, newPendingSkillFinalize(testDivision, c.Name))
+		}},
+	}
+	for _, tc := range busy {
+		rt, c := merchantFixture(t)
+		tc.open(t, rt, c)
+		frames, refusal := rt.HandleNpcAction(testDivision, c, shop)
+		if refusal == "" || len(frames) != 1 ||
+			string(frames[0].Payload) != string(wire.EncodeNpcInteractionRefusal(errCodeKeeperBusy)) {
+			t.Fatalf("%s: frames %+v refusal %q, want the IM_BUSY refusal", tc.name, frames, refusal)
+		}
+	}
+
+	// Idle, and with only a pending exchange request, the talk is admitted.
+	rt, c := merchantFixture(t)
+	if _, refusal := rt.HandleNpcAction(testDivision, c, shop); refusal != "" {
+		t.Fatalf("idle talk refused: %q", refusal)
+	}
+	rt, c = merchantFixture(t)
+	rt.Exchanges.Propose(testDivision, c.Name, "partner", rt.Now().UnixMilli())
+	if _, refusal := rt.HandleNpcAction(testDivision, c, shop); refusal != "" {
+		t.Fatalf("pending-request talk refused: %q", refusal)
+	}
+}
+
+/*
+================
 TestNpcStorageWithoutAuthorityIsRefused
 
 The NPC grants storage but no storage authority is configured: the
