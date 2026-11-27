@@ -17,6 +17,7 @@ import (
 
 	"opensro.online/server/internal/domain"
 	"opensro.online/server/internal/game/enterworld"
+	"opensro.online/server/internal/game/item/gacha"
 	"opensro.online/server/internal/game/item/grounditem"
 	"opensro.online/server/internal/game/item/inventory"
 	"opensro.online/server/internal/game/item/wire"
@@ -165,10 +166,25 @@ groundItemPickable
 Whether a ground row may be picked up at all: the item's authored
 pickup permission (itemdata canPick) clear refuses with
 ErrCodeCannotBePicked. An absent permission passes, so a degraded
-reference load never invents a refusal (#4490, U6-10).
+reference load never invents a refusal (#4490, U6-10). Native: the
+v1.188 pickup admission (0x4A9050) refuses 0x1839 when its permission
+test (0x483E50) finds ref+0x8C bit 0x20 clear, the bit the ref row
+reader (0x6A3090) sets from token 21.
+
+Port-only, not native: the Magic Pop ticket SRO_UNIQUE_POP_TICKET leaves
+on a unique kill is meant to be picked up, but its item row
+(ITEM_MALL_GACHA_CARD) has the permission clear, so the native gate
+refused every one (BUG-103). While the flag is on, the drop retires
+every native card row (monsterloot.go), and the card's own canDrop is
+clear, so a player cannot put one down. Every card on the ground is then
+the port's ticket, and it is admitted. With the flag off the native gate
+holds.
 ================
 */
 func (rt *Runtime) groundItemPickable(item grounditem.Item) bool {
+	if rt.UniqueRules.PopTicket && item.Codename == gacha.CardCodename {
+		return true
+	}
 	refs := rt.deps.ItemReferences()
 	if refs == nil {
 		return true

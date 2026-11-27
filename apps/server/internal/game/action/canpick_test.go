@@ -17,6 +17,7 @@ import (
 	"testing"
 
 	"opensro.online/server/internal/game/enterworld"
+	"opensro.online/server/internal/game/item/gacha"
 	"opensro.online/server/internal/game/item/inventory"
 	"opensro.online/server/internal/game/item/wire"
 	"opensro.online/server/internal/game/world/simulation"
@@ -94,5 +95,59 @@ func TestPickupOfAPickableRowStillGrants(t *testing.T) {
 	}
 	if !found {
 		t.Fatalf("pickable row missing from the bag: %+v", c.MissionInventory)
+	}
+}
+
+/*
+================
+popCardRefs
+
+The shipped Magic Pop card row: its pickup permission is clear (BUG-103).
+================
+*/
+func popCardRefs() staticItemSource {
+	return staticItemSource{
+		gacha.CardCodename: {
+			RefObjID: 88003, Codename: gacha.CardCodename, TypeIDs: [4]int64{3, 3, 3, 1},
+			NativeFields: enterworld.NewNativeFields(map[string]float64{"canPick": 0, "canTrade": 0, "maxStack": 50}),
+		},
+	}
+}
+
+/*
+================
+pickUpPopCard
+
+Drops one Magic Pop card beside c and asks for it: whether it left the
+ground.
+================
+*/
+func pickUpPopCard(t *testing.T, popTicket bool) bool {
+	t.Helper()
+	c := testCharacter()
+	rt, clock := newTestRuntime(c, popCardRefs())
+	rt.UniqueRules.PopTicket = popTicket
+	spawn := simulation.SeedWorldState(c).Spawn
+	drop := PlanItemDrop(inventory.Item{RefObjID: 88003, Codename: gacha.CardCodename, TypeFlags: wire.PackTypeFlags(3, 3, 3, 1), Quantity: 1}, 1, spawn, c.Name, clock.Now())
+	added := rt.Ground.Add(testDivision, drop)
+	rt.HandleTargetInteract(testDivision, c, wire.TargetInteract{Gid: added.Gid}.Encode())
+	return rt.Ground.Count(testDivision) == 0
+}
+
+/*
+================
+TestPopTicketCardIsPickedUpWhileTheTicketRuleRuns
+
+BUG-103: the unique kill's Magic Pop ticket answered "cannot be
+obtained". With SRO_UNIQUE_POP_TICKET on it is picked up; off, the native
+permission gate still holds.
+================
+*/
+func TestPopTicketCardIsPickedUpWhileTheTicketRuleRuns(t *testing.T) {
+	if !pickUpPopCard(t, true) {
+		t.Fatal("the Pop ticket stayed on the ground with SRO_UNIQUE_POP_TICKET on")
+	}
+	if pickUpPopCard(t, false) {
+		t.Fatal("a native card with its permission clear was picked up with the flag off")
 	}
 }
