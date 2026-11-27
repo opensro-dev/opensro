@@ -6,6 +6,7 @@ import { foldAssetCase } from "../shared/assetPaths.mjs";
 import { pathExists } from "../shared/fsUtils.mjs";
 import { writeJsonIfChanged } from "../shared/jsonOut.mjs";
 import { claimPublicFile } from "../shared/publicationLedger.mjs";
+import { writeIntoPublicTree } from "../shared/publicWrite.mjs";
 import { publicRoot } from "./paths.mjs";
 
 /**
@@ -224,4 +225,37 @@ export async function notedReadFile( file, ...rest ) {
 	const resolved = await resolveOnDiskPath( file );
 	noteRead( resolved );
 	return readFile( resolved, ...rest );
+}
+
+const NEWLINE_BYTE = 0x0a;
+
+/*
+================
+publishedJson
+
+The bytes the JSON pass leaves on disk for one of the world builder's records
+(jsonAssetCompression.mjs minifyJsonBytes): JSON.stringify output loses only
+its trailing newline. Writing that form directly stops every rebuild from
+rewriting 16k files the pass then rewrites and regzips again.
+
+The names and descriptors still hash the newline form, as they always have
+(a mesh file's sha256 is not its name's); renaming every mesh would be a
+data release of its own.
+================
+*/
+export function publishedJson( bytes ) {
+	return bytes.at( -1 ) === NEWLINE_BYTE ? bytes.subarray( 0, -1 ) : bytes;
+}
+
+/*
+================
+writeCompactJson
+================
+*/
+export async function writeCompactJson( outputPath, value ) {
+	const text = `${JSON.stringify( value )}\n`;
+	// An unchanged bundle keeps its mtime: a rebuild of all 2123 regions
+	// otherwise sent every one back through the JSON gzip pass.
+	await writeIntoPublicTree( outputPath, publishedJson( Buffer.from( text, "utf8" ) ) );
+	return text;
 }

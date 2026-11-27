@@ -202,7 +202,8 @@ test("a persisted tile ledger without recorded references is discarded, not trus
 	// The ledger-hit path the review named: a ledger whose tiles do not
 	// record the bundle's reference cannot be checked against the probe.
 	// Version 4 records it, version 5 adds each region's named paths, version
-	// 6 each region's input digest; older ledgers are refused and re-read.
+	// 6 each region's input digest, version 7 each region's stat signature
+	// and the whole-set key; older ledgers are refused and re-read.
 	const { readTerrainTileLedger } = await import( "../../build/world/buildOutdoorWorldRegionResources.mjs" );
 	const ledgerDir = path.join( generatedRoot, "intermediate" );
 	await mkdir( ledgerDir, { recursive: true } );
@@ -238,8 +239,19 @@ test("a persisted tile ledger without recorded references is discarded, not trus
 			inputs: { "27024": "digest" }
 		} )
 	);
+	assert.equal( (await readTerrainTileLedger()).size, 0, "a v6 ledger without stat signatures is ignored" );
+	await writeFile(
+		path.join( ledgerDir, "outdoor-terrain-tiles.json" ),
+		JSON.stringify( {
+			version: 7,
+			regions: { "27024": [ { ddjFileName: "x.ddj", sourcePath: "y", imagePublicPath: "/z.png" } ] },
+			references: { "27024": [ "/z.png" ] },
+			inputs: { "27024": "digest" },
+			inputStats: { "27024": "1:2:3:4" }
+		} )
+	);
 	const fresh = await readTerrainTileLedger();
-	assert.equal( fresh.size, 1, "a v6 ledger is read" );
+	assert.equal( fresh.size, 1, "a v7 ledger is read" );
 });
 
 test("a region whose inputs changed since its build is stale; one whose inputs match is not", async () => {
@@ -248,6 +260,9 @@ test("a region whose inputs changed since its build is stale; one whose inputs m
 	// "Missing navigation BSR 2631". The recorded input digest must notice.
 	const { findStaleOutdoorRegions, outdoorRegionInputDigest, outdoorSharedInputDigest } = await import(
 		"../../build/world/buildOutdoorWorldRegionResources.mjs"
+	);
+	const { outdoorInputSetKey, outdoorRegionInputSignature } = await import(
+		"../../build/world/outdoorRegionLedger.mjs"
 	);
 	const extracted = await mkdtemp( path.join( os.tmpdir(), "sro-outdoor-inputs-" ) );
 	try {
@@ -266,10 +281,19 @@ test("a region whose inputs changed since its build is stale; one whose inputs m
 
 		const shared = await outdoorSharedInputDigest( extracted );
 		const built = await outdoorRegionInputDigest( sector, shared );
+		const signature = await outdoorRegionInputSignature( sector );
 		await mkdir( path.join( generatedRoot, "intermediate" ), { recursive: true } );
 		await writeFile(
 			path.join( generatedRoot, "intermediate", "outdoor-terrain-tiles.json" ),
-			JSON.stringify( { version: 6, regions: {}, references: {}, inputs: { [sector.id]: built } } )
+			JSON.stringify( {
+				version: 7,
+				regions: {},
+				references: {},
+				inputs: { [sector.id]: built },
+				inputStats: { [sector.id]: signature },
+				setKey: outdoorInputSetKey( shared, new Map( [ [ sector.id, signature ] ] ) ),
+				sharedDigest: shared
+			} )
 		);
 		const check = () => findStaleOutdoorRegions( { extractedRoot: extracted, sectors: [ sector ], jobs: 1 } );
 		assert.deepEqual( await check(), [], "unchanged inputs are current" );
