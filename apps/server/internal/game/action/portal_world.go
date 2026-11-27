@@ -222,12 +222,14 @@ func (rt *Runtime) fortressEntry(division string, c *enterworld.Character, desti
 fortressWarEntry
 
 The native war-entry check past its war-mode test. The
-occupying guild needs no application; everyone else must have applied.
-Defenders (the holder: a temporary
-holder while one exists) may bring half of MaxEntrance; attackers the
-whole of it, or half once the fortress is occupied, and only after the
-post-capture wait. Each side counts the PCs already in the world's layer
-(siege slots 39 and 40).
+owning guild (the occupied-guild query, not the holder query) needs
+no application; everyone else must have applied - a capturing guild
+always has, so a temporary holder passes as an applicant. The side
+split is the holder's: defenders (the holder, a temporary one while
+one stands, and its allies) may bring half of MaxEntrance; attackers
+the whole of it, or half once the fortress has an owner, and only
+after the post-capture wait. Each side counts the PCs already in the
+world's layer (siege slots 39 and 40).
 ================
 */
 func (rt *Runtime) fortressWarEntry(division string, c *enterworld.Character, fortressID uint32) byte {
