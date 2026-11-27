@@ -73,6 +73,10 @@ type LaneConfig struct {
 	// WarChanged runs after the war period turns on or off, for the
 	// fortress worlds' own war phases.
 	WarChanged func(nowMs int64, active bool) []simulation.DivisionFrames
+	// BootSettle runs once, on the first tick outside a war, when a
+	// fortress is still temporarily held: it finishes that fortress
+	// alone (Tick). Nil leaves such a fortress held.
+	BootSettle func(nowMs int64) []simulation.DivisionFrames
 }
 
 /*
@@ -129,8 +133,8 @@ Tick
 Applies every schedule edge between the last tick and now. The first tick
 starts whatever is already running, as a shard booting mid-period does;
 booting outside a war with a fortress still temporarily held (a war a
-crash cut short) settles it at once through the war-end path, as the
-reference server's post-boot restore finishes the occupation.
+crash cut short) finishes that fortress at once through BootSettle, as
+the reference server's post-boot restore settles only the held ones.
 ================
 */
 func (l *Lane) Tick(nowMs int64) []simulation.DivisionFrames {
@@ -176,12 +180,10 @@ func (l *Lane) Tick(nowMs int64) []simulation.DivisionFrames {
 	if len(frames) > 0 {
 		out = append(out, simulation.DivisionFrames{DivisionID: l.config.Division, Frames: frames})
 	}
-	if l.config.WarChanged != nil {
-		if warChanged {
-			out = append(out, l.config.WarChanged(nowMs, warActive)...)
-		} else if bootSettle {
-			out = append(out, l.config.WarChanged(nowMs, false)...)
-		}
+	if warChanged && l.config.WarChanged != nil {
+		out = append(out, l.config.WarChanged(nowMs, warActive)...)
+	} else if bootSettle && l.config.BootSettle != nil {
+		out = append(out, l.config.BootSettle(nowMs)...)
 	}
 	return out
 }

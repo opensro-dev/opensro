@@ -98,32 +98,37 @@ func TestLaneBootSettlesATemporaryHolder(t *testing.T) {
 		return time.Date(2026, 10, 6, 9, 0, 0, 0, loc).UnixMilli()
 	}
 	clean, _, loc := laneFixture(t)
-	var cleanChanges []bool
-	clean.config.WarChanged = func(_ int64, active bool) []simulation.DivisionFrames {
-		cleanChanges = append(cleanChanges, active)
+	var cleanSettles int
+	clean.config.BootSettle = func(_ int64) []simulation.DivisionFrames {
+		cleanSettles++
 		return nil
 	}
 	clean.Tick(morning(loc))
-	if len(cleanChanges) != 0 {
-		t.Fatalf("a clean boot settled: %v", cleanChanges)
+	if cleanSettles != 0 {
+		t.Fatalf("a clean boot settled: %d", cleanSettles)
 	}
 	boot, authority, loc := laneFixture(t)
 	authority.Occupy("d", 1, 7)
 	if !authority.Capture("d", 1, 9, 0) {
 		t.Fatal("the capture did not stand")
 	}
-	var changes []bool
+	var settles int
+	var warChanges []bool
+	boot.config.BootSettle = func(_ int64) []simulation.DivisionFrames {
+		settles++
+		return nil
+	}
 	boot.config.WarChanged = func(_ int64, active bool) []simulation.DivisionFrames {
-		changes = append(changes, active)
+		warChanges = append(warChanges, active)
 		return nil
 	}
 	boot.Tick(morning(loc))
-	if len(changes) != 1 || changes[0] {
-		t.Fatalf("the boot settle sent %v, want one war-end", changes)
+	if settles != 1 || len(warChanges) != 0 {
+		t.Fatalf("the boot settle ran %d times, war changes %v; want one settle and no war edge", settles, warChanges)
 	}
 	boot.Tick(morning(loc) + 1000)
-	if len(changes) != 1 {
-		t.Fatalf("the settle repeated: %v", changes)
+	if settles != 1 {
+		t.Fatalf("the settle repeated: %d", settles)
 	}
 }
 

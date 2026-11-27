@@ -269,12 +269,63 @@ func (rt *Runtime) finishFortressWar(division string, nowMs int64) []simulation.
 		if !ok {
 			continue
 		}
-		owner, changed := rt.Fortresses.FinishWar(division, fortressID)
-		rt.Monsters.ReinstallStructures(division, instance.Pack(definition.ID, portalWorldLayer), nowMs)
-		rt.forceFortressSave(division)
-		if changed && owner != 0 {
-			out = append(out, rt.conquestFrames(division, fortressID, owner)...)
+		out = append(out, rt.settleFortressWar(division, definition, fortressID, nowMs)...)
+	}
+	return out
+}
+
+/*
+================
+settleFortressWar
+
+One fortress's war end: the holder occupies it, its structures are
+reinstalled, and a change of hands is announced.
+================
+*/
+func (rt *Runtime) settleFortressWar(division string, definition instance.Definition, fortressID uint32, nowMs int64) []simulation.DivisionFrames {
+	owner, changed := rt.Fortresses.FinishWar(division, fortressID)
+	rt.Monsters.ReinstallStructures(division, instance.Pack(definition.ID, portalWorldLayer), nowMs)
+	rt.forceFortressSave(division)
+	if changed && owner != 0 {
+		return rt.conquestFrames(division, fortressID, owner)
+	}
+	return nil
+}
+
+/*
+================
+FortressBootSettle
+
+The reference server's post-boot restore: outside a war, each fortress
+still temporarily held (a war a crash cut short) is finished at once -
+its temporary holder becomes the owner and that fortress alone runs the
+war-end phase (evacuation, rank-buff retirement, registration
+release). The other fortresses keep their applicants and structures.
+================
+*/
+func (rt *Runtime) FortressBootSettle(division string, nowMs int64) []simulation.DivisionFrames {
+	if rt.Fortresses == nil || rt.Monsters == nil {
+		return nil
+	}
+	endKeep := rt.fortressEndGuilds(division)
+	only := map[uint32]bool{}
+	var out []simulation.DivisionFrames
+	for _, definition := range instance.Shipped() {
+		fortressID, ok := rt.Fortresses.ForWorld(definition)
+		if !ok {
+			continue
 		}
+		record, ok := rt.Fortresses.Get(division, fortressID)
+		if !ok || record.TempGuildID == 0 {
+			continue
+		}
+		only[fortressID] = true
+		out = append(out, rt.settleFortressWar(division, definition, fortressID, nowMs)...)
+	}
+	if len(only) > 0 {
+		rt.fortressPhasesMu.Lock()
+		rt.fortressPhases = append(rt.fortressPhases, fortressPhase{division: division, mode: fortressPhaseEnd, dueMs: nowMs, endKeep: endKeep, only: only})
+		rt.fortressPhasesMu.Unlock()
 	}
 	return out
 }
