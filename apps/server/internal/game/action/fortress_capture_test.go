@@ -6,6 +6,7 @@ import (
 	"opensro.online/server/internal/game/enterworld"
 	"opensro.online/server/internal/game/item/wire"
 	"opensro.online/server/internal/game/siege"
+	"opensro.online/server/internal/game/world/fortress"
 	"opensro.online/server/internal/game/world/instance"
 	"opensro.online/server/internal/game/world/monster"
 	"opensro.online/server/internal/game/world/simulation"
@@ -126,5 +127,49 @@ func TestTheStoneFallsToTheGuildThatBreaksIt(t *testing.T) {
 	}
 	if owner, changed := rt.Fortresses.FinishWar(testDivision, jangan); owner != 77 || !changed {
 		t.Fatalf("war end = %d %v", owner, changed)
+	}
+}
+
+/*
+================
+TestBootSettleFinishesOnlyTheHeldFortress
+
+A shard booting outside a war finishes a fortress a crash left
+temporarily held: the temporary holder becomes the owner and that
+fortress's registrations release when its end phase runs. The other
+fortress keeps its owner and its applicants.
+================
+*/
+func TestBootSettleFinishesOnlyTheHeldFortress(t *testing.T) {
+	rt, _, clock := fortressFixtureWithPopulation(t, testFieldFortGate, monster.TemplateFromParts(nil, nil))
+	now := clock.NowMs()
+	// The shipped data activates Jangan alone; the second row stands in
+	// for a fortress the boot must not touch (INS_FORT_HT ships too).
+	rt.Fortresses = fortress.New([]fortress.Catalog{
+		{ID: 1, CodeName: "FORTRESS_JANGAN", TownGate: "GATE_CH"},
+		{ID: 2, CodeName: "FORTRESS_HOTAN", TownGate: "GATE_CH"},
+	})
+	jangan, other := uint32(1), uint32(2)
+	rt.Fortresses.Occupy(testDivision, jangan, 7)
+	rt.Fortresses.SetApplication(testDivision, jangan, 9, fortress.RequestAttack, true)
+	if !rt.Fortresses.Capture(testDivision, jangan, 9, now) {
+		t.Fatal("the capture did not stand")
+	}
+	rt.Fortresses.Occupy(testDivision, other, 42)
+	rt.Fortresses.SetApplication(testDivision, other, 5, fortress.RequestAttack, true)
+
+	rt.FortressBootSettle(testDivision, now)
+	rt.advanceFortressPhases(now)
+
+	held, _ := rt.Fortresses.Get(testDivision, jangan)
+	if held.GuildID != 9 || held.TempGuildID != 0 || len(held.Applicants) != 0 {
+		t.Fatalf("the held fortress after the boot settle: %+v", held)
+	}
+	untouched, _ := rt.Fortresses.Get(testDivision, other)
+	if untouched.GuildID != 42 || untouched.TempGuildID != 0 {
+		t.Fatalf("the other fortress was settled too: %+v", untouched)
+	}
+	if _, applied := untouched.Applicants[5]; !applied {
+		t.Fatalf("the other fortress lost its applicants: %+v", untouched.Applicants)
 	}
 }
