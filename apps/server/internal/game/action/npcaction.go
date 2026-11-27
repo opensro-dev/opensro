@@ -133,17 +133,19 @@ func (rt *Runtime) HandleNpcAction(divisionID string, character *enterworld.Char
 
 	unlock := rt.lockDivision(divisionID)
 	defer unlock()
-	// The native talk refuses before anything else while the player's
-	// interaction state is busy: an exchange open, a stall kept, or a
-	// stall being visited (the IM_BUSY refusal).
-	if rt.npcTalkBusy(divisionID, character) {
-		return npcFunctionRefusal(errCodeKeeperBusy), "an exchange, a stall or a stall visit is open"
-	}
 	// Natively an NPC function request ends the requester's hide first,
 	// whatever becomes of the request.
 	rt.deps.Update(character, "npc-action-hide", func() bool {
 		return rt.retireHide(divisionID, character, rt.Now().UnixMilli())
 	})
+	// Then, ahead of every test of the request itself, the native talk
+	// refuses IM_BUSY while the player's interaction state is busy: an
+	// exchange open, a stall kept, or a stall being visited. The hide is
+	// already retired above: the handler ends the active skill instance
+	// before it reads the interaction byte.
+	if rt.npcTalkBusy(divisionID, character) {
+		return npcFunctionRefusal(errCodeKeeperBusy), "an exchange, a stall or a stall visit is open"
+	}
 	if selected, ok := rt.Selected.Get(divisionID, character.Name); !ok || selected != gid {
 		// The named object is not the bound one, so the request resolves
 		// to no object: the native no-object answer (code 3).
