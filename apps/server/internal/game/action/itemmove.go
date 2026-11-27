@@ -53,6 +53,14 @@ func (rt *Runtime) HandleItemMove(
 		return failureResult(wire.ErrCodeInvalidRequest)
 	}
 
+	// A dead player's item moves refuse, as the original's dispatch
+	// refuses them (#4490 U6-12): the life-state byte answers every
+	// movement kind but the mall purchase (routed above) and the
+	// server-internal death drop, which no client packet carries.
+	if !enterworld.CharacterAlive(snapshot) {
+		return failureResult(wire.ErrCodeInvalidRequest)
+	}
+
 	worldKey := simulation.WorldKey(divisionID, character.Name)
 
 	// Any item operation supersedes a pickup approach in flight (the native
@@ -124,6 +132,36 @@ func (rt *Runtime) HandleItemMove(
 }
 
 /*
+================
+castLockedMove
+
+Whether an in-flight cast locks this kind-0 move: the destination is
+the weapon socket, a shield is moving onto the shield socket, or one
+worn piece is being shuffled onto another socket. The shield socket
+is locked only when the incoming piece itself is a shield - arrows
+share the socket but are not shields for this test, and anything else
+dragged onto it meets the ordinary socket refusal instead.
+================
+*/
+func castLockedMove(character *enterworld.Character, request wire.ItemMoveRequest) bool {
+	if inventory.IsEquipmentSlot(request.SourceSlot) &&
+		inventory.IsEquipmentSlot(request.DestSlot) {
+		return true
+	}
+	switch request.DestSlot {
+	case inventory.SocketWeapon:
+		return true
+	case inventory.SocketShield:
+		for _, row := range character.MissionInventory {
+			if row.Slot == int64(request.SourceSlot) {
+				return inventory.IsShieldTypeFlags(row.TypeFlags)
+			}
+		}
+	}
+	return false
+}
+
+/*
 ==================
 applyInventoryMove
 ==================
@@ -133,6 +171,16 @@ func (rt *Runtime) applyInventoryMove(
 	character *enterworld.Character,
 	request wire.ItemMoveRequest,
 ) OpResult {
+	// While a skill cast is in flight the original locks the hands
+	// (#4490 U6-12, refusal 0x1834): a kind-0 move cannot change the
+	// weapon or shield, nor shuffle one worn piece onto another
+	// socket. Taking a piece off into the bag and dressing from the
+	// bag stay allowed, so the lock reads the destination first.
+	if rt.hasOpenSkillCast(divisionID, character.Name) &&
+		castLockedMove(character, request) {
+		return failureResult(wire.ErrCodeStorageOperationBlocked)
+	}
+
 	result := failureResult(wire.ErrCodeInvalidRequest)
 	// Ended-effect frames are pushed after Update returns: peer delivery
 	// reads session characters through the store, whose door is not
