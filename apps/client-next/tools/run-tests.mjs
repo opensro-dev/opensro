@@ -474,7 +474,7 @@ many files it reran, most first, RERUN_REASONS_PRINTED of them.
 function rerunLine( rerunBecause ) {
 	const ranked = [ ...rerunBecause ].sort( ( a, b ) => b[1] - a[1] || (a[0] < b[0] ? -1 : 1) );
 	const named = ranked.slice( 0, RERUN_REASONS_PRINTED ).map( ( [id, count] ) =>
-		`${id.replace( "\t", " " )} (${count})`
+		`${id.replaceAll( "\t", " " )} (${count})`
 	);
 	const rest = ranked.length - named.length;
 	return `tests rerun because: ${named.join( ", " )}${rest > 0 ? `, and ${rest} more inputs` : ""}`;
