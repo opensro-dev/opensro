@@ -5,10 +5,11 @@ efp-projectile-facing.test.mjs - every staggered .efp bolt takes the
 caster's turned yaw, not the logical heading
 
 Frozen Spear (skill 8635) fires three wizard_cold_bolt_b.efp movers at
-SHOT events 2, 4 and 6 of one cast. Natively a mover's Initialize caller
-hands it the source object's yaw float (CICharactor +0x88), which
-CIDecoSkill_Update (8DC440) keeps turned toward the target for the whole
-cast; the travel basis (8D9233) is written only into the mesh child
+SHOT events 2, 4 and 6 of one cast. Natively Initialize's one caller,
+CIDecoSkill_ExecuteStageCommandList, loads the source object's yaw float
+(CICharactor +0x88, at 0x8DE2C9) and hands it to Initialize (0x8DE308);
+the port turns that yaw toward the target during the cast (actor-motion's
+cast facing) and keeps it after; the travel basis (8D9233) is written only into the mesh child
 (+0xE0), while an .efp program (AttachVisualModel's kind 2) lives in
 +0xDC and never receives it. The port's carrier of the object yaw is the
 presented body actor, so each bolt's spawn yaw must be that turned yaw
@@ -150,8 +151,8 @@ function spearCast() {
 		inventory: [],
 		casts: [ cast ]
 	});
-	// The drawn body 8DC440 turned onto the target: its presented row is
-	// what the mover's Initialize reads in this port.
+	// The drawn body the cast turned onto the target: its presented row
+	// carries the source yaw the mover's Initialize reads in this port.
 	const presented = [ {
 		gid: 1,
 		model: "body",
