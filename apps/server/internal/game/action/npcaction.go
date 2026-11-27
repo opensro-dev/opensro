@@ -92,27 +92,6 @@ func (rt *Runtime) routeNpcAction(divisionID string, character *enterworld.Chara
 
 /*
 ================
-npcTalkBusy
-
-The native talk's busy state for this character: an exchange is open,
-a stall is kept, or a stall is being visited - the states that set the
-interaction byte the talk handler reads first. A pending exchange
-request is not busy: the byte is set when the exchange opens.
-================
-*/
-func (rt *Runtime) npcTalkBusy(divisionID string, c *enterworld.Character) bool {
-	if rt.Exchanges.Trading(divisionID, c.Name) {
-		return true
-	}
-	if rt.Stalls.Keeping(divisionID, c.Name) {
-		return true
-	}
-	_, visiting := rt.Stalls.Visiting(divisionID, c.Name)
-	return visiting
-}
-
-/*
-================
 HandleNpcAction
 
 HandleNpcAction applies the ordinary talk/shop subset whose server and
@@ -140,10 +119,11 @@ func (rt *Runtime) HandleNpcAction(divisionID string, character *enterworld.Char
 	})
 	// Then, ahead of every test of the request itself, the native talk
 	// refuses IM_BUSY while the player's interaction state is busy: an
-	// exchange open, a stall kept, or a stall being visited. The hide is
+	// exchange open, a stall kept, or a stall being visited (stallBusy,
+	// the same interaction state the movement lane reads). The hide is
 	// already retired above: the handler ends the active skill instance
 	// before it reads the interaction byte.
-	if rt.npcTalkBusy(divisionID, character) {
+	if rt.stallBusy(divisionID, character.Name) {
 		return npcFunctionRefusal(errCodeKeeperBusy), "an exchange, a stall or a stall visit is open"
 	}
 	if selected, ok := rt.Selected.Get(divisionID, character.Name); !ok || selected != gid {
