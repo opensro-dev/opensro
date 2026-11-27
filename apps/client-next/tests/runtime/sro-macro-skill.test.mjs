@@ -108,6 +108,7 @@ skillRef
  *   targetRequired?: boolean,
  *   actionMs?: number,
  *   group?: number,
+ *   level?: number,
  *   admit?: object,
  *   effectDurationMs?: number
  * }} [over]
@@ -116,7 +117,7 @@ function skillRef( id, over = {} ) {
 	return {
 		id,
 		group: over.group ?? id,
-		level: 1,
+		level: over.level ?? 1,
 		status: false,
 		effectRider: false,
 		...(over.effectDurationMs !== undefined ? { effectDurationMs: over.effectDurationMs } : {}),
@@ -166,7 +167,7 @@ asked, and an optional living monster already selected.
 ================
 */
 /**
- * @param {{ row: boolean, skillOn: number, selectMonster?: boolean }} setup
+ * @param {{ row: boolean, skillOn: number, selectMonster?: boolean, refs?: object[], known?: number[] }} setup
  */
 function macroWorld( setup ) {
 	/** @type {{ opcode: number, payload: Uint8Array }[]} */
@@ -206,12 +207,13 @@ function macroWorld( setup ) {
 			mp: 100,
 			maxHp: 100,
 			maxMp: 100,
-			skills: [ BUFF, ATTACK ],
+			skills: setup.known ?? [ BUFF, ATTACK ],
 			autoPotion: { hp: 0x3211, mp: 0x3212, cure: 0x13, timing: 0x8a }
 		},
 		refSkillSnapshot: [
 			skillRef( BUFF, { actionMs: 100 } ),
-			skillRef( ATTACK, { targetRequired: true, actionMs: 100 } )
+			skillRef( ATTACK, { targetRequired: true, actionMs: 100 } ),
+			...(setup.refs ?? [])
 		]
 	} );
 	g.worldReady();
@@ -1068,4 +1070,66 @@ test("a bound weapon is left alone when the worn weapon already admits the skill
 	assert.equal( sent.filter( frame => frame.opcode === ITEM_MOVE_OPCODE ).length, 0, "no swap" );
 	assert.equal( sent.filter( frame => frame.opcode === SKILL_PRESS_OPCODE ).length, 1, "cast with worn weapon" );
 	g.dispose();
+});
+
+// The next rank of ATTACK: its own skill id in the same skilldata group.
+const ATTACK_NEXT = 12;
+const SKILL_LEARN_RESPONSE_OPCODE = 0xb2cb;
+const NEXT_RANK = skillRef( ATTACK_NEXT, { group: ATTACK, level: 2, targetRequired: true, actionMs: 100 } );
+
+/*
+================
+macroSaves
+================
+*/
+/** @param {{ opcode: number, payload: Uint8Array }[]} sent */
+function macroSaves( sent ) {
+	return sent.filter( f => f.opcode === codec.OP_MACRO_REQUEST && f.payload[0] === codec.MACRO_ACTION_SAVE );
+}
+
+test("currentMacroSkills moves an entry off a rank the character no longer knows", () => {
+	const ranks = new Map( [
+		[ ATTACK, { group: ATTACK, level: 1 } ],
+		[ ATTACK_NEXT, { group: ATTACK, level: 2 } ],
+		[ BUFF, { group: BUFF, level: 1 } ]
+	] );
+	const settings = {
+		available: 7,
+		potionOn: false,
+		skillOn: true,
+		huntOn: false,
+		potion: [],
+		hunt: [],
+		skillFlags: [ 0, 0, 0, 0 ],
+		attack: [ { slot: 0, skill: ATTACK } ],
+		buff: [ { slot: 0, skill: BUFF }, { slot: 1, skill: 99 } ]
+	};
+	const moved = codec.currentMacroSkills( settings, [ ATTACK_NEXT, BUFF ], ranks );
+	assert.deepEqual( moved.attack, [ { slot: 0, skill: ATTACK_NEXT } ], "the learned rank takes the entry" );
+	assert.equal( moved.buff, settings.buff, "a known skill and an id outside the catalogue stay as they are" );
+	assert.equal(
+		codec.currentMacroSkills( moved, [ ATTACK_NEXT, BUFF ], ranks ),
+		moved,
+		"nothing to move: same object"
+	);
+});
+
+test("an upgrade saves the Auto-Skills list at the new rank", () => {
+	const { sent, g } = macroWorld( { row: true, skillOn: 1, refs: [ NEXT_RANK ] } );
+	assert.equal( macroSaves( sent ).length, 0, "a list of known skills is not re-saved" );
+	g.receive( { opcode: SKILL_LEARN_RESPONSE_OPCODE, payload: new Uint8Array( [ 1, ...u32le( ATTACK_NEXT ) ] ) }, 0 );
+	const saves = macroSaves( sent );
+	assert.equal( saves.length, 1, "the upgrade saved the skill section once" );
+	const bytes = Buffer.from( saves[0].payload );
+	assert.ok( bytes.includes( Buffer.from( u32le( ATTACK_NEXT ) ) ), "the save names the new rank" );
+	assert.ok( !bytes.includes( Buffer.from( [ 0, ...u32le( ATTACK ) ] ) ), "the old rank left the list" );
+});
+
+test("a list saved before an upgrade repairs itself when the settings arrive", () => {
+	// The character already knows only the new rank; the server replays a
+	// list that still names the old one.
+	const { sent } = macroWorld( { row: true, skillOn: 1, refs: [ NEXT_RANK ], known: [ BUFF, ATTACK_NEXT ] } );
+	const saves = macroSaves( sent );
+	assert.equal( saves.length, 1, "the replay's stale rank was saved forward" );
+	assert.ok( Buffer.from( saves[0].payload ).includes( Buffer.from( u32le( ATTACK_NEXT ) ) ) );
 });

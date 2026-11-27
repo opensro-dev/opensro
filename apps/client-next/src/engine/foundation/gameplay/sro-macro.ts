@@ -574,3 +574,54 @@ export function commitMacroSave( live: MacroSettings, kind: MacroKind, pending: 
 	if ( kind === MACRO_HUNT ) return { ...live, hunt: pending.hunt };
 	return { ...live, skillFlags: pending.skillFlags, attack: pending.attack, buff: pending.buff };
 }
+
+// A learned skill's place in its skilldata group: the rank chain one
+// upgrade walks (Wolf Bite Spear 4 -> 5 keeps the group, raises level).
+export interface MacroSkillRank {
+	readonly group: number;
+	readonly level: number;
+}
+
+/*
+================
+currentMacroSkills
+
+The settings with every Auto-Skills entry the character no longer knows
+moved to the learned skill of the same skilldata group, or the same
+object when none moved. An upgrade replaces the learned id (the next
+rank is its own skill id), so a list saved at the old rank would name a
+skill the auto-skill step can never cast. Port-only, like the macro:
+the v1.150 client has none, and the hotbar's own upgrade swap (75BB20)
+is the model, applied to the macro lists. An entry with no learned
+rank in its group (an unlearned or unknown id) stays as it is.
+================
+*/
+export function currentMacroSkills(
+	settings: MacroSettings,
+	learned: readonly number[],
+	ranks: ReadonlyMap<number, MacroSkillRank>
+): MacroSettings {
+	const known = new Set( learned );
+	const byGroup = new Map<number, { id: number; level: number; }>();
+	for ( const id of learned ) {
+		const rank = ranks.get( id );
+		if ( !rank || !rank.group ) continue;
+		const best = byGroup.get( rank.group );
+		if ( !best || rank.level > best.level ) byGroup.set( rank.group, { id, level: rank.level } );
+	}
+	const move = ( list: readonly MacroSkill[] ): readonly MacroSkill[] => {
+		let changed = false;
+		const next = list.map( entry => {
+			if ( known.has( entry.skill ) ) return entry;
+			const rank = ranks.get( entry.skill );
+			const current = rank && rank.group ? byGroup.get( rank.group ) : undefined;
+			if ( !current ) return entry;
+			changed = true;
+			return { ...entry, skill: current.id };
+		} );
+		return changed ? next : list;
+	};
+	const attack = move( settings.attack ), buff = move( settings.buff );
+	if ( attack === settings.attack && buff === settings.buff ) return settings;
+	return { ...settings, attack, buff };
+}

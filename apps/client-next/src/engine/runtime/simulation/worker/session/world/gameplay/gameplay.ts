@@ -417,10 +417,12 @@ import {
 import { isSpiritItem } from "@/engine/foundation/gameplay/avatar-socket";
 import { macroRegionIsTown } from "@/engine/foundation/gameplay/region-combat";
 import {
+	currentMacroSkills,
 	MACRO_HUNT,
 	MACRO_ROW_HP,
 	MACRO_ROW_MP,
 	MACRO_SKILL,
+	OP_MACRO_CONFIG,
 	potionSlot
 } from "@/engine/foundation/gameplay/sro-macro";
 import { createTradeProgress } from "./trade-progress/trade-progress";
@@ -1587,6 +1589,25 @@ fails; retry persistence without restoring stale slot occupancy.
 			}
 			bindingRepairs.delete( slot );
 		}
+	}
+	/*
+================
+refreshMacroSkills
+
+Port-only (#3907): moves the Auto-Skills lists off a rank the character
+no longer knows onto its learned successor (currentMacroSkills) and
+saves the change, as the hotbar's upgrade swap saves its slots. Runs
+after an upgrade and when the server sends the settings, so a list
+saved before an upgrade repairs itself.
+================
+	*/
+	function refreshMacroSkills() {
+		const live = sroMacro.view();
+		if ( !live ) return;
+		const next = currentMacroSkills( live, bindings.skills, skillGroups );
+		if ( next === live ) return;
+		const frame = sroMacro.saveFrame( MACRO_SKILL, next );
+		if ( frame ) sendWhenLive( frame );
 	}
 	let worldClock: GameplayState["worldClock"];
 	// CGInterface+0x640: the death kind the 0x37CE notice carries (74FE50 ->
@@ -4903,6 +4924,9 @@ Packet handling must not depend on which HUD panel is currently open.
 				if ( sroMacro.receive( frame ) ) {
 					const failure = sroMacro.takeNotice();
 					if ( failure ) notices = [ ...notices.slice( -99 ), { ...failure, sequence: ++noticeSequence } ];
+					// Only the settings push, never a save answer: a refused
+					// repair must not resend itself on its own answer.
+					if ( frame.opcode === OP_MACRO_CONFIG ) refreshMacroSkills();
 					dirty = true;
 					return true;
 				}
@@ -5768,6 +5792,7 @@ Packet handling must not depend on which HUD panel is currently open.
 							row.kind === 0x49 && replaced.has( row.payload ) ? { ...row, payload: id } : row
 						)
 					};
+					refreshMacroSkills();
 					training.receipt( frame.opcode, id );
 					progression = { ...progression, error: undefined };
 					dirty = true;
