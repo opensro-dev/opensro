@@ -480,7 +480,7 @@ func newGameplayPlane(
 	movementRuntime.RetireMoveEffects = items.RetireMoveEffects
 	movementRuntime.AttackLocked = items.PlayerAttackLocked
 	movementRuntime.MotionLocked = items.PlayerMotionLocked
-	movementRuntime.InteractionLocked = items.PlayerInteractionLocked
+	movementRuntime.InteractionLocked = items.PlayerMovementInteractionLocked
 	movementRuntime.AdvanceResidentRegion = items.AdvanceResidentRegion
 	movementRuntime.CompanionPresentations = items.CompanionPresentations
 	movementRuntime.SpawnSkills = items.SpawnEntrySkills

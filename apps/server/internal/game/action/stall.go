@@ -87,18 +87,40 @@ func (rt *Runtime) stallBusy(division, name string) bool {
 ================
 PlayerInteractionLocked
 
-The movement lane's interaction gate (#3433): a player keeping a stall,
-visiting one or trading does not walk until the stall or exchange closes.
+The direct skill admission's interaction gate (#3433): a player keeping a
+stall, visiting one or trading does not cast until the stall or exchange
+closes. Ground movement weighs the narrower
+PlayerMovementInteractionLocked: the original's move handler still walks
+a player whose exchange is open.
 
 INFERENCE: the v1.150 client refuses the world click while the stall
 control is up (CGInterface_IsInteractionBlocked 67D090), and the original
-pins a trader the same way. The GameServer's move handler is taken to read
-the interaction state the stall and the exchange write, so the server
-refuses what a client that skips the window gate sends.
+pins a trader the same way.
 ================
 */
 func (rt *Runtime) PlayerInteractionLocked(division, name string) bool {
 	return rt.stallBusy(division, name)
+}
+
+/*
+================
+PlayerMovementInteractionLocked
+
+The movement lane's interaction gate (audit U8-16): the original's move
+handler ignores a player's command while its interaction state is a
+stall (keeping one or visiting one) or an NPC's function window, but it
+takes the walk while an exchange is open, so the ground command weighs
+the stall and the window and never the exchange.
+================
+*/
+func (rt *Runtime) PlayerMovementInteractionLocked(division, name string) bool {
+	if rt.Stalls.Keeping(division, name) {
+		return true
+	}
+	if _, visiting := rt.Stalls.Visiting(division, name); visiting {
+		return true
+	}
+	return rt.Selected != nil && rt.Selected.AnyFunctionOpen(division, name)
 }
 
 /*

@@ -120,8 +120,9 @@ type Runtime struct {
 	// drops its ground command. Nil admits.
 	MotionLocked func(divisionID, characterName string) bool
 	// InteractionLocked is the move handler's interaction gate: a player
-	// keeping a stall, visiting one or trading drops its ground command
-	// until the stall or exchange closes (#3433). Nil admits.
+	// keeping a stall, visiting one or holding an NPC's window drops its
+	// ground command; an open exchange still walks (#4490 U8-16).
+	// Nil admits.
 	InteractionLocked func(divisionID, characterName string) bool
 	// AdvanceResidentRegion commits a crossed live region before this command
 	// replaces the segment. The population owner owns the saved-return effect.
@@ -638,10 +639,13 @@ the action/death lane. The caller holds the character operation lock.
 */
 func (rt *Runtime) admitMove(divisionID string, character *enterworld.Character, cosGID uint32) (moveAdmission, *simulation.MoveError) {
 	admission := moveAdmission{worldKey: simulation.WorldKey(divisionID, character.Name)}
-	var riding, deletePending, teleportCasting, alive bool
+	var riding, mounted, deletePending, teleportCasting, alive bool
 	rt.deps.Read(divisionID, func() {
-		if cos := character.ActiveCOS; cos != nil && cos.GID == cosGID && cos.Mounted && cos.Summoned && cos.CurrentHP != 0 {
-			riding = true
+		if cos := character.ActiveCOS; cos != nil && cos.Mounted && cos.Summoned && cos.CurrentHP != 0 {
+			mounted = true
+			if cos.GID == cosGID {
+				riding = true
+			}
 		}
 		deletePending = character.DeletePending
 		teleportCasting = character.NativeTeleportMode == 1
@@ -650,6 +654,11 @@ func (rt *Runtime) admitMove(divisionID string, character *enterworld.Character,
 	})
 	if cosGID != 0 && !riding {
 		return admission, &simulation.MoveError{NativeErrorCode: simulation.NativeErrorInvalidRequest, Reason: "invalidCosOwner"}
+	}
+	if cosGID == 0 && mounted {
+		// The original ignores a ground command from a rider: the ride
+		// moves by its own command, never the walker's (audit U8-16).
+		return admission, &simulation.MoveError{NativeErrorCode: simulation.NativeErrorInvalidRequest, Reason: "mounted"}
 	}
 	if deletePending {
 		return admission, &simulation.MoveError{NativeErrorCode: simulation.NativeErrorInvalidRequest, Reason: "deletePending"}
