@@ -594,6 +594,9 @@ func newGameplayPlane(
 		WarChanged: func(nowMs int64, active bool) []simulation.DivisionFrames {
 			return items.FortressWarChanged(ownedShard.ID, nowMs, active)
 		},
+		BootSettle: func(nowMs int64) []simulation.DivisionFrames {
+			return items.FortressBootSettle(ownedShard.ID, nowMs)
+		},
 	})
 	if err != nil {
 		return nil, err
