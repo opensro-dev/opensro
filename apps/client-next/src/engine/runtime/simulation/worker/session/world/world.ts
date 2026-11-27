@@ -122,6 +122,33 @@ export function reentryKeepsChat( previous: { character: string; division: strin
 
 /*
 ================
+withPublishedReferences
+
+The answer the world applies: the published reference tables, with the
+login's own item and object rows after them (the server skips published
+ids, so the two are disjoint). A digest-held answer (#4421) keeps its
+nulled refObjSnapshot, which tells the world its installed object table
+stands; every other table still has to arrive, because each gameplay
+owner rebuilds its skills, item kinds and stacks from the answer. The
+held path once applied the bare answer, so a re-entry with a buff threw
+"Missing entry skill reference authority" and the inventory lost every
+published item kind until a reload.
+================
+*/
+export function withPublishedReferences( bootstrap: object, tables: PublishedReferences, held: boolean ) {
+	const own = bootstrap as { refItemSnapshot?: unknown[]; refObjSnapshot?: unknown[] | null; };
+	return {
+		...bootstrap,
+		...tables,
+		refItemSnapshot: [ ...tables.refItemSnapshot, ...(own.refItemSnapshot ?? []) ],
+		refObjSnapshot: held ? own.refObjSnapshot : [ ...tables.refObjSnapshot, ...(own.refObjSnapshot ?? []) ]
+	};
+}
+
+type PublishedReferences = { refSkillSnapshot: unknown[]; refItemSnapshot: unknown[]; refObjSnapshot: unknown[]; };
+
+/*
+================
 createWorldSession
 ================
 
@@ -269,6 +296,12 @@ onNetworkFailure
 	// stated on the next EnterWorld so the answer can omit the constant
 	// sections. Cleared when a fresh character entry begins.
 	let heldConstants = "";
+	// The tables and atlas the last references load published: a
+	// digest-held answer names no references file, so it takes these.
+	let published: {
+		tables: PublishedReferences;
+		huntingGuide?: import("@/engine/contracts/hunting-guide").HuntingGuideSource;
+	} | undefined;
 	let references: { kind: "idle"; } | { kind: "loading"; } | {
 		kind: "ready";
 		bootstrap: unknown;
@@ -603,12 +636,17 @@ receive
 					sessionConstants?: unknown;
 				};
 				if (
-					typeof answerBootstrap.sessionConstants === "string" && answerBootstrap.sessionConstants !== "" &&
+					published && typeof answerBootstrap.sessionConstants === "string" &&
+					answerBootstrap.sessionConstants !== "" &&
 					answerBootstrap.sessionConstants === previousHeldConstants &&
 					(answerBootstrap.refObjSnapshot === null || answerBootstrap.refObjSnapshot === undefined)
 				) {
-					huntingGuide = undefined;
-					core.bootstrap( wrapper.bootstrap, resumedTransport, now );
+					huntingGuide = published.huntingGuide;
+					core.bootstrap(
+						withPublishedReferences( wrapper.bootstrap, published.tables, true ),
+						resumedTransport,
+						now
+					);
 					boundThisTransport = true;
 					hasWorld = true;
 					ready = false;
@@ -624,17 +662,12 @@ receive
 						// The published item and object rows and the login's own rows are
 						// disjoint (the server skips published ids); the catalogs reject a repeat.
 						const { huntingGuide: guide, ...tables } = refs;
-						const own = bootstrap as { refItemSnapshot?: unknown[]; refObjSnapshot?: unknown[]; };
+						published = { tables, huntingGuide: guide };
 						references = {
 							kind: "ready",
 							receivedAtMs,
 							huntingGuide: guide,
-							bootstrap: {
-								...bootstrap,
-								...tables,
-								refItemSnapshot: [ ...refs.refItemSnapshot, ...(own.refItemSnapshot ?? []) ],
-								refObjSnapshot: [ ...refs.refObjSnapshot, ...(own.refObjSnapshot ?? []) ]
-							}
+							bootstrap: withPublishedReferences( bootstrap, tables, false )
 						};
 					}
 				}, error => {
@@ -729,6 +762,7 @@ enter
 			// A fresh entry takes its constants from the answer (#4421);
 			// only re-entries inside this world build state the digest.
 			heldConstants = "";
+			published = undefined;
 			hasWorld = false;
 			resume = undefined;
 			entryAttempt = true;
