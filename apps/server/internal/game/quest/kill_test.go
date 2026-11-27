@@ -1,7 +1,10 @@
 package quest
 
 import (
+	"errors"
+
 	"opensro.online/server/internal/game/enterworld"
+	"opensro.online/server/internal/game/item/inventory"
 	"opensro.online/server/internal/game/item/wire"
 	"opensro.online/server/internal/testsupport/clientdata"
 	"testing"
@@ -154,5 +157,41 @@ func TestKillTakersAndSharedQuestCredit(t *testing.T) {
 	}
 	if got := rt.KillTakers(c, "MOB_TEST", 0); len(got) != 1 || got[0].RefID != 902 {
 		t.Fatalf("a full quest still takes kills: %+v", got)
+	}
+}
+
+/*
+================
+TestSharedKillRunsTheMemberExchange
+
+A shared kill that counts none of a member's missions (an empty, non-nil
+credit set) still runs his kill exchange, as the solo event does: the
+server's handler tests the exchange after its mission loop, whichever
+quests the share credited.
+================
+*/
+func TestSharedKillRunsTheMemberExchange(t *testing.T) {
+	def := &Definition{QuestSpec: QuestSpec{Codename: "QX", Objective: ObjectiveKill, KindByte: 1,
+		KillMonsterCodenames: []string{"MOB_TEST"}, KillCount: 1,
+		KillExchange: &KillExchange{TakeItem: "ITEM_TAKE", GrantItem: "ITEM_GRANT"}}, RefID: 903, CountryByte: 3}
+	defs := &Definitions{byRefID: map[uint32]*Definition{903: def},
+		byCodename: map[string]*Definition{"QX": def}, ordered: []*Definition{def}}
+	rt, err := NewRuntime(&enterworld.Deps{}, defs, nil)
+	if err != nil {
+		t.Fatalf("NewRuntime: %v", err)
+	}
+	c := questCharacter()
+	c.ActiveQuests = []enterworld.ActiveQuestRecord{BuildActiveQuestRecord(def, 0)}
+	// Fill the one kill mission while no inventory planner is wired.
+	rt.CreditKillQuests(c, "MOB_TEST", 0, nil)
+	c.MissionInventory = []enterworld.InventoryRow{{Slot: 20, Codename: "ITEM_TAKE", StackCount: 2}}
+	planned := 0
+	rt.PlanInventory = func(*enterworld.Character, []inventory.ItemAmount, []inventory.ItemAmount) ([]enterworld.InventoryRow, []wire.Frame, error) {
+		planned++
+		return nil, nil, errors.New("test: plan only")
+	}
+	rt.CreditKillQuests(c, "MOB_TEST", 0, map[uint32]bool{})
+	if planned != 1 {
+		t.Fatalf("the shared kill planned the exchange %d times, want 1", planned)
 	}
 }
