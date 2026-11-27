@@ -44,6 +44,12 @@ const (
 	// two chained CGInterface_Calls_CMsgStreamBuffer_WriteBytes
 	// length-prefixed writes, receiver FIRST.
 	OpLetterSendRequest uint16 = 0x7261
+	// OpGroupLetterSendRequest is the multi-letter composer the letter
+	// window's guild/union mode sends: client NetClient_Send7600
+	// {u8 kind, u8 count, per recipient u16 len + ANSI name,
+	// u16 len + ANSI body} - kind 1 letters the sender's guild
+	// members, kind 2 letters every named character (the union mode).
+	OpGroupLetterSendRequest uint16 = 0x7600
 )
 
 // S->C opcodes, pinned from the client inbound folds.
@@ -67,6 +73,13 @@ const (
 	// outside 2..9 ride the client's netprocessininterface.cpp:0x130e
 	// assert - never compose them.
 	OpFriendLetterEventPush uint16 = 0x3F9A
+	// OpGroupLetterSendAnswer: client CNetProcess_OnResponse0xB600 -
+	// u8 result; 1 = {u8 failedCount, per failed recipient
+	// u16 len + ANSI name} (each failed name earns a "letter box is
+	// full" chat line; zero failed raises the SENDOK banner, all
+	// failed the SENDERR banner), 2 = {u8 code} into the same
+	// category-0x14 notice table the 0xB261 result-2 arm reads.
+	OpGroupLetterSendAnswer uint16 = 0xB600
 	// OpLetterSendAckAnswer: client CPSMission_OnLetterSendResponse0xB261 -
 	// u8 result; 1 = the UIIT_MSG_LETTER_SENDOK banner, 2 = u8 errorCode
 	// notice (codes unpinned - this server never composes the error
@@ -331,6 +344,109 @@ const (
 // EncodeLetterSendRefusalB261 renders the 0xB261 result-2 body
 // [0x02, code] answering a sender-facing refusal.
 func EncodeLetterSendRefusalB261(code uint8) []byte {
+	return []byte{0x02, code}
+}
+
+// Group-letter kinds (the 0x7600 lead byte).
+const (
+	// GroupLetterKindGuild letters the named members of the sender's
+	// own guild; the sender's guild must be level 3 or higher.
+	GroupLetterKindGuild uint8 = 1
+	// GroupLetterKindUnion letters every named character (the union
+	// mode); the sender's guild must be level 4 or higher.
+	GroupLetterKindUnion uint8 = 2
+)
+
+// The 0xB600 result-2 refusal codes: the low bytes of the native
+// server's error ids, read verbatim by the client's 0xB600 handler
+// into the category-0x14 table. Only the body-length row (0x10) has a
+// v1.150 string; the rest fall to the table's silent default arm -
+// the real client gates these cases itself before the wire (its
+// letter box refreshes the guild/union send permissions), so the
+// refusal text is the client's own and the server code is a backstop.
+const (
+	// GroupLetterRefusalEmpty names an empty recipient name or a
+	// recipient set left empty by the membership filter.
+	GroupLetterRefusalEmpty uint8 = 0x03
+	// GroupLetterRefusalKind names a kind byte outside 1 and 2.
+	GroupLetterRefusalKind uint8 = 0x05
+	// GroupLetterRefusalBodyLength names a body outside 1..1000
+	// bytes (the native read cap; the stored body clamps to the
+	// mailbox column cap the single letter already writes under).
+	GroupLetterRefusalBodyLength uint8 = 0x10
+	// GroupLetterRefusalGuildLevel names a guild below the kind's
+	// level (3 for a guild letter, 4 for a union letter).
+	GroupLetterRefusalGuildLevel uint8 = 0x15
+	// GroupLetterRefusalNoGuild names a sender standing in no guild.
+	GroupLetterRefusalNoGuild uint8 = 0x16
+)
+
+// GroupLetterBodyMaxBytes is the native server's read cap on the
+// 0x7600 body: 1..1000 bytes pass, anything outside is refused.
+const GroupLetterBodyMaxBytes = 1000
+
+// GroupLetterSendRequest is one decoded 0x7600 frame.
+type GroupLetterSendRequest struct {
+	Kind  uint8
+	Names []string
+	Body  string
+}
+
+// DecodeGroupLetterSendRequest strict-decodes the client
+// NetClient_Send7600 wire body {u8 kind, u8 count, per recipient
+// u16 len + ANSI name, u16 len + ANSI body} with no trailing bytes.
+// Kind, membership, levels and the body cap are POLICY, judged in
+// the handler - this is layout only.
+func DecodeGroupLetterSendRequest(payload []byte) (GroupLetterSendRequest, error) {
+	reader := wire.NewReader(payload)
+	kind, err := reader.U8()
+	if err != nil {
+		return GroupLetterSendRequest{}, err
+	}
+	count, err := reader.U8()
+	if err != nil {
+		return GroupLetterSendRequest{}, err
+	}
+	request := GroupLetterSendRequest{Kind: kind, Names: make([]string, 0, count)}
+	for i := 0; i < int(count); i++ {
+		name, err := readSizedString(reader)
+		if err != nil {
+			return GroupLetterSendRequest{}, err
+		}
+		request.Names = append(request.Names, name)
+	}
+	body, err := readSizedString(reader)
+	if err != nil {
+		return GroupLetterSendRequest{}, err
+	}
+	if err := reader.Done(); err != nil {
+		return GroupLetterSendRequest{}, err
+	}
+	request.Body = body
+	return request, nil
+}
+
+// EncodeGroupLetterSendAckB600 renders the 0xB600 result-1 body: u8
+// result = 1, u8 failed count, then each failed recipient's name as
+// u16 len + ANSI - the client raises the SENDOK banner and prints
+// one "letter box is full" chat line per failed name.
+func EncodeGroupLetterSendAckB600(failed []string) []byte {
+	size := 2
+	for _, name := range failed {
+		size += 2 + len(name)
+	}
+	writer := wire.NewWriter(size)
+	writer.U8(1)
+	writer.U8(uint8(len(failed)))
+	for _, name := range failed {
+		writeSizedString(writer, name)
+	}
+	return writer.Payload()
+}
+
+// EncodeGroupLetterSendRefusalB600 renders the 0xB600 result-2 body
+// [0x02, code] answering a sender-facing refusal.
+func EncodeGroupLetterSendRefusalB600(code uint8) []byte {
 	return []byte{0x02, code}
 }
 

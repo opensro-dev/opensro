@@ -14,6 +14,7 @@ type Dependencies interface {
 	UpdateMany(characters []*domain.Character, label string, update func() bool) bool
 	Read(divisionID string, fn func())
 	LetterAuthority() domain.LetterStore
+	GuildAuthority() domain.GuildStore
 	CharacterModelRef(character *domain.Character) uint32
 }
 
