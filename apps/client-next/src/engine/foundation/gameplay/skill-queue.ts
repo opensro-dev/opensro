@@ -7,10 +7,11 @@ A press is decided on the client against the server's clock, never sent to
 be refused (a deliberate deviation from retail, which sends every press and
 answers a cooling-down one with 0x3005):
 
-	send   the skill is ready by the time the press reaches the server
-	queue  it becomes ready within QUEUE_WINDOW_MS: hold the press in one
-	       slot (a newer press replaces it) and send it so it arrives just
-	       after the server's cooldown ends
+	send   a press sent now reaches the server at least ARRIVAL_MARGIN_MS
+	       after the skill is ready
+	queue  it becomes ready within QUEUE_WINDOW_MS of the press arriving:
+	       hold the press in one slot (a newer press replaces it) and send
+	       it so it arrives just after the server's cooldown ends
 	deny   longer to wait: send nothing, the shortcut slot gives feedback
 	       (silent: a sound on every press of a cooling key only nagged)
 
@@ -32,7 +33,7 @@ sample, smoothed as TCP smooths its RTT (gain 1/8).
 */
 
 // How far ahead of readiness a press is held instead of denied (the WoW-style
-// spell queue window).
+// spell queue window), measured against remaining time minus one-way delivery.
 export const QUEUE_WINDOW_MS = 400;
 // How late after the server's cooldown end a held press aims to arrive, so the
 // server's 100 ms tick rarely has to hold it in its own grace queue.
@@ -58,14 +59,16 @@ export type PressDecision =
 decidePress
 
 remainingMs is the local wait until the server's cooldown ends (0 or
-undefined when ready), oneWayMs one delivery.
+undefined when ready), oneWayMs one delivery. The queue window bounds the
+wait left once the press reaches the server, so it is the same at any ping.
 ================
 */
 export function decidePress( remainingMs: number | undefined, oneWayMs: number, now: number ): PressDecision {
 	if ( !remainingMs || remainingMs <= 0 ) return { kind: "send" };
-	const wait = remainingMs - oneWayMs + ARRIVAL_MARGIN_MS;
+	const serverWaitMs = remainingMs - oneWayMs;
+	const wait = serverWaitMs + ARRIVAL_MARGIN_MS;
 	if ( wait <= 0 ) return { kind: "send" };
-	if ( remainingMs <= QUEUE_WINDOW_MS ) return { kind: "queue", fireAtMs: now + wait };
+	if ( serverWaitMs <= QUEUE_WINDOW_MS ) return { kind: "queue", fireAtMs: now + wait };
 	return { kind: "deny", remainingMs };
 }
 
