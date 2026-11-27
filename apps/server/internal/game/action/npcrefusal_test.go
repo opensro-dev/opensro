@@ -133,7 +133,7 @@ func TestNpcTalkWhileBusyIsRefused(t *testing.T) {
 				t.Fatal(err)
 			}
 		}},
-		// The motion-change lock (0x4EF880): a skill cast still open.
+		// The motion-change lock: a skill cast still open.
 		{"mid-cast", func(t *testing.T, rt *Runtime, c *enterworld.Character) {
 			rt.pendingSkillFinalizes = append(rt.pendingSkillFinalizes, newPendingSkillFinalize(testDivision, c.Name))
 		}},

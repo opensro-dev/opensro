@@ -126,8 +126,8 @@ func (rt *Runtime) HandleNpcAction(divisionID string, character *enterworld.Char
 	if rt.stallBusy(divisionID, character.Name) {
 		return npcFunctionRefusal(errCodeKeeperBusy), "an exchange, a stall or a stall visit is open"
 	}
-	// The second native busy test (0x510250, the PC's motion-change lock
-	// 0x4EF880): an attack lock or a committed front action answers the
+	// The reference server's second busy test (the PC's motion-change lock
+	// check): an attack lock or a committed front action answers the
 	// same IM_BUSY, so a talk mid-swing or mid-cast is refused.
 	if rt.PlayerAttackLocked(divisionID, character.Name) || rt.objectActionCommitted(divisionID, character.Name) {
 		return npcFunctionRefusal(errCodeKeeperBusy), "the player's motion is locked by an attack or a committed action"
