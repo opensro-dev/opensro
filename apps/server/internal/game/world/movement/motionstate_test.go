@@ -104,21 +104,32 @@ func TestHandleMotionStateSitStandToggle(t *testing.T) {
 		t.Errorf("sit toggle changed persisted movementMode to %d", *character.World.MovementMode)
 	}
 
-	// A gait change must NOT clear the posture (native SetRunWalkMode 2/3
-	// only switches the speed channel; it never touches motion state 6):
-	// sit, then request walk - still sitting, and the 0x3122 answers the
-	// GAIT value (2), not a stand (0).
+	// A gait request while seated is ignored whole (audit U8-17: the
+	// original's motion-change request takes walk / run only from a
+	// standing or moving motion): no ack, no state push, and neither
+	// the mode nor the posture moves. An earlier reading from the
+	// client's local speed channel answered it; the server's request
+	// handler refuses it before the speed setter is ever reached.
 	nowMs += PostureTransitionMs
 	assertMotionSuccess(t, rt.HandleMotionState("0", character, []byte{simulation.MotionToggleSitStand}), wire.MoveStateSit)
 	nowMs += PostureTransitionMs
-	assertMotionSuccess(t, rt.HandleMotionState("0", character, []byte{simulation.WalkMode}), wire.MoveStateWalk)
+	outcome := rt.HandleMotionState("0", character, []byte{simulation.WalkMode})
+	if outcome.Refusal != "sitting" || len(outcome.Frames) != 0 || len(outcome.Broadcast) != 0 {
+		t.Fatalf("seated walk = %+v, want a silent sitting refusal", outcome)
+	}
 	world = rt.Worlds.Snapshot(key, func() simulation.WorldState { return simulation.SeedWorldState(character) })
 	if !world.Sitting {
-		t.Error("walk request cleared Sitting; gait and posture are separate channels")
+		t.Error("seated walk request stood the character up")
 	}
-	if world.MovementMode != simulation.WalkMode {
-		t.Errorf("world mode = %d, want walk", world.MovementMode)
+	if world.MovementMode == simulation.WalkMode {
+		t.Error("seated walk request changed the movement mode")
 	}
+
+	// Standing first reopens the gait lane.
+	nowMs += PostureTransitionMs
+	assertMotionSuccess(t, rt.HandleMotionState("0", character, []byte{simulation.MotionToggleSitStand}), wire.MoveStateStand)
+	nowMs += PostureTransitionMs
+	assertMotionSuccess(t, rt.HandleMotionState("0", character, []byte{simulation.WalkMode}), wire.MoveStateWalk)
 }
 
 // TestHandleMotionStateSitTruncatesInFlightMove pins the Ruling-44 sit-cancel:
@@ -419,5 +430,55 @@ func TestHandleMotionStateIgnoresAMaskedPlayer(t *testing.T) {
 			}
 			nowMs += PostureTransitionMs
 		}
+	}
+}
+
+// While the casting instance is held (a cast preparing or casting, a
+// chain), the original ignores every motion-state request (audit
+// U8-17). Deleting the MotionChangeLocked consultation must fail THIS
+// test, including its sit arm: the lock is the handler's head gate,
+// not a gait-only one.
+func TestHandleMotionStateIgnoresRequestsWhileCasting(t *testing.T) {
+	character := testCharacter()
+	nowMs := testStartMs
+	rt := motionTestRuntime(character, &nowMs)
+	locked := true
+	rt.MotionChangeLocked = func(string, string) bool { return locked }
+
+	for _, code := range []byte{simulation.WalkMode, simulation.RunMode, simulation.MotionToggleSitStand} {
+		outcome := rt.HandleMotionState("0", character, []byte{code})
+		if outcome.Refusal != "motionChangeLocked" || len(outcome.Frames) != 0 || len(outcome.Broadcast) != 0 {
+			t.Fatalf("code %d while casting = %+v, want a silent motionChangeLocked refusal", code, outcome)
+		}
+	}
+	key := simulation.WorldKey("0", character.Name)
+	world := rt.Worlds.Snapshot(key, func() simulation.WorldState { return simulation.SeedWorldState(character) })
+	if world.Sitting || world.MovementMode == simulation.WalkMode {
+		t.Errorf("locked requests mutated world: mode=%d sitting=%v", world.MovementMode, world.Sitting)
+	}
+
+	locked = false
+	assertMotionSuccess(t, rt.HandleMotionState("0", character, []byte{simulation.WalkMode}), wire.MoveStateWalk)
+}
+
+// Walk / run is taken only from a standing or moving motion; while
+// knocked down (motion 8) the original's request switch reaches no
+// gait arm. Deleting the MotionLocked consultation must fail THIS test.
+func TestHandleMotionStateRefusesGaitWhileKnockedDown(t *testing.T) {
+	character := testCharacter()
+	nowMs := testStartMs
+	rt := motionTestRuntime(character, &nowMs)
+	rt.MotionLocked = func(string, string) bool { return true }
+
+	for _, code := range []byte{simulation.WalkMode, simulation.RunMode} {
+		outcome := rt.HandleMotionState("0", character, []byte{code})
+		if outcome.Refusal != "knockedDown" || len(outcome.Frames) != 0 || len(outcome.Broadcast) != 0 {
+			t.Fatalf("code %d while knocked down = %+v, want a silent knockedDown refusal", code, outcome)
+		}
+	}
+	key := simulation.WorldKey("0", character.Name)
+	world := rt.Worlds.Snapshot(key, func() simulation.WorldState { return simulation.SeedWorldState(character) })
+	if world.MovementMode == simulation.WalkMode {
+		t.Error("knocked-down gait request changed the movement mode")
 	}
 }

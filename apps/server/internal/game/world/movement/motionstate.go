@@ -140,16 +140,34 @@ func (rt *Runtime) HandleMotionState(divisionID string, character *enterworld.Ch
 	// The peek runs under the read door so a first-touch seed reads the
 	// live record's world fields synchronized, the values the detached
 	// record used to carry (WorldStore nests under the store door).
-	var postureInFlight bool
+	var postureInFlight, sitting bool
 	rt.deps.Read(divisionID, func() {
-		if snapshot := rt.Worlds.Snapshot(worldKey, func() simulation.WorldState {
+		snapshot := rt.Worlds.Snapshot(worldKey, func() simulation.WorldState {
 			return simulation.SeedWorldState(character)
-		}); nowMs < snapshot.PostureTransitionUntilMs {
-			postureInFlight = true
-		}
+		})
+		postureInFlight = nowMs < snapshot.PostureTransitionUntilMs
+		sitting = snapshot.Sitting
 	})
 	if postureInFlight {
 		return refusedMotion("postureTransitionInFlight")
+	}
+
+	// The original's motion-change lock ignores the request whole while
+	// a cast is preparing or casting, or a chain holds the casting
+	// instance - walk/run and sit/stand alike (audit U8-17).
+	if rt.MotionChangeLocked != nil && rt.MotionChangeLocked(divisionID, character.Name) {
+		return refusedMotion("motionChangeLocked")
+	}
+
+	// Walk / run is taken only from a standing or moving motion: never
+	// while seated, and never while knocked down (motion 8).
+	if code != simulation.MotionToggleSitStand {
+		if sitting {
+			return refusedMotion("sitting")
+		}
+		if rt.MotionLocked != nil && rt.MotionLocked(divisionID, character.Name) {
+			return refusedMotion("knockedDown")
+		}
 	}
 
 	// The mode write and the record's movement-mode write-back commit as
