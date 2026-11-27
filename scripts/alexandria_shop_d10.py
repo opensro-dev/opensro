@@ -43,6 +43,21 @@ NEW_DEGREE = "10"
 # The largest tab in the shipped tables (slots 0..44).
 MAX_TAB_SLOTS = 45
 DEGREE_TOKEN = re.compile(r"_(\d\d)_")
+
+
+# ================
+# lowest_free_slot
+#
+# The lowest slot of a tab no row holds, as its goods-row text, or None
+# when all MAX_TAB_SLOTS are taken. occupied holds slot texts. The v1.150
+# shop window shows one package per slot, so a row added beside kept ones
+# takes a free slot, never the next count: a tab whose rows start at
+# slot 1 (its slot 0 package not imported) gave the first added row the
+# last kept row's slot, and the GameWorld refuses the duplicate
+# (STORE_SD_ACCESSORY_EU_TAB3:11, r204n).
+# ================
+def lowest_free_slot(occupied):
+	return next((str(slot) for slot in range(MAX_TAB_SLOTS) if str(slot) not in occupied), None)
 ICON_SUFFIX = ".ddj"
 PRICE_COLUMN = 26
 NAME_COLUMN = 5
