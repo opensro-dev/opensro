@@ -167,10 +167,11 @@ writeTooltipBundle
 
 Writes out/tooltip. items are items.json's rows (for codenames),
 references the Go stage's item references by id, magicRows its magic
-definitions, text the client's text lookup.
+definitions, text the client's text lookup. writeFile writes each JSON
+file (the catalogue passes cachedFiles.mjs's writer).
 ================
 */
-export async function writeTooltipBundle( { out, items, references, magicRows, text } ) {
+export async function writeTooltipBundle( { out, items, references, magicRows, text, writeFile = writeFileSync } ) {
 	const dir = path.join( out, "tooltip" );
 	mkdirSync( path.join( dir, "items" ), { recursive: true } );
 	const table = createMagicTable( magicRows );
@@ -218,15 +219,15 @@ export async function writeTooltipBundle( { out, items, references, magicRows, t
 	}
 	for ( const [id, item] of shards ) {
 		const own = item.descriptionSymbol ? { [item.descriptionSymbol]: text( item.descriptionSymbol ) } : {};
-		writeFileSync( path.join( dir, "items", id + ".json" ), JSON.stringify( { ...item, text: own } ) + "\n" );
+		writeFile( path.join( dir, "items", id + ".json" ), JSON.stringify( { ...item, text: own } ) + "\n" );
 	}
 	const common = Object.fromEntries( [ ...used ].filter( ( [symbol] ) => !descriptions.has( symbol ) ).sort() );
-	writeFileSync(
+	writeFile(
 		path.join( dir, "magic.json" ),
 		JSON.stringify( { format: TOOLTIP_FORMAT, references: magicRows, text: common } ) + "\n"
 	);
 	const golden = goldenVectors( items, shards, table, magicRows, text );
-	writeFileSync(
+	writeFile(
 		path.join( dir, "golden.json" ),
 		JSON.stringify( { format: TOOLTIP_FORMAT, vectors: golden } ) + "\n"
 	);
