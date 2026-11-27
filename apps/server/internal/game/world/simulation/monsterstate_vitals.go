@@ -10,8 +10,10 @@ instruction (action's monsterdeferred.go) puts the latch down; it comes
 back when the instruction's duration elapses. The native spawn resets
 both latches up; a missing record reads exactly that.
 
-The heal is state only: the original sends no per-tick frame for it, so
-observers re-read the monster's HP from the next hit record.
+Each heal is published through the periodic vitals sync (0x33A6) with
+the natural-recovery cause (recoverMonster), so a holder's HP bar rises
+with it. A record is dropped once its monster is dead or gone, or full
+with both latches up and no restore pending.
 
 ===========================================================================
 */
@@ -187,10 +189,16 @@ func (s *MonsterState) advanceMonsterVital(state *divisionMonsterState, division
 		rec.nextRecoveryMs += monsterRecoveryIntervalMs
 		s.recoverMonster(state, division, gid, rec, nowMs)
 	}
-	if rec.hpLatch && rec.mpLatch && rec.hpRestoreMs == 0 && rec.mpRestoreMs == 0 {
-		if hp, maxHP, ok := s.monsterVitalHP(state, gid); ok && hp >= maxHP {
-			delete(state.vitals, gid)
-		}
+	hp, maxHP, ok := s.monsterVitalHP(state, gid)
+	if !ok || hp == 0 {
+		// Dead or gone: dropped whatever its latches say. The native spawn
+		// resets both latches up, so a reused gid must start from no record
+		// (a held one would read its latch down and heal a period early).
+		delete(state.vitals, gid)
+		return
+	}
+	if rec.hpLatch && rec.mpLatch && rec.hpRestoreMs == 0 && rec.mpRestoreMs == 0 && hp >= maxHP {
+		delete(state.vitals, gid)
 	}
 }
 

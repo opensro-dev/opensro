@@ -239,3 +239,45 @@ func TestMonsterWithoutRecoveryColumnNeverRecovers(t *testing.T) {
 		t.Fatalf("HP = %d, want 34 (no authored recovery)", got)
 	}
 }
+
+/*
+================
+TestDeadMonsterDropsItsRecoveryRecord
+
+A hurt monster that dies loses its record, even with its HP latch down:
+the record map stays bounded by live hurt or latched monsters, and a
+reused gid starts from the spawn's both-up latches.
+================
+*/
+func TestDeadMonsterDropsItsRecoveryRecord(t *testing.T) {
+	s := vitalsTestState()
+	m := firstDamageTestMonster(t, s, "vitals")
+	now := int64(1_000_000)
+
+	if _, ok := s.ApplyDamage("vitals", m.Gid, 30); !ok {
+		t.Fatal("hurt refused")
+	}
+	s.AdvanceMonsterVitals(now)
+	s.SetMonsterVitalLatches("vitals", m.Gid, false, true, now+60_000, 0, now)
+	s.mu.Lock()
+	pop := s.populationForObject("vitals", m.Gid)
+	held := pop != nil && pop.vitals[m.Gid] != nil
+	s.mu.Unlock()
+	if !held {
+		t.Fatal("the hurt, latched monster has no record")
+	}
+
+	if hit, ok := s.ApplyDamage("vitals", m.Gid, 70); !ok || hit.CurrentHP != 0 {
+		t.Fatalf("kill = %+v, %v; want HP 0", hit, ok)
+	}
+	s.AdvanceMonsterVitals(now + 1)
+	s.mu.Lock()
+	_, left := pop.vitals[m.Gid]
+	s.mu.Unlock()
+	if left {
+		t.Fatal("the dead monster's record is still held")
+	}
+	if hp, mp := s.MonsterVitalLatches("vitals", m.Gid); !hp || !mp {
+		t.Fatalf("latches after death = %v/%v, want both up", hp, mp)
+	}
+}
