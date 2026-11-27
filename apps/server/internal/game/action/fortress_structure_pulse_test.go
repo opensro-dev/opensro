@@ -9,7 +9,6 @@ fortress_structure_pulse_test.go - the tower and stone pulses at war
 package action
 
 import (
-	"math"
 	"testing"
 
 	"opensro.online/server/internal/game/enterworld"
@@ -171,8 +170,9 @@ func TestFortressTowerAndStonePulseInWar(t *testing.T) {
 	if maxHP <= 0 {
 		t.Fatal("the enemy resident has no hit points")
 	}
-	towerHit := int64(math.Round(0.14 * float64(maxHP)))
-	stoneHit := int64(math.Round(0.22 * float64(maxHP)))
+	// The native ratio arm truncates (combat.HPRatioDamage).
+	towerHit := 14 * maxHP / 100
+	stoneHit := 22 * maxHP / 100
 
 	// No war: nothing pulses and nothing is scheduled.
 	if out := rt.advanceFortressStructurePulses(now); len(out) != 0 {

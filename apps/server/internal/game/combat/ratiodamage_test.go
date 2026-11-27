@@ -14,8 +14,8 @@ import "testing"
 ================
 TestHPRatioDamage
 
-The percent of the target's maximum hit points, rounded to the
-nearest point: the tower tiers (5..14), the fort stone tiers (5..22),
+The percent of the target's maximum hit points, truncated as the
+native x87 conversion truncates (control word | 0xC00): the tower tiers (5..14), the fort stone tiers (5..22),
 and the dead inputs.
 ================
 */
@@ -28,9 +28,10 @@ func TestHPRatioDamage(t *testing.T) {
 		{14, 1000, 140},
 		{5, 1000, 50},
 		{22, 1000, 220},
-		{14, 999, 140}, // 139.86 rounds to 140
-		{22, 999, 220}, // 219.78 rounds to 220
-		{5, 10, 1},     // 0.5 rounds to 1
+		{14, 999, 139}, // 139.86 truncates to 139
+		{22, 999, 219}, // 219.78 truncates to 219
+		{5, 10, 0},     // 0.5 truncates to 0
+		{5, 39, 1},     // 1.95 truncates to 1
 		{0, 1000, 0},
 		{14, 0, 0},
 		{14, -5, 0},
