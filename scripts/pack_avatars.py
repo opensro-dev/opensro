@@ -36,6 +36,7 @@ import bisect
 import json
 from pathlib import Path
 import subprocess
+import sys
 import tempfile
 
 import alexandria_npcs as text_tables
@@ -60,6 +61,11 @@ RESOURCE_FOLDERS = ("res", "prim", "icon", "icon64", "server_dep", "effect", "sl
 PET_CHAR_SHARD = "characterdata_150001.txt"
 PET_ITEM_SHARD = "itemdata_150001.txt"
 PET_SKILL_SHARD = "skilldata_150001.txt"
+# The pets' posture for the resource audit: a pet model's authored sound
+# tracks (Draco, the balloons) are walked as Data resources and its
+# ambient particle sets (the Circus Bear, the Ghost) as Particles, as the
+# Sky Temple monsters' are; without it the audit refuses the model.
+PET_POSTURE = {"sounds": "data", "particles": "all"}
 
 
 # ================
@@ -405,7 +411,7 @@ def pack_pets(archives, native, closure=None):
 		pending |= items.direct_assets(scrolls)
 		try:
 			with tempfile.TemporaryDirectory() as staging:
-				records = closure(pending, native, Path(staging), archives)
+				records = closure(pending, native, Path(staging), archives, posture=PET_POSTURE)
 				found = {
 					f"{record['archive'].lower()}/{record['path']}":
 						(Path(staging) / shared.FOLDERS[record["archive"]] / record["path"]).read_bytes()
@@ -543,6 +549,12 @@ def main():
 	parser.add_argument("--report", type=Path, help="also write the pack report as JSON here")
 	args = parser.parse_args()
 	report = pack(args.export_root, args.native_extracted, args.output)
+	# The report is written before the summary, and the summary never
+	# fails on a console codepage: export reasons carry raw bytes.
+	if args.report:
+		args.report.write_text(json.dumps(report, indent=2) + "\n", encoding="utf-8")
+		print(f"Report: {args.report}")
+	sys.stdout.reconfigure(errors="backslashreplace")
 	print(f"Avatars packed: {report['rows']}; excluded: {len(report['excluded'])}")
 	print(f"Pets packed: {len(report['pets'])}; excluded: {len(report['petsExcluded'])}")
 	for entry in report["petsExcluded"]:
@@ -552,9 +564,6 @@ def main():
 	print(f"Archive: {args.output} ({report['files']} entries, {report['bytes']} bytes)")
 	print(f"sha256: {report['sha256']}")
 	print(f"Pin it as scripts/avatars_archive_pins.json: {{\"format\": \"{importer.AVATARS_PIN_FORMAT}\", \"sha256\": \"{report['sha256']}\"}}")
-	if args.report:
-		args.report.write_text(json.dumps(report, indent=2) + "\n", encoding="utf-8")
-		print(f"Report: {args.report}")
 
 
 if __name__ == "__main__":

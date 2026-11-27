@@ -243,7 +243,11 @@ class PackTests(unittest.TestCase):
 # a later file, except a family whose model is "cos\\cat.bsr", whose
 # closure fails as a missing texture would.
 # ================
-def fake_pet_closure(pending, native, staging, archives):
+def fake_pet_closure(pending, native, staging, archives, posture=None):
+	# The real audit refuses a later model's sound tracks and ambient
+	# particles unless the importer declares the posture the pets need.
+	if posture != packer.PET_POSTURE:
+		raise ValueError(f"{sorted(pending)[0][1]}: sound closure requires an explicit importer")
 	if ("Data", "res/cos/cat.bsr") in pending:
 		raise ValueError("missing Data resource: res/cos/cat.ddj")
 	records = []
