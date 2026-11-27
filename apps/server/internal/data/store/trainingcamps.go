@@ -37,6 +37,11 @@ const (
 	// (40 = 0x28: the v1.188 graduation handler refuses below 0x28 with
 	// error 0x681A).
 	campGraduationLevel = 40
+	// campAssistantGraduationLevel is the voluntary assistant graduation
+	// level floor (60 = 0x3C: the same handler refuses an assistant below
+	// 0x3C with error 0x681A). An assistant's graduation gives nothing: no
+	// honor, no evaluation points, no graduate count.
+	campAssistantGraduationLevel = 60
 	// campCompulsoryGraduationLevel is the master-initiated compulsory
 	// graduation level floor (41 = > 0x28: the v1.188 compulsory graduation
 	// handler refuses at or below 0x28 with error 0x6822; client
@@ -293,6 +298,26 @@ func resolvedCharacterLevel(character *domain.Character) int64 {
 		return 1
 	}
 	return *character.Level
+}
+
+/*
+================
+resolvedCharacterHighestLevel
+
+The highest level the character has ever reached (the persisted
+watermark): graduation's level tests read it, not the current level, so
+a death penalty's lost level does not bar a graduation already earned.
+A record with no watermark reads as its current level.
+================
+*/
+func resolvedCharacterHighestLevel(character *domain.Character) int64 {
+	if character == nil {
+		return 1
+	}
+	if character.MaxLevel != nil && *character.MaxLevel >= 1 {
+		return *character.MaxLevel
+	}
+	return resolvedCharacterLevel(character)
 }
 
 /*
