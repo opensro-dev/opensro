@@ -73,6 +73,7 @@ type residentSkill struct {
 	TimedEffect             unique.Handle[SkillTimedEffect]
 	MonsterSelfEffect       unique.Handle[SkillMonsterSelfEffect]
 	MonsterStackingEffect   SkillMonsterStackingEffect
+	DeferredVital           SkillDeferredVital
 	HostileDebuff           unique.Handle[SkillHostileDebuff]
 	Consumption             unique.Handle[SkillConsumption]
 	DirectOffensePinned     bool
@@ -191,6 +192,7 @@ func compactSkill(row SkillRow) residentSkill {
 		TimedEffect:             unique.Make(row.TimedEffect),
 		MonsterSelfEffect:       unique.Make(row.MonsterSelfEffect),
 		MonsterStackingEffect:   row.MonsterStackingEffect,
+		DeferredVital:           row.DeferredVital,
 		HostileDebuff:           unique.Make(row.HostileDebuff),
 		Consumption:             unique.Make(row.Consumption),
 		DirectOffensePinned:     row.DirectOffensePinned,
@@ -312,6 +314,7 @@ func (r residentSkill) value() SkillRow {
 		TimedEffect:             r.TimedEffect.Value(),
 		MonsterSelfEffect:       r.MonsterSelfEffect.Value(),
 		MonsterStackingEffect:   r.MonsterStackingEffect,
+		DeferredVital:           r.DeferredVital,
 		HostileDebuff:           r.HostileDebuff.Value(),
 		Consumption:             r.Consumption.Value(),
 		DirectOffensePinned:     r.DirectOffensePinned,

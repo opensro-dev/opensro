@@ -114,6 +114,55 @@ func TestHeavyPenaltyAlwaysDrops(t *testing.T) {
 
 /*
 ================
+TestDeathDuringExchangeOrStallDropsNothing
+
+An open exchange, and the player's own running stall, latch every
+item against the penalty drop: the same death that always drops at
+penalty 30000 (TestHeavyPenaltyAlwaysDrops) drops nothing.
+================
+*/
+func TestDeathDuringExchangeOrStallDropsNothing(t *testing.T) {
+	for _, open := range []struct {
+		name string
+		open func(rt *Runtime, c *enterworld.Character)
+	}{
+		{"exchange", func(rt *Runtime, c *enterworld.Character) {
+			rt.Exchanges.Open(testDivision, c.Name, "Partner")
+		}},
+		{"stall", func(rt *Runtime, c *enterworld.Character) {
+			if err := rt.Stalls.Open(testDivision, c.Name, "stall", 0); err != nil {
+				t.Fatalf("open stall: %v", err)
+			}
+		}},
+	} {
+		rt, clock, c, mob := newCombatTestRuntime(t, 100)
+		potion := &enterworld.ItemRef{RefObjID: 9, Codename: "ITEM_ETC_HP_POTION_01", TypeIDs: [4]int64{3, 3, 1, 1}, CanDropOnDeath: true}
+		rt.deps.ItemReferences().(staticItemSource)[potion.Codename] = potion
+		c.MissionInventory = append(c.MissionInventory, enterworld.InventoryRow{Slot: 13, RefObjID: potion.RefObjID,
+			Codename: potion.Codename, TypeFlags: potion.TypeFlags(), VarianceBits: "0", StackCount: 5})
+		c.PK = &domain.PKRecord{Penalty: 30000}
+		open.open(rt, c)
+		result := killPlayer(t, rt, clock, c, mob)
+		stayed := false
+		for _, row := range c.MissionInventory {
+			if row.Slot == 13 {
+				stayed = true
+			}
+		}
+		if !stayed {
+			t.Fatalf("%s open: the bag item dropped", open.name)
+		}
+		if hasSimOpcode(result.Frames, wire.OpSingleObjectSpawn) || hasSimOpcode(privateFramesOf(result), wire.OpItemMoveResponse) {
+			t.Fatalf("%s open: drop frames published: public %+v private %+v", open.name, result.Frames, privateFramesOf(result))
+		}
+		if c.PK.Penalty != 30000-600 {
+			t.Fatalf("%s open: penalty = %d, want 29400 (the death still settles)", open.name, c.PK.Penalty)
+		}
+	}
+}
+
+/*
+================
 TestUndroppableItemsStay
 
 An event item (TID 3/3/9), a cash item and a CanDrop 1 item never drop.
