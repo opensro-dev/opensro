@@ -51,7 +51,10 @@ func cosCancelResult(code uint8) OpResult {
 ================
 attackPetSummonBlocked
 
-Port-only: scrolls and toolbar dismissal share the owner/pet attack delay.
+The owner/pet battle test: the owner's battle state, attack lock or
+combat intent, or any summoned pet in combat. Scrolls and toolbar
+dismissal share it for the port-only attack-pet delay, and the cancel
+handler's native battle gate tests a pickup pet with it (#4490 U11-03).
 ================
 */
 func (rt *Runtime) attackPetSummonBlocked(division string, c *enterworld.Character, now int64) bool {
@@ -86,12 +89,20 @@ func (rt *Runtime) HandleCosCancel(division string, c *enterworld.Character, pay
 	unlock := rt.lockDivision(division)
 	defer unlock()
 	gid := binary.LittleEndian.Uint32(payload)
+	// The native admission opens with the manager state and the owner's
+	// life (#4490 U11-03), ahead of the roster: a teleporting or mounted
+	// owner hears 0x440D, a dead owner 0x4411, whatever GID was named.
+	// The pet's own HP is not tested - a retained corpse stays
+	// cancellable.
+	if c.NativeTeleportMode != 0 || c.CompanionByGID(gid) != nil && c.CompanionByGID(gid).Mounted {
+		return cosCancelResult(0x0D)
+	}
+	if !enterworld.CharacterAlive(c) {
+		return cosCancelResult(0x11)
+	}
 	snapshot, ref := rt.ownedCOSSnapshot(division, c, gid)
 	if snapshot == nil || (ref.TidWord>>11 != 3 && ref.TidWord>>11 != 4) {
 		return cosCancelResult(3)
-	}
-	if snapshot.NativeTeleportMode != 0 || snapshot.CompanionByGID(gid).Mounted {
-		return cosCancelResult(0x0D)
 	}
 	now := rt.Now().UnixMilli()
 	if rt.AttackPetExpansion && ref.TidWord>>11 == attackPetBand && rt.attackPetSummonBlocked(division, snapshot, now) {
@@ -102,6 +113,13 @@ func (rt *Runtime) HandleCosCancel(division string, c *enterworld.Character, pay
 	if !worldgeom.SamePlane(owner.RegionID, pet.RegionID) ||
 		!(simulation.WorldDistance2D(owner, pet) < cosCancelRange) {
 		return cosCancelResult(4)
+	}
+	// The native battle gate closes the admission (#4490 U11-03): a
+	// pickup pet engaged in a fight cannot be put away mid-fight, and
+	// the native answer is the plain code 2. The attack-pet expansion's
+	// delay above keeps its own byte.
+	if ref.TidWord>>11 == cosBandPickupPet && rt.attackPetSummonBlocked(division, snapshot, now) {
+		return cosCancelResult(2)
 	}
 	var cancelled *enterworld.CharacterCOS
 	if !rt.deps.Update(c, "cos-cancel", func() bool {
