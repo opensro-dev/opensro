@@ -84,6 +84,9 @@ type Lane struct {
 	config LaneConfig
 	mu     sync.Mutex
 	active map[string]bool
+	// booted records the first tick, which settles a war a crash cut
+	// short (Tick).
+	booted bool
 	// lastTickMs is the siege tick's clock, which the list's countdowns
 	// are read against (the server's fortress tick refreshes the seconds each tick).
 	lastTickMs int64
@@ -124,7 +127,10 @@ func NewLane(config LaneConfig) (*Lane, error) {
 Tick
 
 Applies every schedule edge between the last tick and now. The first tick
-starts whatever is already running, as a shard booting mid-period does.
+starts whatever is already running, as a shard booting mid-period does;
+booting outside a war with a fortress still temporarily held (a war a
+crash cut short) settles it at once through the war-end path, as the
+reference server's post-boot restore finishes the occupation.
 ================
 */
 func (l *Lane) Tick(nowMs int64) []simulation.DivisionFrames {
@@ -133,7 +139,7 @@ func (l *Lane) Tick(nowMs int64) []simulation.DivisionFrames {
 	}
 	now := time.UnixMilli(nowMs).In(l.config.Location)
 	var frames []simulation.Frame
-	var warChanged, warActive bool
+	var warChanged, warActive, bootSettle bool
 	l.mu.Lock()
 	l.lastTickMs = nowMs
 	for _, edge := range edgeOrder {
@@ -154,13 +160,28 @@ func (l *Lane) Tick(nowMs int64) []simulation.DivisionFrames {
 			frames = append(frames, simulation.Frame{Opcode: OpFortressWarState, Payload: EncodeEdge3887(subtype)})
 		}
 	}
+	if !l.booted {
+		l.booted = true
+		if !l.active["SiegeProgressing"] {
+			for _, record := range l.config.Fortresses.Records(l.config.Division) {
+				if record.TempGuildID != 0 {
+					bootSettle = true
+					break
+				}
+			}
+		}
+	}
 	l.mu.Unlock()
 	var out []simulation.DivisionFrames
 	if len(frames) > 0 {
 		out = append(out, simulation.DivisionFrames{DivisionID: l.config.Division, Frames: frames})
 	}
-	if warChanged && l.config.WarChanged != nil {
-		out = append(out, l.config.WarChanged(nowMs, warActive)...)
+	if l.config.WarChanged != nil {
+		if warChanged {
+			out = append(out, l.config.WarChanged(nowMs, warActive)...)
+		} else if bootSettle {
+			out = append(out, l.config.WarChanged(nowMs, false)...)
+		}
 	}
 	return out
 }
