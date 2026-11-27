@@ -47,6 +47,15 @@ const (
 	GuildErrDonateNotAlive  byte = 0x07
 	GuildErrDonateNotMember byte = 0x0D
 	GuildErrDonateSPDeficit byte = 0x32
+	// While a member holds the guild warehouse open, that member cannot
+	// leave or be expelled and the guild cannot be dissolved; the
+	// reference server refuses all three with this code (the v1.150
+	// client names it UIIT_MSG_GUILD_WAREHOUSE_INTERRUPT).
+	GuildErrStorageHeld byte = 0x48
+	// A permission update that would clear the warehouse holder's
+	// storage right is refused whole; the v1.150 client names it
+	// UIIT_MSG_GUILD_WAREHOUSE_USE_ING.
+	GuildErrStorageRightHeld byte = 0x4C
 )
 
 // The category is supplied by the client opcode handler, not on the wire.

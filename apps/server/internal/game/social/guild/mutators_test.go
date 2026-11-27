@@ -367,7 +367,7 @@ func TestHandleKickEmitsSubOp3OracleAndClearsFK(t *testing.T) {
 	t.Parallel()
 	deps, _, alfa, berk, guildID := newTwoMemberGuildFixture(t)
 
-	outcome := guild.HandleKick(deps, mutatorDivision, alfa, mutatorKickPayload("Berk"))
+	outcome := guild.HandleKick(deps, mutatorDivision, alfa, mutatorKickPayload("Berk"), "")
 	if outcome.Refusal != "" {
 		t.Fatalf("kick refused: %s", outcome.Refusal)
 	}
@@ -422,7 +422,7 @@ func TestHandleKickRefusalsStaySilent(t *testing.T) {
 		{"malformed body", alfa, []byte{0x04, 0x00, 'B'}, "payload"},
 	}
 	for _, tc := range cases {
-		outcome := guild.HandleKick(deps, mutatorDivision, tc.actor, tc.payload)
+		outcome := guild.HandleKick(deps, mutatorDivision, tc.actor, tc.payload, "")
 		if outcome.Refusal == "" || outcome.PushPayload != nil {
 			t.Errorf("%s: outcome = %+v, want a silent refusal", tc.name, outcome)
 			continue
@@ -442,7 +442,7 @@ func TestHandleKickRefusalsStaySilent(t *testing.T) {
 		}
 		return record, members
 	})
-	if outcome := guild.HandleKick(deps, mutatorDivision, berk, mutatorKickPayload("Alfa")); !strings.Contains(outcome.Refusal, "lacks the kick bit") {
+	if outcome := guild.HandleKick(deps, mutatorDivision, berk, mutatorKickPayload("Alfa"), ""); !strings.Contains(outcome.Refusal, "lacks the kick bit") {
 		t.Errorf("maskless kick outcome = %+v, want the permMask refusal", outcome)
 	}
 	if _, members, _ := deps.Guilds.Guild(mutatorDivision, guildID); len(members) != 2 {

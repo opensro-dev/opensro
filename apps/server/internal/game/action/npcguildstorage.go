@@ -110,6 +110,21 @@ func (rt *Runtime) guildStorageHolder(key guildStorageKey) (string, bool) {
 
 /*
 ================
+GuildStorageHolder
+
+The guild package's holder test (guild.GuildManagers): whoever holds
+the guild's warehouse while still in the world. While he holds it he
+cannot leave or be expelled, the guild cannot be dissolved, and his
+storage right cannot be taken - the guild lane asks here because the
+holder is runtime state, not a stored row.
+================
+*/
+func (rt *Runtime) GuildStorageHolder(division string, guildID int64) (string, bool) {
+	return rt.guildStorageHolder(guildStorageKey{division: division, guild: guildID})
+}
+
+/*
+================
 HandleGuildStorageOpen
 
 0x7515: the reference server's admission, then the room's single-user lock.
