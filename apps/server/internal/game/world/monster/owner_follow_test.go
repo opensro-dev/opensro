@@ -132,14 +132,21 @@ TestOwnerFollowCatchUpThreshold
 func TestOwnerFollowCatchUpThreshold(t *testing.T) {
 	for _, c := range []struct {
 		distance float32
+		current  float32
 		running  bool
 		want     float32
-	}{{79.999, true, 100}, {80, true, 125}, {80, false, 20}} {
-		current := float32(100)
-		if !c.running {
-			current = 20
-		}
-		got := NativeOwnerFollowRunFactor(OwnerFollowSpeed{Distance: c.distance, OwnerCurrent: current, OwnerRun: 100, AuthoredRun: 100, OwnerRunning: c.running})
+	}{
+		// Below 80 the pet takes the owner's current speed: a walking
+		// owner's 20 stays 20, a running owner's 100 stays 100.
+		{79.999, 20, false, 20},
+		{79.999, 100, true, 100},
+		// At 80 and beyond it takes the owner's run speed (100),
+		// raised by the catch-up factor only while the owner runs.
+		{80, 20, false, 100},
+		{80, 100, true, 125},
+		{200, 20, false, 100},
+	} {
+		got := NativeOwnerFollowRunFactor(OwnerFollowSpeed{Distance: c.distance, OwnerCurrent: c.current, OwnerRun: 100, AuthoredRun: 100, OwnerRunning: c.running})
 		if got != c.want {
 			t.Fatal(c, got)
 		}
