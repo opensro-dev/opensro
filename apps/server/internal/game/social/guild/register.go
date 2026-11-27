@@ -47,10 +47,33 @@ type Presence interface {
 // B77A; their typed policy lives in NoticeRefusalPayload. Every success send is presence-targeted (never a
 // division broadcast). Sends run AFTER the store doors return - never
 // inside the store lock.
-// GuildManagers is the action owner's guild manager test: the selected
-// NPC with service 0xF in range (action/npcguild.go). Nil checks nothing.
+// GuildManagers is the action owner's guild test surface: the selected
+// NPC with service 0xF in range (action/npcguild.go) and whoever holds
+// the guild's warehouse open. The warehouse's holder is live runtime
+// state the store cannot see; the membership mutators refuse around
+// him, so they ask here. Nil checks nothing.
 type GuildManagers interface {
 	GuildManagerInRange(divisionID string, actor *enterworld.Character, gid uint32) bool
+	GuildStorageHolder(divisionID string, guildID int64) (string, bool)
+}
+
+/*
+================
+storageHolderName
+
+Whoever holds the guild's warehouse, "" when nobody does (or when no
+manager surface is wired).
+================
+*/
+func storageHolderName(managers GuildManagers, divisionID string, guildID int64) string {
+	if managers == nil || guildID == 0 {
+		return ""
+	}
+	name, held := managers.GuildStorageHolder(divisionID, guildID)
+	if !held {
+		return ""
+	}
+	return name
 }
 
 /*
@@ -126,7 +149,7 @@ func Register(hub *transport.Hub, deps Dependencies, presence Presence, managers
 			return
 		}
 		guildID := characterGuild(actor)
-		outcome := HandleKick(deps, divisionID, actor, payload)
+		outcome := HandleKick(deps, divisionID, actor, payload, storageHolderName(managers, divisionID, guildID))
 		if outcome.ErrorPayload != nil {
 			_ = s.Send(OpGuildKickAck, outcome.ErrorPayload)
 		}
@@ -147,7 +170,7 @@ func Register(hub *transport.Hub, deps Dependencies, presence Presence, managers
 			return
 		}
 		guildID := characterGuild(actor)
-		outcome := HandleLeave(deps, divisionID, actor, payload)
+		outcome := HandleLeave(deps, divisionID, actor, payload, storageHolderName(managers, divisionID, guildID))
 		if outcome.Refusal != "" && outcome.AckPayload != nil {
 			_ = s.Send(OpGuildLeaveAck, outcome.AckPayload)
 		}
@@ -169,7 +192,7 @@ func Register(hub *transport.Hub, deps Dependencies, presence Presence, managers
 			return
 		}
 		guildID := characterGuild(actor)
-		outcome := HandleBreak(deps, divisionID, actor, payload)
+		outcome := HandleBreak(deps, divisionID, actor, payload, storageHolderName(managers, divisionID, guildID))
 		if outcome.Refusal != "" && outcome.AckPayload != nil {
 			_ = s.Send(OpGuildBreakAck, outcome.AckPayload)
 		}
@@ -225,7 +248,7 @@ func Register(hub *transport.Hub, deps Dependencies, presence Presence, managers
 			return
 		}
 		guildID := characterGuild(actor)
-		outcome := HandlePermissionUpdate(deps, divisionID, actor, payload)
+		outcome := HandlePermissionUpdate(deps, divisionID, actor, payload, storageHolderName(managers, divisionID, guildID))
 		if outcome.Refusal != "" {
 			if outcome.ErrorPayload != nil {
 				_ = s.Send(OpGuildPermissionResult, outcome.ErrorPayload)

@@ -4,9 +4,10 @@ package guild_test
 // subOp 3 kind 1) over the REAL authority store, on the mutators_test.go
 // fixture (Alfa the grade-0 leader, Berk the grade-3 member with the
 // pinned mutatorBerkJID). Success frames byte-compare against
-// HAND-ROLLED oracles; EVERY refusal is fully silent - leave has no
-// answered refusal arm at all: the classic 0x36/0x1E codes are only
-// PROBABLE for Legend.
+// HAND-ROLLED oracles; the refusals below stay fully silent - the
+// lane's answered arms (the release vote's and the warehouse holder's)
+// are pinned in storage_holder_test.go and the vote tests: the classic
+// 0x36/0x1E codes are only PROBABLE for Legend.
 
 import (
 	"bytes"
@@ -29,7 +30,7 @@ func TestHandleLeaveEmitsAckAndSubOp3OracleAndClearsFK(t *testing.T) {
 	t.Parallel()
 	deps, _, alfa, berk, guildID := newTwoMemberGuildFixture(t)
 
-	outcome := guild.HandleLeave(deps, mutatorDivision, berk, mutatorLeavePayload(0x00C40007))
+	outcome := guild.HandleLeave(deps, mutatorDivision, berk, mutatorLeavePayload(0x00C40007), "")
 	if outcome.Refusal != "" {
 		t.Fatalf("leave refused: %s", outcome.Refusal)
 	}
@@ -66,9 +67,10 @@ func TestHandleLeaveEmitsAckAndSubOp3OracleAndClearsFK(t *testing.T) {
 	}
 }
 
-// TestHandleLeaveRefusalsStaySilent pins that EVERY leave refusal is
-// fully silent - no ack, no push, and (by construction: LeaveOutcome
-// has no ErrorPayload slot) no result=2 answer. The leader arm is the
+// TestHandleLeaveRefusalsStaySilent pins that the leave refusals below
+// stay fully silent - no ack, no push, no result=2 answer; the lane's
+// two answered arms live elsewhere (the vote and holder tests). The
+// leader arm is the
 // policy one: grade 0 cannot leave, and whether a Legend leader-leave
 // should refuse or disband stays an undecided frontier - dissolve
 // belongs to the break door (0x766E / subOp 1), which this lane does
@@ -94,7 +96,7 @@ func TestHandleLeaveRefusalsStaySilent(t *testing.T) {
 		{"nil body", berk, nil, "payload"},
 	}
 	for _, tc := range cases {
-		outcome := guild.HandleLeave(deps, mutatorDivision, tc.actor, tc.payload)
+		outcome := guild.HandleLeave(deps, mutatorDivision, tc.actor, tc.payload, "")
 		if outcome.Refusal == "" || outcome.AckPayload != nil || outcome.PushPayload != nil {
 			t.Errorf("%s: outcome = %+v, want a silent refusal", tc.name, outcome)
 			continue
@@ -105,12 +107,12 @@ func TestHandleLeaveRefusalsStaySilent(t *testing.T) {
 	}
 
 	// The identity arms refuse before the body is even decoded.
-	if outcome := guild.HandleLeave(deps, mutatorDivision, nil, mutatorLeavePayload(0)); outcome.Refusal != "characterNotFound" {
+	if outcome := guild.HandleLeave(deps, mutatorDivision, nil, mutatorLeavePayload(0), ""); outcome.Refusal != "characterNotFound" {
 		t.Errorf("nil-character refusal = %q, want characterNotFound", outcome.Refusal)
 	}
 	pending := mutatorCharacter("Dora", 3)
 	pending.DeletePending = true
-	if outcome := guild.HandleLeave(deps, mutatorDivision, pending, mutatorLeavePayload(0)); outcome.Refusal != "deletePending" {
+	if outcome := guild.HandleLeave(deps, mutatorDivision, pending, mutatorLeavePayload(0), ""); outcome.Refusal != "deletePending" {
 		t.Errorf("delete-pending refusal = %q, want deletePending", outcome.Refusal)
 	}
 
