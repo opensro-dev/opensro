@@ -205,9 +205,9 @@ function installReadHooks() {
 	for ( const name of SPAWNERS ) wrap( childProcess, name, () => noteOpaque( `child process (${name})` ) );
 	const Worker = workerThreads.Worker;
 	workerThreads.Worker = class extends Worker {
-		constructor( ...args ) {
+		constructor( filename, options ) {
 			noteOpaque( "worker thread" );
-			super( ...args );
+			super( filename, options );
 		}
 	};
 	// ESM named imports of the built-ins see the hooks too.
