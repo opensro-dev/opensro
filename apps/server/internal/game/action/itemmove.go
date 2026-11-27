@@ -138,8 +138,9 @@ castLockedMove
 Whether an in-flight cast locks this kind-0 move: the destination is
 the weapon socket, a shield is moving onto the shield socket, or one
 worn piece is being shuffled onto another socket. The shield socket
-is locked only when the incoming piece itself belongs there - moving
-anything else onto it meets the ordinary socket refusal instead.
+is locked only when the incoming piece itself is a shield - arrows
+share the socket but are not shields for this test, and anything else
+dragged onto it meets the ordinary socket refusal instead.
 ================
 */
 func castLockedMove(character *enterworld.Character, request wire.ItemMoveRequest) bool {
@@ -153,8 +154,7 @@ func castLockedMove(character *enterworld.Character, request wire.ItemMoveReques
 	case inventory.SocketShield:
 		for _, row := range character.MissionInventory {
 			if row.Slot == int64(request.SourceSlot) {
-				socket, fits := inventory.EquipSocketForTypeFlags(row.TypeFlags)
-				return fits && socket == inventory.SocketShield
+				return inventory.IsShieldTypeFlags(row.TypeFlags)
 			}
 		}
 	}

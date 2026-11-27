@@ -123,6 +123,28 @@ func TestCastLockShieldSocketReadsTheIncomingPiece(t *testing.T) {
 	if !bytes.Equal(castAnswer, plainAnswer) {
 		t.Fatalf("a sword onto the shield socket answered %v mid-cast, %v out of cast; the cast lock must not read it", castAnswer, plainAnswer)
 	}
+
+	// Arrows share the shield socket (the quiver) but are not shields:
+	// restocking them mid-cast answers as it does out of cast.
+	ammoRow := enterworld.InventoryRow{
+		Slot: 20, RefObjID: 9998, Codename: "TEST_ARROWS",
+		TypeFlags: wire.PackTypeFlags(3, 3, 4, 0), VarianceBits: "0", StackCount: 30,
+	}
+	ammoPlainCharacter := requirementTestCharacter(5, []enterworld.InventoryRow{ammoRow})
+	ammoPlain, _ := newTestRuntime(ammoPlainCharacter, items)
+	ammoCastCharacter := requirementTestCharacter(5, []enterworld.InventoryRow{ammoRow})
+	ammoCasting, _ := newTestRuntime(ammoCastCharacter, items)
+	ammoCasting.pendingSkillFinalizes = append(ammoCasting.pendingSkillFinalizes,
+		newPendingSkillFinalize(testDivision, ammoCastCharacter.Name))
+	ammoIn := wire.ItemMoveRequest{MovementType: wire.MoveTypeInventory, SourceSlot: 20, DestSlot: 7, Quantity: 30}
+	ammoPlainAnswer := moveAnswer(t, ammoPlain, ammoPlainCharacter, ammoIn)
+	ammoCastAnswer := moveAnswer(t, ammoCasting, ammoCastCharacter, ammoIn)
+	if bytes.Equal(ammoCastAnswer, []byte{2, wire.ErrCodeStorageOperationBlocked}) {
+		t.Fatalf("restocking arrows mid-cast answered %v, the shield cast refusal; arrows are not shields", ammoCastAnswer)
+	}
+	if !bytes.Equal(ammoCastAnswer, ammoPlainAnswer) {
+		t.Fatalf("restocking arrows answered %v mid-cast, %v out of cast", ammoCastAnswer, ammoPlainAnswer)
+	}
 }
 
 // newMoveGateRuntime builds the cast tests' mannequin: a bag sword
