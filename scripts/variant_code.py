@@ -91,26 +91,54 @@ def code_path(location: str, repository_root: Path) -> Path:
 # they were kept) keys its ran files whole, as it was keyed then.
 # ================
 def code_key(files: list[Path], repository_root: Path, environ, ran: frozenset[str] = frozenset(),
-		functions: dict[str, tuple] | None = None) -> str:
+		functions: dict[str, tuple] | None = None, scripts: dict | None = None) -> str:
 	digest = hashlib.sha256()
 	flags: dict[str, str] = {}
+	reached = script_reach(scripts)
 	for path in sorted(files, key=lambda item: code_location(item, repository_root)):
 		location = code_location(path, repository_root)
-		digest.update(location.encode("utf-8") + b"\0")
-		try:
-			content = path.read_bytes()
-		except OSError:
-			digest.update(b"gone\n")
+		script = reached.get(str(path.resolve()), NOT_REACHED) if path.suffix in SCRIPT_SUFFIXES else NOT_REACHED
+		if script is None:
+			# A Node module the step reaches none of (scriptReach.mjs):
+			# not part of what it ran.
 			continue
-		keep = None if functions is None else functions.get(location)
-		keyed = code_content(path, content, location in ran, keep)
-		digest.update(hashlib.sha256(keyed).hexdigest().encode("ascii") + b"\n")
-		for name in FLAG_LITERAL.findall(content.decode("utf-8", "ignore")):
+		digest.update(location.encode("utf-8") + b"\0")
+		if script is not NOT_REACHED:
+			digest.update(script["digest"].encode("ascii") + b"\n")
+			names = script["flags"]
+		else:
+			try:
+				content = path.read_bytes()
+			except OSError:
+				digest.update(b"gone\n")
+				continue
+			keep = None if functions is None else functions.get(location)
+			keyed = code_content(path, content, location in ran, keep)
+			digest.update(hashlib.sha256(keyed).hexdigest().encode("ascii") + b"\n")
+			names = FLAG_LITERAL.findall(content.decode("utf-8", "ignore"))
+		for name in names:
 			value = environ.get(name)
 			flags[name] = hashlib.sha256(value.encode("utf-8")).hexdigest() if value is not None else ""
 	for name in sorted(flags):
 		digest.update(f"flag\0{name}\0{flags[name]}\n".encode("utf-8"))
 	return digest.hexdigest()
+
+
+# ================
+# script_reach
+#
+# A closure's script keys (scriptReach.mjs via module_closures) by
+# resolved path. A Node module keyed by what the step can reach: #4596's
+# new constant and helpers in world/constants.mjs and world/io.mjs, which
+# no variant step calls, re-ran 17 of them when those files keyed whole.
+# Without them (a caller that has none), scripts key whole as before.
+# ================
+SCRIPT_SUFFIXES = frozenset({".mjs", ".js"})
+NOT_REACHED = object()
+
+
+def script_reach(scripts: dict | None) -> dict:
+	return {str(Path(file).resolve()): value for file, value in (scripts or {}).items()}
 
 
 # ================

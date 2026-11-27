@@ -13,7 +13,7 @@ rather than a silent gap.
 ===========================================================================
 */
 import assert from "node:assert/strict";
-import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { appendFile, mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
@@ -93,13 +93,25 @@ test("the closure covers imports, named Python files and the modules they import
 	);
 });
 
-test("a byte change anywhere in the closure changes the hash", async () => {
+test("a byte change in a Python file the entry can run changes the hash", async () => {
 	const root = path.join( temporaryRoot, "hash" );
 	await writeRepository( root );
 	const entryUrl = pathToFileURL( path.join( root, "scripts/build/entry.mjs" ) ).href;
 	const before = await codeHash( entryUrl, root );
 	assert.equal( await codeHash( entryUrl, root ), before );
 	await writeFile( path.join( root, "scripts/paths.py" ), "ROOT = 2\n" );
+	assert.notEqual( await codeHash( entryUrl, root ), before );
+});
+
+test("the hash follows reached Node code: an unused export stands, a load-time statement moves it", async () => {
+	const root = path.join( temporaryRoot, "reach" );
+	await writeRepository( root );
+	const entryUrl = pathToFileURL( path.join( root, "scripts/build/entry.mjs" ) ).href;
+	const helper = path.join( root, "scripts/build/lib/helper.mjs" );
+	const before = await codeHash( entryUrl, root );
+	await appendFile( helper, "\nexport const UNUSED = 1;\n" );
+	assert.equal( await codeHash( entryUrl, root ), before );
+	await appendFile( helper, "\nglobalThis.helperLoaded = true;\n" );
 	assert.notEqual( await codeHash( entryUrl, root ), before );
 });
 

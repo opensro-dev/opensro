@@ -150,12 +150,17 @@ def code_closure(entry: Path = BUILDER, repository_root: Path | None = None) -> 
 # codeStamp's moduleClosures: for each (ran, imported) record of a step,
 # what it ran and imported, their module-level imports and the pins beside
 # them, and the scripts the files that ran name - every record in one Node
-# start.
+# start. Each closure comes with what its Node scripts can reach
+# (scriptReach.mjs): {absolute path: {digest, flags} or None}, None for a
+# script the step reaches none of.
 # ================
-def module_closures(records: list[tuple], repository_root: Path | None = None) -> list[list[Path]]:
+def module_closures(records: list[tuple], repository_root: Path | None = None) -> list[tuple[list[Path], dict]]:
 	if not records:
 		return []
-	return [[Path(file) for file in closure] for closure in code_stamp("moduleClosures", records, repository_root)]
+	return [
+		([Path(file) for file in closure["files"]], closure["scripts"])
+		for closure in code_stamp("moduleClosureKeys", records, repository_root)
+	]
 
 
 # ================
