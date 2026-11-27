@@ -62,6 +62,7 @@
 	"SRO_LEVEL_CAP": "90",
 	"SRO_MAINTENANCE_MESSAGE": "on",
 	"SRO_MALL_CATEGORIES": "on",
+	"SRO_MALL_EXTRA_GOODS": "on,statrecall,laterpets",
 	"SRO_MOST_WANTED_COS_KILLS": "on",
 	"SRO_MOST_WANTED_STREAK_NOTICE": "on",
 	"SRO_MUHAN": "on",
