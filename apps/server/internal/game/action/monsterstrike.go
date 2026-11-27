@@ -551,6 +551,9 @@ func (rt *Runtime) publishMonsterStrikes(p monsterPublication, primary monsterSt
 		}
 		result.Private = append(result.Private, private)
 	}
+	// The swing has landed: a caster that queued a deferred vital
+	// instruction at engage takes it now (monsterdeferred.go).
+	result.Frames = append(result.Frames, simFrames(rt.applyMonsterDeferredSelfHit(in.division, in.instance, skill, in.now))...)
 	return result
 }
 
