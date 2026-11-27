@@ -33,6 +33,8 @@ func MonsterInstanceStats(instance monster.Instance) (Stats, error) {
 	if err != nil {
 		return s, err
 	}
+	// The instance's effective ceiling is what the ratio arm measures on.
+	s.MaxHP = int64(instance.EffectiveMaxHP())
 	// +0xD34 is the published abnormal mask. The hit-outcome routine's atca
 	// step tests it on the target (esi), which this projection is when the
 	// instance is the defender.

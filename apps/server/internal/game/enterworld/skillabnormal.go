@@ -104,6 +104,15 @@ func encodedAbnormalParams(fields []string) abnormal.SkillParams {
 					MaxTargets: args[3], Reduction: args[4], Select: args[5],
 				}
 			}
+			// Kind 3 (+0x294) is the standing effect's own area: the
+			// fortress structure skills author it for the reach their
+			// pulse or aura works in.
+			if len(args) >= 6 && args[0] == 3 {
+				out.PersistentArea = abnormal.EffectArea{
+					Present: true, Kind: args[0], Shape: args[1], Radius: args[2],
+					MaxTargets: args[3], Reduction: args[4], Select: args[5],
+				}
+			}
 		}
 		i += 1 + arity
 	}

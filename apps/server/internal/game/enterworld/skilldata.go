@@ -233,6 +233,9 @@ type SkillRow struct {
 	// FixedDamage marks a pdmg hit (skillfixeddamage.go): its single impact
 	// deals the authored amount, and dmgt converts the damage into MP.
 	FixedDamage SkillFixedDamage
+	// RatioDamage marks a pdm2 hit (skillratiodamage.go): its impact
+	// adds Percent of the target's maximum hit points.
+	RatioDamage SkillRatioDamage
 	// LifeSteal marks an lfst hit (skilllifesteal.go): its damage is the
 	// life taken, which the caster recovers.
 	LifeSteal SkillLifeSteal
