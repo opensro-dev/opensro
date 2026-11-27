@@ -208,7 +208,7 @@ func (rt *Runtime) contextSkillAdmission(division string, c *enterworld.Characte
 	}
 
 	// Natively a planted trap at its link group's live cap refuses the
-	// cast; the oldest trap is not ended to make room (0x59DC80).
+	// cast; the oldest trap is not ended to make room.
 	if skill.CombatTrap.Pinned {
 		if code := rt.trapCountRefusal(division, c, skill); code != 0 {
 			return code
