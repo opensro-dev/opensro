@@ -7,6 +7,7 @@ import (
 
 	log "github.com/sirupsen/logrus"
 	"opensro.online/server/internal/game/enterworld"
+	"opensro.online/server/internal/game/restriction"
 	"opensro.online/server/internal/transport"
 )
 
@@ -283,6 +284,11 @@ func RegisterLetter(hub *transport.Hub, deps Dependencies, presence Presence) {
 		sender, divisionID, bound := enterworld.SessionCharacter(deps, s)
 		if !bound {
 			log.Debugf("community: 0x%04X from unbound session %d discarded", opcode, s.ID)
+			return
+		}
+		// A chat-blocked sender's letter dies here after the restriction
+		// notice: the native letter gate drops it before the mailbox.
+		if restriction.Report(s, transport.CommandRestrictionChat) {
 			return
 		}
 		outcome := HandleLetterSend(deps, divisionID, sender, payload, time.Now())
