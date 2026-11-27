@@ -75,7 +75,13 @@ type MallPackage struct {
 	// Badge is the later client's N/H/R mark on the goods (issue
 	// #3257): "new", "hot" or "recommended", stamped by the categories
 	// layout (mallcategories.go); "" - and no JSON field - otherwise.
-	Badge  string     `json:"badge,omitempty"`
+	Badge string `json:"badge,omitempty"`
+	// Gender is the package's wearer sex for the renewal mall's filter
+	// (issue #4480, port-only): "male" or "female" when a content item's
+	// own ReqGender says so, read in Hydrate from the item reference,
+	// never from a package or item name; "" - and no JSON field - for
+	// ungendered packages. A client predating the field ignores it.
+	Gender string     `json:"gender,omitempty"`
 	Code   string     `json:"-"`
 	Scraps [][]string `json:"-"`
 }
