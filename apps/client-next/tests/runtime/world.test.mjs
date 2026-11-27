@@ -2433,6 +2433,128 @@ test("published static item and monster rows join the login's own rows before th
 	presentation.dispose();
 });
 
+test("a digest-held re-entry keeps the published skills and item kinds", async t => {
+	const sockets = socketHarness( t ), presentation = createPresentation();
+	const data = JSON.stringify( {
+			referencesVersion: 3,
+			skillLifecycleVersion: 1,
+			refSkillSnapshot: [ {
+				id: 7,
+				group: 1,
+				level: 1,
+				token: true,
+				status: true,
+				effectRider: true,
+				effectDurationMs: 5000
+			} ],
+			refItemSnapshot: [ { refObjId: 1, typeFlags: 0x6c, icon: "item/etc/hp_potion_01.ddj" } ],
+			refObjSnapshot: []
+		} ),
+		bytes = new TextEncoder().encode( data ),
+		digest = Buffer.from( await crypto.subtle.digest( "SHA-256", bytes ) ).toString( "hex" );
+	let fetches = 0;
+	t.mock.method( globalThis, "fetch", async () => {
+		fetches++;
+		return new Response( data );
+	} );
+	const http = createSessionHttp();
+	let referenceCompletion = Promise.resolve();
+	const world = createWorldSession( async () => "ticket", ( ...args ) => {
+		const request = http.references( ...args );
+		referenceCompletion = request.then( () => {}, () => {} );
+		return request;
+	}, ignoreIncident );
+	// A buffed character holding a published item: both need the
+	// published tables on every entry answer.
+	const entry = {
+		...bootstrap,
+		sessionConstants: "c0ffee",
+		inventorySlotCount: 45,
+		equipmentSlotCount: 13,
+		equipItems: [ { slot: 13, refObjId: 1, body: [ 1, 0, 0, 0, 3, 0 ] } ],
+		localPlayerEntry: {
+			...bootstrap.localPlayerEntry,
+			spawnSkills: [ { id: 7, token: 99, remaining: 4000, status: 1 } ]
+		}
+	};
+	/*
+================
+answer
+================
+	*/
+	function answer( value ) {
+		const blob = Buffer.from(
+				JSON.stringify( {
+					v: 2,
+					bootstrap: value,
+					references: { path: `/transport/references/${digest}.json`, sha256: digest, bytes: bytes.length }
+				} )
+			),
+			p = Buffer.alloc( 9 + blob.length );
+		p[0] = 1;
+		p.writeUInt32LE( blob.length, 5 );
+		blob.copy( p, 9 );
+		return p;
+	}
+	/*
+================
+admit
+================
+	*/
+	async function admit( socket, value, from ) {
+		socket.receive( 7, answer( value ) );
+		for ( const row of rows ) socket.receive( row.opcode, row.payload );
+		await referenceCompletion;
+		const deadline = Date.now() + WORLD_ADMISSION_BUDGET_MS;
+		for (
+			let tick = from;
+			world.status().phase !== "world" && !world.status().error && Date.now() < deadline;
+			tick = Math.min( tick + 1, from + 50 )
+		) {
+			await settle();
+			world.step( tick );
+			let batch;
+			while ( (batch = world.take()) ) {
+				presentation.apply( batch );
+				world.ack( batch.sequence );
+			}
+		}
+	}
+	world.enter( "fixture", "shard", "http://localhost:9000" );
+	await settle();
+	world.step( 1 );
+	const first = sockets.at( -1 );
+	first.onopen();
+	first.receive( 2, welcome() );
+	world.step( 2 );
+	await settle();
+	world.step( 3 );
+	await admit( first, entry, 4 );
+	assert.equal( world.status().phase, "world" );
+	assert.equal( fetches, 1 );
+	world.ready();
+	world.disconnect();
+	world.reconnect();
+	await settle();
+	world.step( 100 );
+	const second = sockets.at( -1 );
+	assert.notEqual( second, first );
+	second.onopen();
+	second.receive( 2, welcome( true ) );
+	world.step( 101 );
+	await settle();
+	world.step( 102 );
+	// The re-entry stated the digest, so the server nulls the constant
+	// snapshot; the answer still names the buff and the item.
+	await admit( second, { ...entry, refObjSnapshot: null }, 103 );
+	assert.equal( world.status().error ?? null, null );
+	assert.equal( world.status().phase, "world" );
+	assert.equal( fetches, 1, "a held answer loads no references" );
+	assert.deepEqual( presentation.gameplay()?.inventory.map( item => item.refObjId ), [ 1 ] );
+	world.dispose();
+	presentation.dispose();
+});
+
 test("an edge-routed transport base carries its route to the socket and the reference fetch", async t => {
 	const sockets = socketHarness( t ), requested = [];
 	const data = JSON.stringify( {
