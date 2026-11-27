@@ -321,7 +321,8 @@ boundPetChestFixture
 
 A store-backed pair of guild members at a guild manager, with two
 pets already in the chest - legacy stock from before the deposit
-gate: one carries a bound stone, one an unbound stone.
+gate: one carries a bound stone, one an unbound stone, one a
+record-bound mall row.
 ================
 */
 func boundPetChestFixture(t *testing.T) (*Runtime, *enterworld.Character, *enterworld.Character) {
@@ -394,14 +395,14 @@ func boundPetChestFixture(t *testing.T) (*Runtime, *enterworld.Character, *enter
 	}
 
 	// The legacy stock, written as a pre-gate deposit left it.
-	chestPet := func(slot int64, gid uint32, bound bool) domain.InventoryRow {
+	chestPet := func(slot int64, gid uint32, codename string, bound bool) domain.InventoryRow {
 		return domain.InventoryRow{
 			Slot: slot, RefObjID: 901, Codename: "SUMMON_PICKUP",
 			TypeFlags: refs.staticItemSource["SUMMON_PICKUP"].TypeFlags(), StackCount: 1,
 			Summon: &domain.CharacterCOS{
 				GID: gid, RefObjID: 951, Codename: "PICKUP",
 				Container: &domain.COSContainer{Capacity: 28, Rows: []domain.InventoryRow{
-					{Slot: 0, RefObjID: 11460, Codename: tradePetStoneCodename,
+					{Slot: 0, RefObjID: refs.staticItemSource[codename].RefObjID, Codename: codename,
 						TypeFlags: wire.PackTypeFlags(3, 3, 1, 1), StackCount: 1, ForgeBound: bound},
 				}},
 			},
@@ -409,7 +410,8 @@ func boundPetChestFixture(t *testing.T) (*Runtime, *enterworld.Character, *enter
 	}
 	if _, refusal, err := guilds.TransactGuildStorageAs(testDivision, a.ID,
 		func(_ *domain.Character, chest *domain.AccountStorage) error {
-			chest.Rows = append(chest.Rows, chestPet(0, 991, true), chestPet(1, 992, false))
+			chest.Rows = append(chest.Rows, chestPet(0, 991, tradePetStoneCodename, true),
+				chestPet(1, 992, tradePetStoneCodename, false), chestPet(2, 993, tradePetMallCodename, false))
 			return nil
 		}); err != nil || refusal.Refused() {
 		t.Fatalf("seed the chest: refusal %v, err %v", refusal, err)
@@ -459,6 +461,15 @@ func TestBoundLoadedPetStaysInTheGuildChest(t *testing.T) {
 	}
 	if bagRowByCodename(b, "SUMMON_PICKUP") != nil {
 		t.Fatal("the refused withdraw took the pet out of the chest")
+	}
+	// The record-bound mall row stays in the chest the same way.
+	res = rt.applyGuildStorageMove(testDivision, b, wire.ItemMoveRequest{
+		MovementType: wire.MoveTypeGuildStorageWithdraw, SourceSlot: 2, DestSlot: 20, NpcGID: guildManagerGid})
+	if len(res.Frames) != 1 || !bytes.Equal(res.Frames[0].Payload, []byte{2, errCodeInvalidStorageTarget}) {
+		t.Fatalf("guild withdraw of a pet carrying a record-bound row = %+v, want the storage-target refusal", res.Frames)
+	}
+	if bagRowByCodename(b, "SUMMON_PICKUP") != nil {
+		t.Fatal("the refused withdraw took the record-bound pet out of the chest")
 	}
 
 	// Control: the unbound-loaded pet beside it withdraws as always.
