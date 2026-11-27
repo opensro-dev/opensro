@@ -105,3 +105,49 @@ func TestRankedParallelKillCountersDoNotCrossCredit(t *testing.T) {
 		t.Fatal("rank outside nibble accepted")
 	}
 }
+
+/*
+================
+TestKillTakersAndSharedQuestCredit
+
+The party share's census and credit: a character's quests that take a
+kill (an unfilled kill mission, or a gather mission dropping from it),
+and a credit restricted to the named quests advancing only those.
+================
+*/
+func TestKillTakersAndSharedQuestCredit(t *testing.T) {
+	rt := testRuntime(t)
+	killDef := &Definition{QuestSpec: QuestSpec{Codename: "QA", Objective: ObjectiveKill, KindByte: 1,
+		KillMonsterCodenames: []string{"MOB_TEST"}, KillCount: 3}, RefID: 901, CountryByte: 3}
+	gatherDef := &Definition{QuestSpec: QuestSpec{Codename: "QB", Objective: ObjectiveCollect, KindByte: 2,
+		CollectItemCodename: "ITEM_TEST", CollectCount: 5, DivideType: 5,
+		MonsterDrop: &MonsterDropRule{ItemCodename: "ITEM_TEST", MonsterCodenames: []string{"MOB_TEST"}, ChancePercent: 100}}, RefID: 902, CountryByte: 3}
+	rt.Defs = &Definitions{byRefID: map[uint32]*Definition{901: killDef, 902: gatherDef},
+		byCodename: map[string]*Definition{"QA": killDef, "QB": gatherDef}, ordered: []*Definition{killDef, gatherDef}}
+	c := questCharacter()
+	c.ActiveQuests = []enterworld.ActiveQuestRecord{BuildActiveQuestRecord(killDef, 0), BuildActiveQuestRecord(gatherDef, 0)}
+	takers := rt.KillTakers(c, "MOB_TEST", 0)
+	if len(takers) != 2 || takers[0] != (KillTaker{RefID: 901}) || takers[1] != (KillTaker{RefID: 902, DivideType: 5, Drop: true}) {
+		t.Fatalf("takers %+v", takers)
+	}
+	if got := rt.KillTakers(c, "MOB_OTHER", 0); len(got) != 0 {
+		t.Fatalf("another monster's takers %+v", got)
+	}
+	progress := func() uint32 { return recordProgress(missionRecord(c.ActiveQuests[0], missionDefinition(killDef, 0))) }
+	rt.CreditKillQuests(c, "MOB_TEST", 0, map[uint32]bool{902: true})
+	if progress() != 0 {
+		t.Fatalf("a gather-only credit advanced the kill quest: %d", progress())
+	}
+	rt.CreditKillQuests(c, "MOB_TEST", 0, map[uint32]bool{901: true})
+	if progress() != 1 {
+		t.Fatalf("the shared credit counted %d", progress())
+	}
+	rt.CreditKillQuests(c, "MOB_TEST", 0, nil)
+	rt.CreditKillQuests(c, "MOB_TEST", 0, map[uint32]bool{901: true})
+	if progress() != 3 {
+		t.Fatalf("the counter overran its goal: %d", progress())
+	}
+	if got := rt.KillTakers(c, "MOB_TEST", 0); len(got) != 1 || got[0].RefID != 902 {
+		t.Fatalf("a full quest still takes kills: %+v", got)
+	}
+}

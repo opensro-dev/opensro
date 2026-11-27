@@ -203,7 +203,13 @@ type QuestSpec struct {
 	// KillExchange swaps an item once every kill mission stands complete
 	// (QNO_RM_MEETROC_6's native kill handler). See chain_reset.go.
 	KillExchange *KillExchange
-	Repeatable   bool
+	// DivideType is the kill-share mode (LuaSetDivideType, the quest
+	// class's own byte): in an auto-share party the kill counts for one
+	// holder at a time in turn (0, also unset), every near holder
+	// (1/4/5), or the killer only (2/3). Gather missions ride the same
+	// share. Zero is the rotation, the common case.
+	DivideType uint8
+	Repeatable bool
 	// KindByte is the wire u10 the CIFQuestReward content button
 	// switches on (CIFQuestReward_OnContentButton): 1/7/8 open the
 	// give-up window, 2 opens the REWARD window (its action button

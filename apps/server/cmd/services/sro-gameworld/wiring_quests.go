@@ -62,6 +62,16 @@ func (game *gameplayPlane) wireQuestDoors(quests *quest.Runtime) {
 	game.items.CaptureQuestTrap = quests.CaptureQuestTrap
 	game.items.UpdateQuestInventory = quests.InventoryUpdater()
 	game.items.UpdateQuestKill = quests.KillUpdater()
+	game.items.UpdateQuestKillFor = quests.CreditKillQuests
+	game.items.NoteQuestKillChains = quests.NoteKillChains
+	game.items.QuestKillTakers = func(character *enterworld.Character, codename string, rarity uint8) []action.QuestKillTaker {
+		var out []action.QuestKillTaker
+		for _, taker := range quests.KillTakers(character, codename, rarity) {
+			out = append(out, action.QuestKillTaker{RefID: taker.RefID, DivideType: taker.DivideType, Drop: taker.Drop})
+		}
+		return out
+	}
+	game.items.QuestMonsterDropsFor = quests.MonsterDropsFor
 	game.items.UpdateQuestTeleport = quests.TeleportUpdater()
 	game.items.NoteQuestKillSite = quests.NoteKillSite
 	quests.SpawnExitGate = func(world instance.ID, fell simulation.Spawn) bool {

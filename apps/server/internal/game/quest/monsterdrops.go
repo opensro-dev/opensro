@@ -108,12 +108,28 @@ the killed monster's rarity byte.
 ================
 */
 func (rt *Runtime) MonsterDrops(c *enterworld.Character, monster string, rarity uint8, roll func() (uint32, error)) []inventory.ItemAmount {
+	return rt.MonsterDropsFor(c, monster, rarity, roll, nil)
+}
+
+/*
+================
+MonsterDropsFor
+
+MonsterDrops restricted to the named quests (only nil takes all): the
+party kill fan-out rolls a shared kill's gather drops for the member
+the share credited, no one else.
+================
+*/
+func (rt *Runtime) MonsterDropsFor(c *enterworld.Character, monster string, rarity uint8, roll func() (uint32, error), only map[uint32]bool) []inventory.ItemAmount {
 	fast := rt.Hwan.OstraconDropCount()
 	if c == nil || c.DeletePending || roll == nil {
 		return nil
 	}
 	var out []inventory.ItemAmount
 	for _, record := range c.ActiveQuests {
+		if only != nil && !only[record.RefID] {
+			continue
+		}
 		def, ok := rt.Defs.ByRefID(record.RefID)
 		if ok {
 			def, ok = definitionAtStage(def, record.Stage)
