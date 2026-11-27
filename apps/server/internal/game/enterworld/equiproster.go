@@ -257,6 +257,12 @@ type CharacterRef struct {
 	InventoryCapacity uint8
 	// Client column 72, server RefObjCommon+8C bit 0x400: vehicle use permission.
 	CanRide bool
+	// Characterdata column 17 (CanSell) and column 31 (SellPrice): the
+	// stable keeper buys a standing transport back for its SellPrice.
+	// Only the trade transports carry CanSell 1 (donkey 240 up to the
+	// behemoth's 1620); every ride and pet authors 0.
+	CanSell   bool
+	SellPrice int64
 }
 
 /*
