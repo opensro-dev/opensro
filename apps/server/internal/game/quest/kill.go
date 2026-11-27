@@ -2,7 +2,6 @@ package quest
 
 import (
 	"fmt"
-	"slices"
 
 	"opensro.online/server/internal/game/enterworld"
 	"opensro.online/server/internal/game/item/wire"
@@ -53,18 +52,19 @@ func (rt *Runtime) NoteKillChains(character *enterworld.Character, codename stri
 CreditKillQuests
 
 The mission loop of one kill event for a single character: every active
-kill quest refreshes (or, when only names some, just those RefIDs), and
-each named quest's exchange runs. A shared kill (the native DivideType
-fan-out) credits members by RefID through this entry; the solo killer
-passes nil and takes all of his.
+kill quest refreshes (or, when only names some, just those RefIDs). A
+shared kill (the native DivideType fan-out) credits members by RefID
+through this entry; the solo killer passes nil and takes all of his.
+
+The exchange is not part of the restriction: it runs for every quest
+the event reaches, matching or not, exactly as the solo loop runs it -
+the server's handler tests the mask after its mission loop. A shared
+kill narrows whose missions count, never whose exchanges run.
 ================
 */
 func (rt *Runtime) CreditKillQuests(character *enterworld.Character, codename string, rarity uint8, only map[uint32]bool) []wire.Frame {
 	var frames []wire.Frame
 	for i, record := range character.ActiveQuests {
-		if only != nil && !only[record.RefID] {
-			continue
-		}
 		def, ok := rt.Defs.ByRefID(record.RefID)
 		if ok {
 			def, ok = definitionAtStage(def, record.Stage)
@@ -72,13 +72,13 @@ func (rt *Runtime) CreditKillQuests(character *enterworld.Character, codename st
 		if !ok || def.TimeLimitMinutes > 0 && record.RemainingMinutes == 0 || (def.Objective != ObjectiveKill && def.Objective != ObjectiveParallel) {
 			continue
 		}
-		updated, changed := refreshMissions(character, def, record, codename, rarity)
-		if changed {
-			character.ActiveQuests[i] = updated
-			frames = append(frames, missionProgressFrames(def, record, updated)...)
+		if only == nil || only[record.RefID] {
+			updated, changed := refreshMissions(character, def, record, codename, rarity)
+			if changed {
+				character.ActiveQuests[i] = updated
+				frames = append(frames, missionProgressFrames(def, record, updated)...)
+			}
 		}
-		// The exchange runs on every kill event, matching or not: the
-		// server's handler tests the mask after its mission loop.
 		frames = append(frames, rt.applyKillExchange(character, def, i)...)
 	}
 	return frames
@@ -144,19 +144,7 @@ func killQuestTakes(def *Definition, record enterworld.ActiveQuestRecord, codena
 	if def.Objective != ObjectiveCollect || def.MonsterDrop == nil {
 		return false
 	}
-	rule := def.MonsterDrop
-	if !rule.AnyMonster && !slices.Contains(rule.MonsterCodenames, codename) {
-		return false
-	}
-	if len(rule.MonsterGrades) > 0 {
-		for i, code := range rule.MonsterCodenames {
-			if code == codename {
-				return rule.MonsterGrades[i] == rarity&15
-			}
-		}
-		return false
-	}
-	return true
+	return monsterDropMatches(def.MonsterDrop, codename, rarity)
 }
 
 // The action owner already checks the selected NPC/session and liveness.

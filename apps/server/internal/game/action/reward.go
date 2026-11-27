@@ -391,6 +391,28 @@ type questKillTurnKey struct {
 
 /*
 ================
+questKillTurnEntry
+
+One rotation's state: the roster index to try first next time, and
+the last kill (ms) that consulted it. The table is bounded
+(pruneQuestKillTurns): the native keeps its lists on the party and
+frees them with it; the port's parties are rebuilt by the registry,
+so an entry no kill has consulted for a day belongs to a party that
+is gone, and past the cap those are the entries dropped.
+================
+*/
+type questKillTurnEntry struct {
+	next   uint32
+	seenMs int64
+}
+
+const (
+	questKillTurnMaxEntries = 4096
+	questKillTurnIdleMs     = 24 * 60 * 60 * 1000
+)
+
+/*
+================
 questKillHolder
 ================
 */
@@ -415,14 +437,17 @@ rebuilt from the party's live roster each kill; the native keeps them
 per quest on the party, which differs only when the roster changes
 between two kills of one rotation.
 
-The turn indices live on the runtime, keyed by the party's order: a
-party the composition rebuilds (relog) restarts its rotations.
+The rotations live on the runtime, keyed by the party's order: a
+party the composition rebuilds (relog) restarts its rotations, and
+the table is bounded (pruneQuestKillTurns) where the native frees
+its lists with the party itself.
 ================
 */
 func (rt *Runtime) shareQuestKill(divisionID string, killer *enterworld.Character, target monster.Instance, pose monster.Pose, now int64) ([]wire.Frame, []grounditem.Item, bool) {
 	if rt.QuestKillTakers == nil || rt.UpdateQuestKillFor == nil {
 		return nil, nil, false
 	}
+	rt.pruneQuestKillTurns(now)
 	party := rt.rewardPartyOf(divisionID, enterworld.ObjectIDForCharacter(killer))
 	if party == nil || party.Options&questKillShareOptions != questKillShareOptions {
 		return nil, nil, false
@@ -485,7 +510,7 @@ func (rt *Runtime) shareQuestKill(divisionID string, killer *enterworld.Characte
 				}
 			}
 		default:
-			for _, picked := range rt.questKillTurn(divisionID, party.Order, refID, hs) {
+			for _, picked := range rt.questKillTurn(divisionID, party.Order, refID, hs, now) {
 				credit(picked)
 			}
 		}
@@ -521,16 +546,19 @@ for the quest, the first near holder (the roster wraps); the index
 moves past him. Nobody near credits nobody.
 ================
 */
-func (rt *Runtime) questKillTurn(divisionID string, partyOrder uint64, refID uint32, hs []questKillHolder) []questKillHolder {
+func (rt *Runtime) questKillTurn(divisionID string, partyOrder uint64, refID uint32, hs []questKillHolder, now int64) []questKillHolder {
 	if len(hs) == 0 {
 		return nil
 	}
 	key := questKillTurnKey{division: divisionID, party: partyOrder, refID: refID}
 	rt.questKillTurnsMu.Lock()
 	if rt.questKillTurns == nil {
-		rt.questKillTurns = map[questKillTurnKey]uint32{}
+		rt.questKillTurns = map[questKillTurnKey]questKillTurnEntry{}
 	}
-	start := int(rt.questKillTurns[key]) % len(hs)
+	entry := rt.questKillTurns[key]
+	entry.seenMs = now
+	rt.questKillTurns[key] = entry
+	start := int(entry.next) % len(hs)
 	rt.questKillTurnsMu.Unlock()
 	for step := 0; step < len(hs); step++ {
 		h := hs[(start+step)%len(hs)]
@@ -538,11 +566,36 @@ func (rt *Runtime) questKillTurn(divisionID string, partyOrder uint64, refID uin
 			continue
 		}
 		rt.questKillTurnsMu.Lock()
-		rt.questKillTurns[key] = uint32(start + step + 1)
+		entry = rt.questKillTurns[key]
+		entry.next = uint32(start + step + 1)
+		entry.seenMs = now
+		rt.questKillTurns[key] = entry
 		rt.questKillTurnsMu.Unlock()
 		return []questKillHolder{h}
 	}
 	return nil
+}
+
+/*
+================
+pruneQuestKillTurns
+
+Bound the rotation table: past the entry cap, rotations no kill has
+consulted for a day are dropped. Runs on the sharing lane only, and
+only pays the scan when the table is actually oversized.
+================
+*/
+func (rt *Runtime) pruneQuestKillTurns(now int64) {
+	rt.questKillTurnsMu.Lock()
+	defer rt.questKillTurnsMu.Unlock()
+	if len(rt.questKillTurns) <= questKillTurnMaxEntries {
+		return
+	}
+	for key, entry := range rt.questKillTurns {
+		if now-entry.seenMs > questKillTurnIdleMs {
+			delete(rt.questKillTurns, key)
+		}
+	}
 }
 
 /*
@@ -557,10 +610,15 @@ him. Returns his frames and the spawned drops.
 */
 func (rt *Runtime) applySharedKillCredit(divisionID string, killer, member *enterworld.Character, target monster.Instance, pose monster.Pose, now int64, progress, dropQuests map[uint32]bool) ([]wire.Frame, []grounditem.Item) {
 	creditFrames := func() []wire.Frame {
-		if len(progress) == 0 {
-			return nil
+		// The event reached this member (a counted quest or a gather
+		// roll), so his kill exchanges run even when no mission of his
+		// counted: an empty credit set, never nil, keeps the missions
+		// out and the exchanges in.
+		only := progress
+		if only == nil {
+			only = map[uint32]bool{}
 		}
-		return rt.UpdateQuestKillFor(member, target.Ref.Codename, target.Rarity(), progress)
+		return rt.UpdateQuestKillFor(member, target.Ref.Codename, target.Rarity(), only)
 	}
 	var frames []wire.Frame
 	if enterworld.ObjectIDForCharacter(member) == enterworld.ObjectIDForCharacter(killer) {

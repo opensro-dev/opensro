@@ -116,14 +116,19 @@ and a credit restricted to the named quests advancing only those.
 ================
 */
 func TestKillTakersAndSharedQuestCredit(t *testing.T) {
-	rt := testRuntime(t)
 	killDef := &Definition{QuestSpec: QuestSpec{Codename: "QA", Objective: ObjectiveKill, KindByte: 1,
 		KillMonsterCodenames: []string{"MOB_TEST"}, KillCount: 3}, RefID: 901, CountryByte: 3}
 	gatherDef := &Definition{QuestSpec: QuestSpec{Codename: "QB", Objective: ObjectiveCollect, KindByte: 2,
 		CollectItemCodename: "ITEM_TEST", CollectCount: 5, DivideType: 5,
 		MonsterDrop: &MonsterDropRule{ItemCodename: "ITEM_TEST", MonsterCodenames: []string{"MOB_TEST"}, ChancePercent: 100}}, RefID: 902, CountryByte: 3}
-	rt.Defs = &Definitions{byRefID: map[uint32]*Definition{901: killDef, 902: gatherDef},
+	defs := &Definitions{byRefID: map[uint32]*Definition{901: killDef, 902: gatherDef},
 		byCodename: map[string]*Definition{"QA": killDef, "QB": gatherDef}, ordered: []*Definition{killDef, gatherDef}}
+	// Hand-built definitions: the census reads no catalog, so the test
+	// runs where no game data is built (the shared fixture loader's do).
+	rt, err := NewRuntime(&enterworld.Deps{}, defs, nil)
+	if err != nil {
+		t.Fatalf("NewRuntime: %v", err)
+	}
 	c := questCharacter()
 	c.ActiveQuests = []enterworld.ActiveQuestRecord{BuildActiveQuestRecord(killDef, 0), BuildActiveQuestRecord(gatherDef, 0)}
 	takers := rt.KillTakers(c, "MOB_TEST", 0)

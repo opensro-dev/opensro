@@ -375,11 +375,10 @@ type Runtime struct {
 	// tick (fortress_capture.go).
 	structureDeathsMu sync.Mutex
 	structureDeaths   []structureDeath
-	// questKillTurns are the party kill shares' turn indices, per
-	// (party, quest): the rotation of the native DivideType-0 share
-	// (reward.go).
+	// questKillTurns are the party kill shares' rotations, per
+	// (party, quest): the native DivideType-0 share (reward.go).
 	questKillTurnsMu sync.Mutex
-	questKillTurns   map[questKillTurnKey]uint32
+	questKillTurns   map[questKillTurnKey]questKillTurnEntry
 	// FortressStore keeps the fortress structures' rows (fortress_persist.go).
 	FortressStore     enterworld.FortressStore
 	fortressPersistMu sync.Mutex

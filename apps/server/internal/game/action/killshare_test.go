@@ -26,6 +26,7 @@ import (
 type killShareBook struct {
 	credits   map[string]map[uint32]int
 	drops     map[string]int
+	events    map[string]int
 	soloKill  int
 	soloDrops int
 	chains    int
@@ -87,9 +88,10 @@ func seedKillShareParty(t *testing.T, rt *Runtime, killer *enterworld.Character,
 		far.Name:    {{RefID: 102, DivideType: 5}},
 		other.Name:  {{RefID: 102, DivideType: 5}, {RefID: 104, DivideType: 1, Drop: true}},
 	}
-	book := &killShareBook{credits: map[string]map[uint32]int{}, drops: map[string]int{}, pushed: map[string]int{}}
+	book := &killShareBook{credits: map[string]map[uint32]int{}, drops: map[string]int{}, events: map[string]int{}, pushed: map[string]int{}}
 	rt.QuestKillTakers = func(c *enterworld.Character, _ string, _ uint8) []QuestKillTaker { return held[c.Name] }
 	rt.UpdateQuestKillFor = func(c *enterworld.Character, _ string, _ uint8, only map[uint32]bool) []wire.Frame {
+		book.events[c.Name]++
 		if book.credits[c.Name] == nil {
 			book.credits[c.Name] = map[uint32]int{}
 		}
@@ -177,6 +179,11 @@ func TestPartyKillSharesByTheQuestsRule(t *testing.T) {
 	if book.pushed["Near2"] == 0 || book.pushed["Far"] != 0 {
 		t.Fatalf("progress went to the wrong sessions: %+v", book.pushed)
 	}
+	// The event reached every credited member - Near3 by its gather
+	// roll alone, so its kill exchanges run - and nobody uncredited.
+	if book.events["Near3"] != 1 || book.events["Near1"] != 0 || book.events["Far"] != 0 || book.events["OtherWorld"] != 0 {
+		t.Fatalf("kill events: %+v", book.events)
+	}
 }
 
 /*
@@ -211,6 +218,35 @@ func TestPartyKillTurnRotates(t *testing.T) {
 	}
 	if book.chains != 3 {
 		t.Fatalf("the killer's chains ran %d times", book.chains)
+	}
+	if book.events["Near3"] != 3 {
+		t.Fatalf("kill events: %+v", book.events)
+	}
+}
+
+/*
+================
+TestQuestKillTurnTableIsBounded
+
+Past the entry cap, rotations no kill has consulted for a day are
+dropped; a live rotation keeps its place.
+================
+*/
+func TestQuestKillTurnTableIsBounded(t *testing.T) {
+	rt, _, _, _ := newCombatTestRuntime(t, 100)
+	rt.questKillTurns = map[questKillTurnKey]questKillTurnEntry{}
+	now := int64(questKillTurnIdleMs * 3)
+	for i := 0; i < questKillTurnMaxEntries+1; i++ {
+		rt.questKillTurns[questKillTurnKey{division: testDivision, party: uint64(1000 + i), refID: 1}] = questKillTurnEntry{seenMs: 0}
+	}
+	live := questKillTurnKey{division: testDivision, party: 77, refID: 101}
+	rt.questKillTurns[live] = questKillTurnEntry{next: 2, seenMs: now}
+	rt.pruneQuestKillTurns(now)
+	if len(rt.questKillTurns) != 1 {
+		t.Fatalf("the table holds %d entries after the prune", len(rt.questKillTurns))
+	}
+	if got := rt.questKillTurns[live]; got.next != 2 {
+		t.Fatalf("the live rotation lost its place: %+v", got)
 	}
 }
 

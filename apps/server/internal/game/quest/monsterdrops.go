@@ -147,6 +147,26 @@ func (rt *Runtime) MonsterDropsFor(c *enterworld.Character, monster string, rari
 
 /*
 ================
+monsterDropMatches
+
+Whether a kill of (monster, rarity) is one the rule drops from: the
+species list (or any monster), and where the mission grades its
+monsters the base grade. The taker census (killQuestTakes) and the
+roll below read the rule through this one predicate.
+================
+*/
+func monsterDropMatches(rule *MonsterDropRule, monster string, rarity uint8) bool {
+	if !rule.AnyMonster && !slices.Contains(rule.MonsterCodenames, monster) {
+		return false
+	}
+	if len(rule.MonsterGrades) > 0 && rule.MonsterGrades[slices.Index(rule.MonsterCodenames, monster)] != rarity&15 {
+		return false
+	}
+	return true
+}
+
+/*
+================
 missionMonsterDrops
 
 Held-item admission and drop identity share the same codename. A knife drop
@@ -162,10 +182,7 @@ func missionMonsterDrops(c *enterworld.Character, def *Definition, monster strin
 	if code == "" {
 		code = def.CollectItemCodename
 	}
-	if !rule.AnyMonster && !slices.Contains(rule.MonsterCodenames, monster) {
-		return nil
-	}
-	if len(rule.MonsterGrades) > 0 && rule.MonsterGrades[slices.Index(rule.MonsterCodenames, monster)] != rarity&15 {
+	if !monsterDropMatches(rule, monster, rarity) {
 		return nil
 	}
 	if c.Level == nil || *c.Level < int64(rule.MinPlayerLevel) {
