@@ -21,6 +21,7 @@ import (
 	"time"
 
 	"opensro.online/server/internal/agent/publicstats"
+	"opensro.online/server/internal/data/store"
 	"opensro.online/server/internal/game/action"
 	"opensro.online/server/internal/game/caravan"
 	"opensro.online/server/internal/game/caravanai"
@@ -470,6 +471,10 @@ func publicRules() publicstats.RulesResponse {
 				Native: "A quick move into or out of storage takes the first empty slot.",
 				Now:    "A quick move lands on a matching stack with room first.",
 				Why:    "Owner decision: storage fills less with split stacks."},
+			{Flag: store.EnvQuickCharacterDelete, On: store.QuickCharacterDeleteFromEnv(),
+				Native: "A deleted character can be restored for seven days before it is gone.",
+				Now:    "A deleted character can be restored for one day before it is gone; the character select screen counts down that day.",
+				Why:    "Owner decision 2026-11-27: seven days held names and slots too long."},
 			{Flag: enterworld.EnvInventoryPages, On: enterworld.InventoryPagesFromEnv(),
 				Native: "A new character carries one page of 32 bag slots, and the six expansion quests add 16 more.",
 				Now:    "A new character carries two and a half pages (80 bag slots), and the expansion quests still add their 16, reaching the full three pages. Turning the rule off is native only for what new characters start with: a character already raised keeps its larger bag and every item in it.",
