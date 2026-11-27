@@ -48,6 +48,13 @@ var siegeWorldCodes = map[string]bool{
 	"INS_FORT_SK": true, "INS_FORT_BJ": true, "INS_FORT_HM": true, "INS_FORT_ER": true,
 }
 
+// battleArenaWorldCodes are the RefGameWorld codenames the world manager
+// builds as battle arena worlds: the later server's INS_ARENA_* rows,
+// which only the port-only Styria Clash registers today.
+var battleArenaWorldCodes = map[string]bool{
+	"INS_ARENA_JOB_WAR": true,
+}
+
 /*
 ================
 Definition.Siege
@@ -57,6 +64,16 @@ which sends a teleport through the fortress entry rules.
 ================
 */
 func (d Definition) Siege() bool { return siegeWorldCodes[d.CodeName] }
+
+/*
+================
+Definition.BattleArena
+
+A battle arena world: the class whose world-manager slot 30 (+0x78)
+answers 1, which keeps return scrolls out of a running match.
+================
+*/
+func (d Definition) BattleArena() bool { return battleArenaWorldCodes[d.CodeName] }
 
 /*
 ================

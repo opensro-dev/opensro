@@ -75,6 +75,9 @@ const (
 	errCodeReverseWorld uint8 = 0xf5
 	errCodeReverseJob   uint8 = 0xe9
 	errCodeReverseWar   uint8 = 0xf2
+	// errCodeScrollArena is 0x187A, the low byte both scroll uses answer
+	// when the reader stands in a Battle Arena world.
+	errCodeScrollArena uint8 = 0x7a
 )
 
 /*
@@ -261,8 +264,15 @@ func (rt *Runtime) beginReverseReturnScroll(division string, c *enterworld.Chara
 		return false
 	}
 	// The reference server requires the current world's reference type (+0x20) to be zero.
-	if here, ok := instance.Lookup(instance.ID(domain.CharacterWorldInstance(c)).Definition()); !ok || here.NativeType != 0 {
+	here, hereKnown := instance.Lookup(instance.ID(domain.CharacterWorldInstance(c)).Definition())
+	if !hereKnown || here.NativeType != 0 {
 		*result = itemUseFailure(errCodeReverseWorld)
+		return false
+	}
+	// Right after the instance check, a Battle Arena world refuses the
+	// scroll: the cast must not take a player out of a running match.
+	if here.BattleArena() {
+		*result = itemUseFailure(errCodeScrollArena)
 		return false
 	}
 	var destination travelPoint

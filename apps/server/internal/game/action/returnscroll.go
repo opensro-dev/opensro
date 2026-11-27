@@ -168,6 +168,24 @@ func (rt *Runtime) returnCastAdmission(division string, c *enterworld.Character,
 
 /*
 ================
+returnScrollArenaRefused
+
+The reference server refuses both return scrolls in a Battle Arena world
+(the world manager's battle-arena test: the world class's slot-30
+answer) with 0x187A. Sets *result and returns true when it refuses.
+================
+*/
+func (rt *Runtime) returnScrollArenaRefused(c *enterworld.Character, result *OpResult) bool {
+	here, ok := instance.Lookup(instance.ID(domain.CharacterWorldInstance(c)).Definition())
+	if !ok || !here.BattleArena() {
+		return false
+	}
+	*result = itemUseFailure(errCodeScrollArena)
+	return true
+}
+
+/*
+================
 beginReturnScroll
 
 Inside the item-use character mutation door. The v1.188 item use
@@ -189,10 +207,21 @@ func (rt *Runtime) beginReturnScroll(division string, c *enterworld.Character, r
 		if mode != teleportModeBlocking || !rt.returnScrollAdmission(division, c, result) {
 			return false
 		}
+		// After the shared checks, whose last speaking legs are the
+		// reference server's criminal-state and transport refusals, a
+		// Battle Arena world refuses the scroll before the cast starts:
+		// the cast must not leave a running match.
+		if rt.returnScrollArenaRefused(c, result) {
+			return false
+		}
 	case "THIEFDEN":
 		// Reference server: only a thief in job mode (job state 2) returns to the den,
 		// at the gate Param4 names.
 		if !rt.returnCastAdmission(division, c, result) {
+			return false
+		}
+		// The arena refusal precedes the destination string's own checks.
+		if rt.returnScrollArenaRefused(c, result) {
 			return false
 		}
 		if enterworld.DressedJob(c) != domain.JobThief {
