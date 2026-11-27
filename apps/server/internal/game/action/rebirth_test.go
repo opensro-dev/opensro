@@ -253,7 +253,10 @@ TestPresentPositionRebirthIsLevelGated
 ================
 */
 func TestPresentPositionRebirthIsLevelGated(t *testing.T) {
+	// The native gate reads the record's level watermark, which a
+	// level-11 character has already raised to 11.
 	high := rebirthTestCharacter(11, 0)
+	high.MaxLevel = testInt64(11)
 	highRuntime, _ := newTestRuntime(high, testItems())
 	if result := highRuntime.HandleLocalRebirth(testDivision, high, []byte{2}); len(result.Frames) != 0 {
 		t.Fatalf("level 11 present-position rebirth was accepted: %+v", result)
