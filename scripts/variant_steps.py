@@ -419,6 +419,9 @@ class Runner:
 		self.code_root = REPO_ROOT if repository_root is None else Path(repository_root)
 		self.steps: list[dict] = []
 		self.journal: list[dict] | None = None
+		# How many of the journal's steps are this build's steps, in
+		# order (load): only those can be judged; the rest are undone.
+		self.matched = 0
 		self.arguments: dict | None = None
 		self.fresh = True
 		self.first = 0
@@ -464,9 +467,14 @@ class Runner:
 	# ================
 	# load
 	#
-	# The journal is this build's when its arguments are this build's
-	# and its steps are the registered ones; anything else (or nothing
-	# readable) starts the record over.
+	# The journal is this build's when its arguments are this build's;
+	# anything else (or nothing readable) starts the record over. Its
+	# steps are judged as far as they are the registered ones, in order
+	# (matched): a step added, renamed or split ends the match there,
+	# and begin rolls the tree back to that point, so the steps in front
+	# still replay. Required to match whole, #4598's split of
+	# later-layers threw the record away and r204n laid the whole
+	# variant down again (base 658 s, every step run, #4337).
 	# ================
 	def load(self, arguments: dict) -> bool:
 		self.arguments = arguments
@@ -474,9 +482,19 @@ class Runner:
 		if not body or body.get("arguments") != arguments:
 			return False
 		entries = body.get("steps")
-		if not isinstance(entries, list) or [entry.get("name") for entry in entries] != [s["name"] for s in self.steps]:
+		if not isinstance(entries, list) or not all(isinstance(entry, dict) for entry in entries):
 			return False
+		names = [step["name"] for step in self.steps]
+		matched = 0
+		while matched < min(len(entries), len(names)) and entries[matched].get("name") == names[matched]:
+			matched += 1
+		if matched == 0:
+			return False
+		if matched < len(names) or matched < len(entries):
+			print(f"variant steps: the step list changed after {names[matched - 1]}: "
+				  f"{matched} of {len(names)} steps keep their record", flush=True)
 		self.journal = entries
+		self.matched = matched
 		return True
 
 	# ================
@@ -659,7 +677,7 @@ class Runner:
 		lines = []
 		state = EMPTY_STATE
 		self.key_journal_code()
-		for step, entry in zip(self.steps, self.journal):
+		for step, entry in zip(self.steps[:self.matched], self.journal):
 			now = self.key_parts(step, entry.get("reads"), state, entry.get("laterKey", ""))
 			if parts_key(step["name"], now) == entry.get("key"):
 				lines.append((step["name"], "current"))
@@ -668,6 +686,7 @@ class Runner:
 				moved = [name for name in now if was.get(name) != now[name]] if was else ["result not journaled"]
 				lines.append((step["name"], "stale: " + ", ".join(moved)))
 			state = chain(state, entry["effect"])
+		lines += [(step["name"], "new in the step list: runs") for step in self.steps[self.matched:]]
 		return lines
 
 	# ================
@@ -685,10 +704,12 @@ class Runner:
 		if self.fresh:
 			self.first = 0
 			return
-		first = len(self.steps)
+		# A changed step list ends what can replay at the last shared
+		# step; the rollback below undoes every recorded step from there.
+		first = self.matched if self.matched < len(self.steps) or self.matched < len(self.journal) else len(self.steps)
 		state = EMPTY_STATE
 		self.key_journal_code()
-		for index, (step, entry) in enumerate(zip(self.steps, self.journal)):
+		for index, (step, entry) in enumerate(zip(self.steps[:self.matched], self.journal)):
 			# Over a prefix that still matches, every earlier result is the
 			# journal's, so the arguments they supplied are the recorded ones.
 			if entry.get("key") != self.key_of(step, entry.get("reads"), state, entry.get("laterKey", "")):
@@ -699,7 +720,7 @@ class Runner:
 		if dirty is not None and dirty < first:
 			first = dirty
 		self.first = first
-		if first < len(self.steps):
+		if first < len(self.journal):
 			self.rollback(first)
 
 	# ================
@@ -817,7 +838,7 @@ class Runner:
 	# ================
 	def settle_step(self, index: int):
 		step = self.steps[index]
-		entry = None if self.fresh else (self.journal or [])[index]
+		entry = None if self.fresh or index >= self.matched else self.journal[index]
 		if entry is not None and index < self.first:
 			self.state = chain(self.state, entry["effect"])
 			self.records.append(entry)
