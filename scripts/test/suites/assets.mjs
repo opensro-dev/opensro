@@ -50,6 +50,7 @@ export default {
 		"scripts/test/assets/jsonAssetCompression.test.mjs",
 		"scripts/test/assets/vatPipeline.test.mjs",
 		"scripts/test/assets/resourceBuildGraph.test.mjs",
+		"scripts/test/assets/resourceFingerprintServer.test.mjs",
 		"scripts/test/assets/laterDungeonMapStep.test.mjs",
 		"scripts/test/assets/laterWorldMapButtonsStep.test.mjs",
 		"scripts/test/assets/laterResLayoutsStep.test.mjs",

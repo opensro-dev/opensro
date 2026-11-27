@@ -541,12 +541,23 @@ func (rt *Runtime) applyStallEdit(division string, c *enterworld.Character, kind
 		if r.Done() != nil {
 			return nil, wire.StallErrInvalidOp
 		}
-		if price > rt.stallPriceLimit() {
-			return nil, wire.StallErrBadPrice
+		// A stall slot of 10 or more is refused outright; a taken
+		// in-range slot reroutes to the first free one inside Edit
+		// (#4490 U18-08).
+		if int(slot) >= stall.Slots {
+			return nil, wire.StallErrBadSlot
 		}
+		// The native add validator's order: the item's own refusals,
+		// then the count, then the price, then the network group.
 		item, code := rt.stallOfferable(division, c, bagSlot)
 		if code == 0 {
 			code = rt.stallCountRefusal(division, c, bagSlot, count)
+		}
+		if code == 0 && price > rt.stallPriceLimit() {
+			code = wire.StallErrBadPrice
+		}
+		if code == 0 && rt.stallCategory(item) == 0 {
+			code = wire.StallErrNoNetworkGroup
 		}
 		if code != 0 {
 			return nil, code
@@ -576,6 +587,8 @@ func (rt *Runtime) applyStallEdit(division string, c *enterworld.Character, kind
 			return nil
 		})
 		switch {
+		case errors.Is(err, stall.ErrOffered):
+			return nil, wire.StallErrAlreadyOffered
 		case errors.Is(err, stall.ErrFull):
 			return nil, wire.StallErrStallFull
 		case err != nil:
@@ -710,7 +723,16 @@ func (rt *Runtime) stallOfferBody(division string, c *enterworld.Character) []by
 ================
 stallOfferable
 
-A bag item that may go on the table (the exchange's rule).
+A bag item that may go on the table. The judgment is the trade
+door's (Tradeable); the refusal byte and its order are the native
+add validator's: no such bag item, a bag item this stall already
+offers, a summoned pet's item, an item inside its rental period,
+then no trade permission - refusals the port previously collapsed
+onto the generic invalid-operation byte (#4490 U18-01, U18-08).
+Natively the period refusal fires only while the period runs (the
+not-expired test), so an item whose rental ran out during the
+session falls through to the trade judgment. The add's own Edit
+keeps the already-offered test as the backstop for a race.
 ================
 */
 func (rt *Runtime) stallOfferable(division string, c *enterworld.Character, bagSlot uint8) (inventory.Item, uint8) {
@@ -718,21 +740,41 @@ func (rt *Runtime) stallOfferable(division string, c *enterworld.Character, bagS
 	if snapshot == nil {
 		return inventory.Item{}, wire.StallErrBadBagSlot
 	}
-	item, code := rt.exchangeOfferable(snapshot, bagSlot)
-	switch code {
-	case 0:
-		return item, 0
-	case wire.ErrCodeInvalidRequest:
+	if bagSlot < inventory.EquipmentSlotEnd || bagSlot >= inventory.BagEnd(snapshot) {
 		return inventory.Item{}, wire.StallErrBadBagSlot
 	}
-	return inventory.Item{}, wire.StallErrInvalidOp
+	item, ok := bagOf(snapshot).At(bagSlot)
+	if !ok {
+		return inventory.Item{}, wire.StallErrBadBagSlot
+	}
+	if rt.Stalls != nil {
+		if s, open := rt.Stalls.Get(division, c.Name); open {
+			for _, other := range s.Slots {
+				if other != nil && other.BagSlot == bagSlot {
+					return inventory.Item{}, wire.StallErrAlreadyOffered
+				}
+			}
+		}
+	}
+	if item.Summon != nil && item.Summon.Summoned {
+		return inventory.Item{}, wire.StallErrSummonedPet
+	}
+	if item.RentExpiresUnix > 0 && item.RentExpiresUnix > rt.Now().Unix() {
+		return inventory.Item{}, wire.StallErrPeriodRunning
+	}
+	if !rt.Tradeable(item.Codename, item.ForgeBound, item.EarnedBought, item.Summon) {
+		return inventory.Item{}, wire.StallErrNotTradeable
+	}
+	return item, 0
 }
 
 /*
 ================
 stallCountRefusal
 
-Natively a count of at least one, no more than the bag stack holds.
+Natively the count is the bag stack's whole quantity: an offer is
+the stack as it sits in the bag, priced once for all of it, so a
+partial or padded count refuses (#4490 U18-08).
 ================
 */
 func (rt *Runtime) stallCountRefusal(division string, c *enterworld.Character, bagSlot uint8, count uint16) uint8 {
@@ -759,7 +801,7 @@ func stallCountRefusalIn(snapshot *enterworld.Character, bagSlot uint8, count ui
 	if stack == 0 {
 		stack = 1
 	}
-	if count == 0 || count > stack {
+	if count != stack {
 		return wire.StallErrBadCount
 	}
 	return 0

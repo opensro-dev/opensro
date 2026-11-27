@@ -5,7 +5,7 @@ nasrun_drops_test.go - tests for nasrun_drops.go
 
 Through the token kill (nasrun_tokens_test.go): a zero roll wins every
 earner's Spirit and jewel into their bag with a notice; a high roll
-wins nothing; a middle roll wins the 2 % jewel and misses the 0.25 %
+wins nothing; a middle roll wins the 90 % jewel and misses the 10 %
 Spirit; off, the same kill pays nothing. The odds themselves are
 game/nasrun/drops_test.go's.
 
@@ -23,12 +23,12 @@ import (
 )
 
 // tokenKillRoll's rolls are draws of one value in DropRoll's domain
-// (32768): easy Spirit odds (0.25 %) take a draw under 82, the jewel
-// (2 %) under 656.
+// (32768): easy Spirit odds (10 %) take a draw under 3277, the jewel
+// (90 %) under 29492.
 const (
 	dropRollWinsAll  = 0
-	dropRollJewel    = 100
-	dropRollWinsNone = 30_000
+	dropRollJewel    = 10_000
+	dropRollWinsNone = 32_000
 )
 
 // The prizes, as scripts/nasrun_import.py stages them.

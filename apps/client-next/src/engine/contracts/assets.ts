@@ -118,6 +118,32 @@ export interface AssetProgress {
 }
 /*
 ================
+AssetRequestTiming
+
+One finished HTTP attempt of the shared download pipe, as the worker
+measured it: how long the headers took (firstByteMs, -1 when no response
+arrived) and how long the whole attempt took, with the bytes it kept and
+how it ended. Reports carry the recent attempts (#4580) so a slow link
+(a long, steady duration) reads apart from a stalled request (a first
+byte that never came, or an outcome of "stall"). Paths only: the asset
+owner strips credentials and queries exactly as for job paths.
+================
+*/
+export interface AssetRequestTiming {
+	readonly path: string;
+	// Milliseconds from the attempt's start to its headers; -1 if none came.
+	readonly firstByteMs: number;
+	// Milliseconds from the attempt's start to its settlement.
+	readonly durationMs: number;
+	// Bytes this attempt kept (a resumed read counts only its own share).
+	readonly bytes: number;
+	readonly outcome: "ok" | "stall" | "http" | "error";
+	// The HTTP status when the outcome is "http".
+	readonly status?: number;
+}
+
+/*
+================
 AssetWorkerMessage
 
 Worker replies transfer decoded resources or acknowledge a cancellation:
@@ -133,6 +159,10 @@ export type AssetWorkerMessage =
 	// when a decode-phase read starts downloading again. None carries a
 	// slot or a result; the watchdog in assets.ts owns their meaning.
 	| { kind: "job-progress"; id: number; bytes: number; }
+	// Finished download attempts since the last report, flushed on the
+	// progress beat (#4580). Diagnostics only: the asset owner keeps the
+	// recent records for the bug report's assets.json; nothing acts on them.
+	| { kind: "request-timings"; records: readonly AssetRequestTiming[]; }
 	| { kind: "job-decoding"; id: number; }
 	// The decoder's own work notes: cumulative work units (placements and
 	// terrain blocks processed) reported from inside the synchronous
@@ -291,6 +321,8 @@ export interface AssetJobSnapshot {
 	}[];
 	// The store's counters from the worker's latest progress, null before one.
 	readonly store: AssetStoreStats | null;
+	// Recent finished download attempts, oldest first (#4580).
+	readonly requests: readonly AssetRequestTiming[];
 }
 /*
 ================

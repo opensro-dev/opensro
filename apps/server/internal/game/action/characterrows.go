@@ -146,6 +146,13 @@ maxStackFor ports missionItemMaxStack: the itemdata MaxStack column, gated
 on the stackable-ETC class. A nil item source behaves like a missing row -
 cap 1, the swap leg - which is the documented dev-mode degradation until
 the itemdata loader lands.
+
+Type (3, 3, 13, 15) rows with the whole-item bit in the sixth authored
+parameter (the grab-pet clock rows) never stack: the merge check treats
+them as one row however large the stack column reads, because two clocks
+poured into one row would lose their minutes. Cap 1 here makes every lane
+that asks - bag, warehouse, COS bag, stall, exchange, sale - move such a
+row whole, sell it whole, and never split it (#4490, U6-14).
 ==================
 */
 func (rt *Runtime) maxStackFor(typeFlags uint16, codename string) uint16 {
@@ -160,6 +167,12 @@ func (rt *Runtime) maxStackFor(typeFlags uint16, codename string) uint16 {
 	ref, ok := rt.deps.ItemReferences().ItemRefByCodename(codename)
 	if !ok || ref == nil || len(ref.NativeFields) == 0 {
 		return 1
+	}
+
+	if ref.TypeIDs == [4]int64{3, 3, 13, 15} {
+		if param6, ok := ref.NativeFields.Lookup("itemParam6_2b0"); ok && int64(param6)&2 != 0 {
+			return 1
+		}
 	}
 
 	maxStack, ok := ref.NativeFields.Lookup("maxStack")

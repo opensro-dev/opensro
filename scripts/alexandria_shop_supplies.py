@@ -225,15 +225,18 @@ def merge_supplies(raw, items, port_stock=False):
 	def stock_tab(tab_code, wanted, source_of, template_row):
 		old = sorted(goods_by_tab[tab_code], key=lambda r: int(r[4]))
 		have = {r[3] for r in old}
+		occupied = {r[4] for r in old}
 		rows_out = list(old)
 		for item_code in wanted:
 			code = "PACKAGE_" + item_code
-			if code in have or len(rows_out) >= d10.MAX_TAB_SLOTS:
+			slot = d10.lowest_free_slot(occupied)
+			if code in have or slot is None:
 				continue
 			if not make_package(item_code, source_of):
 				continue
-			rows_out.append([*template_row[:2], tab_code, code, str(len(rows_out)), *template_row[5:]])
+			rows_out.append([*template_row[:2], tab_code, code, slot, *template_row[5:]])
 			have.add(code)
+			occupied.add(slot)
 		goods_by_tab[tab_code] = rows_out
 		return rows_out, len(rows_out) - len(old)
 

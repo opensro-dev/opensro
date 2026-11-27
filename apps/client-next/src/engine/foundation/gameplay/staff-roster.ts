@@ -31,6 +31,8 @@ use; it imports nothing, so Node tests load it as it ships.
 
 export const OP_STAFF_STATE = 0x3fcc;
 export const OP_STAFF_ROSTER = 0x3fcd;
+// The global chat type: public chat on this shard, staff-coloured too.
+const GLOBAL_CHAT_CHANNEL = 6;
 // Mirrors the server's bound on roles and grants: staff are few.
 const MAX_STAFF = 1024;
 const STATE_BYTES = 5;
@@ -139,8 +141,10 @@ export function staffBoardName(
 ================
 staffChatColor
 
-A rostered sender's colour for a public line (All 1, GM 3), as RGBA;
-other channels keep their own colour (whisper, party, guild...).
+A rostered sender's colour for a public line (All 1, GM 3, Global 6),
+as RGBA; other channels keep their own colour (whisper, party, guild...).
+Global is public chat on this shard, where every player talks, so a GM
+there is told apart the same way (owner, 2026-11-27).
 ================
 */
 export function staffChatColor(
@@ -148,7 +152,7 @@ export function staffChatColor(
 	channel: number,
 	name: string | undefined
 ): [number, number, number, number] | undefined {
-	if ( channel !== 1 && channel !== 3 ) return undefined;
+	if ( channel !== 1 && channel !== 3 && channel !== GLOBAL_CHAT_CHANNEL ) return undefined;
 	const entry = staffEntry( roster, name );
 	if ( !entry ) return undefined;
 	const argb = entry.chatColor;

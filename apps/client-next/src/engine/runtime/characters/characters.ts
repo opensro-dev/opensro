@@ -30,7 +30,7 @@ import { createPresentationSamples } from "./presentation-samples";
 import { createPresentationState } from "./presentation-state";
 import { createPresentationActions } from "./presentation-actions";
 import { createPresentationEvents } from "./presentation-events";
-import { resolveDrawnPoses } from "./presentation-poses";
+import { holdSurvivesRevision, resolveDrawnPoses } from "./presentation-poses";
 import { createFootprints } from "./footprints";
 import { createSunDropMarkers } from "./sun-drop-markers";
 import { createCharacterStateIndex } from "./state-index";
@@ -623,9 +623,6 @@ export function createCharacterPresentation(
 			logicalPose,
 			localMover,
 			states,
-			castByActor,
-			actionLayersByActor,
-			waitingActors,
 			vitalsByGid,
 			health,
 			pendingDeaths: feedback.pendingDeaths( gameplay?.casts ?? [], health?.currentResult ),
@@ -657,11 +654,8 @@ export function createCharacterPresentation(
 			if ( state?.navigationHold ) {
 				if ( displaced || dead || entity?.mountedOn ) return undefined;
 				if ( state.navigationHold.revision === movementRevision ) return state.navigationHold.pose;
-				const pose = entity ? logicalPose( entity ) : undefined, hold = state.navigationHold.logical;
-				return !moving &&
-						(waiting || activeCast ||
-							(!!pose && hold.regionId === pose.regionId && hold.x === pose.x && hold.y === pose.y &&
-								hold.z === pose.z)) ?
+				const pose = entity ? logicalPose( entity ) : undefined;
+				return pose && holdSurvivesRevision( state.navigationHold.logical, pose, !!moving ) ?
 					state.navigationHold.pose :
 					undefined;
 			}

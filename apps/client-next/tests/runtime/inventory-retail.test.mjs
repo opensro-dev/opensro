@@ -212,3 +212,31 @@ test("weapon swap and companion ammo move commit as one inventory result", () =>
 	] );
 	assert.equal( defined( owner.state().inventory.find( i => i.slot === 13 ) ).quantity, 50 );
 });
+test("taking a worn item off settles when the server names another bag place (BR-261127-1019-4DC6)", () => {
+	// The server detaches into the bag's first free place whatever place was
+	// asked (#4625): the answer [1, 0, 2, 19] settles a 2 -> 25 request, and
+	// the next move goes out instead of waiting on the busy bag.
+	const sent = [],
+		owner = createInventory( f => sent.push( f ) ),
+		body = ref => [ ref, 0, 0, 0, 2, 0, 0, 0, 0, 0, 0, 0, 0, 30, 0, 0, 0, 0 ];
+	owner.bootstrap( {
+		inventorySlotCount: 45,
+		equipmentSlotCount: 13,
+		refItemSnapshot: [ { refObjId: 1, typeFlags: 0xeac, name: "Hat" }, {
+			refObjId: 2,
+			typeFlags: 0xeac,
+			name: "Cap"
+		} ],
+		equipItems: [ { slot: 2, refObjId: 1, body: body( 1 ) }, { slot: 20, refObjId: 2, body: body( 2 ) } ],
+		avatarItems: []
+	} );
+	owner.move( 2, 25, 0, 1000 );
+	owner.receive( 0xb06d, Uint8Array.of( 1, 0, 2, 19, 0, 0, 0 ) );
+	assert.equal( owner.state().inventoryPending, false, "the detach answer settles the request" );
+	assert.deepEqual( owner.state().inventory.map( row => row.slot ).sort( ( a, b ) => a - b ), [ 19, 20 ] );
+	owner.move( 20, 21, 0, 2000 );
+	assert.equal( sent.length, 2, "the next move is sent" );
+	// A bag move answered with another destination is still not its answer.
+	owner.receive( 0xb06d, Uint8Array.of( 1, 0, 20, 22, 0, 0, 0 ) );
+	assert.equal( owner.state().inventoryPending, true, "a bag-to-bag answer must name the asked place" );
+});

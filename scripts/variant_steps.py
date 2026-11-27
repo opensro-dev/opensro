@@ -18,14 +18,19 @@ removed. A step's key covers what the step reads:
 	                module level, the Node scripts they name and the pin
 	                data beside them (codeStamp's moduleClosure), each
 	                by checkout-relative path, so a fresh freeze
-	                checkout keys the same
+	                checkout keys the same (variant_code.py)
 	its flags       the SRO_* variables named in that code, by value
 	its sources     the source roots its last run opened files under,
 	                fingerprinted as variant_stamp fingerprints them,
 	                plus any loose file it opened outside those roots
-	the tree before the accumulated effect of every earlier step,
-	                chained by hash, so a step whose inputs came back
-	                byte-identical is current again
+	the tree before what it read of the tree the earlier steps left -
+	                each file it opened, each path it tested, each
+	                directory it listed (variant_tree_reads.py), so a
+	                step whose reads came back the same is current
+	                however the rest moved; a step whose reads cannot be
+	                recorded (it starts a process, runs package code) is
+	                keyed by the accumulated effect of every earlier
+	                step instead, chained by hash
 
 A build whose journal still matches runs nothing: the tree is verified
 against the journal (a file an outsider changed names its owning step).
@@ -46,21 +51,22 @@ place would rewrite the other.
 """
 from __future__ import annotations
 
-import ast
 import builtins
 import hashlib
 import json
 import os
-import re
 import shutil
 import sys
-import sysconfig
 import time
 from pathlib import Path
 
 import state_document
+import build_progress
 import variant_settle
 import variant_stamp
+import variant_reuse
+import variant_tree_reads
+from variant_code import code_key, code_location, code_path, frozen_functions, is_installed_code
 from prepare_client_resources import file_digest, write_atomically
 from sro_paths import REPO_ROOT, tree_state_root
 
@@ -70,17 +76,15 @@ JOURNAL_FORMAT = "sro-variant-steps"
 # means bumps this instead, and an older journal starts the record over.
 JOURNAL_VERSION = 2
 JOURNAL_NAME = "variant-steps.json"
+# The keying a step's recorded reads carry when its Node scripts are keyed
+# by what it reaches (scriptReach.mjs); a record without it keyed them whole.
+REACH_KEYING = "reach"
 BLOB_ROOT = "variant-blobs"
-FLAG_LITERAL = re.compile(r"SRO_[A-Z0-9_]+")
 # The chain every build starts from: the empty tree, in this format.
 EMPTY_STATE = hashlib.sha256(f"sro-variant-steps/{JOURNAL_VERSION}".encode("ascii")).hexdigest()
 # The sys.monitoring tool slot the code recorder takes while a step runs
 # (0-2 and 5 are the debugger, coverage, profiler and optimizer slots).
 CODE_TOOL = 4
-# Where interpreter and package code lives: never a step's own code.
-INSTALLED_CODE = tuple(
-	str(Path(path).resolve()) for path in {sysconfig.get_path(name) for name in ("stdlib", "platstdlib", "purelib", "platlib")}
-)
 
 
 # ================
@@ -143,123 +147,10 @@ def lay_blob(variant_root: Path, sha: str, target: Path) -> None:
 
 
 #============================================================================
-# A step's code: what it ran, and what that code names
-#============================================================================
-
-
-# ================
-# is_installed_code
-#
-# A file of the interpreter or of an installed package: pinned by the
-# toolchain, never a step's own code.
-# ================
-def is_installed_code(path: str) -> bool:
-	return path.startswith("<") or path.startswith(INSTALLED_CODE)
-
-
-# ================
-# code_location
-#
-# How the journal names one code file: repository-relative inside the
-# checkout, so a release built from a fresh freeze checkout keys every
-# step exactly as the last one did (r204i: each new rel-<sha> checkout
-# moved every key, #4251); absolute outside it.
-# ================
-def code_location(path: Path, repository_root: Path) -> str:
-	try:
-		return path.resolve().relative_to(repository_root.resolve()).as_posix()
-	except ValueError:
-		return str(path.resolve())
-
-
-# ================
-# code_path
-#
-# The file a recorded code location names under this checkout.
-# ================
-def code_path(location: str, repository_root: Path) -> Path:
-	path = Path(location)
-	return path if path.is_absolute() else repository_root / location
-
-
-# ================
-# code_key
-#
-# A digest of the step's code files, each by its location and content,
-# and of the SRO_* flags they name: the step reruns when its code changes
-# or when a flag it names moves. A file that is gone keys as gone.
-#
-# A Python file keys by its syntax tree (code_content), not its bytes: a
-# comment or a blank line is not code. ran names the files whose code the
-# step ran (record_run); every other Python file in the closure was only
-# imported, so its function bodies key as empty. The smoke's one-comment
-# edit to alexandria_npcs.py had made 22 of 28 steps stale (#4251).
-# ================
-def code_key(files: list[Path], repository_root: Path, environ, ran: frozenset[str] = frozenset()) -> str:
-	digest = hashlib.sha256()
-	flags: dict[str, str] = {}
-	for path in sorted(files, key=lambda item: code_location(item, repository_root)):
-		location = code_location(path, repository_root)
-		digest.update(location.encode("utf-8") + b"\0")
-		try:
-			content = path.read_bytes()
-		except OSError:
-			digest.update(b"gone\n")
-			continue
-		keyed = code_content(path, content, location in ran)
-		digest.update(hashlib.sha256(keyed).hexdigest().encode("ascii") + b"\n")
-		for name in FLAG_LITERAL.findall(content.decode("utf-8", "ignore")):
-			value = environ.get(name)
-			flags[name] = hashlib.sha256(value.encode("utf-8")).hexdigest() if value is not None else ""
-	for name in sorted(flags):
-		digest.update(f"flag\0{name}\0{flags[name]}\n".encode("utf-8"))
-	return digest.hexdigest()
-
-
-# ================
-# BodyStripper
-#
-# Empties every function body, leaving the def itself: its name, its
-# decorators and the defaults its arguments evaluate when the module
-# loads, which is all a module the step never ran a function of can do.
-# ================
-class BodyStripper(ast.NodeTransformer):
-	def visit_FunctionDef(self, node):
-		node.body = [ast.Pass()]
-		return node
-
-	visit_AsyncFunctionDef = visit_FunctionDef
-
-
-# ================
-# code_content
-#
-# What a code file keys by. A Python file is its syntax tree, which
-# drops comments, blank lines and layout; when its code did not run in
-# the step, the tree has its function bodies emptied (BodyStripper). The
-# recorder sees every function that starts (record_run), so a body it
-# did not see start cannot have touched the step; no step runs Python in
-# a child process (the children are Node scripts and ffmpeg, keyed as
-# bytes). A file that does not parse, and every other file, keys by its
-# bytes.
-# ================
-def code_content(path: Path, content: bytes, ran: bool) -> bytes:
-	if path.suffix != ".py":
-		return content
-	try:
-		tree = ast.parse(content)
-	except (SyntaxError, ValueError):
-		return content
-	if not ran:
-		tree = BodyStripper().visit(tree)
-	return ast.dump(tree).encode("utf-8")
-
-
-#============================================================================
 # The read log: what a run opened, and what that costs next time
 #============================================================================
 
-_recording: dict = {"reads": None}
+_recording: dict = {"reads": None, "tree": None}
 _hook_installed = False
 
 
@@ -271,6 +162,9 @@ _hook_installed = False
 # business (the tree diff sees them however they were made).
 # ================
 def audit_hook(event, args):
+	tree = _recording["tree"]
+	if tree is not None:
+		tree.audit(event, args)
 	if event != "open":
 		return
 	reads = _recording["reads"]
@@ -293,7 +187,8 @@ def audit_hook(event, args):
 #
 # Run one step with the recorders on; returns (result, the paths it
 # opened for reading, the source files of the code it ran, those of the
-# modules it only imported).
+# modules it only imported, the functions it started, and what it read
+# of variant_root's tree: variant_tree_reads' record, None without one).
 #
 # The code is what ran, not what its modules could reach: the static
 # import closure of any importer was nearly the whole build (160 files,
@@ -306,18 +201,20 @@ def audit_hook(event, args):
 # ran: module_closures takes the scripts a file names only from files
 # that ran.
 # ================
-def record_run(run):
+def record_run(run, variant_root: Path | None = None):
 	global _hook_installed
 	if not _hook_installed:
 		sys.addaudithook(audit_hook)
 		_hook_installed = True
 	reads: set[str] = set()
 	ran: set[str] = set()
+	started_functions: dict[str, set[str]] = {}
 	imported: set[str] = set()
 	monitoring = sys.monitoring
 
 	def started(code, offset):
 		ran.add(code.co_filename)
+		started_functions.setdefault(code.co_filename, set()).add(code.co_qualname)
 		return monitoring.DISABLE
 
 	original_import = builtins.__import__
@@ -333,13 +230,20 @@ def record_run(run):
 	# Code a previous step already reported was switched off; this step
 	# must see it again.
 	monitoring.restart_events()
+	tree = None if variant_root is None else variant_tree_reads.Recorder(variant_root, variant_settle.CONTENT_ROOT)
 	_recording["reads"] = reads
+	_recording["tree"] = tree
 	builtins.__import__ = recording_import
+	if tree is not None:
+		tree.start()
 	try:
 		value = run()
 	finally:
+		if tree is not None:
+			tree.stop()
 		builtins.__import__ = original_import
 		_recording["reads"] = None
+		_recording["tree"] = None
 		monitoring.set_events(CODE_TOOL, 0)
 		monitoring.register_callback(CODE_TOOL, monitoring.events.PY_START, None)
 		monitoring.free_tool_id(CODE_TOOL)
@@ -350,7 +254,15 @@ def record_run(run):
 
 	code = own_code(ran)
 	modules = own_code(getattr(sys.modules.get(name), "__file__", None) for name in imported) - code
-	return value, reads, sorted(code), sorted(modules)
+	functions: dict[str, set[str]] = {}
+	for path, names in started_functions.items():
+		resolved = str(Path(path).resolve())
+		if resolved in code:
+			functions.setdefault(resolved, set()).update(names)
+	if tree is not None:
+		tree.ran_code(ran)
+	functions_ran = {path: sorted(names) for path, names in functions.items()}
+	return value, reads, sorted(code), sorted(modules), functions_ran, None if tree is None else tree.reads()
 
 
 #============================================================================
@@ -530,10 +442,16 @@ class Runner:
 		self.code_root = REPO_ROOT if repository_root is None else Path(repository_root)
 		self.steps: list[dict] = []
 		self.journal: list[dict] | None = None
+		# How many of the journal's steps are this build's steps, in
+		# order (load): only those can be judged; the rest are undone.
+		self.matched = 0
 		self.arguments: dict | None = None
 		self.fresh = True
 		self.first = 0
 		self.state = EMPTY_STATE
+		# The tree the settled steps' effects leave, moved with state
+		# (advance): what a step read is looked up in it.
+		self.tree = variant_tree_reads.TreeView()
 		self.records: list[dict] = []
 		self._root_fingerprints: dict[str, str] = {}
 		self._code_keys: dict[tuple[str, ...], str] = {}
@@ -561,11 +479,28 @@ class Runner:
 		})
 
 	# ================
+	# index
+	#
+	# A registered step's position, by name: the builder takes each
+	# result by name, so a step added or split never shifts the others.
+	# ================
+	def index(self, name: str) -> int:
+		for position, step in enumerate(self.steps):
+			if step["name"] == name:
+				return position
+		raise KeyError(f"no variant step {name}")
+
+	# ================
 	# load
 	#
-	# The journal is this build's when its arguments are this build's
-	# and its steps are the registered ones; anything else (or nothing
-	# readable) starts the record over.
+	# The journal is this build's when its arguments are this build's;
+	# anything else (or nothing readable) starts the record over. Its
+	# steps are judged as far as they are the registered ones, in order
+	# (matched): a step added, renamed or split ends the match there,
+	# and begin rolls the tree back to that point, so the steps in front
+	# still replay. Required to match whole, #4598's split of
+	# later-layers threw the record away and r204n laid the whole
+	# variant down again (base 658 s, every step run, #4337).
 	# ================
 	def load(self, arguments: dict) -> bool:
 		self.arguments = arguments
@@ -573,9 +508,19 @@ class Runner:
 		if not body or body.get("arguments") != arguments:
 			return False
 		entries = body.get("steps")
-		if not isinstance(entries, list) or [entry.get("name") for entry in entries] != [s["name"] for s in self.steps]:
+		if not isinstance(entries, list) or not all(isinstance(entry, dict) for entry in entries):
 			return False
+		names = [step["name"] for step in self.steps]
+		matched = 0
+		while matched < min(len(entries), len(names)) and entries[matched].get("name") == names[matched]:
+			matched += 1
+		if matched == 0:
+			return False
+		if matched < len(names) or matched < len(entries):
+			print(f"variant steps: the step list changed after {names[matched - 1]}: "
+				  f"{matched} of {len(names)} steps keep their record", flush=True)
 		self.journal = entries
+		self.matched = matched
 		return True
 
 	# ================
@@ -601,8 +546,9 @@ class Runner:
 	# (variant_stamp.module_closures). Steps with the same record share one
 	# closure computation.
 	# ================
-	def recorded_code_key(self, ran: list[str], imported: list[str] = ()) -> str:
-		key = (tuple(ran), tuple(imported))
+	def recorded_code_key(self, ran: list[str], imported: list[str] = (), functions: dict | None = None,
+			reach: bool = True) -> str:
+		key = (tuple(ran), tuple(imported), frozen_functions(functions), reach)
 		if key not in self._code_keys:
 			self.key_code([key])
 		return self._code_keys[key]
@@ -616,7 +562,7 @@ class Runner:
 	# ================
 	def key_code(self, keys: list[tuple]):
 		records = []
-		for ran, imported in keys:
+		for ran, imported, _, _ in keys:
 			records.append((
 				[code_path(location, self.code_root) for location in ran],
 				[code_path(location, self.code_root) for location in imported],
@@ -625,9 +571,12 @@ class Runner:
 			[([f for f in ran if f.is_file()], [f for f in imported if f.is_file()]) for ran, imported in records],
 			self.repository_root,
 		)
-		for key, (ran, imported), closure in zip(keys, records, closures):
+		for key, (ran, imported), (closure, scripts) in zip(keys, records, closures):
 			files = set(closure) | set(ran) | set(imported)
-			self._code_keys[key] = code_key(sorted(files), self.code_root, self.environ, frozenset(key[0]))
+			functions = None if key[2] is None else dict(key[2])
+			self._code_keys[key] = code_key(
+				sorted(files), self.code_root, self.environ, frozenset(key[0]), functions, scripts if key[3] else None
+			)
 
 	# ================
 	# key_journal_code
@@ -639,9 +588,13 @@ class Runner:
 		keys = []
 		for entry in self.journal or []:
 			reads = entry.get("reads") or {}
-			key = (tuple(reads.get("code", [])), tuple(reads.get("imported", [])))
-			if key not in self._code_keys and key not in keys:
-				keys.append(key)
+			record = (tuple(reads.get("code", [])), tuple(reads.get("imported", [])), frozen_functions(reads.get("functions")))
+			# A record keyed before scripts were keyed by reach is judged
+			# as it was keyed, and upgraded (reached_entry) once it holds.
+			for reach in {reads.get("keying") == REACH_KEYING, True}:
+				key = record + (reach,)
+				if key not in self._code_keys and key not in keys:
+					keys.append(key)
 		if keys:
 			self.key_code(keys)
 
@@ -676,7 +629,8 @@ class Runner:
 	# keep. Compiled caches (__pycache__) follow their source and are not
 	# recorded.
 	# ================
-	def classify_reads(self, reads: set[str], code: list[str] = (), imported: list[str] = ()) -> dict:
+	def classify_reads(self, reads: set[str], code: list[str] = (), imported: list[str] = (),
+			functions: dict[str, list[str]] | None = None) -> dict:
 		own = str(self.variant.resolve())
 		checkout = self.code_root.resolve()
 		roots: set[str] = set()
@@ -701,9 +655,13 @@ class Runner:
 					(modules if path.suffix == ".py" else locations).add(code_location(path, checkout))
 			elif path.is_file():
 				files[text] = variant_stamp.file_key(path, True)
+		started = {
+			code_location(Path(path), checkout): sorted(names)
+			for path, names in (functions or {}).items() if Path(path).suffix == ".py"
+		}
 		return {
 			"roots": sorted(roots), "code": sorted(locations), "imported": sorted(modules - locations),
-			"files": files,
+			"files": files, "functions": dict(sorted(started.items())), "keying": REACH_KEYING,
 		}
 
 	# ================
@@ -711,21 +669,27 @@ class Runner:
 	#
 	# What a step's key is made of, by name, so a stale step can say which
 	# part moved (explain): its arguments, those an earlier step's result
-	# supplied (later_key), its code, its sources, and the chain state in
-	# front of it.
+	# supplied (later_key), its code, its sources, and what it read of the
+	# tree in front of it (tree), or the chain state for a step whose
+	# reads are not recorded.
 	# ================
-	def key_parts(self, step: dict, recorded_reads: dict | None, state: str, later_key: str = "") -> dict:
+	def key_parts(self, step: dict, recorded_reads: dict | None, state: str, later_key: str = "",
+			tree: variant_tree_reads.TreeView | None = None) -> dict:
 		if recorded_reads is not None and step["roots"]:
 			recorded_reads = {
 				**recorded_reads,
 				"roots": sorted(set(recorded_reads.get("roots", [])) | set(step["roots"])),
 			}
 		code = "unrecorded" if recorded_reads is None else self.recorded_code_key(
-			recorded_reads.get("code", []), recorded_reads.get("imported", [])
+			recorded_reads.get("code", []), recorded_reads.get("imported", []), recorded_reads.get("functions"),
+			recorded_reads.get("keying") == REACH_KEYING
+		)
+		read = None if tree is None or recorded_reads is None else variant_tree_reads.tree_key(
+			tree, recorded_reads.get("tree")
 		)
 		return {
 			"arguments": step["argumentsKey"], "later": later_key, "code": code,
-			"sources": self.sources_key(recorded_reads), "state": state,
+			"sources": self.sources_key(recorded_reads), "state": state if read is None else read,
 		}
 
 	# ================
@@ -733,8 +697,9 @@ class Runner:
 	#
 	# The key a step must match to skip: its name and its key parts.
 	# ================
-	def key_of(self, step: dict, recorded_reads: dict | None, state: str, later_key: str = "") -> str:
-		return parts_key(step["name"], self.key_parts(step, recorded_reads, state, later_key))
+	def key_of(self, step: dict, recorded_reads: dict | None, state: str, later_key: str = "",
+			tree: variant_tree_reads.TreeView | None = None) -> str:
+		return parts_key(step["name"], self.key_parts(step, recorded_reads, state, later_key, tree))
 
 	# ================
 	# explain
@@ -750,10 +715,10 @@ class Runner:
 		if self.journal is None:
 			return [(step["name"], "no usable journal: every step runs") for step in self.steps]
 		lines = []
-		state = EMPTY_STATE
+		state, tree = EMPTY_STATE, variant_tree_reads.TreeView()
 		self.key_journal_code()
-		for step, entry in zip(self.steps, self.journal):
-			now = self.key_parts(step, entry.get("reads"), state, entry.get("laterKey", ""))
+		for step, entry in zip(self.steps[:self.matched], self.journal):
+			now = self.key_parts(step, entry.get("reads"), state, entry.get("laterKey", ""), tree)
 			if parts_key(step["name"], now) == entry.get("key"):
 				lines.append((step["name"], "current"))
 			else:
@@ -761,6 +726,8 @@ class Runner:
 				moved = [name for name in now if was.get(name) != now[name]] if was else ["result not journaled"]
 				lines.append((step["name"], "stale: " + ", ".join(moved)))
 			state = chain(state, entry["effect"])
+			tree.apply(entry["effect"])
+		lines += [(step["name"], "new in the step list: runs") for step in self.steps[self.matched:]]
 		return lines
 
 	# ================
@@ -772,26 +739,42 @@ class Runner:
 	# journal-less build starts from the cleared tree instead.
 	# ================
 	def begin(self, force: bool = False):
+		# What an earlier build kept and never took back is stale now.
+		variant_reuse.clear(self.variant)
 		self.fresh = force or self.journal is None
 		if self.fresh:
 			self.first = 0
 			return
-		first = len(self.steps)
-		state = EMPTY_STATE
+		# A changed step list ends what can replay at the last shared
+		# step; the rollback below undoes every recorded step from there.
+		first = self.matched if self.matched < len(self.steps) or self.matched < len(self.journal) else len(self.steps)
+		state, tree = EMPTY_STATE, variant_tree_reads.TreeView()
+		started = time.perf_counter()
 		self.key_journal_code()
-		for index, (step, entry) in enumerate(zip(self.steps, self.journal)):
+		coded = time.perf_counter()
+		for index, (step, entry) in enumerate(zip(self.steps[:self.matched], self.journal)):
 			# Over a prefix that still matches, every earlier result is the
 			# journal's, so the arguments they supplied are the recorded ones.
-			if entry.get("key") != self.key_of(step, entry.get("reads"), state, entry.get("laterKey", "")):
+			if entry.get("key") != self.key_of(step, entry.get("reads"), state, entry.get("laterKey", ""), tree):
 				first = index
 				break
 			state = chain(state, entry["effect"])
+			tree.apply(entry["effect"])
+		keyed = time.perf_counter()
 		dirty = self.dirty_step()
 		if dirty is not None and dirty < first:
 			first = dirty
 		self.first = first
-		if first < len(self.steps):
+		verified = time.perf_counter()
+		if first < len(self.journal):
 			self.rollback(first)
+		# Said, not silent: r204n's try 8 spent about 59 s before its first
+		# step with nothing naming the part (#4337).
+		print(
+			f"variant: begin: code keys {coded - started:.1f} s, step keys {keyed - coded:.1f} s, "
+			f"tree check {verified - keyed:.1f} s, rollback {time.perf_counter() - verified:.1f} s",
+			flush=True,
+		)
 
 	# ================
 	# final_state
@@ -865,7 +848,9 @@ class Runner:
 				before = befores[index][relative]
 				target = self.variant / relative
 				if before is None:
-					target.unlink(missing_ok=True)
+					# Kept, not deleted: a rerun step that lays the same file
+					# again takes it back (variant_reuse.py, #4337).
+					variant_reuse.stash(self.variant, relative)
 				else:
 					lay_blob(self.variant, before, target)
 		# Directories the undone steps leave empty go with them.
@@ -889,7 +874,11 @@ class Runner:
 	# ================
 	def result(self, index: int):
 		started = time.perf_counter()
-		value, how = self.settle_step(index)
+		build_progress.begin_step(self.steps[index]["name"])
+		try:
+			value, how = self.settle_step(index)
+		finally:
+			build_progress.end_step()
 		# One line a step, so a slow build names the step that cost it (#4251).
 		print(f"step {self.steps[index]['name']}: {how} in {time.perf_counter() - started:.1f} s", flush=True)
 		return value
@@ -902,15 +891,15 @@ class Runner:
 	# ================
 	def settle_step(self, index: int):
 		step = self.steps[index]
-		entry = None if self.fresh else (self.journal or [])[index]
+		entry = None if self.fresh or index >= self.matched else self.journal[index]
 		if entry is not None and index < self.first:
-			self.state = chain(self.state, entry["effect"])
-			self.records.append(entry)
+			self.records.append(self.reached_entry(step, entry))
+			self.advance(entry["effect"])
 			return decode_result(entry["result"], self.variant), "current"
 		# Every earlier step is settled, so their results are in hand.
 		later = tuple(step["later"]()) if step["later"] else ()
 		later_key = arguments_digest(later) if later else ""
-		now = None if entry is None else self.key_parts(step, entry.get("reads"), self.state, later_key)
+		now = None if entry is None else self.key_parts(step, entry.get("reads"), self.state, later_key, self.tree)
 		if now is not None and entry.get("key") == parts_key(step["name"], now):
 			for relative, sha in entry["effect"]:
 				target = self.variant / relative
@@ -918,8 +907,8 @@ class Runner:
 					target.unlink(missing_ok=True)
 				else:
 					lay_blob(self.variant, sha, target)
-			self.state = chain(self.state, entry["effect"])
-			self.records.append(entry)
+			self.records.append(self.reached_entry(step, entry))
+			self.advance(entry["effect"])
 			return decode_result(entry["result"], self.variant), "replayed"
 		if now is not None:
 			# Said, not silent: r204l's rebuild reran avatars-v1696 with no
@@ -929,24 +918,55 @@ class Runner:
 			print(f"step {step['name']}: stale: {', '.join(moved)}", flush=True)
 		arguments = step["arguments"] + later
 		before = snapshot(self.variant)
-		value, reads, code, imported = record_run(lambda: step["function"](*arguments))
+		value, reads, code, imported, functions, tree_reads = record_run(
+			lambda: step["function"](*arguments), self.variant
+		)
 		effect = effect_between(self.variant, before, snapshot(self.variant))
-		classified = self.classify_reads(reads, code, imported)
+		classified = {**self.classify_reads(reads, code, imported, functions), "tree": tree_reads}
 		try:
 			encoded = encode_result(value, self.variant)
-			parts = self.key_parts(step, classified, self.state, later_key)
+			parts = self.key_parts(step, classified, self.state, later_key, self.tree)
 			key = parts_key(step["name"], parts)
 		except Unrecordable as refusal:
 			# Said, not silent: the skills step reran on every build for an
 			# int-keyed summary nobody saw (#4251).
 			print(f"step {step['name']}: not journaled ({refusal}); it runs on every build", flush=True)
 			encoded, key, parts = None, None, None
-		self.state = chain(self.state, effect)
+		self.advance(effect)
 		self.records.append({
 			"name": step["name"], "key": key, "parts": parts, "reads": classified, "effect": effect,
 			"result": encoded, "laterKey": later_key,
 		})
 		return value, "ran"
+
+	# ================
+	# reached_entry
+	#
+	# A journal entry that held, as the next build should find it: one
+	# recorded before Node scripts were keyed by reach (scriptReach.mjs)
+	# held under whole-file keys, which proves the code is what ran, so
+	# it is re-keyed by reach over that same code. Without this the first
+	# build after the change re-ran every step behind a script: the
+	# format, not the code, would have moved their keys.
+	# ================
+	def reached_entry(self, step: dict, entry: dict) -> dict:
+		reads = entry.get("reads")
+		if reads is None or entry.get("key") is None or reads.get("keying") == REACH_KEYING:
+			return entry
+		reached = {**reads, "keying": REACH_KEYING}
+		parts = self.key_parts(step, reached, self.state, entry.get("laterKey", ""), self.tree)
+		return {**entry, "reads": reached, "parts": parts, "key": parts_key(step["name"], parts)}
+
+	# ================
+	# advance
+	#
+	# One settled step's effect onto the chain state and the tree view:
+	# the two always move together, so a later step's key never sees one
+	# without the other.
+	# ================
+	def advance(self, effect: list[list]):
+		self.state = chain(self.state, effect)
+		self.tree.apply(effect)
 
 	# ================
 	# finish
@@ -962,3 +982,4 @@ class Runner:
 		# over the tree the journal now describes (the build's own settle
 		# in main() afterwards finds nothing left to do).
 		variant_settle.settle(self.variant)
+		variant_reuse.clear(self.variant)

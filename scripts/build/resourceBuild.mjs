@@ -161,7 +161,12 @@ const LANE_MODULES = {
 		"./char/buildLocomotionBanAssets.mjs",
 		"./char/buildDropModelAssets.mjs"
 	],
-	npc: [ "./char/buildNpcModelAssets.mjs", "./char/buildNpcVatAssets.mjs" ]
+	npc: [ "./char/buildNpcModelAssets.mjs", "./char/buildNpcVatAssets.mjs" ],
+	text: [ "./text.mjs", "./launcher.mjs", "./config.mjs" ],
+	fonts: [ "./fonts.mjs" ],
+	audio: [ "./audio.mjs" ],
+	cursors: [ "./cursors.mjs" ],
+	world: [ "./title.mjs", "./world/index.mjs" ]
 };
 
 /*
@@ -473,13 +478,13 @@ export async function buildSroResources( steps = RESOURCE_BUILD_STEPS, options =
 		worldResults
 	] = await runResourceTasks( [
 		lane( "interface-images", { modules: laneModules( "interfaceImages" ) }, interfaceImagesLane ),
-		textLane,
-		fontsLane,
-		audioLane,
-		cursorAssetsLane,
+		lane( "text", { modules: laneModules( "text" ) }, textLane ),
+		lane( "fonts", { modules: laneModules( "fonts" ) }, fontsLane ),
+		lane( "audio", { modules: laneModules( "audio" ) }, audioLane ),
+		lane( "cursors", { modules: laneModules( "cursors" ) }, cursorAssetsLane ),
 		lane( "title-characters", { modules: laneModules( "titleCharacters" ) }, titleCharacterAssetsLane ),
 		lane( "npc", { modules: laneModules( "npc" ), key: serverRosterKey }, npcAssetsLane ),
-		worldLane
+		lane( "world", { modules: laneModules( "world" ) }, worldLane )
 	] );
 	const titleRosterAssets = titleCharacterAssets.roster;
 	const crowdVatAssets = titleCharacterAssets.vat;

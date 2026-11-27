@@ -86,3 +86,59 @@ test("asset dump distinguishes held slots without consuming or exposing credenti
 	assert.equal( read().phase, "failed" );
 	assert.equal( read().error, "Asset worker failed" );
 });
+
+test("the snapshot keeps the worker's recent download attempts, oldest first (#4580)", t => {
+	/** @type {FixtureWorker | undefined} */
+	let worker;
+	const previous = Object.getOwnPropertyDescriptor( globalThis, "Worker" );
+	/*
+	================
+	FixtureWorker
+	================
+	*/
+	class FixtureWorker {
+		/** @type {((event: {data: unknown}) => void) | null} */
+		onmessage = null;
+		/** @type {(() => void) | null} */
+		onerror = null;
+		/*
+		================
+		constructor
+		================
+		*/
+		constructor() {
+			worker = this;
+		}
+		/*
+		================
+		postMessage
+		================
+		*/
+		postMessage() {}
+		/*
+		================
+		terminate
+		================
+		*/
+		terminate() {}
+	}
+	Object.defineProperty( globalThis, "Worker", { configurable: true, value: FixtureWorker } );
+	const assets = createAssets();
+	t.after( () => {
+		assets.dispose();
+		if ( previous ) Object.defineProperty( globalThis, "Worker", previous );
+		else Reflect.deleteProperty( globalThis, "Worker" );
+	} );
+	assert.ok( worker );
+	const read = assets.snapshot;
+	assert.ok( read );
+	assert.deepEqual( read().requests, [] );
+	const stalled = { path: "/assets/packs/a.bin", firstByteMs: -1, durationMs: 15100, bytes: 0, outcome: "stall" };
+	const delivered = { path: "/assets/packs/a.bin", firstByteMs: 40, durationMs: 900, bytes: 12, outcome: "ok" };
+	worker.onmessage?.( { data: { kind: "request-timings", records: [ stalled ] } } );
+	worker.onmessage?.( { data: { kind: "request-timings", records: [ delivered ] } } );
+	assert.deepEqual( read().requests, [ stalled, delivered ] );
+	// The snapshot copies the ring: a reader cannot rewrite the owner's tail.
+	Reflect.set( read().requests, "length", 0 );
+	assert.equal( read().requests.length, 2 );
+});

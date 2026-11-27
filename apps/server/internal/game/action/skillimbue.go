@@ -62,7 +62,10 @@ func (rt *Runtime) acceptInstantSelfEffect(division string, character, snapshot 
 	if _, _, err := combat.PlayerStats(snapshot, rt.statCatalogs()); err != nil {
 		return OpResult{DiagnosticRefusal: "instant-effect-loadout-invalid"}
 	}
-	if _, code := rt.instantSelfEffectCost(division, snapshot, skill, now); code != 0 {
+	// Read before the door: the guild read inside it would deadlock
+	// (admitContext.FortressRole).
+	role := rt.guildFortressRole(division, snapshot)
+	if _, code := rt.instantSelfEffectCost(division, snapshot, skill, now, role); code != 0 {
 		return offensiveRefusal(code)
 	}
 	rider, ok := rt.skillDurationRider(division, snapshot, skill)
@@ -81,7 +84,7 @@ func (rt *Runtime) acceptInstantSelfEffect(division string, character, snapshot 
 		if !enterworld.CharacterAlive(character) || !enterworld.SkillUsable(character, skill) {
 			return false
 		}
-		cost, code := rt.instantSelfEffectCost(division, character, skill, now)
+		cost, code := rt.instantSelfEffectCost(division, character, skill, now, role)
 		refusal = code
 		if code != 0 {
 			return false
@@ -139,13 +142,13 @@ movement rows and the SKILL_MALL_PET_SKILL rows are 0xFF/0xFF without reqi
 and pass it unchanged.
 ================
 */
-func (rt *Runtime) instantSelfEffectCost(division string, c *enterworld.Character, skill enterworld.SkillRow, now int64) (int64, uint16) {
+func (rt *Runtime) instantSelfEffectCost(division string, c *enterworld.Character, skill enterworld.SkillRow, now int64, role uint8) (int64, uint16) {
 	cost, code := rt.offensiveCost(division, c, skill, now)
 	if code == 0x3003 || code == 0x3005 {
 		// An unparsed row or a cooling skill answers before the weapon.
 		return cost, code
 	}
-	if refusal := skillEquipmentRefusal(c, rt.statCatalogs().Items, skill, rt.guildFortressRole(division, c)); refusal != 0 {
+	if refusal := skillEquipmentRefusal(c, rt.statCatalogs().Items, skill, role); refusal != 0 {
 		return 0, refusal
 	}
 	return cost, code
@@ -240,6 +243,11 @@ func (rt *Runtime) resolvePlayerImpactBehindWall(division, name string, skill en
 	// A fortress weapon's hit is its hit group's amount alone; no
 	// imbue share joins it.
 	if rt.fortressArmed(division, name) {
+		return split, err
+	}
+	// A hit on a fortress structure is the target-side hit group's
+	// amount alone; no imbue share joins it.
+	if defender.Structure {
 		return split, err
 	}
 	imbue, imbueAbnormal := rt.activeWeaponImbue(division, name, nowMs)

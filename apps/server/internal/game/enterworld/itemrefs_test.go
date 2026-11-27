@@ -163,6 +163,23 @@ func TestTooltipAvatarTrailingFields(t *testing.T) {
 	}
 }
 
+func TestNativeFieldsCanPickProjection(t *testing.T) {
+	fields := make([]string, 60)
+	for i := range fields {
+		fields[i] = "0"
+	}
+	if v, present := buildItemNativeFields(fields).Lookup("canPick"); !present || v != 0 {
+		t.Fatalf("canPick zero: %v/%v", v, present)
+	}
+	fields[21] = "1"
+	if v, present := buildItemNativeFields(fields).Lookup("canPick"); !present || v != 1 {
+		t.Fatalf("canPick one: %v/%v", v, present)
+	}
+	if _, present := buildItemNativeFields(fields[:18]).Lookup("canPick"); present {
+		t.Fatal("absent canPick column manufactured")
+	}
+}
+
 // buildItemRef must lift the equip-requirement media columns
 // (14, 32..39, 58/59/60, 64) into the typed ItemRef fields the equip
 // gates read, and default absent columns to their pass values (country 3,

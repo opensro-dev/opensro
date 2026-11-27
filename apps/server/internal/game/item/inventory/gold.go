@@ -28,23 +28,24 @@ func GoldHeapTier(amount uint32) string {
 }
 
 // DropGold validates a type-0x0A gold ground drop against a balance and
-// returns the debited balance and the amount actually dropped.
+// returns the debited balance and the amount dropped.
 //
-// The requested amount is first clamped to the native ceiling
-// (wire.MaxGold), matching the client, which clamps at the head of its
-// serializer before the request is ever sent. A request for nothing, or for
-// more than the character holds, is refused.
+// The original refuses in this order (#4490 U6-15): nothing (0x1829),
+// more than the one-drop ceiling (the generic code), then more than
+// the character holds (0x180F). Nothing is clamped: past the ceiling
+// the whole request is refused and the balance is untouched.
 func DropGold(balance uint64, requested uint32) (uint64, uint32, *Fault) {
-	amount := wire.ClampGold(uint64(requested))
-
-	if amount == 0 {
+	if requested == 0 {
 		return balance, 0, newFault(wire.ErrCodePositiveNumberOnly, "invalidGoldAmount")
 	}
-	if uint64(amount) > balance {
+	if requested > wire.MaxGold {
+		return balance, 0, newFault(wire.ErrCodeInvalidRequest, "goldAmountAboveCeiling")
+	}
+	if uint64(requested) > balance {
 		return balance, 0, newFault(wire.ErrCodeNotEnoughGold, "insufficientGold")
 	}
 
-	return balance - uint64(amount), amount, nil
+	return balance - uint64(requested), requested, nil
 }
 
 // PickupGold credits a picked-up gold pile onto a balance.

@@ -8,9 +8,12 @@ viewer is shown are a pure function of the character record, the
 static quest definitions and the quest calendar's hour (the marker
 derivation reads nothing else; period-start quotas are bypassed for
 markers), so the hook derives them once per (record, write epoch,
-hour) and re-derives on the first move of any of the three - the
-per-tick full definition scan the profile charged to the store's
-read door is gone (#3099). Transport and world rosters remain
+hour) - the per-tick full definition scan the profile charged to the
+store's read door is gone (#3099). A record swap or an hour move
+re-derives at once; a write-epoch move re-derives at most once per
+questMarkerEpochSettleMs, because an active player's epoch moves on
+almost every tick (a step, a vitals pulse) and the live profile still
+charged 6.4 ms of every tick to re-derivations (#4587). Transport and world rosters remain
 root-owned.
 
 ===========================================================================
@@ -28,6 +31,30 @@ import (
 	"opensro.online/server/internal/game/world/simulation"
 )
 
+// questMarkerEpochSettleMs is the shortest gap between two
+// derivations of one session that only a write-epoch move asks for.
+// Inferred, not native: the original pushes markers from its quest
+// events, and no binary rule bounds the delay; 500 ms (5 ticks) keeps
+// an accepted or finished quest's marker change within half a second
+// while active players stop paying a definition scan every tick.
+const questMarkerEpochSettleMs = 500
+
+/*
+================
+questMarkerKey
+
+What a derivation answers for: the record itself, its store write
+epoch (wired false when no epoch is read, so no key proves the record
+stood still) and the quest calendar's hour.
+================
+*/
+type questMarkerKey struct {
+	character *enterworld.Character
+	epoch     uint64
+	wired     bool
+	hour      int
+}
+
 /*
 ================
 questMarkerRows
@@ -43,6 +70,9 @@ type questMarkerRows struct {
 	character *enterworld.Character
 	epoch     uint64
 	hour      int
+	// derivedMs is when the rows were last derived, the settle
+	// window's start.
+	derivedMs int64
 	rows      map[uint32][18]byte
 	// gen names this row set's content: it changes only when a derive
 	// returns different rows, so a publication already at gen has
@@ -57,14 +87,17 @@ freshFor
 Whether rows derived under this entry's key still answer for the
 record now. The epoch must be wired: with no write epoch read, no
 key proves the record stood still and every tick re-derives (the
-pre-cache behaviour of detached compositions).
+pre-cache behaviour of detached compositions). A moved epoch is
+served the cached rows until questMarkerEpochSettleMs has passed
+since the last derivation; the next tick after that re-derives, so
+the final state always lands.
 ================
 */
-func (entry *questMarkerRows) freshFor(character *enterworld.Character, epoch uint64, wired bool, hour int) bool {
-	if entry == nil || entry.character != character || !wired {
+func (entry *questMarkerRows) freshFor(key questMarkerKey, nowMs int64) bool {
+	if entry == nil || entry.character != key.character || !key.wired || entry.hour != key.hour {
 		return false
 	}
-	return entry.epoch == epoch && entry.hour == hour
+	return entry.epoch == key.epoch || nowMs-entry.derivedMs < questMarkerEpochSettleMs
 }
 
 /*
@@ -89,8 +122,8 @@ key stands, else a fresh derive kept under the key. derive performs
 the read-door derivation; it runs only on a key move.
 ================
 */
-func (d *questMarkerDerivations) rows(sessionID uint64, character *enterworld.Character, epoch uint64, wired bool, hour int, derive func() map[uint32][18]byte) map[uint32][18]byte {
-	if entry := d.bySession[sessionID]; entry.freshFor(character, epoch, wired, hour) {
+func (d *questMarkerDerivations) rows(sessionID uint64, key questMarkerKey, nowMs int64, derive func() map[uint32][18]byte) map[uint32][18]byte {
+	if entry := d.bySession[sessionID]; entry.freshFor(key, nowMs) {
 		return entry.rows
 	}
 	rows := derive()
@@ -98,14 +131,16 @@ func (d *questMarkerDerivations) rows(sessionID uint64, character *enterworld.Ch
 		d.bySession = make(map[uint64]*questMarkerRows)
 	}
 	previous := d.bySession[sessionID]
-	if previous != nil && previous.character == character && sameMarkerRows(previous.rows, rows) {
+	if previous != nil && previous.character == key.character && sameMarkerRows(previous.rows, rows) {
 		// A write that moved the epoch but not the markers (a step, a
 		// vitals tick) keeps the row set and its gen: same content.
-		previous.epoch, previous.hour = epoch, hour
+		previous.epoch, previous.hour, previous.derivedMs = key.epoch, key.hour, nowMs
 		return previous.rows
 	}
 	d.nextGen++
-	d.bySession[sessionID] = &questMarkerRows{character: character, epoch: epoch, hour: hour, rows: rows, gen: d.nextGen}
+	d.bySession[sessionID] = &questMarkerRows{
+		character: key.character, epoch: key.epoch, hour: key.hour, derivedMs: nowMs, rows: rows, gen: d.nextGen,
+	}
 	return rows
 }
 
@@ -264,7 +299,8 @@ func (game *gameplayPlane) questMarkerTick() simulation.TickHook {
 			}
 			live[session.ID] = true
 			epoch, wired := game.deps.WriteEpoch(c)
-			rows := derived.rows(session.ID, c, epoch, wired, questMarkerHour(game.quests), func() map[uint32][18]byte {
+			key := questMarkerKey{character: c, epoch: epoch, wired: wired, hour: questMarkerHour(game.quests)}
+			rows := derived.rows(session.ID, key, nowMs, func() map[uint32][18]byte {
 				var states map[uint32]quest.NpcMarker
 				game.deps.Read(division, func() { states = quest.MarkersByNpc(game.quests.MarkerStates(c)) })
 				encoded := make(map[uint32][18]byte, len(states))

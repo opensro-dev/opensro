@@ -11,7 +11,7 @@ the owner's numbers are in the market design doc (2026-11-16).
 | Rule                       | Value                  | Constant          |
 | -------------------------- | ---------------------- | ----------------- |
 | Sale fee, from the seller  | 1%, rounded down       | `FeePercent`      |
-| Listing duration           | 24 hours               | `ListingDuration` |
+| Listing duration           | 7 days                 | `ListingDuration` |
 | Open listings per account  | 20                     | `OpenListingCap`  |
 | Expiry pass                | every minute, 200 max  | `ExpiryInterval`  |
 

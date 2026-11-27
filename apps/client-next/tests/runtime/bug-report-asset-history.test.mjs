@@ -126,6 +126,21 @@ test("no asset owner yet reads as a null queue, not a failure", () => {
 	assert.equal( doc.samples[0].t, -1 );
 });
 
+test("the document's current entry carries the recent download attempts (#4580)", () => {
+	const { host, history } = harness();
+	const requests = [
+		{ path: "/assets/packs/a.bin", firstByteMs: -1, durationMs: 15100, bytes: 0, outcome: "stall" },
+		{ path: "/assets/packs/a.bin", firstByteMs: 40, durationMs: 900, bytes: 1048576, outcome: "ok" }
+	];
+	host.snapshot = { phase: "running", error: null, available: 7, jobs: [], store: null, requests };
+	history.sample( 0 );
+	const doc = history.document( 0, 0 );
+	// A slow link and a stalled request read apart in the one place.
+	assert.deepEqual( doc.current.requests, requests );
+	// The samples stay queue history: the attempts ride only the current entry.
+	assert.equal( doc.samples[0].requests, undefined );
+});
+
 test("each sample carries the persistent store's counters", () => {
 	const { host, history } = harness();
 	const store = {

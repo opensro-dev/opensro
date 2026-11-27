@@ -247,6 +247,49 @@ func CargoCapacity(rarity uint8, inventory uint16) uint16 {
 
 /*
 ================
+TransportBagPlaces
+
+The server's transport bag size (#4490 U11-01): how many places a
+transport's cargo bag opens with, from its owner's level. rarity picks
+the capacity class (1 holds 40, 2 holds 30, the CargoCapacity classes);
+any other rarity is an input error in the server and falls back to the
+row's second authored word, the same authored run the owner-follow rule
+reads - the v1.150 transport rows all carry rarity 0, so the fallback
+governs them. A mall-type COS divides the class by 1.4 first. With the
+base EXP basis G (BaseDeathExp of the owner's level gold minimum):
+
+	places = clamp(int(40 / S * G * 2448 / 11796), 1, authoredSize)
+
+so a level-1 owner opens 7 places on a horse row (class 40), 24 at
+level 20, and the row's 60 caps the size from level 60. An authoredSize
+of 0 authors no bag at all. A row with no usable class word (no authored
+run either) keeps its authored size rather than dividing by zero; no
+shipped vehicle row is shaped that way.
+================
+*/
+func TransportBagPlaces(rarity uint8, authoredRun int64, mall bool, goldMinimum int64, authoredSize int) int {
+	if authoredSize <= 0 {
+		return 0
+	}
+	class := float64(authoredRun)
+	switch rarity {
+	case 1:
+		class = 40
+	case 2:
+		class = 30
+	}
+	if class <= 0 {
+		return authoredSize
+	}
+	if mall {
+		class /= 1.4
+	}
+	places := int(40 / class * float64(BaseDeathExp(goldMinimum)) * 2448 / 11796)
+	return min(max(places, 1), authoredSize)
+}
+
+/*
+================
 CargoValue
 
 The server's cargo value: goods count x 348 over the base
