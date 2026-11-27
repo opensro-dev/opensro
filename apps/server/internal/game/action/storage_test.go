@@ -162,6 +162,40 @@ func TestStorageRefusesUnstorableItemsAndOverdrafts(t *testing.T) {
 
 /*
 ================
+TestStorageGoldZeroAmountRefuses
+
+No amount is the original's own warehouse refusal in both directions
+(0x1829); asking for more than either side holds keeps the gold
+refusal (0x180F) (#4490 U6-16).
+================
+*/
+func TestStorageGoldZeroAmountRefuses(t *testing.T) {
+	rt, c, authority := storageFixture(t)
+	gold := goldOf(c)
+
+	r := trade(t, rt, c, wire.ItemMoveRequest{MovementType: wire.MoveTypeStorageGoldDeposit, GoldAmount: 0})
+	if r.Frames[0].Payload[0] != 2 || r.Frames[0].Payload[1] != wire.ErrCodePositiveNumberOnly {
+		t.Fatalf("deposit of nothing = %v, want [02 29]", r.Frames[0].Payload)
+	}
+	r = trade(t, rt, c, wire.ItemMoveRequest{MovementType: wire.MoveTypeStorageGoldWithdraw, GoldAmount: 0})
+	if r.Frames[0].Payload[0] != 2 || r.Frames[0].Payload[1] != wire.ErrCodePositiveNumberOnly {
+		t.Fatalf("withdrawal of nothing = %v, want [02 29]", r.Frames[0].Payload)
+	}
+	r = trade(t, rt, c, wire.ItemMoveRequest{MovementType: wire.MoveTypeStorageGoldDeposit, GoldAmount: uint32(gold + 1)})
+	if r.Frames[0].Payload[0] != 2 || r.Frames[0].Payload[1] != wire.ErrCodeNotEnoughGold {
+		t.Fatalf("deposit past the purse = %v, want [02 0f]", r.Frames[0].Payload)
+	}
+	r = trade(t, rt, c, wire.ItemMoveRequest{MovementType: wire.MoveTypeStorageGoldWithdraw, GoldAmount: 1})
+	if r.Frames[0].Payload[0] != 2 || r.Frames[0].Payload[1] != wire.ErrCodeNotEnoughGold {
+		t.Fatalf("withdrawal from an empty warehouse = %v, want [02 0f]", r.Frames[0].Payload)
+	}
+	if authority.room.Gold != 0 || goldOf(c) != gold {
+		t.Fatalf("the refusals moved gold: room %d, purse %d (was %d)", authority.room.Gold, goldOf(c), gold)
+	}
+}
+
+/*
+================
 TestStorageGoldDepositCaps
 
 Off, one deposit moves at most the native 100,000,000. On, a
