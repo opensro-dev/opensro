@@ -63,6 +63,34 @@ func stallEdit(kind uint8, body ...byte) []byte {
 
 /*
 ================
+TestStallOpenValueAndEmptyStall
+
+#4490 U18-08, the open-for-business arm: a value of 2 or more is
+refused with the native 0x31 (not the generic invalid-operation
+byte, which would print a wrong line on the client), and opening
+with nothing on the table answers the nothing-to-sell byte the
+v1.150 client's own stall table carries.
+================
+*/
+func TestStallOpenValueAndEmptyStall(t *testing.T) {
+	rt, owner, _, _ := stallFixture(t)
+	title := wire.NewWriter(16).WStr("Potions").Payload()
+	if out := rt.HandleStallCreate(testDivision, owner, title); !bytes.Equal(out.Frames[0].Payload, []byte{1}) {
+		t.Fatalf("create %+v", out.Frames)
+	}
+	if out := rt.HandleStallEdit(testDivision, owner, stallEdit(wire.StallEditOpen, 2, 0)); !bytes.Equal(out.Frames[0].Payload, []byte{2, wire.StallErrBadOpenValue}) {
+		t.Fatalf("open value 2 answered %+v, want [02 31]", out.Frames)
+	}
+	if out := rt.HandleStallEdit(testDivision, owner, stallEdit(wire.StallEditOpen, 1, 0)); !bytes.Equal(out.Frames[0].Payload, []byte{2, wire.StallErrNothingToSell}) {
+		t.Fatalf("empty open answered %+v, want [02 0c]", out.Frames)
+	}
+	if s, ok := rt.Stalls.Get(testDivision, owner.Name); !ok || s.Open {
+		t.Fatalf("the stall opened anyway: %+v", s)
+	}
+}
+
+/*
+================
 TestStallSellsToAVisitor
 
 The owner opens, puts the whole 20-potion stack up for 300 gold and

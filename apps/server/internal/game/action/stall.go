@@ -647,8 +647,11 @@ func (rt *Runtime) applyStallEdit(division string, c *enterworld.Character, kind
 	case wire.StallEditOpen:
 		open, _ := r.U8()
 		network, _ := r.U8()
-		if r.Done() != nil || open > 1 {
+		if r.Done() != nil {
 			return nil, wire.StallErrInvalidOp
+		}
+		if open > 1 {
+			return nil, wire.StallErrBadOpenValue
 		}
 		return rt.openStall(division, c, open == 1, network == 1)
 	case wire.StallEditGreeting:
@@ -681,7 +684,11 @@ openStall
 
 Kind 5: opens or closes the stall for business; an opening that asks for
 the stall network registers it there when the owner stands in a town
-(code 1), and answers 0x4A outside one, leaving it unlisted.
+(code 1), and answers 0x4A outside one, leaving it unlisted. An opening
+with nothing on the table answers the nothing-to-sell byte: the later
+server lets an empty stall open, but the v1.150 client's stall table
+carries this refusal's string - the client's own rule, kept (#4490
+U18-08).
 ================
 */
 func (rt *Runtime) openStall(division string, c *enterworld.Character, open, network bool) ([]byte, uint8) {
