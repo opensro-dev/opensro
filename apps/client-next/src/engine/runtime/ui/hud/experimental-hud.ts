@@ -353,7 +353,7 @@ export const EXPERIMENTAL_TABS: readonly ExperimentalTab[] = [
 						key: "smallestAmmoStack",
 						id: "experimental-smallest-ammo-stack",
 						label: "Reload bolts and arrows from the smallest stack",
-						description: "When the quiver empties, refill it from the smallest bag stack."
+						description: "When the quiver empties, refill from the smallest stack."
 					},
 					{
 						key: "uniqueDamageRank",
@@ -408,7 +408,7 @@ export const EXPERIMENTAL_TABS: readonly ExperimentalTab[] = [
 						key: "maintenanceNotice",
 						id: "experimental-maintenance-notice",
 						label: "Maintenance notice",
-						description: "Login screens: planned maintenance from the public schedule."
+						description: "Show planned maintenance on the login screens."
 					},
 					{
 						// Port-only, not native (#3530): the Job Honor Rank

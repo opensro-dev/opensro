@@ -64,6 +64,40 @@ test("skill motion mapping preserves every native action state and authored set 
 	assert.throws( () => skillMotionRole( 0xCCCCC0, "ANI_UNKNOWN" ), /animation state/ );
 });
 
+test("a BAN whose clip name is in the retail codepage still decodes", () => {
+	// nasrun1_man_run.ban names its clip in CP949; the name is never used.
+	const u32 = n => {
+		const b = Buffer.alloc( 4 );
+		b.writeUInt32LE( n );
+		return b;
+	};
+	const name = Buffer.from( "b3b2c0dab3aabdbab7e9", "hex" ),
+		bone = Buffer.from( "root" ),
+		key = Buffer.alloc( 28 );
+	key.writeFloatLE( 1, 12 );
+	const bytes = Buffer.concat( [
+		Buffer.from( "JMXVBAN 0102" ),
+		u32( 0 ),
+		u32( 0 ),
+		u32( name.length ),
+		name,
+		u32( 1000 ),
+		u32( 0 ),
+		u32( 0 ),
+		u32( 2 ),
+		u32( 0 ),
+		u32( 1000 ),
+		u32( 1 ),
+		u32( bone.length ),
+		bone,
+		u32( 2 ),
+		key,
+		key
+	] );
+	const clip = decodeNativeClip( bytes );
+	assert.equal( clip.duration, 1 );
+	assert.equal( clip.channels[0].bone, "root" );
+});
 test("published player skill BANs decode with native set/state identity and valid named tracks", () => {
 	const manifest = JSON.parse( readFileSync( CLIENT_PUBLIC_ROOT + "/assets/anim/manifest.json", "utf8" ) ),
 		paths = new Set();
