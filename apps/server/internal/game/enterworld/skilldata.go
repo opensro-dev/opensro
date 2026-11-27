@@ -211,6 +211,10 @@ type SkillRow struct {
 	Duplicate         SkillDuplicate
 	DamageCancel      SkillDamageCancel
 	MonsterSelfEffect SkillMonsterSelfEffect
+	// DeferredVital is the row's pmhp block in its deferred mode
+	// (skilldeferred.go): queued on the caster at engage, self-applied
+	// after the swing.
+	DeferredVital SkillDeferredVital
 	// MonsterStackingEffect is an event-cast persistent mom buff (skillmonsterself.go).
 	MonsterStackingEffect SkillMonsterStackingEffect
 	// HostileDebuff is an enemy-targeted buff instance (skillhostiledebuff.go).
@@ -880,6 +884,7 @@ func (t *TextdataSkills) parse(shards []string) {
 			parseSkillMonsterCapture(fields, &row)
 			parseSkillDuplicate(fields, &row)
 			parseSkillMonsterSelfEffect(fields, &row)
+			parseSkillDeferredVital(fields, &row)
 			parseSkillMonsterStackingEffect(fields, &row)
 			if row.Codename != "" {
 				if firstID, dup := t.byCodename[row.Codename]; dup && firstID != row.ID {

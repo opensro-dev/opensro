@@ -116,6 +116,8 @@ func (portalRejectEntry) ReentryPackets(string, string) ([]enterworld.Packet, bo
 func TestPortalSelectedNpcTransactionAndRollback(t *testing.T) {
 	clientdata.RequireGameData(t)
 	rt, c, _, _ := returnFixture(t, 30000)
+	// A paying traveller: past the free-fare watermark (U8-10).
+	c.MaxLevel = testInt64(25)
 	dir := gamedatatest.TextdataDir(t)
 	rt.NpcRoster = []simulation.NpcDef{{ObjectID: 2001, RefObjID: 2011, Codename: "NPC_CH_FERRY", TalkFlags: 2}}
 	rt.NpcSpawn.Enabled = true
@@ -157,6 +159,8 @@ func TestPortalSelectedNpcTransactionAndRollback(t *testing.T) {
 func TestPortalStructureGrantAndDestinationTransaction(t *testing.T) {
 	clientdata.RequireGameData(t)
 	rt, c, _, _ := returnFixture(t, 30000)
+	// A paying traveller: past the free-fare watermark (U8-10).
+	c.MaxLevel = testInt64(25)
 	// The fixture gate stands at the player, inside its hit range.
 	rt.NpcSpawn.Enabled, rt.NpcSpawn.AtPlayer = true, true
 	rt.NpcRoster = []simulation.NpcDef{{ObjectID: 252094, RefObjID: 2094, Codename: "STORE_CH", Teleport: &simulation.TeleportGateBounds{Radius: 10, Height: 25, FortressID: 1}}}
@@ -277,6 +281,7 @@ func TestMuhanArenaSoloPartyAdmission(t *testing.T) {
 func TestFortressGateFeeTaxFillsTheTreasury(t *testing.T) {
 	clientdata.RequireGameData(t)
 	rt, c, _, _ := returnFixture(t, 30000)
+	c.MaxLevel = testInt64(25) // a paying traveller (free fares end at 20)
 	rt.NpcSpawn.Enabled, rt.NpcSpawn.AtPlayer = true, true
 	rt.NpcRoster = []simulation.NpcDef{{ObjectID: 252094, RefObjID: 2094, Codename: "STORE_CH", FortressID: 1,
 		Teleport: &simulation.TeleportGateBounds{Radius: 10, Height: 25, FortressID: 1}}}

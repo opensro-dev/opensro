@@ -435,8 +435,3 @@ func (s *Store) MetaView() MetaView {
 	}
 	return MetaView{GidCounter: gid, NextCharID: next}
 }
-
-// DeleteReservationWindow is how long a deletion reservation waits
-// before the reaper archives the character - the same 7 days the
-// character-select screen's countdown renders
-// (CHARACTER_DELETE_RESERVATION_DAYS in CPSCharacterSelect.tsx).

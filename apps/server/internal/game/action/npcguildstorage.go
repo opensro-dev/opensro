@@ -351,7 +351,7 @@ func (rt *Runtime) applyGuildStorageMove(division string, c *enterworld.Characte
 	// the bound rows outright. The refusal runs inside the move's own
 	// commit, under the store lock, so no chest move between a check
 	// and the withdraw can slip a loaded pet into the slot.
-	mutate := rt.storageMutation(personal, q)
+	mutate := rt.storageMutation(personal, q, true)
 	if personal == wire.MoveTypeStorageWithdraw {
 		withdraw := mutate
 		mutate = func(next *domain.Character, room *domain.AccountStorage) error {
