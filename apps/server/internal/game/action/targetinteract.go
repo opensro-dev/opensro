@@ -38,13 +38,24 @@ func (rt *Runtime) HandleTargetInteract(
 	unlock := rt.lockDivision(divisionID)
 	defer unlock()
 	if queued, accepted := rt.queueObjectAction(divisionID, character, payload); accepted {
+		// A skill command the queue answered (queued or refused) was
+		// handled all the same: it gives up a pending suit change.
+		if wire.ClassifyTargetActionLane(payload) == wire.TargetActionSkill {
+			rt.cancelJobDress(divisionID, character)
+		}
 		return queued
 	}
 	previous := rt.captureActionSession(divisionID, character)
+	lane := wire.ClassifyTargetActionLane(payload)
 	result := rt.handleTargetInteractLocked(divisionID, character, payload, rt.handlerDoors())
-	switch wire.ClassifyTargetActionLane(payload) {
+	switch lane {
 	case wire.TargetActionBasicAttack, wire.TargetActionFollow, wire.TargetActionSkill:
-		return rt.publishActionSession(divisionID, character, result, previous)
+		result = rt.publishActionSession(divisionID, character, result, previous)
+	}
+	if lane == wire.TargetActionSkill {
+		// The native skill command clears a pending suit change once the
+		// command has been handled, refused or not.
+		rt.cancelJobDress(divisionID, character)
 	}
 	return result
 }
