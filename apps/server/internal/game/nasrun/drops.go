@@ -30,7 +30,8 @@ const (
 	SpiritDropHardBps = 2_000
 	// JewelDropBps is Sabakun's jewel's odds on any of them (90 %):
 	// +0 to +6 spends about 16 jewels on average (alchemy/nasrun.go's
-	// 70..20 % ladder), so about 18 kills, the owner's target.
+	// 70..20 % ladder), so about 18 kills, the owner's target; the
+	// ladder's 15..5 % tail to +10 spends about 49 more.
 	JewelDropBps = 9_000
 	// DropBps in one whole chance, for the settlement's roll.
 	DropBps = 10_000

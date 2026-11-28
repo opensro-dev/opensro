@@ -11,7 +11,10 @@ piece as an avatar record of the equipment catalog under a reserved id
 above every RefItemID, and dress.visualChanges names each skill's pieces
 (scripts/build/char/visualChanges.mjs). While such a buff is attached to
 an actor, the costume replaces its worn avatars; the pieces' masks and
-priority hide the equipment they cover, as any avatar's do.
+priority hide the equipment they cover, as any avatar's do. The weapon
+has no visual mask, so the costume puts it away by its own rule: hidden
+while the wearer stands or moves, drawn again while a skill animates
+(costumeHidesWeapon).
 
 ===========================================================================
 */
@@ -36,4 +39,20 @@ export function visualChangeAvatars(
 		if ( pieces?.length ) return pieces.map( refObjId => ({ slot: 0, refObjId, typeFlags: 0, plus: 0 }) );
 	}
 	return undefined;
+}
+
+/*
+================
+costumeHidesWeapon
+
+Whether a costume puts its wearer's weapon away: while the Spirit's buff
+holds, the weapon is hidden standing and moving, and drawn only while a
+skill animates (the owner's account of the later client, 2026-11-27).
+casting is the body's own criterion (auxiliary-motion.ts castAnimating):
+the transformation's self buff keeps its cast for the buff's whole
+duration, so membership in the cast table is not casting.
+================
+*/
+export function costumeHidesWeapon( costumed: boolean, casting: boolean ): boolean {
+	return costumed && !casting;
 }

@@ -868,7 +868,7 @@ func (t *TextdataSkills) parse(shards []string) {
 			parseSkillRecovery(fields, &row)
 			parseSkillImbue(fields, &row)
 			parseSkillWall(fields, &row)
-			if replacement, err := compileSkillReplacement(fields); err == nil {
+			if replacement, err := compileSkillReplacementRow(fields); err == nil {
 				replacement.PackedStates = packedStatesFor(row.Codename, replacement.PackedStates)
 				row.Replacement = replacement
 				row.ReplacementPinned = true
@@ -878,6 +878,7 @@ func (t *TextdataSkills) parse(shards []string) {
 			row.InstantSelfEffectPinned = row.Imbue.Pinned || instantMovementSkill(fields, row)
 			row.StructureRepair = compileStructureRepair(fields, row)
 			parseSkillTimedEffect(fields, &row)
+			projectTimedRecoveryRates(fields, &row)
 			parseSkillConcealment(fields, &row)
 			if row.Concealment.Pinned && row.Concealment.Hide {
 				// The plain-setter projection refuses levelled hides; the

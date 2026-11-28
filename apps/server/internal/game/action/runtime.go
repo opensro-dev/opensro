@@ -210,6 +210,9 @@ type Runtime struct {
 	// CaravanHire answers the port-only caravan hire window's request
 	// (OpCaravanHireRequest); nil when AI caravans are off.
 	CaravanHire func(division string, c *enterworld.Character, payload []byte) []wire.Frame
+	// AttendanceRequest answers the port-only attendance request
+	// (wire.OpAttendanceCheckIn); nil when SRO_ATTENDANCE is off.
+	AttendanceRequest AttendanceRequestFunc
 	// CaravanHireLabel names the caravan hire row an NPC offers this
 	// character ("" for none); select sends it as OpCaravanHireNpc so the
 	// client lists it first in the NPC's menu.
@@ -476,6 +479,10 @@ type Runtime struct {
 	// towers and stones, by division and structure
 	// (fortress_structure_pulse.go). Tick-owned.
 	structurePulses map[string]map[uint32]int64
+	// structureAuras are the standing holds of the fortress structures'
+	// holder-side auras, by division and structure
+	// (fortress_structure_aura.go). Tick-owned.
+	structureAuras map[string]map[uint32]*structureAuraHold
 
 	// UnlimitedItems names the item codenames whose use is never spent (the
 	// operator's beta starter kit, SRO_BETA_STARTER_KIT). Set once at wiring.

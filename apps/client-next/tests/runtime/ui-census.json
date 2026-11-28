@@ -1817,6 +1817,10 @@
 					"reads": 1,
 					"writes": 0
 				},
+				"panel:Attendance Calendar": {
+					"reads": 1,
+					"writes": 0
+				},
 				"panel:Auto Potion": {
 					"reads": 10,
 					"writes": 0
@@ -2570,6 +2574,10 @@
 				"panel:Alchemy": {
 					"reads": 0,
 					"writes": 2
+				},
+				"panel:Attendance Calendar": {
+					"reads": 0,
+					"writes": 1
 				},
 				"panel:Auto Potion": {
 					"reads": 0,
@@ -4961,6 +4969,10 @@
 					"reads": 6,
 					"writes": 0
 				},
+				"panel:Attendance Calendar": {
+					"reads": 2,
+					"writes": 0
+				},
 				"panel:Auto Potion": {
 					"reads": 2,
 					"writes": 0
@@ -5491,6 +5503,10 @@
 				},
 				"panel:Alchemy": {
 					"reads": 3,
+					"writes": 0
+				},
+				"panel:Attendance Calendar": {
+					"reads": 1,
 					"writes": 0
 				},
 				"panel:Auto Potion": {
@@ -11031,6 +11047,12 @@
 			"fn": "activate",
 			"kind": "prefix",
 			"ordinal": 1,
+			"pattern": "attendance-"
+		},
+		{
+			"fn": "activate",
+			"kind": "prefix",
+			"ordinal": 1,
 			"pattern": "avatar:"
 		},
 		{
@@ -13287,7 +13309,7 @@
 	"source": "src/engine/runtime/ui/ui.ts",
 	"summary": {
 		"fields": 309,
-		"routes": 863,
+		"routes": 864,
 		"sharedFields": 252
 	}
 }

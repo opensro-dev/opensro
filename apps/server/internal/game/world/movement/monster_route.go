@@ -23,13 +23,12 @@ const monsterRouteProbeBudget = 256
 // monsterGlobalRouteProbeBudget bounds the homing search
 // (PlanMonsterGlobalRoute): a returning mover can be regions from home
 // behind a terrain barrier, and the search only runs when the bounded
-// search and the march have both failed, on the mover's one-second
-// retry cadence. Sized from the real Taklamakan wedge (#4124): the
-// rim-to-nest crossing measures 117046 probes (~0.8 s on the dev box)
-// because the Euclidean heuristic floods the gorge basin before it
-// finds the pass, so the budget carries ~2.2x that with room for
-// longer kites; the worst case is ~1.8 s for a mover whose home is
-// unreachable, after which it rejoins the normal wait. See
+// search and the march have both failed. Sized from the real Taklamakan
+// wedge (#4124): the rim-to-nest crossing measures 117046 probes because
+// the Euclidean heuristic floods the gorge basin before it finds the
+// pass, so the budget carries ~2.2x that with room for longer kites.
+// The search runs in slices across ticks (monster_route_homing.go); in
+// one call an exhausted search held the live tick for up to 1 s. See
 // TestGlobalRouteCrossesTheGorgeRim.
 const monsterGlobalRouteProbeBudget = 262144
 const monsterRouteGrid = 32.0
@@ -53,11 +52,14 @@ local budget cannot see around (the Taklamakan gorge rim, #4124), where
 the native mover simply walks its global path home. Only the returning
 mode's fallback consults this entry (simulation's globalRoute); chase
 and follow keep the bounded budget above. Geometry, tie order and the
-step probe are identical - the budget is the only difference.
+step probe are identical; the budget, and the slicing that answers
+NavigationSearchPending until the search settles, are the difference.
 ================
 */
 func (v *WaterValidator) PlanMonsterGlobalRoute(from, goal monster.Pose) *monster.NavigationRoute {
-	return findMonsterRouteWithBudget(from, goal, v.probeMonsterRouteStep, monsterGlobalRouteProbeBudget)
+	return v.homing.plan(homingKey{from, goal}, func() *routeSearch {
+		return newRouteSearch(from, goal, v.probeMonsterRouteStep, monsterGlobalRouteProbeBudget)
+	}, monsterGlobalRouteSliceProbes)
 }
 
 /*
@@ -180,71 +182,149 @@ findMonsterRouteWithBudget
 The detour search itself, parameterized only by its probe budget: the
 bounded local search (PlanMonsterRoute) and the homing search
 (PlanMonsterGlobalRoute) share every rule but how far they may look.
+Run to completion in one call; the homing search runs the same search
+in slices instead (monster_route_homing.go).
 ================
 */
 func findMonsterRouteWithBudget(from, goal monster.Pose, step func(monster.Pose, monster.Pose, bool) (float64, bool, bool), budget int) *monster.NavigationRoute {
+	route, _ := newRouteSearch(from, goal, step, budget).advance(math.MaxInt)
+	return route
+}
+
+// routeKey is one search cell: grid offsets from the start and the
+// rounded height, so stacked floors stay apart.
+type routeKey struct{ x, z, y int }
+
+/*
+================
+routeSearch
+
+The detour search's whole state between slices: the open queue, the
+best cost per cell and the probes spent. A search paused between two
+node expansions resumes exactly where it stopped, so a sliced search
+returns the same route, probe for probe, as one run to completion.
+================
+*/
+type routeSearch struct {
+	goal   monster.Pose
+	step   func(monster.Pose, monster.Pose, bool) (float64, bool, bool)
+	budget int
+	count  int
+	start  *routeNode
+	open   routeQueue
+	best   map[routeKey]float64
+	result *monster.NavigationRoute
+}
+
+/*
+================
+newRouteSearch
+
+Opens a search with its first, direct probe. A clear straight line or
+unavailable geometry settles it at once.
+================
+*/
+func newRouteSearch(from, goal monster.Pose, step func(monster.Pose, monster.Pose, bool) (float64, bool, bool), budget int) *routeSearch {
 	goal = routeNormalize(goal)
+	s := &routeSearch{goal: goal, step: step, budget: budget}
 	_, firstClear, firstAvailable := step(from, goal, true)
 	if !firstAvailable {
-		return monster.UnresolvedNavigationRoute(goal, monster.NavigationGeometryUnavailable).WithProbes(1)
-	} // unavailable geometry is not an obstacle to guess around
+		// Unavailable geometry is not an obstacle to guess around.
+		s.result = monster.UnresolvedNavigationRoute(goal, monster.NavigationGeometryUnavailable).WithProbes(1)
+		return s
+	}
 	if firstClear {
-		return monster.NewNavigationRoute(goal, []monster.Pose{goal}).WithProbes(1)
+		s.result = monster.NewNavigationRoute(goal, []monster.Pose{goal}).WithProbes(1)
+		return s
 	}
 	// Fixed work budget and deterministic tie order bound crowded-server cost.
 	// Retried requests are paced and cached by the mover, not by this adapter.
-	count := 1
-	start := &routeNode{pose: from, priority: routeDistance(from, goal)}
-	open := routeQueue{start}
-	type key struct{ x, z, y int }
-	best := map[key]float64{{0, 0, int(math.Round(from.Y))}: 0}
+	s.count = 1
+	s.start = &routeNode{pose: from, priority: routeDistance(from, goal)}
+	s.open = routeQueue{s.start}
+	s.best = map[routeKey]float64{{0, 0, int(math.Round(from.Y))}: 0}
+	return s
+}
+
+/*
+================
+routeSearch.advance
+
+Expands nodes until the search settles or this call has spent slice
+probes; returns the settled route (nil while it is still open) and the
+probes this call spent. The pause is only ever taken before a pop, and
+one expansion can overrun slice by its eight neighbour probes.
+================
+*/
+func (s *routeSearch) advance(slice int) (*monster.NavigationRoute, int) {
+	if s.result != nil {
+		return s.result, 0
+	}
+	spentFrom := s.count
 	directions := [8][2]int{{1, 0}, {0, 1}, {-1, 0}, {0, -1}, {1, 1}, {-1, 1}, {-1, -1}, {1, -1}}
-	for open.Len() > 0 && count < budget {
-		n := heap.Pop(&open).(*routeNode)
-		if n.cost > best[key{n.x, n.z, int(math.Round(n.pose.Y))}] {
+	for s.open.Len() > 0 && s.count < s.budget {
+		if s.count-spentFrom >= slice {
+			return nil, s.count - spentFrom
+		}
+		n := heap.Pop(&s.open).(*routeNode)
+		if n.cost > s.best[routeKey{n.x, n.z, int(math.Round(n.pose.Y))}] {
 			continue
 		}
-		if n != start {
-			count++
-			if _, clear, _ := step(n.pose, goal, false); clear {
-				points := []monster.Pose{goal}
-				for at := n; at != start; at = at.parent {
+		if n != s.start {
+			s.count++
+			if _, clear, _ := s.step(n.pose, s.goal, false); clear {
+				points := []monster.Pose{s.goal}
+				for at := n; at != s.start; at = at.parent {
 					points = append(points, at.pose)
 				}
 				for i, j := 0, len(points)-1; i < j; i, j = i+1, j-1 {
 					points[i], points[j] = points[j], points[i]
 				}
-				return monster.NewNavigationRoute(goal, points).WithProbes(count)
+				return s.settle(monster.NewNavigationRoute(s.goal, points).WithProbes(s.count)), s.count - spentFrom
 			}
 		}
 		for _, d := range directions {
-			if count >= budget {
+			if s.count >= s.budget {
 				break
 			}
 			x, z := n.x+d[0], n.z+d[1]
-			p := from
+			p := s.start.pose
 			p.X += float64(x) * monsterRouteGrid
 			p.Z += float64(z) * monsterRouteGrid
 			p.Y = n.pose.Y
 			p = routeNormalize(p)
-			count++
-			restY, clear, _ := step(n.pose, p, false)
+			s.count++
+			restY, clear, _ := s.step(n.pose, p, false)
 			if !clear {
 				continue
 			}
 			p.Y = restY
 			cost := n.cost + routeDistance(n.pose, p)
-			k := key{x, z, int(math.Round(p.Y))}
-			if previous, ok := best[k]; ok && previous <= cost {
+			k := routeKey{x, z, int(math.Round(p.Y))}
+			if previous, ok := s.best[k]; ok && previous <= cost {
 				continue
 			}
-			best[k] = cost
-			heap.Push(&open, &routeNode{pose: p, x: x, z: z, cost: cost, priority: cost + routeDistance(p, goal), parent: n, order: count})
+			s.best[k] = cost
+			heap.Push(&s.open, &routeNode{pose: p, x: x, z: z, cost: cost, priority: cost + routeDistance(p, s.goal), parent: n, order: s.count})
 		}
 	}
 	status := monster.NavigationRouteBlocked
-	if count >= budget {
+	if s.count >= s.budget {
 		status = monster.NavigationSearchExhausted
 	}
-	return monster.UnresolvedNavigationRoute(goal, status).WithProbes(count)
+	return s.settle(monster.UnresolvedNavigationRoute(s.goal, status).WithProbes(s.count)), s.count - spentFrom
+}
+
+/*
+================
+routeSearch.settle
+
+Records the final route and drops the queue and cell table, which can
+hold a quarter million nodes on an exhausted homing search.
+================
+*/
+func (s *routeSearch) settle(route *monster.NavigationRoute) *monster.NavigationRoute {
+	s.result = route
+	s.open, s.best, s.start = nil, nil, nil
+	return route
 }

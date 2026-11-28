@@ -559,6 +559,9 @@ export type GameplayCommand =
 		readonly name: string;
 	}
 	| { readonly kind: "caravan-hire-close"; }
+	// Port-only attendance calendar request (#3255, attendance.ts): operation
+	// 0 checks in today, 1 claims a continuity tier, 2 an accumulation tier.
+	| { readonly kind: "attendance"; readonly operation: 0 | 1 | 2; readonly tier: number; }
 	| { readonly kind: "arena-decision"; readonly operation: 0 | 1 | 2 | 5; readonly id: string; }
 	| {
 		readonly kind: "arena-decision";
@@ -911,6 +914,9 @@ export interface GameplayState extends MoverPublication {
 	readonly uniqueDamageRank?: import("./unique-rank").UniqueDamageRank | null;
 	// Port-only job honor board and own standing (job-honor.ts), under SRO_JOB_HONOR.
 	readonly jobHonor?: import("./job-honor").JobHonorFeed | null;
+	// Port-only (#3255): the attendance month and its reward tiers
+	// (attendance.ts), under SRO_ATTENDANCE.
+	readonly attendance?: import("./attendance").AttendanceFeed | null;
 	// Port-only (#3648): the Styria Clash standing (styria.ts) and its
 	// latched result, under SRO_STYRIA_CLASH.
 	readonly styria?: import("./styria").StyriaFeed | null;

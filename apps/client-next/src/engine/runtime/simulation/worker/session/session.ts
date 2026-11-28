@@ -16,7 +16,12 @@ import { createWorldSession } from "./world/world";
 import { createSessionDecoder } from "./decode/decode";
 import { createSessionHttp } from "./http/http";
 import type { SessionCommand, SessionOwner, SessionState } from "@/engine/contracts/session";
-import { type ClientIncident, INCIDENT_MESSAGE_LENGTH } from "@/engine/contracts/network";
+import {
+	type ClientIncident,
+	FOREIGN_UNCAUGHT_ERROR_CODE,
+	INCIDENT_MESSAGE_LENGTH,
+	UNCAUGHT_ERROR_CODE
+} from "@/engine/contracts/network";
 import { buildTag } from "@/engine/foundation/release/build-tag";
 import {
 	MAX_STARTING_WAIT_MS,
@@ -169,7 +174,7 @@ apart from failures; a refused entry files as a software failure with the
 stage it happened in. Each code reports once - except asset failures,
 which file once per terminal episode: the stream owners hand each out
 exactly once (#2337), so a code dedupe would eat a later episode whole.
-The one uncaught_error code is the journal's fault port instead: it hands
+The uncaught codes (ours and foreign) are the journal's fault port instead: it hands
 over the first throw of each distinct failure (journal.ts recordError,
 bounded there), so those dedupe by the failure itself - message and top
 frame - or a storm's second signature never files (#3684).
@@ -177,7 +182,8 @@ frame - or a storm's second signature never files (#3684).
 	*/
 	function reportClient( command: Extract<SessionCommand, { kind: "client-report"; }> ) {
 		if ( command.incidentKind !== "asset" ) {
-			const key = command.code === "uncaught_error" ?
+			const uncaught = command.code === UNCAUGHT_ERROR_CODE || command.code === FOREIGN_UNCAUGHT_ERROR_CODE;
+			const key = uncaught ?
 				command.code + "\n" + command.message + "\n" + (command.stack?.split( "\n" )[0] ?? "") :
 				command.code;
 			if ( clientReports.has( key ) || clientReports.size >= CLIENT_REPORT_CODES ) return;

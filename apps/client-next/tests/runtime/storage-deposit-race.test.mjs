@@ -46,7 +46,7 @@ function warehouseFixture() {
 		simulationProtocolVersion: 1,
 		inventorySlotCount: 45,
 		equipmentSlotCount: 13,
-		refItemSnapshot: [ { refObjId: POTION, typeFlags: 0xec } ],
+		refItemSnapshot: [ { refObjId: POTION, typeFlags: 0xec, nativeFields: { maxStack: 50 } } ],
 		equipItems: [ { slot: BAG_SLOT, refObjId: POTION, body: [ 1, 0, 0, 0, 10, 0 ] } ]
 	} );
 	const entity = {
@@ -109,6 +109,48 @@ test("a deposit answered after the window closed leaves the bag, and the next vi
 		"the reopened warehouse is listed by the server, not drawn from a copy"
 	);
 	assert.equal( defined( snapshot( game ).storage, "reopened room" ).phase, "listing" );
+});
+
+/*
+================
+a room move answered after the warehouse was reopened
+
+BR journals (#4737): the storage sort sent a room move (0x706D), the
+player talked to the warehouse again (0x72C3 list request), and the move's
+0xB06D echo arrived while the reopened room was still listing with no rows.
+Settling the echo against that empty room threw "Empty storage source slot"
+and ended the session. The echo settles against the room the move was
+planned on; the server's list then replaces it.
+================
+*/
+test("a room move answered after the warehouse was reopened settles instead of ending the session (#4737)", () => {
+	const { game, sent } = warehouseFixture();
+	game.command(
+		{ kind: "storage-move", move: { type: 2, source: BAG_SLOT, destination: 0, quantity: 0, gold: 0 } },
+		6,
+		undefined
+	);
+	game.receive( { opcode: ITEM_MOVE_RESULT, payload: Uint8Array.of( 1, 2, BAG_SLOT, 0 ) }, 7 );
+	game.command(
+		{ kind: "storage-move", move: { type: 1, source: 0, destination: 5, quantity: 10, gold: 0 } },
+		8,
+		undefined
+	);
+	game.command( { kind: "storage-close" }, 9, undefined );
+	const before = sent.length;
+	game.command( { kind: "storage-open", gid: NPC_GID }, 10, undefined );
+	assert.deepEqual( sent.slice( before ).map( frame => frame.opcode ), [ STORAGE_LIST_REQ ] );
+	assert.doesNotThrow( () =>
+		game.receive( { opcode: ITEM_MOVE_RESULT, payload: Uint8Array.of( 1, 1, 0, 5, 10, 0 ) }, 11 )
+	);
+	const reopened = defined( snapshot( game ).storage, "reopened room" );
+	assert.equal( reopened.phase, "listing", "the echo must not reopen the room before its list" );
+	// The server's list, sent after the move, replaces the room.
+	game.receive( { opcode: STORAGE_LIST, payload: Uint8Array.of( 150, 0 ) }, 12 );
+	const listed = snapshot( game );
+	assert.equal( defined( listed.storage, "listed room" ).phase, "opening" );
+	// The pending move is settled: a new command is admitted.
+	assert.equal( listed.inventoryPending, false );
 });
 
 test("a transport resume resets the cached warehouse so reopening relists stored items with their icons and names", () => {

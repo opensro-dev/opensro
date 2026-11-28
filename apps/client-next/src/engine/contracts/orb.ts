@@ -15,6 +15,19 @@ export interface ItemEffectFeedback {
 	readonly source: import("./world").EntityState;
 	readonly item: number;
 	readonly typeFlags: number;
+	// A named effect record to play instead of the item's own (a Devil's
+	// Spirit transition, spirit-effects.ts).
+	readonly record?: string;
+}
+// Port-only (SRO_NASRUN): a Devil's Spirit transition on its wearer
+// (spirit-effects.ts); presentation resolves the record by the Spirit's
+// codename.
+export interface SpiritEffectFeedback {
+	readonly kind: "spirit-effect";
+	readonly gid: number;
+	readonly item: number;
+	readonly typeFlags: number;
+	readonly transition: import("@/engine/foundation/gameplay/spirit-effects").SpiritTransition;
 }
 export type VisualFeedback =
 	| {
@@ -24,6 +37,7 @@ export type VisualFeedback =
 		readonly source: { readonly regionId: number; readonly x: number; readonly y: number; readonly z: number; };
 	}
 	| ItemEffectFeedback
+	| SpiritEffectFeedback
 	| OrbFeedback
 	| { readonly kind: "level-up"; readonly gid: number; }
 	| SystemEffectFeedback;

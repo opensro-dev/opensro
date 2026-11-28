@@ -150,7 +150,7 @@ func (rt *Runtime) installPeriodicCast(p periodicCast) (OpResult, skillCastDecis
 			InstanceToken: token, OwnerOrTargetGid: p.target.gid})
 		rt.queueSkillFinalize(p.division, p.snapshot.Name, caster, p.now, wire.SkillCastReleaseFrame(token, p.target.gid))
 	}
-	rt.queueSkillCastClose(p.division, p.snapshot.Name, caster, token, p.skill, 0, p.now+int64(p.skill.ActionDurationMs))
+	rt.queueSkillCastClose(p.division, p.snapshot.Name, caster, token, p.skill, 0, p.release.castCloseAtMs(p.now, p.skill.ActionCastingTimeMs, int64(p.skill.ActionDurationMs)))
 	public = append([]wire.Frame{start}, public...)
 	private = append(private, wire.Frame{Opcode: simulation.OpVitalsUpdate,
 		Payload: simulation.VitalsRefreshPayload(caster, rt.publishedVitals(p.division, p.character))})

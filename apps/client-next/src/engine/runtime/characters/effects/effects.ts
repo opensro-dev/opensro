@@ -2825,8 +2825,13 @@ export function createCharacterEffects(
 						category = flags & 0x780,
 						subtype = flags >>> 11;
 					const firework = consumable && category === 0x300;
-					let record: import("@/engine/contracts/effects").EffectRecord | undefined;
-					if ( consumable ) {
+					// A named record the event carries (a Devil's Spirit transition,
+					// spirit-effects.ts) stands for the item's own.
+					let record: import("@/engine/contracts/effects").EffectRecord | undefined =
+						event.record === undefined ?
+							undefined :
+							namedCatalog[event.record];
+					if ( event.record === undefined && consumable ) {
 						const potion = category === 0x180 ?
 							4 :
 							category === 0x80 ?
@@ -2843,7 +2848,7 @@ export function createCharacterEffects(
 							];
 						}
 					}
-					record ??= namedCatalog[reference.codename];
+					if ( event.record === undefined ) record ??= namedCatalog[reference.codename];
 					if ( !record ) {
 						if ( firework ) {
 							refuse( `item:${reference.codename}: missing retail named effect record` );

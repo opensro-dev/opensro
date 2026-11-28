@@ -477,7 +477,8 @@ test("the first stack overflow files one incident with its frames, repeats file 
 	}
 	assert.deepEqual( filed, [ {
 		message: "RangeError: Maximum call stack size exceeded",
-		frames: [ "    at /src/stall.ts:10:5", "    at /src/frame.ts:20:3" ]
+		frames: [ "    at /src/stall.ts:10:5", "    at /src/frame.ts:20:3" ],
+		foreign: false
 	} ] );
 });
 
@@ -524,7 +525,8 @@ test("an overflow with no page frame files its frames' location classes, never t
 			"    at <native>",
 			"    at <blob>",
 			"    at <other-origin>"
-		]
+		],
+		foreign: true
 	} ] );
 	const text = JSON.stringify( page.journal.since( 0 ) );
 	for ( const secret of [ "secretWalk", "abcdef", "evalPlayerName", "elsewhere", "0f3c" ] ) {
@@ -560,7 +562,7 @@ test("a rejected non-error files as a rejection with no frames", t => {
 	const event = new Event( "unhandledrejection" );
 	Object.assign( event, { reason: "secret text" } );
 	page.window.dispatchEvent( event );
-	assert.deepEqual( filed, [ { message: "Rejection", frames: [] } ] );
+	assert.deepEqual( filed, [ { message: "Rejection", frames: [], foreign: false } ] );
 });
 
 test("a storm of distinct failures files at most the kept eight", t => {
@@ -591,8 +593,106 @@ test("a failure storming past the kept eight files once it proves a storm", t =>
 	assert.equal( filed.length, 9 );
 	assert.deepEqual( filed[8], {
 		message: "RangeError: Maximum call stack size exceeded",
-		frames: [ "    at /src/stall.ts:10:5", "    at /src/frame.ts:20:3" ]
+		frames: [ "    at /src/stall.ts:10:5", "    at /src/frame.ts:20:3" ],
+		foreign: false
 	} );
 	throwNow( page, failWith( "Maximum call stack size exceeded" ) );
 	assert.equal( filed.length, 9 );
+});
+
+/*
+================
+foreign failures
+
+The live overflows of #3425 / #3684 (33 stacks, 2026-11-28) ran only
+extension and eval'd frames. Such a failure files as foreign; a page
+frame, or a stack of bare native frames, keeps the failure ours.
+================
+*/
+test("a failure that ran only another origin's code files as foreign, under its own code", async t => {
+	const { uncaughtIncidentCode } = await import( "../../src/engine/contracts/network.ts" );
+	const { page, filed } = incidentPage( t );
+	const extension = new RangeError( "Maximum call stack size exceeded" );
+	extension.stack = [
+		"RangeError: Maximum call stack size exceeded",
+		...Array.from( { length: 4 }, () => "    at walk (chrome-extension://abcdef/inject.js:3:9)" ),
+		"    at Array.map (<anonymous>)"
+	].join( "\n" );
+	throwNow( page, extension );
+	const native = new RangeError( "Maximum call stack size exceeded" );
+	native.stack =
+		"RangeError: Maximum call stack size exceeded\n    at Array.map (<anonymous>)\n    at JSON.parse (<anonymous>)";
+	throwNow( page, native );
+	assert.equal( filed.length, 2 );
+	assert.equal( filed[0].foreign, true );
+	assert.equal( uncaughtIncidentCode( filed[0] ), "foreign_uncaught_error" );
+	assert.equal( filed[1].foreign, false, "bare native frames prove nothing" );
+	assert.equal( uncaughtIncidentCode( filed[1] ), "uncaught_error" );
+});
+
+/*
+================
+foreign blind spots
+
+A same-origin frame whose script the list never saw load may be ours, so
+it never files as foreign; a stackless error is classified from the
+window event's own source (58 of the 91 live overflows had no stack).
+================
+*/
+test("a same-origin frame the script list missed keeps the failure ours", t => {
+	const { page, filed } = incidentPage( t );
+	const missed = new RangeError( "Maximum call stack size exceeded" );
+	missed.stack = [
+		"RangeError: Maximum call stack size exceeded",
+		`    at walk (${ORIGIN}/assets/late-chunk-123.js:4:2)`,
+		"    at walk (chrome-extension://abcdef/inject.js:3:9)"
+	].join( "\n" );
+	throwNow( page, missed );
+	assert.equal( filed.length, 1 );
+	assert.deepEqual( filed[0].frames, [ "    at <same-origin>", "    at <extension>" ] );
+	assert.equal( filed[0].foreign, false );
+});
+
+/*
+================
+throwStackless
+
+Dispatches one uncaught error with no stack, as a cross-script or
+overflowing throw arrives, and the event's own source.
+================
+*/
+function throwStackless( page, filename, lineno = 7, colno = 3 ) {
+	const error = new RangeError( "Maximum call stack size exceeded" );
+	error.stack = "";
+	const event = new Event( "error" );
+	Object.assign( event, { error, message: error.message, filename, lineno, colno } );
+	page.window.dispatchEvent( event );
+}
+
+test("a stackless error names its source: our script by path, another by class", t => {
+	const { page, filed } = incidentPage( t );
+	throwStackless( page, ORIGIN + "/src/stall.ts" );
+	page.advance( 1000 );
+	throwStackless( page, ORIGIN + "/src/stall.ts" );
+	assert.equal( filed.length, 1, "a repeat from one source files once" );
+	assert.deepEqual( filed[0].frames, [ "    at /src/stall.ts:7:3" ] );
+	assert.equal( filed[0].foreign, false );
+});
+
+test("a foreign stackless error filed first never swallows one of ours", t => {
+	const { page, filed } = incidentPage( t );
+	throwStackless( page, "chrome-extension://abcdef/inject.js" );
+	page.advance( 1000 );
+	throwStackless( page, ORIGIN + "/src/stall.ts" );
+	assert.equal( filed.length, 2, "each source files its own failure" );
+	assert.equal( filed[0].foreign, true );
+	assert.deepEqual( filed[1].frames, [ "    at /src/stall.ts:7:3" ] );
+	assert.equal( filed[1].foreign, false );
+});
+
+test("a stackless error thrown by an extension files as foreign", t => {
+	const { page, filed } = incidentPage( t );
+	throwStackless( page, "chrome-extension://abcdef/inject.js" );
+	assert.deepEqual( filed[0].frames, [ "    at <extension>" ] );
+	assert.equal( filed[0].foreign, true );
 });
