@@ -113,6 +113,21 @@ export interface MallLabels {
 
 /*
 ================
+mallTitle
+
+The goods' title wherever the mall names them (card, popup, purchase
+question, tooltip): the localized name, and for a pack the count it
+delivers, so the single scroll and its pack of eleven never read the
+same. The native package names carry no count (an owner-reported bug,
+2026-11-28; fixed, not copied).
+================
+*/
+export function mallTitle( name: string, offer: Pick<MallOffer, "count"> ): string {
+	return offer.count ? `${name} (x${offer.count})` : name;
+}
+
+/*
+================
 mallTooltipRows
 
 The item-mall leg of 5592B0 (pane 0xf): the package price object's silk

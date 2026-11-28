@@ -699,6 +699,31 @@ func TestGachaExchangePassesByAVoucherItCannotPay(t *testing.T) {
 
 /*
 ================
+TestGachaExchangeNeverAliasesAHighSlot
+
+A stored slot of 256 or more is out of the bag. Narrowed to a byte it would
+name slot 13, whose row (here an ordinary item with no pair) the exchange
+would then read as the voucher's pair: it must neither panic nor pay.
+================
+*/
+func TestGachaExchangeNeverAliasesAHighSlot(t *testing.T) {
+	rt, c, p := operatorFixture(t, 0)
+	c.MissionInventory[0].Slot = 13 + 256
+	plain := c.MissionInventory[0]
+	plain.Slot = 13
+	plain.RefObjID, plain.Codename = 11459, "ITEM_PLAIN"
+	plain.MagicOptions = nil
+	c.MissionInventory = append(c.MissionInventory, plain)
+	before := c.Snapshot()
+	frames, reason := rt.HandleGachaExchange(testDivision, c, p)
+	if reason == "" || !reflect.DeepEqual(c.Snapshot(), before) {
+		t.Fatalf("an out-of-bag voucher was exchanged: %+v", c.MissionInventory)
+	}
+	assertGachaRefusal(t, frames, gacha.OpExchangeResult, 5)
+}
+
+/*
+================
 TestGachaExchangeConsumesTheVoucherItRead
 ================
 */
