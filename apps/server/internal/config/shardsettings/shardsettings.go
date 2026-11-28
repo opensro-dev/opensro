@@ -591,6 +591,7 @@ var Settings = []Setting{
 	// weather on the GM's climate for some minutes (action/weather.go).
 	// "off" is native; the shard turns it on (config/shard-settings.json).
 	{Env: "SRO_GM_WEATHER", NomadVar: "gm_weather", Default: "off"},
+	{Env: "SRO_CITY_SNOW", NomadVar: "city_snow", Default: "off"},
 	{Env: "SRO_ALCHEMY_RATES", NomadVar: "alchemy_rates", Default: "on", Catalogue: true},
 	// Owner, 2026-10-18: reversed the 2026-10-13 +11 cap; the deployment
 	// default stays native ("off", ceiling 250).

@@ -54,11 +54,13 @@ test("/WEATHER refuses an unknown kind, a bad number or an extra word", () => {
 reply
 ================
 */
-test("the /WEATHER reply prints the server's text on both results", () => {
+test("the /WEATHER reply prints the server's text on both results, and only an accepted one is a weather set", () => {
 	const text = "snow 200 for 30 min on climate 1001";
 	const bytes = new TextEncoder().encode( text );
 	const ok = Uint8Array.of( 1, 0xfc, bytes.length, 0, ...bytes );
-	assert.deepEqual( gmReply( ok ), { console: true, text: "-> " + text } );
+	// An accepted /WEATHER releases the console's weather hold (gameplay.ts);
+	// a refusal (the flag off, a region without weather) leaves it standing.
+	assert.deepEqual( gmReply( ok ), { console: true, text: "-> " + text, weatherSet: true } );
 	const why = new TextEncoder().encode( "region 0x0000 has no weather" );
 	const failed = Uint8Array.of( 2, 0xfc, why.length, 0, ...why );
 	assert.deepEqual( gmReply( failed ), { console: true, text: "Failed. -> region 0x0000 has no weather" } );

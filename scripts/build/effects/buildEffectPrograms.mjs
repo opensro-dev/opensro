@@ -24,6 +24,7 @@ import {
 	equipmentParticleCatalog
 } from "../char/equipmentParticles.mjs";
 import { readPublishedAssetBytesSync } from "../../lib/publishedAsset.mjs";
+import { EXPANDED_BUILD } from "../../lib/expandedBuild.mjs";
 import {
 	effectProgramHeader,
 	EFFECT_PROGRAM_INDEX,
@@ -566,6 +567,49 @@ function effectTexturePngPath( texturePath ) {
 
 /*
 ================
+splitEffectClosureGaps
+
+Port-only, not native: the gap rule exists for variant game roots alone.
+
+Every reachable effect's meshes and textures, checked before anything is
+published, so one run names every hole instead of the first. A native
+build keeps the full closure mandatory: any hole is fatal. An expanded
+(variant) build adds later-client effects, and those clients ship effects
+naming files no archive holds (v1.696 skill_ar_cursefire_at6_shot.efp names
+textures/beam_r.ddj; neither v1.150, VSRO 1.188 nor v1.696 has it). Such an
+effect, whose BMS or DDJ source is absent from the game root, is returned in
+gapEffects with its missing files; the client draws nothing for it, as it
+does for an archive-absent EFP. A DDJ that is present but has no converted
+PNG is a conversion failure and stays fatal in either build.
+================
+*/
+export function splitEffectClosureGaps(
+	{ effectMeshes, effectTextures, hasMesh, hasTexture, hasTextureSource, expanded }
+) {
+	const gapEffects = {};
+	const fatal = [];
+	for ( const key of [ ...effectMeshes.keys() ].sort( compareText ) ) {
+		const absent = [];
+		for ( const mesh of [ ...effectMeshes.get( key ) ].sort( compareText ) ) {
+			if ( !hasMesh( mesh ) ) absent.push( mesh );
+		}
+		for ( const texture of [ ...(effectTextures.get( key ) ?? []) ].sort( compareText ) ) {
+			if ( hasTexture( texture ) ) continue;
+			if ( hasTextureSource( texture ) ) {
+				fatal.push( `${key}: ${texture} has its DDJ source but no converted PNG` );
+				continue;
+			}
+			absent.push( texture.replace( /\.png$/, ".ddj" ) );
+		}
+		if ( absent.length === 0 ) continue;
+		if ( expanded ) gapEffects[key] = absent;
+		else fatal.push( `${key}: missing ${absent.join( ", " )}` );
+	}
+	return { gapEffects, fatal };
+}
+
+/*
+================
 copyIfDifferent
 
 Copy unless the target is already the same size and not older.
@@ -699,6 +743,37 @@ export async function buildEffectProgramsAsset() {
 		);
 	}
 
+	const ddjIndex = fileIndex( particlesRoot, ".ddj" );
+	const { gapEffects, fatal } = splitEffectClosureGaps( {
+		effectMeshes,
+		effectTextures,
+		hasMesh: ( name ) => resolveIndexedFile( bmsIndex, name, "BMS" ) !== null,
+		hasTexture: ( name ) => pngIndex.has( name ),
+		hasTextureSource: ( name ) => ddjIndex.has( name.replace( /\.png$/, ".ddj" ) ),
+		expanded: EXPANDED_BUILD
+	} );
+	if ( fatal.length > 0 ) {
+		throw new Error(
+			"[effect-programs] runtime-reachable EFP mesh/texture closure is incomplete:\n" +
+				fatal.map( ( line ) => `  - ${line}` ).join( "\n" )
+		);
+	}
+	for ( const key of Object.keys( gapEffects ) ) {
+		delete effects[key];
+		effectMeshes.delete( key );
+		effectTextures.delete( key );
+	}
+	meshNames.clear();
+	textureNames.clear();
+	for ( const own of effectMeshes.values() ) for ( const mesh of own ) meshNames.add( mesh );
+	for ( const own of effectTextures.values() ) for ( const texture of own ) textureNames.add( texture );
+	if ( Object.keys( gapEffects ).length > 0 ) {
+		console.warn(
+			`[effect-programs] ${Object.keys( gapEffects ).length} added effect(s) name files their ` +
+				"source archives never shipped; published as unavailable (closureGaps in the index)"
+		);
+	}
+
 	const meshes = {};
 	for ( const meshName of [ ...meshNames ].sort() ) {
 		const source = resolveIndexedFile( bmsIndex, meshName, "BMS" );
@@ -752,6 +827,14 @@ export async function buildEffectProgramsAsset() {
 			unavailable
 		} );
 	}
+	// An added effect with a closure gap draws nothing either; its file names
+	// the files no source archive held instead of the retail archive's hash.
+	for ( const key of Object.keys( gapEffects ).sort( compareText ) ) {
+		writeJsonIfChangedSync( claimFile( effectProgramFile( key ), key ), {
+			...effectProgramHeader(),
+			unavailable: { closureGaps: gapEffects[key] }
+		} );
+	}
 	for ( const name of Object.keys( meshes ) ) {
 		writeJsonIfChangedSync( claimFile( effectMeshFile( name ), name ), meshes[name] );
 	}
@@ -773,6 +856,7 @@ export async function buildEffectProgramsAsset() {
 		ambiguousEffectAliases,
 		missingEffects,
 		nativeUnavailable: { ...unavailable, effects: nativeUnavailableEffects },
+		closureGaps: { effects: gapEffects },
 		meshes: Object.keys( meshes ),
 		textures
 	} );

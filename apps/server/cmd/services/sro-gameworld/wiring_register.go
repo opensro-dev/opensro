@@ -179,6 +179,11 @@ func (game *gameplayPlane) register(hub *transport.Hub, loadQuests questDefiniti
 	if game.items.GMWeather {
 		log.Infof("gm: /WEATHER ON (%s)", action.EnvGMWeather)
 	}
+	// Port-only, not native: the towns snow all the time (owner 2026-11-28).
+	game.items.CitySnow = action.CitySnowFromEnv()
+	if game.items.CitySnow {
+		log.Infof("weather: town snow ON (%s)", action.EnvCitySnow)
+	}
 	// Port-only, not native: a GM's /FORGE item forge (issue #1980).
 	game.items.GMItemForge = action.GMItemForgeFromEnv()
 	if game.items.GMItemForge {

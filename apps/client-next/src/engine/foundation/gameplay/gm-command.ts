@@ -141,6 +141,9 @@ export interface GmReply {
 	readonly text?: string;
 	readonly key?: string;
 	readonly console: boolean;
+	// The server accepted a port /WEATHER (event-environment.ts
+	// releaseDebugWeather).
+	readonly weatherSet?: true;
 }
 
 /*
@@ -422,7 +425,10 @@ export function gmReply( p: Uint8Array ): GmReply | null {
 		// The port's moderation, notice and weather answers carry the
 		// server's text on both results (gmcommand/moderation.go, notice.go,
 		// admin.go), so the GM always reads why.
-		return { console: true, text: (result === 1 ? "-> " : "Failed. -> ") + string() };
+		const text = (result === 1 ? "-> " : "Failed. -> ") + string();
+		return code === GM_WEATHER && result === 1 ?
+			{ console: true, text, weatherSet: true } :
+			{ console: true, text };
 	}
 	if ( code === GM_FORGE ) {
 		// The port's /FORGE answer: one guide line per ack (the forged

@@ -98,6 +98,26 @@ export function debugWeather( state: EventEnvironment, mode: 1 | 2 | 3 | undefin
 	return { ...state, server, effective: derivedEffective( state.groups, server, null ) };
 }
 
+/*
+================
+releaseDebugWeather
+
+Port-only, not native: a GM's /WEATHER the server accepts (its OK reply,
+gm-command.ts gmReply weatherSet) drops the console's weather hold, so
+the server's weather it asked for is drawn. The server's SRO_GM_WEATHER
+(default off, native) gates it: off, every /WEATHER is refused and the
+native hold stands.
+Natively a console /rain or /snow holds until a console /clear and
+discards every 0x3BDE meanwhile; with the port's server command beside
+it, a forgotten /rain made /WEATHER look broken (2026-11-28). The
+server slot keeps its last word; the next 0x3BDE refreshes it.
+================
+*/
+export function releaseDebugWeather( state: EventEnvironment ): EventEnvironment {
+	if ( !state.debug ) return state;
+	return { ...state, debug: null, effective: derivedEffective( state.groups, state.server, null ) };
+}
+
 // CHRISTMAS_EVENT_GROUP is the native Christmas event's group (the
 // stolen socks): its notice and its snow. CAROL_MUSIC_MODE is the music
 // manager's carol mode (8F7A43, event_carol_0%d.ogg).

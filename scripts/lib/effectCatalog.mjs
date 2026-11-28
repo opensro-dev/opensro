@@ -68,7 +68,7 @@ export function readEffectProgramSync( path, publicRoot = CLIENT_PUBLIC_ROOT ) {
 readEffectCatalogSync
 
 The whole closure in the catalogue shape: framesPerSecond, effects by key,
-meshes by key, textures, nativeUnavailable, missingEffects,
+meshes by key, textures, nativeUnavailable, closureGaps, missingEffects,
 ambiguousEffectAliases and reachability. Read once per public root.
 ================
 */
@@ -89,6 +89,7 @@ export function readEffectCatalogSync( publicRoot = CLIENT_PUBLIC_ROOT ) {
 		ambiguousEffectAliases: index.ambiguousEffectAliases,
 		missingEffects: index.missingEffects,
 		nativeUnavailable: index.nativeUnavailable,
+		closureGaps: index.closureGaps ?? { effects: {} },
 		meshes,
 		textures: index.textures
 	};
@@ -102,8 +103,9 @@ effectProgramFromCatalog
 
 One effect of a catalogue-shaped value as the compiler's input: { file,
 meshes }, with file in the published per-effect layout (bytes encodes it
-for the worker's parser). An archive-absent key gives the unavailable file;
-an unknown key gives a file without an effect, which the compiler refuses.
+for the worker's parser). An archive-absent or closure-gap key gives the
+unavailable file; an unknown key gives a file without an effect, which the
+compiler refuses.
 ================
 */
 export function effectProgramFromCatalog( catalog, path ) {
@@ -115,6 +117,11 @@ export function effectProgramFromCatalog( catalog, path ) {
 	const unavailable = catalog.nativeUnavailable;
 	if ( !catalog.effects?.[key] && unavailable?.effects?.includes( key ) ) {
 		const file = { ...header, unavailable: { archiveSha256: unavailable.archiveSha256 } };
+		return { file, meshes: {}, bytes: encode( file ) };
+	}
+	const gaps = catalog.closureGaps?.effects?.[key];
+	if ( !catalog.effects?.[key] && gaps ) {
+		const file = { ...header, unavailable: { closureGaps: gaps } };
 		return { file, meshes: {}, bytes: encode( file ) };
 	}
 	const file = {
