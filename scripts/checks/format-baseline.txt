@@ -16,7 +16,6 @@ apps/client-next/src/engine/foundation/animation/effect-script.ts
 apps/client-next/src/engine/foundation/animation/fortress-appearance.ts
 apps/client-next/src/engine/foundation/animation/ground-visual.ts
 apps/client-next/src/engine/foundation/animation/hawk.ts
-apps/client-next/src/engine/foundation/animation/hit-light.ts
 apps/client-next/src/engine/foundation/animation/impact-source.ts
 apps/client-next/src/engine/foundation/animation/item-effect-clock.ts
 apps/client-next/src/engine/foundation/animation/locomotion-blend.ts

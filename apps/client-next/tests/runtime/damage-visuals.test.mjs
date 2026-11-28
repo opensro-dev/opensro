@@ -40,6 +40,18 @@ test("native hit light seeds diffuse then ticks twice-RGB diffuse and unattenuat
 	owner.step( 2.01, alive );
 	assert.equal( owner.get( 1 ), undefined );
 });
+test("a hit light goes out with its holder, asked of the frame's entity index", () => {
+	const owner = createHitLights(),
+		definition = { color: [ 1, 1, 1 ], duration: 1, range: 1000, attenuation: .2 },
+		pose = { regionId: 257, x: 1, y: 2, z: 3 };
+	owner.start( 1, definition, pose, 0 );
+	owner.start( 2, definition, pose, 0 );
+	owner.step( .1, new Map( [ [ 1, {} ], [ 2, {} ] ] ) );
+	assert.ok( owner.get( 1 ) && owner.get( 2 ) );
+	owner.step( .2, new Map( [ [ 2, {} ] ] ) );
+	assert.equal( owner.get( 1 ), undefined );
+	assert.ok( owner.get( 2 ) );
+});
 test("damage primary gate encloses both hit light and secondary with kind-7, projectile and blood-option branches", () => {
 	for (
 		const [kind, projectile, secondary, defensive, primary, bloodOn, paths, tinted] of [

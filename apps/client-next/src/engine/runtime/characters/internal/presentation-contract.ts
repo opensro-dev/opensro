@@ -536,7 +536,9 @@ decision with the same stamp publishes it again with only its clocks
 export interface KeptRecord {
 	readonly actor: CharacterActor;
 	readonly stamp: RecordStamp;
-	readonly retained: MotionRetained | undefined;
+	// Written once, by actor-motion present after advance has published:
+	// the record is that frame's own object, so it is not copied to add it.
+	retained: MotionRetained | undefined;
 }
 
 /*

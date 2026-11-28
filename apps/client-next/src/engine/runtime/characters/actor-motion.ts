@@ -32,6 +32,7 @@ import type {
 	ActorFrame,
 	ActorOwner,
 	ActorPass,
+	KeptRecord,
 	MotionDecision,
 	MotionRetained,
 	MotionStamp,
@@ -982,8 +983,11 @@ export function createActorMotion( owner: ActorOwner ) {
 			// last retained frame behind, and the next frame decides.
 			if ( reused ) previous!.frame = frameIndex;
 			else decision.state.motion = retain && { decision, stamp: retain, frame: frameIndex };
-			const motion = decision.state.motion;
-			decision.state.record = record && motion && { ...record, retained: motion };
+			// The record advance returned is this frame's own: it takes the
+			// decision it was published under in place, not as a copy.
+			const motion = decision.state.motion, own = record && motion ? record as KeptRecord : undefined;
+			if ( own ) own.retained = motion!;
+			decision.state.record = own;
 		}
 	};
 }
