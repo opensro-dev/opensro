@@ -586,10 +586,15 @@ export function publishCharacters(
 			}
 		}
 	}
+	// The publication contract (actor-snapshots.ts clocksOnly): what reaches
+	// the renderer is frozen, and nothing it references changes after it is
+	// published but its clocks. Every producer replaces a changed value
+	// rather than writing into it, so a stage effect, a fading copy or a
+	// booth whose other fields hold is copied for its clocks alone; one left
+	// unfrozen was validated and copied in full every frame.
 	for ( const actor of next.values() ) {
-		presentedActors.push(
-			hiddenGids.has( actor.gid ) ? { ...actor, opacity: 0, pickable: false } : actor
-		);
+		const shown = hiddenGids.has( actor.gid ) ? { ...actor, opacity: 0, pickable: false } : actor;
+		presentedActors.push( Object.isFrozen( shown ) ? shown : Object.freeze( shown ) );
 		wanted.push( actor.model );
 	}
 	for ( const actor of portraits ) wanted.push( actor.model );
