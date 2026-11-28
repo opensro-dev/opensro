@@ -984,8 +984,8 @@ export function createWorldRenderer(
 	const retired: WorldScene[] = [];
 	let lastReflection = false;
 	let lastView: Float32Array | null = null, lastEye: WorldCamera["eye"] | null = null;
-	// The terrain stamp: bumped whenever the view changed, so a terrain
-	// group's frustum-culled choice (native A2D1B0) keys on cell AND view.
+	// The terrain choice stamp: a terrain group's frustum-culled choice
+	// (native A2D1B0) keys on its eye cell and on this stamp.
 	// Terrain culls against a widened frustum the camera stays inside
 	// (cull-envelope.ts, port-only): its choice is remade when the envelope
 	// is, not on every view change. terrainChoiceStamp is what the terrain
