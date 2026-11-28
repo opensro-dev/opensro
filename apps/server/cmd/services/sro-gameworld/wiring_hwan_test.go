@@ -44,12 +44,13 @@ func TestHwanQuestsBuiltReadsTheQuestRows(t *testing.T) {
 
 /*
 ================
-TestHwanReverseMapExtrasFollowTheQuestRowsAndTheTomb
+TestHwanReverseMapExtrasFollowTheQuestRows
 
-The NPC homes need the quest rows; the tomb entrance needs only SRO_QINSHI_TOMB.
+The NPC homes need the quest rows. The tomb adds no point of its own
+(the imported table's cave flag reaches it), whatever SRO_QINSHI_TOMB says.
 ================
 */
-func TestHwanReverseMapExtrasFollowTheQuestRowsAndTheTomb(t *testing.T) {
+func TestHwanReverseMapExtrasFollowTheQuestRows(t *testing.T) {
 	names := func(dir string) string {
 		out := ""
 		for _, point := range hwanReverseMapExtras(dir) {
@@ -61,18 +62,13 @@ func TestHwanReverseMapExtrasFollowTheQuestRowsAndTheTomb(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(built, "questdata.txt"), []byte("1\t349\tQNO_CH_HWAN_1_1\t95\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	t.Setenv("SRO_QINSHI_TOMB", "off")
-	if got := names(bare); got != "" {
-		t.Fatalf("no quests and no tomb: %q", got)
-	}
-	if got := names(built); got != "Exorcist's Home;Sunset Witch;" {
-		t.Fatalf("quest rows only: %q", got)
-	}
-	t.Setenv("SRO_QINSHI_TOMB", "on")
-	if got := names(bare); got != "Qin-Shi Tomb Entrance;" {
-		t.Fatalf("tomb only: %q", got)
-	}
-	if got := names(built); got != "Exorcist's Home;Sunset Witch;Qin-Shi Tomb Entrance;" {
-		t.Fatalf("both: %q", got)
+	for _, tomb := range []string{"off", "on"} {
+		t.Setenv("SRO_QINSHI_TOMB", tomb)
+		if got := names(bare); got != "" {
+			t.Fatalf("SRO_QINSHI_TOMB=%s, no quests: %q", tomb, got)
+		}
+		if got := names(built); got != "Exorcist's Home;Sunset Witch;" {
+			t.Fatalf("SRO_QINSHI_TOMB=%s, quest rows: %q", tomb, got)
+		}
 	}
 }

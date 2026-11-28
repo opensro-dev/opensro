@@ -56,6 +56,7 @@ import { UNIQUE_NEST_SIGN } from "@/engine/foundation/ui/unique-nests";
 import { createHuntingGuideHud } from "./hunting-guide";
 import { createUniqueNestsHud } from "./unique-nests";
 import { reverseMapButtons } from "./reverse-map-buttons";
+import { reverseMapFloors } from "@/engine/foundation/gameplay/reverse-return-map";
 import { cavePageHits, cavePageImages, mapSignName } from "./map-cave-page";
 import {
 	GUIDE_MONSTER,
@@ -85,6 +86,8 @@ const ROOT = "/assets/images/Media_extracted/";
 // sign's centre (mapSignName, map-cave-page.ts).
 const MAP_ROSTER_PREFIX = "map-roster:";
 const MAP_ROSTER_HOVER_INSET = 2;
+// The reverse return floor menu's labels (a CIFButton's default white).
+const WHITE_TEXT = [ 1, 1, 1, 1 ] as const;
 
 /*
 ================
@@ -151,7 +154,7 @@ interface MapPaint {
 		viewCave( pick: ( x: number, y: number ) => { regionId: number; x: number; z: number; } | null ): void;
 		hide(): void;
 	};
-	reverseScrollHud: { mapping(): boolean; };
+	reverseScrollHud: { mapping(): boolean; menu(): number | null; };
 	text: MapText;
 	resources: MapImages;
 	paths: string[];
@@ -950,8 +953,14 @@ export function createWorldMapHud( options: MapHudOptions ) {
 			// Several icons can open one page (the three fort_worldmap icons
 			// 91006-91008 all open 1001): each later one gets a "#n" suffix so
 			// control identities stay unique; the activation reads the page id.
+			// While a reverse return scroll holds the map, the page icons take
+			// no clicks: the v1.188 button-up (0x6971c8) tests only the return
+			// icons in that mode, and the town and dungeon icons (0x6973e3) only
+			// outside it. The Ch'in Tomb's icon sits under the cave flag, and so
+			// does the tools' entrance button over it (map-tools.ts doors).
 			const townHitCount = new Map<number, number>();
-			for ( const { icon, rect: r } of mapOpen ? mapProjection?.hits ?? [] : [] ) {
+			const pageIcons = mapOpen && !(pose && !caveMap && reverseScrollHud.mapping());
+			for ( const { icon, rect: r } of pageIcons ? mapProjection?.hits ?? [] : [] ) {
 				const page = worldMapPages( mapLayout ).find( p => p.id === icon.destination );
 				if ( page ) {
 					const seen = townHitCount.get( page.id ) ?? 0;
@@ -983,21 +992,38 @@ export function createWorldMapHud( options: MapHudOptions ) {
 			}
 			// Port-only: the reverse return map points while the map holds a scroll.
 			if ( mapOpen && pose && !caveMap && reverseScrollHud.mapping() ) {
+				// A dungeon group's floors are never painted: its flag's menu
+				// lists them (reverse-map-buttons.ts).
+				const published = game?.reverseMapPoints ?? [],
+					group = reverseScrollHud.menu(),
+					flag = group === null ?
+						undefined :
+						published.find( point => point.group === group && !point.floor );
 				const buttons = reverseMapButtons( {
 					points: worldMapPointMarkers( {
 						page: mapPage,
 						clip: mapClip,
 						pan: mapPan,
 						center: mapCenter ?? mapViewPose( pose ),
-						points: game?.reverseMapPoints ?? [],
+						points: published.filter( point => !point.floor ),
 						layout: mapLayout
 					} ),
+					menu: flag && group !== null ? { group, floors: reverseMapFloors( published, flag ) } : null,
 					clip: mapClip,
 					hover,
 					has: path => resources.has( path )
 				} );
 				paths.push( ...buttons.paths );
-				mapImages.push( ...buttons.images );
+				mapImages.push(
+					...buttons.images,
+					...buttons.labels.flatMap( label =>
+						text.quads( label.value, label.rect, mapClip, WHITE_TEXT, {
+							hAlign: 1,
+							vAlign: 1,
+							overflow: "clip"
+						} )
+					)
+				);
 				mapHits.push( ...buttons.hits );
 			}
 			if ( mapOpen ) {
@@ -1122,6 +1148,7 @@ export function createWorldMapHud( options: MapHudOptions ) {
 					levelNote: input.caveMaps?.monsterLevelNote,
 					offerUniqueSpawns: experimental.state().saved.uniqueSpawnPoints,
 					icons: (mapProjection?.hits ?? []).map( hit => hit.rect ),
+					doors: pageIcons,
 					text,
 					page: mapPage,
 					pan: mapPan,

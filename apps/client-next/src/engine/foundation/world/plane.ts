@@ -45,9 +45,9 @@ export interface PlaneFeatures {
 	// grid. CIFMinimap converts outdoor sector coordinates only; a cave reads
 	// from its own origin (hud-readouts.ts).
 	readonly minimapCoordinates: boolean;
-	// reverseReturnPoints: a reverse return scroll destination. The table's
-	// points are field positions the scroll lands on in the open world; a
-	// cave region is refused when the table is decoded.
+	// reverseReturnPoints: a reverse return scroll map point. The table's
+	// map points are field positions; a cave region is accepted only as a
+	// dungeon group's floor, which its flag's menu lists (reverse-return-map.ts).
 	readonly reverseReturnPoints: boolean;
 	// characterPvs: the port-only dungeon character admission
 	// (character-selection.ts), which culls actors in rooms or floors the

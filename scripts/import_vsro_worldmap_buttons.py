@@ -40,8 +40,10 @@ ARCHIVE_ROOT = "interface/"
 # already draw the checkbutton's on and off faces. The reverse return
 # point's button (xy_returnicon, #3391) ships here too, with all three
 # faces: reverse-map-buttons.ts draws its focus face, so a build with only
-# this client no longer falls back to the port's old sign. This import
-# is their only producer: the v1.696 guide import leaves them out.
+# this client no longer falls back to the port's old sign. So does the
+# button of a dungeon flag's floor menu (map_return, v1.188 0x631d60),
+# with its focus and press faces. This import is their only producer:
+# the v1.696 guide import leaves them out.
 BUTTONS = (
 	"worldmap/wmap_big_button_world",
 	"worldmap/wmap_button_automatic",
@@ -68,6 +70,9 @@ BUTTONS = (
 	"worldmap/map/xy_returnicon",
 	"worldmap/map/xy_returnicon_focus",
 	"worldmap/map/xy_returnicon_press",
+	"worldmap/map/map_return",
+	"worldmap/map/map_return_focus",
+	"worldmap/map/map_return_press",
 )
 
 

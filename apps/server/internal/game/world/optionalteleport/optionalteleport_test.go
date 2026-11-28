@@ -4,10 +4,12 @@
 optionalteleport_test.go - which imported rows the port serves
 
 Synthetic textdata directories: no import is the native table (nil), the
-outdoor map rows of named regions are served by their own ids, dungeon
-groups and unnamed regions are dropped, Alexandria rows follow its
-overlay and SRO_ALEXANDRIA, a band above the shard's level cap is
-lowered to it, and a malformed import is refused.
+outdoor map rows of named regions are served by their own ids, unnamed
+regions are dropped, a dungeon group is served as its flag and its open
+floors (the Ch'in Tomb's only with SRO_QINSHI_TOMB on, an incomplete group
+not at all), Alexandria rows follow its overlay and SRO_ALEXANDRIA, a band
+above the shard's level cap is lowered to it, and a malformed import is
+refused.
 
 ===========================================================================
 */
@@ -22,13 +24,48 @@ import (
 	"testing"
 
 	"opensro.online/server/internal/game/world/alexandria"
+	"opensro.online/server/internal/game/world/monster"
 )
 
 const (
 	testJangan     = 25000
 	testConstant   = 26959
 	testAlexandria = 23088
+	// The shipped table's cave flag regions and floors (refoptionalteleport
+	// rows 29..38): Donwhang Stone Cave is 0x8001, the tomb floors 2..4
+	// are 0x8006..0x8004, written signed as the table writes them.
+	testDonwhangFlag = 27027
+	testTombFlag     = 26284
+	testDonwhangCave = -32767
+	testTombFloor2   = -32762
+	testTombFloor3   = -32763
 )
+
+/*
+================
+floorRow
+
+A dungeon group's floor row: not drawn on the map, with the shipped
+rows' level 70 band.
+================
+*/
+func floorRow(id, group, region int64, name string) importRow {
+	return importRow{Service: 1, ID: id, Zone: "SN_ZONE", Name: name, RegionID: region,
+		X: -11719, Y: -47, Z: 5742, WorldID: 1, RegionGroup: group, MapPoint: 0, LevelMin: 70, LevelMax: 999}
+}
+
+/*
+================
+flagRow
+
+A dungeon group's flag: a map row with no name of its own.
+================
+*/
+func flagRow(id, group, region int64) importRow {
+	row := outdoorRow(id, region, "")
+	row.RegionGroup = group
+	return row
+}
 
 /*
 ================
@@ -110,15 +147,11 @@ TestServesOutdoorMapRowsByTheirOwnIDs
 ================
 */
 func TestServesOutdoorMapRowsByTheirOwnIDs(t *testing.T) {
-	flag := outdoorRow(14, testJangan, "Test flag")
-	flag.RegionGroup = 1
-	floor := outdoorRow(15, -32767, "Test floor")
-	floor.MapPoint, floor.RegionGroup, floor.LevelMin, floor.LevelMax = 0, 1, 50, 999
 	retired := outdoorRow(5, testJangan, "Retired")
 	retired.Service = 0
 	unnamedRegion := outdoorRow(6, 26100, "Unnamed Ruins")
 	unnamed := outdoorRow(9, testConstant, "")
-	rows := []importRow{outdoorRow(11, testJangan, "Jangan"), unnamed, flag, floor, retired, unnamedRegion}
+	rows := []importRow{outdoorRow(11, testJangan, "Jangan"), unnamed, retired, unnamedRegion}
 	dir := writeTextdata(t, rows, map[int64]string{testJangan: "Jangan", testConstant: "Constantinople"}, false)
 	points, err := Load(dir)
 	if err != nil {
@@ -130,6 +163,85 @@ func TestServesOutdoorMapRowsByTheirOwnIDs(t *testing.T) {
 	// A row without its own English name takes the region's.
 	if points[0].Name != "Constantinople" || points[1].RegionID != testJangan || points[1].X != 100 {
 		t.Fatalf("points %+v", points)
+	}
+	if points[0].Group != 0 || points[0].Floor || !points[0].Destination() {
+		t.Fatalf("a field point is not a plain destination: %+v", points[0])
+	}
+}
+
+/*
+================
+TestServesDungeonGroupsAsTheirFlagAndFloors
+
+The shipped table's two groups: Donwhang Stone Cave (group 1) is v1.150
+content and always served; the Ch'in Tomb floors (group 2) follow
+SRO_QINSHI_TOMB, and with them closed the tomb's flag goes too. A flag
+is drawn but is no destination; a floor keeps its signed dungeon region
+as the unsigned id and its own name.
+================
+*/
+func TestServesDungeonGroupsAsTheirFlagAndFloors(t *testing.T) {
+	donwhangFloor := floorRow(30, 1, testDonwhangCave, "Donwhang Stone Cave")
+	donwhangFloor.LevelMin = 50
+	rows := []importRow{
+		outdoorRow(11, testJangan, "Jangan"),
+		flagRow(29, 1, testDonwhangFlag), donwhangFloor,
+		flagRow(31, 2, testTombFlag),
+		floorRow(32, 2, testTombFloor2, "Tomb of Qin-Shi Emperor lv.2"),
+		floorRow(33, 2, testTombFloor3, "Tomb of Qin-Shi Emperor lv.3"),
+	}
+	zones := map[int64]string{testJangan: "Jangan", testDonwhangFlag: "Donwhang", testTombFlag: "Jangan"}
+	dir := writeTextdata(t, rows, zones, false)
+	t.Setenv(monster.EnvQinShiTomb, "off")
+	points, err := Load(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := ids(points); len(got) != 3 || got[0] != 11 || got[1] != 29 || got[2] != 30 {
+		t.Fatalf("tomb closed: served ids %v, want [11 29 30]", got)
+	}
+	t.Setenv(monster.EnvQinShiTomb, "on")
+	if points, err = Load(dir); err != nil {
+		t.Fatal(err)
+	}
+	if got := ids(points); len(got) != 6 {
+		t.Fatalf("tomb open: served ids %v, want all six rows", got)
+	}
+	flag, floor := points[3], points[4]
+	if flag.ID != 31 || flag.Group != 2 || flag.Floor || flag.Destination() || flag.Name != "Jangan" {
+		t.Fatalf("tomb flag %+v", flag)
+	}
+	if floor.ID != 32 || floor.Group != 2 || !floor.Floor || !floor.Destination() || floor.RegionID != 0x8006 ||
+		floor.X != -11719 || floor.Name != "Tomb of Qin-Shi Emperor lv.2" || floor.Admits(69) || !floor.Admits(70) {
+		t.Fatalf("tomb floor %+v", floor)
+	}
+}
+
+/*
+================
+TestDropsAnIncompleteDungeonGroup
+
+A floor without its flag cannot be chosen, and a flag without a floor
+would open an empty menu: neither is served. A grouped row on a field
+region that is not a map point is no floor either.
+================
+*/
+func TestDropsAnIncompleteDungeonGroup(t *testing.T) {
+	notADungeon := floorRow(40, 3, testJangan, "Field Floor")
+	rows := []importRow{
+		outdoorRow(11, testJangan, "Jangan"),
+		floorRow(30, 1, testDonwhangCave, "Orphan Floor"),
+		flagRow(31, 2, testTombFlag),
+		flagRow(39, 3, testDonwhangFlag), notADungeon,
+	}
+	zones := map[int64]string{testJangan: "Jangan", testDonwhangFlag: "Donwhang", testTombFlag: "Jangan"}
+	t.Setenv(monster.EnvQinShiTomb, "on")
+	points, err := Load(writeTextdata(t, rows, zones, false))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := ids(points); len(got) != 1 || got[0] != 11 {
+		t.Fatalf("served ids %v, want the field point only", got)
 	}
 }
 
