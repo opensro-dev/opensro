@@ -27,6 +27,7 @@ filter's item-mall-gender:<sex> (issue #4480).
 
 import type { UiRect } from "@/engine/contracts/ui";
 import type { MallGender, MallOffer, MallTab } from "@/engine/contracts/item-mall";
+import { mallTitle } from "@/engine/foundation/ui/commerce-tooltip";
 import { type MallCategoryList, mallTabCaptionLater } from "@/engine/foundation/ui/item-mall-layout";
 import { BONUS_SILK_CAPTION_KEY, EARNED_SILK_CAPTION, silkWalletHelp } from "@/engine/foundation/ui/mall-wallet";
 import {
@@ -412,7 +413,7 @@ export function renewalMallView( input: RenewalMallInput ): RenewalMallOp[] {
 		const badge = renewalBadgeArt( offer.badge );
 		if ( badge ) ops.push( { kind: "image", path: badge, rect: [ card[0] + 8, card[1] + 8, 12, 12 ] } );
 		label(
-			copy( offer.name ),
+			mallTitle( copy( offer.name ), offer ),
 			[ card[0] + slotName.rect[0], card[1] + slotName.rect[1], slotName.rect[2], slotName.rect[3] ],
 			slotName.fontColor,
 			0,

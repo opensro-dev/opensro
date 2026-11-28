@@ -31,8 +31,6 @@ stock, exactly as the build passes leave them.
 package commerce
 
 import (
-	"fmt"
-	"os"
 	"strings"
 
 	"opensro.online/server/internal/game/enterworld"
@@ -59,13 +57,7 @@ a typo cannot silently open or close the shops.
 ================
 */
 func AlexandriaHideD11GoodsFromEnv() (bool, error) {
-	switch strings.ToLower(strings.TrimSpace(os.Getenv(EnvAlexandriaHideD11Goods))) {
-	case "1", "on", "true":
-		return true, nil
-	case "", "0", "off", "false":
-		return false, nil
-	}
-	return false, fmt.Errorf("%s=%q: want on or off", EnvAlexandriaHideD11Goods, os.Getenv(EnvAlexandriaHideD11Goods))
+	return switchFromEnv(EnvAlexandriaHideD11Goods, false)
 }
 
 /*
