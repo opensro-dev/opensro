@@ -541,6 +541,9 @@ export interface RuntimeControl extends Disposable {
 	characterActors(): readonly import("./character").CharacterActor[];
 	/** Copied counters and retained-pose eligibility; does not advance animation. */
 	characterStats(): CharacterStatistics;
+	// The native graphic options' draw switches (GRAPHIC_OPTION_*), for a bench
+	// that weighs what each category costs the GPU.
+	setRenderMode( mode: number, enabled: boolean ): void;
 	/**
 	 * characterStats plus the posed culling ceiling. Reads displayed-pose
 	 * palettes, which can force CPU pose evaluation: diagnostics only, never

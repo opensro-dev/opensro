@@ -130,6 +130,7 @@ import {
 	visibleFrustumBox,
 	terrainLod
 } from "@/engine/foundation/rendering/world-math";
+import { createCullEnvelope } from "@/engine/foundation/rendering/cull-envelope";
 import { nativePickAlpha, validPickAlpha } from "@/engine/foundation/rendering/pick-alpha";
 import { hypot3 } from "@/engine/foundation/math/hypot";
 /*
@@ -985,7 +986,12 @@ export function createWorldRenderer(
 	let lastView: Float32Array | null = null, lastEye: WorldCamera["eye"] | null = null;
 	// The terrain stamp: bumped whenever the view changed, so a terrain
 	// group's frustum-culled choice (native A2D1B0) keys on cell AND view.
-	let terrainViewStamp = 0;
+	// Terrain culls against a widened frustum the camera stays inside
+	// (cull-envelope.ts, port-only): its choice is remade when the envelope
+	// is, not on every view change. terrainChoiceStamp is what the terrain
+	// caches key on; with a water mirror the exact per-view cull stands.
+	const terrainEnvelope = createCullEnvelope();
+	let terrainChoiceStamp = 0, terrainChoiceKey = "", terrainPlanes: Float64Array | null = null, terrainSlack = 0;
 	const residency = createWorldResidency();
 	let imageBytes = 0, disposed = false;
 	/*
@@ -2109,7 +2115,6 @@ export function createWorldRenderer(
 			const viewChanged = reflectWater || lastReflection !== reflectWater || !lastView ||
 				!matrix.every( ( v, i ) => v === lastView![i] ) || !lastEye ||
 				localCamera.eye.some( ( v, i ) => v !== lastEye![i] );
-			if ( viewChanged ) terrainViewStamp++;
 			lastReflection = reflectWater;
 			lastEye = localCamera.eye;
 			const weatherImages = new Map<string, ImageDraw>();
@@ -2168,6 +2173,21 @@ export function createWorldRenderer(
 			const sampleDetails = probe?.sampleDetails?.() ?? false;
 			const frustum = prepareViewFrustum( matrix ), visible: WorldGroup[] = [];
 			pickFrustum = frustum;
+			if ( reflectionFrustum ) {
+				// The mirror follows the view exactly: choose per view, as natively.
+				if ( viewChanged || terrainChoiceKey !== "view" ) terrainChoiceStamp++;
+				terrainChoiceKey = "view";
+				terrainPlanes = frustum;
+				terrainSlack = 0;
+			} else {
+				const envelope = terrainEnvelope.envelope( localCamera, aspect ), key = "envelope:" + envelope.stamp;
+				if ( key !== terrainChoiceKey ) {
+					terrainChoiceStamp++;
+					terrainChoiceKey = key;
+					terrainPlanes = prepareViewFrustum( envelope.matrix );
+					terrainSlack = envelope.slack;
+				}
+			}
 			triangles = 0;
 			const eyeCellX = Math.floor( localCamera.eye[0] / 320 ), eyeCellZ = Math.floor( localCamera.eye[2] / 320 );
 			// The fade range of scenery objects follows the background distance.
@@ -2214,7 +2234,7 @@ export function createWorldRenderer(
 				if (
 					kind === WALK_TERRAIN && walk.cell[walked * 2] === eyeCellX &&
 					walk.cell[walked * 2 + 1] === eyeCellZ &&
-					walk.terrainView[walked] === terrainViewStamp
+					walk.terrainView[walked] === terrainChoiceStamp
 				) {
 					const indices = walk.count[walked]!;
 					if ( indices > 0 ) {
@@ -2240,14 +2260,17 @@ export function createWorldRenderer(
 					// every range at the LOD its distance from the eye cell selects, then
 					// the frustum culls the ranges whose sphere falls outside it - the
 					// main frustum or the water mirror's - as the native client does
-					// each frame (A2D1B0). The two halves change at different rates:
+					// each frame (A2D1B0). Port-only: without a mirror the frustum is
+					// the cull envelope's (cull-envelope.ts), so a turning camera
+					// re-chooses only when it leaves the envelope; the superset it
+					// draws is clipped by the rasterizer. The two halves change at different rates:
 					// the LOD band moves only when the eye crosses a cell or the
 					// detail inputs change, and the frustum pass fills a reused
 					// scratch list, so a view that culls the same set as the last
 					// one neither copies nor uploads indices again - the same draw
 					// lists as re-choosing every frame, without the per-frame work.
 					const cellChanged = cache.cellX !== eyeCellX || cache.cellZ !== eyeCellZ ||
-						cache.viewStamp !== terrainViewStamp;
+						cache.viewStamp !== terrainChoiceStamp;
 					if ( cache.chosen && !cellChanged ) {
 						if ( cache.indexCount ) {
 							visible.push( group );
@@ -2298,11 +2321,11 @@ export function createWorldRenderer(
 						for ( const range of cache.lodRanges ) {
 							if (
 								visibleFrustumSphere(
-									frustum,
+									terrainPlanes!,
 									range.center[0],
 									range.center[1],
 									range.center[2],
-									range.radius
+									range.radius + terrainSlack
 								) ||
 								!!reflectionFrustum &&
 									visibleFrustumSphere(
@@ -2319,7 +2342,7 @@ export function createWorldRenderer(
 					}
 					cache.cellX = eyeCellX;
 					cache.cellZ = eyeCellZ;
-					cache.viewStamp = terrainViewStamp;
+					cache.viewStamp = terrainChoiceStamp;
 					if ( sampleDetails ) probe?.detailEnd?.( "terrain-candidates" );
 					if ( sampleDetails ) probe?.detailBegin?.( "terrain-indices" );
 					// The draw holds the same ranges in the same order as the last
@@ -2402,7 +2425,7 @@ export function createWorldRenderer(
 					walk.count[walked] = count;
 					walk.cell[walked * 2] = eyeCellX;
 					walk.cell[walked * 2 + 1] = eyeCellZ;
-					walk.terrainView[walked] = terrainViewStamp;
+					walk.terrainView[walked] = terrainChoiceStamp;
 					if ( sampleDetails ) probe?.detailBegin?.( "terrain-index-upload" );
 					if ( indicesDirty ) {
 						if ( layers.member( group ) ) layers.select( group, cache.indices, count );
@@ -2734,6 +2757,7 @@ export function createWorldRenderer(
 					selections.clear();
 					walk.cell.fill( NaN );
 					lastEye = null;
+					terrainChoiceKey = "";
 					break;
 				default:
 					return;
@@ -2756,6 +2780,8 @@ export function createWorldRenderer(
 			orderGroups( [] );
 			objectOrder.clear();
 			lastEye = null;
+			terrainEnvelope.invalidate();
+			terrainChoiceKey = "";
 			pickGroups = [];
 			resetAnimations( undefined, true );
 			draws.clear();
@@ -2818,6 +2844,8 @@ export function createWorldRenderer(
 			orderGroups( [] );
 			objectOrder.clear();
 			lastEye = null;
+			terrainEnvelope.invalidate();
+			terrainChoiceKey = "";
 			pickGroups = [];
 			collisionScene = null;
 			collisionParts = [];
