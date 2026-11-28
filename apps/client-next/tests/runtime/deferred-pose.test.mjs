@@ -55,6 +55,9 @@ function model() {
 		primitives: [ { joints: [ 0, 1 ], inverseBind: Float32Array.from( [ ...I(), ...I() ] ) } ]
 	};
 }
+// A third layer: past the two the GPU skeleton pass mixes (MAX_GPU_LAYERS).
+const THIRD_LAYER = Object.freeze( { clip: "move", time: .6, weight: .25, lane: "timed", loop: true } );
+
 test("deferred poses preserve seeks, long clocks, CPU sockets, layers and failed-request isolation", () => {
 	const m = model(),
 		a = createCharacterPose( m ),
@@ -82,7 +85,21 @@ test("deferred poses preserve seeks, long clocks, CPU sockets, layers and failed
 	} ];
 	a.evaluate( "", 0, false, layers );
 	b.evaluate( "", 0, false, layers, true );
+	// A crossfade's two layers are one GPU sample: the event layer first,
+	// the timed one mixed in by the headroom it gets (sampleLayers).
+	const crossfade = b.gpuSample();
+	assert.deepEqual( [ crossfade.time, crossfade.next, crossfade.nextTime, crossfade.share ], [
+		.8,
+		m.clips[0],
+		.2,
+		.5
+	] );
+	assert.deepEqual( b.socket( "socket" ), a.socket( "socket" ) );
+	// Past the GPU's two layers the CPU mixes.
+	a.evaluate( "", 0, false, [ ...layers, THIRD_LAYER ] );
+	b.evaluate( "", 0, false, [ ...layers, THIRD_LAYER ], true );
 	assert.equal( b.gpuSample(), null );
+	assert.equal( b.gpuRefusal(), "layers" );
 	assert.deepEqual( b.socket( "socket" ), a.socket( "socket" ) );
 	const revision = b.revision();
 	// A rejected request (an invalid layer weight) must not poison the
@@ -208,7 +225,7 @@ test("models that share clips share one clip plan; a skeleton is per model", () 
 	assert.ok( a.data.length < clips.data.length + a.data.length, "skeleton holds no keyframes" );
 });
 
-test("one layered pose cannot force eligible siblings onto CPU", () => {
+test("one pose past the GPU layers cannot force eligible siblings onto CPU", () => {
 	const m = model(), a = createCharacterPose( m ), b = createCharacterPose( m ), bank = createPaletteStreams( m, 2 );
 	a.evaluate( "move", .2, true, undefined, true );
 	b.evaluate( "", 0, true, [ { clip: "move", time: .5, weight: .5, lane: "event", loop: true }, {
@@ -217,7 +234,7 @@ test("one layered pose cannot force eligible siblings onto CPU", () => {
 		weight: .5,
 		lane: "timed",
 		loop: true
-	} ], true );
+	}, THIRD_LAYER ], true );
 	bank.update( [ b, a ], ( source, model, primitive, samples ) => {
 		assert.equal( samples[0], null );
 		assert.equal( samples[1].clip, m.clips[0] );
@@ -246,9 +263,9 @@ test("a pose deferred to its consumers builds no skeleton until one asks, then t
 		lane: "timed",
 		loop: true
 	} ];
-	// Blended layers: the GPU cannot sample them, so deferral true builds at once.
+	// More layers than the GPU mixes: deferral true builds at once.
 	const hybrid = createCharacterPose( m );
-	hybrid.evaluate( "", 0, true, layers, true );
+	hybrid.evaluate( "", 0, true, [ ...layers, THIRD_LAYER ], true );
 	assert.equal( hybrid.cpuEvaluations(), 1 );
 	const out = new Float32Array( 32 ), expected = new Float32Array( 32 );
 	for ( const time of [ .1, .4, .9 ] ) {

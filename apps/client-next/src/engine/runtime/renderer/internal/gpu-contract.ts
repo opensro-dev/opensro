@@ -442,10 +442,7 @@ export interface GeometryCommands {
 		source: Float32Array,
 		model: import("@/engine/contracts/character").CharacterModel,
 		primitive: import("@/engine/contracts/character").CharacterPrimitive,
-		samples: readonly (
-			| { readonly clip: import("@/engine/contracts/character").CharacterClip; readonly time: number; }
-			| null
-		)[],
+		samples: readonly (import("@/engine/contracts/character").CharacterGpuSample | null)[],
 		revision: number
 	): boolean;
 	gpuAnimationStats?(): {

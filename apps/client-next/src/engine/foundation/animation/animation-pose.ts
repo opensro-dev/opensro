@@ -20,7 +20,13 @@ bone names (A981A0 searches compound branches in order for a marker).
 */
 import { createAttachmentBindPose } from "./equipment-sockets";
 import { clipNodeChannels, createAnimationTimelines, type ClipNodeChannelCache } from "./animation-timelines";
-import type { CharacterModel, CharacterPrimitive, CharacterLayer, CharacterClip } from "@/engine/contracts/character";
+import type {
+	CharacterClip,
+	CharacterGpuSample,
+	CharacterLayer,
+	CharacterModel,
+	CharacterPrimitive
+} from "@/engine/contracts/character";
 import { compose, multiplyDisjoint as multiply, multiplyQuaternion, slerp } from "@/engine/foundation/math/pose-math";
 import { paletteBindings } from "./palette-bindings";
 import { bodyBoneScale } from "./body-shape";
@@ -33,6 +39,9 @@ const RADIAL_WORDS = [ 4, 5, 6, 8, 9, 10 ] as const;
 // Distinct missing clip names one evaluator records: a model is one
 // catalogue row, so a handful of names says everything about it.
 export const MAX_MISSING_CLIPS = 8;
+// The layers the GPU skeleton pass mixes (CharacterGpuSample): a
+// crossfade's two. More fall back to the CPU mixer.
+export const MAX_GPU_LAYERS = 2;
 /*
 ================
 PoseDeferral
@@ -201,7 +210,7 @@ without changing skeleton storage, the selected layers or their revision.
 	const boneRotation = new Float32Array( 4 );
 	let rotatedNode = -1, releasedNode = -1, rotationChanged = false;
 	let cpuPending = false, cpuEvaluations = 0;
-	const sampleRequest = { clip: model.clips[0]!, time: 0 };
+	const sampleRequest = { clip: model.clips[0]!, time: 0, next: null as CharacterClip | null, nextTime: 0, share: 0 };
 	/*
 ================
 gpuRefusal
@@ -211,26 +220,55 @@ one clip at full weight on the default body with no rotated bone.
 ================
 	*/
 	function gpuRefusal(): string | null {
-		const layer = resolved[0];
-		if ( resolved.length !== 1 ) return "layers";
-		if ( !layer?.clip ) return "no clip";
-		if ( layer.weight !== 1 ) return "weight";
 		if ( volume !== DEFAULT_BODY_VOLUME ) return "body volume";
 		if ( rotatedNode >= 0 ) return "bone rotation";
-		if ( !gpuClips.has( layer.clip ) ) return "clip not on gpu";
-		return null;
+		// The mixer skips a layer without a clip or weight (sampleLayers):
+		// only the layers that contribute count.
+		let live = 0;
+		for ( const layer of resolved ) {
+			if ( !layer.clip || layer.weight === 0 ) continue;
+			if ( ++live > MAX_GPU_LAYERS ) return "layers";
+			if ( !gpuClips.has( layer.clip ) ) return "clip not on gpu";
+		}
+		return live ? null : "no clip";
 	}
 	/*
 ================
 gpuSample
 ================
 	*/
-	function gpuSample(): { readonly clip: CharacterClip; readonly time: number; } | null {
+	function gpuSample(): CharacterGpuSample | null {
 		if ( gpuRefusal() ) return null;
-		const layer = resolved[0]!;
-		sampleRequest.clip = layer.clip!;
-		sampleRequest.time = layer.time;
+		let first: ResolvedLayer | undefined, second: ResolvedLayer | undefined;
+		for ( const layer of resolved ) {
+			if ( !layer.clip || layer.weight === 0 ) continue;
+			if ( first ) second = layer;
+			else first = layer;
+		}
+		// Event tracks commit before timed ones (sampleLayers): the event
+		// layer of a split pair goes first.
+		if ( second && first!.lane === "timed" && second.lane === "event" ) [first, second] = [ second, first ];
+		sampleRequest.clip = first!.clip!;
+		sampleRequest.time = first!.time;
+		sampleRequest.next = second?.clip ?? null;
+		sampleRequest.nextTime = second?.time ?? 0;
+		sampleRequest.share = second ? mixShare( first!, second ) : 0;
 		return sampleRequest;
+	}
+	/*
+================
+mixShare
+
+How far toward the second layer a node both animate is mixed, as the CPU
+mixer computes it: one lane accumulates by w/(sum+w); across lanes the
+event layer commits min(w, 1) first and the timed one gets only the
+remaining headroom.
+================
+	*/
+	function mixShare( first: ResolvedLayer, second: ResolvedLayer ): number {
+		if ( first.lane === second.lane ) return second.weight / (first.weight + second.weight);
+		const committed = Math.min( first.weight, 1 ), weight = Math.min( second.weight, 1 - committed );
+		return weight > 0 ? weight / (committed + weight) : 0;
 	}
 	/*
 ================
