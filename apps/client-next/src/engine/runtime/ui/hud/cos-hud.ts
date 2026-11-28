@@ -1,14 +1,15 @@
 /*
 ===========================================================================
 
-cos-hud.ts - the COS HUD's state: selected companion, bar and Clean prompt
+cos-hud.ts - the COS HUD's state: selected companion, bar, Clean and sale prompts
 
 CIFCOSManager shares one status icon across guild soldiers; other companions
 have individual status icons. The worker publishes their bindings and selected
 GID. The HUD owns one command panel, shown for the selected companion (CIFCOSManager_SelectCompanion
 6F21F0). This module mirrors selection and owns the panel's open/close toggle
 (CIFCOSCommand_OnToggleOpen 6A3750), the transport Clean confirmation
-the executor raises (6A2350 case 5), and the item-target cursor A6 that
+the executor raises (6A2350 case 5), the stable keeper's sale box (6A9F50,
+opened when 5B6CA0 admits a dropped portrait), and the item-target cursor A6 that
 Grass of Life, the clock and the armour gender tool arm on right-button use.
 The UI draws from it every frame.
 
@@ -21,6 +22,7 @@ picked kind completes the use.
 */
 import type { GameplayCommand, InventoryItem, CosRecord } from "@/engine/contracts/gameplay";
 import { cosClass } from "@/engine/foundation/ui/cos-command";
+import type { CosSaleVerdict } from "@/engine/foundation/ui/cos-sale";
 import { companionItemTargetCommand } from "@/engine/foundation/gameplay/cos-item-use";
 import {
 	isWeaponSwitchScroll,
@@ -34,11 +36,20 @@ const ITEM_TARGET_CURSOR = 0xa6;
 
 /*
 ================
+CosSaleAsk
+
+The open sale box: the admitted verdict and the store NPC its OK names.
+================
+*/
+export type CosSaleAsk = Extract<CosSaleVerdict, { kind: "confirm"; }> & { readonly npc: number; };
+
+/*
+================
 createCosHud
 ================
 */
 export function createCosHud() {
-	let selected = 0, open = true, cleanConfirm: number | null = null;
+	let selected = 0, open = true, cleanConfirm: number | null = null, saleAsk: CosSaleAsk | null = null;
 	let source: InventoryItem | null = null, targetUse: GameplayCommand | null = null;
 	// The weapon switch box (port-only): the chosen weapon's type word and
 	// the race picked in its first step, null until then.
@@ -274,6 +285,12 @@ export function createCosHud() {
 				cleanConfirm = null;
 				changed = true;
 			}
+			// 6A9F50's box belongs to its status icon; a sold or dismissed
+			// transport takes the box with it.
+			if ( saleAsk !== null && !shown.some( r => r.gid === saleAsk!.gid ) ) {
+				saleAsk = null;
+				changed = true;
+			}
 			return changed;
 		},
 		/*
@@ -285,6 +302,7 @@ reset
 			selected = 0;
 			open = true;
 			cleanConfirm = null;
+			saleAsk = null;
 			source = null;
 			targetUse = null;
 		},
@@ -345,6 +363,34 @@ takeClean
 			const gid = cleanConfirm;
 			cleanConfirm = null;
 			return gid;
+		},
+		/*
+================
+askSale
+================
+		*/
+		askSale( ask: CosSaleAsk ) {
+			saleAsk = ask;
+		},
+		/*
+================
+saleAsk
+================
+		*/
+		saleAsk() {
+			return saleAsk;
+		},
+		/*
+================
+takeSale
+
+Closes the box and hands back what its OK would sell.
+================
+		*/
+		takeSale() {
+			const ask = saleAsk;
+			saleAsk = null;
+			return ask;
 		}
 	};
 }
