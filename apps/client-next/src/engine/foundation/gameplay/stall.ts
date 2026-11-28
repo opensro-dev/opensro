@@ -63,6 +63,12 @@ const STALL_NETWORK_SUPPLIER_CATEGORY = 0x1b;
 export const STALL_JOB_SUIT_CODE = 0x3b;
 export const STALL_ALCHEMY_CATEGORY = 0x12;
 export const STALL_ALCHEMY_CODE = 0x16;
+// CGInterface_OnWorldClick (698C51) prints {0x12, 0x17} for a click on a
+// stall keeper while the alchemy box shows, after the select.
+export const STALL_VISIT_ALCHEMY_CODE = 0x17;
+// NetClient_SendTradeRequest7237 (6FE93F) prints {0x12, 0x19} and sends
+// nothing while the alchemy box shows.
+export const TRADE_ALCHEMY_CODE = 0x19;
 const OFFERS_END = 0xff;
 // 0x71A8 edit kinds.
 const EDIT_MODIFY = 1;
