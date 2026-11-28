@@ -490,12 +490,13 @@ def tree_skills(text_root, own):
 # hunting2 merge then restaged 37 kinds an earlier layer already held and
 # its identities collided (#4843). A listed shard keeps its place, so a
 # rerun writes the same bytes as the first build. A tree without the
-# index is left alone: a new one-line index would hide every native shard.
+# index stops the build: a new one-line index would hide every native
+# shard, and leaving the shard unlisted hides it from every later layer.
 # ================
 def list_shard(text_root, index_name, shard):
 	path = Path(text_root) / index_name
 	if not path.exists():
-		return
+		raise SystemExit(f"{path} is missing: {shard} cannot be listed, so no later layer would read it")
 	rows = tables.table_rows(path.read_bytes())
 	if not any(row and row[0].lower() == shard for row in rows):
 		write_atomically(path, encode_rows(rows + [[shard]]))

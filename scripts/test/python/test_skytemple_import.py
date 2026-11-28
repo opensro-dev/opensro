@@ -4,6 +4,7 @@ test_skytemple_import.py - the Sky Temple import's admission and build rules.
 ===========================================================================
 """
 import script_paths  # noqa: F401  (puts scripts/ and its build folders on sys.path, #3410)
+import later_tables
 import later_fixtures  # noqa: E402
 import json
 import os
@@ -422,6 +423,7 @@ def build_trees(base):
 	native_char = ["0"] * 120
 	native_char[0], native_char[1], native_char[2] = "1", "100", "MOB_NATIVE_TEST"
 	write_table(output / text, "characterdata_5000.txt", [native_char])
+	write_table(output / text, "characterdata.txt", [["characterdata_5000.txt"]])
 	write_table(output / text, "skilldata.txt", [["skilldata_5000.txt"]])
 	write_table(output / text, "skilldata_5000.txt", [skill(50, "SKILL_NATIVE")])
 	write_table(output / text, "textdataname.txt", [["1", "SN_NATIVE", "x", "", "", "Native", "", "", "", "", ""]])
@@ -506,6 +508,10 @@ class SkytempleImportTest(unittest.TestCase):
 			self.assertTrue(summary["enabled"])
 			self.assertEqual((summary["kinds"], summary["nests"], len(summary["regions"])), (1, 2, 288))
 
+			# Its shards are listed in the tree's index, the view every later
+			# layer's standing read follows (#4843).
+			self.assertIn(sky.CHARACTER_SHARD, later_tables.Archive.tree(text).files("characterdata.txt"))
+			self.assertIn(sky.SKILL_SHARD, later_tables.Archive.tree(text).files("skilldata.txt"))
 			shard = read_rows(text / sky.CHARACTER_SHARD)
 			self.assertEqual(len(shard), 1)
 			# Above every object row, the native gate building's 2094 too (#3994).
@@ -541,6 +547,9 @@ class SkytempleImportTest(unittest.TestCase):
 			with mock.patch.dict(os.environ, {sky.FLAG: "off"}):
 				off = sky.add_skytemple(native, output, source, closure)
 			self.assertEqual(off, {"enabled": False})
+			# Switched off, the index lines go with the shards.
+			self.assertNotIn(sky.CHARACTER_SHARD, later_tables.Archive.tree(text).files("characterdata.txt"))
+			self.assertNotIn(sky.SKILL_SHARD, later_tables.Archive.tree(text).files("skilldata.txt"))
 			for name in (sky.CHARACTER_SHARD, sky.SKILL_SHARD, sky.POPULATION_FILE):
 				self.assertFalse((text / name).exists(), name)
 			self.assertFalse((output / sky.MARKER).exists())
