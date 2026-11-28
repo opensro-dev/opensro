@@ -7,7 +7,7 @@ Usage:
   node tools/perf/bench/fps-bench.mjs [--seconds N] [--at a,b] [--only a,b]
        [--counts] [--spans] [--cpu] [--heap] [--out DIR] [--trace] [--gpu-process] [--json FILE]
        [--screenshot] [--snow] [--frames N] [--frame-ms MS] [--memory] [--gpu-time]
-       [--hide ground,sky,objects,characters]
+       [--hide ground,sky,objects,characters] [--render-scale 100|75|50]
        [--paced] [--cpu-rate N] [--frame-limit 0|60|120|240] [--shadow-detail 0|1|2]
 
 For each location (--at) resets the scratch character there, boots the dev
@@ -79,6 +79,8 @@ main thread's frame and world-preparation time per frame. Options add:
             cross and combat scenarios run once and get no traced window.
   --hide    switch native graphic options off (ground, sky, objects,
             characters) before measuring: with --gpu-time, what each costs.
+  --render-scale  the Experimental render scale (port-only): the scene at
+            75% or 50% resolution; with --gpu-time, whether the pass is fill-bound.
   --gpu-time  the GPU's own time per frame: the page opens with the
             renderer's pass timestamps on (gpu-timing=1) and each row gains
             the frames' GPU ms (mean, p50, p99) and the costliest passes
@@ -655,7 +657,8 @@ async function session( options, location, results ) {
 		shadowDetail: options.shadowDetail,
 		// A profile is attribution: line positions matter, its timing is perturbed anyway.
 		lineInfo: options.cpu,
-		gpuTiming: options.gpuTime
+		gpuTiming: options.gpuTime,
+		experimental: options.renderScale === 100 ? undefined : { renderScale: options.renderScale }
 	} );
 	try {
 		// A stale or replaced session can boot outside the scene; every
@@ -943,6 +946,7 @@ const options = parseOptions( process.argv.slice( 2 ), {
 	gpuProcess: false,
 	gpuTime: false,
 	hide: [],
+	renderScale: 100,
 	combat: "MOB_CH_TIGER:10:GIANT",
 	vulnerable: false,
 	crowd: 32,
@@ -957,6 +961,7 @@ const options = parseOptions( process.argv.slice( 2 ), {
 }, USAGE );
 if ( !frameLimits().includes( options.frameLimit ) ) throw Error( `unsupported frame limit ${options.frameLimit}` );
 for ( const name of options.only ) if ( !SCENARIOS.includes( name ) ) throw Error( `unknown scenario ${name}` );
+if ( ![ 100, 75, 50 ].includes( options.renderScale ) ) throw Error( "--render-scale must be 100, 75 or 50" );
 for ( const name of options.hide ) if ( !(name in HIDE_MODES) ) throw Error( `unknown --hide ${name}` );
 // Chrome runs one trace at a time.
 if ( options.trace && options.gpuProcess ) {

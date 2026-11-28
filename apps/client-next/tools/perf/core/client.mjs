@@ -487,7 +487,8 @@ export async function openClient(
 		backgroundThrottling = false,
 		beforeLogin = undefined,
 		lineInfo = false,
-		gpuTiming = false
+		gpuTiming = false,
+		experimental = undefined
 	} = {}
 ) {
 	process.env.SRO_PROBE_UNLOCK_FPS = uncapped ? "1" : "0";
@@ -510,6 +511,14 @@ export async function openClient(
 				)
 			}
 		);
+		// Experimental rows a bench sets (the client's own store, read at boot:
+		// experimental-options.ts EXPERIMENTAL_STORAGE_KEY); every other row
+		// keeps its default.
+		if ( experimental ) {
+			await page.addInitScript( record => {
+				localStorage.setItem( "sro:v1150:experimental-options:3", JSON.stringify( record ) );
+			}, experimental );
+		}
 		await page.addInitScript( instrument, { counts, spans } );
 		await bootPlayableSession( page, CHARACTER, beforeLogin, { search: gpuTiming ? "?gpu-timing=1" : "" } );
 		await page.evaluate( () => globalThis.__benchRuntime = globalThis.__playableRuntime );
