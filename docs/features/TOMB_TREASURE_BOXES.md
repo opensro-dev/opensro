@@ -47,10 +47,11 @@ Every `MOB_TQ_*` death rolls each box's key once, at 0.5 / 0.25 / 0.16667 / 0.02
 eight times higher. The roll is `((rand << 15) | rand) % 1e6 / 1e6`, and a key drops at the monster for the kill's
 owner.
 
-## Not yet
+## The guards
 
-- The guards (`MOB_TQ_TREASURE_GUARD`, `_CLON`) have no v1.150 characterdata row. Until the build stages them from the
-  v1.188 client (#4810), the guard outcome answers `_03` and summons nothing.
+- The guards (`MOB_TQ_TREASURE_GUARD`, `_CLON`) have no v1.150 characterdata row. The build stages them from the
+  v1.188 client behind the same switch (`scripts/tomb_box_import.py`, their own 350000 shard band), so a switch-on
+  build hands the guard outcome its monsters; the answer text stays `_03` either way.
 
 ## Native claims
 
