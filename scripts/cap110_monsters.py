@@ -476,7 +476,7 @@ def tree_characters(text_root, own):
 # above and never restages.
 # ================
 def tree_skills(text_root, own):
-	return [row for row in later_tables.Archive.tree(text_root).rows("skilldata.txt", excluding=(own,))
+	return [row for row in later_tables.Archive.tree(text_root).rows("skilldata.txt", excluding=(own,), width=SKILL_COLUMNS)
 		if len(row) == SKILL_COLUMNS]
 
 
@@ -703,7 +703,7 @@ def add_monsters(vsro_root, native, output, source_root=None):
 		base_text = (text_root / "textdataname.txt").read_bytes()
 		known = {r[1] for r in characters.translation_rows(base_text) if len(r) > 1}
 		wanted = {r[5] for r in refs.values()} - known
-		texts = [[r[0], r[1], r[2], "", "", r[5], r[4], r[7], r[8], r[9], ""] for r in read.rows("textdata_object.txt", characters.translation_rows) if len(r) >= 10 and r[1] in wanted]
+		texts = [[r[0], r[1], r[2], "", "", r[5], r[4], r[7], r[8], r[9], ""] for r in read.rows("textdata_object.txt", characters.translation_rows, width=10) if len(r) >= 10 and r[1] in wanted]
 		if wanted - {r[1] for r in texts}:
 			raise ValueError("missing field monster names")
 		# Name rows a family that is off this build owned leave with it: the

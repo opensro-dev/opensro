@@ -368,7 +368,7 @@ def without_quests(text_root, codes):
 # ================
 def add_quests(read, text_root, prior):
 	native = without_quests(text_root, set(prior.get("quests", [])))
-	source = {row[2]: row for row in read.rows(QUEST_TABLE) if len(row) > 2}
+	source = {row[2]: row for row in read.rows(QUEST_TABLE, width=3) if len(row) > 2}
 	taken_ids = {row[1] for row in native if len(row) > 1}
 	taken_codes = {row[2] for row in native if len(row) > 2}
 	added = []
