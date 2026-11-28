@@ -2308,7 +2308,7 @@ test("reference admission holds native packets until verified data, and cancella
 	const sockets = socketHarness( t );
 	let release, signal;
 	const data = JSON.stringify( {
-			referencesVersion: 3,
+			referencesVersion: 4,
 			skillLifecycleVersion: 1,
 			refSkillSnapshot: [],
 			refItemSnapshot: [],
@@ -2392,7 +2392,7 @@ begin
 test("published static item and monster rows join the login's own rows before the world is admitted", async t => {
 	const sockets = socketHarness( t ), presentation = createPresentation();
 	const data = JSON.stringify( {
-			referencesVersion: 3,
+			referencesVersion: 4,
 			skillLifecycleVersion: 1,
 			refSkillSnapshot: [],
 			refItemSnapshot: [ { refObjId: 1, typeFlags: 0x6c, icon: "item/etc/hp_potion_01.ddj" } ],
@@ -2471,7 +2471,7 @@ test("published static item and monster rows join the login's own rows before th
 test("a digest-held re-entry keeps the published skills and item kinds", async t => {
 	const sockets = socketHarness( t ), presentation = createPresentation();
 	const data = JSON.stringify( {
-			referencesVersion: 3,
+			referencesVersion: 4,
 			skillLifecycleVersion: 1,
 			refSkillSnapshot: [ {
 				id: 7,
@@ -2593,7 +2593,7 @@ admit
 test("an edge-routed transport base carries its route to the socket and the reference fetch", async t => {
 	const sockets = socketHarness( t ), requested = [];
 	const data = JSON.stringify( {
-			referencesVersion: 3,
+			referencesVersion: 4,
 			skillLifecycleVersion: 1,
 			refSkillSnapshot: [],
 			refItemSnapshot: [],
@@ -2648,7 +2648,7 @@ test("an advertised transport base that already names the socket is used as-is",
 test("an advertised socket-form base fetches references beside the socket, not under it", async t => {
 	const sockets = socketHarness( t ), requested = [];
 	const data = JSON.stringify( {
-			referencesVersion: 3,
+			referencesVersion: 4,
 			skillLifecycleVersion: 1,
 			refSkillSnapshot: [],
 			refItemSnapshot: [],
@@ -3156,7 +3156,7 @@ than thirty seconds end to end; only thirty seconds without a chunk fail.
 test("reference byte progress extends the thirty-second window past a slow body", async t => {
 	const sockets = socketHarness( t );
 	const data = JSON.stringify( {
-			referencesVersion: 3,
+			referencesVersion: 4,
 			skillLifecycleVersion: 1,
 			refSkillSnapshot: [],
 			refItemSnapshot: [],
@@ -3238,7 +3238,7 @@ test("reference byte progress extends the thirty-second window past a slow body"
 test("a stalled reference body times out after thirty seconds of silence", async t => {
 	const sockets = socketHarness( t );
 	const data = JSON.stringify( {
-			referencesVersion: 3,
+			referencesVersion: 4,
 			skillLifecycleVersion: 1,
 			refSkillSnapshot: [],
 			refItemSnapshot: [],

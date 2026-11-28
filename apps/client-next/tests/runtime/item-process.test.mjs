@@ -593,6 +593,47 @@ test("Magic Pang prize rows rebuild when references or bootstrap update tooltips
 	assert.deepEqual( afterSecondReferences.item?.tooltip, tooltipV2 );
 });
 
+test("a v1.696 prize is labelled by its reference name key, with SN_<codename> only as the fallback", () => {
+	const owner = createInventory( () => {}, () => {} );
+	owner.bootstrap( {
+		refItemSnapshot: [
+			{
+				refObjId: 4140,
+				typeFlags: 0x06ac,
+				name: "SN_ITEM_EVENT_TBLADE_10_RARE",
+				codename: "ITEM_EVENT_TBLADE_10_RARE"
+			},
+			{ refObjId: 4035, typeFlags: 0x06ac, codename: "ITEM_CH_SWORD_08_A_RARE" },
+			{ refObjId: 4071, typeFlags: 0x06ac }
+		],
+		gachaPool: {
+			npc: 9251,
+			visibleSet: 1,
+			levelCap: 90,
+			entries: [
+				{ entry: 1, refObjId: 4140, quantity: 1, minLevelCap: 1, plus: 0, options: [] },
+				{ entry: 2, refObjId: 4035, quantity: 1, minLevelCap: 1, plus: 0, options: [] },
+				{ entry: 3, refObjId: 4071, quantity: 1, minLevelCap: 1, plus: 0, options: [] }
+			],
+			tree: [ {
+				tid: [ 3, 1, 6, 2 ],
+				group: 100,
+				groupLabel: "UIIT_CTL_WK_CH_WEAPON",
+				sub: 101,
+				subLabel: "UIIT_CTL_WK_CH_WEAPON_SWORD",
+				degrees: 15
+			} ]
+		}
+	} );
+	open( owner );
+	assert.deepEqual( owner.state().gacha.prizes.map( prize => prize.nameSymbol ), [
+		// The imported prize's authored key is not SN_<codename>.
+		"SN_ITEM_EVENT_TBLADE_10_RARE",
+		"SN_ITEM_CH_SWORD_08_A_RARE",
+		""
+	] );
+});
+
 test("Magic Pang prize catalogue serves degree-9 Seal of Star under Pool V2 and falls back to retail v1.150 when off", () => {
 	assert.deepEqual( gachaPrizes(), [
 		{ entry: 1, refObjId: 4146, quantity: 1, nameSymbol: "SN_ITEM_CH_TBLADE_09_A_RARE" },

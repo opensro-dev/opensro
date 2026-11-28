@@ -68,6 +68,17 @@ const (
 	TombGateFloor6Portal4 = "Chins_Floor6_Portal4"
 )
 
+// tombFloor5Orders are the six orders the Floor 5 portal spawner can
+// stand its three portals in: portal j (to Floor 6's East, South and West
+// arrivals, j = 0..2) stands at exit place tombFloor5Orders[k][j], one k
+// drawn by rand() % 6 when the floor is set up (v1.188 server Floor 5
+// trigger setup). Places: 0 (1498, 59, 1650), 1 (1815, 68, -1334),
+// 2 (-1349, 68, 1101).
+var tombFloor5Orders = [6][3]int{{0, 1, 2}, {0, 2, 1}, {1, 0, 2}, {1, 2, 0}, {2, 0, 1}, {2, 1, 0}}
+
+// TombFloor5Places is the number of Floor 5 exit places (and portals).
+const TombFloor5Places = 3
+
 // Boss window after the floor boss dies before the chain re-arms
 // (inference above; the Floor 1-3 unique respawn window).
 const (
@@ -227,10 +238,13 @@ type tombFloorState struct {
 
 // tombPopulation is the chain's state for one division population.
 type tombPopulation struct {
-	armed    bool
-	floors   []tombFloorState
-	gates    map[string]bool
-	liveGids map[uint32]string
+	armed bool
+	// floor5Order indexes tombFloor5Orders: drawn each time the floor
+	// that raises the Floor 6 entry gate is armed.
+	floor5Order int
+	floors      []tombFloorState
+	gates       map[string]bool
+	liveGids    map[uint32]string
 }
 
 /*
@@ -554,6 +568,11 @@ raises Initialize on exactly these).
 ================
 */
 func (c *TombChain) armFloorLocked(s *MonsterState, state *divisionMonsterState, pop *tombPopulation, floor int, nowMs int64) {
+	if entry, ok := c.gateFloor[TombGateFloor6Entry]; ok && entry == floor {
+		// The setup draws the portals' order before it raises any
+		// spawner, so each arming may stand them differently.
+		pop.floor5Order = int(s.randomWord() % uint32(len(tombFloor5Orders)))
+	}
 	for index := range c.spawners {
 		resolved := &c.spawners[index]
 		if resolved.floor != floor || !resolved.def.Initialize {
@@ -760,4 +779,36 @@ func (s *MonsterState) TombGateOpen(division string, gate string) bool {
 		}
 	}
 	return false
+}
+
+/*
+================
+MonsterState.TombFloor5Destination
+
+Which Floor 6 arrival (0 East, 1 South, 2 West) the portal standing at
+Floor 5 exit place leads to in the division, under the order drawn when
+the floor was armed. False with no chain, no armed population, or a
+place outside 0..TombFloor5Places-1.
+================
+*/
+func (s *MonsterState) TombFloor5Destination(division string, place int) (int, bool) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.tombChain == nil || place < 0 || place >= TombFloor5Places {
+		return 0, false
+	}
+	state := s.divs[division]
+	if state == nil {
+		return 0, false
+	}
+	pop, ok := s.tombChain.populations[state]
+	if !ok || !pop.armed {
+		return 0, false
+	}
+	for portal, at := range tombFloor5Orders[pop.floor5Order] {
+		if at == place {
+			return portal, true
+		}
+	}
+	return 0, false
 }

@@ -110,6 +110,25 @@ export interface GachaPrizeRow {
 	// The plain presented instance the prize slot's hover help shows, once
 	// the item reference has arrived (BUG-084).
 	readonly item?: InventoryItem;
+	// v1.696 Magic POP only (gacha-pool.ts): what the select window's
+	// filter reads, once the item reference has arrived.
+	readonly typeFlags?: number;
+	readonly itemClass?: number;
+	readonly minLevelCap?: number;
+}
+
+/*
+================
+GachaPoolView
+
+The published v1.696 Magic POP pool's level cap and category tree. Present
+only while the server publishes gachaPool; the window then opens on the
+select window and pages its prizes.
+================
+*/
+export interface GachaPoolView {
+	readonly levelCap: number;
+	readonly tree: readonly import("@/engine/foundation/gameplay/gacha-pool").GachaTreeRow[];
 }
 
 export interface GachaState {
@@ -123,6 +142,7 @@ export interface GachaState {
 	readonly reward?: { readonly refObjId: number; readonly quantity: number; };
 	readonly error: number | null;
 	readonly prizes?: readonly GachaPrizeRow[];
+	readonly pool?: GachaPoolView;
 }
 
 /*

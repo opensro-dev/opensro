@@ -21,7 +21,7 @@ const { createSessionHttp } = await import(
 	sourceFileUrl( "src/engine/runtime/simulation/worker/session/http/http.ts" ).href
 );
 const data = JSON.stringify( {
-		referencesVersion: 3,
+		referencesVersion: 4,
 		skillLifecycleVersion: 1,
 		refSkillSnapshot: [],
 		refItemSnapshot: [ { refObjId: 7 } ],
@@ -133,7 +133,8 @@ async function loadDocument( t, document ) {
 }
 
 test("references of the previous contract are refused", async t => {
-	// Contract 2 published no monster rows (#369); a browser of 3 needs them.
+	// Contract 2 published no monster rows (#369) and 3 no Magic POP pool,
+	// which a browser of 4 reads; both are refused before any decode.
 	await assert.rejects(
 		loadDocument( t, {
 			referencesVersion: 2,
@@ -141,11 +142,21 @@ test("references of the previous contract are refused", async t => {
 			refSkillSnapshot: [],
 			refItemSnapshot: []
 		} ),
-		/contract 2, expected 3/
+		/contract 2, expected 4/
 	);
 	await assert.rejects(
 		loadDocument( t, {
 			referencesVersion: 3,
+			skillLifecycleVersion: 1,
+			refSkillSnapshot: [],
+			refItemSnapshot: [],
+			refObjSnapshot: []
+		} ),
+		/contract 3, expected 4/
+	);
+	await assert.rejects(
+		loadDocument( t, {
+			referencesVersion: 4,
 			skillLifecycleVersion: 1,
 			refSkillSnapshot: [],
 			refItemSnapshot: []

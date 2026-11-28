@@ -96,3 +96,39 @@ func TestPartySummonScrollRefusesBeforeSpending(t *testing.T) {
 		t.Fatalf("the scroll is admitted as family %d", family)
 	}
 }
+
+/*
+================
+TestSummonEventItemsServedByTheV1696MagicPop
+
+Out of So-Ok's Christmas Gift's mode, a loaded v1.696 catalog serves the
+summon-event items it pays (its lose set holds the party scroll and
+Pandora's Box) and nothing else; the v1.150 machine serves none.
+================
+*/
+func TestSummonEventItemsServedByTheV1696MagicPop(t *testing.T) {
+	t.Setenv(progression.EnvChristmasEventMode, string(progression.ChristmasModeWinter))
+	t.Setenv(EnvMagicPopV1696, "on")
+	rt, _ := v1696Fixture(t, true)
+	rt.SoOkChristmas = progression.SoOkChristmasFromEnv()
+	paid := rt.GachaCatalog.RewardCodenames()
+	if len(paid) == 0 {
+		t.Fatal("the v1.696 catalog pays nothing")
+	}
+	for _, name := range paid {
+		if !rt.summonEventItemServed(name) {
+			t.Fatalf("%s is paid by the v1.696 catalog but not served", name)
+		}
+	}
+	if rt.summonEventItemServed(PartySummonScrollItem) {
+		t.Fatal("the scroll is served by a catalog that does not pay it")
+	}
+
+	legacy, _ := v1696Fixture(t, false)
+	legacy.SoOkChristmas = progression.SoOkChristmasFromEnv()
+	for _, name := range legacy.GachaCatalog.RewardCodenames() {
+		if legacy.summonEventItemServed(name) {
+			t.Fatalf("the v1.150 machine served %s", name)
+		}
+	}
+}

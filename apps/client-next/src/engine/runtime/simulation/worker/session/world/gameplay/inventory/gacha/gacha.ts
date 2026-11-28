@@ -5,12 +5,15 @@ gacha.ts - the Magic Pang window session and roll lifecycle
 
 Owns opening, ticket selection, roll timing and result sounds. Shared NPC
 acknowledgements are validated before the Magic Pang service is selected.
+While the server publishes the v1.696 Magic POP pool (gacha-pool.ts), a roll
+names one of its entries instead of the v1.150 twelve; the wire is the same.
 
 ===========================================================================
 */
 import { gachaPrizes, isGachaTicket } from "@/engine/foundation/gameplay/gacha-catalog";
 import { GACHA_FUNCTION, GACHA_ROLL_MS } from "@/engine/foundation/ui/gacha-window";
 import { npcInteractionMask } from "@/engine/foundation/gameplay/npc-dialogue";
+import type { GachaPool } from "@/engine/foundation/gameplay/gacha-pool";
 import type { GachaState } from "@/engine/contracts/item-process";
 import type { InventoryItem } from "@/engine/contracts/gameplay";
 import type { UiSoundHandle } from "@/engine/foundation/ui/sound-catalog";
@@ -41,7 +44,36 @@ export function createGacha() {
 		result: null,
 		error: null
 	};
+	// The published v1.696 pool, or undefined for the v1.150 window.
+	let pool: GachaPool | undefined;
+	/*
+	================
+	rollable
+
+	The entries a roll may name: the v1.696 pool's rows the level cap shows
+	(0xA71220 hides the rest, so the window never offers them), else the
+	v1.150 twelve.
+	================
+	*/
+	function rollable( entry: number ) {
+		if ( pool ) {
+			const cap = pool.levelCap;
+			return pool.entries.some( row => row.entry === entry && row.minLevelCap <= cap );
+		}
+		return gachaPrizes().some( prize => prize.entry === entry );
+	}
 	return {
+		/*
+		================
+		setPool
+
+		Installed from the entry references; undefined restores the v1.150 window.
+		================
+		*/
+		setPool( next: GachaPool | undefined ) {
+			pool = next;
+		},
+		pool: () => pool,
 		/*
 		================
 		open
@@ -112,7 +144,7 @@ export function createGacha() {
 			const flags = item?.typeFlags ?? 0;
 			if (
 				!state.visible || ![ "idle", "result" ].includes( state.phase ) ||
-				!gachaPrizes().some( prize => prize.entry === entry ) || !item || slot < FIRST_BAG_SLOT ||
+				!rollable( entry ) || !item || slot < FIRST_BAG_SLOT ||
 				slot > MAX_SLOT || item.slot !== slot || item.quantity <= 0 ||
 				!isGachaTicket( flags )
 			) throw Error( "Magic Pang roll unavailable" );
@@ -191,6 +223,7 @@ export function createGacha() {
 		================
 		*/
 		reset() {
+			pool = undefined;
 			state = {
 				visible: false,
 				phase: "closed",
