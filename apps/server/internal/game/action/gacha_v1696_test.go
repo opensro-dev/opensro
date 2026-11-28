@@ -378,6 +378,43 @@ func TestGachaV1696ExchangeRefusesAnUnresolvedOption(t *testing.T) {
 
 /*
 ================
+TestGachaV1696ExchangePassesByAnUnpayableCard
+
+A card whose reward cannot be made (an M token without the magic table) is
+a fault of that card, not of the bag: the walk passes it by and still pays
+the voucher behind it, instead of stopping on it at every talk.
+================
+*/
+func TestGachaV1696ExchangePassesByAnUnpayableCard(t *testing.T) {
+	t.Setenv(EnvMagicPopV1696, "on")
+	rt, c := v1696Fixture(t, true)
+	rt.DropRoll = func() (uint32, error) { return 0, nil }
+	rt.GachaRoll = func() (uint32, error) { return 0, nil }
+	if _, reason := rt.HandleGachaRoll(testDivision, c, v1696Roll(1)); reason != "" {
+		t.Fatal(reason)
+	}
+	rt.Alchemy = nil
+	lose := rt.GachaCatalog.LoseCard
+	c.MissionInventory = append(c.MissionInventory, enterworld.InventoryRow{Slot: 40, RefObjID: lose.RefObjID,
+		Codename: lose.Codename, TypeFlags: lose.TypeFlags, StackCount: 1, MagicOptions: []uint64{3630, 7}})
+	rt.Selected.Set(testDivision, c.Name, 18)
+	if _, reason := rt.HandleGachaExchange(testDivision, c, wire.NewWriter(4).U32(18).Payload()); reason != "" {
+		t.Fatal(reason)
+	}
+	kept, paid := 0, false
+	for _, row := range c.MissionInventory {
+		if rt.GachaCatalog.IsResultCard(row.RefObjID) {
+			kept++
+		}
+		paid = paid || row.RefObjID == 3630 && row.StackCount == 7
+	}
+	if kept != 1 || !paid {
+		t.Fatalf("kept %d cards, paid=%v: %+v", kept, paid, c.MissionInventory)
+	}
+}
+
+/*
+================
 TestGachaV1696PoolPublishesTheOptionIdsTheExchangeWrites
 
 The pool's option lines carry the magicoption row id the exchange stores

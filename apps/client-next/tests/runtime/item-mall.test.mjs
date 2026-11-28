@@ -598,6 +598,37 @@ test("the catalogue decoder keeps a known package gender and drops an unknown on
 	assert.equal( state.offers[3]?.gender, undefined );
 });
 
+test("the catalogue decoder keeps a pack's count and drops a single's or a malformed one", () => {
+	const offer = ( slot, count ) => ({
+		group: 852,
+		shop: 0,
+		tab: 0,
+		slot,
+		currencyMask: 2,
+		packageId: 90100 + slot,
+		name: "Scroll " + slot,
+		description: "Description",
+		icon: "item/example.ddj",
+		silk: 15,
+		giftSilk: 0,
+		allowsPoints: false,
+		purchaseLimit: 5,
+		itemIds: [ 42 ],
+		...(count === null ? {} : { count })
+	});
+	const payload = new TextEncoder().encode( JSON.stringify( {
+		version: 1,
+		tabs: [ { shop: 0, tab: 0, category: "MALL_CONSUME_SCROLL", label: "Scroll" } ],
+		offers: [ offer( 0, 11 ), offer( 1, 1 ), offer( 2, "11" ), offer( 3, null ), offer( 4, 2.5 ) ],
+		silk: 0,
+		earnedSilk: 0,
+		giftSilk: 0,
+		points: 0
+	} ) );
+	const { state } = mallProjection( payload );
+	assert.deepEqual( state.offers.map( offer => offer.count ), [ 11, undefined, undefined, undefined, undefined ] );
+});
+
 test("the lump-buy boxes caption their total row with the total-price line", () => {
 	// 528920 sets the total control's text on both boxes that draw a
 	// total row: UIIT_MSG_QUESTION_SILKMALL_ZZIM_LUMP_BUY_TOTAL

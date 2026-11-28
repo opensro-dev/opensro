@@ -79,6 +79,13 @@ func configureItemMall(items *action.Runtime, textdataDir string, mallAuthority 
 	if !items.MallEarnedTradable {
 		log.Infof("mall: earned-silk purchases stay bound (%s=off, native)", action.EnvEarnedSilkTradable)
 	}
+	// SRO_MALL_P2W_SCROLLS_OFF (port-only, not native, owner 2026-11-28):
+	// the damage, resurrection and instant return scrolls leave the mall
+	// (commerce/mallp2wscrolls.go); off is the shipped mall.
+	items.MallP2WScrollsOff, err = commerce.MallP2WScrollsOffFromEnv()
+	if err != nil {
+		return err
+	}
 	if err := items.ConfigureMall(textdataDir, mallAuthority, mallExtra, mallCategories); err != nil {
 		return fmt.Errorf("mall catalogue: %w", err)
 	}

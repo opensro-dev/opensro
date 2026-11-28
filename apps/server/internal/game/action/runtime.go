@@ -635,6 +635,12 @@ type Runtime struct {
 	// default is on.
 	MallEarnedTradable bool
 
+	// MallP2WScrollsOff keeps the pay-to-win scrolls out of the mall
+	// (SRO_MALL_P2W_SCROLLS_OFF, port-only, not native, owner
+	// 2026-11-28; commerce/mallp2wscrolls.go). The zero value is the
+	// shipped mall. Composition sets it before ConfigureMall.
+	MallP2WScrollsOff bool
+
 	// EquipSwitch enables each port-only equipment switch scroll by kind
 	// (SRO_WEAPON_SWITCH_SCROLL, SRO_ARMOR_SWITCH_SCROLL,
 	// SRO_ACCESSORY_SWITCH_SCROLL; commerce/equipswitch.go). A missing
