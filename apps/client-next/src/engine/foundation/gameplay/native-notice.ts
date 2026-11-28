@@ -19,13 +19,13 @@ v1.150 table leaves every one of these codes silent, so resolveNativeNotice
 reads this table before its silent return (a row after it never fires).
 ================
 */
-const LATER_CLIENT_CATEGORY1: ReadonlyMap<number, string> = new Map( [
+const LATER_CLIENT_CATEGORY1: Readonly<Record<number, string>> = {
 	// Magic Cube (#3906): indexes 123 / 127, full and sell while non-empty.
-	[ 0x8A, "UIIT_STT_MAGIC_CUBE_INVENTORY_FULL" ],
-	[ 0x8E, "UIIT_STT_MAGIC_CUBE_STORE_SELL_ERROR" ],
+	0x8A: "UIIT_STT_MAGIC_CUBE_INVENTORY_FULL",
+	0x8E: "UIIT_STT_MAGIC_CUBE_STORE_SELL_ERROR",
 	// Storage addition at its limit (#3904): index 0xEF.
-	[ 0xFE, "UIIT_STT_STORAGE_EXPANSION_USE_ERORR" ]
-] );
+	0xFE: "UIIT_STT_STORAGE_EXPANSION_USE_ERORR"
+} as const;
 export function resolveNativeNotice(
 	category: number,
 	code: number,
@@ -52,7 +52,7 @@ export function resolveNativeNotice(
 			route.banner || (category === 1 && code === 7 && context.itemMallOpen === true)
 		);
 	}
-	const later = category === 1 ? LATER_CLIENT_CATEGORY1.get( code ) : undefined;
+	const later = category === 1 ? LATER_CLIENT_CATEGORY1[code] : undefined;
 	if ( later ) return notice( later, 5, false );
 	if ( route.kind === "silent" ) return route;
 	if ( category === 1 && code === 50 ) {
