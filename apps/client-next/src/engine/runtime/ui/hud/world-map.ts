@@ -34,6 +34,7 @@ import { minimapSameFloor } from "@/engine/foundation/ui/minimap-floor";
 import { questMarkerTargets, rosterPositions } from "@/engine/foundation/ui/minimap-markers";
 import { questLocationTargets } from "@/engine/foundation/ui/quest-locations";
 import {
+	betaPlayerSign,
 	worldMapDemand,
 	expandedWorldMapOn,
 	worldMapDungeonOf,
@@ -683,15 +684,8 @@ export function createWorldMapHud( options: MapHudOptions ) {
 				betaStart = mapMarkers.length;
 				for ( const player of game?.betaPlayers ?? [] ) {
 					if ( player.gid === game?.localGid || partyGids.has( player.gid ) ) continue;
-					const isAI = player.name.startsWith( "[AI]" );
-					const isTrader = isAI && player.name.includes( "Trader" );
-					const isThief = isAI && player.name.includes( "Thief" );
-					const size = isAI ? 12 : 8;
-					const path = isTrader ?
-						ROOT + "interface/minimap/mm_sign_npc.png" :
-						isThief ?
-						ROOT + "interface/minimap/mm_sign_monster.png" :
-						ROOT + "interface/minimap/mm_sign_otherplayer.png";
+					const { path, ai } = betaPlayerSign( player.name );
+					const size = ai ? 12 : 8;
 					betaRoster.push( {
 						kind: "beta",
 						name: player.name,
@@ -767,6 +761,9 @@ export function createWorldMapHud( options: MapHudOptions ) {
 			const caveLocal = pose && cavePage && input.caveMaps ?
 				cavePageLocal( input.caveMaps, cavePage, pose, game?.navigationFloor ) :
 				false;
+			// The party and academy rows the dungeon page draws: only on the
+			// player's own floor, so a beta sign stands in for them elsewhere.
+			const caveRoster = caveLocal && cavePage ? roster.filter( row => row.regionId === cavePage.regionId ) : [];
 			const caveMap = mapOpen && pose && cavePage && input.caveMaps ?
 				caveMapView( {
 					pose,
@@ -783,16 +780,17 @@ export function createWorldMapHud( options: MapHudOptions ) {
 					// The beta roster's players first, so party signs
 					// stay on top, as on the world page.
 					roster: [
-						...cavePlayerSigns( cavePage, game?.betaPlayers ?? [], game?.localGid ),
-						...(caveLocal ?
-							roster
-								.filter( row => row.regionId === cavePage.regionId )
-								.map( row => ({
-									x: row.x,
-									z: row.z,
-									path: ROOT + "interface/worldmap/wmap_sign_" + row.kind + ".png"
-								}) ) :
-							[])
+						...cavePlayerSigns(
+							cavePage,
+							game?.betaPlayers ?? [],
+							game?.localGid,
+							new Set( caveRoster.map( row => row.name ) )
+						),
+						...caveRoster.map( row => ({
+							x: row.x,
+							z: row.z,
+							path: ROOT + "interface/worldmap/wmap_sign_" + row.kind + ".png"
+						}) )
 					],
 					ground: guideCaveGround
 				} ) :
