@@ -28,11 +28,11 @@ func TestMasterGrantsUnionChat(t *testing.T) {
 	t.Parallel()
 	deps, _, alfa, berk, guildID := newTwoMemberGuildFixture(t)
 	request := binary.LittleEndian.AppendUint32(binary.LittleEndian.AppendUint32([]byte{1}, mutatorBerkJID), guild.PermMaskUnionChat)
-	refused := guild.HandlePermissionUpdate(deps, mutatorDivision, berk, request)
+	refused := guild.HandlePermissionUpdate(deps, mutatorDivision, berk, request, "")
 	if !bytes.Equal(refused.ErrorPayload, []byte{2, 0x1E}) {
 		t.Fatalf("a member's grant answered % X (%s)", refused.ErrorPayload, refused.Refusal)
 	}
-	outcome := guild.HandlePermissionUpdate(deps, mutatorDivision, alfa, request)
+	outcome := guild.HandlePermissionUpdate(deps, mutatorDivision, alfa, request, "")
 	if outcome.Refusal != "" {
 		t.Fatal(outcome.Refusal)
 	}
@@ -46,7 +46,7 @@ func TestMasterGrantsUnionChat(t *testing.T) {
 			t.Fatalf("stored rights %#x", member.PermMask)
 		}
 	}
-	if again := guild.HandlePermissionUpdate(deps, mutatorDivision, alfa, request); again.PushPayload != nil {
+	if again := guild.HandlePermissionUpdate(deps, mutatorDivision, alfa, request, ""); again.PushPayload != nil {
 		t.Fatal("an unchanged grant was pushed")
 	}
 }

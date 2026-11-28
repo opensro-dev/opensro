@@ -24,7 +24,15 @@ func creatureImpactCount(skill enterworld.SkillRow) int {
 	if skill.CreatureStatusCast || skill.StatusCast {
 		return 1
 	}
-	return int(skill.Attack.ImpactCount)
+	if count := int(skill.Attack.ImpactCount); count > 0 {
+		return count
+	}
+	// A ratio program authors its hit count nowhere else: one impact
+	// record per hit, as the hit outcome writes it.
+	if skill.RatioDamage.Present {
+		return 1
+	}
+	return 0
 }
 
 /*

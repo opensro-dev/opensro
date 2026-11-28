@@ -20,6 +20,7 @@ import (
 	"opensro.online/server/internal/game/enterworld"
 	"opensro.online/server/internal/game/item/wire"
 	"opensro.online/server/internal/game/macro"
+	"opensro.online/server/internal/game/restriction"
 	"opensro.online/server/internal/game/social/guild"
 	"opensro.online/server/internal/game/world/simulation"
 	"opensro.online/server/internal/transport"
@@ -93,18 +94,18 @@ func (rt *Runtime) Register(hub *transport.Hub) {
 	hub.Handle(wire.OpCosBehaviorRequest, rt.hubHandler(hub, rt.HandleCosBehavior))
 	hub.Handle(0x77e7, rt.hubHandler(hub, rt.HandleRetailBuyback))
 	hub.Handle(opShopBuyback, rt.hubHandler(hub, rt.HandleBuyback))
-	hub.Handle(wire.OpItemMoveRequest, rt.hubHandler(hub, rt.HandleItemMove))
-	hub.Handle(wire.OpExchangeRequest, rt.hubHandler(hub, rt.HandleExchangeRequest))
+	hub.Handle(wire.OpItemMoveRequest, rt.dropRestrictedHandler(hub, rt.HandleItemMove))
+	hub.Handle(wire.OpExchangeRequest, rt.restrictedHandler(hub, transport.CommandRestrictionTrade, rt.HandleExchangeRequest))
 	hub.Handle(wire.OpExchangeConfirm, rt.hubHandler(hub, rt.HandleExchangeConfirm))
 	hub.Handle(wire.OpExchangeApprove, rt.hubHandler(hub, rt.HandleExchangeApprove))
 	hub.Handle(wire.OpExchangeCancel, rt.hubHandler(hub, rt.HandleExchangeCancel))
-	hub.Handle(wire.OpStallCreate, rt.hubHandler(hub, rt.HandleStallCreate))
+	hub.Handle(wire.OpStallCreate, rt.restrictedHandler(hub, transport.CommandRestrictionTrade, rt.HandleStallCreate))
 	hub.Handle(wire.OpStallClose, rt.hubHandler(hub, rt.HandleStallClose))
-	hub.Handle(wire.OpStallVisit, rt.hubHandler(hub, rt.HandleStallVisit))
+	hub.Handle(wire.OpStallVisit, rt.restrictedHandler(hub, transport.CommandRestrictionTrade, rt.HandleStallVisit))
 	hub.Handle(wire.OpStallLeave, rt.hubHandler(hub, rt.HandleStallLeave))
 	hub.Handle(wire.OpStallBuy, rt.hubHandler(hub, rt.HandleStallBuy))
 	hub.Handle(wire.OpStallEdit, rt.hubHandler(hub, rt.HandleStallEdit))
-	hub.Handle(wire.OpStallNetworkSearch, rt.hubHandler(hub, rt.HandleStallNetworkSearch))
+	hub.Handle(wire.OpStallNetworkSearch, rt.restrictedHandler(hub, transport.CommandRestrictionTrade, rt.HandleStallNetworkSearch))
 	hub.Handle(wire.OpStallNetworkBuy, rt.hubHandler(hub, rt.HandleStallNetworkBuy))
 	hub.Handle(wire.OpTargetInteract, rt.hubHandler(hub, rt.HandleTargetInteract))
 	hub.Handle(wire.OpItemUseRequest, rt.hubHandler(hub, rt.HandleItemUse))
@@ -114,6 +115,7 @@ func (rt *Runtime) Register(hub *transport.Hub) {
 	hub.Handle(wire.OpCosRideRequest, rt.hubHandler(hub, rt.HandleCosRide))
 	hub.Handle(opCosCancelRequest, rt.hubHandler(hub, rt.HandleCosCancel))
 	hub.Handle(opCosTerminateRequest, rt.hubHandler(hub, rt.HandleCosTerminate))
+	hub.Handle(opCosSellRequest, rt.hubHandler(hub, rt.HandleCosSell))
 	hub.Handle(wire.OpLocalRebirthRequest, rt.hubHandlerPrepared(hub, rt.HandleLocalRebirth, rt.prepareLocalRebirth))
 	hub.Handle(wire.OpVisualFlagsRequest, rt.hubHandler(hub, rt.HandleVisualFlags))
 	// 0x745A object select/interact rides its own glue (select.go): its
@@ -182,6 +184,53 @@ conversation hold no pending answer and stay silent.
 */
 func (rt *Runtime) hubHandler(hub *transport.Hub, op opFunc) transport.HandlerFunc {
 	return rt.hubHandlerPrepared(hub, op, nil)
+}
+
+/*
+================
+restrictedHandler
+
+The command-restriction gate at the message door: while the session
+carries the named restriction, the request dies here after the
+restriction notice (restriction.Report), before any binding or scene
+work, as the native check drops the request in the server's message
+handling. The exchange request, the stall's creation and its visit,
+and the Open Market's opening answer to the trade kind.
+================
+*/
+func (rt *Runtime) restrictedHandler(hub *transport.Hub, kind uint8, op opFunc) transport.HandlerFunc {
+	inner := rt.hubHandler(hub, op)
+	return func(s *transport.Session, opcode uint16, payload []byte) {
+		if restriction.Report(s, kind) {
+			return
+		}
+		inner(s, opcode, payload)
+	}
+}
+
+/*
+================
+dropRestrictedHandler
+
+The item move's restriction gate: only the ground drop arm answers
+to the trade kind - the gold drop the same request carries stays
+open (the native gold-drop routine never makes the restriction
+check), as do the bag, storage and companion moves. The move kind is
+the wire's own peek (wire.ItemMoveType); an unreadable request falls
+through to the handler, which refuses it as it refuses every
+malformed move.
+================
+*/
+func (rt *Runtime) dropRestrictedHandler(hub *transport.Hub, op opFunc) transport.HandlerFunc {
+	inner := rt.hubHandler(hub, op)
+	return func(s *transport.Session, opcode uint16, payload []byte) {
+		if moveType, ok := wire.ItemMoveType(payload); ok &&
+			moveType == wire.MoveTypeGroundDrop &&
+			restriction.Report(s, transport.CommandRestrictionTrade) {
+			return
+		}
+		inner(s, opcode, payload)
+	}
 }
 
 /*

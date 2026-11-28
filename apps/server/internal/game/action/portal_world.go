@@ -184,9 +184,9 @@ The native teleport's siege branch. The destination gate's own building decides 
 rule: a fortress gate takes anyone not in a
 job suit while no war runs (the native war-entry check returns
 before its war checks when the server's war mode is clear); every other
-portal of the fortress takes only the owning guild
-(the native owner test) or an allied one (the allied test,
-fortress_allies.go).
+portal of the fortress takes only the holder's guild (a temporary
+holder while a capture stands) or one allied with it (the defender
+test, fortress_allies.go).
 ================
 */
 func (rt *Runtime) fortressEntry(division string, c *enterworld.Character, destination portalDestination, world instance.Definition) byte {
@@ -208,11 +208,9 @@ func (rt *Runtime) fortressEntry(division string, c *enterworld.Character, desti
 	if c.GuildID != nil {
 		guildID = *c.GuildID
 	}
-	if !rt.Fortresses.GuildOwns(division, fortressID, guildID) {
-		record, _ := rt.Fortresses.Get(division, fortressID)
-		if guildID == 0 || record.GuildID == 0 || !rt.Unions.Allied(division, record.GuildID, guildID) {
-			return portalFortressOwnersOnly
-		}
+	record, _ := rt.Fortresses.Get(division, fortressID)
+	if !rt.fortressDefender(division, record, guildID) {
+		return portalFortressOwnersOnly
 	}
 	return 0
 }
@@ -222,12 +220,14 @@ func (rt *Runtime) fortressEntry(division string, c *enterworld.Character, desti
 fortressWarEntry
 
 The native war-entry check past its war-mode test. The
-occupying guild needs no application; everyone else must have applied.
-Defenders (the holder: a temporary
-holder while one exists) may bring half of MaxEntrance; attackers the
-whole of it, or half once the fortress is occupied, and only after the
-post-capture wait. Each side counts the PCs already in the world's layer
-(siege slots 39 and 40).
+owning guild (the occupied-guild query, not the holder query) needs
+no application; everyone else must have applied - a capturing guild
+always has, so a temporary holder passes as an applicant. The side
+split is the holder's: defenders (the holder, a temporary one while
+one stands, and its allies) may bring half of MaxEntrance; attackers
+the whole of it, or half once the fortress has an owner, and only
+after the post-capture wait. Each side counts the PCs already in the
+world's layer (siege slots 39 and 40).
 ================
 */
 func (rt *Runtime) fortressWarEntry(division string, c *enterworld.Character, fortressID uint32) byte {

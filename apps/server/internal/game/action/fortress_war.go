@@ -42,6 +42,9 @@ type fortressPhase struct {
 	mode     uint8
 	dueMs    int64
 	endKeep  map[uint32]map[int64]bool
+	// only restricts an end phase to the named fortresses (the boot
+	// settle, FortressBootSettle); nil runs every fortress (a war end).
+	only map[uint32]bool
 }
 
 /*
@@ -109,6 +112,9 @@ func (rt *Runtime) runFortressPhase(phase fortressPhase) {
 	for _, definition := range instance.Shipped() {
 		fortressID, ok := rt.Fortresses.ForWorld(definition)
 		if !ok {
+			continue
+		}
+		if phase.only != nil && !phase.only[fortressID] {
 			continue
 		}
 		record, ok := rt.Fortresses.Get(phase.division, fortressID)

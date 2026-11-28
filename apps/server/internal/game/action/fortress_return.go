@@ -16,11 +16,15 @@ no occupied fortress (FAIL_03), 8 not yet (FAIL_01). The cooldown reaches
 the action window as 0x3792 [u8 2][u8 5][u32 seconds]
 (the client's CNetProcessSecond_OnTimedJobState3792 766E30).
 
-INFERENCE: the reference server also refuses inside a world whose vtable +0x78 says so
-(0x7C09); only instance worlds can, and v1.150 has no code for it, so a
-return from a non-permanent world reads "not yet". The job-suit refusal
-is the v1.150 client's FAIL_02; the v1.188 handler leaves it to the job
-system's teleport gate.
+The reference server also refuses inside a Battle Arena world (its
+world-manager slot 30, +0x78; 0x7C09) - a class no shipped v1.150 world
+belongs to, so the arm can only fire in a port-only arena today, and
+the v1.150 client has no code of its own for it: it reads FAIL_01
+("not yet") like the cooldown. Every other world - the field, a
+dungeon, the fortress itself - returns freely there. The job-suit
+refusal is the v1.150 client's FAIL_02; the v1.188 handler leaves it
+to the job system's teleport gate, and its holder test runs before
+the suit test, as here.
 
 ===========================================================================
 */
@@ -83,9 +87,6 @@ The revival gate c returns to, or the 0x1F code that refuses it.
 ================
 */
 func (rt *Runtime) fortressReturnGate(division string, c *enterworld.Character) (travelPoint, uint8) {
-	if rt.jobDressed(c) {
-		return travelPoint{}, fortressReturnJobSuit
-	}
 	if c.GuildID == nil || rt.Fortresses == nil || rt.portals == nil {
 		return travelPoint{}, fortressReturnNoFortress
 	}
@@ -93,7 +94,10 @@ func (rt *Runtime) fortressReturnGate(division string, c *enterworld.Character) 
 	if !ok {
 		return travelPoint{}, fortressReturnNoFortress
 	}
-	if here, ok := instance.Lookup(instance.ID(domain.CharacterWorldInstance(c)).Definition()); !ok || here.NativeType != 0 {
+	if rt.jobDressed(c) {
+		return travelPoint{}, fortressReturnJobSuit
+	}
+	if here, ok := instance.Lookup(instance.ID(domain.CharacterWorldInstance(c)).Definition()); ok && here.BattleArena() {
 		return travelPoint{}, fortressReturnNotYet
 	}
 	if rt.Now().UnixMilli() < c.FortressReturnUntilMs {

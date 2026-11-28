@@ -191,10 +191,11 @@ const (
 	// CIFNPCTalk_RefreshActionMenu -
 	// the STATE reset rides the subOp-3 kind-1 push, not this frame).
 	// The handler also parses {u8 2}{u8 code} into the category-0x10
-	// error sink, but NO leave trigger->code pair is pinned for Legend
-	// (0x36 leader-refuse and 0x1E no-guild are classic-v1.188
-	// PROBABLE only), so result=2 is NEVER emitted here - every leave
-	// refusal stays silent (errors.go posture).
+	// error sink; the lane emits it for exactly the two refusal pairs
+	// the reference server words (the release vote's 0x38 and the
+	// warehouse holder's 0x48). The 0x36 leader-refuse and 0x1E
+	// no-guild codes have no pinned leave trigger pair, so those
+	// refusals stay silent (errors.go posture).
 	OpGuildLeaveAck uint16 = 0xB56E
 	// OpGuildKickAck is 0x74B1's answer
 	// (CPSMission_OnGuildKickResponse0xB4B1): only [2][code] is read.
@@ -206,9 +207,9 @@ const (
 	// CIFNPCTalk_RefreshActionMenu interaction refresh - the
 	// guild-state wipe rides the subOp-1 push, not this frame). The
 	// handler also parses {u8 2}{u8 code} into the category-0x10
-	// sink, but NO break
-	// trigger->code pair is pinned for Legend, so result=2 is NEVER
-	// emitted - every break refusal stays silent (the leave posture).
+	// sink; the lane emits it for the two refusal pairs the reference
+	// server words (a running guild war's 0x46 and the warehouse
+	// holder's 0x48) and stays silent on every other refusal.
 	OpGuildBreakAck uint16 = 0xB66E
 	// OpGuildNameGrantAck is the 0xB2BC name-grant answer to the
 	// GRANTING ACTOR - a SECOND-HOST frame (CNetProcessSecond

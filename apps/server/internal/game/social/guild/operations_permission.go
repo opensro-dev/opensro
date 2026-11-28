@@ -14,10 +14,12 @@ twelve members may hold the union chat right afterwards
 sends no answer, only the 0x3B29 0x16 batch of the new rights (mask 0x10)
 to every online member.
 
-INFERENCE: the reference server also refuses removing the storage right from the
-member using the guild storage (0x4C4C); no guild storage is ported, so
-that test always admits. The master's own rights are not edited: the
-leader holds them all.
+The reference server also refuses the whole update when one of its
+grants would clear the storage right (mask 0x8) of the member who
+HOLDS the guild warehouse at that moment (0x4C4C, named by the client
+UIIT_MSG_GUILD_WAREHOUSE_USE_ING): while the room is held, its holder
+keeps the right that opened it. The master's own rights are not
+edited: the leader holds them all.
 
 ===========================================================================
 */
@@ -39,6 +41,7 @@ const (
 	unionChatMemberLimit = 12
 
 	permErrUnionChatFull uint8 = 0x4B
+	permErrStorageHeld   uint8 = GuildErrStorageRightHeld
 )
 
 /*
@@ -108,7 +111,7 @@ type permissionOutcome struct {
 HandlePermissionUpdate
 ================
 */
-func HandlePermissionUpdate(deps Dependencies, divisionID string, actor *enterworld.Character, payload []byte) permissionOutcome {
+func HandlePermissionUpdate(deps Dependencies, divisionID string, actor *enterworld.Character, payload []byte, storageHolder string) permissionOutcome {
 	grants, err := DecodePermissionRequest(payload)
 	if err != nil {
 		return permissionOutcome{Refusal: err.Error()}
@@ -147,10 +150,29 @@ func HandlePermissionUpdate(deps Dependencies, divisionID string, actor *enterwo
 				code = permErrUnionChatFull
 				return guild, members, false
 			}
+			// The warehouse holder keeps the storage right while he
+			// holds the room: a grant clearing it (or dropping him to
+			// a mask without it) refuses the whole update, tested
+			// after the union-chat cap as the reference server does.
+			if storageHolder != "" {
+				for _, member := range members {
+					if member.Name != storageHolder {
+						continue
+					}
+					for _, grant := range grants {
+						if grant.JID == member.JID && grant.PermMask&PermMaskStorage == 0 {
+							code = permErrStorageHeld
+							return guild, members, false
+						}
+					}
+				}
+			}
 			return guild, members, len(applied) != 0
 		},
 	)
 	switch {
+	case code == permErrStorageHeld:
+		return permissionOutcome{Refusal: "member holds the guild storage", ErrorPayload: EncodeGuildErrorResult(code)}
 	case code != 0:
 		return permissionOutcome{Refusal: "union chat rights full", ErrorPayload: EncodeGuildErrorResult(code)}
 	case refusal == enterworld.GuildRefusalLeaderRequired:

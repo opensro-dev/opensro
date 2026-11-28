@@ -70,7 +70,7 @@ func TestInventoryAdditionGrowsTheBagOnce(t *testing.T) {
 	if !announced {
 		t.Fatalf("no 0x3092 bag announce in %+v", out.Frames)
 	}
-	assertItemUseRefusedUnchanged(t, rt, c, use, wire.ErrCodeInvalidRequest)
+	assertItemUseRefusedUnchanged(t, rt, c, use, wire.ErrCodeStorageAdditionLimit)
 }
 
 /*
@@ -90,6 +90,26 @@ func TestInventoryAdditionTopsUpAFlooredBag(t *testing.T) {
 		t.Fatalf("addition = %+v / %q", out.Frames, out.DiagnosticRefusal)
 	}
 	if c.InventoryCapacity() != domain.MaxInventorySize || !c.InventoryAdditionUsed {
+		t.Fatalf("capacity %d, used %v", c.InventoryCapacity(), c.InventoryAdditionUsed)
+	}
+}
+
+/*
+================
+TestInventoryAdditionAtTheCeilingAnswersTheLimit
+
+A bag already at the 109 ceiling has nothing left to add: the use
+answers the later client's limit code, spends nothing and leaves the
+one-time mark unspent.
+================
+*/
+func TestInventoryAdditionAtTheCeilingAnswersTheLimit(t *testing.T) {
+	c, rt, item := expansionCharacter(t, "ITEM_MALL_INVENTORY_ADDITION", 24405, map[string]float64{
+		"itemParam1_29c": 32})
+	c.InventorySize = domain.MaxInventorySize
+	use := wire.NewWriter(3).U8(25).U16(item.TypeFlags()).Payload()
+	assertItemUseRefusedUnchanged(t, rt, c, use, wire.ErrCodeStorageAdditionLimit)
+	if c.InventoryAdditionUsed || c.InventoryCapacity() != domain.MaxInventorySize {
 		t.Fatalf("capacity %d, used %v", c.InventoryCapacity(), c.InventoryAdditionUsed)
 	}
 }
@@ -116,7 +136,7 @@ func TestWarehouseAdditionGrowsTheRoomTwice(t *testing.T) {
 	if authority.room.Capacity != 210 || authority.room.ExpansionUses != 2 {
 		t.Fatalf("room = %+v", authority.room)
 	}
-	assertItemUseRefusedUnchanged(t, rt, c, use, wire.ErrCodeInvalidRequest)
+	assertItemUseRefusedUnchanged(t, rt, c, use, wire.ErrCodeStorageAdditionLimit)
 	if authority.room.Capacity != 210 {
 		t.Fatalf("refused use grew the room: %+v", authority.room)
 	}
@@ -171,7 +191,7 @@ func TestWarehouseAdditionRefusedAtCommitKeepsTheItem(t *testing.T) {
 	}
 	rt.ConfigureStorage(authority)
 	use := wire.NewWriter(3).U8(25).U16(item.TypeFlags()).Payload()
-	assertItemUseRefusedUnchanged(t, rt, c, use, wire.ErrCodeInvalidRequest)
+	assertItemUseRefusedUnchanged(t, rt, c, use, wire.ErrCodeStorageAdditionLimit)
 	if authority.room.Capacity != 210 || authority.room.ExpansionUses != 2 {
 		t.Fatalf("refused commit changed the room: %+v", authority.room)
 	}

@@ -7,6 +7,11 @@ import (
 
 const monsterNavigationRetryMs int64 = 1000
 
+// monsterHomingPendingRetryMs is how soon a mover whose homing search is
+// still open checks back: one tick, so the search advances one slice per
+// tick (movement monsterGlobalRouteSliceProbes) instead of once a second.
+const monsterHomingPendingRetryMs int64 = 100
+
 func routedBehavior(m monster.MoverState) bool {
 	return m.Mode() == monster.MoverChasing || m.Mode() == monster.MoverFollowing || m.Mode() == monster.MoverReturning
 }
@@ -95,8 +100,13 @@ func (ops *MonsterMoverOps) planSegment(instance *monster.Instance, mover monste
 			// economics are pinned separately).
 			if marched := ops.marchRoute(caller, mover.Mode(), live, owner, goal); marched != nil {
 				route = marched
-			} else if global := ops.globalRoute(caller, mover.Mode(), live, owner, goal); global != nil {
+			} else if global, pending := ops.globalRoute(caller, mover.Mode(), live, owner, goal); global != nil {
 				route = global
+			} else if pending {
+				// The sliced homing search is still open: no route and no
+				// failure yet, so nothing is memoised and the mover
+				// checks back next tick to advance it.
+				return ops.waitForHomingSearch(instance.Gid, mover, live, goal, settledFrames, now)
 			} else {
 				next, frames := ops.waitForNavigation(instance.Gid, mover, live, goal, speed, settledFrames, now)
 				// Only a real search failure is noted, and only where the
@@ -158,19 +168,46 @@ The homing fallback when the march stalls: one global search at the
 homing budget (PlanGlobalRoute), whose waypoints the mover then walks
 like any detour route. Returns a ready route, or nil for any other
 mode, when no global planner is wired, or when the search fails: the
-caller's wait then stands.
+caller's wait then stands. pending reports a sliced search that has not
+settled yet (NavigationSearchPending).
 ================
 */
-func (ops *MonsterMoverOps) globalRoute(caller navCaller, mode monster.MoverMode, live monster.Pose, owner NavOwner, goal monster.Pose) *monster.NavigationRoute {
+func (ops *MonsterMoverOps) globalRoute(caller navCaller, mode monster.MoverMode, live monster.Pose, owner NavOwner, goal monster.Pose) (route *monster.NavigationRoute, pending bool) {
 	if mode != monster.MoverReturning || ops.PlanGlobalRoute == nil {
-		return nil
+		return nil, false
 	}
-	route := ops.planGlobalRouteTimed(caller, live, owner, goal)
+	route = ops.planGlobalRouteTimed(caller, live, owner, goal)
 	ops.Navigation.plan(caller, route)
-	if route == nil || route.Status() != monster.NavigationRouteReady || route.Len() == 0 {
-		return nil
+	if route != nil && route.Status() == monster.NavigationSearchPending {
+		return nil, true
 	}
-	return route
+	if route == nil || route.Status() != monster.NavigationRouteReady || route.Len() == 0 {
+		return nil, false
+	}
+	return route, false
+}
+
+/*
+================
+MonsterMoverOps.waitForHomingSearch
+
+The wait while the mover's sliced homing search is still open. Unlike
+waitForNavigation it records no move stop: a search in progress is not
+a failed step, and ten stops would latch the native stuck event before
+an unreachable home's search (64 slices) could settle.
+================
+*/
+func (ops *MonsterMoverOps) waitForHomingSearch(gid uint32, mover monster.MoverState, live, goal monster.Pose, settledFrames []Frame, now int64) (monster.MoverState, []Frame) {
+	hadSegment := mover.ArriveMs > mover.DepartMs
+	mover.Pose = live
+	mover.From, mover.To = monster.Pose{}, monster.Pose{}
+	mover.DepartMs, mover.ArriveMs = 0, 0
+	mover.AdoptNavigation(nil)
+	mover.WaitNavigation(goal, now+monsterHomingPendingRetryMs)
+	if hadSegment {
+		return mover, []Frame{correctionFrame(gid, live)}
+	}
+	return mover, settledFrames
 }
 
 func (ops *MonsterMoverOps) waitForNavigation(gid uint32, mover monster.MoverState, live, goal monster.Pose, speed float64, settledFrames []Frame, now int64) (monster.MoverState, []Frame) {

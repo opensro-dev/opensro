@@ -157,6 +157,30 @@ func (r *Registry) Pending(divisionID, target string, nowMs int64) bool {
 
 /*
 ================
+DropOutgoingRequest
+
+Drops the requester's own outstanding request, wherever it was
+addressed; reports whether one was still inside its answer window.
+An asker who asks again cancels the earlier ask first (the earlier
+target's prompt lapses with its own window, the way an expired ask
+already lapses here).
+================
+*/
+func (r *Registry) DropOutgoingRequest(divisionID, requester string, nowMs int64) bool {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	prefix := divisionID + "\x00"
+	for k, request := range r.requests {
+		if strings.HasPrefix(k, prefix) && strings.EqualFold(request.From, requester) {
+			delete(r.requests, k)
+			return nowMs <= request.expiresAtMs
+		}
+	}
+	return false
+}
+
+/*
+================
 TakeRequest
 ================
 */

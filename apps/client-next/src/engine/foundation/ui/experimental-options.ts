@@ -191,6 +191,12 @@ export interface ExperimentalOptions {
 	// (ammunitionpreference.go) and is read per shot; off is the
 	// original's lowest-slot reload.
 	readonly smallestAmmoStack: boolean;
+	// Port-only, not native (#4740): a skill the server queued behind the
+	// running cast (0xB2CD arm count 2) starts its wind-up when the client
+	// estimates the server ended that cast, one delivery before the 0xB245
+	// that natively starts it. Off by default until the owner decides
+	// (2026-11-28); off is the native start on 0xB245.
+	readonly predictedQueuedCast: boolean;
 	// Port-only, not native (owner 2026-10-24, extended #2741): companion
 	// and vigor auto-potions (transport-auto-potion.ts, companion-potions.ts).
 	// The original watches only the player (70C550). On unless turned off
@@ -527,6 +533,7 @@ export function experimentalOptions( value: unknown = null ): ExperimentalOption
 		autoSelect: enabled( "autoSelect" ),
 		homingProjectiles: enabled( "homingProjectiles" ),
 		smallestAmmoStack: enabled( "smallestAmmoStack" ),
+		predictedQueuedCast: enabled( "predictedQueuedCast" ),
 		transportAutoPotion: record.transportAutoPotion !== false,
 		webTransport: record.webTransport !== false,
 		petClickOpensWindow: record.petClickOpensWindow !== false,
@@ -709,6 +716,8 @@ export interface ExperimentalGameplay {
 	// Port-only (#4527): the server reloads the quiver from the
 	// smallest matching bag stack while on; off (or unset) is native.
 	readonly smallestAmmoStack?: boolean;
+	// Port-only (#4740): predict a server-queued cast; off (or unset) is native.
+	readonly predictedQueuedCast?: boolean;
 	readonly sunDropMarker?: boolean;
 	readonly warpArrivalSound?: boolean;
 	readonly christmasCarols?: boolean;
@@ -734,6 +743,7 @@ export function experimentalGameplay( options: ExperimentalOptions ): Experiment
 		highlightEventNotices: options.highlightEventNotices,
 		homingProjectiles: options.homingProjectiles,
 		smallestAmmoStack: options.smallestAmmoStack,
+		predictedQueuedCast: options.predictedQueuedCast,
 		sunDropMarker: options.sunDropMarker,
 		warpArrivalSound: options.warpArrivalSound,
 		christmasCarols: options.christmasCarols,

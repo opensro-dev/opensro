@@ -284,7 +284,8 @@ export function completeRestrictionText( entries ) {
 //   and lapsed line (#4384), byte-for-byte, the later client's "awaken" included.
 // - STORAGE_EXPANSION (textuisystem_4300.txt row ids 4223-4224): the
 //   storage expansion items' use questions (#3904), byte-for-byte,
-//   the later client's "expended" included.
+//   the later client's "expended" included; USE_ERORR (the later key's
+//   own spelling) is the limit refusal's line, 01:FE.
 export const LATER_UI_TEXT_COMPLETIONS = Object.freeze( {
 	UIIT_MSG_NASRUN_WEAR_EXTENSION_ITEM_NOT_USE: "You cannot use this while you are wearing it.",
 	UIIT_CLT_REVERSE_RETRUN_SCROLL_TO_APPOINT_CHANGE: "Move to certain location at the map.",
@@ -361,7 +362,8 @@ export const LATER_UI_TEXT_COMPLETIONS = Object.freeze( {
 	UIIT_STT_STORAGE_EXPANSION_INVENTORY_ADDITION_ITEM_USE:
 		"Inventory will be expended to 32 rooms permanently. Do you want to use it now?",
 	UIIT_STT_STORAGE_EXPANSION_WAREHOUSE_ADDITION_ITEM_USE:
-		"Personal Storage will be expended to 30 rooms permanently. Do you want to use it now?"
+		"Personal Storage will be expended to 30 rooms permanently. Do you want to use it now?",
+	UIIT_STT_STORAGE_EXPANSION_USE_ERORR: "Limit is reached, unable to use it."
 } );
 
 export function completeUiText( entries ) {

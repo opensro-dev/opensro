@@ -362,8 +362,9 @@ func TestTextdataSkillsMatchesShippedRows(t *testing.T) {
 TestTextdataSkillsReadsANegativeCoolTimeGroup
 
 Column 18 is a DWORD the shard writes signed: the Monster Defence Ignore
-ranks' 0xCC000000 arrives as -872415232 and must load as group 0xCC, so
-the two ranks share one cooldown (#3456).
+ranks' 0xCC000000 arrives as -872415232 and must load as group 0xCC and
+packed replacement states 0xCC000000, so the two ranks share one cooldown and
+their replacement metadata pins (#3456). Out-of-range negatives still refuse.
 ================
 */
 func TestTextdataSkillsReadsANegativeCoolTimeGroup(t *testing.T) {
@@ -371,11 +372,18 @@ func TestTextdataSkillsReadsANegativeCoolTimeGroup(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(dir, "skilldata.txt"), []byte("shard_a.txt\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	shard := syntheticSkillRow(map[int]string{
-		1: "31149", 2: "887", 3: "SKILL_MALL_NASRUN_MOBDEFENCEIGNORE_01", 7: "1", 14: "1200000", 18: "-872415232",
-	}) + "\n" + syntheticSkillRow(map[int]string{
-		1: "31150", 2: "888", 3: "SKILL_MALL_NASRUN_MOBDEFENCEIGNORE_02", 7: "2", 14: "1200000", 18: "-872415232",
-	}) + "\n"
+	makeRow := func(id, group, code, level, col18 string) string {
+		cells := map[int]string{
+			1: id, 2: group, 3: code, 5: code, 7: level, 8: "1", 14: "1200000", 18: col18, 68: "3",
+		}
+		for col := skilldataColEncodedTail; col < 118; col++ {
+			cells[col] = "0"
+		}
+		return syntheticSkillRow(cells)
+	}
+	shard := makeRow("31149", "887", "SKILL_MALL_NASRUN_MOBDEFENCEIGNORE_01", "1", "-872415232") + "\n" +
+		makeRow("31150", "888", "SKILL_MALL_NASRUN_MOBDEFENCEIGNORE_02", "2", "-872415232") + "\n" +
+		makeRow("31151", "889", "SKILL_TEST_OUT_OF_RANGE_COL18", "1", "-2147483649") + "\n"
 	if err := os.WriteFile(filepath.Join(dir, "shard_a.txt"), []byte(shard), 0o644); err != nil {
 		t.Fatal(err)
 	}
@@ -391,5 +399,18 @@ func TestTextdataSkillsReadsANegativeCoolTimeGroup(t *testing.T) {
 		if row.CoolTimeGroup != 0xCC {
 			t.Fatalf("row %d cool-time group = %#x, want 0xCC (0xCC000000's high byte)", id, row.CoolTimeGroup)
 		}
+		if !row.ReplacementPinned || row.ReplacementRefusal != "" {
+			t.Fatalf("row %d replacement refused: %q", id, row.ReplacementRefusal)
+		}
+		if row.Replacement.PackedStates != 0xCC000000 {
+			t.Fatalf("row %d replacement packed states = %#x, want 0xcc000000", id, row.Replacement.PackedStates)
+		}
+	}
+	outOfRange, ok := skills.SkillByID(31151)
+	if !ok {
+		t.Fatal("row 31151 did not load")
+	}
+	if outOfRange.ReplacementPinned {
+		t.Fatalf("row 31151 out-of-range negative column 18 pinned replacement: %+v", outOfRange.Replacement)
 	}
 }

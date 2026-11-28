@@ -50,6 +50,7 @@ func (rt *Runtime) MonsterActionTickHook() simulation.TickHook {
 		if rt.Monsters != nil {
 			rt.Monsters.AdvanceSummons(nowMs)
 			rt.Monsters.AdvanceMonsterStackingEffects(nowMs)
+			rt.Monsters.AdvanceMonsterVitals(nowMs)
 		}
 		out := rt.retireMonsterSelfEffects(nowMs)
 		out = append(out, rt.advanceMonsterCasts(nowMs)...)
@@ -149,6 +150,9 @@ func (rt *Runtime) TickHook() simulation.TickHook {
 		frames("advanceSiegeCorpses", rt.advanceSiegeCorpses)
 		frames("drainStructureDeaths", rt.drainStructureDeaths)
 		step("advanceFortressStructures", func() { rt.advanceFortressStructures(nowMs) })
+		frames("advanceFortressStructurePulses", rt.advanceFortressStructurePulses)
+		step("advanceFortressStructureAppearances", func() { rt.advanceFortressStructureAppearances() })
+		frames("advanceFortressStructureAuras", rt.advanceFortressStructureAuras)
 		step("advanceFortressRosters", func() { rt.advanceFortressRosters(nowMs) })
 		step("advanceFortressForges", func() { rt.Fortresses.AdvanceItemForges(nowMs) })
 		step("advanceGuildVotes", func() { rt.advanceGuildVotes(nowMs) })

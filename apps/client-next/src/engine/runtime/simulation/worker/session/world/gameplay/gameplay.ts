@@ -615,6 +615,8 @@ const SKILL_RUN_UP_MARGIN = 20;
 // native field for action range carries the same reach the server fights
 // with (the item tooltip renders it as metres; the fight reads it raw).
 const WEAPON_SOCKET = 6;
+// The equipment socket a shield or an ammunition stack sits in.
+const SHIELD_SOCKET = 7;
 // The equipment socket a free-battle cape sits in (594980's drop target).
 const CAPE_SOCKET = 8;
 // Bare-handed, the server's reach is 6.
@@ -975,7 +977,7 @@ when the cast finally started.
 	): WireFrame {
 		const oneWay = skillPress.oneWayMs();
 		sendFrame( frame );
-		skillPress.sent( now, skillId );
+		skillPress.sent( now, skillId, target || undefined );
 		if ( prediction === "cast" ) {
 			combat.pressed( skillId, now + oneWay, now + 4 * oneWay + SKILL_ANSWER_SLACK_MS, now );
 		} // The HUD shows it as next while the server runs the caster there.
@@ -1260,6 +1262,63 @@ would turn it.
 		}
 		const oneWay = skillPress.oneWayMs();
 		combat.predict( metadata.id, target?.gid ?? 0, now, now + 4 * oneWay + SKILL_ANSWER_SLACK_MS );
+	}
+	/*
+================
+predictQueuedCast
+
+When a press is confirmed queued on the server (B2CD arm count 2) behind
+a timed local cast, begin its windup one one-way latency before the
+server's B245 arrives so adoption hands off seamlessly at steady high ping.
+================
+	*/
+	function predictQueuedCast( now: number, local: EntityState | undefined ) {
+		if ( !predictedQueuedCast ) return;
+		const oneWay = skillPress.oneWayMs();
+		if ( oneWay <= 0 ) return;
+		const queued = skillPress.serverQueued();
+		if ( !queued || queued.predicted ) return;
+		if ( combat.predicting() || skillPress.queued() || combat.guidedActive( localGid, now ) ) return;
+		const walking = movement.state(), pose = walking.pose;
+		if (
+			!pose || walking.moving || !local || local.mountedOn ||
+			local.movementMode === MOVEMENT_SEATED || local.appearanceState?.[0] === 2
+		) return;
+		const rate = local.animationRate && local.animationRate < 1 ? local.animationRate : 1;
+		let blockingEnd = -Infinity, hasBlocking = false;
+		for ( const c of combat.state().casts ) {
+			if ( c.caster !== localGid || c.cancelledAtMs !== undefined ) continue;
+			const row = catalog.find( entry => entry.id === c.skill );
+			if (
+				!row?.actionMs || c.receivedAtMs === undefined || row.holdsCaster ||
+				(row.chain && c.cancellationRequestedAtMs === undefined)
+			) return;
+			const effectiveActionMs = row.actionMs / rate;
+			if ( c.receivedAtMs + effectiveActionMs <= queued.sinceMs ) continue;
+			const serverEnd = c.receivedAtMs - oneWay + effectiveActionMs;
+			if ( serverEnd > blockingEnd ) blockingEnd = serverEnd;
+			hasBlocking = true;
+		}
+		if ( !hasBlocking || now < blockingEnd ) return;
+		const metadata = catalog.find( row => row.id === queued.skill );
+		if ( !metadata?.actionMs || metadata.groundTarget ) return;
+		if ( !pressAdmitted( metadata, local ) ) return;
+		if ( skillCooldown( combat.state().skillCooldowns, queued.skill, metadata.cooldownGroup ?? 0, now ) ) return;
+		if ( metadata.targetRequired && queued.target === undefined ) return;
+		const target = queued.target !== undefined ? readEntity( queued.target ) : undefined;
+		if ( queued.target !== undefined ) {
+			if ( !target || !skillAdmitsPredictedTarget( metadata, target, localGid ) ) return;
+			if (
+				target.gid !== localGid &&
+				((target.kind === "monster" && target.appearanceState?.[0] === 2) || !withinReach( metadata, target ))
+			) return;
+		}
+		skillPress.markServerQueuedPredicted();
+		if ( target && target.gid !== localGid ) {
+			movement.heading( movementHeading( pose, { ...target, angle: target.heading } ) );
+		}
+		combat.predict( metadata.id, target?.gid ?? 0, now, now + 4 * oneWay + SKILL_ANSWER_SLACK_MS );
+		dirty = true;
 	}
 	/*
 ================
@@ -1663,12 +1722,32 @@ pending copy, and the next settings replay repairs what it commits.
 	// (sendAmmoReloadPreference), declared at every worldReady while on
 	// and whenever the row changes under a live world.
 	let ammoReloadSmallest = false;
+	// The Experimental "Start queued skills early" row (#4740, port-only):
+	// off is the native start of a queued skill on its 0xB245.
+	let predictedQueuedCast = false;
 	// Port-only (#3907): the Experimental "SRO Macro" row, and the macro
 	// auto-potion's row order (checkMacroPotion), auto-skill cursors
 	// (checkMacroSkill), and auto-hunt start clock (checkMacroHunt).
 	let sroMacroEnabled = false;
 	let macroPotionQueue = emptyMacroPotionQueue();
 	let macroSkillLoop = emptyMacroSkillLoop();
+	// Port-only (#4697): per skill, the worn loadout (the refObjIds on the
+	// weapon and shield sockets) at the moment the Auto-Skills swap went
+	// out for it. A swap the server refuses never changes the bag, and the
+	// pick's rewind would send it again every 2000 ms forever: the buff
+	// pass never finishes, the attack step never runs, and the hunt stands
+	// idle at its monster. While the loadout still reads the same, that
+	// same swap (the same bag slot) is not sent again; a landed swap, a
+	// manual re-equip, or the entry's own cast clears the wait. A rebound
+	// Weapon/Shield bind names another bag slot, so its swap still goes out.
+	let macroSwapWaits = new Map<
+		number,
+		{
+			readonly weapon: number | undefined;
+			readonly shield: number | undefined;
+			readonly source: number;
+		}
+	>();
 	let macroHuntStartedAtMs = 0;
 	let macroHuntWasOn = false;
 	// The last Auto-Hunt request and when it went out: one request per
@@ -2154,6 +2233,7 @@ clears it when another character enters.
 		sroMacro.clear();
 		macroPotionQueue = emptyMacroPotionQueue();
 		macroSkillLoop = emptyMacroSkillLoop();
+		macroSwapWaits.clear();
 		macroHuntStartedAtMs = 0;
 		macroHuntWasOn = false;
 		macroHuntLastAction = "";
@@ -2367,6 +2447,7 @@ The Experimental window's gameplay rows (experimentalGameplay).
 				if ( live ) sendAmmoReloadPreference();
 			}
 			sroMacroEnabled = value.sroMacro === true;
+			predictedQueuedCast = value.predictedQueuedCast === true;
 		},
 		/*
 ================
@@ -2610,7 +2691,7 @@ next 0x3AC5 status-5 row throw "Unknown academy member status" (#2876).
 			combat.clear();
 			combat.restoreCooldowns( value, nextCatalog, receivedAtMs );
 			combat.references( b.refSkillSnapshot ?? [] );
-			inventory.bootstrap( value, receivedAtMs );
+			inventory.bootstrap( value, receivedAtMs, continued );
 			journalBagChange( receivedAtMs, INVENTORY_JOURNAL_ENTRY, NO_PAYLOAD );
 			guide = queueGuide( guide, [
 				...guideInventoryEvents(
@@ -4704,7 +4785,13 @@ state here before a command can claim a native wire conversation.
 					const frame = combat.skill( skillId, localGid );
 					if ( pressAdmitted( metadata, local ) ) movement.holdForCast( now );
 					predictCast( metadata, undefined, local, now );
-					return sendSkillPress( frame, skillId, now, pressAdmitted( metadata, local ) ? "cast" : null );
+					return sendSkillPress(
+						frame,
+						skillId,
+						now,
+						pressAdmitted( metadata, local ) ? "cast" : null,
+						localGid
+					);
 				}
 			}
 			if ( command.kind === "skill" && command.gid === undefined ) {
@@ -4831,7 +4918,7 @@ state here before a command can claim a native wire conversation.
 			// server's to refuse, and its stand-in showed a cooldown that vanished.
 			if ( !admitted ) {
 				sendFrame( frame );
-				skillPress.sent( now, command.skillId );
+				skillPress.sent( now, command.skillId, entity.gid );
 				return frame;
 			}
 			return sendSkillPress(
@@ -6920,6 +7007,7 @@ before take assembles the presentation snapshot.
 				mp: vital?.mp ?? potionFacts.mp,
 				abnormal: vital?.abnormal ?? potionFacts.abnormal
 			};
+			predictQueuedCast( now, local );
 			const low = [
 				vitalWarning( potionFacts.hp, potionFacts.maxHp ),
 				vitalWarning( potionFacts.mp, potionFacts.maxMp )
@@ -7399,6 +7487,7 @@ runs (native 00687520).
 		const settings = sroMacro.view();
 		if ( !live || !sroMacroEnabled || !settings?.skillOn || !potionFacts.alive || !local ) {
 			macroSkillLoop = emptyMacroSkillLoop();
+			macroSwapWaits.clear();
 			return;
 		}
 		// selectionIntent: the clicked monster even before its B45A grant, as
@@ -7485,7 +7574,22 @@ runs (native 00687520).
 		// check so a useless shield equip cannot clear a weaponKinds
 		// refuse and oscillate.
 		if ( admission.kind === "refuse" && macroSkillSwapHelps( admission.code ) ) {
+			// A swap already went out for this entry and the worn loadout
+			// reads exactly as it did then, so the swap never landed (the
+			// server refused it, #4697). Re-issuing that swap cannot clear
+			// this refusal, and the rewind below would wedge the whole step
+			// table on this entry forever, so its bag slot is skipped for as
+			// long as the loadout stays as it is. A candidate from another
+			// slot (the player rebound the Weapon/Shield bind) is judged
+			// as usual.
+			const wornWeapon = bag.find( row => row.slot === WEAPON_SOCKET )?.refObjId;
+			const wornShield = bag.find( row => row.slot === SHIELD_SOCKET )?.refObjId;
+			const wait = macroSwapWaits.get( skillId );
+			const refusedSource = wait && wait.weapon === wornWeapon && wait.shield === wornShield ?
+				wait.source :
+				undefined;
 			for ( const swap of macroSkillSwapCandidates( settings.skillFlags, bag ) ) {
+				if ( swap.source === refusedSource ) continue;
 				const after = pressAdmission( {
 					admit: metadata.admit,
 					needsFooting: metadata.needsFooting,
@@ -7512,6 +7616,7 @@ runs (native 00687520).
 				}
 				// Native does not advance the list cursor on a swap
 				// (00687af5); rewind the picker's already-advanced entry.
+				macroSwapWaits.set( skillId, { weapon: wornWeapon, shield: wornShield, source: swap.source } );
 				const cursor = pick.list === "attack" ?
 					{ attack: Math.max( 0, macroSkillLoop.attack - 1 ) } :
 					{ buff: Math.max( 0, macroSkillLoop.buff - 1 ) };
@@ -7541,6 +7646,7 @@ runs (native 00687520).
 			return;
 		}
 		macroSkillLoop = macroSkillCast( macroSkillLoop, now, metadata.actionMs ?? 0 );
+		macroSwapWaits.delete( skillId );
 		dirty = true;
 	}
 	/*

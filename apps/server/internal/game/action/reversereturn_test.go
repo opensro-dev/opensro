@@ -1,7 +1,7 @@
 /*
 ===========================================================================
 
-reversereturn_test.go - the guides' free reverse return and the gate scroll
+reversereturn_test.go - the guides' free reverse return and the reverse return scroll
 
 ===========================================================================
 */
@@ -10,10 +10,11 @@ package action
 
 import (
 	"bytes"
-	"opensro.online/server/internal/domain"
+	"encoding/binary"
 	"testing"
 	"time"
 
+	"opensro.online/server/internal/domain"
 	"opensro.online/server/internal/game/enterworld"
 	"opensro.online/server/internal/game/item/wire"
 	"opensro.online/server/internal/game/world/fortress"
@@ -25,7 +26,7 @@ import (
 ================
 reverseReturnFixture
 
-The return fixture's character beside a selected teleport gate (gid 2001),
+The return fixture's character beside a selected teleport ferry (gid 2001),
 holding two reverse return scrolls in slot 23 (1000 ms cast).
 ================
 */
@@ -49,30 +50,91 @@ func reverseReturnFixture(t *testing.T) (*Runtime, *enterworld.Character, *fakeC
 
 /*
 ================
-reverseReturn
-================
-*/
-func reverseReturn(rt *Runtime, c *enterworld.Character, choice uint8) OpResult {
-	return rt.HandlePortal(testDivision, c, wire.NewWriter(6).U32(2001).U8(gateReverseReturn).U8(choice).Payload())
-}
+TestSelectGrantsReverseReturnOnlyToBeginnerGuides
 
-/*
-================
-TestGateOffersTheReverseReturnOnlyToAScrollHolder
+Only the beginner guides (service 0x1E) carry capability 0x20000000 on select;
+holding a reverse return scroll never adds it to ferries, town gates or the
+Bandit Den gate, and 0x7495 type 5 against a ferry never falls back to a scroll.
 ================
 */
-func TestGateOffersTheReverseReturnOnlyToAScrollHolder(t *testing.T) {
+func TestSelectGrantsReverseReturnOnlyToBeginnerGuides(t *testing.T) {
 	rt, c, _ := reverseReturnFixture(t)
-	gate := rt.NpcRoster[0]
-	if rt.reverseReturnCapability(gate, c) != simulation.NpcTalkFlagReverseReturn {
-		t.Fatal("a gate did not offer the reverse return to a scroll holder")
+	spawn := simulation.SeedWorldState(c).Spawn
+	guide := simulation.NpcDef{ObjectID: 2004, RefObjID: 19519, Codename: "NPC_EU_ADVICE3",
+		AuthoredSpawn: true, Spawn: spawn}
+	guide.Services = simulation.ResolveNpcServices(guide)
+	guide.TalkFlags = simulation.ResolveNpcTalkFlags(guide)
+	rt.NpcRoster = append(rt.NpcRoster,
+		simulation.NpcDef{
+			ObjectID:      2002,
+			RefObjID:      2094,
+			Codename:      "STORE_CH_GATE",
+			TalkFlags:     simulation.NpcTalkFlagTeleport | simulation.NpcTalkFlagRecallPoint,
+			Services:      simulation.NpcServices(0).With(simulation.NpcServiceTeleport, simulation.NpcServiceRecallPoint),
+			Teleport:      &simulation.TeleportGateBounds{Radius: 25, Height: 10},
+			AuthoredSpawn: true,
+			Spawn:         spawn,
+		},
+		simulation.NpcDef{
+			ObjectID:      2003,
+			RefObjID:      2197,
+			Codename:      "STORE_TD_GATE",
+			TalkFlags:     simulation.NpcTalkFlagResurrectPoint,
+			Services:      simulation.NpcServices(0).With(simulation.NpcServiceResurrectPoint),
+			Teleport:      &simulation.TeleportGateBounds{Radius: 20, Height: 15},
+			AuthoredSpawn: true,
+			Spawn:         spawn,
+		},
+		guide,
+	)
+
+	selectFlags := func(gid uint32, isGate bool) uint32 {
+		outcome := rt.HandleObjectSelect(testDivision, c, selectBody(gid))
+		if outcome.Refusal != "" || len(outcome.Frames) != 1 || outcome.Frames[0].Opcode != wire.OpObjectSelectResult {
+			t.Fatalf("select gid %d failed: %+v", gid, outcome)
+		}
+		payload := outcome.Frames[0].Payload
+		if isGate {
+			return binary.LittleEndian.Uint32(payload[5:9])
+		}
+		return binary.LittleEndian.Uint32(payload[6:10])
 	}
-	if rt.reverseReturnCapability(simulation.NpcDef{TalkFlags: 1}, c) != 0 {
-		t.Fatal("a merchant offered the reverse return")
+
+	for _, tc := range []struct {
+		name   string
+		gid    uint32
+		isGate bool
+		want   bool
+	}{
+		{"ferry", 2001, false, false},
+		{"town gate", 2002, true, false},
+		{"den gate", 2003, true, false},
+		{"beginner guide", 2004, false, true},
+	} {
+		flags := selectFlags(tc.gid, tc.isGate)
+		got := flags&simulation.NpcTalkFlagReverseReturn != 0
+		if got != tc.want {
+			t.Fatalf("%s select flags = 0x%x (reverse=%v), want %v", tc.name, flags, got, tc.want)
+		}
 	}
+
 	c.MissionInventory = c.MissionInventory[:len(c.MissionInventory)-1]
-	if rt.reverseReturnCapability(gate, c) != 0 {
-		t.Fatal("a gate offered the reverse return without a scroll")
+	if flags := selectFlags(2004, false); flags&simulation.NpcTalkFlagReverseReturn == 0 {
+		t.Fatalf("beginner guide without scroll flags = 0x%x, want 0x20000000", flags)
+	}
+
+	// Sending 0x7495 type 5 against the ferry with a scroll in the bag runs the
+	// native guide handler (refusing max level > 20) and never consumes a scroll.
+	rt, c, _ = reverseReturnFixture(t)
+	c.World.LastDeathPoint = &domain.WorldPoint{WorldSpawn: *worldSpawnFromMission(simulation.Spawn{RegionID: 25000, X: 812, Y: 30, Z: 1204})}
+	level := guideReturnMaxLevel + 1
+	c.MaxLevel = &level
+	out := rt.HandlePortal(testDivision, c, wire.NewWriter(6).U32(2001).U8(gateReverseReturn).U8(reverseReturnLastDeath).Payload())
+	if len(out.Frames) == 0 || !bytes.Equal(out.Frames[0].Payload, portalFailure(errCodeGuideLevel).Frames[0].Payload) {
+		t.Fatalf("ferry type-5 answered %+v, want guide level refusal 0x%x", out.Frames, errCodeGuideLevel)
+	}
+	if c.MissionInventory[len(c.MissionInventory)-1].StackCount != 2 || c.NativeTeleportMode != 0 {
+		t.Fatal("ferry type-5 spent a scroll or started a cast")
 	}
 }
 
@@ -174,39 +236,12 @@ Natively no recorded death answers 0x1886 (notice 390) and spends nothing.
 */
 func TestReverseReturnWithoutADeathRefusesAndKeepsTheScroll(t *testing.T) {
 	rt, c, _ := reverseReturnFixture(t)
-	out := reverseReturn(rt, c, reverseReturnLastDeath)
+	out := useReverseScroll(rt, c, reverseReturnLastDeath)
 	if len(out.Frames) != 1 || !bytes.Equal(out.Frames[0].Payload, wire.EncodeItemUseError(errCodeNoDeathPoint)) {
 		t.Fatalf("missing death point answered %+v", out.Frames)
 	}
 	if c.MissionInventory[len(c.MissionInventory)-1].StackCount != 2 || c.NativeTeleportMode != 0 {
 		t.Fatal("a refused reverse return spent the scroll or started a cast")
-	}
-}
-
-/*
-================
-TestReverseReturnTakesThePlayerToWhereItDied
-================
-*/
-func TestReverseReturnTakesThePlayerToWhereItDied(t *testing.T) {
-	rt, c, clock := reverseReturnFixture(t)
-	died := simulation.Spawn{RegionID: 25000, X: 812, Y: 30, Z: 1204, Angle: 0}
-	c.World.LastDeathPoint = &domain.WorldPoint{WorldSpawn: *worldSpawnFromMission(died)}
-	out := reverseReturn(rt, c, reverseReturnLastDeath)
-	assertOpcodes(t, out.Frames, 0x3122, wire.OpItemUseResponse, opCommerceItemReferences, wire.OpItemUseVisual)
-	if out.Frames[1].Payload[1] != 23 || c.MissionInventory[len(c.MissionInventory)-1].StackCount != 1 || c.NativeTeleportMode != 1 {
-		t.Fatalf("the reverse return did not spend one scroll and start the cast: %+v", out.Frames)
-	}
-	var sent []wire.Frame
-	rt.PushCharacterFrames = func(_, _ string, f []wire.Frame) { sent = append(sent, f...) }
-	clock.Advance(time.Second)
-	rt.TickHook()(clock.NowMs())
-	rt.processReturnArrivals()
-	if len(sent) == 0 || sent[0].Opcode != enterworld.OpcodeResetClient {
-		t.Fatalf("missing native reentry: %+v", sent)
-	}
-	if got := missionSpawnFromWorld(c.World.Spawn, simulation.Spawn{}); got.RegionID != died.RegionID || got.X != died.X || got.Z != died.Z {
-		t.Fatalf("arrived at %+v, not where the player died", got)
 	}
 }
 
@@ -330,8 +365,8 @@ func TestReverseScrollWorldAdmissionsBeforeConsumption(t *testing.T) {
 ================
 TestReverseScrollFromTheBagTakesThePlayerToWhereItDied
 
-The bag use runs the native scroll check as the gate row does: one scroll spent, the cast,
-and the reentry at the recorded death point.
+The bag use runs the native scroll check: one scroll spent, the cast, and the reentry at the
+recorded death point.
 ================
 */
 func TestReverseScrollFromTheBagTakesThePlayerToWhereItDied(t *testing.T) {

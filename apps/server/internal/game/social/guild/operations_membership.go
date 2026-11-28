@@ -12,11 +12,9 @@ import (
 	"opensro.online/server/internal/game/enterworld"
 )
 
-// KickOutcome is one handled 0x74B1 request. EVERY kick refusal stays
-// fully silent - deliberately no ErrorPayload slot: the 0x1F refusal
-// code is pinned only at a client-LOCAL call site (00703ead), kick has
-// no dedicated ack opcode, and no S->C carrier frame for a kick refusal
-// is pinned, so a code with no evidenced carrier is not implementable
+// KickOutcome is one handled 0x74B1 request. Kick refusals stay silent
+// except the two the reference server words on this lane: the running
+// vote's and the warehouse holder's, both answered on the 0xB4B1 result
 // (errors.go). PushPayload is the 0x3B29
 // subOp-3 frame for every ONLINE member named in MemberNames - the
 // PRE-REMOVAL member list, so the kicked player and the acting kicker
@@ -43,6 +41,34 @@ func refusedKick(reason string) KickOutcome {
 	return KickOutcome{Refusal: reason}
 }
 
+/*
+================
+actorMemberRow
+
+The actor's own member row in their guild, read outside the store
+doors. The warehouse-holder refusals are worded before a door commits
+anything (the holder is live runtime state, never a stored row), and
+only for an actor the door itself would admit: everyone else keeps the
+door's own answer, unchanged.
+================
+*/
+func actorMemberRow(deps Dependencies, divisionID string, actor *enterworld.Character) (enterworld.GuildMemberRecord, bool) {
+	store := deps.GuildAuthority()
+	if store == nil || actor == nil {
+		return enterworld.GuildMemberRecord{}, false
+	}
+	_, members, found := store.Guild(divisionID, characterGuild(actor))
+	if !found {
+		return enterworld.GuildMemberRecord{}, false
+	}
+	for _, row := range members {
+		if row.CharID == actor.ID {
+			return row, true
+		}
+	}
+	return enterworld.GuildMemberRecord{}, false
+}
+
 // HandleKick applies one decoded 0x74B1 request through the ATOMIC
 // RemoveGuildMember door (member row + FK clear, one commit). The
 // permission check is mask-only (PermMaskKick, the same DECISION as the
@@ -50,13 +76,19 @@ func refusedKick(reason string) KickOutcome {
 // guild's members (DECISION: no EqualFold fallback - the client's own
 // me-check is exact wide-string equality and retail compares exact);
 // kicking yourself or the grade-0 leader refuses. The pushed jid is the
-// kicked member's STORED JID from their member record.
+// kicked member's STORED JID from their member record. A target who
+// HOLDS the guild warehouse (storageHolder, "" when nobody does) cannot
+// be expelled: the reference server tests the holder before the vote,
+// self and master arms, and answers 0x48 on this lane. The refusal is
+// worded only for an actor the door would admit - the holder test is
+// runtime state the door cannot see, and everyone else keeps the
+// door's own answer.
 /*
 ================
 HandleKick
 ================
 */
-func HandleKick(deps Dependencies, divisionID string, actor *enterworld.Character, payload []byte) KickOutcome {
+func HandleKick(deps Dependencies, divisionID string, actor *enterworld.Character, payload []byte, storageHolder string) KickOutcome {
 	if actor == nil {
 		return refusedKick("characterNotFound")
 	}
@@ -73,6 +105,11 @@ func HandleKick(deps Dependencies, divisionID string, actor *enterworld.Characte
 	request, err := DecodeKickRequest(payload)
 	if err != nil {
 		return refusedKick(err.Error())
+	}
+	if storageHolder != "" && storageHolder == request.MemberName {
+		if row, ok := actorMemberRow(deps, divisionID, actor); ok && row.PermMask&PermMaskKick != 0 {
+			return KickOutcome{ErrorPayload: EncodeGuildErrorResult(GuildErrStorageHeld), Refusal: "member holds the guild storage"}
+		}
 	}
 	removal, refusal := deps.GuildAuthority().KickGuildMember(
 		divisionID,
@@ -113,11 +150,10 @@ func HandleKick(deps Dependencies, divisionID string, actor *enterworld.Characte
 // 0x3B29 subOp-3 kind-1 frame for every ONLINE member named in
 // MemberNames - the PRE-REMOVAL member list, so the leaver is included
 // (their client's jid==me arm performs the full guild reset; the ack
-// alone does not wipe the guild block). EVERY refusal stays fully
-// silent - deliberately no ErrorPayload slot: the leader-refuse 0x36
-// and no-guild 0x1E codes are pinned only on the classic v1.188 leave
-// job (PROBABLE for Legend), so emitting either would invent a
-// contract.
+// alone does not wipe the guild block). Refusals stay silent except the
+// two the reference server words on this lane: the running vote's 0x38
+// and the warehouse holder's 0x48. The leader-refuse 0x36 and no-guild
+// 0x1E codes have no pinned leave trigger pair, so they stay silent.
 type LeaveOutcome struct {
 	AckPayload        []byte
 	PushPayload       []byte
@@ -143,13 +179,16 @@ func refusedLeave(reason string) LeaveOutcome {
 // and discards its leave body the same way). A grade-0 LEADER cannot
 // leave - refused SILENTLY: the classic 0x4c36 refuse code is only
 // PROBABLE for Legend - dissolve is the break 0x766E job (HandleBreak,
-// the DissolveGuild door + subOp-1 fan-out), never this handler's.
+// the DissolveGuild door + subOp-1 fan-out), never this handler's. A
+// leaver who HOLDS the guild warehouse (storageHolder, "" when nobody
+// does) cannot leave either: the reference server tests the holder
+// before the vote arm and answers 0x48 on this lane.
 /*
 ================
 HandleLeave
 ================
 */
-func HandleLeave(deps Dependencies, divisionID string, actor *enterworld.Character, payload []byte) LeaveOutcome {
+func HandleLeave(deps Dependencies, divisionID string, actor *enterworld.Character, payload []byte, storageHolder string) LeaveOutcome {
 	if actor == nil {
 		return refusedLeave("characterNotFound")
 	}
@@ -166,6 +205,9 @@ func HandleLeave(deps Dependencies, divisionID string, actor *enterworld.Charact
 	request, err := DecodeLeaveRequest(payload)
 	if err != nil {
 		return refusedLeave(err.Error())
+	}
+	if storageHolder != "" && storageHolder == actor.Name {
+		return LeaveOutcome{AckPayload: EncodeGuildErrorResult(GuildErrStorageHeld), Refusal: "member holds the guild storage"}
 	}
 	removal, refusal := deps.GuildAuthority().LeaveGuild(divisionID, actor.ID)
 	if refusal == enterworld.GuildRefusalVoteInProgress {
@@ -193,11 +235,9 @@ func HandleLeave(deps Dependencies, divisionID string, actor *enterworld.Charact
 // MemberNames - the PRE-DISSOLVE member list, so the leader is included
 // (the client's break arm reads the announced guild name from its OWN
 // local state and drops the whole guild block - one payload-less frame
-// serves everyone). EVERY refusal stays fully silent - deliberately no
-// ErrorPayload slot: the client's CPSMission_OnGuildDisbandResponse0xB66E
-// handler parses {u8 2}{u8 code} into
-// the cat-0x10 sink, but NO break trigger->code pair is pinned for
-// Legend (the leave posture; emitting one would invent a contract).
+// serves everyone). Refusals stay silent except the two the reference
+// server words on this lane: a running guild war's 0x46 and the
+// warehouse holder's 0x48, both in the AckPayload slot.
 type BreakOutcome struct {
 	AckPayload        []byte
 	PushPayload       []byte
@@ -225,13 +265,18 @@ func refusedBreak(reason string) BreakOutcome {
 // LEADER may dissolve: leave's handler refuses leaders pointing here
 // (register.go HandleLeave), and the client opens the break confirm
 // (msgbox kind 0x13, CIFNpcTalk_ExecuteMenuAction case 0x14) from
-// leadership arms only - a non-leader break is refused silently.
+// leadership arms only - a non-leader break is refused silently. While
+// any member HOLDS the guild warehouse (storageHolder) the guild
+// cannot be dissolved: the reference server answers the leader 0x48.
+// Its war test runs first there; here the war answer still comes from
+// the door whenever nobody holds the room, so a guild both at war and
+// held hears the holder's text - same refusal, different wording.
 /*
 ================
 HandleBreak
 ================
 */
-func HandleBreak(deps Dependencies, divisionID string, actor *enterworld.Character, payload []byte) BreakOutcome {
+func HandleBreak(deps Dependencies, divisionID string, actor *enterworld.Character, payload []byte, storageHolder string) BreakOutcome {
 	if actor == nil {
 		return refusedBreak("characterNotFound")
 	}
@@ -248,6 +293,11 @@ func HandleBreak(deps Dependencies, divisionID string, actor *enterworld.Charact
 	request, err := DecodeBreakRequest(payload)
 	if err != nil {
 		return refusedBreak(err.Error())
+	}
+	if storageHolder != "" {
+		if row, ok := actorMemberRow(deps, divisionID, actor); ok && row.Grade == domain.GuildLeaderGrade {
+			return BreakOutcome{AckPayload: EncodeGuildErrorResult(GuildErrStorageHeld), Refusal: "member holds the guild storage"}
+		}
 	}
 	dissolved, refusal := deps.GuildAuthority().DissolveGuildAs(divisionID, actor.ID)
 	if refusal == domain.GuildRefusalWarActive {

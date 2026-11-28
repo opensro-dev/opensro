@@ -129,6 +129,9 @@ type MonsterRef struct {
 	RiderTransformMode uint8
 	Level              uint8
 	MaxHP              uint32
+	// RecoveryHP is the flat HP the monster's natural recovery restores
+	// per four-second tick (colRecoveryHP); zero recovers nothing.
+	RecoveryHP uint32
 	// Country is RefObjCommon.Country (characterdata column 14): 0 China,
 	// 1 Europe, 2 Islam, 3 random China/Europe. The native drop-reference builder reads this from
 	// the defeated monster, not from the killer, to choose its country bucket.
@@ -196,17 +199,21 @@ type MonsterRef struct {
 // shipped rows. col 12 (TID4) is NOT consumed by the classification
 // gates.
 const (
-	colService       = 0
-	colRefObjID      = 1
-	colCodename      = 2
-	colNameStrID     = 5
-	colCharBit       = 8
-	colTid1          = 9
-	colTid2          = 10
-	colTid3          = 11
-	colTid4          = 12
-	colCountry       = 14
-	colMonsterType   = 15
+	colService     = 0
+	colRefObjID    = 1
+	colCodename    = 2
+	colNameStrID   = 5
+	colCharBit     = 8
+	colTid1        = 9
+	colTid2        = 10
+	colTid3        = 11
+	colTid4        = 12
+	colCountry     = 14
+	colMonsterType = 15
+	// colRecoveryHP is the reference's +0xD4: the flat HP a monster's
+	// natural recovery restores each four-second tick (characterdata
+	// column 40). A negative value authors no recovery.
+	colRecoveryHP    = 40
 	colWalk          = 46
 	colRun           = 47
 	colScale         = 48
@@ -446,6 +453,10 @@ func parseMonsterRefTables(textdataDir string, tables [][][]string) map[uint32]M
 				displayName = strings.TrimSpace(cols[colCodename])
 			}
 			codename := strings.TrimSpace(cols[colCodename])
+			var recoveryHP uint32
+			if len(cols) > colRecoveryHP {
+				recoveryHP, _ = columnUint32(cols, colRecoveryHP)
+			}
 			var costRepair, costRevive, upgradeGold, upgradeGuildPoints, buildMinutes uint32
 			var canRevive bool
 			if structure && len(cols) > colCostRevive {
@@ -477,6 +488,7 @@ func parseMonsterRefTables(textdataDir string, tables [][][]string) map[uint32]M
 				ModelPath:          strings.TrimSpace(cols[colModel]),
 				Level:              uint8(level),
 				MaxHP:              maxHP,
+				RecoveryHP:         recoveryHP,
 				Country:            uint8(country),
 				CombatPinned:       parameters.CombatPinned,
 				PhysicalDefense:    parameters.PhysicalDefense,

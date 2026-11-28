@@ -28,9 +28,10 @@ import (
 Graduate
 
 The v1.188 server's graduation request applies a member command that the
-camp manager submits as persistent operation case 4:
-Voluntary apprentice graduation at level >= 40 with satisfaction 0..4
-(a satisfaction of 5 or more is refused).
+camp manager submits as persistent operation case 4. The level test reads
+the highest level reached, not the current level: an apprentice graduates
+at 40 with a satisfaction of 0..4 (a satisfaction of 5 or more is refused,
+after the level test), and an assistant graduates at 60 and gives nothing.
 ================
 */
 func (door storeCampDoor) Graduate(divisionID string, memberCharID int64, satisfaction uint8, nowMs int64) domain.TrainingCampGraduateResult {
@@ -38,9 +39,6 @@ func (door storeCampDoor) Graduate(divisionID string, memberCharID int64, satisf
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	if satisfaction > 4 {
-		return domain.TrainingCampGraduateResult{Refusal: domain.TrainingCampGraduateUnavailable}
-	}
 	student := s.characterByIDLocked(divisionID, memberCharID)
 	if student == nil || student.DeletePending {
 		return domain.TrainingCampGraduateResult{Refusal: domain.TrainingCampGraduateUnavailable}
@@ -65,11 +63,23 @@ func (door storeCampDoor) Graduate(divisionID string, memberCharID int64, satisf
 	if memberIdx < 0 {
 		return domain.TrainingCampGraduateResult{Refusal: domain.TrainingCampGraduateNotInCamp}
 	}
-	if members[memberIdx].Kind != 2 {
+	// The master and any other kind stay refused here (the native handler
+	// answers the master with a bare 5, which has no v1.150 client text;
+	// the port keeps its own refusal).
+	switch members[memberIdx].Kind {
+	case 2:
+		if resolvedCharacterHighestLevel(student) < campGraduationLevel {
+			return domain.TrainingCampGraduateResult{Refusal: domain.TrainingCampGraduateLevelLow}
+		}
+		if satisfaction > 4 {
+			return domain.TrainingCampGraduateResult{Refusal: domain.TrainingCampGraduateUnavailable}
+		}
+	case 1:
+		if resolvedCharacterHighestLevel(student) < campAssistantGraduationLevel {
+			return domain.TrainingCampGraduateResult{Refusal: domain.TrainingCampGraduateLevelLow}
+		}
+	default:
 		return domain.TrainingCampGraduateResult{Refusal: domain.TrainingCampGraduateNotApprentice}
-	}
-	if resolvedCharacterLevel(student) < campGraduationLevel {
-		return domain.TrainingCampGraduateResult{Refusal: domain.TrainingCampGraduateLevelLow}
 	}
 
 	return door.completeGraduationLocked(divisionID, campID, memberIdx, satisfaction, true, nowMs)
@@ -126,7 +136,7 @@ func (door storeCampDoor) CompulsoryGraduate(divisionID string, masterCharID int
 	if targetMember.Kind != 2 {
 		return domain.TrainingCampGraduateResult{Refusal: domain.TrainingCampGraduateNotApprentice}
 	}
-	if resolvedCharacterLevel(targetChar) < campCompulsoryGraduationLevel {
+	if resolvedCharacterHighestLevel(targetChar) < campCompulsoryGraduationLevel {
 		return domain.TrainingCampGraduateResult{Refusal: domain.TrainingCampGraduateCompulsoryLevelLow}
 	}
 
@@ -140,7 +150,8 @@ completeGraduationLocked
 The v1.188 server's graduation point update, its honor and evaluation
 award, its clamped honor add, and retail stored
 procedure _TRAINING_CAMP_MEMBER_GRADUATE (SRO_VT_SHARD.bak @ 0x53E8B30):
-  - Always increments camp.GraduateCount by 1 (SQL 0x53E9376/0x53E94B0).
+  - An apprentice's graduation increments camp.GraduateCount by 1
+    (SQL 0x53E9376/0x53E94B0); an assistant's gives nothing.
   - When joinLevel <= 30 (0x1E in both server tests; SQL IF @JoinLvl <= 30 at 0x53E9104):
   - mentorPoint = 40 - joinLevel (0x28 minus the join level)
   - subMentorPoint = (40 - joinLevel) / 10 (x87 trunc(* 0.1); SQL @MentorPoint / 10)
@@ -178,8 +189,11 @@ func (door storeCampDoor) completeGraduationLocked(
 		joinLevel = 1
 	}
 
+	// Only an apprentice's graduation awards anything (and raises the
+	// camp's graduate count): an assistant's gives nothing.
+	awards := graduate.Kind == 2
 	var mentorReward, subMentorReward uint32
-	if joinLevel <= campHonorAwardMaxJoinLevel {
+	if awards && joinLevel <= campHonorAwardMaxJoinLevel {
 		mentorReward = uint32(campGraduationLevel - joinLevel)
 		subMentorReward = mentorReward / 10
 	}
@@ -211,12 +225,14 @@ func (door storeCampDoor) completeGraduationLocked(
 		next = append(next, member)
 	}
 
-	if joinLevel <= campHonorAwardMaxJoinLevel {
+	if awards && joinLevel <= campHonorAwardMaxJoinLevel {
 		evalDeltas := [5]int32{-3, -1, 1, 3, 5}
 		camp.EvaluationPoints += evalDeltas[satisfaction]
 		camp.LatestEvaluationAtMs = nowMs
 	}
-	camp.GraduateCount++
+	if awards {
+		camp.GraduateCount++
+	}
 
 	s.camps[divisionID][campID] = camp
 	s.campMembers[divisionID][campID] = next

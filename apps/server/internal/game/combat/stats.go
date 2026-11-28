@@ -68,6 +68,11 @@ type Stats struct {
 	graph    *paramkeeper.Graph
 	Level    uint8
 	MaxLevel uint8
+	// MaxHP is the snapshot's maximum hit points (keeper parameter 3
+	// for a player, the reference row's ceiling for a creature): the
+	// hit outcome's ratio arm measures its damage on it. A snapshot
+	// that carries no ceiling leaves it zero and the arm inert.
+	MaxHP int64
 
 	Strength  float64
 	Intellect float64
@@ -401,6 +406,10 @@ func playerStatsWithModifiers(
 	out.graph = graph
 	if err = readParameterStats(graph, &out); err != nil {
 		return Stats{}, Loadout{}, err
+	}
+	// Keeper parameter 3 is the gauge ceiling the ratio arm measures on.
+	if hp, ok := out.Param(3); ok && hp > 0 {
+		out.MaxHP = int64(hp)
 	}
 	return out, loadout, nil
 }

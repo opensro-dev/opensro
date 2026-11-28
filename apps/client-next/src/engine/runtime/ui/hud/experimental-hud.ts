@@ -356,6 +356,15 @@ export const EXPERIMENTAL_TABS: readonly ExperimentalTab[] = [
 						description: "When the quiver empties, refill from the smallest stack."
 					},
 					{
+						// Port-only, not native (#4740): off is the
+						// original's start on the server's cast answer.
+						key: "predictedQueuedCast",
+						id: "experimental-predicted-queued-cast",
+						label: "Start queued skills early",
+						description:
+							"Start a skill you queued as soon as the one before it ends, without waiting for the server."
+					},
+					{
 						key: "uniqueDamageRank",
 						id: "experimental-unique-damage-rank",
 						label: "Unique damage ranking",

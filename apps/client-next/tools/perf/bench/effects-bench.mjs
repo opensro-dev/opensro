@@ -33,7 +33,7 @@ import { createCaptures } from "../core/client.mjs";
 import { writeFile } from "node:fs/promises";
 
 const USAGE =
-	"effects-bench.mjs [--count N] [--seconds S] [--warmup S] [--cpu-rate N] [--match REGEX] [--size WxH] [--cpu] [--heap] [--trace] [--gpu] [--counts] [--out DIR]";
+	"effects-bench.mjs [--count N] [--seconds S] [--warmup S] [--cpu-rate N] [--match REGEX] [--size WxH] [--cpu] [--heap] [--trace] [--gpu] [--counts] [--screenshot] [--out DIR]";
 
 /*
 ================
@@ -243,6 +243,7 @@ const options = parseOptions(
 		trace: false,
 		gpu: false,
 		counts: false,
+		screenshot: false,
 		cpuRate: 1,
 		out: "temp/artifacts/effects-bench"
 	},
@@ -280,7 +281,14 @@ try {
 	} );
 	await captures.start();
 	console.log( `[effects] ${options.warmup}s warmup, ${options.seconds}s measurement, CPU rate ${options.cpuRate}` );
-	const result = await page.evaluate( measureEffects, { seconds: options.seconds, warmup: options.warmup } );
+	const measured = page.evaluate( measureEffects, { seconds: options.seconds, warmup: options.warmup } );
+	// The measured scene, halfway through: measureEffects disposes the
+	// renderer when it returns, so the capture runs beside it.
+	if ( options.screenshot ) {
+		await new Promise( resolve => setTimeout( resolve, (options.warmup + options.seconds / 2) * 1000 ) );
+		await page.locator( "canvas" ).screenshot( { path: `${options.out}/scene.png` } );
+	}
+	const result = await measured;
 	await captures.stop( "effects" );
 	await captures.finish();
 	await writeFile(

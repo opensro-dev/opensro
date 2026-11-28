@@ -38,6 +38,23 @@ const MIN_ALIGNMENT = 256;
 
 /*
 ================
+bindingOffsetAlignment
+
+The byte multiple every buffer binding offset of this device lands on:
+the WebGPU default, or a larger limit the device reports (it may only
+lower them, so the default always satisfies it).
+================
+*/
+export function bindingOffsetAlignment( device: GPUDevice ): number {
+	return Math.max(
+		MIN_ALIGNMENT,
+		device.limits?.minUniformBufferOffsetAlignment ?? 0,
+		device.limits?.minStorageBufferOffsetAlignment ?? 0
+	);
+}
+
+/*
+================
 BufferSlice
 
 One range of a slab (or a dedicated buffer). binding is the stable
@@ -127,11 +144,7 @@ slabSet
 */
 function slabSet( device: GPUDevice, label: string, usage: number, retire: Retire, layout: SlabLayout ) {
 	const { stride, staged } = layout;
-	const alignment = stride || Math.max(
-		MIN_ALIGNMENT,
-		device.limits?.minUniformBufferOffsetAlignment ?? 0,
-		device.limits?.minStorageBufferOffsetAlignment ?? 0
-	);
+	const alignment = stride || bindingOffsetAlignment( device );
 	const slabs: Slab[] = [], dedicated = new Set<GPUBuffer>();
 	// A staged set's mirrors by buffer, and those written since the last flush.
 	const stages = new Map<GPUBuffer, Stage>(), dirty = new Set<Stage>();

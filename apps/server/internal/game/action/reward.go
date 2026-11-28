@@ -2,8 +2,10 @@ package action
 
 import (
 	"math"
+	"sort"
 	"time"
 
+	"opensro.online/server/internal/domain"
 	"opensro.online/server/internal/game/enterworld"
 	"opensro.online/server/internal/game/item/grounditem"
 	"opensro.online/server/internal/game/item/wire"
@@ -307,7 +309,10 @@ creditQuestKillInsideDoor
 The original raises the quest kill event for the player whose blow killed
 the monster, not for the reward representative: that player's kill
 missions count it and its gather missions roll their quest drops, owned by
-it. The caller holds the fatal hit's door, as for applyMonsterKillInsideDoor.
+it. In a party with both EXP and item auto-share, the same event is
+shared by the quest's DivideType instead (shareQuestKill): the killer
+alone is never the whole story there. The caller holds the fatal hit's
+door, as for applyMonsterKillInsideDoor.
 ==================
 */
 func (rt *Runtime) creditQuestKillInsideDoor(
@@ -321,18 +326,315 @@ func (rt *Runtime) creditQuestKillInsideDoor(
 		return nil, nil
 	}
 	rt.noteRocKill(target.Ref.Codename, target.Gid, pose)
-	if rt.UpdateQuestKill != nil && rt.Monsters != nil {
-		if live, ok := rt.Monsters.Get(divisionID, target.Gid); ok && live.CurrentHP == 0 {
-			if rt.NoteQuestKillSite != nil {
-				rt.NoteQuestKillSite(killer, live.Ref.Codename, simulation.Spawn{RegionID: pose.RegionID, X: pose.X, Y: pose.Y, Z: pose.Z})
-			}
-			questFrames, _ := rt.UpdateQuestKill(killer, live.Ref.Codename, live.Rarity())
-			frames = append(frames, questFrames...)
-		}
+	live, alive := monster.Instance{}, false
+	if rt.Monsters != nil {
+		live, alive = rt.Monsters.Get(divisionID, target.Gid)
+	}
+	if !alive || live.CurrentHP != 0 {
+		return frames, added
+	}
+	if rt.NoteQuestKillSite != nil {
+		rt.NoteQuestKillSite(killer, live.Ref.Codename, simulation.Spawn{RegionID: pose.RegionID, X: pose.X, Y: pose.Y, Z: pose.Z})
+	}
+	if shareFrames, shareDrops, shared := rt.shareQuestKill(divisionID, killer, target, pose, now); shared {
+		frames = append(frames, shareFrames...)
+		added = append(added, shareDrops...)
+		return frames, added
+	}
+	if rt.UpdateQuestKill != nil {
+		questFrames, _ := rt.UpdateQuestKill(killer, live.Ref.Codename, live.Rarity())
+		frames = append(frames, questFrames...)
 	}
 	for _, plannedDrop := range rt.planQuestKillDrops(killer, target, pose, now) {
 		if spawned := rt.addMonsterGround(divisionID, target.Gid, plannedDrop); spawned.Gid != 0 {
 			added = append(added, spawned)
+		}
+	}
+	return frames, added
+}
+
+// questKillShareOptions are the two auto-share bits of a party (EXP and
+// item share) the native kill fan-out requires together.
+const questKillShareOptions = 0x3
+
+// questKillShareReach is the native near test of the fan-out: the same
+// world as the killer and within 1,000 in 3D of him.
+const questKillShareReach = 1000.0
+
+/*
+================
+QuestKillTaker
+
+One quest of a character that takes a kill: its RefID, its DivideType
+(the kill-share mode) and whether it gathers from the kill instead of
+counting it. The composition converts the quest runtime's own list.
+================
+*/
+type QuestKillTaker struct {
+	RefID      uint32
+	DivideType uint8
+	Drop       bool
+}
+
+/*
+================
+questKillTurnKey
+
+One (party, quest) rotation of the DivideType-0 share.
+================
+*/
+type questKillTurnKey struct {
+	division string
+	party    uint64
+	refID    uint32
+}
+
+/*
+================
+questKillTurnEntry
+
+One rotation's state: the roster index to try first next time, and
+the last kill (ms) that consulted it. The table is bounded
+(pruneQuestKillTurns): the native keeps its lists on the party and
+frees them with it; the port's parties are rebuilt by the registry,
+so an entry no kill has consulted for a day belongs to a party that
+is gone, and past the cap those are the entries dropped.
+================
+*/
+type questKillTurnEntry struct {
+	next   uint32
+	seenMs int64
+}
+
+const (
+	questKillTurnMaxEntries = 4096
+	questKillTurnIdleMs     = 24 * 60 * 60 * 1000
+)
+
+/*
+================
+questKillHolder
+================
+*/
+type questKillHolder struct {
+	c     *enterworld.Character
+	taker QuestKillTaker
+	near  bool
+}
+
+/*
+================
+shareQuestKill
+
+The native kill fan-out in an auto-share party: per quest, the holders
+are the party members whose quest takes the kill, and the quest's
+DivideType (0 in turn, 1/4/5 every near holder, 2/3 the killer alone)
+picks the credited among the same-world, near ones. Each credited
+member counts the kill and rolls his own gather drops. Returns
+true when the party shares (EXP and item), claiming the whole credit;
+false leaves the kill with the killer, as today. The holder lists are
+rebuilt from the party's live roster each kill; the native keeps them
+per quest on the party, which differs only when the roster changes
+between two kills of one rotation.
+
+The rotations live on the runtime, keyed by the party's order: a
+party the composition rebuilds (relog) restarts its rotations, and
+the table is bounded (pruneQuestKillTurns) where the native frees
+its lists with the party itself.
+================
+*/
+func (rt *Runtime) shareQuestKill(divisionID string, killer *enterworld.Character, target monster.Instance, pose monster.Pose, now int64) ([]wire.Frame, []grounditem.Item, bool) {
+	if rt.QuestKillTakers == nil || rt.UpdateQuestKillFor == nil {
+		return nil, nil, false
+	}
+	rt.pruneQuestKillTurns(now)
+	party := rt.rewardPartyOf(divisionID, enterworld.ObjectIDForCharacter(killer))
+	if party == nil || party.Options&questKillShareOptions != questKillShareOptions {
+		return nil, nil, false
+	}
+	killerSnapshot := rt.characterSnapshot(divisionID, killer)
+	if killerSnapshot == nil {
+		return nil, nil, false
+	}
+	killerWorld := domain.CharacterWorldInstance(killerSnapshot)
+	origin := rt.liveSpawn(simulation.WorldKey(divisionID, killer.Name), killer, now)
+	holders := map[uint32][]questKillHolder{}
+	var refIDs []uint32
+	for _, gid := range party.Members {
+		member := rt.findCharacterByGid(divisionID, gid)
+		if member == nil {
+			continue
+		}
+		snapshot := rt.characterSnapshot(divisionID, member)
+		if snapshot == nil {
+			continue
+		}
+		near := domain.CharacterWorldInstance(snapshot) == killerWorld &&
+			distance3D(origin, rt.liveSpawn(simulation.WorldKey(divisionID, member.Name), member, now)) <= questKillShareReach
+		for _, taker := range rt.QuestKillTakers(member, target.Ref.Codename, target.Rarity()) {
+			if _, seen := holders[taker.RefID]; !seen {
+				refIDs = append(refIDs, taker.RefID)
+			}
+			holders[taker.RefID] = append(holders[taker.RefID], questKillHolder{c: member, taker: taker, near: near})
+		}
+	}
+	sort.Slice(refIDs, func(i, j int) bool { return refIDs[i] < refIDs[j] })
+	progress := map[*enterworld.Character]map[uint32]bool{}
+	drops := map[*enterworld.Character]map[uint32]bool{}
+	name := map[*enterworld.Character]bool{}
+	credit := func(h questKillHolder) {
+		sets := progress
+		if h.taker.Drop {
+			sets = drops
+		}
+		if sets[h.c] == nil {
+			sets[h.c] = map[uint32]bool{}
+			name[h.c] = true
+		}
+		sets[h.c][h.taker.RefID] = true
+	}
+	killerGID := enterworld.ObjectIDForCharacter(killer)
+	for _, refID := range refIDs {
+		hs := holders[refID]
+		switch hs[0].taker.DivideType {
+		case 2, 3:
+			for _, h := range hs {
+				if enterworld.ObjectIDForCharacter(h.c) == killerGID {
+					credit(h)
+				}
+			}
+		case 1, 4, 5:
+			for _, h := range hs {
+				if h.near {
+					credit(h)
+				}
+			}
+		default:
+			for _, picked := range rt.questKillTurn(divisionID, party.Order, refID, hs, now) {
+				credit(picked)
+			}
+		}
+	}
+	var frames []wire.Frame
+	if rt.NoteQuestKillChains != nil {
+		frames = append(frames, rt.NoteQuestKillChains(killer, target.Ref.Codename)...)
+	}
+	var members []*enterworld.Character
+	for c := range name {
+		members = append(members, c)
+	}
+	sort.Slice(members, func(i, j int) bool { return members[i].Name < members[j].Name })
+	var added []grounditem.Item
+	for _, member := range members {
+		memberFrames, memberDrops := rt.applySharedKillCredit(divisionID, killer, member, target, pose, now, progress[member], drops[member])
+		added = append(added, memberDrops...)
+		if enterworld.ObjectIDForCharacter(member) == killerGID {
+			frames = append(frames, memberFrames...)
+		} else if len(memberFrames) > 0 && rt.PushCharacterFrames != nil {
+			rt.PushCharacterFrames(divisionID, member.Name, memberFrames)
+		}
+	}
+	return frames, added, true
+}
+
+/*
+================
+questKillTurn
+
+The next credited holder of one quest in turn: from the party's index
+for the quest, the first near holder (the roster wraps); the index
+moves past him. Nobody near credits nobody.
+================
+*/
+func (rt *Runtime) questKillTurn(divisionID string, partyOrder uint64, refID uint32, hs []questKillHolder, now int64) []questKillHolder {
+	if len(hs) == 0 {
+		return nil
+	}
+	key := questKillTurnKey{division: divisionID, party: partyOrder, refID: refID}
+	rt.questKillTurnsMu.Lock()
+	if rt.questKillTurns == nil {
+		rt.questKillTurns = map[questKillTurnKey]questKillTurnEntry{}
+	}
+	entry := rt.questKillTurns[key]
+	entry.seenMs = now
+	rt.questKillTurns[key] = entry
+	start := int(entry.next) % len(hs)
+	rt.questKillTurnsMu.Unlock()
+	for step := 0; step < len(hs); step++ {
+		h := hs[(start+step)%len(hs)]
+		if !h.near {
+			continue
+		}
+		rt.questKillTurnsMu.Lock()
+		entry = rt.questKillTurns[key]
+		entry.next = uint32(start + step + 1)
+		entry.seenMs = now
+		rt.questKillTurns[key] = entry
+		rt.questKillTurnsMu.Unlock()
+		return []questKillHolder{h}
+	}
+	return nil
+}
+
+/*
+================
+pruneQuestKillTurns
+
+Bound the rotation table: past the entry cap, rotations no kill has
+consulted for a day are dropped. Runs on the sharing lane only, and
+only pays the scan when the table is actually oversized.
+================
+*/
+func (rt *Runtime) pruneQuestKillTurns(now int64) {
+	rt.questKillTurnsMu.Lock()
+	defer rt.questKillTurnsMu.Unlock()
+	if len(rt.questKillTurns) <= questKillTurnMaxEntries {
+		return
+	}
+	for key, entry := range rt.questKillTurns {
+		if now-entry.seenMs > questKillTurnIdleMs {
+			delete(rt.questKillTurns, key)
+		}
+	}
+}
+
+/*
+================
+applySharedKillCredit
+
+One credited member of a shared kill: his counted quests advance (in
+his own character door when he is not the killer, whose door the
+caller holds) and his gather drops are planned and spawned, owned by
+him. Returns his frames and the spawned drops.
+================
+*/
+func (rt *Runtime) applySharedKillCredit(divisionID string, killer, member *enterworld.Character, target monster.Instance, pose monster.Pose, now int64, progress, dropQuests map[uint32]bool) ([]wire.Frame, []grounditem.Item) {
+	creditFrames := func() []wire.Frame {
+		// The event reached this member (a counted quest or a gather
+		// roll), so his kill exchanges run even when no mission of his
+		// counted: an empty credit set, never nil, keeps the missions
+		// out and the exchanges in.
+		only := progress
+		if only == nil {
+			only = map[uint32]bool{}
+		}
+		return rt.UpdateQuestKillFor(member, target.Ref.Codename, target.Rarity(), only)
+	}
+	var frames []wire.Frame
+	if enterworld.ObjectIDForCharacter(member) == enterworld.ObjectIDForCharacter(killer) {
+		frames = creditFrames()
+	} else {
+		rt.deps.Update(member, "quest-kill-share", func() bool {
+			frames = creditFrames()
+			return len(frames) > 0
+		})
+	}
+	var added []grounditem.Item
+	if len(dropQuests) > 0 {
+		for _, plannedDrop := range rt.planQuestKillDropsFor(member, target, pose, now, dropQuests) {
+			if spawned := rt.addMonsterGround(divisionID, target.Gid, plannedDrop); spawned.Gid != 0 {
+				added = append(added, spawned)
+			}
 		}
 	}
 	return frames, added

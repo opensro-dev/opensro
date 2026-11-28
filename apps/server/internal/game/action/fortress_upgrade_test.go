@@ -260,6 +260,35 @@ func TestStructureUpgradeBuildsADefensivePosition(t *testing.T) {
 
 /*
 ================
+TestStructureUpgradeNeedsNoHolderGuild
+
+The upgrade asks only for the position - commander or battle
+commander - in the member's own guild, not for the fortress's holder:
+while another guild holds Jangan (a war capture stands), guild 77's
+commander still raises the position, pays his own guild's points, and
+the stored row names the holder as its owner.
+================
+*/
+func TestStructureUpgradeNeedsNoHolderGuild(t *testing.T) {
+	rt, c, store, jangan, gp, clock := upgradeFixture(t)
+	if !rt.Fortresses.Capture(testDivision, jangan, 99, clock.NowMs()) {
+		t.Fatal("the capture did not stand")
+	}
+	out := upgradeRequest(rt, c, jangan, testPositionZone, 0)
+	want := wire.NewWriter(11).U8(siege.ActionUpgrade).U8(1).U32(jangan).U32(testPositionZone).U8(0).Payload()
+	if got := upgradeAnswer(t, out); !bytes.Equal(got, want) {
+		t.Fatalf("answer % x, want % x", got, want)
+	}
+	if *c.Gold != 1000000-testPositionGold || *gp != 100000-testPositionGP {
+		t.Fatalf("gold %d guild points %d, want %d and %d", *c.Gold, *gp, 1000000-testPositionGold, 100000-testPositionGP)
+	}
+	if row := store.rows[testPositionZone]; row.OwnerGuildID != 99 {
+		t.Fatalf("stored row names owner %d, want the holder 99", row.OwnerGuildID)
+	}
+}
+
+/*
+================
 TestStructureUpgradeWaitsOutTheBuildMinutes
 
 Level 1 stands a week before it may be raised again: the list reports the

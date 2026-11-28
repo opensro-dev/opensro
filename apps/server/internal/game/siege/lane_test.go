@@ -86,6 +86,54 @@ func TestLaneRunsAWarWednesday(t *testing.T) {
 
 /*
 ================
+TestLaneBootSettlesATemporaryHolder
+
+A shard booting outside a war with a fortress still temporarily held
+(a war a crash cut short) finishes that war on its first tick: one
+war-end change. A clean boot and every later tick settle nothing.
+================
+*/
+func TestLaneBootSettlesATemporaryHolder(t *testing.T) {
+	morning := func(loc *time.Location) int64 {
+		return time.Date(2026, 10, 6, 9, 0, 0, 0, loc).UnixMilli()
+	}
+	clean, _, loc := laneFixture(t)
+	var cleanSettles int
+	clean.config.BootSettle = func(_ int64) []simulation.DivisionFrames {
+		cleanSettles++
+		return nil
+	}
+	clean.Tick(morning(loc))
+	if cleanSettles != 0 {
+		t.Fatalf("a clean boot settled: %d", cleanSettles)
+	}
+	boot, authority, loc := laneFixture(t)
+	authority.Occupy("d", 1, 7)
+	if !authority.Capture("d", 1, 9, 0) {
+		t.Fatal("the capture did not stand")
+	}
+	var settles int
+	var warChanges []bool
+	boot.config.BootSettle = func(_ int64) []simulation.DivisionFrames {
+		settles++
+		return nil
+	}
+	boot.config.WarChanged = func(_ int64, active bool) []simulation.DivisionFrames {
+		warChanges = append(warChanges, active)
+		return nil
+	}
+	boot.Tick(morning(loc))
+	if settles != 1 || len(warChanges) != 0 {
+		t.Fatalf("the boot settle ran %d times, war changes %v; want one settle and no war edge", settles, warChanges)
+	}
+	boot.Tick(morning(loc) + 1000)
+	if settles != 1 {
+		t.Fatalf("the settle repeated: %d", settles)
+	}
+}
+
+/*
+================
 TestFortressListMatchesTheClientReadOrder
 
 Client 76C870 case 0: u8 count; per fortress u32 id, sized name, four u32, u8

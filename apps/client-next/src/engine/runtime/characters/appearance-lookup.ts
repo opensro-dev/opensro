@@ -6,7 +6,7 @@ appearance-lookup.ts - which model, skin and equipment an entity presents
 Resolves an entity to what it is drawn as: a transform skin (a mask's own
 model, msch 1) or a reference disguise (msch 3, the body redressed) before
 its own refObjId, the equipment the active skin wears, and the catalogue
-resource with any structure stage or monster material variant applied. A
+resource with any structure stage or authored material variant applied. A
 thief or hunter monster wears its trade appearance (trade-appearance.ts,
 861720): a player body dressed once per spawn.
 
@@ -16,7 +16,7 @@ published catalogue and the structure visuals, which characters.ts owns.
 ===========================================================================
 */
 import type { createReferenceAppearances } from "@/engine/foundation/animation/reference-appearance";
-import { monsterMaterialSlot } from "@/engine/foundation/rendering/monster-scale";
+import { cosMaterialSlot, monsterMaterialSlot } from "@/engine/foundation/rendering/monster-scale";
 import type { ModelParticle } from "@/engine/foundation/animation/model-particles";
 import type { EntityState, TransformSkin } from "@/engine/contracts/world";
 import type { GameplayState } from "@/engine/contracts/gameplay";
@@ -199,9 +199,14 @@ export function createAppearanceLookup( sources: AppearanceSources ) {
 		const staged = resource?.structureVisuals &&
 			structureVisuals.appearance( entity.gid, resource.glb, resource.ambientParticles ?? [] );
 		if ( resource && staged ) return { ...resource, glb: staged.glb, ambientParticles: staged.particles };
+		// A record's authored material kind binds its BMT slot at spawn for
+		// companions as for monsters (8554E0 and 861B00 share 853E70): the
+		// Spotted Rabbit's kind 1 is its clone material set (#4695).
 		const variant = resource && entity.kind === "monster" ?
 			resource.materialVariants
 				?.[String( monsterMaterialSlot( entity.rarity ?? 0, entity.tidWord ?? 0, resource.materialKind ) )] :
+			resource && entity.kind === "cos" ?
+			resource.materialVariants?.[String( cosMaterialSlot( resource.materialKind ) )] :
 			undefined;
 		return resource && variant ? { ...resource, glb: variant } : resource;
 	}

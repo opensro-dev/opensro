@@ -190,6 +190,116 @@ func TestExchangeSummonedPetItemRefused(t *testing.T) {
 
 /*
 ================
+TestExchangeAskInteractionStates
+
+#4490 U18-10, the asker's own interaction state at the request door:
+a stall visitor is refused with the stall byte, a dead asker and one
+keeping a stall of their own with the asker-busy byte, and an asker
+already inside an exchange hears nothing at all. The asked side in a
+stall answers the asked busy byte.
+================
+*/
+func TestExchangeAskInteractionStates(t *testing.T) {
+	ask := func(rt *Runtime, from, to *enterworld.Character) OpResult {
+		return rt.HandleExchangeRequest(testDivision, from, wire.NewWriter(4).U32(enterworld.ObjectIDForCharacter(to)).Payload())
+	}
+	refused := func(t *testing.T, out OpResult, code uint8) {
+		t.Helper()
+		if len(out.Frames) != 1 || !bytes.Equal(out.Frames[0].Payload, []byte{2, code}) {
+			t.Fatalf("ask answered %+v, want [02 %02x]", out.Frames, code)
+		}
+	}
+
+	t.Run("visitor asker", func(t *testing.T) {
+		rt, a, b, _ := exchangeFixture(t)
+		if err := rt.Stalls.Open(testDivision, b.Name, "stall", 0); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := rt.Stalls.Enter(testDivision, a.Name, b.Name); err != nil {
+			t.Fatal(err)
+		}
+		refused(t, ask(rt, a, b), wire.ExchangeErrStallVisit)
+	})
+
+	t.Run("dead asker", func(t *testing.T) {
+		rt, a, b, _ := exchangeFixture(t)
+		zero := int64(0)
+		a.CurrentHP = &zero
+		refused(t, ask(rt, a, b), wire.ExchangeErrAskerBusy)
+	})
+
+	t.Run("keeper asker", func(t *testing.T) {
+		rt, a, b, _ := exchangeFixture(t)
+		if err := rt.Stalls.Open(testDivision, a.Name, "stall", 0); err != nil {
+			t.Fatal(err)
+		}
+		refused(t, ask(rt, a, b), wire.ExchangeErrAskerBusy)
+	})
+
+	t.Run("trading asker hears nothing", func(t *testing.T) {
+		rt, a, b, _ := exchangeFixture(t)
+		rt.Exchanges.Open(testDivision, a.Name, b.Name)
+		if out := ask(rt, a, b); len(out.Frames) != 0 {
+			t.Fatalf("a trading asker was answered %+v, want silence", out.Frames)
+		}
+	})
+
+	t.Run("visitor asked", func(t *testing.T) {
+		rt, a, b, _ := exchangeFixture(t)
+		keeper := testCharacter()
+		keeper.ID, keeper.Name = 9, "keeper"
+		if err := rt.Stalls.Open(testDivision, keeper.Name, "stall", 0); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := rt.Stalls.Enter(testDivision, b.Name, keeper.Name); err != nil {
+			t.Fatal(err)
+		}
+		refused(t, ask(rt, a, b), wire.ExchangeErrBusy)
+	})
+
+	t.Run("keeper asked", func(t *testing.T) {
+		rt, a, b, _ := exchangeFixture(t)
+		if err := rt.Stalls.Open(testDivision, b.Name, "stall", 0); err != nil {
+			t.Fatal(err)
+		}
+		refused(t, ask(rt, a, b), wire.ExchangeErrBusy)
+	})
+}
+
+/*
+================
+TestExchangeReaskCancelsTheEarlierAsk
+
+#4490 U18-10: an asker with an ask still out cancels that ask and
+asks again - the first target's slot is free, the second target
+holds the live ask and got the prompt.
+================
+*/
+func TestExchangeReaskCancelsTheEarlierAsk(t *testing.T) {
+	rt, a, b, pushed := exchangeFixture(t)
+	third := testCharacter()
+	third.ID, third.Name, third.MissionInventory = 9, "third", nil
+	deps := rt.deps.(*enterworld.Deps)
+	deps.Characters = enterworld.StaticCharacterSource{testDivision: {a, b, third}}
+
+	rt.HandleExchangeRequest(testDivision, a, wire.NewWriter(4).U32(enterworld.ObjectIDForCharacter(b)).Payload())
+	if !rt.Exchanges.Pending(testDivision, b.Name, rt.Now().UnixMilli()) {
+		t.Fatal("the first ask was not parked")
+	}
+	rt.HandleExchangeRequest(testDivision, a, wire.NewWriter(4).U32(enterworld.ObjectIDForCharacter(third)).Payload())
+	if rt.Exchanges.Pending(testDivision, b.Name, rt.Now().UnixMilli()) {
+		t.Fatal("the first ask survived the re-ask")
+	}
+	if !rt.Exchanges.Pending(testDivision, third.Name, rt.Now().UnixMilli()) {
+		t.Fatal("the second ask was not parked")
+	}
+	if prompt := lastFrame(t, pushed[third.Name], 0x3393); !bytes.Equal(prompt.Payload, wire.NewWriter(5).U8(1).U32(enterworld.ObjectIDForCharacter(a)).Payload()) {
+		t.Fatalf("prompt % X", prompt.Payload)
+	}
+}
+
+/*
+================
 stallSlotItem
 
 The RefObjID a character holds in a bag slot.

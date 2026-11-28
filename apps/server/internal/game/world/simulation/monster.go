@@ -217,10 +217,19 @@ func BuildStructureCreateRow(def MonsterDef, gid uint32, spawn Spawn) []byte {
 		U8(def.BodyStatus).
 		F32(float32(def.WalkSpeed)).
 		F32(float32(def.RunSpeed)).
-		F32(float32(def.ScaleDenom)).
-		// A structure carries no buffs.
-		U8(0).
-		U8(1)
+		F32(float32(def.ScaleDenom))
+	// The shared block's skill list: the structure's standing skill
+	// rides it (fortress_structure_appearance.go installs it), as a
+	// monster's linked effects ride its own row.
+	count := def.LinkedEffects.Len()
+	if count > maxMonsterSpawnSkills {
+		panic("monster effect projection exceeds native spawn capacity")
+	}
+	w.U8(uint8(count))
+	for effect := range def.LinkedEffects.Entries() {
+		w.U32(effect.SkillID).U32(effect.Token)
+	}
+	w.U8(1)
 	name := []byte(def.Name)
 	w.U16(uint16(len(name))).Bytes(name)
 	if def.TypeID4 == structureHeadquarters {

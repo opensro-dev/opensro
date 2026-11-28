@@ -19634,7 +19634,9 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 							"",
 						canRecall: !!(capabilities & 0x40),
 						canReturnPoint: !!(capabilities & 0x100),
-						canReverseReturn: !!(capabilities & 0x20000000),
+						// 5D959D..5D95C2: capability 0x20000000 adds action 0x2B only on a CICNPC
+						// (0xcf000c), never on a CITeleportGate.
+						canReverseReturn: !!(capabilities & 0x20000000) && target?.kind === "npc",
 						gateRows: capabilities & 0x8000000 ? game.targetGateRows : undefined,
 						canStorage: !!(capabilities & 4),
 						// Port-only (#3529): the storage keeper also opens the market

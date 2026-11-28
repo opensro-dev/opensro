@@ -538,7 +538,7 @@ func (rt *Runtime) acceptSkillStagePhaseAt(divisionID string, character, snapsho
 		rt.queueSkillFinalize(divisionID, snapshot.Name, enterworld.ObjectIDForCharacter(snapshot), nowMs+int64(skill.ActionCastingTimeMs), wire.SkillCastReleaseFrame(instanceToken, target.Gid))
 	} else {
 		success = wire.SkillCastReleaseResultFrame(wireResult)
-		closeAt = nowMs + rt.wolfHowlActionMs(divisionID, snapshot, skill.ActionDurationMs)
+		closeAt = release.castCloseAtMs(nowMs, skill.ActionCastingTimeMs, rt.wolfHowlActionMs(divisionID, snapshot, skill.ActionDurationMs))
 	}
 	if skill.ActionHandler == enterworld.SkillActionProjectile {
 		flight := projectileFlightMs(playerPose, targetAt, skill.ProjectileSpeed)

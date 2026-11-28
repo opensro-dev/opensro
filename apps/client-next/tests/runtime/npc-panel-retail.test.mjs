@@ -221,7 +221,7 @@ test("the Christmas exchange row rides capability 0x40000 ahead of the withdrawa
 	);
 });
 
-test("a teleport gate lists the reverse return's two destinations only with its capability", () => {
+test("an NPC talk menu lists the reverse return's two destinations only with its capability", () => {
 	const state = { phase: "menu", gid: 7 };
 	const render = canReverseReturn =>
 		npcTalkLayout( {

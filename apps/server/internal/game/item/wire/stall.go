@@ -134,6 +134,12 @@ const (
 	// notice category names 0x30, so the refusal prints nothing, as
 	// it does natively. The 0x18 market-full row the port sent for a
 	// while (#2414) is a row the native server never sends here.
+	// #4490 U18-08: a stall open-for-business value of 2 or more is
+	// refused with the native 0x31 (no row of the client's stall
+	// category names it, so it prints nothing) - not the generic
+	// invalid-operation byte, which would print a wrong line. The
+	// real client composes only 0 and 1 here.
+	StallErrBadOpenValue uint8 = 0x31
 	StallErrStallFull    uint8 = 0x30
 	StallErrRideState    uint8 = 0x34
 	StallErrMurderer     uint8 = 0x39

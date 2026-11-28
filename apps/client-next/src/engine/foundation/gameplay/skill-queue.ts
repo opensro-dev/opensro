@@ -7,10 +7,11 @@ A press is decided on the client against the server's clock, never sent to
 be refused (a deliberate deviation from retail, which sends every press and
 answers a cooling-down one with 0x3005):
 
-	send   the skill is ready by the time the press reaches the server
-	queue  it becomes ready within QUEUE_WINDOW_MS: hold the press in one
-	       slot (a newer press replaces it) and send it so it arrives just
-	       after the server's cooldown ends
+	send   a press sent now reaches the server at least ARRIVAL_MARGIN_MS
+	       after the skill is ready
+	queue  it becomes ready within QUEUE_WINDOW_MS of the press arriving:
+	       hold the press in one slot (a newer press replaces it) and send
+	       it so it arrives just after the server's cooldown ends
 	deny   longer to wait: send nothing, the shortcut slot gives feedback
 	       (silent: a sound on every press of a cooling key only nagged)
 
@@ -32,7 +33,7 @@ sample, smoothed as TCP smooths its RTT (gain 1/8).
 */
 
 // How far ahead of readiness a press is held instead of denied (the WoW-style
-// spell queue window).
+// spell queue window), measured against remaining time minus one-way delivery.
 export const QUEUE_WINDOW_MS = 400;
 // How late after the server's cooldown end a held press aims to arrive, so the
 // server's 100 ms tick rarely has to hold it in its own grace queue.
@@ -58,14 +59,16 @@ export type PressDecision =
 decidePress
 
 remainingMs is the local wait until the server's cooldown ends (0 or
-undefined when ready), oneWayMs one delivery.
+undefined when ready), oneWayMs one delivery. The queue window bounds the
+wait left once the press reaches the server, so it is the same at any ping.
 ================
 */
 export function decidePress( remainingMs: number | undefined, oneWayMs: number, now: number ): PressDecision {
 	if ( !remainingMs || remainingMs <= 0 ) return { kind: "send" };
-	const wait = remainingMs - oneWayMs + ARRIVAL_MARGIN_MS;
+	const serverWaitMs = remainingMs - oneWayMs;
+	const wait = serverWaitMs + ARRIVAL_MARGIN_MS;
 	if ( wait <= 0 ) return { kind: "send" };
-	if ( remainingMs <= QUEUE_WINDOW_MS ) return { kind: "queue", fireAtMs: now + wait };
+	if ( serverWaitMs <= QUEUE_WINDOW_MS ) return { kind: "queue", fireAtMs: now + wait };
 	return { kind: "deny", remainingMs };
 }
 
@@ -97,6 +100,15 @@ export interface SkillQueueState {
 	readonly fireAtMs?: number;
 }
 
+// Server-confirmed queued skill press tracked alongside its target so
+// gameplay prediction can start windup one one-way latency early.
+export interface ServerQueuedPress {
+	readonly skill: number;
+	readonly sinceMs: number;
+	readonly target?: number;
+	readonly predicted?: boolean;
+}
+
 /*
 ================
 DeniedPress
@@ -120,7 +132,7 @@ round-trip estimate.
 */
 export function createSkillPressQueue<Command>() {
 	let queued: QueuedPress<Command> | null = null, queuedSince = 0, denied: DeniedPress | null = null;
-	let serverQueued: SkillQueueState | null = null, lastSent: number | undefined;
+	let armQueued: ServerQueuedPress | null = null, lastSent: number | undefined, lastSentTarget: number | undefined;
 	let approaching: SkillQueueState | null = null, approachTarget = 0;
 	let rtt = 0, answerPendingSince: number | null = null;
 	return {
@@ -185,8 +197,9 @@ export function createSkillPressQueue<Command>() {
 		queued answer queues it.
 		================
 		*/
-		sent( now: number, skill: number ) {
+		sent( now: number, skill: number, target?: number ) {
 			lastSent = skill;
+			lastSentTarget = target;
 			answerPendingSince = now;
 			// A newer press replaces the command the server was running for.
 			approaching = null;
@@ -201,6 +214,7 @@ export function createSkillPressQueue<Command>() {
 		*/
 		commandSent() {
 			lastSent = undefined;
+			lastSentTarget = undefined;
 			approaching = null;
 		},
 		/*
@@ -256,18 +270,30 @@ export function createSkillPressQueue<Command>() {
 		================
 		*/
 		commandCount( kind: number, count: number, now: number ): boolean {
-			let next = serverQueued;
+			let next = armQueued;
 			if ( count < 2 ) next = null;
 			else if ( kind === ACTION_STATE_ARM ) {
 				next = lastSent === undefined ?
 					null :
-					serverQueued?.skill === lastSent ?
-					serverQueued :
-					{ skill: lastSent, sinceMs: now };
+					armQueued?.skill === lastSent && armQueued?.target === lastSentTarget ?
+					armQueued :
+					{
+						skill: lastSent,
+						sinceMs: now,
+						...(lastSentTarget !== undefined ? { target: lastSentTarget } : {})
+					};
 			}
-			const changed = next !== serverQueued;
-			serverQueued = next;
+			const changed = next !== armQueued;
+			armQueued = next;
 			return changed;
+		},
+		serverQueued(): ServerQueuedPress | null {
+			return armQueued;
+		},
+		markServerQueuedPredicted() {
+			if ( armQueued && !armQueued.predicted ) {
+				armQueued = { ...armQueued, predicted: true };
+			}
 		},
 		/*
 		================
@@ -302,7 +328,9 @@ export function createSkillPressQueue<Command>() {
 		state() {
 			const next: SkillQueueState | undefined = queued ?
 				{ skill: queued.skill, sinceMs: queuedSince, fireAtMs: queued.fireAtMs } :
-				serverQueued ?? approaching ?? undefined;
+				armQueued ?
+				{ skill: armQueued.skill, sinceMs: armQueued.sinceMs } :
+				approaching ?? undefined;
 			return {
 				skillQueue: next,
 				skillDenied: denied ?? undefined
@@ -317,8 +345,9 @@ export function createSkillPressQueue<Command>() {
 			queued = null;
 			queuedSince = 0;
 			denied = null;
-			serverQueued = null;
+			armQueued = null;
 			lastSent = undefined;
+			lastSentTarget = undefined;
 			approaching = null;
 			rtt = 0;
 			answerPendingSince = null;

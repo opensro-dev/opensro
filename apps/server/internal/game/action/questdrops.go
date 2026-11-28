@@ -10,11 +10,35 @@ import (
 )
 
 func (rt *Runtime) planQuestKillDrops(c *enterworld.Character, target monster.Instance, pose monster.Pose, now int64) []grounditem.Item {
-	if rt.QuestMonsterDrops == nil || rt.deps.ItemReferences() == nil {
+	return rt.planQuestKillDropsFor(c, target, pose, now, nil)
+}
+
+/*
+================
+planQuestKillDropsFor
+
+planQuestKillDrops restricted to the named quests (only nil takes
+all): a shared kill's gather drops roll for the credited member only.
+================
+*/
+func (rt *Runtime) planQuestKillDropsFor(c *enterworld.Character, target monster.Instance, pose monster.Pose, now int64, only map[uint32]bool) []grounditem.Item {
+	if rt.deps.ItemReferences() == nil {
 		return nil
 	}
+	var amounts []inventory.ItemAmount
+	if only != nil {
+		if rt.QuestMonsterDropsFor == nil {
+			return nil
+		}
+		amounts = rt.QuestMonsterDropsFor(c, target.Ref.Codename, target.Rarity(), rt.DropRoll, only)
+	} else {
+		if rt.QuestMonsterDrops == nil {
+			return nil
+		}
+		amounts = rt.QuestMonsterDrops(c, target.Ref.Codename, target.Rarity(), rt.DropRoll)
+	}
 	var drops []grounditem.Item
-	for _, amount := range rt.QuestMonsterDrops(c, target.Ref.Codename, target.Rarity(), rt.DropRoll) {
+	for _, amount := range amounts {
 		ref, ok := rt.deps.ItemReferences().ItemRefByCodename(amount.Codename)
 		if !ok || ref == nil || amount.Count == 0 || amount.Count > 65535 {
 			continue

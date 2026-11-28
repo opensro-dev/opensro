@@ -80,7 +80,7 @@ func (rt *Runtime) acceptMirage(division string, c, snapshot *enterworld.Charact
 	if len(targets) > 0 {
 		released = wire.SkillCastUntargetedAreaReleaseFrame(wire.SkillCastSuccess{SkillId: skill.ID, CasterGid: gid, InstanceToken: pending.token}, targets)
 	}
-	rt.queueSkillCastClose(division, c.Name, gid, pending.token, skill, 0, now+int64(skill.ActionDurationMs))
+	rt.queueSkillCastClose(division, c.Name, gid, pending.token, skill, 0, pending.castCloseAtMs(now, skill.ActionCastingTimeMs, int64(skill.ActionDurationMs)))
 	vitals := wire.Frame{Opcode: simulation.OpVitalsUpdate, Payload: simulation.VitalsRefreshWithSourcePayload(gid, simulation.VitalsSourceSkillRecovery, rt.publishedVitals(division, c))}
 	return OpResult{Frames: []wire.Frame{released, vitals}, Broadcast: []wire.Frame{released}, ActorPrivate: []wire.Frame{vitals}}, skillCastAccepted
 }

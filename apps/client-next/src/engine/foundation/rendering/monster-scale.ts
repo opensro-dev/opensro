@@ -67,6 +67,19 @@ export function cosScale( percent = DEFAULT_SCALE_PERCENT ): number {
 
 /*
 ================
+authoredMaterialSlot
+
+The BMT slot a record's material kind (characterdata column 109) authors:
+kinds 1, 3 and 4 bind that slot of the model's material list, every other
+kind the base slot 0. Unavailable slots fall back at admission.
+================
+*/
+export function authoredMaterialSlot( kind = 0 ): number {
+	return kind === 1 || kind === 3 || kind === 4 ? kind : 0;
+}
+
+/*
+================
 monsterMaterialSlot
 
 The same spawn branch selects BMT slot 2 for ordinary champions. Other
@@ -76,6 +89,20 @@ admission.
 */
 export function monsterMaterialSlot( rarity: number, tidWord: number, kind = 0 ): number {
 	if ( playerLookalike( tidWord ) ) return 0;
-	const slot = kind === 1 || kind === 3 || kind === 4 ? kind : 0;
+	const slot = authoredMaterialSlot( kind );
 	return rarity === RARITY_CHAMPION && slot <= 1 ? CHAMPION_MATERIAL_SLOT : slot;
+}
+
+/*
+================
+cosMaterialSlot
+
+8554E0 loads a companion's mesh through the same
+CICharactor_LoadVisualMeshFromBSR (853E70) as a monster's, so the record's
+authored kind binds its BMT slot the same way; a companion has no grade,
+so no champion override applies (#4695).
+================
+*/
+export function cosMaterialSlot( kind = 0 ): number {
+	return authoredMaterialSlot( kind );
 }

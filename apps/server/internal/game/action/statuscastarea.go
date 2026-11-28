@@ -81,7 +81,7 @@ func (rt *Runtime) acceptUntargetedStatusCast(division string, c, snapshot *ente
 	if len(published.targets) > 0 {
 		released = wire.SkillCastUntargetedAreaReleaseFrame(success, published.targets)
 	}
-	rt.queueSkillCastClose(division, c.Name, gid, pending.token, skill, 0, now+int64(skill.ActionDurationMs))
+	rt.queueSkillCastClose(division, c.Name, gid, pending.token, skill, 0, pending.castCloseAtMs(now, skill.ActionCastingTimeMs, int64(skill.ActionDurationMs)))
 	vitals := wire.Frame{Opcode: simulation.OpVitalsUpdate, Payload: simulation.VitalsRefreshWithSourcePayload(gid, simulation.VitalsSourceSkillRecovery, rt.publishedVitals(division, c))}
 	public := append([]wire.Frame{released}, published.after...)
 	public = append(public, battleFrames...)

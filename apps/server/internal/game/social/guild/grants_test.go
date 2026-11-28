@@ -58,7 +58,7 @@ func TestHandleBreakDissolves(t *testing.T) {
 	t.Parallel()
 	deps, _, alfa, berk, guildID := newTwoMemberGuildFixture(t)
 
-	outcome := guild.HandleBreak(deps, mutatorDivision, alfa, mutatorBreakPayload(0x00C40001))
+	outcome := guild.HandleBreak(deps, mutatorDivision, alfa, mutatorBreakPayload(0x00C40001), "")
 	if outcome.Refusal != "" {
 		t.Fatalf("leader break refused: %s", outcome.Refusal)
 	}
@@ -104,7 +104,7 @@ func TestHandleBreakRefusals(t *testing.T) {
 		{"malformed trailing", alfa, append(mutatorBreakPayload(0), 0x00), ""},
 	}
 	for _, tc := range cases {
-		outcome := guild.HandleBreak(deps, mutatorDivision, tc.actor, tc.payload)
+		outcome := guild.HandleBreak(deps, mutatorDivision, tc.actor, tc.payload, "")
 		if outcome.Refusal == "" {
 			t.Errorf("%s: not refused", tc.name)
 			continue
@@ -125,7 +125,7 @@ func TestHandleBreakRefusals(t *testing.T) {
 	if err := authority.CreateCharacter(mutatorDivision, "test-account", loner); err != nil {
 		t.Fatalf("CreateCharacter(%s): %v", loner.Name, err)
 	}
-	if outcome := guild.HandleBreak(deps, mutatorDivision, loner, mutatorBreakPayload(0)); !strings.Contains(outcome.Refusal, "not in a guild") {
+	if outcome := guild.HandleBreak(deps, mutatorDivision, loner, mutatorBreakPayload(0), ""); !strings.Contains(outcome.Refusal, "not in a guild") {
 		t.Errorf("guildless refusal = %q, want not-in-a-guild", outcome.Refusal)
 	}
 }

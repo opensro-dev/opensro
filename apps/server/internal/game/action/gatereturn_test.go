@@ -310,22 +310,6 @@ func TestGateTownReturnRefusals(t *testing.T) {
 
 /*
 ================
-TestDenGateOffersTheReverseReturnToAScrollHolder
-
-The gate inference of reversereturn.go covers a gate whose only row is
-the return point.
-================
-*/
-func TestDenGateOffersTheReverseReturnToAScrollHolder(t *testing.T) {
-	rt, c, _ := reverseReturnFixture(t)
-	den := simulation.NpcDef{TalkFlags: simulation.NpcTalkFlagResurrectPoint}
-	if rt.reverseReturnCapability(den, c) != simulation.NpcTalkFlagReverseReturn {
-		t.Fatal("the den gate did not offer the reverse return to a scroll holder")
-	}
-}
-
-/*
-================
 TestDenEntryRefusesTradersAndHunters
 
 The reference server's case 2 checks the link's TARGET: travelling into

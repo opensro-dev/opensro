@@ -105,7 +105,10 @@ func (rt *Runtime) fortressServiceQuery(division string, c *enterworld.Character
 fortressTaxService
 
 The reference server permits the admitted manager query, then checks range, period,
-fortress, unchanged ratio, ownership and master in that order.
+fortress, unchanged ratio, the holder (the temporary holder while a war
+capture stands) and its master in that order - as the levy door already
+does; the rate belonged to the owner alone here, which the capture
+inverts.
 ================
 */
 func (rt *Runtime) fortressTaxService(division string, c *enterworld.Character, request siege.Interaction) OpResult {
@@ -139,13 +142,13 @@ func (rt *Runtime) fortressTaxService(division string, c *enterworld.Character, 
 	if record.TaxRate == rate {
 		return fortressRefusal(request.Action, errTaxUnchanged)
 	}
-	if c.GuildID == nil || *c.GuildID == 0 || *c.GuildID != record.GuildID {
+	if c.GuildID == nil || *c.GuildID == 0 || *c.GuildID != record.Holder() {
 		return fortressRefusal(request.Action, errOwner)
 	}
 	if rt.Guilds == nil {
 		return fortressRefusal(request.Action, fortressErrUnknown)
 	}
-	_, members, exists := rt.Guilds.Guild(division, record.GuildID)
+	_, members, exists := rt.Guilds.Guild(division, record.Holder())
 	if !exists {
 		return fortressRefusal(request.Action, errOwner)
 	}
