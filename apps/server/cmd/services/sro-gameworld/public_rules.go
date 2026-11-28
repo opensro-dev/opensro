@@ -40,6 +40,7 @@ import (
 	"opensro.online/server/internal/game/social/contributor"
 	"opensro.online/server/internal/game/social/eventbot"
 	"opensro.online/server/internal/game/sookarena"
+	"opensro.online/server/internal/game/tombbox"
 	"opensro.online/server/internal/game/tunables"
 	"opensro.online/server/internal/game/uniquestatus"
 	"opensro.online/server/internal/game/world/alexandria"
@@ -427,6 +428,7 @@ func publicRules() publicstats.RulesResponse {
 				Now:    "No monster drops an item above degree 9: equipment, elixirs, Lucky Powder, stones, tablets or elements. Every degree-9-and-below drop keeps its chance, and items already owned are kept.",
 				Why:    "The level cap stays 90 while community polls decide what the new areas drop; this keeps new degree-10 gear out of the economy until they close."},
 			{Flag: nasrun.Env, On: nasrun.Enabled(os.Getenv(nasrun.Env)), Native: "Avatar storage holds four avatars: hat, dress, attachment and flag.", Now: "A fifth avatar socket holds a Devil's Spirit.", Why: "Optional port-only step toward the later Devil's Spirit (#3456)."},
+			{Flag: tombbox.Env, On: tombbox.Enabled(os.Getenv(tombbox.Env)), Native: "The Ch'in Tomb's second floor holds no treasure box, and no monster drops the boxes' keys.", Now: "Four treasure boxes stand on the tomb's second floor. Tomb monsters can drop their keys, and a key opens its box for gold, potions, a recipe, a top-degree item, damage or guards.", Why: "The v1.150 client defines the boxes, keys and talk; the later client removed the boxes (#4810)."},
 			{Flag: magiccube.Env, On: magiccube.Enabled(os.Getenv(magiccube.Env)), Native: "The game has no Magic Cube: elixirs stay in the bag.", Now: "The Item Mall sells sixteen Magic Cubes that hold matching elixirs (weapon, armor, accessory or shield); a cube refuses sale or consignment while it holds any, and dropping, trading or stalling one keeps its elixirs with it.", Why: "Optional port-only step toward the later Magic Cube (#3906)."},
 			{Flag: macro.Env, On: macro.Enabled(os.Getenv), Native: "The game has no macro window: only the v1.150 auto-potion.", Now: "The server keeps each character's SRO Macro settings (auto-potion, auto-skill and auto-hunt) and their on/off states, and returns them at every login.", Why: "Optional port-only step toward the later official SRO Macro (#3907)."},
 			{Flag: sookarena.Env, On: sookarena.Enabled(os.Getenv(sookarena.Env)), Native: "Event So-ok offers no solo survival arena.", Now: "Three private survival entries per account per UTC day, shared by its characters, five stages, fivefold EXP/SP and checkpoint reward chests.", Why: "Optional port-only survival event."},

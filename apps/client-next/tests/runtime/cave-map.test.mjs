@@ -9,7 +9,7 @@ import "../helpers/native-source-loader.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
 import { defined } from "../helpers/defined.mjs";
-const { caveDungeonFloors, caveMapCatalog, caveMapPage, caveMapView, cavePageLocal } = await import(
+const { caveDungeonFloors, caveMapCatalog, caveMapPage, caveMapView, cavePageLocal, cavePlayerSigns } = await import(
 	"../../src/engine/foundation/ui/cave-map.ts"
 );
 
@@ -73,6 +73,23 @@ test("roster signs stand on the page at their points, under the player's sign", 
 	// The player's sign still paints last, as 57CE80's pass order ends.
 	assert.equal( shown.quads.at( -1 )?.texture.endsWith( "mm_sign_character.png" ), true );
 	assert.equal( view().quads.some( quad => quad.texture.endsWith( "wmap_sign_party.png" ) ), false );
+});
+
+test("the beta roster's other players stand on the page of their own region", () => {
+	const players = [
+		{ gid: 1, regionId: 0x8006, x: 0, z: 0, name: "me" },
+		{ gid: 2, regionId: 0x8006, x: 0, z: 0, name: "peer" },
+		{ gid: 3, regionId: 0x8005, x: 0, z: 0, name: "below" },
+		{ gid: 4, regionId: 0x63a6, x: 0, z: 0, name: "outside" }
+	];
+	const signs = cavePlayerSigns( PAGE, players, 1 );
+	// Only the peer on this floor's region; the local player has their own sign.
+	assert.equal( signs.length, 1 );
+	const shown = view( { roster: signs } );
+	const sign = shown.quads.find( quad => quad.texture.endsWith( "mm_sign_otherplayer.png" ) );
+	assert.deepEqual( sign?.rect, [ CLIP[0] + 150 - 8, CLIP[1] + 150 - 8, 16, 16 ] );
+	assert.equal( shown.quads.at( -1 )?.texture.endsWith( "mm_sign_character.png" ), true );
+	assert.deepEqual( cavePlayerSigns( PAGE, [], 1 ), [] );
 });
 
 test("one image holds the floor, with world zero on tile 128's corner", () => {

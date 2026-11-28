@@ -199,6 +199,12 @@ var Settings = []Setting{
 	// gates and quests (scripts/roc_import.py); the switch admits the
 	// quest kinds' nests here (monster/roc.go). "off" is native.
 	{Env: "SRO_ROC", NomadVar: "roc", Default: "off", Catalogue: true},
+	// Port-only switch, native content: the Ch'in Tomb's four treasure
+	// boxes on its second floor, their open event and the key drop from
+	// tomb monsters (game/tombbox, #4810). The later client deleted the
+	// boxes, so "off" (no box, no key) is the default. Not a catalogue
+	// setting: the catalogue publishes no NPC talk or event drop.
+	{Env: "SRO_TOMB_TREASURE_BOXES", NomadVar: "tomb_treasure_boxes", Default: "off"},
 	// Port-only, not native: the Arabia continent population and its
 	// dungeon world from the v1.696 client (monster/arabia.go). The
 	// continent rides the Alexandria variant build; the switch admits

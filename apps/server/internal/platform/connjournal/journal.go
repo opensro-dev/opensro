@@ -58,9 +58,9 @@ const checkpointPeriod = 15 * time.Second
 // retentionDays is how long a closed row is kept.
 const retentionDays = 30
 
-// maxUserAgentBytes bounds the User-Agent a row stores: a browser's
+// MaxUserAgentBytes bounds the User-Agent a row stores: a browser's
 // header is evidence, not a document.
-const maxUserAgentBytes = 256
+const MaxUserAgentBytes = 256
 
 /*
 ================
@@ -229,10 +229,10 @@ func (j *Journal) RecordEntered(entry Entry) bool {
 	if j == nil || entry.Session == "" {
 		return false
 	}
-	ipKey, netKey := keyHashes(j.key, entry.Address)
+	ipKey, netKey := AddressKeys(j.key, entry.Address)
 	row := &storedRow{session: entry.Session, account: entry.Account, character: entry.Character,
 		shard: entry.Shard, transport: entry.Transport, ipKey: ipKey, netKey: netKey,
-		userAgent: bounded(entry.UserAgent, maxUserAgentBytes), build: entry.Build, screen: entry.Screen}
+		userAgent: bounded(entry.UserAgent, MaxUserAgentBytes), build: entry.Build, screen: entry.Screen}
 	return j.enqueue(write{row: row, session: entry.Session, at: millis(j.now()), closing: entry.Closing})
 }
 
@@ -415,17 +415,18 @@ func (j *Journal) Health() map[string]any {
 
 /*
 ================
-keyHashes
+AddressKeys
 
 The two keyed hashes of one client address: the address itself and
 its network, /24 for IPv4 and /48 for IPv6. An unkeyed hash of an IPv4
 address falls to a brute force of the address space, so both are
-HMACs under the shard's key, domain-separated so an address hash can
-never be mistaken for a network hash. An address that does not parse
-(a test's stand-in peer) hashes to nothing rather than to a guess.
+HMACs under the caller's key (the shard's for its sessions, the
+Agent's for its logins, #4815), domain-separated so an address hash
+can never be mistaken for a network hash. An address that does not
+parse (a test's stand-in peer) hashes to nothing rather than to a guess.
 ================
 */
-func keyHashes(key []byte, address string) (ipKey string, netKey string) {
+func AddressKeys(key []byte, address string) (ipKey string, netKey string) {
 	host := address
 	if parsed, _, err := net.SplitHostPort(address); err == nil {
 		host = parsed

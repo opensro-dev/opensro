@@ -142,3 +142,112 @@ test("the overview centres on the dungeon's map point", () => {
 	}
 	assert.notDeepEqual( overviewTiles( CAVE_POSE ), overviewTiles( { ...CAVE_POSE, regionId: 0x8001 } ) );
 });
+
+// Ch'in Tomb B1's page: region 0x8007's own floor, world zero on tile 128.
+const TOMB_PAGE = {
+	regionId: 0x8007,
+	floorIndex: 0,
+	layer: 1,
+	floorLabel: "QT_A01_FLOOR01",
+	caption: "Underground Level 1 of Tomb of Qin-Shi",
+	columns: 4,
+	rows: 4,
+	width: 512,
+	height: 512,
+	left: 126,
+	top: 129,
+	image: "map_world_jinf01",
+	labels: [],
+	signs: []
+};
+const TOMB_CATALOG = {
+	format: "sro-later-dungeon-map",
+	version: 2,
+	imageRoot: "/fixture/dungeon/",
+	signIcon: "sign",
+	monsterLevelNote: "Fixture note",
+	maps: [ TOMB_PAGE ]
+};
+
+/*
+================
+caveTextures
+
+The quad textures of one open M map on the Tomb B1 page, the player
+standing on that floor with the given beta roster (beta-map.ts).
+================
+*/
+/**
+ * @param {readonly object[]} betaPlayers
+ * @returns {string[]}
+ */
+function caveTextures( betaPlayers ) {
+	const hud = createWorldMapHud( {
+		assets: { available: () => 0, request: () => 0, take: () => null, cancel: () => {} },
+		base: "http://fixture.invalid",
+		experimental: { state: () => ({ saved: experimentalOptions() }), restore: () => {} }
+	} );
+	/** @type {any[]} */
+	const quads = [];
+	/** @type {any} */
+	const input = {
+		next: { entities: [] },
+		game: {
+			pose: CAVE_POSE,
+			localGid: 1,
+			navigationFloor: 0,
+			betaPlayers,
+			social: { self: 1, localName: "Me", members: [] }
+		},
+		pose: CAVE_POSE,
+		panel: "Map",
+		w: 1200,
+		h: 900,
+		full: [ 0, 0, 1200, 900 ],
+		hover: null,
+		hudData: { map: {} },
+		trackedQuest: 0,
+		minimapResources: { positions: () => undefined },
+		caveMaps: TOMB_CATALOG,
+		mapTeleport: { view: () => {}, viewCave: () => {}, hide: () => {} },
+		reverseScrollHud: { mapping: () => false },
+		text: {
+			path: () => null,
+			run: ( /** @type {string} */ value ) => ({ width: value.length * 6 }),
+			extentHeight: () => 12,
+			quads: () => []
+		},
+		resources: { has: () => true, size: () => undefined },
+		paths: [],
+		quads,
+		controls: [],
+		hudCopy: ( /** @type {string} */ k ) => k,
+		beginWindow: () => [ 0, 0, 0, 0 ],
+		endWindow: () => {},
+		windowBox: () => {},
+		authoredButton: () => {},
+		closeButton: () => {},
+		image: () => {}
+	};
+	try {
+		hud.present( input );
+		return quads.map( q => q.texture );
+	} finally {
+		hud.dispose();
+	}
+}
+
+test("the Tomb page shows the beta roster's other players on its floor", () => {
+	const OTHER = "mm_sign_otherplayer.png";
+	const count = ( /** @type {string[]} */ textures ) => textures.filter( t => t.endsWith( OTHER ) ).length;
+	const at = { x: CAVE_POSE.x + 40, z: CAVE_POSE.z };
+	const textures = caveTextures( [
+		{ gid: 1, regionId: 0x8007, x: CAVE_POSE.x, z: CAVE_POSE.z, name: "Me" },
+		{ gid: 2, regionId: 0x8007, ...at, name: "Peer" },
+		{ gid: 3, regionId: 0x8006, ...at, name: "Below" }
+	] );
+	assert.ok( textures.some( t => t.endsWith( "map_world_jinf01.png" ) ), "the Tomb B1 page is shown" );
+	// The peer on B1 only: B2's player and the local player have no sign here.
+	assert.equal( count( textures ), 1 );
+	assert.equal( count( caveTextures( [] ) ), 0 );
+});

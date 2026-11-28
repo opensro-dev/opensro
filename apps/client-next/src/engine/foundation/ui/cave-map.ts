@@ -10,7 +10,7 @@ the world map.
 
 ===========================================================================
 */
-import type { Pose } from "@/engine/contracts/gameplay";
+import type { BetaMapPlayer, Pose } from "@/engine/contracts/gameplay";
 import type { UiQuad, UiRect } from "@/engine/contracts/ui";
 import { planeKindOf } from "@/engine/foundation/world/plane";
 import { REGION_SIZE } from "@/engine/foundation/world/world-space";
@@ -26,6 +26,8 @@ const COLOR_RANGE = 255;
 // The picked species' sign on a dungeon page, the minimap's monster
 // sign the hunting guide uses outdoors.
 const CAVE_MONSTER_MARKER = "/assets/images/Media_extracted/interface/minimap/mm_sign_monster.png";
+// The beta roster's sign for another player, as the world page draws it.
+const CAVE_PLAYER_MARKER = "/assets/images/Media_extracted/interface/minimap/mm_sign_otherplayer.png";
 
 export interface CaveMapLabel {
 	readonly text: string;
@@ -195,9 +197,11 @@ export interface CaveMapInput {
 	// A picked species' anchor on this page, in region-local
 	// coordinates; drawn as the monster sign (issue #3239).
 	readonly mark?: { readonly x: number; readonly z: number; } | null;
-	// The party and academy signs on this page, in region-local
-	// coordinates (issue #3775): the roster the caller admitted to
-	// the floor the player stands on, drawn under the player's sign.
+	// The roster signs on this page, in region-local coordinates and
+	// paint order: the beta roster's other players (cavePlayerSigns),
+	// then the party and academy signs (issue #3775) the caller
+	// admitted to the floor the player stands on, all drawn under
+	// the player's sign.
 	readonly roster?: readonly { readonly x: number; readonly z: number; readonly path: string; }[];
 	// A picked guide monster's hunting ground on this floor, in
 	// region-local coordinates (worldmap-guide.ts guideDungeonGround):
@@ -241,6 +245,28 @@ export function cavePageLocal(
 		return navigationFloor === page.floorIndex;
 	}
 	return pose.regionId === page.regionId;
+}
+
+/*
+================
+cavePlayerSigns
+
+Port-only, not native: the beta roster's other players (beta-map.ts,
+SRO_BETA_PLAYER_MAP) on a dungeon page, as the world page draws them.
+The roster carries no height, so a player stands on the page of their
+own region. In the Tomb every floor is its own region, so that is their
+floor; in Donwhang's one shared region each floor's page shows the
+whole cave's players. The local player has their own sign.
+================
+*/
+export function cavePlayerSigns(
+	page: CaveMapPage,
+	players: readonly BetaMapPlayer[],
+	localGid: number | undefined
+): readonly { readonly x: number; readonly z: number; readonly path: string; }[] {
+	return players
+		.filter( player => player.gid !== localGid && player.regionId === page.regionId )
+		.map( player => ({ x: player.x, z: player.z, path: CAVE_PLAYER_MARKER }) );
 }
 
 /*

@@ -52,6 +52,7 @@ import (
 	"opensro.online/server/internal/game/social/party"
 	"opensro.online/server/internal/game/social/union"
 	"opensro.online/server/internal/game/sookarena"
+	"opensro.online/server/internal/game/tombbox"
 	"opensro.online/server/internal/game/uniquestatus"
 	"opensro.online/server/internal/game/world/monster"
 	"opensro.online/server/internal/game/world/movement"
@@ -200,6 +201,7 @@ func newGameplayPlane(
 	items.NasrunSocket = nasrun.Enabled(os.Getenv(nasrun.Env))
 	items.NasrunTokens = items.NasrunSocket
 	items.MagicCube = magiccube.Enabled(os.Getenv(magiccube.Env))
+	items.TombBoxes = tombbox.Enabled(os.Getenv(tombbox.Env))
 	items.Guilds = deps.Guilds
 	items.UnlimitedItems = enterworld.StarterKitCodenames(deps.StarterKit)
 	if err := items.ValidateLootReferences(); err != nil {
