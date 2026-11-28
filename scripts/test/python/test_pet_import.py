@@ -483,6 +483,26 @@ class ArchiveTests(unittest.TestCase):
 			name_rows = importer.characters.translation_rows((output / importer.TEXT_ROOT / "textdataname.txt").read_bytes())
 			self.assertTrue({"SN_COS_P_DOG", "SN_ITEM_PET_DOG"} <= {row[1] for row in name_rows if len(row) > 1})
 
+	def test_a_doubled_underscore_name_key_takes_its_single_underscore_title(self):
+		# #4857: v1.696 keys its Dark Griffin event scroll ..._ASS__GRYPHON_A
+		# and ships text only under ..._ASS_GRYPHON_A; untitled, the item
+		# stops the build's title check.
+		with tempfile.TemporaryDirectory() as folder:
+			base = Path(folder)
+			native, output = base / "native", base / "out"
+			self._tree(native, *native_wolf())
+			texts = [["1", "SN_COS_P_DOG", "k", "", "", "Dog", "Dog", "a", "b", "c"],
+				["1", "SN_ITEM_PET_DOG", "k", "", "", "Dog scroll", "Dog scroll", "a", "b", "c"]]
+			zip_path, pin_path = self._archive(base, self._entries(
+				[char_row("COS_P_DOG", 9001)],
+				[scroll("ITEM_PET_DOG", 9002, "COS_P_DOG"), scroll("ITEM_PET__DOG", 9003, "COS_P_DOG")], texts))
+			report = self._run(zip_path, pin_path, native, output)
+			self.assertEqual(report["missingNameText"], [])
+			self.assertEqual(report["nameTextTypos"], {"SN_ITEM_PET__DOG": "SN_ITEM_PET_DOG"})
+			name_rows = importer.characters.translation_rows((output / importer.TEXT_ROOT / "textdataname.txt").read_bytes())
+			by_key = {row[1]: row[2:] for row in name_rows if len(row) > 1}
+			self.assertEqual(by_key.get("SN_ITEM_PET__DOG"), by_key["SN_ITEM_PET_DOG"])
+
 	def test_v1696_name_text_behind_a_shard_index_is_found(self):
 		# v1.696 ships textdata_object.txt as an index of TextData_Object_<n>
 		# parts, and each part's rows carry 17 columns: a numeric text id
