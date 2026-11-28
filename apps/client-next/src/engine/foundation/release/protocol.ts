@@ -78,7 +78,12 @@ checks) reads the same numbers the client ships.
 // only a client with the Experimental row composes. A protocol-22 tab
 // computes nothing wrong - it never declares the byte and there is no
 // answer to read - so 22 stays served.
-export const RELEASE_PROTOCOL = 23;
+// Protocol 24 reads the trade table's gold as a u64 above the u32 range
+// (exchange.ts readTableGold; SRO_WIDE_TRADE_GOLD, #4264). Only a wide
+// amount a protocol-24 tab sends reaches those frames, and an older
+// partner keeps showing the last narrow amount, never more than the table
+// holds, so 22 and 23 stay served.
+export const RELEASE_PROTOCOL = 24;
 // The public reference file's contract (releaseprotocol.ReferencesContract).
 export const REFERENCES_CONTRACT = 3;
 export const RELEASE_PROTOCOL_HEADER = "X-OpenSRO-Protocol";

@@ -12,8 +12,12 @@ and a 10,000,000,000 deposit instead (owner, 2026-11-28; the deposit was
 and gold-move wire are unchanged.
 
 A deposit above 4,294,967,295 does not fit the native u32 gold move, so
-it travels in the port's wide form (item/wire WideGoldDeposit), as the
+it travels in the port's wide form (item/wire WideGoldMove), as the
 raised stall price does.
+
+SRO_WIDE_TRADE_GOLD (owner, 2026-11-26, #4264) lets the exchange window's
+gold travel in the same wide form, so one trade can carry more than
+4,294,967,295. Off is native: an amount above the u32 range is refused.
 
 The switch also takes a value: a bare number names the warehouse deposit
 cap itself, up to MaxStorageGoldDepositLimit, without touching the stall
@@ -150,4 +154,23 @@ func (rt *Runtime) storageGoldDepositLimit() uint64 {
 		return RaisedStorageGoldDepositLimit
 	}
 	return NativeStorageGoldDepositLimit
+}
+
+// EnvWideTradeGold turns the wide exchange-window gold on (#4264).
+const EnvWideTradeGold = "SRO_WIDE_TRADE_GOLD"
+
+/*
+================
+WideTradeGoldFromEnv
+
+Port-only, not native: true when SRO_WIDE_TRADE_GOLD is on, so one trade
+table may hold more than 4,294,967,295 gold. Anything else is native.
+================
+*/
+func WideTradeGoldFromEnv() bool {
+	switch strings.ToLower(strings.TrimSpace(os.Getenv(EnvWideTradeGold))) {
+	case "on", "1", "true":
+		return true
+	}
+	return false
 }

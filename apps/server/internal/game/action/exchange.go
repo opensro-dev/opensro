@@ -32,6 +32,7 @@ package action
 import (
 	"bytes"
 	"errors"
+	"math"
 
 	log "github.com/sirupsen/logrus"
 	"opensro.online/server/internal/domain"
@@ -249,6 +250,11 @@ func (rt *Runtime) applyExchangeMove(division string, c *enterworld.Character, r
 		}
 		frame = wire.EncodeExchangeTakeResult(request.SourceSlot)
 	case wire.MoveTypeExchangeGold:
+		// The native table holds a u32; only the port's wide form, on a
+		// SRO_WIDE_TRADE_GOLD shard, carries more (#4264).
+		if request.GoldAmount > math.MaxUint32 && !rt.WideTradeGold {
+			return failureResult(wire.ErrCodeInvalidRequest)
+		}
 		if request.GoldAmount > goldOf(snapshot) {
 			return failureResult(wire.ErrCodeNotEnoughGold)
 		}
@@ -258,9 +264,9 @@ func (rt *Runtime) applyExchangeMove(division string, c *enterworld.Character, r
 		_, partner, _ := rt.Exchanges.Snapshot(division, c.Name)
 		rt.PushCharacterFrames(division, partner.Name, []wire.Frame{{
 			Opcode:  wire.OpExchangePartnerGold,
-			Payload: wire.EncodeExchangePartnerGold30BB(uint32(request.GoldAmount)),
+			Payload: wire.EncodeExchangePartnerGold30BB(request.GoldAmount),
 		}})
-		return OpResult{Frames: []wire.Frame{{Opcode: wire.OpItemMoveResponse, Payload: wire.EncodeExchangeGoldResult(uint32(request.GoldAmount))}}}
+		return OpResult{Frames: []wire.Frame{{Opcode: wire.OpItemMoveResponse, Payload: wire.EncodeExchangeGoldResult(request.GoldAmount)}}}
 	default:
 		return failureResult(wire.ErrCodeInvalidRequest)
 	}

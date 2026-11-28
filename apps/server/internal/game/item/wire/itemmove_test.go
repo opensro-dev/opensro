@@ -1,6 +1,8 @@
 package wire
 
 import (
+	"bytes"
+	"encoding/binary"
 	"errors"
 	"reflect"
 	"testing"
@@ -437,9 +439,9 @@ func TestGoldHeapExcludesShopTokens(t *testing.T) {
 ================
 TestWideGoldDepositRoundTrip
 
-A warehouse deposit above the u32 range travels as a u64 and decodes back
-whole; below it, and for every other gold move, the native four bytes
-stay (port-only wide form, WideGoldDeposit).
+A warehouse deposit or trade-table gold above the u32 range travels as a
+u64 and decodes back whole; below it, and for every other gold move, the native four bytes
+stay (port-only wide form, WideGoldMove).
 ================
 */
 func TestWideGoldDepositRoundTrip(t *testing.T) {
@@ -453,6 +455,9 @@ func TestWideGoldDepositRoundTrip(t *testing.T) {
 		{MoveTypeStorageGoldDeposit, 10_000_000_000, 9},
 		{MoveTypeGuildStorageGoldDeposit, 10_000_000_000, 9},
 		{MoveTypeStorageGoldWithdraw, 100_000_000, 5},
+		// The trade table's gold has no native pre-clamp (#4264).
+		{MoveTypeExchangeGold, 4_294_967_295, 5},
+		{MoveTypeExchangeGold, 5_000_000_000, 9},
 	} {
 		payload, err := ItemMoveRequest{MovementType: tc.move, GoldAmount: tc.amount}.Encode()
 		if err != nil || len(payload) != tc.size {
@@ -467,5 +472,28 @@ func TestWideGoldDepositRoundTrip(t *testing.T) {
 	// refusal, as before.
 	if _, err := DecodeItemMoveRequest([]byte{MoveTypeStorageGoldWithdraw, 0, 0, 0, 0, 1, 0, 0, 0}); err == nil {
 		t.Fatal("a withdraw decoded a u64 amount")
+	}
+}
+
+/*
+================
+TestWideTradeGoldFrames
+
+The trade gold's echo and the partner's 0x30BB keep the native u32 at the
+bound and grow to a u64 past it (WideGoldMove, #4264).
+================
+*/
+func TestWideTradeGoldFrames(t *testing.T) {
+	if got := EncodeExchangeGoldResult(4_294_967_295); !bytes.Equal(got, []byte{1, MoveTypeExchangeGold, 0xff, 0xff, 0xff, 0xff}) {
+		t.Fatalf("narrow echo % X", got)
+	}
+	if got := EncodeExchangeGoldResult(5_000_000_000); len(got) != 10 || binary.LittleEndian.Uint64(got[2:]) != 5_000_000_000 {
+		t.Fatalf("wide echo % X", got)
+	}
+	if got := EncodeExchangePartnerGold30BB(1000); !bytes.Equal(got, []byte{2, 0xe8, 3, 0, 0}) {
+		t.Fatalf("narrow partner gold % X", got)
+	}
+	if got := EncodeExchangePartnerGold30BB(5_000_000_000); len(got) != 9 || got[0] != 2 || binary.LittleEndian.Uint64(got[1:]) != 5_000_000_000 {
+		t.Fatalf("wide partner gold % X", got)
 	}
 }

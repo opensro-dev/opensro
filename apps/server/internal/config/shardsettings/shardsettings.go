@@ -556,6 +556,9 @@ var Settings = []Setting{
 	// 1,000,000,000 and 100,000,000 caps. "off" is native; a bare
 	// number instead names the warehouse deposit cap alone.
 	{Env: "SRO_RAISED_GOLD_CAPS", NomadVar: "raised_gold_caps", Default: "off"},
+	// Owner, 2026-11-26 (#4264): exchange-window gold above 4,294,967,295
+	// in the port's wide gold move. Port-only; off is native: the u32 bound.
+	{Env: "SRO_WIDE_TRADE_GOLD", NomadVar: "wide_trade_gold", Default: "off"},
 	// Port-only, not native (owner, 2026-11-22): a sort button on the bag,
 	// the warehouses and companion bags that sends ordinary item moves.
 	// "off" is native.

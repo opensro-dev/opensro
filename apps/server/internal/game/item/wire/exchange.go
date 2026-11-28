@@ -113,10 +113,15 @@ func EncodeExchangeOffer3569(ownerGid uint32, rows []ExchangeOfferRow, toOwner b
 /*
 ================
 EncodeExchangePartnerGold30BB
+
+[kind][u32 gold], or the port's wide [u64] above the u32 range
+(WideGoldMove), which only a SRO_WIDE_TRADE_GOLD shard admits.
 ================
 */
-func EncodeExchangePartnerGold30BB(gold uint32) []byte {
-	return NewWriter(5).U8(exchangePartnerGoldKind).U32(gold).Payload()
+func EncodeExchangePartnerGold30BB(gold uint64) []byte {
+	w := NewWriter(9).U8(exchangePartnerGoldKind)
+	writeGoldAmount(w, MoveTypeExchangeGold, uint32(gold), gold)
+	return w.Payload()
 }
 
 /*
@@ -163,8 +168,12 @@ func EncodeExchangeTakeResult(exchangeSlot uint8) []byte {
 /*
 ================
 EncodeExchangeGoldResult
+
+[1][0x0D][u32 gold], or the wide [u64] above the u32 range (WideGoldMove).
 ================
 */
-func EncodeExchangeGoldResult(gold uint32) []byte {
-	return NewWriter(6).U8(ResultSuccess).U8(MoveTypeExchangeGold).U32(gold).Payload()
+func EncodeExchangeGoldResult(gold uint64) []byte {
+	w := NewWriter(10).U8(ResultSuccess).U8(MoveTypeExchangeGold)
+	writeGoldAmount(w, MoveTypeExchangeGold, uint32(gold), gold)
+	return w.Payload()
 }

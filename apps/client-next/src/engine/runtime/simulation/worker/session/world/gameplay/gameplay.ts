@@ -778,6 +778,7 @@ export function createGameplay(
 	// window may use the published wider overview and town pages.
 	let alexandria = false;
 	let raisedGoldCaps = false; // Port-only SRO_RAISED_GOLD_CAPS: the raised stall and warehouse caps.
+	let wideTradeGold = false; // Port-only SRO_WIDE_TRADE_GOLD: trade gold past the u32 range (#4264).
 	// Port-only SRO_RAISED_GOLD_CAPS: the shard's chosen warehouse deposit cap, when published.
 	let publishedStorageGoldDepositLimit: number | undefined;
 	let inventorySortRule = false; // Port-only SRO_INVENTORY_SORT: the containers' sort button.
@@ -2508,6 +2509,7 @@ next 0x3AC5 status-5 row throw "Unknown academy member status" (#2876).
 			moonlitThiefSuit = (value as { moonlitThiefSuit?: unknown; } | null)?.moonlitThiefSuit === true;
 			alexandria = (value as { alexandria?: unknown; } | null)?.alexandria === true;
 			raisedGoldCaps = (value as { raisedGoldCaps?: unknown; } | null)?.raisedGoldCaps === true;
+			wideTradeGold = (value as { wideTradeGold?: unknown; } | null)?.wideTradeGold === true;
 			publishedStorageGoldDepositLimit = acceptedStorageGoldDepositLimit(
 				(value as { storageGoldDepositLimit?: unknown; } | null)?.storageGoldDepositLimit
 			);
@@ -7282,6 +7284,7 @@ The published plane when something changed since the last take, else null.
 				...(moonlitThiefSuit ? { moonlitThiefSuit } : {}),
 				...(alexandria ? { alexandria } : {}),
 				...(raisedGoldCaps ? { raisedGoldCaps } : {}),
+				...(wideTradeGold ? { wideTradeGold } : {}),
 				...(publishedStorageGoldDepositLimit !== undefined ?
 					{ storageGoldDepositLimit: publishedStorageGoldDepositLimit } :
 					{}),

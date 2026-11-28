@@ -3622,7 +3622,7 @@
 					"writes": 2
 				},
 				"gold": {
-					"reads": 2,
+					"reads": 3,
 					"writes": 1
 				},
 				"inventory": {
@@ -7666,7 +7666,7 @@
 					"writes": 0
 				},
 				"drop": {
-					"reads": 16,
+					"reads": 17,
 					"writes": 0
 				},
 				"event": {
@@ -7738,7 +7738,7 @@
 					"writes": 0
 				},
 				"gold": {
-					"reads": 3,
+					"reads": 4,
 					"writes": 0
 				},
 				"ground": {

@@ -392,6 +392,7 @@ func buildCharacterProjection(deps *Deps, divisionID string, character *Characte
 		Alexandria:              deps.Alexandria,
 		RaisedGoldCaps:          deps.RaisedGoldCaps,
 		StorageGoldDepositLimit: deps.StorageGoldDepositLimit,
+		WideTradeGold:           deps.WideTradeGold,
 		UiTuning:                UiTuningFrom(tunables.Current()),
 	}
 }

@@ -719,6 +719,10 @@ type Runtime struct {
 	// (goldcaps.go; port-only, not native). Zero keeps the switch's two
 	// values: 1,000,000,000 with RaisedGoldCaps, else the native 100,000,000.
 	StorageGoldDepositLimit uint64
+	// WideTradeGold admits exchange-window gold above 4,294,967,295 in the
+	// port's wide gold move (goldcaps.go; port-only, not native, #4264).
+	// False is native: one trade table holds at most the u32 range.
+	WideTradeGold bool
 	// TeleportGrace makes a teleport arrival untouchable for the revival's
 	// grace (teleportprotection.go; port-only, not native). False is native.
 	TeleportGrace bool

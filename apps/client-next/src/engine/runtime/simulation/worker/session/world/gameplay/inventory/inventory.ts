@@ -206,6 +206,9 @@ export function createInventory(
 	// Port-only, not native: SRO_RAISED_GOLD_CAPS widens the stall offer
 	// price field to u64 (stall.ts); the world entry publishes it.
 	let raisedGoldCaps = false;
+	// Port-only, not native: SRO_WIDE_TRADE_GOLD lets the trade table's
+	// gold pass the u32 range (exchange.ts); the world entry publishes it.
+	let wideTradeGold = false;
 	// Set when a request went unanswered past its deadline; only a world
 	// bootstrap (a fresh entry, or a resumed transport's EnterWorld) clears it.
 	// timedOutRequest names that request for the incident report.
@@ -1018,6 +1021,7 @@ bootstrap
 		bootstrap( value: unknown, receivedAtMs = 0, continued = false ) {
 			bindingMoves = [];
 			raisedGoldCaps = (value as { raisedGoldCaps?: unknown; } | null)?.raisedGoldCaps === true;
+			wideTradeGold = (value as { wideTradeGold?: unknown; } | null)?.wideTradeGold === true;
 			itemCooldowns = [];
 			presentations = new WeakMap();
 			gachaRows = null;
@@ -1353,7 +1357,7 @@ exchangeCommand
 ================
 		*/
 		exchangeCommand( command: ExchangeCommand ) {
-			const frame = exchangeRequest( exchange, command );
+			const frame = exchangeRequest( exchange, command, wideTradeGold );
 			if ( command.kind === "exchange-request" ) exchange = { ...exchange, requesting: true };
 			if ( command.kind === "exchange-confirm" ) {
 				const warning = exchangeConfirmWarning( exchange, exchangeConfirmPressed );
