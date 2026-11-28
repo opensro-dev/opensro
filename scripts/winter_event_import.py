@@ -98,8 +98,6 @@ SOUND_TABLE = "effectsound.txt"
 SOUND_ENCODING = "cp949"
 PIN_FILE = Path(__file__).with_name("v1696_archive_pins.json")
 # Character row columns (cap110_monsters.py's layout).
-CHAR_CODE = 2
-CHAR_LEVEL = 57
 
 SPEC = later_world_import.WorldImport(
 	label="winter event",
@@ -136,8 +134,8 @@ def flag_enabled(env=os.environ):
 # or the Pandora's Box monster, at or below the server's level cap.
 # ================
 def admits(row):
-	code = row[CHAR_CODE]
-	return (code.startswith(PREFIX) or code == PANDORA_BOX) and int(row[CHAR_LEVEL]) <= cap110.MAX_LEVEL
+	code = row[characters.CODENAME_COLUMN]
+	return (code.startswith(PREFIX) or code == PANDORA_BOX) and int(row[characters.LEVEL_COLUMN]) <= cap110.MAX_LEVEL
 
 
 # ================
@@ -186,7 +184,7 @@ def add_winter_monsters(native, out, env=os.environ):
 		staged = add_winter_items(native, output, read, archives, prior)
 		presentation = add_winter_presentation(output, read, set(refs))
 	kinds["characterInfo"] = sorted(set(kinds["characterInfo"]) | set(presentation.pop("characterInfo")))
-	summary = {"enabled": True, **kinds, **staged, **presentation, "levels": {code: int(later[code][CHAR_LEVEL]) for code in refs}}
+	summary = {"enabled": True, **kinds, **staged, **presentation, "levels": {code: int(later[code][characters.LEVEL_COLUMN]) for code in refs}}
 	write_atomically(marker, (json.dumps(summary, indent=2) + "\n").encode())
 	return summary
 

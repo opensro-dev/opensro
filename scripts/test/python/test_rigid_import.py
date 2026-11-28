@@ -11,6 +11,7 @@ source carries), and the item shard's stage/reap round trip.
 ===========================================================================
 """
 import script_paths  # noqa: F401  (puts scripts/ and its build folders on sys.path, #3410)
+import alexandria_npcs as characters  # noqa: E402
 import json
 import tempfile
 import unittest
@@ -164,7 +165,7 @@ class RigidKindNamesTest(unittest.TestCase):
 			["1", "SN_MOB_EU_KERBEROS_L2", "태백급", "", "", "", "", "", "Shipped", "", ""],
 			["1", "SN_OTHER", "x", "", "", "", "", "", "", "", ""]]
 		rigid.later_world_import.fill_layer_english(texts, rigid.KIND_NAMES)
-		english = rigid.later_world_import.NAME_ENGLISH
+		english = characters.TEXT_ENGLISH_COLUMN
 		self.assertEqual(texts[0][english], rigid.KIND_NAMES["SN_MOB_AM_IVY_L2"])
 		self.assertEqual(texts[1][english], "Shipped", "a shipped translation stays")
 		self.assertEqual(texts[2][english], "", "a symbol the layer does not name is untouched")

@@ -20,9 +20,11 @@ from unittest.mock import patch
 import zipfile
 
 import cap110_items as items  # noqa: E402
+import alexandria_npcs as characters  # noqa: E402
 import hashlib
 import os
 import pet_import  # noqa: E402
+import pet_rows  # noqa: E402
 import mall_avatar_import as importer  # noqa: E402
 import pack_avatars as packer  # noqa: E402
 import sro_pk2  # noqa: E402
@@ -155,7 +157,7 @@ class PackTests(unittest.TestCase):
 			self.assertEqual(len(texts), 2)
 			self.assertTrue(all(len(row) == importer.VSRO_TEXT_COLUMNS for row in texts))
 			by_key = {row[1]: row for row in texts}
-			self.assertEqual(by_key["SN_" + GOOD][importer.TEXT_ENGLISH], "Suit")
+			self.assertEqual(by_key["SN_" + GOOD][characters.TEXT_ENGLISH_COLUMN], "Suit")
 
 	# ================
 	# test_pack_is_deterministic
@@ -327,9 +329,9 @@ class PetPackTests(unittest.TestCase):
 				scrolls = importer.tables.table_rows(archive.read(text + packer.PET_ITEM_SHARD))
 				manifest = importer.tables.table_rows(archive.read(text + "itemdata.txt"))
 				texts = importer.tables.table_rows(archive.read(text + "textdata_object.txt"))
-			self.assertEqual([row[pet_import.CHAR_CODE] for row in chars], ["COS_P_DOG"])
+			self.assertEqual([row[characters.CODENAME_COLUMN] for row in chars], ["COS_P_DOG"])
 			# The original identity rides; the importer assigns the built one.
-			self.assertEqual(chars[0][pet_import.CHAR_ID], "9001")
+			self.assertEqual(chars[0][characters.ID_COLUMN], "9001")
 			self.assertEqual([row[items.CODENAME] for row in scrolls], ["ITEM_PET_DOG"])
 			self.assertEqual([row[0] for row in manifest], [packer.SHARD_NAME, packer.PET_ITEM_SHARD])
 			self.assertIn("data/res/cos/newpet.bsr", names)

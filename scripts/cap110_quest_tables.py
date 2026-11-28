@@ -104,8 +104,8 @@ def quest_rows(later, variant):
 def text_symbols(later_texts):
 	found = []
 	for rows in later_texts:
-		found += [row[blue.KEY_COLUMN] for row in rows if len(row) > blue.ENGLISH_COLUMN + 1
-			and (QUEST_CODE.search(row[blue.KEY_COLUMN]) or row[blue.KEY_COLUMN] in EXTRA_SYMBOLS)]
+		found += [row[characters.TEXT_KEY_COLUMN] for row in rows if len(row) > characters.TEXT_ENGLISH_COLUMN + 1
+			and (QUEST_CODE.search(row[characters.TEXT_KEY_COLUMN]) or row[characters.TEXT_KEY_COLUMN] in EXTRA_SYMBOLS)]
 	return tuple(dict.fromkeys(found))
 
 
@@ -167,7 +167,7 @@ def add_quest_tables(vsro_root, native, output):
 		new_rows = quest_rows(later, variant)
 		later_texts = [read.rows(name) for name in TEXT_SOURCES]
 		symbols = text_symbols(later_texts)
-		by_key = {row[blue.KEY_COLUMN]: row for rows in later_texts for row in rows if len(row) > blue.ENGLISH_COLUMN + 1}
+		by_key = {row[characters.TEXT_KEY_COLUMN]: row for rows in later_texts for row in rows if len(row) > characters.TEXT_ENGLISH_COLUMN + 1}
 		text_path = safe_target(text_root, TEXT_FILE)
 		raw, appended, replaced = blue.fill_text(text_path.read_bytes(), by_key, symbols)
 		ended = {}

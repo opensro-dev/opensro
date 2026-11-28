@@ -598,7 +598,6 @@ def later_text_rows(source, name):
 # English one the port reads, and the VSRO client repeats English in 6,
 # 10, 12, 13 and 14 where it has no translation.
 VSRO_TEXT_COLUMNS = 15
-TEXT_ENGLISH = 8
 V1696_TEXT_COLUMNS = 17
 V1696_ABSENT = "0"
 
@@ -618,7 +617,7 @@ def vsro_text_row(row):
 	if len(row) != V1696_TEXT_COLUMNS or not row[1].strip().isdigit():
 		return row
 	cells = [row[0]] + row[2:2 + VSRO_TEXT_COLUMNS - 1]
-	english = cells[TEXT_ENGLISH]
+	english = cells[text_tables.TEXT_ENGLISH_COLUMN]
 	for column in range(3, VSRO_TEXT_COLUMNS):
 		if cells[column] == V1696_ABSENT:
 			cells[column] = "" if column == 3 else english
