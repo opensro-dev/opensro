@@ -78,7 +78,7 @@ RESISTANCE_AT = 61
 RESISTANCE_COUNT = 6
 # The six element resists (ResistFrozen .. ResistZombie, the server's
 # ElementResist) follow the character's level in every native table:
-# 12,746 of v1.150's 12,761 rows, and 1,383 of the 1,644 rows only the
+# 12,734 of v1.150's 12,761 rows, and 1,451 of the 1,644 rows only the
 # v1.188 server database holds (#4802). Up to LINEAR_RESIST_END it is
 # twice the level, from level 2; above it the native steps, each value
 # held from its level up. The later clients ship no resist column, so a
