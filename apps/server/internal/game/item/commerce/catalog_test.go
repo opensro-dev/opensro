@@ -140,3 +140,99 @@ func TestShippedCatalog(t *testing.T) {
 		t.Fatal("no PACKAGE_ITEM_ETC_TRADE_* rows found in refshopgoods.txt")
 	}
 }
+
+/*
+================
+TestListedWithoutPriceNamesEachUnpricedPackageOnce
+
+The native load check's report set (v1.188 RefPackageItem_ValidatePrices
+0x6a9840): a live goods row whose package has no price the shop takes is
+named once, sorted; a priced or condition-held package, a retired row
+and a short row are not.
+================
+*/
+func TestListedWithoutPriceNamesEachUnpricedPackageOnce(t *testing.T) {
+	goods := [][]string{
+		{"1", "11", "TAB_A", "PACKAGE_SILK_ONLY", "0"},
+		{"1", "11", "TAB_B", "PACKAGE_SILK_ONLY", "3"},
+		{"1", "11", "TAB_A", "PACKAGE_GOLD", "1"},
+		{"1", "11", "TAB_A", "PACKAGE_HELD", "2"},
+		{"0", "11", "TAB_A", "PACKAGE_RETIRED", "4"},
+		{"1", "11", "TAB_A", "PACKAGE_A_UNPRICED", "5"},
+		{"1", "11", "TAB_A"},
+	}
+	settled := map[string]bool{"PACKAGE_GOLD": true, "PACKAGE_HELD": true}
+	got := listedWithoutPrice(goods, func(code string) bool { return settled[code] })
+	want := []string{"PACKAGE_A_UNPRICED", "PACKAGE_SILK_ONLY"}
+	if strings.Join(got, ",") != strings.Join(want, ",") {
+		t.Fatalf("unpriced %v, want %v", got, want)
+	}
+}
+
+/*
+================
+TestShippedCatalogPricesEveryGood
+
+Every good the shipped v1.150 shops list carries a gold, guild point or
+honor price, as the original data does (census 2026-11-28: 1419 gold,
+80 gold+honor, 25 gold+guild): the load report stays empty.
+================
+*/
+func TestShippedCatalogPricesEveryGood(t *testing.T) {
+	tier.Long(t, "the whole shipped shop catalogue loads")
+	dir := clientdata.RetailTextdataDir(t)
+	if _, e := os.Stat(dir); e != nil {
+		t.Skip("original media unavailable")
+	}
+	c, e := Load(dir, enterworld.NewTextdataItems(dir))
+	if e != nil {
+		t.Fatal(e)
+	}
+	if len(c.Unpriced) != 0 {
+		t.Fatalf("unpriced shipped goods %v", c.Unpriced)
+	}
+}
+
+/*
+================
+TestEachCatalogueReadsItsOwnDevicesOfASharedPackage
+
+A degree 10 stone that joined the Silk Mall on its gold-shop package
+(#4658) carries gold and mall rows: the NPC shop prices it in gold and
+ignores the mall's silk and zero-amount rows, the mall sells it for silk
+and ignores the gold row (#4702). A device neither owns (a later coin,
+128) still blocks the NPC good and fails the mall.
+================
+*/
+func TestEachCatalogueReadsItsOwnDevicesOfASharedPackage(t *testing.T) {
+	shared := [][]string{
+		{"1", "11", "PACKAGE", "1", "225750"},
+		{"1", "11", "PACKAGE", "2", "57"},
+		{"1", "11", "PACKAGE", "4", "0"},
+		{"1", "11", "PACKAGE", "16", "0"},
+	}
+	blocked := map[string]bool{}
+	prices := npcShopPrices(shared, blocked)
+	if blocked["PACKAGE"] || prices.gold["PACKAGE"] != 225750 {
+		t.Fatalf("npc shop: blocked %v gold %d", blocked["PACKAGE"], prices.gold["PACKAGE"])
+	}
+	tables := mallFixtureTables()
+	tables["refpricepolicyofitem"] = shared
+	catalog, err := buildMallCatalog(tables)
+	if err != nil || len(catalog.Offers) != 1 || catalog.Offers[0].Silk != 57 || !catalog.Offers[0].AllowsPoints {
+		t.Fatalf("mall: %v %+v", err, catalog)
+	}
+	if catalog.Offers[0].CurrencyMask&PaymentGold != 0 {
+		t.Fatalf("mall offer carries the gold device: mask %d", catalog.Offers[0].CurrencyMask)
+	}
+	coin := append(append([][]string(nil), shared...), []string{"1", "11", "PACKAGE", "128", "5"})
+	blocked = map[string]bool{}
+	npcShopPrices(coin, blocked)
+	if !blocked["PACKAGE"] {
+		t.Fatal("npc shop sold a package with a device it cannot charge")
+	}
+	tables["refpricepolicyofitem"] = coin
+	if _, err := buildMallCatalog(tables); err == nil {
+		t.Fatal("mall accepted a device it cannot charge")
+	}
+}

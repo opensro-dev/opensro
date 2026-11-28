@@ -155,7 +155,10 @@ def merge_d11_stock(raw, items, port_stock=False):
 			goods_by_tab[row[2]].append(row)
 	packages = {r[3]: r for r in rows["refpackageitem.txt"] if len(r) > 3}
 	scraps = {r[2]: r for r in rows["refscrapofpackageitem.txt"] if len(r) > 3}
-	prices = {r[2]: r for r in rows["refpricepolicyofitem.txt"] if len(r) > 2}
+	prices = defaultdict(list)
+	for row in rows["refpricepolicyofitem.txt"]:
+		if len(row) > 4:
+			prices[row[2]].append(row)
 	tabs_of_group = defaultdict(list)
 	for row in rows["refshoptab.txt"]:
 		if len(row) >= 6:
@@ -187,23 +190,13 @@ def merge_d11_stock(raw, items, port_stock=False):
 		item = items.get(item_code)
 		source = next((d10.with_degree(code, degree) for degree in (SOURCE_DEGREE, "09")
 		               if d10.with_degree(code, degree) in packages), None)
-		if source is None or source not in scraps or source not in prices or item is None:
+		if source is None or source not in scraps or not prices.get(source) or item is None:
 			missing.add(code)
 			return False
-		icon = next((v for v in item if v.lower().endswith(d10.ICON_SUFFIX)), packages[source][8])
-		package = list(packages[source])
-		package[2], package[3] = new_id("refpackageitem.txt"), code
-		package[6], package[7], package[8] = item[d10.NAME_COLUMN], item[d10.DESCRIPTION_COLUMN], icon
-		scrap = list(scraps[source])
-		scrap[2], scrap[3], scrap[-1] = code, item_code, str(next_scrap)
+		package, scrap, price = d10.minted_rows((packages[source], scraps[source], prices[source]), code, item,
+			new_id("refpackageitem.txt"), str(next_scrap))
 		next_scrap += 1
-		price = list(prices[source])
-		price[2], price[4] = code, item[d10.PRICE_COLUMN]
-		# All three rows register, so the dicts keep describing the tables
-		# as they will be, minted packages included.
-		packages[code] = package
-		scraps[code] = scrap
-		prices[code] = price
+		packages[code], scraps[code], prices[code] = package, scrap, [price]
 		new_packages.append(package)
 		new_scraps.append(scrap)
 		new_prices.append(price)
