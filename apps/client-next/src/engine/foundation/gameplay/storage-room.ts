@@ -75,6 +75,20 @@ const NATIVE_GOLD_MOVE_MAX = 0xffffffff;
 
 /*
 ================
+publishedStorageGoldDepositLimit
+
+The world entry's storageGoldDepositLimit as a cap, or undefined when it is
+absent or not a whole number the dialog holds exactly (a safe integer of at
+least 1). The worker and the dialog read the published value through this
+one rule, so a cap above the u32 range reaches the dialog.
+================
+*/
+export function publishedStorageGoldDepositLimit( published: unknown ): number | undefined {
+	return typeof published === "number" && Number.isSafeInteger( published ) && published >= 1 ? published : undefined;
+}
+
+/*
+================
 storageGoldDepositLimit
 
 The highest amount one deposit dialog accepts: the shard's published cap
@@ -84,10 +98,8 @@ counts only as a whole number the dialog holds exactly (a safe integer).
 ================
 */
 export function storageGoldDepositLimit( published?: number ): bigint {
-	if ( published !== undefined && Number.isSafeInteger( published ) && published >= 1 ) {
-		return BigInt( published );
-	}
-	return STORAGE_GOLD_DEPOSIT_LIMIT;
+	const cap = publishedStorageGoldDepositLimit( published );
+	return cap === undefined ? STORAGE_GOLD_DEPOSIT_LIMIT : BigInt( cap );
 }
 
 // The guild warehouse's function mask and requests.
