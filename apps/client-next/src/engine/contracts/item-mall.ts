@@ -55,6 +55,9 @@ export interface MallOffer {
 	readonly itemIds: readonly number[];
 	readonly badge?: MallBadge;
 	readonly gender?: MallGender;
+	// How many of its one item the package delivers when more than one
+	// (the "_11" packs); absent for a single or a bundle (mallTitle).
+	readonly count?: number;
 }
 
 /*

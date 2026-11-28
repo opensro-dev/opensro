@@ -81,7 +81,13 @@ type MallPackage struct {
 	// own ReqGender says so, read in Hydrate from the item reference,
 	// never from a package or item name; "" - and no JSON field - for
 	// ungendered packages. A client predating the field ignores it.
-	Gender string     `json:"gender,omitempty"`
+	Gender string `json:"gender,omitempty"`
+	// Count is how many of its one item the package delivers when that
+	// is more than one (the "_11" packs, eleven scrolls; set in Hydrate
+	// by packageCount, the grant's own rule). The client puts it in the
+	// goods' title, so a single and its pack never look the same; 0
+	// - and no JSON field - for a single or a bundle of several items.
+	Count  uint16     `json:"count,omitempty"`
 	Code   string     `json:"-"`
 	Scraps [][]string `json:"-"`
 }
