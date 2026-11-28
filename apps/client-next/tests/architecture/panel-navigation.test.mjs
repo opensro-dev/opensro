@@ -18,12 +18,9 @@ its 20 s budget on a busy CI runner (#2907).
 
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import fs from "node:fs";
-import path from "node:path";
-import { root, ts, visit } from "../../tools/project.mjs";
+import { parse, sourceTexts, ts, visit } from "../../tools/project.mjs";
 
 const UI_DIR = "src/engine/runtime/ui";
-const SOURCE_FILE = /\.(?:ts|tsx|mts|cts)$/;
 const PANEL_INTENTS = [ "open", "toggle", "select", "warm" ];
 const PANEL_OWNERS = [ "setPanel", "resetPanel" ];
 
@@ -44,15 +41,6 @@ function audited( text ) {
 
 /*
 ================
-parse
-================
-*/
-function parse( name, text ) {
-	return ts.createSourceFile( name, text, ts.ScriptTarget.Latest, true );
-}
-
-/*
-================
 uiTrees
 
 The parsed trees of the audited directory's source files that audited()
@@ -61,18 +49,9 @@ keeps, by root-relative path.
 */
 function uiTrees() {
 	const trees = new Map();
-	function walk( dir ) {
-		for ( const entry of fs.readdirSync( path.join( root, dir ), { withFileTypes: true } ) ) {
-			const name = dir + "/" + entry.name;
-			if ( entry.isDirectory() ) {
-				walk( name );
-			} else if ( SOURCE_FILE.test( entry.name ) ) {
-				const text = fs.readFileSync( path.join( root, name ), "utf8" );
-				if ( audited( text ) ) trees.set( name, parse( name, text ) );
-			}
-		}
+	for ( const [name, text] of sourceTexts( UI_DIR ) ) {
+		if ( audited( text ) ) trees.set( name, parse( name, text ) );
 	}
-	walk( UI_DIR );
 	return trees;
 }
 
