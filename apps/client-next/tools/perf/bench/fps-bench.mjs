@@ -9,6 +9,7 @@ Usage:
        [--screenshot] [--snow] [--frames N] [--frame-ms MS] [--memory] [--gpu-time]
        [--hide ground,sky,objects,characters] [--render-scale 100|75|50]
        [--paced] [--cpu-rate N] [--frame-limit 0|60|120|240] [--shadow-detail 0|1|2]
+       [--expect-commit SHA]
 
 For each location (--at) resets the scratch character there, boots the dev
 client uncapped at 1600x900 (core/client.mjs) and runs the location's
@@ -90,6 +91,9 @@ main thread's frame and world-preparation time per frame. Options add:
   --cpu-rate N  apply Chrome CPU throttling after warm-up (for example 4).
   --frame-limit N  use the player's presentation limit; default 0 preserves
                   the uncapped throughput benchmark.
+  --expect-commit SHA  fail the run unless the served bundle's license
+            banner names this commit (core/build-identity.mjs): an A/B side
+            served by a stale preview is refused, not measured.
 
 Read the captures with tools/perf/analyze (profile.mjs, trace.mjs).
 
@@ -116,7 +120,7 @@ import { MISSION_MOVEMENT_FIXTURES } from "../../../../../scripts/lib/missionMov
 import { parseOptions } from "../core/report.mjs";
 import { frameLimits } from "../../../src/engine/foundation/rendering/video-options.ts";
 import { openClient, closeClient, createCaptures, measure, revive } from "../core/client.mjs";
-import { buildIdentity, verifyMeasuredIdentity } from "../core/build-identity.mjs";
+import { buildIdentity, verifyMeasuredIdentity, verifyServedCommit } from "../core/build-identity.mjs";
 import { keepGoing, drag, walk, approach, fight, cross, loadCombat, combat, strike, localAlive } from "./scenarios.mjs";
 import { CROWD_HOST_URL, DEFAULT_ACTIVITY_SEED, obtainCrowd } from "../core/crowd.mjs";
 import { BUSY_IMBUE_SKILL, parseActivity } from "../core/crowd-activity.mjs";
@@ -204,7 +208,7 @@ const USAGE = "fps-bench.mjs [--seconds N] [--at a,b] [--only a,b] [--counts] [-
 	"[--trace] [--screenshot] [--gpu-process] [--json FILE] [--paced] [--cpu-rate N] [--frame-limit 0|60|120|240] [--shadow-detail 0|1|2] " +
 	"[--combat codename:count:CHAMP|GIANT|NORMAL] [--vulnerable] [--crowd N] [--crowd-fixture FILE.json] " +
 	"[--crowd-host URL] [--act walk=SHARE,chat=SHARE,roam=SHARE,busy=SHARE] [--seed N] [--provisioning URL] " +
-	"[--token FILE] [--snow] [--frames N] [--frame-ms MS] [--memory] [--gpu-time]";
+	"[--token FILE] [--snow] [--frames N] [--frame-ms MS] [--memory] [--gpu-time] [--expect-commit SHA]";
 // --gpu-process trace categories, the fewest that serve processCosts:
 // toplevel gives every thread's top-level tasks as complete events with
 // their thread time (tdur); blink.user_timing carries the window marks.
@@ -729,6 +733,7 @@ async function session( options, location, results ) {
 				`  measuring ${identity.build} ${identity.entry ?? identity.origin}, replay ${identity.replay}; ` +
 					`harness ${identity.harnessCommit}, served commit ${identity.servedCommit}`
 			);
+			verifyServedCommit( identity, options.expectCommit );
 			const gpuCursor = options.gpuTime ? await gpuTimingCursor( client.page ) : null;
 			await captures.start();
 			capturing = true;
@@ -957,6 +962,8 @@ const options = parseOptions( process.argv.slice( 2 ), {
 	provisioning: "http://127.0.0.1:8789",
 	token: path.join( REPO_ROOT, "apps/server/.state/cluster/agent-provisioning-token" ),
 	out: "temp/artifacts/fps-bench",
+	// The commit the served bundle must name (build-identity.mjs verifyServedCommit).
+	expectCommit: "",
 	json: ""
 }, USAGE );
 if ( !frameLimits().includes( options.frameLimit ) ) throw Error( `unsupported frame limit ${options.frameLimit}` );

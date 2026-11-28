@@ -34,9 +34,9 @@ export async function bindPlayableRuntime( page ) {
 			.map( script => new URL( script.getAttribute( "src" ) ?? "", location.href ) )
 			.find( url => url.origin === location.origin && url.pathname === "/src/bootstrap.ts" );
 		const url = dev ? dev.href : new URL( "/assets/bench-runtime.js", location.href ).href;
-		let runtime;
+		let runtime, revision;
 		try {
-			runtime = (await import( url )).runtime;
+			({ runtime, revision } = await import( url ));
 		} catch ( error ) {
 			throw Error(
 				`${url} did not load (${error}): benchmark the dev server or a bench bundle (pnpm build:bench)`
@@ -44,6 +44,9 @@ export async function bindPlayableRuntime( page ) {
 		}
 		if ( !runtime ) throw Error( `${url} exports no runtime` );
 		globalThis.__playableRuntime = runtime;
+		// The served build's own stamp (bootstrap.ts revision): the measured
+		// commit, whichever checkout runs the harness.
+		globalThis.__playableRevision = typeof revision === "string" ? revision : "";
 	} );
 }
 /*
