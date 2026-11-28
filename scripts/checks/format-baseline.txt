@@ -162,7 +162,6 @@ apps/client-next/tests/browser/live-champion-aggro.test.mjs
 apps/client-next/tests/browser/live-pursuit.test.mjs
 apps/client-next/tests/browser/live-sight-aggro.test.mjs
 apps/client-next/tests/browser/live-summon-follow.test.mjs
-apps/client-next/tests/browser/live-weather.test.mjs
 apps/client-next/tests/browser/loading-cache.test.mjs
 apps/client-next/tests/browser/loading-feedback.test.mjs
 apps/client-next/tests/browser/loading-presentation.test.mjs

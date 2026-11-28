@@ -10,6 +10,7 @@ modules the client ships, not a per-test bundle.
 ===========================================================================
 */
 import "../helpers/native-source-loader.mjs";
+import { WEATHER_COMMANDS } from "../helpers/weather-commands.mjs";
 import { pathToFileURL as sourceFileUrl } from "node:url";
 import { test } from "node:test";
 import assert from "node:assert/strict";
@@ -1164,7 +1165,8 @@ test("title terrain stays detailed through movement and GPU loss; gameplay resto
 		updateIndices( draw, indices ) {
 			count = indices.length;
 		},
-		updatePositions() {}
+		updatePositions() {},
+		...WEATHER_COMMANDS
 	};
 	const images = {
 		/*
@@ -1207,7 +1209,7 @@ test("title terrain stays detailed through movement and GPU loss; gameplay resto
 
 test("weather emission consumes shared RNG before star trials on the real world owner path", () => {
 	const random = createPresentationRandom( 5, 1, 128 ), world = createWorldRenderer( undefined, undefined, random );
-	const geometry = { upload: () => ({}), release() {}, updatePositions() {} },
+	const geometry = { upload: () => ({}), release() {}, updatePositions() {}, ...WEATHER_COMMANDS },
 		textures = { upload: () => ({}), release() {} };
 	const value = scene( "ordered-stars" );
 	value.groups[0].material.sky = 2;
@@ -1245,6 +1247,7 @@ test("decal texture bindings are rebuilt after terrain retirement and reused whi
 				return draw;
 			},
 			updatePositions() {},
+			...WEATHER_COMMANDS,
 			/*
 			================
 			updateIndices
@@ -1321,6 +1324,7 @@ test("toe decals reuse geometry, fade at twenty seconds and survive device recre
 				return { data, image };
 			},
 			updatePositions() {},
+			...WEATHER_COMMANDS,
 			/*
 			================
 			updateIndices
@@ -1422,6 +1426,7 @@ test("Sun drop rings (port-only #1640) draw gold under admitted drops and releas
 				return { data, image };
 			},
 			updatePositions() {},
+			...WEATHER_COMMANDS,
 			/*
 			================
 			updateIndices
@@ -1489,7 +1494,7 @@ test("Sun drop rings (port-only #1640) draw gold under admitted drops and releas
 
 test("selection texture demand follows scene admission, cancellation, replacement and GPU recovery", () => {
 	const world = createWorldRenderer(),
-		geometry = { upload: () => ({}), release() {}, updateIndices() {}, updatePositions() {} },
+		geometry = { upload: () => ({}), release() {}, updateIndices() {}, updatePositions() {}, ...WEATHER_COMMANDS },
 		textures = { upload: () => ({}), release() {} };
 	const terrain = scene( "demand" );
 	terrain.groups[0].material.terrain = true;

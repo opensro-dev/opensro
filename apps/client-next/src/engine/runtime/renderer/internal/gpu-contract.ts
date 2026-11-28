@@ -524,6 +524,14 @@ export interface GeometryCommands {
 		paletteOffsets?: Uint32Array
 	): GeometryDraw;
 	updateTransform( draw: GeometryDraw, transform: Float32Array ): void;
+	// The resident weather drops (weather-particles.ts): records of new drops
+	// at a region's slots, a region's billboard corners (written only when
+	// they change) and the frame's one simulation step.
+	weatherSpawn( region: number, slot: number, records: Uint32Array ): void;
+	weatherCorners( region: number, corners: Float32Array ): void;
+	// false: the step was refused (too many unsubmitted), and the caller
+	// must forget its drops (weather-particles.ts step).
+	weatherStep( step: WeatherStep ): boolean;
 	upload(
 		data: Geometry,
 		texture?: ImageDraw,
@@ -532,6 +540,30 @@ export interface GeometryCommands {
 	): GeometryDraw;
 	release( draw: GeometryDraw ): void;
 }
+/*
+================
+WeatherStep
+
+One weather simulation step (weather.ts, device/weather-particles.ts):
+the view (the native visibility test), the reference and the eye's death
+height, dt with the region rebase (x, z), elapsed whole ms, the fixed
+ticks the drops' frame counters advance, the drift hash seed, the step's
+serial (the birth stamp of the drops spawned for it) and each region's
+live window: its oldest live slot and how many slots from there may hold
+a live drop.
+================
+*/
+export interface WeatherStep {
+	readonly matrix: Float32Array;
+	readonly reference: readonly [number, number, number, number];
+	readonly motion: readonly [number, number, number];
+	readonly elapsedMs: number;
+	readonly ticks: number;
+	readonly seed: number;
+	readonly serial: number;
+	readonly windows: readonly { readonly tail: number; readonly live: number; }[];
+}
+
 /*
 ================
 PreparedWorld

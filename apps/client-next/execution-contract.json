@@ -1545,7 +1545,9 @@
 			"functions": [
 				"upload",
 				"release",
-				"updatePositions"
+				"weatherSpawn",
+				"weatherCorners",
+				"weatherStep"
 			]
 		},
 		{
@@ -3066,6 +3068,13 @@
 			"function": "encode",
 			"kind": "callback",
 			"reason": "Optional device-owned GpuTimingFrame callback for the terrain index cull compute pass."
+		},
+		{
+			"file": "src/engine/runtime/renderer/device/weather-particles.ts",
+			"expression": "timing?.pass",
+			"function": "encode",
+			"kind": "callback",
+			"reason": "Optional device-owned GpuTimingFrame callback for the weather drop step and compaction pass."
 		},
 		{
 			"file": "src/engine/runtime/renderer/device/particles.ts",

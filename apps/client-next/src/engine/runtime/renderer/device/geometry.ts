@@ -37,6 +37,7 @@ import {
 import { CLOTH_NO_SLOT, CLOTH_STREAM_WORDS, validClothStreamSlots } from "@/engine/foundation/animation/cloth-stream";
 import { createWaterReflection } from "./water-reflection";
 import { createIndexCull } from "./index-cull";
+import { createWeatherParticles } from "./weather-particles";
 import { packTextureStage } from "@/engine/foundation/rendering/texture-stage";
 import type { GpuWork } from "@/engine/foundation/rendering/gpu-work";
 import { packMultiTexture } from "@/engine/foundation/rendering/multi-texture";
@@ -138,8 +139,12 @@ export function createGeometryResources(
 	// The geometry pipeline for state on a scene surface: the HDR stage's
 	// rgba16float intermediate, the MSAA stage's 4x sibling, or the
 	// preview pass's coverage sibling.
-	// rowStates selects the variant a draw with row states needs (Geometry.rowStates).
-	pipelines: ( state: GeometryPipelineState, surface?: SceneSurface, rowStates?: boolean ) => GPURenderPipeline,
+	// variant selects the shader a draw with row states or a weather draw needs.
+	pipelines: (
+		state: GeometryPipelineState,
+		surface?: SceneSurface,
+		variant?: import("./pipelines").GeometryVariant
+	) => GPURenderPipeline,
 	// Each draw holds a lease on its images for as long as it binds them.
 	images: ImageLeases,
 	worldSampler: GPUSampler,
@@ -166,6 +171,8 @@ export function createGeometryResources(
 	const waterReflection = createWaterReflection( created, format, retire );
 	// GPU-culled terrain layer draws (index-cull.ts).
 	const indexCull = createIndexCull( created, retire );
+	// The resident rain and snow drops weather draws read (weather-particles.ts).
+	const weatherParticles = createWeatherParticles( created, retire );
 	// 8BA130 fixes water MIN/MAG to linear independently of the video filter.
 	const waterSampler = worldSampler;
 	const reflectedBindings = new WeakMap<GeometryDraw, { source: GPUBindGroup; draw: GeometryDraw; }>();
@@ -451,8 +458,9 @@ export function createGeometryResources(
 		uniform: Binding,
 		storage: Binding,
 		material: Binding,
-		// Binding 16, only for a draw with row states (its pipeline's variant).
-		rowStates: Binding | undefined,
+		// The variant's own binding: 16, a draw's row states; 17, a weather
+		// draw's drop region (its pipeline's variant).
+		variantBinding: GPUBindGroupEntry | undefined,
 		pipeline: GPURenderPipeline,
 		clampedSampling: boolean,
 		image?: ImageDraw,
@@ -475,7 +483,7 @@ export function createGeometryResources(
 				{ binding: 0, resource: uniform },
 				{ binding: 1, resource: storage },
 				{ binding: 2, resource: material },
-				...(rowStates ? [ { binding: 16, resource: rowStates } ] : []),
+				...(variantBinding ? [ variantBinding ] : []),
 				{
 					binding: 3,
 					resource: clampedSampling ? lightmapSampler : worldSampler
@@ -504,6 +512,8 @@ export function createGeometryResources(
 		instances: Binding;
 		// Binding 16: the row-state table of a rowStates draw.
 		rowStates?: Binding;
+		// A weather draw's region of the drop pool (binding 17).
+		weather?: GPUBufferBinding;
 		// The slab ranges behind the three bindings (no transform for a world
 		// draw); owned marks an instance table with a buffer of its own.
 		stores: {
@@ -557,6 +567,20 @@ export function createGeometryResources(
 	type DrawMeta = typeof metadata extends Map<GeometryDraw, infer Meta> ? Meta : never;
 	/*
 	================
+	variantOf
+
+	The shader variant a draw's metadata needs, and that variant's binding.
+	================
+	*/
+	function variantOf( meta: Pick<DrawMeta, "rowStates" | "weather"> ) {
+		return meta.rowStates ? "rows" as const : meta.weather ? "weather" as const : undefined;
+	}
+	function variantBinding( meta: Pick<DrawMeta, "rowStates" | "weather"> ): GPUBindGroupEntry | undefined {
+		if ( meta.rowStates ) return { binding: 16, resource: meta.rowStates };
+		return meta.weather ? { binding: 17, resource: meta.weather } : undefined;
+	}
+	/*
+	================
 	drawBinding
 
 	A draw's bind group against pipeline, from what it draws (meta.drawn):
@@ -568,7 +592,7 @@ export function createGeometryResources(
 			meta.uniform,
 			meta.drawn.instances,
 			meta.material,
-			meta.rowStates,
+			variantBinding( meta ),
 			pipeline,
 			meta.clampedSampling,
 			meta.image,
@@ -636,7 +660,7 @@ export function createGeometryResources(
 			const pipeline = pipelines(
 				meta.state,
 				{ sceneFloat: floatScene, fullscreenPreview: previewCoverage },
-				!!meta.rowStates
+				variantOf( meta )
 			);
 			cached = {
 				source: draw.binding,
@@ -727,7 +751,7 @@ export function createGeometryResources(
 					const pipeline = pipelines(
 						meta.state,
 						{ sceneFloat: floatScene, msaa: msaaScene },
-						!!meta.rowStates
+						variantOf( meta )
 					);
 					const binding = drawBinding( meta, pipeline, true );
 					cached = {
@@ -905,6 +929,24 @@ export function createGeometryResources(
 		},
 		cullView( main: Float64Array, mirror: Float64Array | null ) {
 			indexCull.view( main, mirror );
+		},
+		/*
+		================
+		weatherSpawn / weatherCorners / weatherStep
+
+		The resident weather drops (weather-particles.ts): new drops' records
+		into a region's slots, a region's billboard corners, and the frame's
+		one step, which the next prepare encodes.
+		================
+		*/
+		weatherSpawn( region: number, slot: number, records: Uint32Array ) {
+			weatherParticles.spawn( region, slot, records );
+		},
+		weatherCorners( region: number, corners: Float32Array ) {
+			weatherParticles.corners( region, corners );
+		},
+		weatherStep( step: import("../internal/gpu-contract").WeatherStep ) {
+			return weatherParticles.step( step );
 		},
 		/*
 		================
@@ -1363,6 +1405,7 @@ export function createGeometryResources(
 				slices.push( storage );
 				const rowStates = data.rowStates ? rowStateStore( capacity ) : undefined;
 				if ( rowStates ) slices.push( rowStates );
+				const weather = data.weather ? weatherParticles.binding( data.weather.region ) : undefined;
 				if ( instances.byteLength ) {
 					gpu.queue.writeBuffer(
 						storage.binding.buffer,
@@ -1531,7 +1574,7 @@ export function createGeometryResources(
 				const selected = pipelines(
 						geometryPipelineState( mat ),
 						{ sceneFloat: floatScene, msaa: msaaScene },
-						!!data.rowStates
+						variantOf( { rowStates: rowStates?.binding, weather } )
 					),
 					clampedSampling = !!(mat?.lightmap || mat?.decal) && !mat?.groundDecal;
 				const bonesBinding: GPUBufferBinding = boneBuffer === defaultBones ?
@@ -1541,7 +1584,7 @@ export function createGeometryResources(
 					uniform,
 					storage.binding,
 					material.binding,
-					rowStates?.binding,
+					variantBinding( { rowStates: rowStates?.binding, weather } ),
 					selected,
 					clampedSampling,
 					image,
@@ -1564,6 +1607,9 @@ export function createGeometryResources(
 					capacity,
 					count
 				);
+				if ( data.weather ) {
+					weatherParticles.attach( data.weather.region, draw, Float32Array.from( data.weather.uvs ) );
+				}
 				// The draw binds its images until release; a released image is
 				// refused here, before the draw is recorded.
 				if ( image ) images.acquire( image );
@@ -1584,6 +1630,7 @@ export function createGeometryResources(
 					material: material.binding,
 					instances: storage.binding,
 					rowStates: rowStates?.binding,
+					weather,
 					stores: {
 						transform,
 						material,
@@ -1657,7 +1704,10 @@ export function createGeometryResources(
 			}
 			shadows?.forget( draw );
 			sunShadows?.forget( draw );
-			if ( draw instanceof DeviceDraw ) indexCull.forget( draw );
+			if ( draw instanceof DeviceDraw ) {
+				indexCull.forget( draw );
+				weatherParticles.detach( draw );
+			}
 			for ( const buffer of geometryBuffers.get( draw ) ?? [] ) {
 				retire( buffer );
 			}
@@ -1731,7 +1781,7 @@ export function createGeometryResources(
 			}
 		},
 		commands,
-		ready: Promise.all( [ animation?.ready, particles?.ready, indexCull.ready ] ),
+		ready: Promise.all( [ animation?.ready, particles?.ready, indexCull.ready, weatherParticles.ready ] ),
 		/*
 		================
 		prepare
@@ -1739,6 +1789,7 @@ export function createGeometryResources(
 		*/
 		prepare( encoder: GPUCommandEncoder, timing?: import("../internal/gpu-contract").GpuTimingFrame ) {
 			indexCull.encode( encoder, timing );
+			weatherParticles.encode( encoder, timing );
 			animation?.encode( encoder, timing );
 			particles?.encode( encoder, timing );
 			shadows?.encode( encoder, timing );
@@ -1801,7 +1852,7 @@ export function createGeometryResources(
 			msaaScene = sceneMsaa;
 			waterReflection.reformat( sceneFloat ? "rgba16float" : format, sceneMsaa ? MSAA_SAMPLE_COUNT : 1 );
 			for ( const [draw, meta] of metadata ) {
-				const pipeline = pipelines( meta.state, { sceneFloat, msaa: sceneMsaa }, !!meta.rowStates );
+				const pipeline = pipelines( meta.state, { sceneFloat, msaa: sceneMsaa }, variantOf( meta ) );
 				DeviceDraw.repipeline(
 					meta.selection,
 					pipeline,
@@ -1881,6 +1932,7 @@ export function createGeometryResources(
 			vertexSlabs.dispose();
 			indexSlabs.dispose();
 			indexCull.dispose();
+			weatherParticles.dispose();
 			for ( const buffer of ownedInstances ) buffer.destroy();
 			ownedInstances.clear();
 			geometryBuffers.clear();

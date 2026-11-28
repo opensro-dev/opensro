@@ -5,7 +5,10 @@ live-weather.test.mjs - tests for weather.ts, native-texture.ts
 
 Loads the TypeScript sources directly through the shared native loader
 (tests/helpers/native-source-loader.mjs), so the tests exercise the same
-modules the client ships, not a per-test bundle.
+modules the client ships, not a per-test bundle. The drops live on the
+GPU (device/weather-particles.ts); these tests run them through the CPU
+model of that pool (tests/helpers/weather-reference.mjs), which the
+browser test pins to the real one.
 
 ===========================================================================
 */
@@ -14,113 +17,132 @@ import "../helpers/native-source-loader.mjs";
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
-import { defined } from "../helpers/defined.mjs";
+import { createWeatherReference } from "../helpers/weather-reference.mjs";
 const { createWeather } = await import( "../../src/engine/runtime/renderer/weather/weather.ts" );
 const { decodeNativeTexture } = await import( "../../src/engine/foundation/assets/native-texture.ts" );
+const { regionOffsetXZ } = await import( "../../src/engine/foundation/world/world-space.ts" );
 const camera = { eye: [ 0, 0, 0 ], target: [ 0, 0, 1 ], near: 1, far: 2000, fov: 1 };
 const matrix = Float32Array.from( [ .001, 0, 0, 0, 0, .001, 0, 0, 0, 0, .001, 0, 0, 0, .5, 1 ] );
-function fixture() {
-	let calls = 0, uploads = 0, releases = 0, updates = 0;
-	const meshes = [];
-	const weather = createWeather( {
-		range: ( a, b ) => {
-			calls++;
-			return Math.trunc( (a + b) / 2 );
-		}
-	} );
-	const gpu = {
-		upload( mesh ) {
-			uploads++;
-			meshes.push( mesh );
-			return { id: uploads };
+const PATHS = [ "rain1", "snow1", "snow2" ].map( n => "/assets/images/Map_extracted/weather/" + n + ".png" );
+const midpoint = ( a, b ) => Math.trunc( (a + b) / 2 );
+
+/*
+================
+fixture
+
+A weather owner over the pool model, with every texture resident and a
+counting midpoint RNG (choice answers the snow variant draw).
+================
+*/
+function fixture( { choice, sounds } = {} ) {
+	let calls = 0;
+	const pool = createWeatherReference();
+	const weather = createWeather(
+		{
+			range: ( a, b ) => {
+				calls++;
+				return a === 0 && b === 4 && choice !== undefined ? choice : midpoint( a, b );
+			}
 		},
-		release() {
-			releases++;
-		},
-		updatePositions() {
-			updates++;
-		}
-	};
-	const images = new Map(
-		[ "rain1", "rain2", "snow1", "snow2" ].map( n => [ "/assets/images/Map_extracted/weather/" + n + ".png", {} ] )
+		sounds && (event => sounds.push( event ))
 	);
+	const images = new Map( PATHS.map( path => [ path, path ] ) );
 	return {
 		weather,
-		meshes,
-		step: (
-			t,
-			region = 0,
-			enabled = true
-		) => (weather.update( camera, t, region, enabled ), weather.prepare( gpu, images, camera, matrix )),
-		stats: () => ({ calls, uploads, releases, updates }),
-		gpu
+		pool,
+		images,
+		calls: () => calls,
+		step: ( t, { region = 0, enabled = true, view = camera, at = undefined, textures = images } = {} ) => {
+			weather.update( view, t, region, enabled, at );
+			return weather.prepare( pool.commands, textures, view, matrix );
+		}
 	};
 }
-test("weather emits into retained GPU batches, consumes shared RNG, and resets without reseeding", () => {
+
+test("weather emits into retained GPU regions, consumes shared RNG, and resets without reseeding", () => {
 	const f = fixture();
 	f.weather.set( { mode: 2, amount: 10 } );
 	f.step( 0 );
-	assert.equal( f.weather.paths().length, 4 );
+	assert.equal( f.weather.paths().length, 3 );
 	assert.equal( f.step( 1 ).length, 1 );
-	assert.equal( f.weather.stats().particles, 4 );
-	assert.equal( f.stats().calls, 14 );
-	assert.equal( f.meshes[0].instances.length, 9 * 16 );
-	assert.equal( f.meshes[0].world, true );
+	assert.equal( f.pool.alive(), 4 );
+	assert.equal( f.calls(), 14 );
+	const mesh = f.pool.state.uploads[0].mesh;
+	assert.equal( mesh.instances.length, 9 * 16 );
+	assert.equal( mesh.world, true );
+	assert.equal( mesh.weather.region, 0 );
 	f.step( 1.01 );
-	assert.equal( f.stats().uploads, 1 );
-	assert.equal( f.stats().updates, 2 );
-	const count = f.stats().calls;
+	assert.equal( f.pool.state.uploads.length, 1, "the region draw is retained" );
+	const count = f.calls();
 	f.weather.set( null );
-	assert.equal( f.weather.stats().particles, 0 );
+	assert.deepEqual( f.weather.stats().windows, [ 0, 0, 0 ] );
 	assert.equal( f.weather.paths().length, 0 );
 	assert.deepEqual( f.step( 2 ), [] );
-	assert.equal( f.stats().calls, count );
-	f.weather.dispose( f.gpu );
-	assert.equal( f.stats().releases, 1 );
+	assert.equal( f.calls(), count );
+	f.weather.dispose( f.pool.commands );
+	assert.equal( f.pool.state.releases, 1 );
 });
+
 test("weather clear drains existing rain as drops fall past the cull", () => {
 	const f = fixture();
 	f.weather.set( { mode: 2, amount: 10 } );
 	f.step( 0 );
 	f.step( 1 );
-	assert.equal( f.weather.stats().particles, 4 );
+	assert.equal( f.pool.alive(), 4 );
 	f.weather.set( { mode: 1, amount: 0 } );
-	// No ground stops a drop now (#4108): two capped 3 s steps (the
-	// native elapsed cap) carry every spawned drop past the
-	// below-eye cull, and mode 1 emits no replacements.
+	// No ground stops a drop (#4108): two capped 3 s steps (the native
+	// elapsed cap) carry every drop past the below-eye cull, and mode 1
+	// emits no replacements; the next step frees their slots.
 	f.step( 4 );
 	f.step( 7 );
-	assert.equal( f.weather.stats().particles, 0 );
-});
-test("max rain settles at the steady state the emission, fall law and cull set", () => {
-	// #4108 cost pin. Emission at the 255 cap is amount*dt*2 = 8.5
-	// drops a step (the shared remainder carries the half). A drop
-	// spawns 100 above the reference (midpoint stub) with start
-	// y+490 and dies when 4.9*((age+10000)/1000)^2 passes 490+100+500
-	// (start, spawn height, eye-500 cull): age 4916 ms, 294 steps.
-	// Steady state is therefore 8.5 * 294 = 2499 live drops, and no
-	// per-drop scene work exists to price: update takes no ground
-	// callback at all. A reintroduced pick, splash or second death
-	// rule moves this count.
-	const weather = createWeather( { range: ( a, b ) => Math.trunc( (a + b) / 2 ) } );
-	const view = { ...camera, eye: [ 0, 100, 0 ], target: [ 0, 100, 1 ] };
-	weather.set( { mode: 2, amount: 255 } );
-	for ( let i = 0; i <= 600; i++ ) weather.update( view, i / 60, 0, true );
-	assert.equal( weather.stats().particles, 2499 );
+	assert.equal( f.pool.alive(), 0 );
+	f.step( 8 );
+	assert.deepEqual( f.weather.stats().windows, [ 0, 0, 0 ] );
+	assert.deepEqual( f.step( 9 ), [], "an empty region is not drawn" );
 });
 
-test("interior weather gate prevents emission and region rebasing keeps particle coordinates finite", () => {
+test("max rain settles at the steady state the emission, fall law and cull set", () => {
+	// #4108 cost pin. Emission at the 255 cap is amount*dt*2 = 8.5 drops a
+	// step. A drop spawns 100 above the reference with start y+490 and dies
+	// when 4.9*((age+10000)/1000)^2 passes 490+100+500: age 4916 ms, 294
+	// steps, so 8.5 * 294 = 2499 live drops. The CPU keeps no drop: its
+	// live window bounds them and is never shorter than the pool's count.
+	const f = fixture(), view = { ...camera, eye: [ 0, 100, 0 ], target: [ 0, 100, 1 ] };
+	f.weather.set( { mode: 2, amount: 255 } );
+	for ( let i = 0; i <= 600; i++ ) f.step( i / 60, { view } );
+	assert.equal( f.pool.alive(), 2499 );
+	const window = f.weather.stats().windows[0];
+	assert.ok( window >= 2499 && window < 2499 + 64, `window ${window}` );
+	assert.equal( f.pool.state.overwrites, 0 );
+	assert.equal( f.weather.stats().overflow, 0 );
+});
+
+test("interior weather gate pauses the drops; region rebases move old drops, not newborn ones", () => {
 	const f = fixture();
 	f.weather.set( { mode: 3, amount: 10 } );
 	f.step( 0 );
-	f.step( 1, 0, false );
-	assert.equal( f.stats().calls, 0 );
+	f.step( 1, { enabled: false } );
+	assert.equal( f.calls(), 0 );
+	assert.equal( f.pool.state.steps, 0, "a paused frame steps nothing" );
 	f.step( 2 );
-	assert.equal( f.weather.stats().particles, 1 );
-	assert.equal( f.stats().calls, 4 );
-	f.step( 2.1, 1 );
-	assert.ok( f.meshes.every( m => m.positions.every( Number.isFinite ) ) );
+	assert.equal( f.pool.alive(), 1 );
+	assert.equal( f.calls(), 4 );
+	const before = f.pool.drop( 1, 0 );
+	// Cross into region 1 while paused: the rebase waits for the next step.
+	f.step( 2.05, { region: 1, enabled: false } );
+	f.step( 2.1, { region: 1 } );
+	const [dx, dz] = regionOffsetXZ( 1, 0 ), moved = f.pool.drop( 1, 0 );
+	assert.ok( Number.isFinite( dx ) && Number.isFinite( dz ) );
+	// The rebase moved it by the region offset; a wrap may then fold it
+	// back toward the reference in steps of 200.
+	const folded = ( value, offset ) => Math.abs( (((value - offset) % 200) + 300) % 200 - 100 ) < 1;
+	assert.ok( folded( moved.x - before.x, dx ) && folded( moved.z - before.z, dz ), "the old drop missed the rebase" );
+	for ( let i = 0; i < 4; i++ ) f.step( 3 + i, { region: 1 } );
+	const newborn = f.pool.drop( 1, 1 );
+	assert.ok( newborn.flags & 1 );
+	assert.ok( Math.abs( newborn.x ) <= 101 && Math.abs( newborn.z - 1 ) <= 101, "a newborn drop was rebased" );
 });
+
 test("native texture decoder preserves every BGRA/BC2 mip and rejects malformed resources", async () => {
 	for ( let i = 1; i <= 8; i++ ) {
 		const bytes = new Uint8Array(
@@ -142,181 +164,175 @@ test("native texture decoder preserves every BGRA/BC2 mip and rejects malformed 
 // wrap against the player, while 8D1910/8D20D0 gate lateral motion on visibility.
 test("camera zoom cannot relocate precipitation or change snow variant probabilities", () => {
 	function sample( eye, choice ) {
-		let mesh;
-		const weather = createWeather( { range: ( a, b ) => a === 0 && b === 4 ? choice : Math.trunc( (a + b) / 2 ) } );
-		const images = new Map(
-			[ "snow1", "snow2" ].map( n => [ "/assets/images/Map_extracted/weather/" + n + ".png", n ] )
-		);
-		const gpu = {
-			upload( m, i ) {
-				mesh = { m, i };
-				return {};
-			},
-			release() {},
-			updatePositions() {}
-		};
-		weather.set( { mode: 3, amount: 10 } );
-		for ( const time of [ 0, 1 ] ) {
-			(weather.update( { ...camera, eye }, time, 0, true, [ 10, 20, 30 ] ),
-				weather.prepare( gpu, images, { ...camera, eye }, matrix ));
-		}
-		return mesh;
+		const f = fixture( { choice } ), view = { ...camera, eye };
+		f.weather.set( { mode: 3, amount: 10 } );
+		for ( const time of [ 0, 1 ] ) f.step( time, { view, at: [ 10, 20, 30 ] } );
+		const region = choice === 0 ? 2 : 1;
+		return { image: f.pool.state.uploads[0]?.image, drop: f.pool.drop( region, 0 ) };
 	}
 	const rare = sample( [ 0, 0, 0 ], 0 ), common = sample( [ 0, 0, 0 ], 1 );
-	assert.equal( defined( rare ).i, "snow2" );
-	assert.equal( defined( common ).i, "snow1" );
-	// Zoom along the same view direction changes neither origin nor geometry.
-	const parallel = sample( [ 0, 0, -100 ], 0 );
-	assert.deepEqual( [ ...defined( rare ).m.positions.slice( 0, 9 ) ], [
-		...defined( parallel ).m.positions.slice( 0, 9 )
-	] );
-	assert.equal( defined( rare ).m.positions[1], 110.5 );
-	assert.equal( defined( common ).m.positions[1], 108.5 );
+	assert.equal( rare.image, PATHS[2] );
+	assert.equal( common.image, PATHS[1] );
+	// Zoom along the same view direction changes neither origin nor drop.
+	assert.deepEqual( sample( [ 0, 0, -100 ], 0 ).drop, rare.drop );
+	// Spawned at 20 + 100, fallen one second at 10 (CWSnow2) or 12 (CWSnow).
+	assert.equal( rare.drop.y, 110 );
+	assert.equal( common.drop.y, 108 );
 });
-test("rain never lands: no splash batch is uploaded and drops fall through the old ground line", () => {
-	// #4108: native rain computes no ground height (the 8CE9C0
-	// census), so the port grounds nothing either. The old code
-	// grounded each drop with a scene pick at y=20 here and splashed
-	// it into a second (rain2, six-vertex, one-instance) batch; now
-	// the rain1 streak batch is the only upload, every batch keeps
-	// the nine-instance shape, and drops fall past 20 until the
-	// below-eye cull retires them.
-	const images = new Map(
-		[ "rain1", "rain2", "snow1", "snow2" ].map( n => [ "/assets/images/Map_extracted/weather/" + n + ".png", n ] )
-	);
-	const uploaded = [], meshes = [];
-	const gpu = {
-		upload( mesh, image ) {
-			uploaded.push( image );
-			meshes.push( mesh );
-			return { image };
-		},
-		release() {},
-		updatePositions() {}
-	};
-	const weather = createWeather( { range: ( a, b ) => Math.trunc( (a + b) / 2 ) } );
-	weather.set( { mode: 2, amount: 255 } );
-	for ( let i = 0; i <= 360; i++ ) {
-		const t = i / 60, view = { ...camera, eye: [ 0, 100, 0 ], target: [ 0, 100, 1 ] };
-		weather.update( view, t, 0, true );
-		weather.prepare( gpu, images, view, matrix );
-	}
-	assert.ok( uploaded.length > 0 );
-	assert.ok( uploaded.every( image => image === "rain1" ), "a splash (rain2) batch was uploaded" );
-	assert.ok( meshes.every( mesh => mesh.instances.length === 9 * 16 ), "a one-instance splash batch was uploaded" );
-	assert.ok( weather.stats().particles > 0 );
+
+test("rain never lands: only the streak region draws, and drops fall through the old ground line", () => {
+	// #4108: native rain computes no ground height (the 8CE9C0 census): no
+	// splash batch, every draw the nine-instance shape.
+	const f = fixture(), view = { ...camera, eye: [ 0, 100, 0 ], target: [ 0, 100, 1 ] };
+	f.weather.set( { mode: 2, amount: 255 } );
+	for ( let i = 0; i <= 360; i++ ) f.step( i / 60, { view } );
+	const uploads = f.pool.state.uploads;
+	assert.ok( uploads.length > 0 );
+	assert.ok( uploads.every( upload => upload.image === PATHS[0] ), "a non-rain draw was uploaded" );
+	assert.ok( uploads.every( upload => upload.mesh.instances.length === 9 * 16 ) );
+	assert.ok( f.pool.alive() > 0 );
 });
 
 test("late texture arrival cannot consume a different shared random stream or freeze snow drift", () => {
 	function run( late ) {
-		let calls = 0, mesh;
-		const weather = createWeather( {
-				range: ( a, b ) => {
-					calls++;
-					return Math.trunc( (a + b) / 2 );
-				}
-			} ),
-			images = new Map(
-				[ "snow1", "snow2" ].map( n => [ "/assets/images/Map_extracted/weather/" + n + ".png", {} ] )
-			);
-		const gpu = {
-			upload( m ) {
-				mesh = m;
-				return {};
-			},
-			release() {},
-			updatePositions() {}
+		const f = fixture();
+		f.weather.set( { mode: 3, amount: 80 } );
+		for ( let i = 0; i <= 40; i++ ) f.step( i / 20, { textures: late && i < 40 ? new Map() : f.images } );
+		return {
+			calls: f.calls(),
+			drops: [ 1, 2 ].map( region => [ ...f.pool.regions[region].words ] ),
+			stats: f.weather.stats()
 		};
-		weather.set( { mode: 3, amount: 80 } );
-		for ( let i = 0; i <= 40; i++ ) {
-			(weather.update( camera, i / 20, 0, true ),
-				weather.prepare( gpu, late && i < 40 ? new Map() : images, camera, matrix ));
-		}
-		return { calls, positions: [ ...defined( mesh ).positions ], stats: weather.stats() };
 	}
 	assert.deepEqual( run( true ), run( false ) );
 });
 
 test("Kerberos event rain preserves snow, targets density ten, and owns one ambient loop", () => {
-	const sounds = [],
-		weather = createWeather( { range: ( a, b ) => Math.trunc( (a + b) / 2 ) }, event => sounds.push( event ) );
-	const gpu = {
-		upload() {
-			return {};
-		},
-		release() {},
-		updatePositions() {}
-	};
-	weather.set( { mode: 3, amount: 80, eventRain: true } );
-	weather.set( { mode: 3, amount: 80, eventRain: true } );
-	for ( const time of [ 0, 1 ] ) {
-		(weather.update( camera, time, 0, true ), weather.prepare( gpu, new Map(), camera, matrix ));
-	}
-	assert.equal( weather.stats().amount, 2 );
-	assert.equal( weather.stats().particles, 5 );
+	const sounds = [], f = fixture( { sounds } );
+	f.weather.set( { mode: 3, amount: 80, eventRain: true } );
+	f.weather.set( { mode: 3, amount: 80, eventRain: true } );
+	for ( const time of [ 0, 1 ] ) f.step( time, { textures: new Map() } );
+	assert.equal( f.weather.stats().amount, 2 );
+	assert.equal( f.pool.alive(), 5 );
 	assert.equal( sounds.length, 1 );
 	assert.equal( sounds[0].loop, true );
 	assert.equal( sounds[0].spatial, false );
-	assert.equal( weather.overlay(), null ); // Event rain alone does not enter the ordinary-rain thunder lottery.
-	weather.set( null );
+	assert.equal( f.weather.overlay(), null ); // Event rain alone does not enter the ordinary-rain thunder lottery.
+	f.weather.set( null );
 	assert.equal( sounds.length, 2 );
 	assert.equal( sounds[1].stop, true );
 });
 
 test("native app caps elapsed weather simulation at three seconds after a stall", () => {
 	function sample( end ) {
-		const weather = createWeather( { range: ( a, b ) => Math.trunc( (a + b) / 2 ) } ),
-			gpu = {
-				upload() {
-					return {};
-				},
-				release() {},
-				updatePositions() {}
-			};
-		weather.set( { mode: 3, amount: 80 } );
-		for ( const time of [ 0, end ] ) {
-			(weather.update( camera, time, 0, true ), weather.prepare( gpu, new Map(), camera, matrix ));
-		}
-		return weather.stats();
+		const f = fixture();
+		f.weather.set( { mode: 3, amount: 80 } );
+		for ( const time of [ 0, end ] ) f.step( time, { textures: new Map() } );
+		const { windows, spawned, overflow, amount, remainder } = f.weather.stats();
+		return { windows, spawned, overflow, amount, remainder, drops: [ ...f.pool.regions[1].words ] };
 	}
 	assert.deepEqual( sample( 30 ), sample( 3 ) );
 });
 
-// #4108: a frame uploads only the span its rows cover (plus the tail an
-// earlier frame wrote, zeroed again), never the whole power-of-two
-// capacity; the padded tail beyond the uploaded span stays zero, so the
-// collapsed triangles at the origin draw nothing, as the old
-// full-capacity fill left them.
-test("weather uploads track the live rows and the padded tail stays zero", () => {
-	const spans = new Map();
-	let rainMesh;
-	const weather = createWeather( { range: ( a, b ) => Math.trunc( (a + b) / 2 ) } ),
-		gpu = {
-			upload( mesh, image ) {
-				if ( image === "rain1" ) rainMesh = mesh;
-				return { image };
-			},
-			release() {},
-			updatePositions( draw, positions ) {
-				spans.set( draw.image, positions.length );
-			}
-		},
-		images = new Map(
-			[ "rain1", "rain2", "snow1", "snow2" ].map(
-				n => [ "/assets/images/Map_extracted/weather/" + n + ".png", n ]
-			)
-		),
-		step = t => (weather.update( camera, t, 0, true ), weather.prepare( gpu, images, camera, matrix ));
-	weather.set( { mode: 2, amount: 255 } );
-	for ( let i = 0; i <= 120; i++ ) step( i / 20 );
-	const steady = spans.get( "rain1" );
-	assert.ok( defined( rainMesh ).positions.length > defined( steady ), "the batch capacity exceeds the live span" );
-	weather.set( { mode: 1, amount: 0 } );
-	for ( let i = 121; i <= 130; i++ ) step( i / 20 );
-	const drained = spans.get( "rain1" );
-	assert.ok( defined( drained ) < defined( steady ), "the upload span did not shrink as the rain drained" );
-	const positions = defined( rainMesh ).positions;
-	for ( let i = defined( drained ); i < positions.length; i++ ) {
-		assert.equal( positions[i], 0, "a padded vertex beyond the uploaded span is not zero" );
+test("a frame uploads new drops' records only, never per-drop geometry", () => {
+	// #4692: the CPU writes 32 bytes a new drop and nothing for a live one.
+	const f = fixture(), sizes = [];
+	const spawn = f.pool.commands.weatherSpawn;
+	f.pool.commands.weatherSpawn = ( region, slot, records ) => {
+		sizes.push( records.byteLength );
+		spawn( region, slot, records );
+	};
+	f.weather.set( { mode: 2, amount: 255 } );
+	for ( let i = 0; i <= 600; i++ ) f.step( i / 60 );
+	assert.equal( sizes.reduce( ( a, b ) => a + b, 0 ), f.pool.state.spawns * 32 );
+	assert.ok( f.pool.state.spawns < 601 * 9, "more records than the emission law spawns" );
+	assert.equal( f.pool.state.overwrites, 0 );
+});
+
+test("heavy snow over a long descent never writes a spawn over a live flake", () => {
+	// The eye sinks at 9 units/s, just slower than CWSnow2 falls: flakes
+	// live far longer than on level ground. The windows keep every live
+	// flake; a full ring drops the spawn (counted), never overwrites.
+	const f = fixture();
+	f.weather.set( { mode: 3, amount: 255 } );
+	for ( let i = 0; i <= 60 * 240; i++ ) {
+		const y = -9 * i / 60, view = { ...camera, eye: [ 0, y, 0 ], target: [ 0, y, 1 ] };
+		f.step( i / 60, { view, at: [ 0, y, 1 ] } );
 	}
+	assert.equal( f.pool.state.overwrites, 0 );
+	const stats = f.weather.stats();
+	for ( const region of [ 1, 2 ] ) assert.ok( stats.windows[region] >= f.pool.alive( region ) );
+});
+
+test("snow falls, wraps and wanders alike at 30 and 500 frames a second", () => {
+	// The first flake's frame counter ticks at 60 Hz whatever the render
+	// rate (its wrap and flip bits with it), and its fall follows dt.
+	function run( fps ) {
+		const f = fixture();
+		f.weather.set( { mode: 3, amount: 10 } );
+		for ( let i = 0; i <= fps * 10; i++ ) f.step( i / fps );
+		return f.pool.drop( 1, 0 );
+	}
+	const slow = run( 30 ), fast = run( 500 );
+	assert.ok( slow.frame > 300, `frame ${slow.frame}` );
+	assert.ok( Math.abs( slow.frame - fast.frame ) <= 2, `${slow.frame} vs ${fast.frame} ticks` );
+	assert.ok( Math.abs( slow.y - fast.y ) < .5, `${slow.y} vs ${fast.y}` );
+});
+
+test("snow's horizontal wander and wrap do not depend on the frame rate", () => {
+	// The midpoint RNG spawns every flake at the reference's x, so a
+	// flake's x is its drift alone. The reference then walks away at
+	// 30 units/s: every flake wraps back within 100 of it on the 60 Hz
+	// ticks. Both rates must give the same spread and the same wrap.
+	function run( fps ) {
+		const f = fixture();
+		f.weather.set( { mode: 3, amount: 255 } );
+		const seconds = 20;
+		for ( let i = 0; i <= fps * seconds; i++ ) {
+			const t = i / fps, walk = t > 10 ? (t - 10) * 30 : 0;
+			f.step( t, { at: [ walk, 0, 1 ] } );
+		}
+		const reference = 300, offsets = [];
+		for ( let slot = 0; slot < f.pool.regions[1].words.length / 8; slot++ ) {
+			const drop = f.pool.drop( 1, slot );
+			if ( drop.flags & 1 ) offsets.push( drop.x - reference );
+		}
+		const inside = offsets.filter( x => Math.abs( x ) <= 102 ).length / offsets.length;
+		const spread = Math.sqrt( offsets.reduce( ( sum, x ) => sum + x * x, 0 ) / offsets.length );
+		return { inside, spread, count: offsets.length };
+	}
+	const slow = run( 30 ), fast = run( 500 );
+	assert.ok( slow.count > 1000 && fast.count > 1000 );
+	assert.ok( slow.inside > .97 && fast.inside > .97, JSON.stringify( { slow, fast } ) );
+	assert.ok( Math.abs( slow.spread - fast.spread ) / slow.spread < .1, JSON.stringify( { slow, fast } ) );
+});
+
+test("a refused step forgets the drops instead of letting the CPU clock run ahead", () => {
+	const f = fixture();
+	f.weather.set( { mode: 2, amount: 255 } );
+	for ( let i = 0; i <= 60; i++ ) f.step( i / 60 );
+	let refusedSerial = 0;
+	const stepCommand = f.pool.commands.weatherStep;
+	f.pool.commands.weatherStep = step => {
+		refusedSerial = step.serial;
+		return stepCommand( step );
+	};
+	f.pool.state.refuse = true;
+	f.step( 61 / 60 );
+	f.pool.state.refuse = false;
+	f.pool.commands.weatherStep = stepCommand;
+	assert.deepEqual( f.weather.stats().windows, [ 0, 0, 0 ] );
+	assert.equal( f.weather.stats().refused, 1 );
+	// Forgotten drops sit outside every window: no later step moves or
+	// draws one (every visible slot holds a drop born after the refusal),
+	// and new spawns take their slots.
+	const words = f.pool.regions[0].words;
+	for ( let i = 62; i <= 600; i++ ) {
+		f.step( i / 60 );
+		for ( const slot of f.pool.visible( 0 ) ) {
+			assert.ok( words[slot * 8 + 7] > refusedSerial, `abandoned drop in slot ${slot} reappeared` );
+		}
+	}
+	assert.ok( f.weather.stats().windows[0] > 0 );
+	assert.equal( f.weather.stats().overflow, 0 );
 });

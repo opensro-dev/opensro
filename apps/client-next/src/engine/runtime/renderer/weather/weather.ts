@@ -1,19 +1,34 @@
 /*
 ===========================================================================
 
-weather.ts - the native weather particle renderer
+weather.ts - the native weather manager: emission, thunder, and the drops
 
-Emits and draws rain and snow batches; batches rewrite their vertices
-every update, so they are uploaded with dynamicVertices.
+Emits rain and snow the way the native manager does (8CE9C0/8D1910: the
+shared remainder, the player-relative spawn, the shared presentation RNG
+draws in their native order) and hands every new drop to the resident GPU
+simulation (device/weather-particles.ts), which steps, culls, drifts and
+draws them by the native rules. Port-only, not native (#4692): the drops'
+per-frame state lives on the GPU, so the CPU's work a frame is constant
+plus one record a new drop, never a pass over the live drops. What the GPU
+changes (drift flips from a per-drop hash, frame bits on fixed ticks) is
+described there.
 
 Native rain never grounds its drops (#4108, the 8CE9C0 census on the
 v1.150 client: no weather function calls any height or raycast
 function; SampleHeight serves nav movement only). A drop spawns at
 the player position plus a random offset and dies by the below-eye
-cull below, the way the spawned native effect object dies by its own
-lifetime. The per-drop scene pick and ground splash this file used to
-run were a port embellishment with no native counterpart; they are
-gone, so spawning a drop is O(1) in any scene.
+cull, the way the spawned native effect object dies by its own
+lifetime.
+
+Slots: each kind's region is a ring the CPU fills in spawn order. The CPU
+never reads a drop back; it keeps, per region, the spawn batches (one a
+step) whose drops may still be alive and an upper bound on each batch's
+height: a drop only falls (snow by its kind's speed times the summed dt,
+rain by the native law of its age), and nothing raises it. A batch whose
+bound is below the death height is dead on the GPU by the step that
+proves it, so its slots leave the live window and may be reused. A spawn
+that finds its region full of possibly live drops is dropped and counted
+(stats().overflow), never written over a live one.
 
 ===========================================================================
 */
@@ -22,48 +37,160 @@ import type { SoundEvent } from "@/engine/contracts/audio";
 import type { WeatherOptions } from "@/engine/foundation/gameplay/weather";
 import { advanceWeatherAmount, initialWeatherAmount } from "@/engine/foundation/gameplay/weather";
 import type { PresentationRandom } from "@/engine/contracts/presentation-random";
-import type { GeometryCommands, GeometryDraw, ImageDraw } from "../internal/gpu-contract";
+import type { GeometryCommands, GeometryDraw, ImageDraw, WeatherStep } from "../internal/gpu-contract";
 import type { WorldCamera } from "@/engine/contracts/scene";
 import { hypot2, hypot3 } from "@/engine/foundation/math/hypot";
 import { regionOffsetXZ } from "@/engine/foundation/world/world-space";
-type Particle = {
-	kind: number;
-	x: number;
-	y: number;
-	z: number;
-	start: number;
-	age: number;
-	frame: number;
-	dx: boolean;
-	dz: boolean;
+import {
+	PARTICLE_ALIVE,
+	PARTICLE_BIRTH_WORD,
+	PARTICLE_WORDS,
+	WEATHER_CAPACITY,
+	WEATHER_REGIONS
+} from "../device/weather-particles";
+
+// The particle kinds (native factories) and each one's region: rain
+// (CWRain), snow (CWSnow) and rare snow (CWSnow2); kind 1 has no factory.
+const KIND_REGION: readonly number[] = [ 0, -1, 1, 2 ];
+const REGION_TEXTURE = [ "rain1", "snow1", "snow2" ] as const;
+// Snow's fall speed a region (units a second); rain falls by its age.
+const REGION_FALL = [ 0, 12, 10 ];
+// Each region's corner uvs (three u, v pairs): the rain streak's, the flake's.
+const REGION_UVS: readonly (readonly number[])[] = [
+	[ .5, 0, .7, 1, .3, 1 ],
+	[ .5, 0, 0, 1, 1, 1 ],
+	[ .5, 0, 0, 1, 1, 1 ]
+];
+const RAIN_GRAVITY = 4.900000095367432;
+// World units a batch's height bound keeps above its drops: snow
+// subtracts each step's fall in float32 on the GPU and in float64 here, so
+// the rounding can add up; rain's height is a closed form of its age.
+const SNOW_BOUND_MARGIN = 32;
+const RAIN_BOUND_MARGIN = 1;
+// The rate the drops' frame counters tick (port-only, inferred): the
+// native bits were tuned for a 60 Hz frame (vsync), so a counter ticks
+// at that rate whatever the render rate.
+export const WEATHER_TICK_HZ = 60;
+// The nine tiles every drop draws at (native weather instances, 50 apart).
+const TILE_SHIFTS = [
+	[ 0, 0 ],
+	[ 50, 0 ],
+	[ 50, -50 ],
+	[ 0, -50 ],
+	[ -50, -50 ],
+	[ -50, 0 ],
+	[ -50, 50 ],
+	[ 0, 50 ],
+	[ 50, 50 ]
+] as const;
+// The most drops one frame may emit (a stalled frame emits at most three
+// seconds' worth, far below this).
+const MAX_FRAME_EMISSION = 32768;
+// Steps that may wait for one prepare (update without prepare).
+const MAX_QUEUED_STEPS = 4;
+
+/*
+================
+Region
+
+One kind's ring: spawn and death counts since the last clear (the live
+window is [dead, spawned)), the batches that may be alive (a ring of
+their end counts, height bounds and the clock at their birth), the
+records waiting for the GPU, and the draw once its texture is resident.
+================
+*/
+type Region = {
+	spawned: number;
+	dead: number;
+	overflow: number;
+	batchEnd: Float64Array;
+	batchTop: Float64Array;
+	batchClock: Float64Array;
+	batchFirst: number;
+	batchCount: number;
+	pending: Uint32Array;
+	pendingCount: number;
+	// The pending records start at this spawn count.
+	pendingFrom: number;
+	draw: GeometryDraw | null;
+	image: ImageDraw | null;
 };
-type Batch = {
-	draw: GeometryDraw;
-	capacity: number;
-	positions: Float32Array;
-	colors: Float32Array;
-	image: ImageDraw;
-	// Vertices the last upload covered: the span the next frame must
-	// zero again where its rows no longer reach (#4108).
-	written: number;
-};
-// The weather owner retains particles and GPU batches. The manager's shared
-// remainder, frame-counter bits and draw-gated RNG follow 8CE9C0/8D1910.
+
+/*
+================
+createRegion
+================
+*/
+function createRegion( capacity: number ): Region {
+	return {
+		spawned: 0,
+		dead: 0,
+		overflow: 0,
+		batchEnd: new Float64Array( capacity ),
+		batchTop: new Float64Array( capacity ),
+		batchClock: new Float64Array( capacity ),
+		batchFirst: 0,
+		batchCount: 0,
+		pending: new Uint32Array( 64 * PARTICLE_WORDS ),
+		pendingCount: 0,
+		pendingFrom: 0,
+		draw: null,
+		image: null
+	};
+}
+
+/*
+================
+weatherDrawGeometry
+
+A region's draw: a placeholder stream (the vertex stage reads the pool),
+an index a corner for the whole region, and the nine tiles.
+================
+*/
+function weatherDrawGeometry( region: number ) {
+	const instances = new Float32Array( TILE_SHIFTS.length * 16 );
+	for ( let i = 0; i < TILE_SHIFTS.length; i++ ) {
+		instances.set( [ 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, TILE_SHIFTS[i]![0], 0, TILE_SHIFTS[i]![1], 1 ], i * 16 );
+	}
+	return {
+		world: true,
+		positions: new Float32Array( 3 ),
+		indices: Uint32Array.from( { length: WEATHER_CAPACITY[region]! * 3 }, ( _, i ) => i ),
+		transform: Float32Array.from( [ 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1 ] ),
+		instances,
+		weather: { region, uvs: REGION_UVS[region]! },
+		material: {
+			color: [ 1, 1, 1, 1 ] as [number, number, number, number],
+			alphaCutoff: 0,
+			blend: true,
+			doubleSided: true,
+			unlit: true,
+			fogDisabled: true
+		}
+	};
+}
+
+// The weather owner retains emission state and the GPU regions. The manager's
+// shared remainder and spawn RNG follow 8CE9C0/8D1910.
 export function createWeather( random?: PresentationRandom, sound?: ( event: SoundEvent ) => void ) {
 	let options: WeatherOptions | null = null,
 		amount = initialWeatherAmount(),
 		remainder = 0,
 		last: number | null = null,
 		origin: number | null = null;
-	let thunder = initialThunder(), soundSequence = 0, overlayVisible = false, drawDelta = 0;
-	let particles: Particle[] = [];
-	// The per-kind visible rows of one prepare, reused across frames:
-	// prepare is synchronous, so retained buckets cannot be observed
-	// half-filled (#4108).
-	const buckets: Particle[][] = [ [], [], [], [] ];
-	const batches = new Map<number, Batch>();
-	const names = [ "rain1", "rain2", "snow1", "snow2" ] as const;
-	const path = ( kind: number ) => "/assets/images/Map_extracted/weather/" + names[kind] + ".png";
+	let thunder = initialThunder(), soundSequence = 0, overlayVisible = false;
+	// The summed step time the drops have fallen by (seconds, and whole ms
+	// for rain's age), the fixed ticks, and the step serials.
+	let fallClock = 0, ageClock = 0, tickTime = 0, ticksDone = 0, serial = 1, seed = 0;
+	// Region rebases not yet stepped: a paused frame still crosses regions,
+	// and the next step moves the drops by every crossing since the last.
+	let heldShiftX = 0, heldShiftZ = 0, refused = 0, lastDeath: number | null = null;
+	const regions: Region[] = WEATHER_CAPACITY.map( createRegion );
+	// Steps made by update and sent by the next prepare, in order.
+	const queued: Omit<WeatherStep, "matrix">[] = [];
+	const record = new Uint32Array( PARTICLE_WORDS ), recordFloats = new Float32Array( record.buffer );
+	const corners = new Float32Array( 12 );
+	const path = ( region: number ) => "/assets/images/Map_extracted/weather/" + REGION_TEXTURE[region] + ".png";
 	function eventSound( active: boolean ) {
 		sound?.( {
 			id: "weather-event-rain",
@@ -78,16 +205,120 @@ export function createWeather( random?: PresentationRandom, sound?: ( event: Sou
 			stop: !active
 		} );
 	}
+	/*
+	================
+	queueSpawn
+
+	One drop record into its region's ring, or a counted overflow when
+	every slot may hold a live drop.
+	================
+	*/
+	function queueSpawn( region: Region, capacity: number, top: number ) {
+		if ( region.spawned - region.dead >= capacity ) {
+			region.overflow++;
+			return;
+		}
+		if ( region.pendingCount === 0 ) region.pendingFrom = region.spawned;
+		const need = (region.pendingCount + 1) * PARTICLE_WORDS;
+		if ( need > region.pending.length ) {
+			const grown = new Uint32Array( Math.max( need, region.pending.length * 2 ) );
+			grown.set( region.pending );
+			region.pending = grown;
+		}
+		region.pending.set( record, region.pendingCount * PARTICLE_WORDS );
+		region.pendingCount++;
+		region.spawned++;
+		// One batch a step: its end, its highest drop, the clock at birth.
+		const lastBatch = (region.batchFirst + region.batchCount - 1) % capacity;
+		if ( region.batchCount && region.batchClock[lastBatch] === (region === regions[0] ? ageClock : fallClock) ) {
+			region.batchEnd[lastBatch] = region.spawned;
+			region.batchTop[lastBatch] = Math.max( region.batchTop[lastBatch]!, top );
+			return;
+		}
+		const at = (region.batchFirst + region.batchCount) % capacity;
+		region.batchEnd[at] = region.spawned;
+		region.batchTop[at] = top;
+		region.batchClock[at] = region === regions[0] ? ageClock : fallClock;
+		region.batchCount++;
+	}
+	/*
+	================
+	retire
+
+	Drops the batches the last step killed: their highest drop is below
+	its death height. Batches die oldest first or not at all here; a
+	younger batch dead before an older one waits (the window stays a
+	superset of the live drops).
+	================
+	*/
+	function retire( index: number, deathHeight: number ) {
+		const region = regions[index]!, capacity = WEATHER_CAPACITY[index]!;
+		while ( region.batchCount ) {
+			const at = region.batchFirst, top = region.batchTop[at]!;
+			let bound: number;
+			if ( index === 0 ) {
+				const t = (ageClock - region.batchClock[at]! + 10000) / 1000;
+				bound = top - t * t * RAIN_GRAVITY;
+			} else {
+				bound = top - REGION_FALL[index]! * (fallClock - region.batchClock[at]!);
+			}
+			if ( bound + (index === 0 ? RAIN_BOUND_MARGIN : SNOW_BOUND_MARGIN) >= deathHeight ) return;
+			region.dead = region.batchEnd[at]!;
+			region.batchFirst = (at + 1) % capacity;
+			region.batchCount--;
+		}
+	}
+	/*
+	================
+	flushRegion
+
+	A region's queued spawns into its ring slots, split where it wraps.
+	================
+	*/
+	function flushRegion( gpu: GeometryCommands, index: number, region: Region ) {
+		if ( !region.pendingCount ) return;
+		const capacity = WEATHER_CAPACITY[index]!, slot = region.pendingFrom % capacity;
+		const first = Math.min( region.pendingCount, capacity - slot );
+		gpu.weatherSpawn( index, slot, region.pending.subarray( 0, first * PARTICLE_WORDS ) );
+		if ( first < region.pendingCount ) {
+			gpu.weatherSpawn(
+				index,
+				0,
+				region.pending.subarray( first * PARTICLE_WORDS, region.pendingCount * PARTICLE_WORDS )
+			);
+		}
+		region.pendingCount = 0;
+	}
+	/*
+	================
+	resetRegions
+
+	Every region empty: a clear (the drops end with the weather) or a lost
+	device (they ended with its pool). Slots are not zeroed: nothing past
+	an empty window is stepped or drawn, and a reused slot gets a record.
+	================
+	*/
+	function resetRegions() {
+		lastDeath = null;
+		for ( const region of regions ) {
+			region.spawned = region.dead = 0;
+			region.batchFirst = region.batchCount = 0;
+			region.pendingCount = 0;
+		}
+		queued.length = 0;
+	}
 	function clear() {
 		overlayVisible = false;
 		if ( options?.eventRain ) eventSound( false );
 		thunder = initialThunder();
-		particles = [];
+		resetRegions();
 		amount = initialWeatherAmount();
 		remainder = 0;
 		last = null;
 		origin = null;
+		heldShiftX = heldShiftZ = 0;
 	}
+	const live = () => regions.some( region => region.spawned > region.dead );
 	return {
 		set( value: WeatherOptions | null ) {
 			if (
@@ -103,8 +334,8 @@ export function createWeather( random?: PresentationRandom, sound?: ( event: Sou
 			return !overlayVisible || thunder.complete ? null : thunder.color.map( v => Math.trunc( v ) / 255 );
 		},
 		paths() {
-			return options && (options.mode !== 1 || options.eventRain) || particles.length ?
-				names.map( ( _, kind ) => path( kind ) ) :
+			return options && (options.mode !== 1 || options.eventRain) || live() ?
+				regions.map( ( _, region ) => path( region ) ) :
 				[];
 		},
 		update(
@@ -120,19 +351,24 @@ export function createWeather( random?: PresentationRandom, sound?: ( event: Sou
 				Math.min( 3000, Math.max( 0, Math.floor( seconds * 1000 ) - Math.floor( last * 1000 ) ) );
 			const dt = last === null ? 0 : Math.fround( Math.min( 3, Math.max( 0, seconds - last ) ) );
 			last = seconds;
-			drawDelta = dt;
 			if ( origin !== null && origin !== region ) {
 				const [dx, dz] = regionOffsetXZ( region, origin );
-				for ( const p of particles ) {
-					p.x += dx;
-					p.z += dz;
-				}
+				heldShiftX += dx;
+				heldShiftZ += dz;
 			}
 			origin = region;
 			overlayVisible = enabled && !!options;
+			// Paused (no weather, indoors, the frontend): the drops neither
+			// step nor draw, as the native update returned before them.
 			if ( !overlayVisible || !options ) return;
 			if ( !random && (options.mode !== 1 || options.eventRain) ) {
 				throw Error( "Weather requires shared presentation RNG" );
+			}
+			// Batches the last step killed free their slots before this frame
+			// spawns: their bound fell below that step's death height while
+			// they were in its window, so the GPU has already cleared them.
+			if ( lastDeath !== null ) {
+				for ( let index = 0; index < WEATHER_REGIONS; index++ ) retire( index, lastDeath );
 			}
 			const flash = advanceThunder( thunder, seconds, dt, options.mode === 2, ( a, b ) => random!.range( a, b ) );
 			thunder = flash.state;
@@ -154,7 +390,7 @@ export function createWeather( random?: PresentationRandom, sound?: ( event: Sou
 				const emission = Math.fround( remainder + amount.value * dt * (mode === 2 ? 2 : .5) ),
 					count = Math.trunc( emission );
 				remainder = Math.fround( emission - count );
-				if ( count > 32768 ) throw Error( "Weather frame exceeds emission budget" );
+				if ( count > MAX_FRAME_EMISSION ) throw Error( "Weather frame exceeds emission budget" );
 				for ( let i = 0; i < count; i++ ) {
 					// 8CE9C0 uses the player position, not the camera eye. CWSnow2 (10/s)
 					// is the one-in-four factory F0886C; CWSnow (12/s) uses F0877C.
@@ -163,43 +399,48 @@ export function createWeather( random?: PresentationRandom, sound?: ( event: Sou
 						extent = kind === 0 ? 600 : 1000;
 					const x = Math.fround( reference[0] + random!.range( -extent, extent ) / 10 ),
 						z = Math.fround( reference[2] + random!.range( -extent, extent ) / 10 );
-					particles.push( {
-						kind,
-						x,
-						y,
-						z,
-						start: kind === 0 ? Math.fround( y + 100 * 4.900000095367432 ) : y,
-						age: 0,
-						frame: 0,
-						dx: false,
-						dz: false
-					} );
+					const start = kind === 0 ? Math.fround( y + 100 * RAIN_GRAVITY ) : y;
+					recordFloats[0] = x;
+					recordFloats[1] = y;
+					recordFloats[2] = z;
+					recordFloats[3] = start;
+					record[4] = 0;
+					record[5] = 0;
+					record[6] = PARTICLE_ALIVE;
+					record[PARTICLE_BIRTH_WORD] = serial;
+					const index = KIND_REGION[kind]!;
+					queueSpawn( regions[index]!, WEATHER_CAPACITY[index]!, start );
 				}
 			}
-			const next: Particle[] = [];
-			for ( const p of particles ) {
-				p.age = (p.age + elapsedMs) >>> 0;
-				p.frame = (p.frame + 1) >>> 0;
-				if ( p.kind === 0 ) {
-					const t = Math.fround( (p.age + 10000) / 1000 );
-					p.y = Math.fround( p.start - t * t * 4.900000095367432 );
-				} else {
-					p.y = Math.fround( p.y - dt * (p.kind === 2 ? 12 : 10) );
-					if ( p.frame & 4 ) {
-						if ( p.x - reference[0] > 100 ) p.x = Math.fround( p.x - 200 );
-						else if ( p.x - reference[0] < -100 ) p.x = Math.fround( p.x + 200 );
-						if ( p.z - reference[2] > 100 ) p.z = Math.fround( p.z - 200 );
-						else if ( p.z - reference[2] < -100 ) p.z = Math.fround( p.z + 200 );
-					}
-				}
-				// The one death every kind shares: fallen far below the
-				// eye. Native drops end inside their effect object; the
-				// port's streak is depth-occluded by the ground it falls
-				// behind long before this cull, as the snow already was.
-				if ( p.y < camera.eye[1] - 500 ) continue;
-				next.push( p );
+			// The step every drop takes this frame, newborn ones included
+			// (the native update stepped the drops it had just spawned).
+			fallClock += dt;
+			ageClock += elapsedMs;
+			tickTime += dt;
+			const ticks = Math.floor( tickTime * WEATHER_TICK_HZ ) - ticksDone;
+			ticksDone += ticks;
+			const deathHeight = camera.eye[1] - 500;
+			const shiftX = heldShiftX, shiftZ = heldShiftZ;
+			heldShiftX = heldShiftZ = 0;
+			lastDeath = deathHeight;
+			// Updates without a prepare between them: the oldest step cannot be
+			// sent, so the drops it should have moved are forgotten too.
+			if ( queued.length === MAX_QUEUED_STEPS ) {
+				resetRegions();
+				refused++;
 			}
-			particles = next;
+			queued.push( {
+				reference: [ reference[0], reference[1], reference[2], deathHeight ],
+				motion: [ dt, shiftX, shiftZ ],
+				elapsedMs,
+				ticks,
+				seed: seed++,
+				serial: serial++,
+				windows: regions.map( ( item, index ) => ({
+					tail: item.dead % WEATHER_CAPACITY[index]!,
+					live: item.spawned - item.dead
+				}) )
+			} );
 		},
 		prepare(
 			gpu: GeometryCommands,
@@ -207,8 +448,11 @@ export function createWeather( random?: PresentationRandom, sound?: ( event: Sou
 			camera: WorldCamera,
 			matrix: Float32Array
 		) {
-			if ( !overlayVisible ) return [];
-			const dt = drawDelta;
+			for ( let index = 0; index < WEATHER_REGIONS; index++ ) flushRegion( gpu, index, regions[index]! );
+			if ( !overlayVisible || !live() ) {
+				queued.length = 0;
+				return [];
+			}
 			const fx = camera.target[0] - camera.eye[0],
 				fy = camera.target[1] - camera.eye[1],
 				fz = camera.target[2] - camera.eye[2],
@@ -225,155 +469,94 @@ export function createWeather( random?: PresentationRandom, sound?: ( event: Sou
 					(fz * right[0]! - fx * right[2]!) / length,
 					(fx * right[1]! - fy * right[0]!) / length
 				];
-			const visible = ( p: Particle ) => {
-				const w = matrix[3]! * p.x + matrix[7]! * p.y + matrix[11]! * p.z + matrix[15]!,
-					x = matrix[0]! * p.x + matrix[4]! * p.y + matrix[8]! * p.z + matrix[12]!,
-					y = matrix[1]! * p.x + matrix[5]! * p.y + matrix[9]! * p.z + matrix[13]!,
-					z = matrix[2]! * p.x + matrix[6]! * p.y + matrix[10]! * p.z + matrix[14]!;
-				return w > 0 && Math.abs( x ) <= w && Math.abs( y ) <= w && z >= 0 && z <= w;
-			};
-			// One pass over the particles, one visibility test each: the
-			// per-kind filter this replaces recomputed the transform four
-			// times per particle per frame (#4108).
-			for ( const bucket of buckets ) bucket.length = 0;
-			for ( const p of particles ) {
-				if ( visible( p ) ) buckets[p.kind]!.push( p );
+			// The corners are the same for every drop of a kind: the camera
+			// axes and the rain's right are this frame's constants.
+			corners.fill( 0 );
+			corners[1] = 10;
+			corners[4] = rainRight[0]! * .3;
+			corners[6] = rainRight[2]! * .3;
+			corners[8] = -rainRight[0]! * .3;
+			corners[10] = -rainRight[2]! * .3;
+			gpu.weatherCorners( 0, corners );
+			for ( let axis = 0; axis < 3; axis++ ) {
+				corners[axis] = up[axis]! * .5;
+				corners[4 + axis] = (right[axis]! - up[axis]!) * .5;
+				corners[8 + axis] = (-right[axis]! - up[axis]!) * .5;
 			}
+			corners[3] = corners[7] = corners[11] = 0;
+			gpu.weatherCorners( 1, corners );
+			gpu.weatherCorners( 2, corners );
+			// Each update's step once, whichever passes then draw the drops
+			// (the main view, the water mirror): they read the same pool.
+			// A refused step means the pool missed time the CPU clock counted:
+			// forget every drop (their slots leave the windows, so nothing
+			// steps or draws them) rather than reuse a slot early.
+			for ( const step of queued ) {
+				if ( !gpu.weatherStep( { ...step, matrix } ) ) {
+					resetRegions();
+					refused++;
+					break;
+				}
+			}
+			queued.length = 0;
 			const output: GeometryDraw[] = [];
-			for ( let kind = 0; kind < 4; kind++ ) {
-				const rows = buckets[kind]!;
-				// Native 8CF730 traverses typed render lists; texture availability must
-				// not suppress the corresponding visible particle callbacks.
-				if ( kind >= 2 ) {
-					for ( const p of rows ) {
-						p.x = Math.fround( p.x + (p.dx ? 2 : -2) * dt );
-						p.z = Math.fround( p.z + (p.dz ? 2 : -2) * dt );
-						if ( p.frame & 16 ) {
-							if ( random!.range( 0, 2 ) ) p.dx = !p.dx;
-							if ( random!.range( 0, 2 ) ) p.dz = !p.dz;
-						}
-					}
+			for ( let index = 0; index < WEATHER_REGIONS; index++ ) {
+				const region = regions[index]!, image = images.get( path( index ) );
+				// Native 8CF730 traverses typed render lists; texture availability
+				// must not suppress the step, only the drawing.
+				if ( region.spawned === region.dead || !image ) continue;
+				if ( !region.draw || region.image !== image ) {
+					if ( region.draw ) gpu.release( region.draw );
+					region.draw = gpu.upload( weatherDrawGeometry( index ), image );
+					region.image = image;
 				}
-				const image = images.get( path( kind ) );
-				if ( !rows.length || !image ) continue;
-				const vertices = 3;
-				let batch = batches.get( kind );
-				if ( !batch || batch.capacity < rows.length || batch.image !== image ) {
-					if ( batch ) gpu.release( batch.draw );
-					const capacity = 2 ** Math.ceil( Math.log2( Math.max( 16, rows.length ) ) ),
-						positions = new Float32Array( capacity * vertices * 3 ),
-						colors = new Float32Array( capacity * vertices * 4 ).fill( 1 ),
-						uvs = new Float32Array( capacity * vertices * 2 );
-					const uv = kind === 0 ? [ .5, 0, .7, 1, .3, 1 ] : [ .5, 0, 0, 1, 1, 1 ];
-					for ( let i = 0; i < capacity; i++ ) uvs.set( uv, i * vertices * 2 );
-					const transform = Float32Array.from( [ 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1 ] ),
-						instances = new Float32Array( 9 * 16 );
-					for ( let i = 0; i < instances.length / 16; i++ ) {
-						instances.set( transform, i * 16 );
-						const shifts = [
-							[ 0, 0 ],
-							[ 50, 0 ],
-							[ 50, -50 ],
-							[ 0, -50 ],
-							[ -50, -50 ],
-							[ -50, 0 ],
-							[ -50, 50 ],
-							[ 0, 50 ],
-							[ 50, 50 ]
-						];
-						instances[i * 16 + 12] = shifts[i]![0]!;
-						instances[i * 16 + 14] = shifts[i]![1]!;
-					}
-					const draw = gpu.upload( {
-						world: true,
-						dynamicVertices: true,
-						positions,
-						colors,
-						uvs,
-						indices: Uint32Array.from( { length: capacity * vertices }, ( _, i ) => i ),
-						transform,
-						instances,
-						material: {
-							color: [ 1, 1, 1, 1 ],
-							alphaCutoff: 0,
-							blend: true,
-							doubleSided: true,
-							unlit: true,
-							fogDisabled: true
-						}
-					}, image );
-					batch = { draw, capacity, positions, colors, image, written: 0 };
-					batches.set( kind, batch );
-				}
-				// Upload only the span the draw can show (#4108): the live
-				// rows plus the tail earlier frames wrote, zeroed again here
-				// so the padded triangles stay degenerate at the origin,
-				// exactly as the full-capacity fill left them. The geometry
-				// owner's checks, mirror copy and GPU write then all run over
-				// the live span instead of the power-of-two capacity.
-				const live = rows.length * vertices,
-					span = Math.max( live, batch.written );
-				batch.positions.fill( 0, live * 3, span * 3 );
-				batch.colors.fill( 1, 0, span * 4 );
-				// The corners are the same for every particle of a kind - the
-				// camera axes and the rain's right are per-frame constants.
-				// Hoisted out of the particle loop, the per-particle work is
-				// the vertex write itself, with no per-particle corner
-				// allocations.
-				let e0x = 0, e0y = 0, e0z = 0, e1x = 0, e1y = 0, e1z = 0, e2x = 0, e2y = 0, e2z = 0;
-				if ( kind === 0 ) {
-					e0y = 10;
-					e1x = rainRight[0]! * .3;
-					e1z = rainRight[2]! * .3;
-					e2x = -rainRight[0]! * .3;
-					e2z = -rainRight[2]! * .3;
-				} else {
-					e0x = up[0]! * .5;
-					e0y = up[1]! * .5;
-					e0z = up[2]! * .5;
-					e1x = (right[0]! - up[0]!) * .5;
-					e1y = (right[1]! - up[1]!) * .5;
-					e1z = (right[2]! - up[2]!) * .5;
-					e2x = (-right[0]! - up[0]!) * .5;
-					e2y = (-right[1]! - up[1]!) * .5;
-					e2z = (-right[2]! - up[2]!) * .5;
-				}
-				for ( let i = 0; i < rows.length; i++ ) {
-					const p = rows[i]!;
-					const at = i * vertices * 3;
-					batch.positions[at] = p.x + e0x;
-					batch.positions[at + 1] = p.y + e0y;
-					batch.positions[at + 2] = p.z + e0z;
-					batch.positions[at + 3] = p.x + e1x;
-					batch.positions[at + 4] = p.y + e1y;
-					batch.positions[at + 5] = p.z + e1z;
-					batch.positions[at + 6] = p.x + e2x;
-					batch.positions[at + 7] = p.y + e2y;
-					batch.positions[at + 8] = p.z + e2z;
-				}
-				gpu.updatePositions(
-					batch.draw,
-					batch.positions.subarray( 0, span * 3 ),
-					batch.colors.subarray( 0, span * 4 ),
-					undefined,
-					undefined,
-					0
-				);
-				batch.written = live;
-				output.push( batch.draw );
+				output.push( region.draw );
 			}
 			return output;
 		},
+		/*
+		================
+		stats
+
+		The CPU's view of the drops: each region's live window (an upper
+		bound on its live drops), spawns dropped for a full ring, and the
+		emission state.
+		================
+		*/
 		stats() {
-			return { particles: particles.length, amount: amount.value, remainder };
+			return {
+				windows: regions.map( region => region.spawned - region.dead ),
+				spawned: regions.map( region => region.spawned ),
+				overflow: regions.reduce( ( sum, region ) => sum + region.overflow, 0 ),
+				refused,
+				amount: amount.value,
+				remainder
+			};
 		},
+		/*
+		================
+		invalidate
+
+		A lost device: the drops died with its pool, so the regions start
+		empty and their draws are made again on the new device.
+		================
+		*/
 		invalidate() {
-			batches.clear();
+			resetRegions();
+			for ( const region of regions ) {
+				region.draw = null;
+				region.image = null;
+			}
 		},
 		dispose( gpu: GeometryCommands | null ) {
-			if ( gpu ) { for ( const batch of batches.values() ) gpu.release( batch.draw ); }
-			batches.clear();
+			if ( gpu ) {
+				for ( const region of regions ) if ( region.draw ) gpu.release( region.draw );
+			}
 			clear();
+			for ( const region of regions ) {
+				region.draw = null;
+				region.image = null;
+			}
 			options = null;
 		}
 	};

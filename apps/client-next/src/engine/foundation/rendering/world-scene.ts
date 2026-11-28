@@ -485,6 +485,8 @@ export function prepareWorldScene( scene: WorldScene ): PreparedWorldScene {
 			dynamicMaterial: undefined,
 			// World draws carry no equipment glow: one material a draw.
 			rowStates: undefined,
+			// Only the weather owner draws from the drop pool.
+			weather: undefined,
 			// World cloth keeps its CPU vertex stream (renderer/world/world.ts).
 			clothStream: undefined,
 			vertices: undefined as Float32Array | undefined
