@@ -15,8 +15,17 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import fc from "fast-check";
 
-const { merchantSelection, merchantQuote, merchantPage, merchantCommand, merchantSaleQuantity } = await import(
-	sourceFileUrl( "src/engine/foundation/ui/merchant.ts" ).href
+const {
+	merchantSelection,
+	merchantQuote,
+	merchantPage,
+	merchantCommand,
+	merchantSaleQuantity,
+	merchantDropRefusal,
+	MERCHANT_NOTICE_CATEGORY
+} = await import( sourceFileUrl( "src/engine/foundation/ui/merchant.ts" ).href );
+const { constantNativeNotice } = await import(
+	sourceFileUrl( "src/engine/foundation/gameplay/native-notice.ts" ).href
 );
 const offer = ( tab, slot, price = "60" ) => ({ tab, slot, refObjId: 100 + slot, name: "Item", price, maxStack: 50 });
 const inventory = [ {
@@ -268,4 +277,34 @@ test("a token offer checks the shop's token balance, not gold", () => {
 	assert.equal( merchantQuote( selection, { ...shop, nasrunTokens: 60 }, inventory, "1", "0" ).valid, true );
 	assert.equal( merchantQuote( selection, { ...shop, nasrunTokens: 59 }, inventory, "1", "0" ).valid, false );
 	assert.equal( merchantQuote( selection, shop, inventory, "1", "1000000" ).valid, false, "no balance sent" );
+});
+
+/*
+================
+merchantDropRefusalLines
+
+5B2630: a worn item is refused with {1, 0x3F} at any store; a bag item is
+refused with {1, 0x3B} only while the store trades a transport's goods;
+a COS bag row (not the player's inventory) is never judged here.
+================
+*/
+test("the store refuses a worn item, and a bag item during a transport trade", () => {
+	const line = drop => {
+		const code = merchantDropRefusal( drop );
+		return code === null ? null : constantNativeNotice( MERCHANT_NOTICE_CATEGORY, code )?.key;
+	};
+	for ( const transportTrade of [ false, true ] ) {
+		for ( const slot of [ 0, 6, 12 ] ) {
+			assert.equal(
+				line( { fromInventory: true, slot, transportTrade } ),
+				"UIIT_MSG_STRGERR_CANT_SELL_EQUIPED_ITEM",
+				`worn ${slot}`
+			);
+		}
+		assert.equal(
+			line( { fromInventory: true, slot: 13, transportTrade } ),
+			transportTrade ? "UIIT_MSG_STRGERR_CANNOT_DEAL_AT_SHOP" : null
+		);
+		assert.equal( line( { fromInventory: false, slot: 3, transportTrade } ), null, "COS bag row" );
+	}
 });
