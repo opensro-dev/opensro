@@ -76,6 +76,18 @@ NATIVE_CHARACTER_COLUMNS = 120
 # VSRO columns before the six resistances, and before the five skill pairs.
 RESISTANCE_AT = 61
 RESISTANCE_COUNT = 6
+# The six element resists (ResistFrozen .. ResistZombie, the server's
+# ElementResist) follow the character's level in every native table:
+# 12,746 of v1.150's 12,761 rows, and 1,383 of the 1,644 rows only the
+# v1.188 server database holds (#4802). Up to LINEAR_RESIST_END it is
+# twice the level, from level 2; above it the native steps, each value
+# held from its level up. The later clients ship no resist column, so a
+# converted row takes the curve. Structures hold none.
+LINEAR_RESIST_FROM = 2
+LINEAR_RESIST_END = 40
+RESIST_STEPS = ((40, 78), (42, 79), (44, 80), (47, 81), (50, 82), (53, 83), (57, 84), (61, 85), (66, 86),
+	(72, 87), (78, 88), (86, 89), (95, 90), (106, 91), (120, 92), (137, 93))
+STRUCTURE_TYPE = "5"
 SKILL_PAIRS_AT = 93
 SKILL_PAIR_COUNT = 5
 # The ten DefaultSkillIDs: in the later layout from column 83, and in
@@ -226,6 +238,28 @@ def is_npc(row):
 
 
 # ================
+# level_resist / element_resist
+#
+# The native element resist of a level, and of one later row: the
+# level's, or none for a structure (fortress gates and towers, typeid-3
+# 5). A unique's own higher resists are server data the client row does
+# not mark; it takes its level's as a floor (#4802).
+# ================
+def level_resist(level):
+	if level < LINEAR_RESIST_FROM:
+		return 0
+	if level < LINEAR_RESIST_END:
+		return 2 * level
+	return [value for start, value in RESIST_STEPS if start <= level][-1]
+
+
+def element_resist(row):
+	if row[TID_COLUMNS[2]] == STRUCTURE_TYPE or not row[LEVEL_COLUMN].isdigit():
+		return 0
+	return level_resist(int(row[LEVEL_COLUMN]))
+
+
+# ================
 # convert_character
 # ================
 def convert_character(row):
@@ -233,7 +267,7 @@ def convert_character(row):
 	if len(row) != VSRO_CHARACTER_COLUMNS:
 		raise ValueError(f"characterdata row {row[ID_COLUMN]} has {len(row)} columns")
 	converted = (
-		row[:RESISTANCE_AT] + ["0"] * RESISTANCE_COUNT + row[RESISTANCE_AT:SKILL_PAIRS_AT]
+		row[:RESISTANCE_AT] + [str(element_resist(row))] * RESISTANCE_COUNT + row[RESISTANCE_AT:SKILL_PAIRS_AT]
 		+ ["0", "0.0"] * SKILL_PAIR_COUNT + row[SKILL_PAIRS_AT:]
 	)
 	# The VSRO name column holds a Korean placeholder; v1.150 writes "xxx".
