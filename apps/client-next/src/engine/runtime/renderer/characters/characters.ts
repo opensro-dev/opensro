@@ -578,6 +578,9 @@ export function createCharacters( random?: import("@/engine/contracts/presentati
 	let framePoses:
 		| Map<string, Map<number, { actor: CharacterActor; pose: ReturnType<typeof createCharacterPose>; }[]>>
 		| null = null;
+	// The pose each actor of the frame being prepared already resolved to.
+	// A body is asked once to draw and once more by every effect it holds.
+	let framePosed: Map<CharacterActor, ReturnType<typeof createCharacterPose>> | null = null;
 	let poseRequests = 0,
 		poseEvaluations = 0,
 		poseSharingHits = 0,
@@ -796,11 +799,30 @@ export function createCharacters( random?: import("@/engine/contracts/presentati
 	================
 	poseFor
 
-	Reuse one actor pose evaluation across geometry, attachment and socket consumers.
+	Reuse one actor pose evaluation across geometry, attachment and socket
+	consumers. Within a prepared frame an actor is resolved once
+	(resolvePose): a holder was resolved again for every effect on it, its
+	sharing lookup, level-of-detail gate and input comparison each time.
 	================
 	*/
 	function poseFor( actor: CharacterActor ) {
 		poseRequests++;
+		const posed = framePosed?.get( actor );
+		if ( posed ) return posed;
+		const pose = resolvePose( actor );
+		if ( pose ) framePosed?.set( actor, pose );
+		return pose;
+	}
+	/*
+	================
+	resolvePose
+
+	The actor's pose for its inputs: a pose another actor of the frame
+	evaluated from the same inputs, or its own, sampled when its level of
+	detail and the frame's work budget allow.
+	================
+	*/
+	function resolvePose( actor: CharacterActor ) {
 		const resource = models.get( actor.model ), model = resource?.model;
 		if ( !model ) return null;
 		const share = framePoses && !resource!.plan.emission &&
@@ -1903,6 +1925,8 @@ the next full prepare pass, so this may run between frames.
 	The bytes of the shared meshes in meshes that the frame plan has not
 	charged yet (charged, by positions array); with mark, they become
 	charged. The device keeps one GPU copy of each, whatever batches draw it.
+	A plan lists each of its meshes once (character-render-plan.ts), so only
+	another batch can have charged one.
 	================
 	*/
 	function meshCharge(
@@ -1911,15 +1935,12 @@ the next full prepare pass, so this may run between frames.
 		mark: boolean
 	): number {
 		let bytes = 0;
-		const counted: (readonly unknown[])[] = [];
 		for ( const mesh of meshes ) {
 			const list = charged.get( mesh.positions );
-			if (
-				list?.some( arrays => sameMesh( arrays, mesh.arrays ) ) ||
-				counted.some( arrays => sameMesh( arrays, mesh.arrays ) )
-			) continue;
+			let known = false;
+			for ( let i = 0; list && i < list.length && !known; i++ ) known = sameMesh( list[i]!, mesh.arrays );
+			if ( known ) continue;
 			bytes += mesh.bytes;
-			counted.push( mesh.arrays );
 			if ( !mark ) continue;
 			if ( list ) list.push( mesh.arrays );
 			else charged.set( mesh.positions, [ mesh.arrays ] );
@@ -4008,6 +4029,7 @@ the next full prepare pass, so this may run between frames.
 				frameGroups =
 					0;
 			framePoses = new Map();
+			framePosed = new Map();
 			const { frameActors, cycles } = sampleFrameActors();
 			if ( residencyDirty ) retireResidency( geometry, images, frameActors );
 			if ( hasMaterialClocks ) {
@@ -4081,7 +4103,7 @@ the next full prepare pass, so this may run between frames.
 			probe?.characterMark( "character-upload" );
 			probe?.characterCount( "pose-evaluations", poseEvaluations );
 			frameGroups = grouped.size;
-			framePoses = null;
+			framePoses = framePosed = null;
 			return frame.output;
 		},
 		/*
@@ -4113,7 +4135,7 @@ the next full prepare pass, so this may run between frames.
 			}
 			disposed = true;
 			rowStreams.rowScratch = rowStreams.lightScratch = rowStreams.glowScratch = undefined;
-			framePoses = null;
+			framePoses = framePosed = null;
 			residentBytes = 0;
 			ownedModels = 0;
 			for ( const batch of batches.values() ) {

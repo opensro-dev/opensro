@@ -238,3 +238,29 @@ test("an emitter drawn from its particle graph builds no CPU skeleton; one with 
 		drawn.dispose();
 	}
 });
+
+test("a holder's pose is resolved once a frame, however many effects hang on it", () => {
+	const r = renderer();
+	try {
+		const body = gid => ({ gid, model: "body", pose: POSE, clip: "idle", time: .25, loop: true, scale: 1 });
+		const effect = gid => ({
+			gid,
+			model: "effect",
+			pose: POSE,
+			clip: "effect",
+			time: .25,
+			loop: true,
+			scale: 1,
+			attachment: { gid: 4, bone: "root", offset: [ 0, 0, 0 ] }
+		});
+		r.frame( [ body( 2 ), body( 4 ), effect( 11 ), effect( 12 ), effect( 13 ) ], .25 );
+		const stats = r.owner.stats();
+		// Each effect asks for its holder's socket, and each body draws.
+		assert.ok( stats.poseRequests >= 5 );
+		// The one share is the second body taking the first one's pose: the
+		// holder asked again is not a new resolution of its own pose.
+		assert.equal( stats.poseSharingHits, 1 );
+	} finally {
+		r.dispose();
+	}
+});

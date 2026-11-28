@@ -20,7 +20,7 @@ import {
 	characterSharedPalette,
 	type CharacterPlanCaches
 } from "./character-budget";
-import { meshArrays } from "@/engine/foundation/rendering/geometry-vertices";
+import { meshArrays, sameMesh } from "@/engine/foundation/rendering/geometry-vertices";
 import { createParticleGraphPlan } from "@/engine/foundation/animation/particle-graph-plan";
 /*
 ================
@@ -70,6 +70,19 @@ export function createCharacterRenderPlan( model: CharacterModel, caches?: Chara
 		four = exactCapacity ? 0 : characterBatchBytes( model, 4, caches ),
 		stride = (four - two) / 2,
 		base = two - stride * 2;
+	// The shared meshes this model draws, each once: primitives that draw
+	// one mesh (an effect's plates) name the same arrays. The frame plan
+	// reads this list for every batch it opens, every frame.
+	const meshes: { positions: Float32Array; arrays: readonly unknown[]; bytes: number; }[] = [];
+	for ( const p of model.primitives ) {
+		if ( !characterSharedMesh( p ) ) continue;
+		const arrays = meshArrays( p.geometry );
+		if ( meshes.some( mesh => sameMesh( mesh.arrays, arrays ) ) ) continue;
+		meshes.push( { positions: p.geometry.positions, arrays, bytes: characterMeshBytes( p.geometry ) } );
+	}
+	// An exact-capacity batch's bytes by row count, each measured once: the
+	// frame plan asks for a batch's growth for every row, every frame.
+	const exactBytes: number[] = [];
 	return {
 		cloth: model.primitives.some( p => p.cloth ),
 		equipmentGlow: model.primitives.some( p => p.equipmentGlow ),
@@ -93,13 +106,9 @@ export function createCharacterRenderPlan( model: CharacterModel, caches?: Chara
 		emission,
 		exactCapacity,
 		poseBytes: characterPoseBytes( model, caches ),
-		// The shared meshes this model draws, each with its one GPU copy's
-		// bytes; the frame plan charges each once, whatever batches draw it.
-		meshes: model.primitives.filter( characterSharedMesh ).map( p => ({
-			positions: p.geometry.positions,
-			arrays: meshArrays( p.geometry ),
-			bytes: characterMeshBytes( p.geometry )
-		}) ),
+		// Each with its one GPU copy's bytes; the frame plan charges each
+		// once, whatever batches draw it.
+		meshes,
 		clocked: model.primitives.some( p => p.emission || p.materialFrames ),
 		// An authored alpha-blended material: the group draws in the
 		// translucent tier, back to front, whatever its opacity, so merging
@@ -131,7 +140,7 @@ export function createCharacterRenderPlan( model: CharacterModel, caches?: Chara
 			return count === 0 ?
 				0 :
 				exactCapacity ?
-				characterBatchBytes( model, count, caches ) :
+				exactBytes[count] ??= characterBatchBytes( model, count, caches ) :
 				count === 1 ?
 				one :
 				base + stride * 2 ** Math.ceil( Math.log2( count ) );
