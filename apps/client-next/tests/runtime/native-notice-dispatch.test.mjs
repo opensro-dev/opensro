@@ -84,6 +84,30 @@ test("an item use refused at the storage addition limit prints the later client'
 	// The generic refusal stays silent, as natively.
 	assert.equal( inventoryNotice( ITEM_USE_RESPONSE_OPCODE, new Uint8Array( [ 2, 0x02 ] ) ), null );
 });
+/*
+================
+the later client's category-01 rows
+
+01:8A and 01:8E (Magic Cube, #3906) and 01:FE are silent in the v1.150
+data; each must still print its later-client line.
+================
+*/
+test("every later-client category-01 row prints though the v1.150 table is silent", () => {
+	for (
+		const [code, key] of [
+			[ 0x8A, "UIIT_STT_MAGIC_CUBE_INVENTORY_FULL" ],
+			[ 0x8E, "UIIT_STT_MAGIC_CUBE_STORE_SELL_ERROR" ],
+			[ 0xFE, "UIIT_STT_STORAGE_EXPANSION_USE_ERORR" ]
+		]
+	) {
+		assert.deepEqual( nativeNoticeRoute( 1, code ), { kind: "silent" } );
+		const shown = resolveNativeNotice( 1, code );
+		assert.equal( shown.kind, "notice", `01:${code.toString( 16 )}` );
+		assert.equal( shown.notice.key, key );
+		assert.equal( shown.notice.nativeType, 5 );
+	}
+});
+
 test("learning, matching and guild refusals reach gameplay notices without placeholder text", () => {
 	const bindings = [
 		[ 0xb2cb, 5 ],

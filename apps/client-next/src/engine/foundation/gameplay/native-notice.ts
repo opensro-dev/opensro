@@ -9,6 +9,23 @@ export interface NativeNoticeContext {
 export type NoticeResolution = { readonly kind: "notice"; readonly notice: SystemNotice; } | {
 	readonly kind: "silent";
 } | { readonly kind: "context"; readonly category: number; readonly code: number; };
+/*
+================
+LATER_CLIENT_CATEGORY1
+
+Port-only rows from the later v1.696 client's category-01 jump (base
+0x180F, table 0xCDFB38), all printed as guide 5 without a banner. The
+v1.150 table leaves every one of these codes silent, so resolveNativeNotice
+reads this table before its silent return (a row after it never fires).
+================
+*/
+const LATER_CLIENT_CATEGORY1: ReadonlyMap<number, string> = new Map( [
+	// Magic Cube (#3906): indexes 123 / 127, full and sell while non-empty.
+	[ 0x8A, "UIIT_STT_MAGIC_CUBE_INVENTORY_FULL" ],
+	[ 0x8E, "UIIT_STT_MAGIC_CUBE_STORE_SELL_ERROR" ],
+	// Storage addition at its limit (#3904): index 0xEF.
+	[ 0xFE, "UIIT_STT_STORAGE_EXPANSION_USE_ERORR" ]
+] );
 export function resolveNativeNotice(
 	category: number,
 	code: number,
@@ -35,13 +52,8 @@ export function resolveNativeNotice(
 			route.banner || (category === 1 && code === 7 && context.itemMallOpen === true)
 		);
 	}
-	// Later-client storage addition limit (#3904): the v1.696 category-01
-	// jump sends index 0xEF (01:FE) to the same printer as the Magic Cube
-	// rows. The v1.150 table leaves 01:FE silent, so this row is read
-	// before the silent return.
-	if ( category === 1 && code === 0xFE ) {
-		return notice( "UIIT_STT_STORAGE_EXPANSION_USE_ERORR", 5, false );
-	}
+	const later = category === 1 ? LATER_CLIENT_CATEGORY1.get( code ) : undefined;
+	if ( later ) return notice( later, 5, false );
 	if ( route.kind === "silent" ) return route;
 	if ( category === 1 && code === 50 ) {
 		if ( context.country === undefined ) return route;
@@ -133,15 +145,6 @@ export function resolveNativeNotice(
 				}
 			}
 		};
-	}
-	// Port-only later-client Magic Cube notices (#3906). Absent from the
-	// v1.150 dispatch table; the v1.696 category-01 jump indexes 123 / 127
-	// (01:8A full, 01:8E sell while non-empty).
-	if ( category === 1 && code === 0x8A ) {
-		return notice( "UIIT_STT_MAGIC_CUBE_INVENTORY_FULL", 5, false );
-	}
-	if ( category === 1 && code === 0x8E ) {
-		return notice( "UIIT_STT_MAGIC_CUBE_STORE_SELL_ERROR", 5, false );
 	}
 	return route;
 }
