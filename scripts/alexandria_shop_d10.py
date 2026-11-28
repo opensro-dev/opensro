@@ -79,8 +79,8 @@ GOLD_DEVICE = "1"
 # template with none (a mall-only degree 9 package, priced in silk only)
 # lends its first row's layout, re-keyed to gold. A shop sells the
 # minted good for gold: the native server's load check names a non-mall
-# package without a gold row ("(%s) register gold price.", v1.188
-# RefPackageItem_ValidatePrices 0x6a9840), and the mall catalogue
+# package without a gold row ("(%s) register gold price.", the v1.188
+# server's package price check), and the mall catalogue
 # refuses a silk device carrying an amount on a gold good (#4702).
 # ================
 def minted_rows(template, code, item, package_id, scrap_index):

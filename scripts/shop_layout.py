@@ -9,15 +9,15 @@ share. Two do not:
 
 - refpricepolicyofitem carries PreviousCost (the struck-through "was"
   price) between PaymentDevice and Cost. Neither v1.150 binary has a
-  place for it: the v1.188 server skips the column
-  (RefPricePolicyOfItem_ReadRow 0x6a8b80, CDBRecStream_SkipColumn) and
+  place for it: the v1.188 server's price-row reader skips the
+  column, and
   the v1.150 client reads 13 columns (CRefPricePolicyOfItem_ParseTextRow
   0x813910), so a 14-column row would put PreviousCost where it reads
   Cost (#4704).
 - refshoptab's text export has a 7th column the database does not hold
   (_RefShopTab has 6): "xxx", empty, or a designer's note in v1.696.
   Neither binary reads it (v1.150 CRefShopTabData_ParseTextRow 0x816c50,
-  v1.188 RefShopTab_ReadRow 0x6a9d80).
+  nor the v1.188 server's shop-tab reader).
 
 native_row is the one conversion: every column of every table is named
 here (LAYOUTS), each extra column has a stated fate, and a row of any
