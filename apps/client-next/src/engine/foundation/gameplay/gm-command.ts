@@ -66,6 +66,12 @@ const MAX_NOTICE_TEXT_BYTES = 400;
 // zero for either meaning the server's default. The bounds are the
 // server's (action/weather.go); the reply is the moderation text reply.
 const GM_WEATHER = 0xfc;
+// The port's /NAMEPLATE ON|OFF (GM tooling, not native; owner 2026-11-28):
+// subcommand 0xFD and a u8 switch, 1 on and 0 off, the glow every player
+// sees around the GM's own name (staff-nameplate.ts). The reply is the
+// moderation text reply.
+const GM_NAMEPLATE = 0xfd;
+const GM_NAMEPLATE_SWITCH = { ON: 1, OFF: 0 } as const;
 const GM_WEATHER_KINDS = { CLEAR: 1, RAIN: 2, SNOW: 3 } as const;
 const GM_WEATHER_MAX_AMOUNT = 255;
 const GM_WEATHER_MAX_MINUTES = 120;
@@ -421,10 +427,13 @@ export function gmReply( p: Uint8Array ): GmReply | null {
 		const percent = viewOf( p ).getUint16( 2, true );
 		return { console: true, text: "-> speed set to " + percent + "%" };
 	}
-	if ( (code >= GM_CHAT_MUTE && code <= GM_ALLOW_LOGOUT) || code === GM_NOTICE || code === GM_WEATHER ) {
-		// The port's moderation, notice and weather answers carry the
+	if (
+		(code >= GM_CHAT_MUTE && code <= GM_ALLOW_LOGOUT) || code === GM_NOTICE || code === GM_WEATHER ||
+		code === GM_NAMEPLATE
+	) {
+		// The port's moderation, notice, weather and nameplate answers carry the
 		// server's text on both results (gmcommand/moderation.go, notice.go,
-		// admin.go), so the GM always reads why.
+		// admin.go, nameplate.go), so the GM always reads why.
 		const text = (result === 1 ? "-> " : "Failed. -> ") + string();
 		return code === GM_WEATHER && result === 1 ?
 			{ console: true, text, weatherSet: true } :
@@ -718,6 +727,12 @@ export function gmRequest(
 	// Any case: the command is port-only. The words are rejoined with one
 	// space, as the moderation reasons are. A bare /NOTICE still sends its
 	// empty text, so the GM reads the server's "type the notice text".
+	// Any case: the command is port-only. Only ON or OFF leaves.
+	if ( name?.toUpperCase() === "/NAMEPLATE" ) {
+		const on = (GM_NAMEPLATE_SWITCH as Readonly<Record<string, number>>)[arg.toUpperCase()];
+		if ( on === undefined || tokens.length !== 2 ) return null;
+		return { opcode: OP_GM_COMMAND, payload: Uint8Array.of( GM_NAMEPLATE, on ) };
+	}
 	if ( name?.toUpperCase() === "/NOTICE" ) {
 		const text = sizedText( tokens.slice( 1 ).join( " " ) );
 		if ( text.length - 2 > MAX_NOTICE_TEXT_BYTES ) return null;

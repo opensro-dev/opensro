@@ -13,6 +13,8 @@ clients, so a grant or revoke applies with no restart and no relog:
 	0x3FCD staff roster, to every player of the division:
 	       u16 count, then per entry: u16 len + UTF-8 character name,
 	       u16 len + UTF-8 tag, u32 name ARGB, u32 chat ARGB
+	0x3FD3 staff nameplates off, to every player of the division:
+	       u16 count, then per entry: u16 len + UTF-8 character name
 
 The browser client flips its GM console and default chat channel on
 0x3FCC (INFERENCE: the original learns GM only with world entry, as this
@@ -21,6 +23,14 @@ and draws each roster name's tag and colours from 0x3FCD. Both are sent
 at world entry too. A shard with no staff sends neither, which is the
 native behaviour. Both opcodes are free in the v1.150 client and this
 server's port range (the next after 0x3FCB).
+
+0x3FD3 names the staff whose nameplate glow is off (/NAMEPLATE OFF, owner
+2026-11-28): every client draws the glow on each roster name except these,
+so every player sees what the staff member chose. It is a separate frame
+because 0x3FCD's decoder refuses trailing bytes: a tab that predates it
+drops the unknown opcode and keeps its roster (no release-protocol bump).
+It goes with every roster push and, when anyone is off, at world entry.
+0x3FD3 is the next free port-only opcode (0x3FCE..0x3FD2 are taken).
 
 ===========================================================================
 */
@@ -38,8 +48,9 @@ import (
 
 const (
 	// OpStaffState and OpStaffRoster are the port-only S->C frames above.
-	OpStaffState  uint16 = 0x3FCC
-	OpStaffRoster uint16 = 0x3FCD
+	OpStaffState      uint16 = 0x3FCC
+	OpStaffRoster     uint16 = 0x3FCD
+	OpStaffNameplates uint16 = 0x3FD3
 )
 
 /*
@@ -71,6 +82,41 @@ func StaffRosterFrame(roster []staff.RosterEntry) wire.Frame {
 
 /*
 ================
+StaffNameplatesFrame
+
+The roster's staff whose nameplate glow is off.
+================
+*/
+func StaffNameplatesFrame(roster []staff.RosterEntry) wire.Frame {
+	var off []string
+	for _, entry := range roster {
+		if entry.NameplateOff {
+			off = append(off, entry.Character)
+		}
+	}
+	w := wire.NewWriter(2 + len(off)*16).U16(uint16(len(off)))
+	for _, name := range off {
+		w.Str(name)
+	}
+	return wire.Frame{Opcode: OpStaffNameplates, Payload: w.Payload()}
+}
+
+/*
+================
+anyNameplateOff
+================
+*/
+func anyNameplateOff(roster []staff.RosterEntry) bool {
+	for _, entry := range roster {
+		if entry.NameplateOff {
+			return true
+		}
+	}
+	return false
+}
+
+/*
+================
 StaffEntryFrames
 
 What a world entry owes the entering player: the roster when the division
@@ -82,6 +128,9 @@ func (rt *Runtime) StaffEntryFrames(division string, c *enterworld.Character) []
 	if rt.StaffRoster != nil {
 		if roster := rt.StaffRoster(division); len(roster) > 0 {
 			frames = append(frames, StaffRosterFrame(roster))
+			if anyNameplateOff(roster) {
+				frames = append(frames, StaffNameplatesFrame(roster))
+			}
 		}
 	}
 	if c.GMPrivilege {
@@ -161,14 +210,51 @@ func (rt *Runtime) OperatorSetStaff(division, name string, gm bool, capabilities
 ================
 PushStaffRoster
 
-Sends the division's current roster to every player in it: after a grant,
-a revoke or a role edit. An empty roster is sent too, so a last revoke
-clears every client's tags.
+Sends the division's current roster and nameplate switches to every
+player in it: after a grant, a revoke, a role edit or a /NAMEPLATE. An
+empty roster is sent too, so a last revoke clears every client's tags.
 ================
 */
 func (rt *Runtime) PushStaffRoster(division string) {
 	if rt.StaffRoster == nil || rt.PushShardPeerFrames == nil {
 		return
 	}
-	rt.PushShardPeerFrames(division, "", []wire.Frame{StaffRosterFrame(rt.StaffRoster(division))})
+	roster := rt.StaffRoster(division)
+	rt.PushShardPeerFrames(division, "", []wire.Frame{StaffRosterFrame(roster), StaffNameplatesFrame(roster)})
+}
+
+/*
+================
+SetGMNameplate
+
+The gmcommand port: a GM's /NAMEPLATE ON or OFF, the glow every client
+draws around the GM's own name. Port-only, not native (owner 2026-11-28).
+The sender must still be staff when the command runs; the switch is the
+staff book's (StaffSetNameplate), and every player is told at once.
+================
+*/
+func (rt *Runtime) SetGMNameplate(division, sender string, on bool) bool {
+	if rt == nil || rt.StaffSetNameplate == nil {
+		return false
+	}
+	unlock := rt.lockDivision(division)
+	gm := rt.findCharacter(division, sender)
+	name, staffNow := "", gm != nil && gm.GMPrivilege
+	if staffNow {
+		name = gm.Name
+	}
+	unlock()
+	if !staffNow {
+		return false
+	}
+	changed, err := rt.StaffSetNameplate(division, name, on)
+	if err != nil {
+		log.WithError(err).WithField("character", name).Warn("staff: nameplate switch not saved")
+		return false
+	}
+	if changed {
+		log.WithFields(log.Fields{"character": name, "on": on}).Info("staff: nameplate switched")
+		rt.PushStaffRoster(division)
+	}
+	return true
 }

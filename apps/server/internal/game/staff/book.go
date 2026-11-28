@@ -21,6 +21,11 @@ Character.GMPrivilege and GMCapabilities (action OperatorSetStaff) and
 tells the clients. The host allowlist (SRO_GM_CHARACTERS) is a separate,
 read-only source the book never writes.
 
+The book also keeps each staff member's nameplate switch (/NAMEPLATE ON
+and OFF, owner 2026-11-28): the animated glow the clients draw around a
+staff name. It is on unless the staff member turned it off, and it is
+kept by name, so a host-allowlist GM's switch is kept too.
+
 ===========================================================================
 */
 package staff
@@ -119,12 +124,27 @@ type RosterEntry struct {
 	Tag       string
 	NameColor uint32
 	ChatColor uint32
+	// NameplateOff: the staff member turned the nameplate glow off.
+	NameplateOff bool
+}
+
+/*
+================
+NameplateSwitch
+
+One staff member who turned the nameplate glow off, as the file keeps it.
+================
+*/
+type NameplateSwitch struct {
+	Division  string `json:"division"`
+	Character string `json:"character"`
 }
 
 type bookFile struct {
-	Version int     `json:"version"`
-	Roles   []Role  `json:"roles"`
-	Grants  []Grant `json:"grants"`
+	Version      int               `json:"version"`
+	Roles        []Role            `json:"roles"`
+	Grants       []Grant           `json:"grants"`
+	NameplateOff []NameplateSwitch `json:"nameplateOff,omitempty"`
 }
 
 /*
@@ -139,6 +159,9 @@ type Book struct {
 	write  func(path string, payload []byte) error
 	roles  map[string]Role
 	grants map[string]Grant
+	// nameplateOff holds key(division, character) of every staff member
+	// whose nameplate glow is off, with the name as it was switched.
+	nameplateOff map[string]NameplateSwitch
 }
 
 func key(division, character string) string {
@@ -161,7 +184,8 @@ func OpenBook(path string, now func() time.Time, write func(string, []byte) erro
 	if now == nil || write == nil {
 		return nil, errors.New("staff: clock and writer are required")
 	}
-	book := &Book{path: path, now: now, write: write, roles: map[string]Role{}, grants: map[string]Grant{}}
+	book := &Book{path: path, now: now, write: write, roles: map[string]Role{}, grants: map[string]Grant{},
+		nameplateOff: map[string]NameplateSwitch{}}
 	raw, err := os.ReadFile(path)
 	if err != nil && !errors.Is(err, os.ErrNotExist) {
 		return nil, fmt.Errorf("staff: read %s: %w", path, err)
@@ -182,6 +206,12 @@ func OpenBook(path string, now func() time.Time, write func(string, []byte) erro
 				return nil, fmt.Errorf("staff: %s: %w", path, err)
 			}
 			book.grants[key(grant.Division, grant.Character)] = grant
+		}
+		for _, off := range file.NameplateOff {
+			if off.Division == "" || off.Character == "" || len(off.Character) > maxCharacterLen {
+				return nil, fmt.Errorf("staff: %s: invalid nameplate switch %+v", path, off)
+			}
+			book.nameplateOff[key(off.Division, off.Character)] = off
 		}
 	}
 	if _, ok := book.roles[GMRole]; !ok {
@@ -363,18 +393,58 @@ func (book *Book) Roster(division string, allowlisted []string) []RosterEntry {
 			continue
 		}
 		seen[strings.ToLower(grant.Character)] = true
-		roster = append(roster, rosterEntry(grant.Character, book.roles[grant.Role]))
+		entry := rosterEntry(grant.Character, book.roles[grant.Role])
+		_, entry.NameplateOff = book.nameplateOff[key(division, grant.Character)]
+		roster = append(roster, entry)
 	}
 	for _, name := range allowlisted {
 		if !seen[strings.ToLower(name)] {
 			seen[strings.ToLower(name)] = true
-			roster = append(roster, rosterEntry(name, book.roles[GMRole]))
+			entry := rosterEntry(name, book.roles[GMRole])
+			_, entry.NameplateOff = book.nameplateOff[key(division, name)]
+			roster = append(roster, entry)
 		}
 	}
 	sort.Slice(roster, func(i, j int) bool {
 		return strings.ToLower(roster[i].Character) < strings.ToLower(roster[j].Character)
 	})
 	return roster
+}
+
+/*
+================
+SetNameplate
+
+Turns a staff member's nameplate glow on or off (/NAMEPLATE). The caller
+has already checked the sender is staff; the book only keeps the switch.
+Reports whether anything changed; a failed save leaves the switch as it was.
+================
+*/
+func (book *Book) SetNameplate(division, character string, on bool) (bool, error) {
+	if division == "" || character == "" || len(character) > maxCharacterLen {
+		return false, fmt.Errorf("staff: invalid nameplate switch for %q", character)
+	}
+	book.mu.Lock()
+	defer book.mu.Unlock()
+	k := key(division, character)
+	previous, wasOff := book.nameplateOff[k]
+	if wasOff == !on {
+		return false, nil
+	}
+	if on {
+		delete(book.nameplateOff, k)
+	} else {
+		book.nameplateOff[k] = NameplateSwitch{Division: division, Character: character}
+	}
+	if err := book.saveLocked(); err != nil {
+		if wasOff {
+			book.nameplateOff[k] = previous
+		} else {
+			delete(book.nameplateOff, k)
+		}
+		return false, err
+	}
+	return true, nil
 }
 
 func rosterEntry(character string, role Role) RosterEntry {
@@ -398,6 +468,13 @@ func (book *Book) saveLocked() error {
 	}
 	sort.Slice(file.Grants, func(i, j int) bool {
 		return key(file.Grants[i].Division, file.Grants[i].Character) < key(file.Grants[j].Division, file.Grants[j].Character)
+	})
+	for _, off := range book.nameplateOff {
+		file.NameplateOff = append(file.NameplateOff, off)
+	}
+	sort.Slice(file.NameplateOff, func(i, j int) bool {
+		return key(file.NameplateOff[i].Division, file.NameplateOff[i].Character) <
+			key(file.NameplateOff[j].Division, file.NameplateOff[j].Character)
 	})
 	payload, err := json.MarshalIndent(file, "", "\t")
 	if err != nil {
