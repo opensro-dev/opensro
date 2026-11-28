@@ -23,6 +23,7 @@ import { assembleAvatar, primSlot } from "./buildAvatar.mjs";
 import { avatarToGlb } from "./exportGlb.mjs";
 import { parseCompound } from "../world/objects/compound.mjs";
 import { parseJmxResourceBsr } from "../world/objects/formats.mjs";
+import { materialBsrModifiers } from "../shared/bsrModifiers.mjs";
 import { parseAttachPartLink, parseBsk, parseCharacterBsr } from "./formats.mjs";
 import { characterMaterialVariants } from "./materialVariants.mjs";
 import { loadDataAsset } from "../shared/jmxAssetIO.mjs";
@@ -134,16 +135,25 @@ pieces: [{ part, itemBsrPath }]; returns a manifest entry { glb, parts, covers }
 or null when nothing was bindable. `tag` is the log prefix ("dress"/"weapon").
 write( diskPath, bytes, publicPath ) publishes the GLB (writeIntoPublicTreeSync
 by default); a caller that post-processes the bytes holds them instead.
+ownModifiers publishes each mesh's own BSR material and texture modifiers
+(the Devil's Spirit costume, #4407); every other set keeps the environment
+modifiers alone, byte for byte, until the all-item native fix (#4753)
+lands with its census.
 ================
 */
 export async function buildItemSetGlb(
-	{ tag, key, donor, donorSkel, pieces, outSubdir, write = writeIntoPublicTreeSync }
+	{ tag, key, donor, donorSkel, pieces, outSubdir, write = writeIntoPublicTreeSync, ownModifiers = false }
 ) {
 	// Resolve every piece's item .bsr -> skinned mesh paths + material set + cover keys.
 	const meshPaths = [];
 	const materialSetPaths = [];
 	const partByMesh = new Map();
 	const environmentByMesh = new Map();
+	// Per-mesh material, texture and multi-texture modifiers of the item's own
+	// BSR (CRTModMtrl and its texture kin), as an entity BSR publishes them
+	// (compileBsrVisual): a material-pass record drives only its BMT subset, as
+	// the Devil's Spirit robe's alpha-blended, scrolling smoke (#4407).
+	const modifiersByMesh = new Map();
 	// Per-mesh view of the ITEM's OWN skeleton (.bsk): parent links for the ancestor
 	// walk, full bones (incl. bind world) for bind-pose validation. Native item bone
 	// hierarchies resolve inside the item's own CRTBranch only - a wearer bone with the
@@ -192,6 +202,10 @@ export async function buildItemSetGlb(
 			meshPaths.push( meshPath );
 			partByMesh.set( meshPath, part );
 			environmentByMesh.set( meshPath, itemBsr.modifiers?.environmentModifiers ?? [] );
+			const modifiers = ownModifiers ? materialBsrModifiers( itemBsr.modifiers ) : undefined;
+			if ( modifiers && Object.values( modifiers ).some( list => list.length ) ) {
+				modifiersByMesh.set( meshPath, modifiers );
+			}
 			if ( itemSkelInfo ) itemSkelByMesh.set( meshPath, itemSkelInfo );
 			if ( attachBone ) attachByMesh.set( meshPath, attachBone );
 		}
@@ -218,6 +232,7 @@ export async function buildItemSetGlb(
 		meshPaths,
 		materialSetPaths,
 		environmentModifiersForMesh: meshPath => environmentByMesh.get( meshPath ) ?? [],
+		bsrModifiersForMesh: meshPath => modifiersByMesh.get( meshPath ),
 		noClips: true,
 		// A direct name match is only genuine if the item's own .bsk agrees with the
 		// donor on that bone's BIND POSE (same rig family). Item-private bones with

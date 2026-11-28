@@ -106,7 +106,7 @@ export function createPresentation() {
 				} else if ( event.kind === "travel" ) nextTravel = { ...event.travel };
 				else if (
 					event.kind === "pet-crow-effect" || event.kind === "item-effect" || event.kind === "level-up" ||
-					event.kind === "system-effect" ||
+					event.kind === "system-effect" || event.kind === "spirit-effect" ||
 					event.kind === "orb-feedback"
 				) {
 					// One-shot presentation: a stale batch drops it instead of

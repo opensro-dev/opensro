@@ -57,8 +57,7 @@ import { convertTextureTrees } from "../shared/convertImagesRunner.mjs";
 import { isMainScript } from "../shared/fsUtils.mjs";
 import { quatMultiply, quatRotateVector } from "../shared/math3d.mjs";
 import { refreshPrecompressedSidecars } from "../generatedManifestSidecars.mjs";
-import { extractedRoot, gameRoot, modelReadRoots, publicAssetsRoot, retailTextdataRoot } from "../world/paths.mjs";
-import { laterStateModifiers, loadLaterAnimationSources } from "./laterAnimationSets.mjs";
+import { gameRoot, modelReadRoots, publicAssetsRoot, retailTextdataRoot } from "../world/paths.mjs";
 
 const MODULE_FILE = fileURLToPath( import.meta.url );
 const textdataDir = retailTextdataRoot;
@@ -405,8 +404,6 @@ export async function buildRoster( options = {} ) {
 	}
 	const models = [];
 	let stored = 0;
-	// Port-only (SRO_NASRUN, #4407): the later bodies' transformation sets.
-	const laterSets = loadLaterAnimationSources( extractedRoot );
 	for ( const model of resolved ) {
 		const { publicPath } = glbOutput( model );
 		const outcome = results[rosterActionName( model )];
@@ -421,11 +418,7 @@ export async function buildRoster( options = {} ) {
 			glb: publicPath,
 			// The whole model is one native source; previewGlb shares it.
 			source: model.bsrPath,
-			...outcome.result,
-			// The transformation's state-bound auras, through the NPC models'
-			// native modifier mechanism (laterStateModifiers). A v1.150 body
-			// publishes none.
-			...(model.isMount ? null : laterStateModifiers( model.bsrPath, laterSets ))
+			...outcome.result
 		};
 		if ( outcome.hit ) stored += 1;
 		const seatNote = entry.seat ? ` seat=[${entry.seat}]` : "";

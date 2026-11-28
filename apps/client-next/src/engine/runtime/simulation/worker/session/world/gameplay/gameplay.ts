@@ -338,6 +338,7 @@ import {
 import { skillBindings, quickSlotPacket } from "@/engine/foundation/gameplay/quickslots";
 import { decodeCosRecord } from "@/engine/foundation/gameplay/cos-record";
 import { decodeSpiritSkills, SPIRIT_SKILLS_OPCODE, spiritSkillList } from "@/engine/foundation/gameplay/spirit-skills";
+import { spiritLapsed } from "@/engine/foundation/gameplay/spirit-effects";
 import { decodeWorldClock } from "@/engine/foundation/gameplay/world-clock";
 import { vitalsUpdate } from "@/engine/foundation/gameplay/vitals";
 import {
@@ -5074,7 +5075,20 @@ Packet handling must not depend on which HUD panel is currently open.
 					return true;
 				}
 				if ( frame.opcode === SPIRIT_SKILLS_OPCODE ) {
+					const lent = spiritSkills;
 					spiritSkills = decodeSpiritSkills( frame.payload );
+					// Port-only (SRO_NASRUN): the strip emptying under a worn
+					// Spirit is its clock running out (spirit-effects.ts).
+					const worn = inventory.wornSpirit();
+					if ( worn && localGid !== 0 && spiritLapsed( lent, spiritSkills, true ) ) {
+						publishFeedback( {
+							kind: "spirit-effect",
+							gid: localGid,
+							item: worn.refObjId,
+							typeFlags: worn.typeFlags,
+							transition: "expire"
+						} );
+					}
 					dirty = true;
 					return true;
 				}
@@ -6429,6 +6443,18 @@ Packet handling must not depend on which HUD panel is currently open.
 					notices = [ ...notices.slice( -99 ), { ...notice, sequence: ++noticeSequence } ];
 					if ( notice.text ) chat.notice( notice.text );
 					dirty = true;
+				}
+				// Port-only (SRO_NASRUN): a Spirit woken in the bag plays its
+				// dark force on its owner (spirit-effects.ts).
+				for ( const spirit of inventory.takeSpiritWakes() ) {
+					if ( localGid === 0 ) continue;
+					publishFeedback( {
+						kind: "spirit-effect",
+						gid: localGid,
+						item: spirit.refObjId,
+						typeFlags: spirit.typeFlags,
+						transition: "awake"
+					} );
 				}
 				if ( frame.opcode === ARENA_CHEST_OPCODE ) {
 					const chest = inventory.state().arenaChest;

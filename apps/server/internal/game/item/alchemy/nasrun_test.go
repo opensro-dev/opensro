@@ -64,12 +64,13 @@ func spiritResult(t *testing.T, r Outcome) (spirit, jewel inventory.Item) {
 ================
 TestSpiritJewelRollsTheOwnersChances
 
-At each plus, a draw under the chance raises the Spirit one plus and a
-draw at the chance keeps it; either way one jewel is spent.
+At each plus, a draw under the chance raises the Spirit one plus; a draw
+at the chance keeps it up to +5 and drops it back to +5 above (#4732);
+either way one jewel is spent.
 ================
 */
 func TestSpiritJewelRollsTheOwnersChances(t *testing.T) {
-	for plus, chance := range []uint32{70, 60, 50, 40, 30, 20} {
+	for plus, chance := range []uint32{70, 60, 50, 40, 30, 20, 15, 10, 8, 5} {
 		for _, tc := range []struct {
 			draw    uint32
 			success bool
@@ -84,6 +85,8 @@ func TestSpiritJewelRollsTheOwnersChances(t *testing.T) {
 			want := uint8(plus)
 			if tc.success {
 				want++
+			} else if want > spiritFailFloor {
+				want = spiritFailFloor
 			}
 			if r.Success != tc.success || r.Destroyed || spirit.Plus != want || r.From != uint8(plus) {
 				t.Fatalf("+%d draw %d: outcome %+v, Spirit +%d, want +%d", plus, tc.draw, r, spirit.Plus, want)
@@ -132,7 +135,7 @@ func TestSpiritJewelRefusals(t *testing.T) {
 		want  Refusal
 	}{
 		{"switch off: a Spirit is no target", false, 0, []uint8{16, 17}, Refusal(0x10)},
-		{"at +6", true, SpiritMaxPlus, []uint8{16, 17}, Refusal(0x0f)},
+		{"at +10", true, SpiritMaxPlus, []uint8{16, 17}, Refusal(0x0f)},
 		{"a lucky powder staged", true, 0, []uint8{16, 17, 15}, Refusal(0x0a)},
 		{"a native elixir on a Spirit", true, 0, []uint8{16, 14}, Refusal(9)},
 		{"the jewel on native gear", true, 0, []uint8{13, 17}, Refusal(9)},

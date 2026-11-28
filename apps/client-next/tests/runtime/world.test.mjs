@@ -1748,6 +1748,41 @@ test("retail ordered equipment replacement and clear-by-slot accept zero and abs
 	assert.equal( owner.count(), 0 );
 });
 
+test("a Spirit's equip and unequip visuals play its transitions, and its spawn plays none", () => {
+	const row = peerFixture.scenarios[1], owner = createEntities();
+	// The Devil's Spirit's type word: TID 3/1/14/1.
+	const SPIRIT = 24405, SPIRIT_TYPE = 3 << 2 | 1 << 5 | 14 << 7 | 1 << 11;
+	owner.bootstrap( {
+		...bootstrap,
+		refObjSnapshot: [ { refObjId: row.modelRefObjId, kind: "player" } ],
+		refItemSnapshot: [ ...row.equipment, { refObjId: SPIRIT, typeFlags: SPIRIT_TYPE } ]
+	} );
+	flush( owner );
+	owner.receive( { opcode: 0x30d7, payload: Uint8Array.from( Buffer.from( row.payloadHex, "hex" ) ) } );
+	const spawned = flush( owner );
+	assert.equal( spawned.events.some( e => e.kind === "spirit-effect" ), false );
+	const visual = ( opcode, slot = 0 ) => {
+		const p = new Uint8Array( opcode === 0x3314 ? 10 : 9 ), v = new DataView( p.buffer );
+		v.setUint32( 0, row.gid, true );
+		p[4] = slot;
+		v.setUint32( 5, SPIRIT, true );
+		owner.receive( { opcode, payload: p } );
+		return flush( owner ).events.filter( e => e.kind === "spirit-effect" );
+	};
+	const expected = transition => [ {
+		kind: "spirit-effect",
+		gid: row.gid,
+		item: SPIRIT,
+		typeFlags: SPIRIT_TYPE,
+		transition
+	} ];
+	assert.deepEqual( visual( 0x3314 ), expected( "equip" ) );
+	assert.deepEqual( visual( 0x377c, 4 ), expected( "unequip" ) );
+	// A quick re-equip is its own transition again, never merged or dropped.
+	assert.deepEqual( visual( 0x3314 ), expected( "equip" ) );
+	owner.dispose();
+});
+
 test("jewelry equip notifications leave the visual model unchanged without refusing valid packets", () => {
 	const row = peerFixture.scenarios[1], owner = createEntities();
 	const jewelry = [ 5, 12 ].flatMap( group =>

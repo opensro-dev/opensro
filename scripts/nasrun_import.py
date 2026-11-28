@@ -478,6 +478,35 @@ def costume_effects(later_text, keys, has_particle):
 
 
 # ================
+# item_effects
+#
+# The itemcodename rows of the later itemeffect.txt for codes, as
+# {codename: {transition: effect key}}. A Spirit must name all four
+# transitions once, and only the states the table defines: a partial or
+# unknown row refuses, so the client never plays half the family.
+# ================
+def item_effects(later_text, codes):
+	effects, section = {}, None
+	for line in later_text.splitlines():
+		cells = [cell.strip() for cell in line.split("	")]
+		if cells[0] == "#section":
+			section = cells[1] if len(cells) > 1 else None
+			continue
+		if section != ITEM_EFFECT_SECTION or line.startswith("//") or cells[0] not in codes:
+			continue
+		state = cells[2] if len(cells) > 2 and cells[2] else "0"
+		transition = ITEM_EFFECT_TRANSITIONS.get(state)
+		rows = effects.setdefault(cells[0], {})
+		if transition is None or len(cells) < 2 or not cells[1] or transition in rows:
+			raise ValueError(f"Nasrun item effect row {line.strip()!r} is not a single known state")
+		rows[transition] = cells[1]
+	for code in sorted(codes):
+		if sorted(effects.get(code, {})) != sorted(ITEM_EFFECT_TRANSITIONS.values()):
+			raise ValueError(f"Nasrun item {code} lacks item effects: {sorted(effects.get(code, {}))}")
+	return {code: effects[code] for code in sorted(codes)}
+
+
+# ================
 # add_nasrun_skills
 #
 # The skill pass the Alexandria builder runs after the skill tier
@@ -498,6 +527,18 @@ SPIRIT_EDGE_SHEET = "icon/item/etc/icon_edge_nasrun.ddj"
 # the import stages the lent skills' rows alone, as the client ships them.
 VISUAL_CHANGE_TABLE = "charactervisualchange.txt"
 VC_SERVICE, VC_SKILL, VC_AVATAR_EFFECT, VC_BSR_M, VC_BSR_F = 0, 9, 10, 19, 20
+
+# The later clients' item presentation table: each Spirit names the
+# skill effect record its wearer plays when it is worn (state 0), taken
+# off (1), woken (2) and when its clock runs out (3) - the dark force that
+# enters or leaves the character (avatar_nasrun01_equip01 / unequip01 /
+# awake01.efp on Bip01 Spine1, with their sounds). Its itemcodename
+# section keys a row by item codename; the itemtypeid section is empty
+# for every Spirit. v1.150 has no such table: the import keeps the
+# Spirits' rows in its marker for the build (spirit-effects.ts).
+ITEM_EFFECT_TABLE = "itemeffect.txt"
+ITEM_EFFECT_SECTION = "itemcodename"
+ITEM_EFFECT_TRANSITIONS = {"0": "equip", "1": "unequip", "2": "awake", "3": "expire"}
 
 # The lent skills' cast effects and their costume's looping auras (#4407):
 # the VSRO skilleffect.txt rows keyed by a lent skill (its skillaniset2 row
@@ -621,6 +662,10 @@ def add_nasrun_skills(vsro_root, native, output):
 				icons.add(("Data", shared.normalized_path(row[column])))
 		# Their cast effects and costume auras, and the effect files they play.
 		effect_keys = set(SKILL_CODES) | {row[VC_AVATAR_EFFECT].strip() for row in visual_rows} - {"xxx", ""}
+		# The Spirits' presentation records (equip, unequip, wake, lapse).
+		spirits = {code for code, kind in ROWS if kind is WEARABLE_TYPE}
+		spirit_effects = item_effects(tables.decode_table(read_later(ITEM_EFFECT_TABLE)), spirits) 			if tables.TEXTDATA + ITEM_EFFECT_TABLE in index else {}
+		effect_keys |= {key for rows in spirit_effects.values() for key in rows.values()}
 		# A tree or a later client without the table (the unit fixtures)
 		# stages no effect rows.
 		effect_path = safe_target(text_root, SKILL_EFFECT_TABLE)
@@ -672,6 +717,7 @@ def add_nasrun_skills(vsro_root, native, output):
 		"visualChanges": len(visual_rows),
 		"effectKeys": sorted(effect_keys),
 		"costumeEffects": worn, "costumeEffectsRefused": worn_refused,
+		"itemEffects": spirit_effects,
 		"animationSources": {key: f"{LATER_BSR_DIR}/{key}" for key in sorted(bodies)},
 		"animationSets": list(TRANSFORM_SETS) if bodies else [],
 		"limits": [
