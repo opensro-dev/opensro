@@ -466,6 +466,7 @@ def build_trees(base, hideout=False):
 	# (NPC_CH_GACHA_MACHINE's shape): it keeps this row and id 101.
 	native_npc = ["0"] * 120
 	native_npc[0], native_npc[1], native_npc[2] = "1", "101", "NPC_CH_NATIVE_SHOP"
+	write_table(output / text, "characterdata.txt", [["characterdata_5000.txt"]])
 	write_table(output / text, "characterdata_5000.txt", [native_char, native_npc])
 	write_table(output / text, "itemdata.txt", [["itemdata_5000.txt"]])
 	write_table(output / text, "itemdata_5000.txt", [quest_item("ITEM_NATIVE_TEST", 200)])

@@ -226,12 +226,9 @@ def key_items(source_links, source_items, variant_items):
 # variant refuses by name instead of standing two objects on one id.
 # ================
 def taken_building_ids(text_root, building_ids):
-	used = {}
-	for pattern in ("characterdata_*.txt", "itemdata_*.txt", "teleportbuilding.txt"):
-		for path in text_root.glob(pattern):
-			for row in tables.table_rows(path.read_bytes()):
-				if len(row) > 2:
-					used[row[1]] = row[2]
+	# Every object file on disk, listed in an index or not: a reservation
+	# that reads too much only refuses more, never stacks two objects.
+	used = {row[1]: row[2] for _, row in published_ids.object_rows(text_root) if len(row) > 2}
 	return sorted(f"{identity} ({used[identity]})" for identity in building_ids if identity in used)
 
 

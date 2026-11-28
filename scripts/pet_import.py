@@ -358,15 +358,9 @@ def native_tables(native, exclude_shards=()):
 	# output share a tree, so a rebuild still sees its kinds as fresh
 	# and can restage their skills (later_world_import's tree_characters
 	# rule).
-	excluded = {name.lower() for name in exclude_shards}
-	text_root = Path(native) / TEXT_ROOT
-	chars = [row for path in sorted(text_root.glob("characterdata_*.txt"))
-		if path.name.lower() not in excluded
-		for row in tables.table_rows(path.read_bytes())]
-	item_rows = [row for path in sorted(text_root.glob("itemdata_*.txt"))
-		if path.name.lower() not in excluded
-		for row in tables.table_rows(path.read_bytes())]
-	return chars, item_rows
+	tree = later_tables.Archive.tree(Path(native) / TEXT_ROOT)
+	return (tree.rows("characterdata.txt", excluding=exclude_shards),
+		tree.rows("itemdata.txt", excluding=exclude_shards))
 
 
 # ================
@@ -388,10 +382,7 @@ def stage_pet_skills(read, text_root, skill_shard, char_rows, previous_skills=No
 	if not needed:
 		_drop_skill_shard(text_root, skill_shard)
 		return char_rows, {}
-	native_skills = [
-		row for path in text_root.glob("skilldata_*.txt") if path.name.lower() != skill_shard.lower()
-		for row in tables.table_rows(path.read_bytes()) if len(row) == 118
-	]
+	native_skills = cap110_monsters.tree_skills(text_root, skill_shard)
 	client_skills = [row for row in skill_tables.client_skill_rows(read) if len(row) > 3 and row[1].isdigit()]
 	added, skill_map = cap110_monsters.merge_skills(native_skills, client_skills, needed, previous_skills or {})
 	for row in char_rows:

@@ -617,8 +617,7 @@ def add_skytemple(native, output, source=None, closure=copy_resource_closure):
 		allocated = monsters.allocate_characters(occupied, sorted(refs), prior.get("characters", {}))
 		for code, row in sorted(refs.items()):
 			row[1] = str(allocated[code])
-		native_skills = [r for p in text_root.glob("skilldata_*.txt") if p.name != SKILL_SHARD
-			for r in tables.table_rows(p.read_bytes()) if len(r) == 118]
+		native_skills = monsters.tree_skills(text_root, SKILL_SHARD)
 		needed = {int(s) for r in refs.values() for s in r[89:99] if int(s)}
 		# The client's skills as the client reads them: its encrypted
 		# skilldataenc set when it ships one, else the plain manifest

@@ -27,7 +27,7 @@ import re
 import sys
 from pathlib import Path
 
-import import_vsro_alexandria as tables
+import later_tables
 from prepare_client_resources import write_atomically
 
 sys.path.insert(0, str(Path(__file__).resolve().parent / "build"))
@@ -190,7 +190,7 @@ def stage_field_equipment(text_root, source_root):
 	# ================
 	def read(name):
 		return json.loads((source_root / (name + ".json")).read_text(encoding="utf-8"))
-	items = [r for path in text_root.glob("itemdata_*.txt") for r in tables.table_rows(path.read_bytes())]
+	items = later_tables.Archive.tree(text_root).rows("itemdata.txt")
 	if source_root is None:
 		# Client-only (#3246, #3405): the committed vSRO backup supplies the
 		# expansion gear and the native classes, mirrored above 101.

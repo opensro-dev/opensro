@@ -456,9 +456,8 @@ def add_npcs(vsro_root, native, out, regions):
 	names = ("npcpos.txt", "npcchat.txt", "refshopgroup.txt", "refmappingshopgroup.txt", "refshop.txt", "skilleffect.txt")
 	tables = {name: (native / textdata / name).read_bytes() for name in names}
 	tables[CHARACTER_TARGET] = (native / textdata / CHARACTER_TARGET).read_bytes()
-	tables["characters"] = [
-		path.read_bytes() for path in sorted((native / textdata).glob("characterdata_*.txt"))
-	]
+	native_tree = later_tables.Archive.tree(native / textdata)
+	tables["characters"] = [native_tree.file(shard) for shard in native_tree.files("characterdata.txt")]
 	with later_tables.Archive.open(vsro_root) as source:
 		vsro = {name: source.file(name) for name in tuple(n for n in names if n != "refshop.txt") + ("textdata_object.txt",)}
 		# The characterdata index names the shards, as the client reads them.

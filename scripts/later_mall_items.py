@@ -261,27 +261,22 @@ def patch_overlaps(native, output, later_rows):
 	later = {row[SKILL_CODENAME]: row[SKILL_OVERLAP] for row in later_rows
 		if len(row) > SKILL_OVERLAP and row[SKILL_SERVICE] == "1" and row[SKILL_CODENAME] in OVERLAP_CODES}
 	records = []
+	tree = later_tables.Archive.overlay(native / TEXT_ROOT, output / TEXT_ROOT)
 	for code in OVERLAP_CODES:
 		if code not in later:
 			raise ValueError(f"the later client has no skill {code}")
-		found = None
-		for root in (output / TEXT_ROOT, native / TEXT_ROOT):
-			for path in sorted(root.glob("skilldata_*.txt")):
-				if sro_pk2.fold_ascii(path.name) == SKILL_SHARD:
-					continue
-				if any(len(row) > SKILL_OVERLAP and row[SKILL_CODENAME] == code for row in tables.table_rows(path.read_bytes())):
-					found = path
-					break
-			if found:
-				break
+		# The first shard the tree's index lists that holds the row: the
+		# output's copy of it when a layer wrote one, else the native's.
+		found = next((shard for shard in tree.files(SKILL_MANIFEST, excluding=(SKILL_SHARD,))
+			if any(len(row) > SKILL_OVERLAP and row[SKILL_CODENAME] == code for row in tables.table_rows(tree.file(shard)))), None)
 		if found is None:
 			raise ValueError(f"no skill table holds {code}")
-		target = safe_target(output / TEXT_ROOT, found.name)
+		target = safe_target(output / TEXT_ROOT, found)
 		created = not target.exists()
-		rows = tables.table_rows(found.read_bytes())
+		rows = tables.table_rows(tree.file(found))
 		for row in rows:
 			if len(row) > SKILL_OVERLAP and row[SKILL_CODENAME] == code:
-				records.append({"shard": found.name, "code": code, "native": row[SKILL_OVERLAP], "word": later[code], "created": created})
+				records.append({"shard": found, "code": code, "native": row[SKILL_OVERLAP], "word": later[code], "created": created})
 				row[SKILL_OVERLAP] = later[code]
 		write_atomically(target, cap110.encode_rows(rows))
 	return records
@@ -337,12 +332,7 @@ def add_later_mall_items(native, output, v1696_root=None, env=os.environ):
 	# A rebuild starts from the tables without this import's own rows.
 	nasrun.strip_texts(safe_target(text_root, NAME_TABLE), set(prior.get("texts", [])))
 	restore_overlaps(native, output, prior.get("overlaps", []))
-	for path in sorted(text_root.glob("itemdata*.txt")):
-		if sro_pk2.fold_ascii(path.name) in (ITEM_SHARD, ITEM_MANIFEST):
-			continue
-		for row in tables.table_rows(path.read_bytes()):
-			if len(row) > items.CODENAME and row[items.SERVICE] == "1" and row[items.CODENAME] in item_codes:
-				raise ValueError(f"mall item {row[items.CODENAME]} already stands in the item tables")
+	shared.refuse_standing_items(text_root, ITEM_SHARD, item_codes, "mall item")
 	with ExitStack() as stack:
 		archives, identities = avatars.open_archives(stack, root, avatars.V1696_SOURCE)
 		source = later_tables.Archive.media(*archives["Media"])
@@ -363,18 +353,16 @@ def add_later_mall_items(native, output, v1696_root=None, env=os.environ):
 		# of each shard an earlier pass wrote into the output.
 		occupied_skills = set()
 		standing_skills = set()
-		for path in sorted({*text_root.glob("skilldata_*.txt"), *(native / TEXT_ROOT).glob("skilldata_*.txt")}):
-			if sro_pk2.fold_ascii(path.name) == SKILL_SHARD:
-				continue
-			for row in tables.table_rows(path.read_bytes()):
-				if len(row) > SKILL_CODENAME and row[SKILL_ID].strip().isdigit():
-					occupied_skills.add(int(row[SKILL_ID]))
-				if row[SKILL_CODENAME] in SKILL_CODES:
-					# Already standing before this import: another
-					# build step owns that skill (the expert
-					# package references it by name); only its
-					# absence from the later rows is a defect.
-					standing_skills.add(row[SKILL_CODENAME])
+		tree = later_tables.Archive.overlay(native / TEXT_ROOT, text_root)
+		for row in tree.rows("skilldata.txt", excluding=(SKILL_SHARD,)):
+			if len(row) > SKILL_CODENAME and row[SKILL_ID].strip().isdigit():
+				occupied_skills.add(int(row[SKILL_ID]))
+			if row[SKILL_CODENAME] in SKILL_CODES:
+				# Already standing before this import: another
+				# build step owns that skill (the expert
+				# package references it by name); only its
+				# absence from the later rows is a defect.
+				standing_skills.add(row[SKILL_CODENAME])
 		staged_codes = [code for code in SKILL_CODES if code not in standing_skills]
 		allocated_skills = published_ids.allocate(published_ids.SKILLS, occupied_skills, staged_codes, prior.get("skills", {}))
 		staged_skills = []

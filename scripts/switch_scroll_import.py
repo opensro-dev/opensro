@@ -34,6 +34,7 @@ from pathlib import Path
 import alexandria_npcs as characters
 import cap110_monsters as cap110
 import import_vsro_alexandria as tables
+import later_tables
 import nasrun_import as nasrun
 import published_ids
 from prepare_client_resources import safe_target, write_atomically
@@ -98,18 +99,15 @@ def text_row(key, text):
 # ================
 # donor_rows
 #
-# The tree's item rows by codename, this import's own shard excepted:
-# the output's tables when it holds them, else the native tree's.
+# The tree's item rows by codename, this import's own shard excepted,
+# in the order the tree's itemdata index lists them (the first row of a
+# codename wins): the output's tables over the native tree's.
 # ================
 def donor_rows(native, text_root):
-	root = text_root if (text_root / "itemdata.txt").exists() else native / TEXT_ROOT
 	rows = {}
-	for path in sorted(root.glob("itemdata_*.txt")):
-		if path.name.lower() == ITEM_SHARD:
-			continue
-		for row in tables.table_rows(path.read_bytes()):
-			if len(row) > 2 and row[0] == "1":
-				rows.setdefault(row[2], row)
+	for row in later_tables.Archive.overlay(native / TEXT_ROOT, text_root).rows("itemdata.txt", excluding=(ITEM_SHARD,)):
+		if len(row) > 2 and row[0] == "1":
+			rows.setdefault(row[2], row)
 	return rows
 
 

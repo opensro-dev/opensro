@@ -320,6 +320,8 @@ class NasrunSkillImportTest(unittest.TestCase):
 		native_skill[0], native_skill[1], native_skill[3] = "1", str(self.NATIVE_SKILL), "SKILL_NATIVE_THING"
 		(native / nasrun.TEXT_ROOT / "skilldata_5000.txt").write_bytes(utf16([native_skill]))
 		(text_root / "skilldata.txt").write_bytes(utf16([["skilldata_5000.txt"], ["skilldata_110000.txt"]]))
+		# The earlier layer's shard the index lists.
+		(text_root / "skilldata_110000.txt").write_bytes(utf16([]))
 		(text_root / nasrun.NAME_TABLE).write_bytes(utf16([["1", "SN_NATIVE_A", "", "", "", "", "", "", "Native A"]]))
 		return vsro, native, output, text_root
 

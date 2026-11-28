@@ -155,6 +155,7 @@ class MuhanImportTest(unittest.TestCase):
 		source.mkdir()
 		native_char = ["0"] * 104
 		native_char[1], native_char[2] = "100", "MOB_NATIVE"
+		(text_root / "characterdata.txt").write_bytes(utf16([["characterdata_5000.txt"]]))
 		(text_root / "characterdata_5000.txt").write_bytes(utf16([native_char]))
 		(text_root / "skilldata.txt").write_bytes(utf16([["skilldata_5000.txt"]]))
 		(text_root / "skilldata_5000.txt").write_bytes(utf16([]))

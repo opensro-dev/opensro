@@ -22,6 +22,15 @@ owner, each shape of a textdata read that goes around it (#4761):
 	or startswith("textdata_"): an index, not a prefix, names the files
 	a textdata path spelled as a literal ("server_dep/silkroad/textdata/...")
 	Archive's private members (._read_file, ._has_file)
+	a glob of a built tree's characterdata, itemdata or skilldata shards
+	(<table>_*.txt, #4770): the client loads only what the tree's index
+	lists, in its order, and a glob also reads an unlisted shard
+	(skilldata_virtual.txt) in file-system order. Archive.tree and
+	Archive.overlay follow the index; rows(..., excluding=) leaves an
+	importer's own shard out.
+
+One file may break one rule for a reason it states (GLOB_EXCEPTIONS):
+a folder that is not a client tree has no index to follow.
 
 Comment lines and docstrings are prose and do not count. Writing an
 archive (a test fixture's {TEXTDATA + name: bytes}) is not a read and
@@ -60,8 +69,19 @@ const RULES = [
 	{ why: "a walk of textdata names by prefix", pattern: new RegExp( "\\.startswith\\s*\\(\\s*\\(?\\s*" + TEXTDATA ) },
 	{ why: "a walk of a table's files by name prefix", pattern: /\.startswith\s*\(\s*["']textdata_/i },
 	{ why: "a textdata path literal", pattern: /["']server_dep\/silkroad\/textdata\//i },
-	{ why: "Archive's private members", pattern: /\._(?:read_file|has_file)\b/ }
+	{ why: "Archive's private members", pattern: /\._(?:read_file|has_file)\b/ },
+	{
+		why: "a glob of an index table's shards",
+		pattern: /\.r?glob\s*\(\s*[rbf]*["'](?:characterdata|itemdata|skilldata)_?\*/i
+	}
 ];
+
+// Files a rule does not apply to, with the reason. pack_content.py reads
+// the one characterdata shard of another server's export folder, which
+// is not a client tree and ships no index (#4770).
+const EXCEPTIONS = {
+	"scripts/pack_content.py": [ "a glob of an index table's shards" ]
+};
 
 /*
 ================
@@ -98,15 +118,17 @@ function codeLines( text ) {
 findLaterTableReads
 
 The lines of one Python file that read later textdata around its owner,
-with the rule each breaks.
+with the rule each breaks. file (repository-relative) selects the
+rules EXCEPTIONS lifts for it.
 ================
 */
-export function findLaterTableReads( text ) {
+export function findLaterTableReads( text, file = "" ) {
 	const hits = [];
+	const lifted = EXCEPTIONS[file] || [];
 	for ( const { line, text: source } of codeLines( text ) ) {
 		if ( TEXTDATA_DEFINITION.test( source.trim() ) ) continue;
 		const code = source.replace( /\s+#.*$/, "" );
-		const rule = RULES.find( candidate => candidate.pattern.test( code ) );
+		const rule = RULES.find( candidate => !lifted.includes( candidate.why ) && candidate.pattern.test( code ) );
 		if ( rule ) hits.push( { line, text: source.trim(), why: rule.why } );
 	}
 	return hits;
@@ -137,13 +159,15 @@ function main() {
 		} catch {
 			continue; // listed but deleted in the working tree
 		}
-		for ( const hit of findLaterTableReads( text ) ) {
+		for ( const hit of findLaterTableReads( text, file ) ) {
 			violations.push( `${file}:${hit.line}: ${hit.why}: ${hit.text}` );
 		}
 	}
 	if ( violations.length ) {
 		console.error( "later-table-reads: these read later textdata around scripts/later_tables.py." );
-		console.error( "Read through later_tables.Archive (rows, rows_of, text, files, file):" );
+		console.error(
+			"Read through later_tables.Archive (rows, rows_of, text, files, file; tree and overlay for a built tree):"
+		);
 		for ( const violation of violations ) console.error( "  " + violation );
 		process.exit( 1 );
 	}

@@ -20,6 +20,14 @@ index. The payload reader beneath is private here, and the
 check:later-table-reads gate refuses a textdata payload read anywhere
 else in scripts/ (#4761).
 
+A built v1.150 tree is read the same way (#4770): its characterdata,
+itemdata and skilldata are indexes too, and the client loads only the
+shards an index lists, in its order. Archive.tree reads one folder and
+Archive.overlay a build's output over the native extraction; an
+importer leaves its own shard out with rows(..., excluding=), never by
+globbing <table>_*.txt (the gate refuses that too). A shard the index
+does not list (skilldata_virtual.txt, a reap's leftover) is not read.
+
 ===========================================================================
 """
 import mmap
@@ -119,6 +127,39 @@ class Archive:
 		return cls(read_file, lambda name: name in files, str(root))
 
 	# ================
+	# overlay
+	#
+	# A build's textdata: each file the output's copy when a step before
+	# wrote one, else the native extraction's (native_root and
+	# output_root are the two textdata folders). An index is followed
+	# like any other, so the output's index, once a step rewrote it,
+	# names the shards of both trees.
+	# ================
+	@classmethod
+	def overlay(cls, native_root, output_root):
+		native_root, output_root = Path(native_root), Path(output_root)
+		native_paths = {sro_pk2.fold_ascii(path.name): path for path in native_root.iterdir() if path.is_file()} \
+			if native_root.is_dir() else {}
+
+		# ================
+		# path_of
+		# ================
+		def path_of(name):
+			written = output_root / name
+			return written if written.is_file() else native_paths.get(name)
+
+		# ================
+		# read_file
+		# ================
+		def read_file(name):
+			path = path_of(name)
+			if path is None:
+				raise ValueError(f"the tree has no {name}")
+			return path.read_bytes()
+
+		return cls(read_file, lambda name: path_of(name) is not None, "the built tree")
+
+	# ================
 	# of
 	#
 	# A dict of {file name: bytes}.
@@ -157,11 +198,14 @@ class Archive:
 	# files
 	#
 	# The files a table's rows come from: its shards when the file is an
-	# index, else the file itself.
+	# index, else the file itself. excluding names shards to leave out:
+	# an importer's own, which its rebuild rewrites.
 	# ================
-	def files(self, name):
+	def files(self, name, excluding=()):
 		name = sro_pk2.fold_ascii(name)
-		return [sro_pk2.fold_ascii(shard) for shard in shards(table_rows(self._read_file(name)))] or [name]
+		left_out = {sro_pk2.fold_ascii(shard) for shard in excluding}
+		listed = [sro_pk2.fold_ascii(shard) for shard in shards(table_rows(self._read_file(name)))] or [name]
+		return [part for part in listed if part not in left_out]
 
 	# ================
 	# rows
@@ -173,14 +217,14 @@ class Archive:
 	# table: a reader of v1.696's layout (an id cell after the service
 	# cell) must not misread VSRO's. optional reads a table the client
 	# may not ship (v1.696 has no textdata_new.txt) as no rows.
+	# excluding leaves the named shards out (files).
 	# ================
-	def rows(self, name, parse=table_rows, indexed_only=False, optional=False):
+	def rows(self, name, parse=table_rows, indexed_only=False, optional=False, excluding=()):
 		if optional and not self.has(name):
 			return []
-		files = self.files(name)
-		if indexed_only and files == [sro_pk2.fold_ascii(name)]:
+		if indexed_only and self.files(name) == [sro_pk2.fold_ascii(name)]:
 			raise ValueError(f"{name} is not a v1.696 shard index")
-		return [row for part in files for row in parse(self._read_file(part))]
+		return [row for part in self.files(name, excluding) for row in parse(self._read_file(part))]
 
 	# ================
 	# rows_of

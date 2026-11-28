@@ -41,6 +41,31 @@ test("the hand reads #4761 retired are refused", () => {
 	for ( const line of retired ) assert.notEqual( refused( line ), null, line );
 });
 
+test("a glob of a tree's index table shards is refused (#4770)", () => {
+	const globs = [
+		'\tfor path in sorted(root.glob("itemdata_*.txt")):',
+		'\tnative_skills = [r for p in text_root.glob("skilldata_*.txt") if p.name != SKILL_SHARD',
+		'\treturn [row for path in Path(text_root).glob("characterdata_*.txt") if path.name != own',
+		'\tfor path in sorted(text_root.glob("ItemData*.txt")):',
+		"\tshards = list(root.rglob('skilldata_*.txt'))"
+	];
+	for ( const line of globs ) assert.equal( refused( line ), "a glob of an index table's shards", line );
+	const tree = [
+		'\treturn later_tables.Archive.tree(text_root).rows("characterdata.txt", excluding=(own,))',
+		'\tfor row in tree.rows("skilldata.txt", excluding=(SKILL_SHARD,)):',
+		'\tfor path in sorted(root.glob("textdata_*.json")):'
+	];
+	for ( const line of tree ) assert.equal( refused( line ), null, line );
+});
+
+test("a named exception lifts only its own rule in its own file", () => {
+	const text = '\tshards = sorted(export_root.glob("characterdata_*.txt"))\n';
+	assert.deepEqual( findLaterTableReads( text, "scripts/pack_content.py" ), [] );
+	assert.equal( findLaterTableReads( text, "scripts/other.py" ).length, 1 );
+	const payload = "\treturn sro_pk2.payload(media, media_index[TEXTDATA + LOCALINFO])\n";
+	assert.equal( findLaterTableReads( payload, "scripts/pack_content.py" ).length, 1 );
+});
+
 test("reads through the owner, writes and the row serializer pass", () => {
 	const allowed = [
 		"\tsource = later_tables.Archive.media(media, index)",
