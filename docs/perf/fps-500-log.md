@@ -3,6 +3,23 @@
 Laptop: AMD iGPU, 1920x1200, crowd of 16, snow, busy casting. One line per
 finding; numbers are measured, never estimated.
 
+## Measurement validity (2026-11-28)
+
+- Every laptop run before 2026-11-28 served the laptop's 11-17 generated
+  asset tree (manifest b449d34a), not the PC's 11-26 tree (f0cd9a73): 1198
+  effect files missing (asset schema 5, per-effect EasyFX programs, #3951),
+  2412 world files changed, 2548 images missing. The client skipped the
+  effect programs it could not load (404) without an error, so those runs
+  drew no effect actors and no particles (39 of 39 runs: effect-actors 0;
+  character candidates 18 vs 63 on the PC) although the server accepted
+  every imbue. They are crowded gameplay without combat effects, on older
+  world assets: valid for that workload only, not full-combat baselines.
+  The laptop GPU sweep below is in that class, terrain included.
+- The bench now records the served asset manifest (identity.servedAssets),
+  refuses another tree with --expect-assets, and fails a busy-crowd window
+  unless 90% of its frames drew effect actors and particles; each row keeps
+  a per-second workload timeline.
+
 ## Baseline (0cc0601f5)
 
 - drag: frame 5.13 ms (195 fps), main CPU 4.51, GPU 3.13 (main-pass 2.61).

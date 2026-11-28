@@ -174,7 +174,7 @@ export function instrument( { counts, spans, target = globalThis } ) {
 		end() {
 			const endedAtMs = now(), elapsedMs = endedAtMs - frameStart, counts = { ...tally };
 			if ( displayed ) displayed.presentedAtMs = endedAtMs;
-			target.__benchRows.push( [ elapsedMs, worldEnd - worldStart, counts ] );
+			target.__benchRows.push( [ elapsedMs, worldEnd - worldStart, counts, frameStart ] );
 			if ( target.__benchRows.length > 16384 ) target.__benchRows.splice( 0, 4096 );
 			if ( !measuring || target.__benchLoop !== true || measuring !== target.__benchLongFrames ) return;
 			const cpuMs = counts["cpu-ms"] ?? elapsedMs, evidence = measuring;
@@ -362,6 +362,7 @@ export async function measure( page, name, ms, drive ) {
 	// Preserve rare incidents before the per-frame averages round them away.
 	// These totals cover the retained rows, whose count is reported explicitly.
 	const countTotals = { ...tally };
+	const workload = workloadEvidence( rows, timeOriginMs );
 	for ( const key in tally ) tally[key] = Number( (tally[key] / Math.max( 1, rows.length )).toFixed( 2 ) );
 	return {
 		name,
@@ -386,8 +387,70 @@ export async function measure( page, name, ms, drive ) {
 		inputs,
 		counts: tally,
 		countTotals,
-		countedFrames: rows.length
+		countedFrames: rows.length,
+		workload
 	};
+}
+
+/*
+================
+workloadEvidence
+
+Which counted frames drew the combat workload (an effect actor, a live
+particle), in total and per second of the window, with the window's first
+frame on the page and wall clocks. A window average says effects existed
+somewhere in it; this says when, so a capture taken at a known wall time
+can be matched to the frames around it.
+================
+*/
+export function workloadEvidence( rows, timeOriginMs ) {
+	const startPageMs = rows[0]?.[3] ?? 0, timeline = [];
+	let effectFrames = 0, particleFrames = 0;
+	for ( const [, , counts, at] of rows ) {
+		const second = Math.max( 0, Math.floor( ((at ?? startPageMs) - startPageMs) / 1000 ) );
+		const slot = timeline[second] ??= { frames: 0, effectFrames: 0, particleFrames: 0 };
+		slot.frames++;
+		if ( (counts["effect-actors"] ?? 0) > 0 ) {
+			slot.effectFrames++;
+			effectFrames++;
+		}
+		if ( (counts.particles ?? 0) > 0 ) {
+			slot.particleFrames++;
+			particleFrames++;
+		}
+	}
+	for ( let i = 0; i < timeline.length; i++ ) timeline[i] ??= { frames: 0, effectFrames: 0, particleFrames: 0 };
+	return {
+		startPageMs,
+		startWallMs: timeOriginMs + startPageMs,
+		frames: rows.length,
+		effectFrames,
+		particleFrames,
+		timeline
+	};
+}
+
+// The share of a combat window's frames that must draw effect actors and
+// live particles. A busy crowd recasts its imbues continuously (the PC's
+// drag windows drew ~20 effect actors on average), so a lower share means
+// the effects were not drawn, not that combat paused.
+export const COMBAT_FRAME_SHARE = 0.9;
+
+/*
+================
+verifyCombatWorkload
+
+Refuses a combat window whose frames did not draw its workload: server
+receipts prove casts were accepted, not that the client drew their effects.
+================
+*/
+export function verifyCombatWorkload( workload, name ) {
+	const need = Math.ceil( workload.frames * COMBAT_FRAME_SHARE );
+	if ( workload.frames > 0 && workload.effectFrames >= need && workload.particleFrames >= need ) return;
+	throw Error(
+		`${name}: combat workload missing: effect actors in ${workload.effectFrames}, particles in ${workload.particleFrames} ` +
+			`of ${workload.frames} frames (need ${need} each)`
+	);
 }
 
 /*

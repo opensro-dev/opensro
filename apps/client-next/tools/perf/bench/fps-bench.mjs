@@ -95,6 +95,13 @@ main thread's frame and world-preparation time per frame. Options add:
   --expect-commit SHA  fail the run unless the served bundle's stamped
             revision is this commit (core/build-identity.mjs): an A/B side
             served by a stale preview is refused, not measured.
+  --expect-assets HASH  fail the run unless the served /assets/manifest.json
+            manifestHash starts with HASH: one machine's stale generated
+            tree is refused, not measured.
+A busy crowd (--act busy=...) is a combat window: the run fails unless at
+least COMBAT_FRAME_SHARE of its frames drew effect actors and particles
+(core/client.mjs verifyCombatWorkload). Every row records the per-second
+workload timeline (workload in --json).
 
 Read the captures with tools/perf/analyze (profile.mjs, trace.mjs).
 
@@ -120,8 +127,13 @@ import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { MISSION_MOVEMENT_FIXTURES } from "../../../../../scripts/lib/missionMovementFixture.mjs";
 import { parseOptions } from "../core/report.mjs";
 import { frameLimits } from "../../../src/engine/foundation/rendering/video-options.ts";
-import { openClient, closeClient, createCaptures, measure, revive } from "../core/client.mjs";
-import { buildIdentity, verifyMeasuredIdentity, verifyServedCommit } from "../core/build-identity.mjs";
+import { openClient, closeClient, createCaptures, measure, revive, verifyCombatWorkload } from "../core/client.mjs";
+import {
+	buildIdentity,
+	verifyMeasuredIdentity,
+	verifyServedAssets,
+	verifyServedCommit
+} from "../core/build-identity.mjs";
 import { keepGoing, drag, walk, approach, fight, cross, loadCombat, combat, strike, localAlive } from "./scenarios.mjs";
 import { CROWD_HOST_URL, DEFAULT_ACTIVITY_SEED, obtainCrowd } from "../core/crowd.mjs";
 import { BUSY_IMBUE_SKILL, parseActivity } from "../core/crowd-activity.mjs";
@@ -210,7 +222,7 @@ const USAGE = "fps-bench.mjs [--seconds N] [--at a,b] [--only a,b] [--counts] [-
 	"[--trace] [--screenshot] [--gpu-process] [--json FILE] [--paced] [--cpu-rate N] [--frame-limit 0|60|120|240] [--shadow-detail 0|1|2] " +
 	"[--combat codename:count:CHAMP|GIANT|NORMAL] [--vulnerable] [--crowd N] [--crowd-fixture FILE.json] " +
 	"[--crowd-host URL] [--act walk=SHARE,chat=SHARE,roam=SHARE,busy=SHARE] [--seed N] [--provisioning URL] " +
-	"[--token FILE] [--snow] [--rain] [--frames N] [--frame-ms MS] [--memory] [--gpu-time] [--expect-commit SHA]";
+	"[--token FILE] [--snow] [--rain] [--frames N] [--frame-ms MS] [--memory] [--gpu-time] [--expect-commit SHA] [--expect-assets HASH]";
 // --gpu-process trace categories, the fewest that serve processCosts:
 // toplevel gives every thread's top-level tasks as complete events with
 // their thread time (tdur); blink.user_timing carries the window marks.
@@ -658,9 +670,12 @@ async function session( options, location, results ) {
 			const identity = await buildIdentity( client.page );
 			console.log(
 				`  measuring ${identity.build} ${identity.entry ?? identity.origin}, replay ${identity.replay}; ` +
-					`harness ${identity.harnessCommit}, served commit ${identity.servedCommit}`
+					`harness ${identity.harnessCommit}, served commit ${identity.servedCommit}, ` +
+					`assets ${identity.servedAssets?.manifestHash.slice( 0, 12 ) ?? "none"} ` +
+					`(${identity.servedAssets?.generatedAt ?? "unknown"})`
 			);
 			verifyServedCommit( identity, options.expectCommit );
+			verifyServedAssets( identity, options.expectAssets );
 			const gpuCursor = options.gpuTime ? await gpuTimingCursor( client.page ) : null;
 			await captures.start();
 			capturing = true;
@@ -755,6 +770,11 @@ async function session( options, location, results ) {
 			results.push( result );
 			if ( options.json ) await writeFile( options.json, JSON.stringify( results, null, 2 ) );
 			console.log( fpsRow( result ) );
+			// A busy crowd is a combat window: it fails unless its frames drew
+			// the effects (the row and JSON above keep the evidence).
+			if ( crowd && parseActivity( options.act ).busy > 0 ) {
+				verifyCombatWorkload( result.workload, `${location.name}/${name}` );
+			}
 			// The world's resident and visible counts after the window (#4692):
 			// static groups (GPU-culled, never walked), walked and walk-visible
 			// groups, and the frame's bundle recordings so far. A bundle without
@@ -918,6 +938,8 @@ const options = parseOptions( process.argv.slice( 2 ), {
 	out: "temp/artifacts/fps-bench",
 	// The commit the served bundle must name (build-identity.mjs verifyServedCommit).
 	expectCommit: "",
+	// The asset manifest hash the page must serve (verifyServedAssets).
+	expectAssets: "",
 	json: ""
 }, USAGE );
 if ( !frameLimits().includes( options.frameLimit ) ) throw Error( `unsupported frame limit ${options.frameLimit}` );
