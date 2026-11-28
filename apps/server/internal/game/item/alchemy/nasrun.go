@@ -25,8 +25,8 @@ jewel. The owner's later rule (2026-11-28, #4732) raises the cap to +10
 (the last plus the ability rows author, nasrun.MaxAbilityPlus) at
 15/10/8/5 % beyond +6, and makes it harder: a failure above +5 drops the
 Spirit back to +5 (spiritFailFloor), and a failure at or below +5 keeps
-the plus. #4732's third rule, a failure from +8 that can also destroy the
-Spirit, waits there for its chance.
+the plus. A failure never destroys the Spirit (the owner, 2026-11-28,
+withdrawing #4732's "from +8 can destroy").
 
 Event Spirits: nasrun.IsSpirit matches any 3/1/14, and ISRO-R has ten
 ITEM_EVENT_AVATAR_*_NASRUN* rows of that type. They are out of reach only

@@ -63,7 +63,7 @@ at a time up to +10 (`internal/game/item/alchemy/nasrun.go`):
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | Chance | 70 % | 60 % | 50 % | 40 % | 30 % | 20 % | 15 % | 10 % | 8 % | 5 % |
 
-- A failure spends the jewel. At or below +5 it keeps the plus; above +5 it drops the Spirit back to +5 (the owner's rule, 2026-11-28, #4732). #4732's destruction rule from +8 is not in yet.
+- A failure spends the jewel. At or below +5 it keeps the plus; above +5 it drops the Spirit back to +5 (the owner's rule, 2026-11-28, #4732). A failure never destroys the Spirit (owner, 2026-11-28).
 - The chance is the table alone: Lucky options, avatar luck and the shard's rate table do not change it.
 - Refusals use the native codes: a lucky powder staged with the jewel (0x0a), a Spirit at +10 (0x0f), a native
   elixir on a Spirit or the jewel on native gear (0x09). Off, a Spirit is no target (0x10).
