@@ -346,12 +346,18 @@ A bug report is sent by the player, with the message and stack it
 kept; an incident is filed with no one asking, so it carries no text a
 player could have put into an error: the class name, the message only
 when the engine itself wrote it (ENGINE_ERRORS), and only the stack's
-own frames (stackFrames: script path, line and column).
+own frames (stackFrames: script path, line and column). foreign marks a
+failure whose stack names none of the page's scripts but ran code from
+somewhere else (an extension, eval'd or other-origin code): the live
+stack overflows of #3425 / #3684 were all of that kind, and they file
+under their own code (contracts/network uncaughtIncidentCode) so triage never chases them
+as ours.
 ================
 */
 export interface UncaughtFailure {
 	readonly message: string;
 	readonly frames: readonly string[];
+	readonly foreign: boolean;
 }
 
 // The engine's own error classes, whose messages the engine writes
@@ -388,7 +394,11 @@ function uncaughtFailure(
 			"Rejection",
 		// The page's own frames name the failure; with none, the classes of
 		// the frames that ran say whose code it was (foreignFrames).
-		frames: frames?.length ? frames : foreign ?? []
+		frames: frames?.length ? frames : foreign ?? [],
+		// Foreign only on proof: no page frame, and at least one frame that
+		// is not a bare native one (a native-only stack says nothing of whose
+		// code called it, and a stackless rejection says nothing at all).
+		foreign: !frames?.length && (foreign ?? []).some( frame => !frame.startsWith( "    at <native>" ) )
 	};
 }
 
