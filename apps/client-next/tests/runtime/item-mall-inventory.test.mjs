@@ -214,3 +214,37 @@ test("mall refusal retains native banner context after clearing the pending requ
 	assert.equal( result?.notices?.at( -1 )?.banner, true );
 	game.dispose();
 });
+
+test("a mall purchase confirmed behind a busy window prints the blocked line and sends nothing (6CB5C0)", () => {
+	const sent = [];
+	const game = createGameplay( frame => sent.push( frame ) );
+	game.bootstrap( { inventorySlotCount: 109, equipmentSlotCount: 13 } );
+	game.seed( {
+		gid: 1,
+		refObjId: 1907,
+		kind: "local-player",
+		name: "Mall tester",
+		regionId: 25000,
+		x: 0,
+		y: 0,
+		z: 0,
+		heading: 0
+	} );
+	game.command( { kind: "mall-open" }, 0, undefined );
+	game.receive( { opcode: 15, payload: json( catalog() ) }, 1 );
+	const request = { group: 852, shop: 2, tab: 3, slot: 4, packageId: 100, quantity: 1, points: 0 };
+	// The stall network is one of the windows 67D090 tests.
+	game.command( { kind: "stall-network-open", open: true }, 2, undefined );
+	game.take();
+	const before = sent.length;
+	assert.equal( game.command( { kind: "mall-buy", request }, 3, undefined ), null );
+	assert.equal( sent.length, before );
+	const blocked = game.take();
+	assert.equal( blocked?.notices?.at( -1 )?.key, "UIIT_MSG_STRGERR_STORAGE_OPERATION_BLOCKED" );
+	assert.notEqual( blocked?.itemMall?.pending, true );
+	// Closed again, the same purchase goes out.
+	game.command( { kind: "stall-network-open", open: false }, 4, undefined );
+	game.command( { kind: "mall-buy", request }, 5, undefined );
+	assert.equal( sent.length, before + 1 );
+	game.dispose();
+});
