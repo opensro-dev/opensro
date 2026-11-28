@@ -57,6 +57,7 @@ from pathlib import Path
 import alexandria_npcs as characters
 import cap110_item_import as item_import
 import cap110_monsters as cap110
+import cap110_skill_effects as effects
 import published_ids
 import import_vsro_alexandria as tables
 import jupiter_import as jupiter
@@ -158,6 +159,7 @@ def add_winter_monsters(native, out, env=os.environ):
 		reap_sounds(output, prior)
 		later_world_import.reap_monsters(SPEC, output, prior)
 		return {"enabled": False, "reason": "off" if not flag_enabled(env) else f"{ROOT_ENV} is not set"}
+	reap_sounds(output, prior)
 	later_world_import.require_pin(SPEC, root, ARCHIVES, jupiter.archive_pins)
 	with ExitStack() as stack:
 		archives = {}
@@ -180,15 +182,14 @@ def add_winter_monsters(native, out, env=os.environ):
 		def has(name):
 			return tables.TEXTDATA + name.lower() in index
 
-		later = {row[CHAR_CODE]: row for shard in tables.table_rows(read("characterdata.txt"))
-			for row in tables.table_rows(read(shard[0]))}
+		later = tables.later_characters(read)
 		refs = {code: characters.convert_character(row) for code, row in sorted(later.items()) if admits(row)}
 		if not refs:
 			raise ValueError(f"the v1.696 client carries no {PREFIX}* character rows")
 		kinds = later_world_import.stage_kinds(SPEC.label, read, has, refs, text_root, prior, CHARACTER_SHARD, SKILL_SHARD,
 			lambda code: code in refs)
 		staged = add_winter_items(native, output, read, archives, prior)
-		presentation = add_winter_presentation(native, output, read, set(refs), prior)
+		presentation = add_winter_presentation(output, read, set(refs))
 	kinds["characterInfo"] = sorted(set(kinds["characterInfo"]) | set(presentation.pop("characterInfo")))
 	summary = {"enabled": True, **kinds, **staged, **presentation, "levels": {code: int(later[code][CHAR_LEVEL]) for code in refs}}
 	write_atomically(marker, (json.dumps(summary, indent=2) + "\n").encode())
@@ -199,16 +200,11 @@ def add_winter_monsters(native, out, env=os.environ):
 # later_text_table
 #
 # One later text table's rows, through its shard manifest when the
-# later client splits it (textdata_object.txt, textevent.txt).
+# later client splits it (textdata_object.txt, textevent.txt). The
+# shard owner joins wrapped rows per file, never across two shards.
 # ================
 def later_text_table(read, name):
-	rows = tables.table_rows(read(name))
-	shards = [row[0] for row in rows if row]
-	if shards and all(len(row) == 1 and row[0].lower().endswith(".txt") for row in rows if row):
-		raw = b"\xff\xfe" + "".join(tables.decode_table(read(shard)) for shard in shards).encode("utf-16-le")
-	else:
-		raw = read(name)
-	return [later_world_import.later_text_row(row) for row in joined_rows(raw)]
+	return [later_world_import.later_text_row(row) for row in tables.later_table_rows(read, name, joined_rows)]
 
 
 # ================
@@ -281,8 +277,7 @@ def replace_text_rows(raw, symbols, rows):
 def add_winter_items(native, output, read, archives, prior):
 	text_root = output / later_world_import.TEXT_ROOT
 	native_text = Path(native) / later_world_import.TEXT_ROOT
-	later_items = {row[2]: row for name in tables.table_rows(read("itemdata.txt"))
-		for row in tables.table_rows(read(name[0])) if len(row) > 2 and row[0] == "1"}
+	later_items = {row[2]: row for row in tables.later_table_rows(read, "itemdata.txt") if len(row) > 2 and row[0] == "1"}
 	rows = []
 	for code in ITEMS:
 		row = later_items.get(code)
@@ -355,93 +350,21 @@ def reap_items(output, prior):
 # ================
 # add_winter_presentation
 #
-# The kinds' characterinfo rows and sound rules, without which the build
-# gives them the first characterinfo row's profile (a Chinese man: his
-# death scream on a Snow Slave). stage_kinds reads characterinfo from the
-# later skilleffect.txt, which in v1.696 holds none: the rows moved to
-# the characterinfo.txt shards, two columns (service, id) wider. Each kind
-# keeps its own row and the base row it names (MOB_EV_SNOWMAN), cut to the
-# native record; the bases' effectsound rules join the native table in
-# its own layout (an empty first cell, cp949).
+# The kinds' characterinfo rows, without which the build gives them the
+# first characterinfo row's profile (a Chinese man: his death scream on
+# a Snow Slave). stage_kinds joins the rows of the staged kinds; this
+# adds the base rows they name (MOB_EV_SNOWMAN) and the profile objects,
+# cut to the native record. Their sound rules, and every file the rows
+# name, are later_presentation's: the variant's last pass joins them for
+# every import's kinds.
 # ================
-def add_winter_presentation(native, output, read, codes, prior):
-	later = later_characterinfo(read)
+def add_winter_presentation(output, read, codes):
+	later = effects.later_characterinfo(read)
 	# The Snow Slave has no row of its own: its characterdata base
 	# (MOB_EV_SNOWMAN) is its profile, as are the sound objects.
 	wanted = set(codes) | {later[code][1] for code in codes if code in later} | set(SOUND_OBJECTS)
-	add_characterinfo(output, later, wanted)
-	sounds = add_sound_rules(native, output, read, SOUND_OBJECTS, "winter")
-	return {"characterInfo": sorted(code for code in wanted if code in later), "soundObjects": sounds}
-
-
-# ================
-# later_characterinfo
-#
-# The later client's characterinfo rows by codename, from the
-# characterinfo.txt shards (two columns, service and id, wider than the
-# native record), cut to the codename onwards.
-# ================
-def later_characterinfo(read):
-	return {row[2]: row[2:] for row in later_text_table_rows(read, "characterinfo.txt")
-		if len(row) >= characters.SKILL_EFFECT_COLUMNS + 2 and row[0] in ("0", "1")}
-
-
-# ================
-# add_characterinfo
-#
-# The characterinfo rows of codes (from later_characterinfo) joined to
-# the tree's skilleffect.txt, cut to the native record; a code the tree
-# already carries, or one in staged (rows stage_kinds just merged), is
-# left alone. Shared by the layers that stage later monsters without a
-# placement (rigid_import.py, pandora_box_import.py). Returns the codes
-# whose rows joined.
-# ================
-def add_characterinfo(output, later, codes, staged=()):
-	effect_path = output / later_world_import.TEXT_ROOT / "skilleffect.txt"
-	known = cap110.characterinfo_codenames(tables.decode_table(effect_path.read_bytes())) | set(staged)
-	info = [later[code][:characters.SKILL_EFFECT_KEPT] for code in sorted(codes) if code in later and code not in known]
-	write_atomically(effect_path, characters.skill_effect_section(effect_path.read_bytes(), info))
-	return [row[0] for row in info]
-
-
-# ================
-# add_sound_rules
-#
-# The later effectsound rules of objects joined to the tree's table in
-# its native layout (an empty first cell, cp949), replacing any a
-# previous build added; reap_sounds removes them again from the
-# marker's soundObjects. A client without one rule for the objects
-# refuses: the kinds would play the first profile's sounds.
-# ================
-def add_sound_rules(native, output, read, objects, label):
-	sound_path = output / later_world_import.TEXT_ROOT / SOUND_TABLE
-	native_sound = Path(native) / later_world_import.TEXT_ROOT / SOUND_TABLE
-	current = (sound_path if sound_path.exists() else native_sound).read_bytes().decode(SOUND_ENCODING)
-	later_sound = read(SOUND_TABLE).decode(SOUND_ENCODING, errors="strict")
-	rules = ["\t" + "\t".join(line.split("\t")[1:]) for line in later_sound.split("\r\n")
-		if len(line.split("\t")) > 2 and line.split("\t")[1] in objects]
-	if not rules:
-		raise ValueError(f"the v1.696 client carries no {label} sound rules")
-	kept = drop_sound_rules(current, objects)
-	if not kept.endswith("\r\n"):
-		kept += "\r\n"
-	write_atomically(sound_path, (kept + "\r\n".join(rules) + "\r\n").encode(SOUND_ENCODING))
-	return list(objects)
-
-
-# ================
-# later_text_table_rows
-#
-# A later UTF-16 table's rows through its shard manifest, as they stand
-# (no text-row mapping): characterinfo.txt lists its Characterinfo_NNN
-# shards.
-# ================
-def later_text_table_rows(read, name):
-	rows = tables.table_rows(read(name))
-	shards = [row[0] for row in rows if row]
-	if shards and all(len(row) == 1 and row[0].lower().endswith(".txt") for row in rows if row):
-		return [row for shard in shards for row in tables.table_rows(read(shard))]
-	return rows
+	effects.join_characterinfo(output / later_world_import.TEXT_ROOT / effects.SKILL_EFFECT_TABLE, later, wanted)
+	return {"characterInfo": sorted(code for code in wanted if code in later)}
 
 
 # ================
@@ -463,9 +386,10 @@ def drop_sound_rules(text, objects):
 # ================
 # reap_sounds
 #
-# The sound half of a switch off: the rules a previous build added leave.
-# The characterinfo rows leave with the monsters' own reap (the marker's
-# characterInfo list).
+# The rules a build before later_presentation joined (its marker's
+# soundObjects) leave, on and off alike: the pass now owns every later
+# kind's rules. The characterinfo rows leave with the monsters' own reap
+# (the marker's characterInfo list).
 # ================
 def reap_sounds(output, prior):
 	path = output / later_world_import.TEXT_ROOT / SOUND_TABLE

@@ -367,9 +367,12 @@ export interface Renderer extends Disposable {
 	 * frame (BUG-070). Optional so test stubs stay valid.
 	 */
 	maintenance?(): void;
+	/** clocks: the frame's clock entries of actors republished unchanged
+	 * but for their clocks (contracts/character.ts ActorClocks). */
 	setCharacterActors(
 		actors: readonly import("./character").CharacterActor[],
-		portraits?: readonly import("./character").CharacterActor[]
+		portraits?: readonly import("./character").CharacterActor[],
+		clocks?: import("./character").ActorClocks
 	): void;
 	/** The actor snapshots the last setCharacterActors retained (read-only). */
 	characterActors(): readonly import("./character").CharacterActor[];

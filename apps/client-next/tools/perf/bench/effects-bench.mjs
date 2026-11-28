@@ -3,7 +3,7 @@
 
 effects-bench.mjs - frame rate of many skill effects, without a server
 
-  node tools/perf/bench/effects-bench.mjs [--count N] [--seconds S]
+  node tools/perf/bench/effects-bench.mjs [--count N] [--seconds S] [--holders N]
                                           [--match REGEX] [--size WxH]
                                           [--warmup S] [--cpu-rate N]
                                           [--cpu] [--heap] [--trace] [--gpu] [--counts] [--out DIR]
@@ -14,6 +14,11 @@ looping on a grid in front of the camera, and reports frames a second,
 the main thread's frame time, and what the frame drew (particles, ribbon
 vertices, draws). No game server or character is involved, so the scene
 is the same on every run: the measure for particle presentation work.
+
+--holders N stands N animated bodies on the grid and attaches the effects
+to their bones and roots in turn, as a crowd's weapon glows and buffs are
+held: the measure for what a held effect costs each frame (its holder's
+socket, its transform, its follow) beside the presentation itself.
 
 To compare two trees, run a second dev server from the other tree and
 point this at it with SRO_PROBE_CLIENT_NEXT_BASE_URL. --cpu and --heap
@@ -33,7 +38,7 @@ import { createCaptures } from "../core/client.mjs";
 import { writeFile } from "node:fs/promises";
 
 const USAGE =
-	"effects-bench.mjs [--count N] [--seconds S] [--warmup S] [--cpu-rate N] [--match REGEX] [--size WxH] [--cpu] [--heap] [--trace] [--gpu] [--counts] [--screenshot] [--out DIR]";
+	"effects-bench.mjs [--count N] [--seconds S] [--holders N] [--warmup S] [--cpu-rate N] [--match REGEX] [--size WxH] [--cpu] [--heap] [--trace] [--gpu] [--counts] [--screenshot] [--out DIR]";
 
 /*
 ================
@@ -44,8 +49,13 @@ in globalThis.__effectsBench for measureEffects. It runs in the page, so
 it closes over nothing.
 ================
 */
-async function admitEffects( { count, match, width, height, counts, gpu } ) {
+async function admitEffects( { count, match, holders, width, height, counts, gpu } ) {
 	const GRID_SPACING = 40;
+	// A holder: a binary tree of turning bones under one skinned triangle,
+	// so every socket an effect hangs on is a moving chain of several bones.
+	const HOLDER = "bench/holder", HOLDER_BONES = 48, HOLDER_BONE_LENGTH = 3;
+	// One held effect in this many stands at its holder's root, as a buff does.
+	const ROOT_SHARE = 4;
 	const { createRenderer } = await import( "/src/engine/runtime/renderer/renderer.ts" );
 	const { createAssets } = await import( "/src/engine/runtime/assets/assets.ts" );
 	const { createCharacterResources } = await import( "/src/engine/runtime/characters/resources/resources.ts" );
@@ -116,7 +126,47 @@ async function admitEffects( { count, match, width, height, counts, gpu } ) {
 			await new Promise( requestAnimationFrame );
 		}
 		renderer.setWorld( { id: "effects-bench", originRegion: 257, groups: [], warnings: [] } );
-		const side = Math.ceil( Math.sqrt( paths.length ) );
+		if ( holders ) {
+			const identity = [ 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1 ];
+			const nodes = Array.from( { length: HOLDER_BONES }, ( _, i ) => ({
+				name: "b" + i,
+				parent: i ? Math.floor( (i - 1) / 2 ) : -1,
+				translation: [ i % 2 ? HOLDER_BONE_LENGTH : -HOLDER_BONE_LENGTH, i ? HOLDER_BONE_LENGTH : 0, 0 ],
+				rotation: [ 0, 0, 0, 1 ],
+				scale: [ 1, 1, 1 ]
+			}) );
+			renderer.setCharacterModel( HOLDER, {
+				nodes,
+				images: [],
+				clips: [ {
+					name: "idle",
+					duration: 1,
+					channels: nodes.map( ( _, node ) => ({
+						node,
+						path: "rotation",
+						interpolation: "LINEAR",
+						times: Float32Array.of( 0, .5, 1 ),
+						values: Float32Array.of( 0, 0, 0, 1, 0, 0, .0998, .995, 0, 0, 0, 1 )
+					}) )
+				} ],
+				primitives: [ {
+					name: "body",
+					node: 0,
+					joints: nodes.map( ( _, i ) => i ),
+					inverseBind: Float32Array.from( nodes.flatMap( () => identity ) ),
+					image: -1,
+					geometry: {
+						positions: Float32Array.of( 0, 0, 0, 2, 0, 0, 0, 6, 0 ),
+						indices: Uint32Array.of( 0, 1, 2 ),
+						joints: Uint32Array.of( 0, 0, 0, 0, 1, 0, 0, 0, 2, 0, 0, 0 ),
+						weights: Float32Array.of( 1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0 ),
+						transform: Float32Array.from( identity ),
+						material: { color: [ 1, 1, 1, 1 ], alphaCutoff: 0, blend: false, doubleSided: true }
+					}
+				} ]
+			}, [] );
+		}
+		const side = Math.ceil( Math.sqrt( holders || paths.length ) );
 		renderer.setWorldCamera( {
 			eye: [ 0, side * GRID_SPACING * .6, -side * GRID_SPACING * 1.1 ],
 			target: [ 0, 0, 0 ],
@@ -133,22 +183,50 @@ async function admitEffects( { count, match, width, height, counts, gpu } ) {
 			await new Promise( requestAnimationFrame );
 		}
 		const ready = paths.filter( path => resources.ready( path ) );
-		const actors = ( time ) =>
-			ready.map( ( model, i ) => ({
-				gid: -1 - i,
-				model,
-				pose: {
-					regionId: 257,
-					x: (i % side - (side - 1) / 2) * GRID_SPACING,
-					y: 0,
-					z: (Math.floor( i / side ) - (side - 1) / 2) * GRID_SPACING,
-					yaw: 0
-				},
-				clip: "effect",
-				time: time + i * .137,
+		const place = i => ({
+			regionId: 257,
+			x: (i % side - (side - 1) / 2) * GRID_SPACING,
+			y: 0,
+			z: (Math.floor( i / side ) - (side - 1) / 2) * GRID_SPACING,
+			yaw: 0
+		});
+		const bodies = time =>
+			Array.from( { length: holders }, ( _, h ) => ({
+				gid: 1 + h,
+				model: HOLDER,
+				pose: place( h ),
+				clip: "idle",
+				time: time + h * .21,
 				loop: true,
 				scale: 1
 			}) );
+		// Effect i of a held scene hangs on holder i % holders: on a bone, or
+		// at the root for one in ROOT_SHARE.
+		const held = i =>
+			holders ?
+				{
+					attachment: {
+						gid: 1 + i % holders,
+						bone: "b" + (1 + i % (HOLDER_BONES - 1)),
+						offset: [ 0, 0, 0 ],
+						basis: "native",
+						...(i % ROOT_SHARE ? {} : { root: true })
+					}
+				} :
+				{};
+		const actors = ( time ) => [
+			...bodies( time ),
+			...ready.map( ( model, i ) => ({
+				gid: -1 - i,
+				model,
+				pose: place( holders ? i % holders : i ),
+				clip: "effect",
+				time: time + i * .137,
+				loop: true,
+				scale: 1,
+				...held( i )
+			}) )
+		];
 		globalThis.__effectsBench = { renderer, resources, assets, actors, probe, tally, ready, width, height };
 	} catch ( error ) {
 		resources.dispose();
@@ -234,6 +312,7 @@ const options = parseOptions(
 	process.argv.slice( 2 ),
 	{
 		count: 36,
+		holders: 0,
 		seconds: 5,
 		warmup: 5,
 		match: "^skill/",
@@ -255,6 +334,7 @@ if (
 	!Number.isFinite( options.warmup ) || options.warmup < 0 ||
 	!Number.isFinite( options.seconds ) || options.seconds <= 0
 ) throw Error( "Invalid effects benchmark timing" );
+if ( !Number.isInteger( options.holders ) || options.holders < 0 ) throw Error( "Invalid holder count" );
 process.env.SRO_PROBE_UNLOCK_FPS = "1";
 const { browser, page } = await launchProbeBrowser();
 try {
@@ -264,6 +344,7 @@ try {
 	await page.evaluate( admitEffects, {
 		count: options.count,
 		match: options.match,
+		holders: options.holders,
 		width,
 		height,
 		counts: options.counts,

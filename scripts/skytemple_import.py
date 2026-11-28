@@ -471,18 +471,13 @@ def merge_object_catalog_remap(current_raw, later_raw, used_ids):
 # source never translated.
 # ================
 def later_object_texts(read):
-	manifest = tables.table_rows(read("textdata_object.txt"))
-	shards = [row[0].lower() for row in manifest if row and row[0].lower().endswith(".txt")]
-	if not shards:
-		raise ValueError("v1.696 textdata_object.txt names no shards")
 	rows = []
-	for shard in shards:
-		for row in characters.translation_rows(read(shard)):
-			if len(row) < 10 or not row[2]:
-				continue
-			english = next((row[at] for at in (9, 13, 14, 15, 16)
-				if len(row) > at and row[at] not in ("0", "")), "")
-			rows.append([row[0], row[2], row[3], "", "", "", "", "", english, ""])
+	for row in tables.later_table_rows(read, "textdata_object.txt", characters.translation_rows, indexed_only=True):
+		if len(row) < 10 or not row[2]:
+			continue
+		english = next((row[at] for at in (9, 13, 14, 15, 16)
+			if len(row) > at and row[at] not in ("0", "")), "")
+		rows.append([row[0], row[2], row[3], "", "", "", "", "", english, ""])
 	return rows
 
 
@@ -505,7 +500,10 @@ def later_object_texts(read):
 # ================
 def copy_resource_closure(seeds, archives, native, output, tolerate_gaps=False):
 	from cap110_item_import import normalized_path, resource_dependencies, tolerant_dependencies
-	pending = {("Data", normalized_path(seed)) for seed in seeds}
+	# A seed is a Data path, or an (archive, path) pair for another of the
+	# walk's archives (a skill stage's effect program in Particles).
+	pending = {(seed[0], normalized_path(seed[1])) if isinstance(seed, tuple) else ("Data", normalized_path(seed))
+		for seed in seeds}
 	seen, written, missing_sounds, missing_effects = set(), [], [], []
 	missing_files, unparsed_files = [], []
 	while pending:
@@ -608,11 +606,7 @@ def remove_owned(output, prior, character_shard=CHARACTER_SHARD, skill_shard=SKI
 				write_atomically(quest_path, monsters.encode_rows(
 					[row for row in tables.table_rows(quest_path.read_bytes())
 						if len(row) <= 1 or row[1] not in speech_symbols]))
-		effect_path = text_root / "skilleffect.txt"
-		effect_text = effects.remove_animation_bases(
-			tables.decode_table(effect_path.read_bytes()), set(prior.get("animationBases", [])))
-		write_atomically(effect_path, b"\xff\xfe" + monsters.drop_characterinfo_rows(
-			effect_text, set(prior.get("characterInfo", []))).encode("utf-16-le"))
+		effects.reap_later_effects(text_root, prior)
 		gate_codes = set(prior.get("gateCodes", []))
 		data_path = text_root / "teleportdata.txt"
 		data_rows = tables.table_rows(data_path.read_bytes()) if gate_codes else []
@@ -689,8 +683,7 @@ def add_skytemple(native, output, source=None, closure=copy_resource_closure):
 		def read(name):
 			return tables.table_text(media, media_index, name.lower())
 
-		later = {row[2]: row for shard in tables.table_rows(read("characterdata.txt"))
-			for row in tables.table_rows(read(shard[0].lower())) if len(row) > 2}
+		later = tables.later_characters(read)
 		codename_by_id = {row[1]: row[2] for row in later.values()}
 		fields, _named = field_regions(tables.table_rows(read("regioncode.txt")))
 		if len(fields) != 288 or set(fields.values()) != {"A", "B", "C", "D"}:
@@ -773,23 +766,8 @@ def add_skytemple(native, output, source=None, closure=copy_resource_closure):
 				characters.translation_rows(base_text), stale_names))
 		write_atomically(text_root / "textdataname.txt", characters.append_rows(base_text, texts))
 
-		effect_path = text_root / "skilleffect.txt"
-		effect_text = tables.decode_table(effect_path.read_bytes())
-		later_effects = tables.decode_table(read("skilleffect.txt"))
-		selected = effects.select_later_rows(later_effects, {r[3] for r in added} - effects.native_bases(effect_text))
-		unknown = effects.missing_animation_states(
-			[line for rows in selected.values() for _, line in rows], effect_text)
-		if unknown:
-			raise ValueError("monster animation states absent natively: " + str(sorted(unknown)))
-		effect_text, _ = effects.merge_skill_effect_text(effect_text, selected)
-		known_info = {r[0] for r in tables.table_rows(effect_text.encode("utf-16")) if r}
-		info = [r[:characters.SKILL_EFFECT_KEPT] for r in tables.table_rows(read("skilleffect.txt"))
-			if len(r) == characters.SKILL_EFFECT_COLUMNS and r[0].startswith(PREFIX) and r[0] not in known_info]
-		owned_info = monsters.characterinfo_codenames(effect_text) & set(refs)
-		stale_info = set(prior.get("characterInfo", [])) - owned_info
-		if stale_info:
-			effect_text = monsters.drop_characterinfo_rows(effect_text, stale_info)
-		write_atomically(effect_path, characters.skill_effect_section(effect_text.encode("utf-16"), info))
+		presentation = effects.stage_later_effects(effects.LaterEffects(text_root, effects.later_skill_effect_text(read),
+			{r[3] for r in added}, lambda code: code.startswith(PREFIX), refs, prior))
 
 		# Region codes and zone names, on the rules the Alexandria map
 		# merge uses: a code row joins where the current row is absent or
@@ -932,9 +910,7 @@ def add_skytemple(native, output, source=None, closure=copy_resource_closure):
 			} | {
 				row[5] for row in tables.table_rows(gate_tables["teleportbuilding.txt"]) if len(row) > 5
 			}) - pre_gate_keys),
-			"animationBases": sorted(set(prior.get("animationBases", []))
-				| {base for rows in selected.values() for base, _ in rows}),
-			"characterInfo": sorted(owned_info | {row[0] for row in info}),
+			**presentation,
 			# Owned names follow characters.owned_name_symbols
 			# (#3767): the old union with the base table claimed rows
 			# this build never added, and the off reap drops them.

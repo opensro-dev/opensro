@@ -419,20 +419,32 @@ if __name__ == "__main__":
 # and a rerun swaps the previous pass's rows for the new ones (#4407).
 # ================
 class SkillEffectMergeTest(unittest.TestCase):
+	# ================
+	# stage
+	#
+	# A skilleffectset row in the native layout: its stage object in the
+	# directory (17) and name (18) cells.
+	# ================
+	@staticmethod
+	def stage(first, key, step, directory, name):
+		cells = [first, key, step] + ["xxx"] * 25
+		cells[17], cells[18] = directory, name
+		return "\t".join(cells) + "\r\n"
+
 	TREE = (
 		"#section\tskillaniset2\r\n"
 		"1\tnative\tSKILL_NATIVE\t0\tFALSE\t0\tDEFAULT\tnone\r\n"
 		"#section\tskilleffectset\r\n"
-		"-\tSKILL_NATIVE\tSHOT\tnative.efp\r\n"
+		+ stage.__func__("-", "SKILL_NATIVE", "SHOT", "system\\", "native.efp")
 	)
 	LATER = (
 		"#section\tskillaniset2\r\n"
 		"1\tlent\tSKILL_LENT\t0\tFALSE\t0\tAVATAR_NASRUN1\tANI_READY01\r\n"
 		"1\tother\tSKILL_OTHER\t0\tFALSE\t0\tDEFAULT\tnone\r\n"
 		"#section\tskilleffectset\r\n"
-		"lent\tSKILL_LENT\tREADY\tsystem\tavatar_nasrun01_skill01_ready01.efp\r\n"
-		"-\tAVATAR_LENT\tACT_L\tsystem\tavatar_nasrun01_skill01_body01.efp\r\n"
-		"-\tSKILL_OTHER\tSHOT\tother.efp\r\n"
+		+ stage.__func__("lent", "SKILL_LENT", "READY", "system\\", "avatar_nasrun01_skill01_ready01.efp")
+		+ stage.__func__("-", "AVATAR_LENT", "ACT_L", "system\\", "avatar_nasrun01_skill01_body01.efp")
+		+ stage.__func__("-", "SKILL_OTHER", "SHOT", "system\\", "other.efp")
 	)
 
 	# ================
@@ -444,9 +456,12 @@ class SkillEffectMergeTest(unittest.TestCase):
 		lines = merged.split("\r\n")
 		aniset, effectset = lines.index("#section\tskillaniset2"), lines.index("#section\tskilleffectset")
 		self.assertIn("1\tlent\tSKILL_LENT\t0\tFALSE\t0\tAVATAR_NASRUN1\tANI_READY01", lines[aniset:effectset])
-		self.assertIn("-\tAVATAR_LENT\tACT_L\tsystem\tavatar_nasrun01_skill01_body01.efp", lines[effectset:])
+		self.assertIn(self.stage("-", "AVATAR_LENT", "ACT_L", "system\\", "avatar_nasrun01_skill01_body01.efp").rstrip("\r\n"),
+			lines[effectset:])
 		self.assertNotIn("SKILL_OTHER", merged)
-		self.assertEqual(efps, ["avatar_nasrun01_skill01_body01.efp", "avatar_nasrun01_skill01_ready01.efp"])
+		# The files are the stage cells' directory + name, wherever the row keeps them.
+		self.assertEqual(efps, [("Particles", "system/avatar_nasrun01_skill01_body01.efp"),
+			("Particles", "system/avatar_nasrun01_skill01_ready01.efp")])
 		# A rerun takes the previous rows out before adding them again.
 		again, _ = nasrun.merge_skill_effects(merged, self.LATER, keys, keys)
 		self.assertEqual(again, merged)

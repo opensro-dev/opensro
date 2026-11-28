@@ -117,6 +117,7 @@ test("866B90 and 85CBD0 keep the local player at seenAlpha (0x50/255) in body 6 
 			{
 				entities: [ local ],
 				next,
+				clocks: new Map(),
 				local,
 				gameplay: { attachedEffects, skillCatalog: [] },
 				seconds: 1,

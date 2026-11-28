@@ -543,11 +543,12 @@ async function tryOnAvatars( avatars ) {
 			local: /** @type {any} */ ({ gid: 1, refObjId: 10, avatars }),
 			gameplay: /** @type {any} */ ({ inventory: [] }),
 			next: new Map(),
+			clocks: new Map(),
 			seconds: 0,
 			blindHeld: false,
 			modelParticles: 0
 		},
-		{ displayed: new Map() },
+		{ displayed: new Map(), displayedClocks: new Map() },
 		/** @type {any} */ ({
 			catalog: new Map( [ [ 10, { codename: "CHAR_CH_MAN_ADVENTURER", glb: "body" } ] ] ),
 			dress: {},
@@ -620,11 +621,12 @@ async function dollPortraits( attachedEffects ) {
 			}),
 			gameplay: /** @type {any} */ ({ inventory: [], attachedEffects }),
 			next: new Map(),
+			clocks: new Map(),
 			seconds: 0,
 			blindHeld: false,
 			modelParticles: 0
 		},
-		{ displayed: new Map() },
+		{ displayed: new Map(), displayedClocks: new Map() },
 		/** @type {any} */ ({
 			catalog: new Map( [ [ 10, f.frame.resource ] ] ),
 			dress,

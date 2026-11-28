@@ -90,6 +90,8 @@ const portraitReadback = runtime + "renderer/device/portrait-readback.ts";
 // The device's bundle-encoder wrapper: finishes the raw encoder it wraps (#2560).
 const bundleEncoder = runtime + "renderer/device/bundle-encoder.ts";
 const particles = runtime + "renderer/device/particles.ts";
+// The particle pass's resident material frame tables (#4692).
+const particleMaterials = runtime + "renderer/device/particle-materials.ts";
 const geometryUploads = runtime + "renderer/device/geometry-uploads.ts";
 // Slabs of geometry's small buffers (uniforms, instances, vertex and index ranges).
 const bufferSlabs = runtime + "renderer/device/buffer-slabs.ts";
@@ -112,6 +114,7 @@ const deviceInternals = [
 	particleQuery,
 	portraitReadback,
 	particles,
+	particleMaterials,
 	shadows,
 	sunShadow,
 	hdr,
@@ -342,6 +345,8 @@ for (
 		"beginComputePass"
 	]
 ) rules[name].push( particles );
+// Its material tables: a store's buffer, written when a table first appears.
+for ( const name of [ "createBuffer", "writeBuffer" ] ) rules[name].push( particleMaterials );
 // Geometry preparation encodes device-owned skinning and shadow prepasses on
 // the frame encoder; it cannot create, submit, or finish an encoder.
 for (

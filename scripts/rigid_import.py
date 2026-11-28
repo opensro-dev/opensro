@@ -249,7 +249,7 @@ def add_rigid(native, out, env=os.environ):
 		def has(name):
 			return tables.TEXTDATA + name.lower() in index
 
-		later = later_world_import.later_characters(read)
+		later = tables.later_characters(read)
 		refs = {}
 		for code in KINDS:
 			row = later.get(code)
@@ -258,26 +258,10 @@ def add_rigid(native, out, env=os.environ):
 			refs[code] = characters.convert_character(row)
 		kinds = later_world_import.stage_kinds(SPEC.label, read, has, refs, text_root, prior, CHARACTER_SHARD, SKILL_SHARD,
 			lambda code: code in refs, english=KIND_NAMES)
-		presentation = add_presentation(output, read, refs, kinds, prior)
 		staged = add_items(native, output, archives, prior)
-	summary = {"enabled": True, **kinds, **presentation, **staged}
+	summary = {"enabled": True, **kinds, **staged}
 	write_atomically(marker, (json.dumps(summary, indent=2) + "\n").encode())
 	return summary
-
-
-# ================
-# add_presentation
-#
-# The staged kinds' characterinfo rows from the later characterinfo
-# shards (stage_kinds reads them from the later skilleffect.txt, which
-# in v1.696 holds none), beside the rows stage_kinds merged. A kind
-# keeps its own row and the base row it names; the bases stand natively
-# already, so only the kinds' rows join.
-# ================
-def add_presentation(output, read, refs, kinds, prior):
-	staged = kinds.get("characterInfo", [])
-	joined = winter.add_characterinfo(output, winter.later_characterinfo(read), refs, staged)
-	return {"characterInfo": sorted(set(staged) | set(joined))}
 
 
 # ================

@@ -11,6 +11,8 @@ assembly, animation and sound phase reads.
 ===========================================================================
 */
 
+import type { ActorClocks } from "@/engine/contracts/character";
+import type { FrameClocks } from "@/engine/foundation/animation/actor-clock";
 import type { RandomIdle } from "@/engine/foundation/animation/random-idle";
 import type { Posture } from "@/engine/foundation/animation/posture";
 import type { Disappear } from "@/engine/foundation/animation/disappear";
@@ -56,6 +58,8 @@ and passes it to each phase that writes it.
 */
 export interface PresentationOutput {
 	displayed: Map<number, CharacterActor>;
+	// The clocks displayed was published with (actor-clock.ts).
+	displayedClocks: ActorClocks;
 	failure: string | null;
 	// The thrown value behind failure, when a phase caught one: the
 	// incident report needs its stack, the HUD line only its text (#2559).
@@ -325,6 +329,10 @@ export interface CharacterPresentationState {
 	// The actor the last steady decision published and the inputs of its
 	// fields (KeptRecord); undefined after any frame that was not steady.
 	record?: KeptRecord;
+	// The actor this state last published, whichever path built it: a
+	// rebuilt actor carries its value objects forward while their values
+	// hold (actor-advance.ts carried).
+	published?: CharacterActor;
 }
 
 /*
@@ -536,7 +544,9 @@ decision with the same stamp publishes it again with only its clocks
 export interface KeptRecord {
 	readonly actor: CharacterActor;
 	readonly stamp: RecordStamp;
-	readonly retained: MotionRetained | undefined;
+	// Written once, by actor-motion present after advance has published:
+	// the record is that frame's own object, so it is not copied to add it.
+	retained: MotionRetained | undefined;
 }
 
 /*
@@ -785,6 +795,8 @@ export interface ActorFrame {
 	readonly logicalPose: ( entity: EntityState ) => Pose;
 	readonly nativeServerName: string | undefined;
 	readonly next: Map<number, CharacterActor>;
+	// The clocks of the actors next republishes unchanged (actor-clock.ts).
+	readonly clocks: FrameClocks;
 	readonly normalFortressClothes: boolean;
 	readonly pendingDeaths: ReadonlySet<number>;
 	readonly probe: { detailBegin( stage: string ): void; detailEnd( stage: string ): void; } | undefined;
@@ -798,6 +810,20 @@ export interface ActorFrame {
 	) => CharacterSoundContext;
 	readonly vitalsByGid: ReadonlyMap<number, VitalState>;
 	readonly waitingActors: ReadonlySet<number>;
+}
+
+/*
+================
+FadeFrame
+
+What a spawn fade reads and writes on one frame: the actors it fades, their
+clock table (a faded copy keeps its actor's entry) and the frame time.
+================
+*/
+export interface FadeFrame {
+	readonly next: Map<number, CharacterActor>;
+	readonly clocks: FrameClocks;
+	readonly seconds: number;
 }
 
 /*

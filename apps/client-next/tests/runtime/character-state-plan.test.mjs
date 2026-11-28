@@ -63,6 +63,43 @@ test("admission plans preserve every capacity reservation including irregular pa
 		assert.equal( plan.clips.get( "walk" ), model.clips[0] );
 	}
 });
+test("a plan lists a mesh several primitives draw once, and measures an exact batch once a row count", () => {
+	const quad = { positions: new Float32Array( 12 ), indices: new Uint32Array( 6 ), joints: new Uint32Array( 16 ) };
+	const primitive = geometry => ({
+		joints: [ 0 ],
+		inverseBind: new Float32Array( 16 ),
+		geometry: { ...geometry, weights: new Float32Array( geometry.positions.length / 3 * 4 ) }
+	});
+	// Two plates of one mesh (the same arrays), a third mesh, and a ribbon,
+	// which keeps the batch at its exact capacity.
+	const weights = new Float32Array( 16 );
+	const shared = { ...primitive( quad ), geometry: { ...quad, weights } };
+	const other = primitive( {
+		positions: new Float32Array( 9 ),
+		indices: new Uint32Array( 3 ),
+		joints: new Uint32Array( 12 )
+	} );
+	const trail = {
+		...primitive( {
+			positions: new Float32Array( 9 ),
+			indices: new Uint32Array( 3 ),
+			joints: new Uint32Array( 12 )
+		} ),
+		ribbon: { fps: 20, widths: Float32Array.of( 1 ), spline: false },
+		emission: { capacity: 4, births: [ 0 ], lifetime: 1 }
+	};
+	const model = {
+		nodes: [ {} ],
+		clips: [ { name: "effect", duration: 1, channels: [] } ],
+		primitives: [ shared, { ...shared }, other, trail ]
+	};
+	const plan = createCharacterRenderPlan( model );
+	assert.equal( plan.exactCapacity, true );
+	assert.deepEqual( plan.meshes.map( mesh => mesh.positions ), [ quad.positions, other.geometry.positions ] );
+	for ( const count of [ 3, 1, 3, 7, 1, 0 ] ) {
+		assert.equal( plan.batchBytes( count ), characterBatchBytes( model, count ), `count ${count}` );
+	}
+});
 test("a shared-palette batch is charged one palette per distinct binding, as palette-streams keeps them", () => {
 	// Three skinned parts: the first two bind the same joints through the
 	// same inverse binds (a body's parts), the third its own. distinct breaks

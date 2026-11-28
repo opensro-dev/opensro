@@ -228,7 +228,7 @@ export function createPresentationEvents() {
 		*/
 		step(
 			frame: PresentationEventFrame,
-			output: Pick<PresentationOutput, "displayed">,
+			output: Pick<PresentationOutput, "displayed" | "displayedClocks">,
 			published: PresentationEventCatalog
 		) {
 			const {
@@ -369,7 +369,11 @@ export function createPresentationEvents() {
 					// The resolver reads only the queried actor and its mount
 					// chain; shifting every displayed actor per query was the
 					// quadratic this pass did not need.
-					const rows = actorQueryRows( output.displayed, [ output.displayed.get( gid ) ] ).map( actor => {
+					const rows = actorQueryRows(
+						output.displayed,
+						[ output.displayed.get( gid ) ],
+						output.displayedClocks
+					).map( actor => {
 						const entity = entitiesByGid.get( actor.gid ),
 							native = entity ? logicalPose( entity ) : undefined;
 						// A held body launches bone projectiles from its held
@@ -582,7 +586,7 @@ export function createPresentationEvents() {
 							output.displayed.get( caster.gid ),
 							output.displayed.get( target.gid ),
 							target.mountedOn !== undefined ? output.displayed.get( target.mountedOn ) : undefined
-						] ).map( actor => {
+						], output.displayedClocks ).map( actor => {
 							const entity = entitiesByGid.get( actor.gid );
 							if ( !entity ) return actor;
 							const pose = drawnPoses.get( actor.gid ) ?? logicalPose( entity );

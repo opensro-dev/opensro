@@ -14,11 +14,13 @@ references changes after publication (the character presentation's actors,
 actor-advance.ts). When a frozen actor follows a frozen one for the same gid
 and differs from it only in its clocks (time, layers, model animation),
 only the clocks are validated and copied: every other field is the same
-value the row already holds.
+value the row already holds. A producer that republishes the row's last
+source object hands its clocks in an ActorClocks entry (actor-clock.ts):
+that actor's clocks are copied from the entry, with no comparison at all.
 
 ===========================================================================
 */
-import type { CharacterActor, CharacterLayer } from "@/engine/contracts/character";
+import type { ActorClock, ActorClocks, CharacterActor, CharacterLayer } from "@/engine/contracts/character";
 import type { Degradation } from "@/engine/contracts/network";
 import { RENDERED_ACTORS } from "@/engine/foundation/animation/character-budget";
 type Mutable<T> = { -readonly [K in keyof T]: T[K]; };
@@ -146,16 +148,16 @@ export function createActorSnapshots( reuse = true ) {
 	================
 	copyModelAnimation
 
-	The row's own copy of the source's model animation frame.
+	The row's own copy of the clock's model animation frame.
 	================
 	*/
-	function copyModelAnimation( target: Actor, source: CharacterActor ) {
-		target.modelAnimation = source.modelAnimation ?
+	function copyModelAnimation( target: Actor, clock: ActorClock ) {
+		target.modelAnimation = clock.modelAnimation ?
 			{
-				...source.modelAnimation,
-				restarted: source.modelAnimation.restarted.map( s => ({ ...s }) ),
-				selected: source.modelAnimation.selected ? { ...source.modelAnimation.selected } : null,
-				dispatch: source.modelAnimation.dispatch.map( row => ({
+				...clock.modelAnimation,
+				restarted: clock.modelAnimation.restarted.map( s => ({ ...s }) ),
+				selected: clock.modelAnimation.selected ? { ...clock.modelAnimation.selected } : null,
+				dispatch: clock.modelAnimation.dispatch.map( row => ({
 					selector: { ...row.selector },
 					ranges: row.ranges.map( range => [ range[0], range[1] ] as const )
 				}) )
@@ -170,9 +172,9 @@ export function createActorSnapshots( reuse = true ) {
 	the only clock poses, picking and particles ever read.
 	================
 	*/
-	function copyTime( target: Actor, source: CharacterActor ) {
-		if ( validClock( source.time ) ) target.time = source.time;
-		else noteHeldTime( source, "time", "time", source.time, target.time );
+	function copyTime( target: Actor, source: CharacterActor, clock: ActorClock ) {
+		if ( validClock( clock.time ) ) target.time = clock.time;
+		else noteHeldTime( source, "time", "time", clock.time, target.time );
 	}
 	/*
 	================
@@ -182,11 +184,11 @@ export function createActorSnapshots( reuse = true ) {
 	weight holds as copyTime does.
 	================
 	*/
-	function copyLayers( target: Actor, source: CharacterActor ) {
-		if ( source.layers ) {
+	function copyLayers( target: Actor, source: CharacterActor, clock: ActorClock ) {
+		if ( clock.layers ) {
 			const layers = (target.layers ?? []) as Mutable<CharacterLayer>[];
-			for ( let i = 0; i < source.layers.length; i++ ) {
-				const layer = source.layers[i]!;
+			for ( let i = 0; i < clock.layers.length; i++ ) {
+				const layer = clock.layers[i]!;
 				const owned = layers[i];
 				if ( owned ) {
 					owned.clip = layer.clip;
@@ -213,7 +215,7 @@ export function createActorSnapshots( reuse = true ) {
 					layers[i] = fresh;
 				}
 			}
-			layers.length = source.layers.length;
+			layers.length = clock.layers.length;
 			target.layers = layers;
 		} else target.layers = undefined;
 	}
@@ -248,7 +250,22 @@ export function createActorSnapshots( reuse = true ) {
 			source.materialTint === previous.materialTint && source.heightFactor === previous.heightFactor &&
 			source.effectBaseScale === previous.effectBaseScale &&
 			source.absoluteEffectScale === previous.absoluteEffectScale &&
-			source.effectAnchor === previous.effectAnchor;
+			source.effectAnchor === previous.effectAnchor &&
+			sameBoneRotation( source.boneRotation, previous.boneRotation );
+	}
+	/*
+	================
+	sameBoneRotation
+
+	A spine aim is a new object on every rebuild (spine-aim.ts), so it is
+	compared by value: the same bone at the same four rotation components.
+	================
+	*/
+	function sameBoneRotation( a: CharacterActor["boneRotation"], b: CharacterActor["boneRotation"] ) {
+		if ( a === b ) return true;
+		if ( !a || !b || a.bone !== b.bone ) return false;
+		const x = a.rotation, y = b.rotation;
+		return x[0] === y[0] && x[1] === y[1] && x[2] === y[2] && x[3] === y[3];
 	}
 	/*
 	================
@@ -257,8 +274,8 @@ export function createActorSnapshots( reuse = true ) {
 	Bring one owned snapshot up to its source actor, reusing nested storage.
 	================
 	*/
-	function copy( target: Actor, source: CharacterActor ) {
-		copyModelAnimation( target, source );
+	function copy( target: Actor, source: CharacterActor, clock: ActorClock ) {
+		copyModelAnimation( target, clock );
 		target.animationLod = source.animationLod ? { ...source.animationLod } : undefined;
 		target.deferredParticle = source.deferredParticle ? { ...source.deferredParticle } : undefined;
 		target.holderVisible = source.holderVisible;
@@ -269,7 +286,7 @@ export function createActorSnapshots( reuse = true ) {
 		target.gid = source.gid;
 		target.model = source.model;
 		target.clip = source.clip;
-		copyTime( target, source );
+		copyTime( target, source, clock );
 		target.loop = source.loop;
 		target.scale = source.scale;
 		target.shadowSize = source.shadowSize;
@@ -292,7 +309,7 @@ export function createActorSnapshots( reuse = true ) {
 		pose.y = source.pose.y;
 		pose.z = source.pose.z;
 		pose.yaw = source.pose.yaw;
-		copyLayers( target, source );
+		copyLayers( target, source, clock );
 		if ( source.attachment ) {
 			const old = target.attachment,
 				rotation = source.attachment.rotation ? (old?.rotation ?? new Float32Array( 16 )) : undefined,
@@ -408,13 +425,20 @@ export function createActorSnapshots( reuse = true ) {
 		Validate a whole publication, then admit it in order up to the budget.
 		================
 		*/
-		update( value: readonly CharacterActor[] ) {
+		update( value: readonly CharacterActor[], entries?: ActorClocks ) {
 			seen = new Set();
 			// Validate the entire publication before changing any admitted snapshot.
 			// Which actors differ from their row's frozen source only in
 			// their clocks: the fields they share were validated with it.
+			// The row's last source republished with a clock entry is one by
+			// its producer's word; any other is compared.
 			const clocks: boolean[] = [];
-			for ( const actor of value ) clocks.push( reuse && clocksOnly( actor, sources.get( actor.gid ) ) );
+			for ( const actor of value ) {
+				const previous = sources.get( actor.gid );
+				clocks.push(
+					reuse && (previous === actor && entries?.has( actor ) === true || clocksOnly( actor, previous ))
+				);
+			}
 			for ( let i = 0; i < value.length; i++ ) {
 				const actor = value[i]!;
 				if ( clocks[i] ) continue;
@@ -473,7 +497,6 @@ export function createActorSnapshots( reuse = true ) {
 				seen.add( actor.gid );
 			}
 			const count = Math.min( value.length, RENDERED_ACTORS );
-			seen = new Set();
 			for ( let i = 0; i < count; i++ ) {
 				const source = value[i]!;
 				let row = index.get( source.gid );
@@ -501,22 +524,28 @@ export function createActorSnapshots( reuse = true ) {
 					reference( row.model, -1 );
 					reference( source.model, 1 );
 				}
+				const clock = entries?.get( source ) ?? source;
 				if ( clocks[i] ) {
-					copyModelAnimation( row, source );
-					copyTime( row, source );
-					copyLayers( row, source );
+					copyModelAnimation( row, clock );
+					copyTime( row, source, clock );
+					copyLayers( row, source, clock );
 					clockCopies++;
 				} else {
-					copy( row, source );
+					copy( row, source, clock );
 					copies++;
 				}
 				sources.set( source.gid, source );
 				rows[i] = row;
-				seen.add( source.gid );
 			}
 			rows.length = count;
+			// Every admitted gid has a row and the gids are distinct, so an
+			// index no larger than the admission holds no leaver: the common
+			// frame sweeps nothing. The validation above saw every gid; only a
+			// publication past the cap needs the admitted ones apart.
+			if ( index.size === count ) return rows;
+			const kept = count === value.length ? seen : new Set( rows.map( row => row.gid ) );
 			for ( const gid of index.keys() ) {
-				if ( !seen.has( gid ) ) {
+				if ( !kept.has( gid ) ) {
 					reference( index.get( gid )!.model, -1 );
 					index.delete( gid );
 					sources.delete( gid );

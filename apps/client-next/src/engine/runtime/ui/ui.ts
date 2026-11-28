@@ -256,6 +256,8 @@ import { EVENT_EXCHANGE_FUNCTION, npcTalkLayout, npcChoiceColor } from "@/engine
 import {
 	merchantBinding,
 	merchantSelection,
+	merchantDropRefusal,
+	MERCHANT_NOTICE_CATEGORY,
 	merchantCommand,
 	merchantQuote,
 	merchantSaleQuantity,
@@ -263,6 +265,7 @@ import {
 	merchantDialogPage,
 	type MerchantSelection
 } from "@/engine/foundation/ui/merchant";
+import { constantNativeNotice } from "@/engine/foundation/gameplay/native-notice";
 import { createNpcPanel } from "./hud/npc-panel";
 import {
 	createUniqueBanner,
@@ -3421,6 +3424,18 @@ export function createUi( ports: UiPorts ) {
 		const game = view?.gameplay;
 		if ( !game?.shop ) return;
 		if ( game.inventoryPending || game.shop.error || game.target !== game.shop.npc ) return;
+		// 5B2630: the store refuses a worn item, and a bag item while it
+		// trades a transport's goods, with a line and no quote.
+		const refusal = merchantDropRefusal( {
+			fromInventory: game.inventory.includes( item ),
+			slot: item.slot,
+			transportTrade: !!game.shop.cosGid
+		} );
+		if ( refusal !== null ) {
+			const notice = constantNativeNotice( MERCHANT_NOTICE_CATEGORY, refusal );
+			if ( notice ) sendGameplay( { kind: "local-notice", notice } );
+			return;
+		}
 		const choice = merchantSelection( "sell", item.slot, game.shop, merchantRows( game ) );
 		if ( !choice || choice.binding !== merchantBinding( item ) ) return;
 		// Magic Cube quantity is StoredItemCount; only an empty cube sells (bag stack 1).

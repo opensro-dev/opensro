@@ -50,15 +50,19 @@ def enabled(env=os.environ):
 # ================
 # read_item_tables
 #
-# Manifest entries are validated basenames, never arbitrary paths.
+# Every client's item rows, through the shard owner
+# (import_vsro_alexandria.later_table_rows, which refuses a path or a
+# repeated entry). The item index also names only itemdata_<n>.txt
+# shards: the band the importers mint their own shards in.
 # ================
+ITEM_SHARD = re.compile(r"itemdata_\d+\.txt", re.IGNORECASE)
+
+
 def read_item_tables(read):
-	names = [row[0].strip() for row in tables.table_rows(read("itemdata.txt"))]
-	if not names or any(not re.fullmatch(r"itemdata_\d+\.txt", name, re.IGNORECASE) for name in names):
-		raise ValueError("invalid item manifest")
-	if len(set(map(sro_pk2.fold_ascii, names))) != len(names):
-		raise ValueError("duplicate item manifest entry")
-	return [row for name in names for row in tables.table_rows(read(sro_pk2.fold_ascii(name)))]
+	names = tables.later_shard_files(read, "itemdata.txt")
+	if not all(ITEM_SHARD.fullmatch(name) for name in names):
+		raise ValueError(f"invalid item manifest: {names}")
+	return [row for name in names for row in tables.table_rows(read(name))]
 
 
 # ================
@@ -270,25 +274,25 @@ def add_items(vsro_root, native, output):
 			roc=roc_import.flag_enabled(), pinned=published_ids.published(published_ids.OBJECTS))
 		summary["fullSetModelsDropped"] = items.plain_worn_models(equipment)
 		set_groups, set_magic, catalogue = items.set_catalogue(
-			tables.table_rows(read_later(items.SET_GROUP_TABLE)),
-			tables.table_rows(read_later(items.MAGIC_GROUP_TABLE)),
-			tables.table_rows(read_later(items.MAGIC_OPTION_TABLE)),
+			tables.later_table_rows(read_later, items.SET_GROUP_TABLE),
+			tables.later_table_rows(read_later, items.MAGIC_GROUP_TABLE),
+			tables.later_table_rows(read_later, items.MAGIC_OPTION_TABLE),
 			equipment,
 		)
 		text_path = safe_target(output / TEXT_ROOT, "textdataname.txt")
 		base_text = text_path.read_bytes() if text_path.exists() else read_native("textdataname.txt")
 		later_texts = [
 			row for name in ("textdata_equip&skill.txt", "textdata_object.txt", "textdata_new.txt")
-			for row in tables.table_rows(read_later(name))
+			for row in tables.later_table_rows(read_later, name)
 		]
 		set_names = {row[items.SET_GROUP_NAME] for row in set_groups if len(row) > items.SET_GROUP_NAME}
 		merged_text, missing_descriptions = items.merge_texts(base_text, later_texts, equipment, set_names)
 		# The set tooltip's option labels (setgroups' options 389 and 390) live in the interface table.
 		ui_path = safe_target(output / TEXT_ROOT, "textuisystem.txt")
 		ui_base = ui_path.read_bytes() if ui_path.exists() else read_native("textuisystem.txt")
-		ui_text, ui_added = items.merge_ui_texts(ui_base, tables.table_rows(read_later("textuisystem.txt")), items.SET_UI_SYMBOLS)
+		ui_text, ui_added = items.merge_ui_texts(ui_base, tables.later_table_rows(read_later, "textuisystem.txt"), items.SET_UI_SYMBOLS)
 		shops = items.shop_dependencies({
-			name: tables.table_rows(read_later(name))
+			name: tables.later_table_rows(read_later, name)
 			for name in ("refscrapofpackageitem.txt", "refshopgoods.txt", "refpricepolicyofitem.txt", "shopitemdata.txt")
 		}, equipment, {row[items.CODENAME] for row in native_rows}, {
 			identity["source"]: code for code, identity in summary["idMap"].items()

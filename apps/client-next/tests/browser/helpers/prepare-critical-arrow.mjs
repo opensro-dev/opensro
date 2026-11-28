@@ -34,7 +34,7 @@ export async function prepareCriticalArrow( name = "asd3" ) {
 			await route.fulfill( {
 				response,
 				body: source.replace( "export function createRenderer(", "function observedRenderer(" ) +
-					`\nexport function createRenderer(...args){const r=observedRenderer(...args);return {...r,setCharacterActors(a){globalThis.__arrowActors=a;r.setCharacterActors(a)}}}`,
+					`\nexport function createRenderer(...args){const r=observedRenderer(...args);return {...r,setCharacterActors(a,p,c){globalThis.__arrowActors=a;r.setCharacterActors(a,p,c)}}}`,
 				contentType: "application/javascript"
 			} );
 		} );

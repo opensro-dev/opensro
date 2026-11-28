@@ -42,6 +42,7 @@ const { createPresentationHarness } = await import( "../../tools/perf/presentati
 const { PRESENTATION_DUE } = await import( "../../src/engine/runtime/characters/presentation-due.ts" );
 const { createActorSnapshots } = await import( "../../src/engine/runtime/renderer/characters/actor-snapshots.ts" );
 const { sameRow } = await import( "../helpers/renderer-row.mjs" );
+const { clocked } = await import( "../../src/engine/foundation/animation/actor-clock.ts" );
 const SEED = 1;
 const RULES = [ "appearance", "motion", "record" ];
 // The share of rule answers the production run must skip: the crowd
@@ -49,8 +50,14 @@ const RULES = [ "appearance", "motion", "record" ];
 const SKIPPED_SHARE = .5;
 // The detail fraction past which a model particle hides (model-emission.ts).
 const PARTICLE_HIDDEN_FRACTION = Math.fround( .9 );
-// The share of renderer copies that must copy only clocks.
-const CLOCK_COPY_SHARE = .5;
+// The share of renderer copies that must copy only clocks: the crowd
+// stands still for most of the scene, and a rebuilt actor keeps its
+// unchanged value objects (actor-advance.ts carried) and every published
+// actor is frozen (presentation-finalize.ts): 95% of copies here.
+const CLOCK_COPY_SHARE = .93;
+// The share of a body's publications that are its last actor object again:
+// 75% on the scene, whose walkers and record refreshes rebuild the rest.
+const STEADY_REPUBLISHED_SHARE = .72;
 
 /*
 ================
@@ -96,14 +103,28 @@ async function replay( rules ) {
 	};
 	const reused = createActorSnapshots(), full = createActorSnapshots( false );
 	let frame = 0, rowsDiffer = -1, published = [];
+	// Each frame's actors by gid, and how often a body's actor was the same
+	// object as on the frame before (republished) or a new one (rebuilt).
+	let lastByGid = new Map(), republishedCount = 0, rebuiltCount = 0;
 	const sources = sceneSources();
 	const harness = await createPresentationHarness( ROOT, sceneSession( SEED ), {
 		due: { appearance: counted( "appearance" ), motion: counted( "motion" ), record: counted( "record" ) },
 		source: pathname => sources.get( pathname ) ?? null,
-		actors: ( actors, portraits = [] ) => {
+		actors: ( actors, portraits = [], clocks = new Map() ) => {
 			for ( const actor of actors ) freezeDeep( actor );
-			published = [ ...actors, ...portraits ];
-			if ( !sameRow( reused.update( actors ), full.update( actors ) ) && rowsDiffer < 0 ) {
+			for ( const clock of clocks.values() ) freezeDeep( clock );
+			for ( const actor of actors ) {
+				// Bodies only: stage effects and particles are rebuilt until
+				// they adopt the table (#4751), a fade is a copy by design.
+				if ( actor.effectEntity || actor.deferredParticle || actor.attachment || actor.opacity !== undefined ) {
+					continue;
+				}
+				if ( lastByGid.get( actor.gid ) === actor ) republishedCount++;
+				else if ( lastByGid.has( actor.gid ) ) rebuiltCount++;
+			}
+			lastByGid = new Map( actors.map( actor => [ actor.gid, actor ] ) );
+			published = [ ...actors.map( actor => clocked( actor, clocks ) ), ...portraits ];
+			if ( !sameRow( reused.update( actors, clocks ), full.update( actors, clocks ) ) && rowsDiffer < 0 ) {
 				rowsDiffer = frame;
 			}
 		}
@@ -140,7 +161,16 @@ async function replay( rules ) {
 	} finally {
 		harness.dispose();
 	}
-	return { frames, asked, skipped, errors: [ ...errors ], rowsDiffer, broken, copies: reused.stats() };
+	return {
+		frames,
+		asked,
+		skipped,
+		errors: [ ...errors ],
+		rowsDiffer,
+		broken,
+		copies: reused.stats(),
+		republished: republishedCount / Math.max( 1, republishedCount + rebuiltCount )
+	};
 }
 
 /*
@@ -167,6 +197,15 @@ test("on the invented scene, skipped resolves, decides and actor builds present 
 		clockCopies > (copies + clockCopies) * CLOCK_COPY_SHARE,
 		`${clockCopies} of ${copies + clockCopies} copied clocks only`
 	);
+	// A steady actor is the same object again, its clocks in the table
+	// (actor-clock.ts); the forced run builds every actor every frame.
+	assert.ok(
+		production.republished >= STEADY_REPUBLISHED_SHARE,
+		`${production.republished} of body publications republished the last object`
+	);
+	// The forced run builds every body each frame; only a body held while its
+	// model loads (actor-appearance.ts) is its last object again.
+	assert.ok( forced.republished < .001, `${forced.republished} of forced publications republished` );
 	for ( const kind of RULES ) {
 		assert.ok(
 			production.skipped[kind] > production.asked[kind] * SKIPPED_SHARE,
