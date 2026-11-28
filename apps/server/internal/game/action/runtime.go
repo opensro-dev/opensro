@@ -265,9 +265,9 @@ type Runtime struct {
 	// cosAbnormals owns each summoned COS block (the character object on the pet).
 	cosAbnormals cosAbnormalStore
 
-	// cosDebuffs owns each summoned COS's hostile debuff words
-	// (cosdebuff.go): runtime state only, keyed as the blocks are.
-	cosDebuffs cosDebuffStore
+	// cosWords owns each summoned COS's installed effect words
+	// (coswords.go): runtime state only, keyed as the blocks are.
+	cosWords cosWordStore
 
 	// Selected is the 0x745A object-selection plane and the authority the
 	// matching 0x74B3 release consumes (select.go / targetrelease.go).

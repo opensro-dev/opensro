@@ -190,7 +190,7 @@ func (rt *Runtime) debuffPlayer(c debuffCast) (OpResult, skillCastDecision) {
 ================
 debuffCOS
 
-The pet recipient (cosdebuff.go): the word installs on the companion,
+The pet recipient (coswords.go): the word installs on the companion,
 judged through its owner at admission (cosTargetRefusal), and no damage
 is dealt, so nothing here can attribute a kill - the owner's attacked
 registration and the caster's hostile registration are the monster and
@@ -219,7 +219,7 @@ func (rt *Runtime) debuffCOS(c debuffCast, target combatTarget) (OpResult, skill
 		if owner.DeletePending || pet == nil || pet.CurrentHP == 0 || pet.SummonGeneration != target.cos.SummonGeneration {
 			return false
 		}
-		replaced, ok := rt.installCosDebuffWord(c.division, owner.Name, target.gid, word, c.now)
+		replaced, ok := rt.installCosWord(c.division, owner.Name, target.gid, word, c.now)
 		if !ok {
 			return false
 		}
