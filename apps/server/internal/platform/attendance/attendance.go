@@ -379,22 +379,24 @@ func (s *Service) ClaimAccumulation(characterID int64, tierIndex int) (Month, er
 ================
 Service::UnclaimContinuity
 
-Clears a continuity claim bit (used to roll back a failed item grant).
+Clears a continuity claim bit of monthKey, the month the claim marked
+(used to roll back a failed item grant).
 ================
 */
-func (s *Service) UnclaimContinuity(characterID int64, tierIndex int) error {
-	return s.unclaim(characterID, tierIndex, true)
+func (s *Service) UnclaimContinuity(characterID int64, monthKey, tierIndex int) error {
+	return s.unclaim(characterID, monthKey, tierIndex, true)
 }
 
 /*
 ================
 Service::UnclaimAccumulation
 
-Clears an accumulation claim bit (used to roll back a failed item grant).
+Clears an accumulation claim bit of monthKey, the month the claim
+marked (used to roll back a failed item grant).
 ================
 */
-func (s *Service) UnclaimAccumulation(characterID int64, tierIndex int) error {
-	return s.unclaim(characterID, tierIndex, false)
+func (s *Service) UnclaimAccumulation(characterID int64, monthKey, tierIndex int) error {
+	return s.unclaim(characterID, monthKey, tierIndex, false)
 }
 
 func (s *Service) claim(characterID int64, tierIndex int, continuity bool) (Month, error) {
@@ -441,7 +443,17 @@ ON CONFLICT (character_id, month_key) DO UPDATE SET `+column+` = excluded.`+colu
 	return m, nil
 }
 
-func (s *Service) unclaim(characterID int64, tierIndex int, continuity bool) error {
+/*
+================
+Service::unclaim
+
+Clears one claim bit in monthKey's row. The month is the claim's, not
+the clock's: a grant refused across the 04:00 UTC turn of the 1st
+still rolls back the month it marked. The cache is touched only when it
+holds that month.
+================
+*/
+func (s *Service) unclaim(characterID int64, monthKey, tierIndex int, continuity bool) error {
 	tiers := AccumulationTiers[:]
 	if continuity {
 		tiers = ContinuityTiers[:]
@@ -449,29 +461,28 @@ func (s *Service) unclaim(characterID int64, tierIndex int, continuity bool) err
 	if characterID <= 0 || tierIndex < 0 || tierIndex >= len(tiers) {
 		return ErrBadTier
 	}
-	key, _ := Today(s.now())
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	m, err := s.loadLocked(characterID, key)
-	if err != nil {
-		return err
+	if s.closed {
+		return ErrClosed
+	}
+	column := "accumulation_claimed"
+	if continuity {
+		column = "continuity_claimed"
 	}
 	bit := uint8(1) << tierIndex
-	column := "accumulation_claimed"
-	next := m.AccumulationClaimed &^ bit
-	if continuity {
-		column, next = "continuity_claimed", m.ContinuityClaimed&^bit
-	}
-	if _, err := s.db.Exec(`UPDATE attendance_months SET `+column+` = ? WHERE character_id = ? AND month_key = ?`,
-		next, characterID, key); err != nil {
+	if _, err := s.db.Exec(`UPDATE attendance_months SET `+column+` = `+column+` & ? WHERE character_id = ? AND month_key = ?`,
+		^bit, characterID, monthKey); err != nil {
 		return fmt.Errorf("attendance: %w", err)
 	}
-	if continuity {
-		m.ContinuityClaimed = next
-	} else {
-		m.AccumulationClaimed = next
+	if m, ok := s.cache[characterID]; ok && monthKey == s.month {
+		if continuity {
+			m.ContinuityClaimed &^= bit
+		} else {
+			m.AccumulationClaimed &^= bit
+		}
+		s.cache[characterID] = m
 	}
-	s.cache[characterID] = m
 	return nil
 }
 

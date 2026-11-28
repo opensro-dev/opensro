@@ -233,7 +233,7 @@ func TestClaimTiersOnce(t *testing.T) {
 	if _, err := service.ClaimAccumulation(7, 0); !errors.Is(err, ErrAlreadyClaimed) {
 		t.Fatalf("repeat accumulation %v", err)
 	}
-	if err := service.UnclaimAccumulation(7, 0); err != nil {
+	if err := service.UnclaimAccumulation(7, m.Key, 0); err != nil {
 		t.Fatal(err)
 	}
 	m, err = service.Current(7)
@@ -242,5 +242,44 @@ func TestClaimTiersOnce(t *testing.T) {
 	}
 	if RewardFor(0) != RewardCodename || RewardFor(4) != "ITEM_CH_TBLADE_09_C_RARE" {
 		t.Fatalf("reward %q", RewardFor(0))
+	}
+}
+
+/*
+================
+TestUnclaimRollsBackTheClaimedMonth
+
+A grant refused across the 04:00 UTC turn of the 1st rolls back the
+month the claim marked, and leaves the new month untouched.
+================
+*/
+func TestUnclaimRollsBackTheClaimedMonth(t *testing.T) {
+	c := &clock{at: time.Date(2026, 11, 1, 5, 0, 0, 0, time.UTC)}
+	service := openAt(t, t.TempDir(), c)
+	for day := 1; day <= 5; day++ {
+		c.at = time.Date(2026, 11, day, 5, 0, 0, 0, time.UTC)
+		if _, _, err := service.CheckIn(7); err != nil {
+			t.Fatal(err)
+		}
+	}
+	claimed, err := service.ClaimAccumulation(7, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	c.at = time.Date(2026, 12, 1, 4, 0, 0, 0, time.UTC)
+	if _, _, err := service.CheckIn(7); err != nil {
+		t.Fatal(err)
+	}
+	if err := service.UnclaimAccumulation(7, claimed.Key, 0); err != nil {
+		t.Fatal(err)
+	}
+	var bitsLeft uint8
+	if err := service.db.QueryRow(`SELECT accumulation_claimed FROM attendance_months
+WHERE character_id = 7 AND month_key = 202611`).Scan(&bitsLeft); err != nil || bitsLeft != 0 {
+		t.Fatalf("November claim bits %d, %v; want 0", bitsLeft, err)
+	}
+	december, err := service.Current(7)
+	if err != nil || december.Key != 202612 || december.Checked != 1 || december.AccumulationClaimed != 0 {
+		t.Fatalf("December %+v, %v", december, err)
 	}
 }

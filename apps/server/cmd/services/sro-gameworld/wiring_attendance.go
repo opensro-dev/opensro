@@ -124,9 +124,9 @@ func attendanceClaim(items *action.Runtime, deps *enterworld.Deps, service *atte
 		return true
 	}) {
 		if continuity {
-			_ = service.UnclaimContinuity(c.ID, tierIndex)
+			_ = service.UnclaimContinuity(c.ID, month.Key, tierIndex)
 		} else {
-			_ = service.UnclaimAccumulation(c.ID, tierIndex)
+			_ = service.UnclaimAccumulation(c.ID, month.Key, tierIndex)
 		}
 		if planErr != nil {
 			log.Infof("attendance: reward %s for %s refused: %v", reward, c.Name, planErr)
