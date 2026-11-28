@@ -21,6 +21,13 @@ inside it; the extraction and the published assets are not, so the gate
 names their identity in SRO_GAME_DATA_IDENTITY and RequireGameData reads
 it: a cached result is then reused only for the data it was produced from.
 
+Present is not current. The gate compares the projection's build revision
+with the pipeline that produces it (scripts/checks/gameDataFreshness.mjs)
+and names a tree built before its producers last changed in
+SRO_GAME_DATA_STALE. Such a tree skips like absent data (or fails under
+SRO_REQUIRE_GAME_DATA=1), because a test that needs newer content would
+otherwise fail with a content message and read as a broken branch (#4759).
+
 This package depends only on config within the module, so game-data tests
 can use it without a dependency cycle.
 
@@ -48,6 +55,10 @@ const RequireEnv = "SRO_REQUIRE_GAME_DATA"
 // test's cache key.
 const IdentityEnv = "SRO_GAME_DATA_IDENTITY"
 
+// StaleEnv names why the server projection is older than its producers
+// (check_go_server.mjs sets it; empty means current or not judged).
+const StaleEnv = "SRO_GAME_DATA_STALE"
+
 /*
 ==================
 RequireGameData
@@ -61,7 +72,7 @@ A resolver error always fails: see gameDataVerdict.
 func RequireGameData(t testing.TB) {
 	t.Helper()
 	missing, err := checkedGameData()
-	switch verdict, reason := gameDataVerdict(missing, err, os.Getenv(RequireEnv) == "1"); verdict {
+	switch verdict, reason := gameDataVerdict(missing, os.Getenv(StaleEnv), err, os.Getenv(RequireEnv) == "1"); verdict {
 	case gameDataFail:
 		t.Fatal(reason)
 	case gameDataSkip:
@@ -80,20 +91,28 @@ const (
 ==================
 gameDataVerdict
 
-What RequireGameData does with one check. Only absent data may skip, and
-only while SRO_REQUIRE_GAME_DATA is off. A resolver error is never absent
+What RequireGameData does with one check. Only absent or stale data may
+skip, and only while SRO_REQUIRE_GAME_DATA is off. A resolver error is never absent
 data: a worktree holding its own generated tree, an unreadable worktree
 link or a relative override names a broken setup, and skipping on it let a
 plain `go test ./...` in such a worktree pass with every game-data test
 skipped.
 ==================
 */
-func gameDataVerdict(missing []string, err error, require bool) (int, string) {
+func gameDataVerdict(missing []string, stale string, err error, require bool) (int, string) {
 	if err != nil {
 		return gameDataFail, "game data cannot be located: " + err.Error()
 	}
-	if len(missing) == 0 {
+	if len(missing) == 0 && stale == "" {
 		return gameDataReady, ""
+	}
+	if len(missing) == 0 {
+		reason := "game data is older than its producers: " + stale
+		if require {
+			return gameDataFail, fmt.Sprintf("%s (%s=1 requires current data)", reason, RequireEnv)
+		}
+		return gameDataSkip, fmt.Sprintf("%s; rebuild it with `pnpm assets build` (set %s=1 to fail instead of skip)",
+			reason, RequireEnv)
 	}
 	reason := "game data is not available"
 	for _, path := range missing {

@@ -78,7 +78,7 @@ import { mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from "n
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { publicAssetsRoot, retailTextdataRoot } from "../build/world/paths.mjs";
+import { publicAssetsRoot, retailTextdataRoot, serverGameDataRoot } from "../build/world/paths.mjs";
 import { sharedCacheEnvironment } from "../lib/goEnvironment.mjs";
 import { findPass, fingerprintOf, recordPass, snapshotAsync } from "./checkStamps.mjs";
 import {
@@ -90,6 +90,7 @@ import {
 	soloVerdicts
 } from "./goTestBudget.mjs";
 import { failureSummary, persistFailureReports, printFailureReports } from "./failureReport.mjs";
+import { readSourceRevision, staleReason } from "./gameDataFreshness.mjs";
 
 const scriptDirectory = path.dirname( fileURLToPath( import.meta.url ) );
 const rebuildRoot = path.resolve( scriptDirectory, "..", ".." );
@@ -152,6 +153,13 @@ const [moduleFiles, goVersion, vulnerabilityDatabase] = await Promise.all( [
 	vulnerabilityDatabaseModified()
 ] );
 const gameIdentity = gameDataIdentity();
+// A projection older than its producers skips its tests with this reason
+// (SRO_GAME_DATA_STALE, clientdata.RequireGameData) instead of failing them
+// on missing content (#4759).
+const gameDataStale = staleReason( readSourceRevision( serverGameDataRoot ), repositoryGit );
+if ( gameDataStale.length > 0 ) {
+	console.log( `server: game data is older than its producers (${gameDataStale}); its tests skip until a rebuild` );
+}
 const toolchain = `=${goVersion}`;
 // Environment that changes what a step checks: a pass under one setting is
 // no evidence for another (SRO_REQUIRE_GAME_DATA=1 turns skips into failures).
@@ -169,6 +177,7 @@ const isScannedGo = ( file ) =>
 const testKeys = [
 	"!apps/server/.generated/game-data/1.150/server/manifest.json",
 	`=game-data ${gameIdentity}`,
+	`=stale ${gameDataStale}`,
 	`=cache ${testCache} p ${packageParallelism}`,
 	toolchain,
 	stepEnvironment
@@ -716,7 +725,8 @@ checkout of the same sources already put in the build cache.
 function goEnvironment() {
 	goEnvironmentValue ??= {
 		...sharedCacheEnvironment( compilerFirstEnvironment() ),
-		SRO_GAME_DATA_IDENTITY: gameIdentity
+		SRO_GAME_DATA_IDENTITY: gameIdentity,
+		SRO_GAME_DATA_STALE: gameDataStale
 	};
 	return goEnvironmentValue;
 }
@@ -835,6 +845,18 @@ function compilerFirstEnvironment() {
 		...process.env,
 		[pathKey]: `${path.dirname( compilerPath )}${path.delimiter}${process.env[pathKey] ?? ""}`
 	};
+}
+
+/*
+================
+repositoryGit
+
+git in the repository, for staleReason: { status, stdout }.
+================
+*/
+function repositoryGit( args ) {
+	const result = spawnSync( "git", args, { windowsHide: true, cwd: rebuildRoot, encoding: "utf8" } );
+	return { status: result.status, stdout: result.stdout ?? "" };
 }
 
 /*
