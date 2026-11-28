@@ -348,6 +348,24 @@ class LaterMallGoodsTest(unittest.TestCase):
 		self.assertFalse(rows["refrentitem.txt"])
 
 	# ================
+	# test_a_gears_stone_never_lists
+	#
+	# The owner's 2026-11-28 decision (#4836): a later mall package
+	# holding a gears magic stone stays out even when its tab, price
+	# and item all stand in the tree; a stone of another family in the
+	# same tab still lists.
+	# ================
+	def test_a_gears_stone_never_lists(self):
+		later = empty()
+		stone = "ITEM_ETC_ARCHEMY_LEVEL_MAGICSTONE_STR_05"
+		later_good(later, "MALL_ARCHEMY_ATHANASIA", stone, 0, "30", 8)
+		athanasia = later_good(later, "MALL_ARCHEMY_ATHANASIA", "ITEM_ETC_ARCHEMY_MAGICSTONE_ATHANASIA_10", 1, "57", 9)
+		rows, summary = goods.goods_rows(later, tree_of({stone, "ITEM_ETC_ARCHEMY_MAGICSTONE_ATHANASIA_10"}))
+		self.assertEqual(summary["packages"], [athanasia])
+		self.assertNotIn("PACKAGE_" + stone, [row[3] for row in rows["refshopgoods.txt"]])
+		self.assertEqual(list(summary["unlisted"]), ["gears stone, never sold for silk"])
+
+	# ================
 	# test_a_summon_scroll_lists_once_its_creature_is_in_the_tree
 	# ================
 	def test_a_summon_scroll_lists_once_its_creature_is_in_the_tree(self):

@@ -5,8 +5,9 @@ mallcategories_gears_test.go - Premium > Gears excludes gears magic stones
 
 Port-only, not native (issue #3257): the 112 gears stones stay
 unlisted even when their imported rows stand. The layout keeps its
-93 offers and its empty Gears tab without Nasrun goods. Bought stones
-still use the alchemy stone path (alchemy package).
+93 offers, and without Nasrun goods it writes no Gears tab at all
+(#4846). Bought stones still use the alchemy stone path (alchemy
+package).
 
 ===========================================================================
 */
@@ -68,11 +69,13 @@ func (s gearsStubRefs) ItemRefByID(id uint32) (*enterworld.ItemRef, bool) {
 TestMallCategoriesGearsNeverListStones
 
 An imported gears stone stays unlisted: the catalogue keeps its 93
-layout offers and Premium's Gears tab (shop 4, tab 1) stays empty.
+layout offers, and with SRO_NASRUN off Premium has no Gears tab, since
+nothing would stand in it.
 ================
 */
 func TestMallCategoriesGearsNeverListStones(t *testing.T) {
 	tier.Long(t, "gears stones stay unlisted despite their imported rows")
+	t.Setenv(nasrun.Env, "")
 	dir := gamedatatest.TextdataDir(t)
 	stone := "ITEM_ETC_ARCHEMY_LEVEL_MAGICSTONE_STR_05"
 	refs := gearsStubRefs{base: enterworld.NewTextdataItems(dir), extra: map[string]*enterworld.ItemRef{
@@ -90,8 +93,8 @@ func TestMallCategoriesGearsNeverListStones(t *testing.T) {
 	if listed := mallOfferNamed(catalog, "PACKAGE_"+stone); listed != nil {
 		t.Fatalf("mall lists imported gears stone: %+v", listed)
 	}
-	if gears := mallOffersOn(catalog, 4, 1); len(gears) != 0 {
-		t.Fatalf("Gears tab holds %+v with an imported stone, want empty", gears)
+	if gears := mallTabCoded(catalog, "MALL_PREMIUM_GEARS"); gears != nil {
+		t.Fatalf("Gears tab %+v stands with an imported stone and no Nasrun goods", gears)
 	}
 	if err := catalog.Hydrate(refs); err != nil {
 		t.Fatal(err)
@@ -102,13 +105,13 @@ func TestMallCategoriesGearsNeverListStones(t *testing.T) {
 ================
 TestMallCategoriesGearsAbsentWithoutImport
 
-No imported rows, no listings: the Gears tab stands empty at the
-93 layout offers, exactly the catalogue a build without the
-later client boots.
+No imported rows, no listings: the 93 layout offers and no Gears
+tab, exactly the catalogue a build without the later client boots.
 ================
 */
 func TestMallCategoriesGearsAbsentWithoutImport(t *testing.T) {
 	tier.Long(t, "gears stones stay unlisted without the import")
+	t.Setenv(nasrun.Env, "")
 	dir := gamedatatest.TextdataDir(t)
 	refs := gearsStubRefs{base: enterworld.NewTextdataItems(dir), extra: map[string]*enterworld.ItemRef{}}
 	catalog, err := LoadMall(dir, nil, true, refs)
@@ -118,8 +121,8 @@ func TestMallCategoriesGearsAbsentWithoutImport(t *testing.T) {
 	if len(catalog.Offers) != 93 {
 		t.Fatalf("layout mall without gears rows: %d offers, want 93", len(catalog.Offers))
 	}
-	if gears := mallOffersOn(catalog, 4, 1); len(gears) != 0 {
-		t.Fatalf("Gears tab holds %+v without the import, want empty", gears)
+	if gears := mallTabCoded(catalog, "MALL_PREMIUM_GEARS"); gears != nil {
+		t.Fatalf("Gears tab %+v stands without the import", gears)
 	}
 }
 
@@ -160,8 +163,8 @@ TestMallCategoriesNasrunGoodsListWithTheSystem
 
 The Devil's Spirit system stands now (#3456): with SRO_NASRUN on
 and their imported rows staged, the six Spirits, the extension
-gear and Sabakun's jewel list in Premium's Gears tab (shop 4,
-tab 1), the Spirits and the gear at the later mall's prices
+gear and Sabakun's jewel list in Premium's Gears tab, the Spirits
+and the gear at the later mall's prices
 (150 and 50 silk, #4240 part 4), the jewel at the authored 30,
 all badged new, and the quotes resolve (#3456 step 5; replaces
 the #3331 refusal test, which stood until the system did).
@@ -186,7 +189,12 @@ func TestMallCategoriesNasrunGoodsListWithTheSystem(t *testing.T) {
 	}
 	wantSilk["PACKAGE_"+nasrunGear] = nasrunGearSilk
 	wantSilk["PACKAGE_"+nasrunJewel] = nasrunJewelSilk
-	for _, offer := range mallOffersOn(catalog, 4, 1) {
+	// With goods to sell the Gears tab is written, before Others.
+	gears, others := mallTabCoded(catalog, "MALL_PREMIUM_GEARS"), mallTabCoded(catalog, "MALL_PREMIUM_OTHERS")
+	if gears == nil || others == nil || gears.Shop != others.Shop || gears.Tab+1 != others.Tab {
+		t.Fatalf("Premium tabs Gears %+v and Others %+v, want Gears just before Others", gears, others)
+	}
+	for _, offer := range mallOffersIn(catalog, "MALL_PREMIUM_GEARS") {
 		want, nasrunGood := wantSilk[offer.Code]
 		if !nasrunGood {
 			continue
