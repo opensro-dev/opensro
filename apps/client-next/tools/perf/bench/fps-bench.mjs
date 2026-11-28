@@ -6,7 +6,7 @@ fps-bench.mjs - frame rate of the real client in the scenarios that matter
 Usage:
   node tools/perf/bench/fps-bench.mjs [--seconds N] [--at a,b] [--only a,b]
        [--counts] [--spans] [--cpu] [--heap] [--out DIR] [--trace] [--gpu-process] [--json FILE]
-       [--screenshot]
+       [--screenshot] [--snow] [--frames N] [--frame-ms MS] [--memory]
        [--paced] [--cpu-rate N] [--frame-limit 0|60|120|240] [--shadow-detail 0|1|2]
 
 For each location (--at) resets the scratch character there, boots the dev
@@ -31,7 +31,8 @@ names the host to ask (default core/crowd.mjs CROWD_HOST_URL). It measures what
 every drawn character costs (#3563); its rows record the crowd's size,
 where it came from and its activity.
 --act walk=0.5,chat=0.2 [--seed N] makes the crowd live (core/crowd-activity.mjs):
-shares of it walk and chat from a seeded script; each row records the
+shares of it walk, chat, roam or stay busy (roam while changing clothes
+and recasting an imbue) from a seeded script; each row records the
 activity, its seed and the server's receipts. Without --act it stands.
 
 Each row reports frames per second, frame-interval percentiles, and the
@@ -51,6 +52,20 @@ main thread's frame and world-preparation time per frame. Options add:
   --screenshot  the page as each timed window ends, OUT/<location>-<scenario>.png
             (taken after the window, so it never touches the timed numbers):
             the before/after picture a performance PR carries.
+  --snow    holds the client's weather at full snow for the whole run
+            (core/scene-evidence.mjs holdSnow; the observer must be a GM,
+            SRO_GM_CHARACTERS on the scratch stack).
+  --frames N  after each timed window, a verify window of N frames (one
+            every --frame-ms, default 500) with the scenario's input still
+            running: OUT/<location>-<scenario>-NN.png beside a record of
+            what the client held (camera, each peer's position, chest
+            garment and imbue, weather, heap), and a verdict in the row
+            that fails the run when the scene was not what it claims
+            (the camera turned in a drag, the actors moved, dressed and
+            imbued in a busy crowd, it snowed with --snow).
+  --memory  the JS heap's start, peak and end MB per timed window, and the
+            MB collections freed in it (sampled every 250 ms); with --heap
+            the sampled allocation profile names who allocated.
   --gpu-process  CPU time in Chrome's GPU process per frame: after each
             timed window, a second, traced window of the same scenario
             (reduced as it arrives; no trace file); the row gains the
@@ -91,7 +106,8 @@ import { openClient, closeClient, createCaptures, measure, revive } from "../cor
 import { buildIdentity, verifyMeasuredIdentity } from "../core/build-identity.mjs";
 import { keepGoing, drag, walk, approach, fight, cross, loadCombat, combat, strike, localAlive } from "./scenarios.mjs";
 import { CROWD_HOST_URL, DEFAULT_ACTIVITY_SEED, obtainCrowd } from "../core/crowd.mjs";
-import { parseActivity } from "../core/crowd-activity.mjs";
+import { BUSY_IMBUE_SKILL, parseActivity } from "../core/crowd-activity.mjs";
+import { captureFrames, holdSnow, judgeFrames } from "../core/scene-evidence.mjs";
 import { cleanupCombat, combatResidue } from "../core/combat-cleanup.mjs";
 import { processCosts } from "../core/trace.mjs";
 
@@ -170,7 +186,8 @@ const LOCATIONS = [ {
 const USAGE = "fps-bench.mjs [--seconds N] [--at a,b] [--only a,b] [--counts] [--spans] [--cpu] [--heap] [--out DIR] " +
 	"[--trace] [--screenshot] [--gpu-process] [--json FILE] [--paced] [--cpu-rate N] [--frame-limit 0|60|120|240] [--shadow-detail 0|1|2] " +
 	"[--combat codename:count:CHAMP|GIANT|NORMAL] [--vulnerable] [--crowd N] [--crowd-fixture FILE.json] " +
-	"[--crowd-host URL] [--act walk=SHARE,chat=SHARE] [--seed N] [--provisioning URL] [--token FILE]";
+	"[--crowd-host URL] [--act walk=SHARE,chat=SHARE,roam=SHARE,busy=SHARE] [--seed N] [--provisioning URL] " +
+	"[--token FILE] [--snow] [--frames N] [--frame-ms MS] [--memory]";
 // --gpu-process trace categories, the fewest that serve processCosts:
 // toplevel gives every thread's top-level tasks as complete events with
 // their thread time (tdur); blink.user_timing carries the window marks.
@@ -488,6 +505,37 @@ async function drive( page, name, location, seconds, scene ) {
 
 /*
 ================
+verifyWindow
+
+After the timed window, the scenario again under frame capture
+(core/scene-evidence.mjs), judged against what this run promises.
+================
+*/
+async function verifyWindow( page, name, location, options, scene, crowd ) {
+	const [, input] = await drive( page, name, location, options.seconds * 1000, scene );
+	const activity = parseActivity( options.act );
+	const frames = await captureFrames( {
+		page,
+		input,
+		count: options.frames,
+		intervalMs: options.frameMs,
+		dir: options.out,
+		prefix: `${location.name}-${name}`,
+		imbue: BUSY_IMBUE_SKILL
+	} );
+	const verdict = judgeFrames( frames, {
+		camera: name === "drag",
+		actors: !!crowd && activity.walk + activity.roam + activity.busy > 0,
+		dress: !!crowd && activity.busy > 0,
+		imbue: !!crowd && activity.busy > 0,
+		snow: options.snow
+	} );
+	console.log( `  verify ${location.name}/${name}: ${JSON.stringify( verdict )}` );
+	return verdict;
+}
+
+/*
+================
 gpuProcessPass
 
 A second window of the scenario under a minimal trace, kept apart from the
@@ -585,10 +633,12 @@ async function session( options, location, results ) {
 			} );
 			await crowdInView( client.page, crowd.peers );
 		}
+		if ( options.snow ) await holdSnow( client.page );
 		captures = await createCaptures( client.page, {
 			dir: options.out,
 			cpu: options.cpu,
 			heap: options.heap,
+			memory: options.memory,
 			trace: options.trace ? `${options.out}/${location.name}.json` : null
 		} );
 		for ( const name of location.scenarios ) {
@@ -672,6 +722,11 @@ async function session( options, location, results ) {
 				throw error;
 			}
 			result.allocatedMBs = allocated === null ? null : allocated / 1048576 / ((Date.now() - started) / 1000);
+			result.memory = captures.memorySpan();
+			if ( options.frames > 0 ) {
+				result.verify = await verifyWindow( client.page, name, location, options, scene, crowd );
+				if ( !result.verify.pass ) process.exitCode = 1;
+			}
 			if ( options.gpuProcess ) {
 				result.gpuProcess = await gpuProcessPass( client.page, name, location, options, scene );
 			}
@@ -794,6 +849,10 @@ const options = parseOptions( process.argv.slice( 2 ), {
 	heap: false,
 	trace: false,
 	screenshot: false,
+	snow: false,
+	frames: 0,
+	frameMs: 500,
+	memory: false,
 	gpuProcess: false,
 	combat: "MOB_CH_TIGER:10:GIANT",
 	vulnerable: false,
@@ -816,4 +875,5 @@ if ( options.trace && options.gpuProcess ) {
 if ( ![ 0, 1, 2 ].includes( options.shadowDetail ) ) throw Error( `unsupported shadow detail ${options.shadowDetail}` );
 if ( !Number.isInteger( options.seed ) || options.seed < 0 ) throw Error( `--seed must be a whole number` );
 parseActivity( options.act );
+if ( !Number.isInteger( options.frames ) || options.frames < 0 ) throw Error( "--frames must be a whole number" );
 await run( options );

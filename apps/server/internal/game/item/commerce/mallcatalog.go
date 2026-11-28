@@ -415,6 +415,10 @@ func mallPackage(tables map[string][][]string, code string) (MallPackage, error)
 			continue
 		}
 		currency, currencyError := strconv.ParseUint(row[3], 10, 8)
+		if currencyError == nil && npcShopDevice(currency) {
+			// The gold shop's price of a package both list (catalog.go).
+			continue
+		}
 		amount, amountError := strconv.ParseUint(row[4], 10, 32)
 		if currencyError != nil || amountError != nil || seen[currency] {
 			return offer, fmt.Errorf("mall: invalid or repeated price for %s", code)

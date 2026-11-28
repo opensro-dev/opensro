@@ -185,6 +185,10 @@ func (s *Service) uniques(*http.Request) (any, error) {
 		u := Unique{
 			RefObjID: state.RefObjID, Name: s.uniqueName(state.RefObjID, state.Codename), Level: state.Level,
 			RegionID: state.RegionID, Alive: state.Alive, SpawnedAt: optionalTime(state.SpawnedAtMs),
+			Copies: make([]UniqueCopy, 0, len(state.Copies)),
+		}
+		for _, c := range state.Copies {
+			u.Copies = append(u.Copies, UniqueCopy{RegionID: c.RegionID, SpawnedAt: rfc3339(c.SpawnedAtMs)})
 		}
 		if kill, ok := last[state.RefObjID]; ok {
 			name, guild := s.killerOf(r, kill)

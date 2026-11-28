@@ -34,6 +34,7 @@ import type { CastState } from "@/engine/contracts/gameplay";
 import { castPhase, damageTicks, skillPulse } from "@/engine/foundation/gameplay/combat-result";
 import { MAX_OPEN_CASTS, openCastOverflow } from "@/engine/foundation/gameplay/open-casts";
 import { OBJECT_SOURCE_MOVE_OPCODE, TARGET_INTERACT_OPCODE } from "@/engine/contracts/opcodes";
+import { skillRequest } from "@/engine/foundation/gameplay/skill-request";
 import { viewOf } from "@/engine/foundation/binary/byte-view";
 /*
 ================
@@ -447,20 +448,7 @@ export function createCombat(
 		A skill request carries an optional object target, never client damage.
 		================
 		*/
-		skill( id: number, gid?: number ) {
-			if ( !Number.isInteger( id ) || id <= 0 || id > 0xffffffff ) {
-				throw new Error( "Invalid skill ID" );
-			}
-			const p = new Uint8Array( gid ? 11 : 7 ), v = new DataView( p.buffer );
-			p[0] = 1;
-			p[1] = 4;
-			v.setUint32( 2, id, true );
-			p[6] = gid ? 1 : 0;
-			if ( gid ) {
-				v.setUint32( 7, gid, true );
-			}
-			return { opcode: TARGET_INTERACT_OPCODE, payload: p };
-		},
+		skill: skillRequest,
 		/*
 		================
 		receive

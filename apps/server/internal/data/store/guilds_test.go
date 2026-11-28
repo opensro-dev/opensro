@@ -687,10 +687,21 @@ func TestDissolveGuildClearsEverythingAtomically(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if _, refusal := s.Guilds().DissolveGuildAs(testDivision, member.ID); !refusal.Refused() {
+	if _, refusal := s.Guilds().DissolveGuildAs(testDivision, member.ID, false); !refusal.Refused() {
 		t.Fatal("non-leader dissolution reported success")
 	}
-	if _, refusal := s.Guilds().DissolveGuildAs(testDivision, leader.ID); refusal.Refused() {
+	// A held warehouse refuses the leader after the war test (#4710), and
+	// a non-leader still hears the leader refusal first.
+	if _, refusal := s.Guilds().DissolveGuildAs(testDivision, leader.ID, true); refusal != enterworld.GuildRefusalStorageHeld {
+		t.Fatalf("held dissolve refusal = %d, want GuildRefusalStorageHeld", refusal)
+	}
+	if _, refusal := s.Guilds().DissolveGuildAs(testDivision, member.ID, true); refusal != enterworld.GuildRefusalLeaderRequired {
+		t.Fatalf("held non-leader dissolve refusal = %d, want GuildRefusalLeaderRequired", refusal)
+	}
+	if _, _, ok := s.Guilds().Guild(testDivision, id); !ok {
+		t.Fatal("a held guild was dissolved")
+	}
+	if _, refusal := s.Guilds().DissolveGuildAs(testDivision, leader.ID, false); refusal.Refused() {
 		t.Fatal("dissolution of a live guild reported failure")
 	}
 	if _, _, ok := s.Guilds().Guild(testDivision, id); ok {

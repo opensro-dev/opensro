@@ -152,6 +152,8 @@ func guildRefusalReason(refusal enterworld.GuildRefusal) string {
 		return "no war compensation is owed"
 	case enterworld.GuildRefusalVoteInProgress:
 		return "voters and candidates stay while the vote runs"
+	case enterworld.GuildRefusalStorageHeld:
+		return "member holds the guild storage"
 	default:
 		return "guild command refused"
 	}

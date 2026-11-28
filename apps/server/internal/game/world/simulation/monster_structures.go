@@ -254,6 +254,9 @@ the nest's death bookkeeping.
 ================
 */
 func (s *MonsterState) removeInstanceLocked(state *divisionMonsterState, gid uint32, row monster.Instance) {
+	// A removed copy no longer stands: the unique tracker forgets it,
+	// or the reference would read alive forever.
+	state.markUniqueDeath(row.Ref.RefObjID, gid)
 	state.instances.remove(gid)
 	s.releaseAnchorHeldBy(state, gid)
 	state.forgetDormant(gid)

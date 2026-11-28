@@ -146,6 +146,9 @@ const (
 	GuildRefusalNotCandidate
 	GuildRefusalVoteInProgress
 	GuildRefusalWarActive
+	// GuildRefusalStorageHeld: a member holds the guild warehouse, so the
+	// guild cannot be dissolved (the dissolve door, after its war test).
+	GuildRefusalStorageHeld
 )
 
 // Refused reports whether a command made no change.
@@ -225,7 +228,11 @@ type GuildStore interface {
 	LeaveGuild(divisionID string, actorID int64) (GuildRemovalResult, GuildRefusal)
 	// DissolveGuildAs atomically requires the acting leader, deletes the
 	// guild and member set, and clears every member character's GuildID FK.
-	DissolveGuildAs(divisionID string, actorID int64) (GuildSnapshot, GuildRefusal)
+	// It refuses in the v1.188 disband job's order: the leader, a running
+	// war (GuildRefusalWarActive), then storageHeld - a member holding the
+	// guild warehouse, live runtime state the caller reads
+	// (GuildRefusalStorageHeld).
+	DissolveGuildAs(divisionID string, actorID int64, storageHeld bool) (GuildSnapshot, GuildRefusal)
 	// DonateGuildPoints is the ATOMIC guild-point donation door (the
 	// 0x740F GP-donate job): debit the donating character's SP, credit
 	// the guild's GP and the donor's member-row DonatedGP in ONE

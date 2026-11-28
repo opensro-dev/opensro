@@ -119,6 +119,7 @@ import {
 	MARKET_CONTROL
 } from "@/engine/foundation/gameplay/commerce-controls";
 import { MAX_INVENTORY_SLOT_COUNT } from "@/engine/foundation/gameplay/quickslots";
+import { inventoryMoveRequest } from "@/engine/foundation/gameplay/inventory-move-request";
 import {
 	BUYBACK_REQUEST_OPCODE,
 	ITEM_MOVE_REQUEST_OPCODE,
@@ -1964,11 +1965,7 @@ move
 			) {
 				throw new Error( "Inventory command unavailable" );
 			}
-			const p = new Uint8Array( 5 );
-			p[1] = source;
-			p[2] = destination;
-			new DataView( p.buffer ).setUint16( 3, quantity, true );
-			const frame = { opcode: ITEM_MOVE_REQUEST_OPCODE, payload: p };
+			const frame = inventoryMoveRequest( source, destination, quantity );
 			send( frame );
 			pending = {
 				opcode: ITEM_MOVE_RESPONSE_OPCODE,
