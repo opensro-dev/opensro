@@ -1265,6 +1265,7 @@ server's B245 arrives so adoption hands off seamlessly at steady high ping.
 ================
 	*/
 	function predictQueuedCast( now: number, local: EntityState | undefined ) {
+		if ( !predictedQueuedCast ) return;
 		const oneWay = skillPress.oneWayMs();
 		if ( oneWay <= 0 ) return;
 		const queued = skillPress.serverQueued();
@@ -1713,6 +1714,9 @@ pending copy, and the next settings replay repairs what it commits.
 	// (sendAmmoReloadPreference), declared at every worldReady while on
 	// and whenever the row changes under a live world.
 	let ammoReloadSmallest = false;
+	// The Experimental "Start queued skills early" row (#4740, port-only):
+	// off is the native start of a queued skill on its 0xB245.
+	let predictedQueuedCast = false;
 	// Port-only (#3907): the Experimental "SRO Macro" row, and the macro
 	// auto-potion's row order (checkMacroPotion), auto-skill cursors
 	// (checkMacroSkill), and auto-hunt start clock (checkMacroHunt).
@@ -2434,6 +2438,7 @@ The Experimental window's gameplay rows (experimentalGameplay).
 				if ( live ) sendAmmoReloadPreference();
 			}
 			sroMacroEnabled = value.sroMacro === true;
+			predictedQueuedCast = value.predictedQueuedCast === true;
 		},
 		/*
 ================

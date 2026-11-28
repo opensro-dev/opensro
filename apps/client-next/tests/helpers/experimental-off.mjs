@@ -82,6 +82,7 @@ export const OFF = Object.freeze( {
 	// Off by default (#4527): the quiver reloads from the native lowest
 	// bag slot; on, the server takes the smallest matching stack.
 	smallestAmmoStack: false,
+	predictedQueuedCast: false,
 	// On by default (owner 2026-11-07, #2741): companion and vigor auto-potions;
 	// off, the automatic potion watches only the player (70C550).
 	transportAutoPotion: true,
