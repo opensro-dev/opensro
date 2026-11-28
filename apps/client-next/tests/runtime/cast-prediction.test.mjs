@@ -552,7 +552,10 @@ function createQueuedChainGame( {
 	spellB = queuedChainSkillRef( 9102, { actionMs: 1000 } ),
 	extraSkills = /** @type {ReturnType<typeof queuedChainSkillRef>[]} */ ([]),
 	actorOverrides = {},
-	mobOverrides = {}
+	mobOverrides = {},
+	// The Experimental "Start queued skills early" row (#4740): on for the
+	// prediction cases, off for the native default.
+	predictedQueuedCast = true
 } = {} ) {
 	/** @type {import("../../src/engine/contracts/world").EntityState} */
 	const actor = {
@@ -599,6 +602,7 @@ function createQueuedChainGame( {
 		},
 		refSkillSnapshot: skills
 	} );
+	game.experimental( { predictedQueuedCast } );
 	game.worldReady();
 	game.seed( actor );
 	game.step( 0, actor );
@@ -760,4 +764,30 @@ test("queued prediction ignores lingering finished aura cast and anchors on the 
 	game.step( 4100, actor );
 	assert.equal( game.take()?.castPrediction?.skill, spellB.id );
 	game.dispose();
+});
+
+test("with the Experimental row off, a queued press waits for the server's B245, as natively (#4740)", () => {
+	const { game, actor, mob, spellA, spellB } = createQueuedChainGame( { predictedQueuedCast: false } );
+	game.command( { kind: "skill", skillId: spellA.id, gid: mob.gid }, 0, mob, actor );
+	game.receive( { opcode: 0xb245, payload: buildCastOpenPayload( spellA.id, actor.gid, 101, mob.gid ) }, 200 );
+	game.receive( { opcode: 0xb2cd, payload: Uint8Array.of( 1, 1 ) }, 200 );
+	game.command( { kind: "skill", skillId: spellB.id, gid: mob.gid }, 800, mob, actor );
+	game.receive( { opcode: 0xb2cd, payload: Uint8Array.of( 1, 2 ) }, 1000 );
+	game.take();
+	for ( const now of [ 3100, 3150, 3199 ] ) {
+		game.step( now, actor );
+		assert.equal( game.take()?.castPrediction, undefined, `no prediction at ${now} with the row off` );
+	}
+	game.dispose();
+});
+
+test("the queued-cast row maps to the gameplay slice and defaults off (#4740)", async () => {
+	const { experimentalGameplay, experimentalOptions } = await import(
+		"../../src/engine/foundation/ui/experimental-options.ts"
+	);
+	assert.equal( experimentalGameplay( experimentalOptions( {} ) ).predictedQueuedCast, false );
+	assert.equal(
+		experimentalGameplay( experimentalOptions( { predictedQueuedCast: true } ) ).predictedQueuedCast,
+		true
+	);
 });
