@@ -56,6 +56,7 @@ const (
 	GuildRefusalNoVote                 = domain.GuildRefusalNoVote
 	GuildRefusalNotCandidate           = domain.GuildRefusalNotCandidate
 	GuildRefusalVoteInProgress         = domain.GuildRefusalVoteInProgress
+	GuildRefusalStorageHeld            = domain.GuildRefusalStorageHeld
 )
 
 type TrainingCampRecord = domain.TrainingCampRecord

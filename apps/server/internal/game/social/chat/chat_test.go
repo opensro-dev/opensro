@@ -204,7 +204,7 @@ func (g stubGuilds) LeaveGuild(string, int64) (enterworld.GuildRemovalResult, en
 DissolveGuildAs
 ================
 */
-func (g stubGuilds) DissolveGuildAs(string, int64) (enterworld.GuildSnapshot, enterworld.GuildRefusal) {
+func (g stubGuilds) DissolveGuildAs(string, int64, bool) (enterworld.GuildSnapshot, enterworld.GuildRefusal) {
 	return enterworld.GuildSnapshot{}, enterworld.GuildRefusalUpdateRejected
 }
 

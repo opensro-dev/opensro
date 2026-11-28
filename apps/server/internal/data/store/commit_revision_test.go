@@ -95,7 +95,7 @@ func TestGuildRevisionMovesWithGuildDoors(t *testing.T) {
 		t.Fatalf("after one guild write revision = %d, want %d", after, before+1)
 	}
 
-	if _, refusal := s.Guilds().DissolveGuildAs(testDivision, leader.ID); refusal.Refused() {
+	if _, refusal := s.Guilds().DissolveGuildAs(testDivision, leader.ID, false); refusal.Refused() {
 		t.Fatalf("the dissolve was refused: %v", refusal)
 	}
 	if _, ok := door.GuildRevision(testDivision, guildID); ok {
