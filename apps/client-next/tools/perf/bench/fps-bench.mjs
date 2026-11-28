@@ -7,6 +7,7 @@ Usage:
   node tools/perf/bench/fps-bench.mjs [--seconds N] [--at a,b] [--only a,b]
        [--counts] [--spans] [--cpu] [--heap] [--out DIR] [--trace] [--gpu-process] [--json FILE]
        [--screenshot] [--snow] [--frames N] [--frame-ms MS] [--memory] [--gpu-time]
+       [--hide ground,sky,objects,characters]
        [--paced] [--cpu-rate N] [--frame-limit 0|60|120|240] [--shadow-detail 0|1|2]
 
 For each location (--at) resets the scratch character there, boots the dev
@@ -76,6 +77,8 @@ main thread's frame and world-preparation time per frame. Options add:
             compositor, so no thread's cost goes unread. Tracing
             slows frames, so this never touches the timed numbers. The
             cross and combat scenarios run once and get no traced window.
+  --hide    switch native graphic options off (ground, sky, objects,
+            characters) before measuring: with --gpu-time, what each costs.
   --gpu-time  the GPU's own time per frame: the page opens with the
             renderer's pass timestamps on (gpu-timing=1) and each row gains
             the frames' GPU ms (mean, p50, p99) and the costliest passes
@@ -127,6 +130,9 @@ const SCENARIOS = [ "still", "drag", "move", "skill", "cross", "combat" ];
 // A quiet Europe field with a measured region crossing, the water ghost
 // field outside Jangan (a busier scene), and a field with a live monster:
 // the scratch character's skills all need a target.
+// --hide names: the native graphic options a bench may switch off
+// (foundation/rendering/graphic-options.ts GRAPHIC_OPTION_*).
+const HIDE_MODES = Object.freeze( { ground: 0x13, sky: 0x14, objects: 0x15, characters: 0x16 } );
 const LOCATIONS = [ {
 	name: "field",
 	fixture: MISSION_MOVEMENT_FIXTURES.region_cross,
@@ -687,6 +693,13 @@ async function session( options, location, results ) {
 			await crowdInView( client.page, crowd.peers );
 		}
 		if ( options.snow ) await holdSnow( client.page );
+		if ( options.hide.length ) {
+			// An ablation: the native graphic options' switches turned off
+			// (GRAPHIC_OPTION_*), so --gpu-time weighs what they draw.
+			await client.page.evaluate( modes => {
+				for ( const mode of modes ) globalThis.__benchRuntime.setRenderMode( mode, false );
+			}, options.hide.map( name => HIDE_MODES[name] ) );
+		}
 		// Before any window: a page that presents nothing measures nothing.
 		await assertDrawn( client.page, location.name );
 		captures = await createCaptures( client.page, {
@@ -929,6 +942,7 @@ const options = parseOptions( process.argv.slice( 2 ), {
 	memory: false,
 	gpuProcess: false,
 	gpuTime: false,
+	hide: [],
 	combat: "MOB_CH_TIGER:10:GIANT",
 	vulnerable: false,
 	crowd: 32,
@@ -943,6 +957,7 @@ const options = parseOptions( process.argv.slice( 2 ), {
 }, USAGE );
 if ( !frameLimits().includes( options.frameLimit ) ) throw Error( `unsupported frame limit ${options.frameLimit}` );
 for ( const name of options.only ) if ( !SCENARIOS.includes( name ) ) throw Error( `unknown scenario ${name}` );
+for ( const name of options.hide ) if ( !(name in HIDE_MODES) ) throw Error( `unknown --hide ${name}` );
 // Chrome runs one trace at a time.
 if ( options.trace && options.gpuProcess ) {
 	throw Error( "choose --trace or --gpu-process per run; each records a trace" );

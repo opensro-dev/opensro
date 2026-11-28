@@ -1785,6 +1785,9 @@ World admission: ${renderer.worldStats().sceneId ?? "none"}; ${renderer.worldSta
 			berserkGauge: () => characters.orbGauge(),
 			characterActors: () => renderer.characterActors(),
 			characterStats: () => renderer.characterStats( true ),
+			// The native graphic options' draw switches (graphic-options.ts), for
+			// a bench that weighs what each category costs the GPU (--hide).
+			setRenderMode: ( mode: number, enabled: boolean ) => renderer.setWorldRenderMode( mode, enabled ),
 			characterCullCensus: () => renderer.characterStats( true, true ),
 			camera: () => input.camera(),
 			worldView: () => renderer.worldView(),
