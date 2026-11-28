@@ -40,7 +40,7 @@ Later-client content, off by default, same shape as Nasrun / gears stones:
 ## Work slices
 
 1. **Wire body** - `IsMagicCube`, CSOItem encode/decode on server and client, so a cube in the bag does not desync inventory parse.
-2. **Item import** - sixteen rows from `SRO_V1696_ROOT`, icons, names, shard `itemdata_190002.txt` behind the switch.
+2. **Item import** - sixteen rows from `SRO_V1696_ROOT`, icons, names, shard `itemdata_190003.txt` behind the switch.
 3. **Linked storage** - `InventoryRow.LinkedStorage` (+ clone / bag round-trip); capacity and filter helpers; sell refusal `0x8E` while `Data > 0`.
 4. **Inventory ops 0x27 / 0x28** - pin the client request layout, then deposit/withdraw + full refusal `0x8A`. Done.
 5. **Client window and notices** - notices `0x8A` / `0x8E` and consignment refusal done; use confirm + linked-storage window + B06D 0x27/0x28 apply done.
