@@ -878,6 +878,7 @@ func (t *TextdataSkills) parse(shards []string) {
 			row.InstantSelfEffectPinned = row.Imbue.Pinned || instantMovementSkill(fields, row)
 			row.StructureRepair = compileStructureRepair(fields, row)
 			parseSkillTimedEffect(fields, &row)
+			projectTimedRecoveryRates(fields, &row)
 			parseSkillConcealment(fields, &row)
 			if row.Concealment.Pinned && row.Concealment.Hide {
 				// The plain-setter projection refuses levelled hides; the
