@@ -64,8 +64,9 @@ func spiritResult(t *testing.T, r Outcome) (spirit, jewel inventory.Item) {
 ================
 TestSpiritJewelRollsTheOwnersChances
 
-At each plus, a draw under the chance raises the Spirit one plus and a
-draw at the chance keeps it; either way one jewel is spent.
+At each plus, a draw under the chance raises the Spirit one plus; a draw
+at the chance keeps it up to +5 and drops it back to +5 above (#4732);
+either way one jewel is spent.
 ================
 */
 func TestSpiritJewelRollsTheOwnersChances(t *testing.T) {
@@ -84,6 +85,8 @@ func TestSpiritJewelRollsTheOwnersChances(t *testing.T) {
 			want := uint8(plus)
 			if tc.success {
 				want++
+			} else if want > spiritFailFloor {
+				want = spiritFailFloor
 			}
 			if r.Success != tc.success || r.Destroyed || spirit.Plus != want || r.From != uint8(plus) {
 				t.Fatalf("+%d draw %d: outcome %+v, Spirit +%d, want +%d", plus, tc.draw, r, spirit.Plus, want)

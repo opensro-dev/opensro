@@ -20,9 +20,13 @@ not ported. Sabakun's scroll (ITEM_ETC_NASRUN_ARCHEMY_RECIPE) is the
 jewel's recipe, also not ported. No table read gives the jewel's chances,
 whether it can fail, or its ceiling. The owner's rule (2026-11-16, #3456)
 stands in for all three: the jewel raises a Spirit one plus at a time,
-permanently, up to +10 (the last plus the ability rows author,
-nasrun.MaxAbilityPlus; +6 until 2026-11-27), at 70/60/50/40/30/20/15/10/8/5 %,
-and a failure spends the jewel and keeps the plus.
+permanently, at 70/60/50/40/30/20 % up to +6, and a failure spends the
+jewel. The owner's later rule (2026-11-28, #4732) raises the cap to +10
+(the last plus the ability rows author, nasrun.MaxAbilityPlus) at
+15/10/8/5 % beyond +6, and makes it harder: a failure above +5 drops the
+Spirit back to +5 (spiritFailFloor), and a failure at or below +5 keeps
+the plus. #4732's third rule, a failure from +8 that can also destroy the
+Spirit, waits there for its chance.
 
 Event Spirits: nasrun.IsSpirit matches any 3/1/14, and ISRO-R has ten
 ITEM_EVENT_AVATAR_*_NASRUN* rows of that type. They are out of reach only
@@ -56,15 +60,19 @@ import (
 )
 
 // SpiritMaxPlus is the highest plus Sabakun's jewel reaches: the last
-// plus the Spirit's ability rows author (owner decision 2026-11-27).
+// plus the Spirit's ability rows author (owner decision 2026-11-28, #4732).
 const SpiritMaxPlus = 10
+
+// spiritFailFloor is the plus a failed attempt above it drops the Spirit
+// back to (#4732).
+const spiritFailFloor = 5
 
 // spiritClass is the Spirit's TID3, the only class the jewel admits.
 const spiritClass = 14
 
 // spiritChances is the owner's success chance (percent) of the attempt
-// from each plus: +0 -> +1 at 70 down to +5 -> +6 at 20 (2026-11-16), then
-// +6 -> +7 at 15 down to +9 -> +10 at 5 (2026-11-27).
+// from each plus: +0 -> +1 at 70 down to +5 -> +6 at 20 (2026-11-16, #3456),
+// then +6 -> +7 at 15 down to +9 -> +10 at 5 (#4732).
 var spiritChances = [SpiritMaxPlus]int{70, 60, 50, 40, 30, 20, 15, 10, 8, 5}
 
 /*
@@ -109,8 +117,11 @@ func (c *Catalog) reinforceSpirit(out []inventory.Item, target, elixir, powder i
 		return zero, err
 	}
 	result := Outcome{Target: item.Slot, Success: int(n) < chance, From: item.Plus}
-	if result.Success {
+	switch {
+	case result.Success:
 		item.Plus++
+	case item.Plus > spiritFailFloor:
+		item.Plus = spiritFailFloor
 	}
 	out[elixir].Quantity--
 	for _, row := range out {

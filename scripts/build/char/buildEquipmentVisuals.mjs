@@ -80,7 +80,15 @@ export function itemSetAction( set, donorWithReads ) {
 		outputRoot: set.held ? PLAIN_ITEM_SET_ROOT : path.join( publicAssetsRoot, "char", "equipment" ),
 		outputs: [ fileName ],
 		code: [ MODULE_FILE ],
-		params: { key: set.key, donorBsr: set.donor.bsrPath, paths: set.paths, held: set.held },
+		// ownModifiers joins the params only when set, so a v1.150 item set's
+		// action key (and its GLB) is unchanged by the Spirit costume's rule.
+		params: {
+			key: set.key,
+			donorBsr: set.donor.bsrPath,
+			paths: set.paths,
+			held: set.held,
+			...(set.ownModifiers ? { ownModifiers: true } : {})
+		},
 		discoverRoots: ITEM_SET_READ_ROOTS,
 		run: async ( { outputRoot } ) => {
 			const { donor: found, reads } = await donorWithReads( set.donor );
@@ -91,6 +99,7 @@ export function itemSetAction( set, donorWithReads ) {
 				...found,
 				pieces: set.paths.map( ( itemBsrPath, i ) => ({ part: `EQ${i}`, itemBsrPath }) ),
 				outSubdir: "equipment",
+				ownModifiers: set.ownModifiers === true,
 				...(set.held ?
 					{ write: ( _diskPath, bytes ) => writePlainItemSet( path.join( outputRoot, fileName ), bytes ) } :
 					{})
@@ -434,7 +443,10 @@ export async function buildEquipmentVisuals( dress, options = {} ) {
 						paths,
 						code: record.code,
 						key: body + "_" + sha256Hex( key ).slice( 0, 20 ),
-						held: false
+						held: false,
+						// Port-only (SRO_NASRUN): the costume's own BSR modifiers
+						// draw its robe smoke (itemAttachments ownModifiers).
+						ownModifiers: true
 					} );
 				}
 				record.bodies[body] = entry;

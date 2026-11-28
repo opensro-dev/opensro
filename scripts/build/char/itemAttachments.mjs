@@ -135,10 +135,14 @@ pieces: [{ part, itemBsrPath }]; returns a manifest entry { glb, parts, covers }
 or null when nothing was bindable. `tag` is the log prefix ("dress"/"weapon").
 write( diskPath, bytes, publicPath ) publishes the GLB (writeIntoPublicTreeSync
 by default); a caller that post-processes the bytes holds them instead.
+ownModifiers publishes each mesh's own BSR material and texture modifiers
+(the Devil's Spirit costume, #4407); every other set keeps the environment
+modifiers alone, byte for byte, until the all-item native fix (#4753)
+lands with its census.
 ================
 */
 export async function buildItemSetGlb(
-	{ tag, key, donor, donorSkel, pieces, outSubdir, write = writeIntoPublicTreeSync }
+	{ tag, key, donor, donorSkel, pieces, outSubdir, write = writeIntoPublicTreeSync, ownModifiers = false }
 ) {
 	// Resolve every piece's item .bsr -> skinned mesh paths + material set + cover keys.
 	const meshPaths = [];
@@ -198,8 +202,10 @@ export async function buildItemSetGlb(
 			meshPaths.push( meshPath );
 			partByMesh.set( meshPath, part );
 			environmentByMesh.set( meshPath, itemBsr.modifiers?.environmentModifiers ?? [] );
-			const modifiers = materialBsrModifiers( itemBsr.modifiers );
-			if ( Object.values( modifiers ).some( list => list.length ) ) modifiersByMesh.set( meshPath, modifiers );
+			const modifiers = ownModifiers ? materialBsrModifiers( itemBsr.modifiers ) : undefined;
+			if ( modifiers && Object.values( modifiers ).some( list => list.length ) ) {
+				modifiersByMesh.set( meshPath, modifiers );
+			}
 			if ( itemSkelInfo ) itemSkelByMesh.set( meshPath, itemSkelInfo );
 			if ( attachBone ) attachByMesh.set( meshPath, attachBone );
 		}
