@@ -38,6 +38,7 @@ import { createPlatform } from "./platform/platform";
 import { chatHistoryScope } from "@/engine/foundation/gameplay/chat-history";
 import { createBuildInfo } from "./build-info/build-info";
 import { createBugReport, diagnosticActors, type ReportParts } from "./bug-report/bug-report";
+import { uncaughtIncidentCode } from "@/engine/contracts/network";
 import type { BugReportField } from "@/engine/contracts/bug-report";
 import { frameProbe } from "./frame-probes";
 import { createFrameWork } from "./frame-work";
@@ -552,7 +553,7 @@ export function startRuntime(
 					sessionCommand( {
 						kind: "client-report",
 						incidentKind: "runtime",
-						code: "uncaught_error",
+						code: uncaughtIncidentCode( failure ),
 						message: failure.message,
 						stack: failure.frames.join( "\n" ) || undefined
 					} ),

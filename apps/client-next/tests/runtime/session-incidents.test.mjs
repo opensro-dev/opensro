@@ -555,3 +555,47 @@ test("each distinct uncaught failure files its own incident; a repeat of one fai
 	await settle();
 	assert.equal( reports.filter( r => r.body.code === "title_fault" ).length, 1 );
 });
+
+/*
+================
+foreign uncaught failures
+
+A failure that ran only another origin's code (#3425 / #3684) files under
+foreign_uncaught_error and dedupes by the failure, as uncaught_error does,
+so a second distinct foreign storm still files.
+================
+*/
+test("foreign uncaught failures file under their own code, once per distinct failure", async t => {
+	/** @type {{ body: any; }[]} */
+	const reports = [];
+	t.mock.method( globalThis, "fetch", async ( url, options ) => {
+		if ( url.endsWith( "/client/incident" ) ) {
+			const body = JSON.parse( options.body );
+			reports.push( { body } );
+			return Response.json( { ok: true, id: body.id } );
+		}
+		return Response.json( [] );
+	} );
+	const session = createSession();
+	t.after( () => session.dispose() );
+	session.command( { kind: "servers", apiBase: command.apiBase } );
+	session.step();
+	await settle();
+	const first = {
+		kind: "client-report",
+		incidentKind: "runtime",
+		code: "foreign_uncaught_error",
+		message: "RangeError: Maximum call stack size exceeded",
+		stack: "    at <extension> x64"
+	};
+	const second = { ...first, stack: "    at <anonymous> x64" };
+	for ( const report of [ first, first, second ] ) {
+		session.command( report );
+		session.step();
+		await settle();
+	}
+	session.step();
+	await settle();
+	const filed = reports.filter( r => r.body.code === "foreign_uncaught_error" );
+	assert.deepEqual( filed.map( r => r.body.stack ), [ first.stack, second.stack ] );
+});
