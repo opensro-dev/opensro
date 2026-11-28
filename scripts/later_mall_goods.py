@@ -259,14 +259,14 @@ def goods_rows(later, tree, rent_rows=None, item_by_id=None):
 	rent_rows = rent_rows or {}
 	item_by_id = item_by_id or {}
 	package_row = {row[PACKAGE_CODE]: row for row in later["refpackageitem.txt"]
-		if row and row[0] == mall.SERVICE_ON and len(row) >= 9}
+		if row and row[0] == later_tables.SERVICE_ON and len(row) >= 9}
 	scraps = collections.defaultdict(list)
 	for row in later["refscrapofpackageitem.txt"]:
-		if row and row[0] == mall.SERVICE_ON and len(row) >= 20:
+		if row and row[0] == later_tables.SERVICE_ON and len(row) >= 20:
 			scraps[row[SCRAP_PACKAGE]].append(row)
 	prices = collections.defaultdict(list)
 	for row in later["refpricepolicyofitem.txt"]:
-		if row and row[0] == mall.SERVICE_ON and len(row) > mall.MALL_PRICE_AMOUNT and row[3] in MALL_CURRENCIES:
+		if row and row[0] == later_tables.SERVICE_ON and len(row) > mall.MALL_PRICE_AMOUNT and row[3] in MALL_CURRENCIES:
 			prices[row[2]].append(row)
 	current = tree.mall_rows
 	packaged = {row[PACKAGE_CODE] for row in current["refpackageitem.txt"] if len(row) > PACKAGE_CODE}
@@ -291,7 +291,7 @@ def goods_rows(later, tree, rent_rows=None, item_by_id=None):
 	for row in current["refshopgoods.txt"]:
 		if len(row) > GOODS_SLOT and row[GOODS_SLOT].isdigit():
 			next_slot[row[GOODS_TAB]] = max(next_slot[row[GOODS_TAB]], int(row[GOODS_SLOT]) + 1)
-	sold = sorted((row for row in later["refshopgoods.txt"] if row and row[0] == mall.SERVICE_ON and len(row) > GOODS_SLOT
+	sold = sorted((row for row in later["refshopgoods.txt"] if row and row[0] == later_tables.SERVICE_ON and len(row) > GOODS_SLOT
 		and row[GOODS_TAB].startswith(("MALL_", "PRE_MALL_")) and (row[GOODS_PACKAGE] not in have or row[GOODS_PACKAGE] in joinable)),
 		key=lambda row: (row[GOODS_TAB], int(row[GOODS_SLOT]) if row[GOODS_SLOT].isdigit() else 0))
 	rows = {name: [] for name, _ in mall.MALL_TABLES}
@@ -417,7 +417,7 @@ def joined_row(name, cells, joined):
 # shop). Refused when the later client has no such tab either.
 # ================
 def carried_tab_row(current, later, tab):
-	authored = [row for row in later if len(row) > SHOP_TAB_CODE and row[0] == mall.SERVICE_ON and row[SHOP_TAB_CODE] == tab]
+	authored = [row for row in later if len(row) > SHOP_TAB_CODE and row[0] == later_tables.SERVICE_ON and row[SHOP_TAB_CODE] == tab]
 	if not authored:
 		raise ValueError(f"the later client has no {tab} tab to carry over")
 	row = list(authored[0])
@@ -525,7 +525,7 @@ def add_goods(later_root, native, output):
 		source = later_tables.Archive.media(*archives["Media"])
 		later = {name: source.rows(name, optional=True) for name, _ in mall.MALL_TABLES}
 		rent_rows = {row[RENT_CODE]: row for row in source.rows(RENT_TABLE, optional=True)
-			if row and row[0] == mall.SERVICE_ON and len(row) > RENT_CODE}
+			if row and row[0] == later_tables.SERVICE_ON and len(row) > RENT_CODE}
 		item_by_id = {row[1]: row[2] for row in source.rows("itemdata.txt", optional=True, width=3) if len(row) > 2}
 		later_tabs = source.rows(SHOP_TAB_TABLE, optional=True)
 		label_texts = later_label_texts(source,
@@ -535,7 +535,7 @@ def add_goods(later_root, native, output):
 	# and the tree does not; a tab is written only if a good lands in
 	# it (goods_rows reports those in the summary's tabs).
 	tree.carry_tabs = {code for code in NASRUN_TABS if code not in tree.shop_tabs
-		and any(len(row) > SHOP_TAB_CODE and row[0] == mall.SERVICE_ON and row[SHOP_TAB_CODE] == code for row in later_tabs)}
+		and any(len(row) > SHOP_TAB_CODE and row[0] == later_tables.SERVICE_ON and row[SHOP_TAB_CODE] == code for row in later_tabs)}
 	rows, summary = goods_rows(later, tree, rent_rows, item_by_id)
 	if summary.get("unstage"):
 		mall.strip_mall(output, set(summary["unstage"]))

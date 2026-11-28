@@ -15,11 +15,11 @@ copy_later_package, so the layout conversion lives in one place.
 import cap110_item_import as shared
 import cap110_items as items
 import import_vsro_alexandria as tables
+import later_tables
 import shop_layout
 from prepare_client_resources import safe_target, write_atomically
 
 TEXT_ROOT = shared.TEXT_ROOT
-SERVICE_ON = "1"
 # Package, scrap, price and goods tables with the column holding the package code.
 MALL_TABLES = (
 	("refpackageitem.txt", 3), ("refscrapofpackageitem.txt", 2),
@@ -129,7 +129,7 @@ def copy_later_package(rows, later, listing):
 		package_cells[2] = str(listing.package_id)
 	rows["refpackageitem.txt"].append(package_cells)
 	for scrap in later["refscrapofpackageitem.txt"]:
-		if scrap[0] == SERVICE_ON and len(scrap) >= 20 and scrap[2] == package:
+		if scrap[0] == later_tables.SERVICE_ON and len(scrap) >= 20 and scrap[2] == package:
 			rows["refscrapofpackageitem.txt"].append(scrap[:1] + [NATIVE_SOURCE] + scrap[2:])
 	for price in listing.prices:
 		rows["refpricepolicyofitem.txt"].append(converted_price(price, listing.silk))

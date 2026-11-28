@@ -31,6 +31,7 @@ from pathlib import Path
 from PIL import Image
 
 import later_tables
+import alexandria_npcs as characters
 import sro_pk2
 from convert_images import save_image_payload
 from import_vsro_alexandria import records, verify_vsro_archive
@@ -53,7 +54,6 @@ DUNGEON_SECTION = "#section\tDungeonmap"
 # Donwhang Stone Cave and the six Ch'in Tomb floors: the rows this port has.
 FIRST_MAP_ID = 2001
 LAST_MAP_ID = 2010
-ENGLISH_COLUMN = 8
 KOREAN_COLUMN = 2
 LABEL_ROW = "1"
 SIGN_ROW = "2"
@@ -113,7 +113,7 @@ def english_text(lines):
 	for line in lines:
 		cells = line.split("\t")
 		if len(cells) > KOREAN_COLUMN and not line.startswith("//"):
-			english = cells[ENGLISH_COLUMN].strip() if len(cells) > ENGLISH_COLUMN else ""
+			english = cells[characters.TEXT_ENGLISH_COLUMN].strip() if len(cells) > characters.TEXT_ENGLISH_COLUMN else ""
 			names[cells[1].strip()] = english or cells[KOREAN_COLUMN].strip()
 	return names
 

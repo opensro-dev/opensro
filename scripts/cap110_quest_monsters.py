@@ -53,9 +53,6 @@ SKILL_SHARD = "skilldata_310000.txt"
 TEXT_ROOT = Path("Media_extracted") / tables.TEXTDATA
 FORMAT = "opensro-cap110-quest-monsters-v1"
 SKILL_COLUMNS = monsters.SKILL_COLUMNS
-FIRST_DEFAULT_SKILL = 89
-END_DEFAULT_SKILL = 99
-NAME_SYMBOL_COLUMN = 5
 MONSTERS = (
 	"MOB_QT_CH_CHARGHOST_01", "MOB_QT_CH_CHARGHOST_02", "MOB_QT_CH_SOLDIER_01_1", "MOB_QT_CH_SOLDIER_01_2",
 	"MOB_QT_CH_SOLDIER_02_1", "MOB_QT_CH_SOLDIER_02_2", "MOB_QT_CH_TOMBSTONE_01",
@@ -99,7 +96,7 @@ def select_monsters(later, native_codes, codes=MONSTERS):
 # The skill identities the converted monster rows name.
 # ================
 def needed_skills(refs):
-	return {int(skill) for row in refs.values() for skill in row[FIRST_DEFAULT_SKILL:END_DEFAULT_SKILL] if int(skill)}
+	return {int(skill) for row in refs.values() for skill in row[characters.NATIVE_DEFAULT_SKILL_AT:characters.NATIVE_DEFAULT_SKILL_END] if int(skill)}
 
 
 # ================
@@ -162,10 +159,10 @@ def add_quest_monsters(vsro_root, native, output):
 			needed, native_skills, lambda: client)
 		added, skill_map = monsters.merge_skills(native_skills, source, needed, prior.get("skills", {}))
 		for row in refs.values():
-			row[FIRST_DEFAULT_SKILL:END_DEFAULT_SKILL] = [str(skill_map[int(skill)]) if int(skill) else "0"
-				for skill in row[FIRST_DEFAULT_SKILL:END_DEFAULT_SKILL]]
+			row[characters.NATIVE_DEFAULT_SKILL_AT:characters.NATIVE_DEFAULT_SKILL_END] = [str(skill_map[int(skill)]) if int(skill) else "0"
+				for skill in row[characters.NATIVE_DEFAULT_SKILL_AT:characters.NATIVE_DEFAULT_SKILL_END]]
 		known_names = {row[1] for row in characters.translation_rows((text_root / "textdataname.txt").read_bytes()) if len(row) > 1}
-		missing = {row[NAME_SYMBOL_COLUMN] for row in refs.values()} - known_names
+		missing = {row[characters.NAME_KEY_COLUMN] for row in refs.values()} - known_names
 		if missing:
 			raise ValueError("missing quest monster names: " + ", ".join(sorted(missing)))
 		# A union with the previous build: a rebuild finds its own rows already

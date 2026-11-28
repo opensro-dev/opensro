@@ -15,7 +15,7 @@ not a flat table it happens to read correctly:
 	name_index                VSRO's textdataname.txt: an index over files
 	                          other table names also stand for
 	wrap_last                 a text row the archive wraps over two lines
-	                          at the end of a shard (#4730)
+	                          at the end of a shard (#4762)
 
 	utf16                     one table's bytes: BOM, tabs, CRLF
 
@@ -23,10 +23,9 @@ not a flat table it happens to read correctly:
 """
 import re
 
+import alexandria_npcs as characters
+
 INDEX_NAME_PART = re.compile(r"[a-z]+|[0-9]+|[^a-z0-9]+")
-# translation_rows joins a wrapped line onto a row of fewer cells than
-# this whose second cell is a name symbol.
-TEXT_ROW_CELLS = 10
 
 
 # ================
@@ -104,7 +103,7 @@ def name_index(tables, index="textdataname.txt"):
 # ================
 def wrap_last(rows):
 	last = rows[-1]
-	for at in range(2, min(len(last), TEXT_ROW_CELLS - 1)):
+	for at in range(2, min(len(last), characters.WRAPPED_ROW_CELLS - 1)):
 		head, space, tail = last[at].partition(" ")
 		if space and head and tail:
 			return rows[:-1] + [last[:at] + [head], [" " + tail] + last[at + 1:]]

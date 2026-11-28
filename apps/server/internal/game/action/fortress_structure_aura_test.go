@@ -10,6 +10,7 @@ flags' auras at war
 package action
 
 import (
+	"strings"
 	"testing"
 
 	"opensro.online/server/internal/game/enterworld"
@@ -119,6 +120,36 @@ func auraSkillID(t *testing.T, rt *Runtime, codename string) uint32 {
 
 /*
 ================
+seatAuraCompanion
+
+Summons the resident's attack pet and stands it at a point of the
+fortress world: the equipped COS record, its bound session and its
+follower, seated as companionTargetsFixture seats them.
+================
+*/
+func seatAuraCompanion(t *testing.T, rt *Runtime, owner *enterworld.Character, at simulation.Spawn) *enterworld.CharacterCOS {
+	t.Helper()
+	ref := equipCombatTestPet(t, rt, owner, 3)
+	pet := owner.ActiveCOS
+	pet.Satiety = 3000
+	rt.BindPetSession(testDivision, owner, 1)
+	state := rt.petSessionFor(testDivision, owner.Name, pet.GID)
+	if state == nil {
+		rt.petMu.Lock()
+		if rt.petSessions == nil {
+			rt.petSessions = map[petOwnerKey]*petSession{}
+		}
+		state = &petSession{character: owner, ready: true}
+		rt.petSessions[petOwnerKey{division: testDivision, name: strings.ToLower(owner.Name), gid: pet.GID}] = state
+		rt.petMu.Unlock()
+	}
+	state.mover.FollowFrom(pet.GID, at)
+	state.refObjID = ref.RefObjID
+	return pet
+}
+
+/*
+================
 TestFortressFlagAuraInstallsForTheHolderSide
 
 With no war the flag is silent. In the war the holder standing in its
@@ -159,6 +190,121 @@ func TestFortressFlagAuraInstallsForTheHolderSide(t *testing.T) {
 	rt.advanceFortressStructureAuras(now + int64(enterworld.SkillFieldScanMs))
 	if _, holds := rt.fieldInstance(testDivision, c.Name, flag); holds {
 		t.Fatal("the holder keeps the flag instance outside its area")
+	}
+}
+
+/*
+================
+TestFortressFlagAuraInstallsForAHolderCompanion
+
+At war the holder's pet standing in the flag's area holds the flag's
+damage word beside its owner and its damage rates rise by the word;
+the enemy's pet at the same spot holds nothing. The war's end retires
+the pet's word with the owner's instance (#4490).
+================
+*/
+func TestFortressFlagAuraInstallsForAHolderCompanion(t *testing.T) {
+	rt, c, clock := auraFixture(t)
+	now := clock.NowMs()
+	flag := auraSkillID(t, rt, "SKILL_FORT_STRUCTURE_AGGRESSIVE_FLAG")
+	pet := seatAuraCompanion(t, rt, c, simulation.Spawn{RegionID: 0x62aa, X: 170, Y: 20, Z: 100})
+	enemy := seatAtTheStone(t, rt, c, 53, "AuraPetEnemy", 88)
+	enemyPet := seatAuraCompanion(t, rt, enemy, simulation.Spawn{RegionID: 0x62aa, X: 180, Y: 20, Z: 100})
+	placeResident(rt, c, simulation.Spawn{RegionID: 0x62aa, X: 160, Y: 20, Z: 100})
+	placeResident(rt, enemy, simulation.Spawn{RegionID: 0x62aa, X: 165, Y: 20, Z: 100})
+	rt.Fortresses.SetPeriod(testDivision, fortress.PeriodWar, true)
+	rt.advanceFortressStructureAuras(now)
+	words := rt.cosWordsHeld(testDivision, c.Name, pet.GID, now)
+	if len(words) != 1 || words[0].SkillID != flag || words[0].Tag != cosWordDamageTag {
+		t.Fatalf("the holder's pet holds %+v, want the flag's damage word", words)
+	}
+	ref, valid := rt.cosReference(pet)
+	if !valid {
+		t.Fatal("the pet's catalogue row does not resolve")
+	}
+	stats, err := cosCombatStats(ref, pet, rt.cosAbnormal(testDivision, c.Name, pet.GID), words)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if stats.PhysicalBasicRate != 10 || stats.MagicalBasicRate != 10 {
+		t.Fatalf("pet damage rates %v/%v, want the flag's flat 10", stats.PhysicalBasicRate, stats.MagicalBasicRate)
+	}
+	if held := rt.cosWordsHeld(testDivision, enemy.Name, enemyPet.GID, now); len(held) != 0 {
+		t.Fatalf("the enemy's pet holds %+v", held)
+	}
+	rt.Fortresses.SetPeriod(testDivision, fortress.PeriodWar, false)
+	rt.advanceFortressStructureAuras(now + 1000)
+	if held := rt.cosWordsHeld(testDivision, c.Name, pet.GID, now); len(held) != 0 {
+		t.Fatalf("the pet's word outlives the war: %+v", held)
+	}
+}
+
+/*
+================
+TestFortressHeadquartersRecoveryWordForACompanion
+
+The holder's pet by the headquarters holds its recovery-rate word,
+and the rates the pet's recovery pulse reads are the authored 100/100.
+================
+*/
+func TestFortressHeadquartersRecoveryWordForACompanion(t *testing.T) {
+	rt, c, clock := auraFixture(t)
+	now := clock.NowMs()
+	hq := auraSkillID(t, rt, "SKILL_FORT_STRUCTURE_HEADQUARTERS")
+	pet := seatAuraCompanion(t, rt, c, simulation.Spawn{RegionID: 0x62aa, X: 950, Y: 20, Z: 100})
+	placeResident(rt, c, simulation.Spawn{RegionID: 0x62aa, X: 960, Y: 20, Z: 100})
+	rt.Fortresses.SetPeriod(testDivision, fortress.PeriodWar, true)
+	rt.advanceFortressStructureAuras(now)
+	words := rt.cosWordsHeld(testDivision, c.Name, pet.GID, now)
+	if len(words) != 1 || words[0].SkillID != hq || words[0].Tag != cosWordRecoveryTag ||
+		words[0].First != 100 || words[0].Second != 100 {
+		t.Fatalf("the pet holds %+v, want the headquarters' recovery word", words)
+	}
+	if hp, mp := rt.cosBuffRecoveryRates(testDivision, c.Name, pet.GID, now); hp != 100 || mp != 100 {
+		t.Fatalf("recovery rates %d/%d, want 100/100", hp, mp)
+	}
+}
+
+/*
+================
+TestFortressHealingFlagPulsesACompanion
+
+One period in, the holder's hurt pet in the healing flag's area
+recovers the authored five percent of its maxima, and the enemy's pet
+at the same spot recovers nothing.
+================
+*/
+func TestFortressHealingFlagPulsesACompanion(t *testing.T) {
+	rt, c, clock := auraFixture(t)
+	now := clock.NowMs()
+	pet := seatAuraCompanion(t, rt, c, simulation.Spawn{RegionID: 0x62aa, X: 560, Y: 20, Z: 500})
+	enemy := seatAtTheStone(t, rt, c, 54, "HealPetEnemy", 88)
+	enemyPet := seatAuraCompanion(t, rt, enemy, simulation.Spawn{RegionID: 0x62aa, X: 570, Y: 20, Z: 500})
+	placeResident(rt, c, simulation.Spawn{RegionID: 0x62aa, X: 555, Y: 20, Z: 500})
+	placeResident(rt, enemy, simulation.Spawn{RegionID: 0x62aa, X: 565, Y: 20, Z: 500})
+	ref, valid := rt.cosReference(pet)
+	if !valid {
+		t.Fatal("the pet's catalogue row does not resolve")
+	}
+	maxHP := int64(uint32(cosParameter(ref, pet, nil, abnormalMaxHPParam)))
+	maxMP := int64(uint32(cosParameter(ref, pet, nil, abnormalMaxMPParam)))
+	pet.CurrentHP, pet.CurrentMP = uint32(maxHP/2), uint32(maxMP/2)
+	enemyPet.CurrentHP = uint32(maxHP / 2)
+	hpBefore, mpBefore, enemyBefore := pet.CurrentHP, pet.CurrentMP, enemyPet.CurrentHP
+	rt.Fortresses.SetPeriod(testDivision, fortress.PeriodWar, true)
+	rt.advanceFortressStructureAuras(now)
+	if pet.CurrentHP != hpBefore {
+		t.Fatal("the healing flag healed the pet on first sight")
+	}
+	rt.advanceFortressStructureAuras(now + 5000)
+	if got, want := int64(pet.CurrentHP), int64(hpBefore)+maxHP*5/100; got != want {
+		t.Fatalf("pet at %d hit points after the pulse, want %d", got, want)
+	}
+	if got, want := int64(pet.CurrentMP), int64(mpBefore)+maxMP*5/100; got != want {
+		t.Fatalf("pet at %d mana after the pulse, want %d", got, want)
+	}
+	if enemyPet.CurrentHP != enemyBefore {
+		t.Fatal("the healing flag healed the enemy's pet")
 	}
 }
 

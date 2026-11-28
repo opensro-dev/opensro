@@ -279,16 +279,15 @@ def staff_standings(spec, later_npcpos, later_id_by_code, native_id_by_code):
 # too. English sits in column 8. The rows come out in
 # later_object_texts' shape, so native_text_row reads either source.
 # ================
-VSRO_ENGLISH_COLUMN = 8
 VSRO_NAME_TABLES = ("textdata_object.txt", "textdataname.txt")
 
 
 def vsro_object_texts(read):
 	rows = []
 	for row in read.rows_of(VSRO_NAME_TABLES, characters.translation_rows):
-		if len(row) <= VSRO_ENGLISH_COLUMN or not row[1]:
+		if len(row) <= characters.TEXT_ENGLISH_COLUMN or not row[1]:
 			continue
-		rows.append([row[0], row[1], row[2], "", "", "", "", "", row[VSRO_ENGLISH_COLUMN], ""])
+		rows.append([row[0], row[1], row[2], "", "", "", "", "", row[characters.TEXT_ENGLISH_COLUMN], ""])
 	return rows
 
 

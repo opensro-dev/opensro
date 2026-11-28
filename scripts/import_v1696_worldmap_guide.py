@@ -45,6 +45,7 @@ from pathlib import Path
 from PIL import Image
 
 import later_tables
+import alexandria_npcs as characters
 import sro_pk2
 from convert_images import save_image_payload
 from import_vsro_alexandria import archive_index
@@ -67,8 +68,6 @@ DDS_HEADER_BYTES = 128
 UNKEYED_PIXELS = (0x00000000, 0x00ffffff)
 # The characterdata columns of a character's codename and level (the
 # same indices cap110_monsters reads).
-LEVEL_COLUMN = 57
-CODENAME_COLUMN = 2
 
 # The art the guide draws besides the tiles, by its path under interface/:
 # the hunting ground's icon and the guide scrollbar's arrows and thumb in
@@ -170,9 +169,9 @@ def english_text(rows):
 def monster_levels(rows):
 	out = {}
 	for row in rows:
-		if len(row) > LEVEL_COLUMN and row[0].strip() == "1":
+		if len(row) > characters.LEVEL_COLUMN and row[0].strip() == "1":
 			try:
-				out[row[CODENAME_COLUMN].strip()] = int(row[LEVEL_COLUMN])
+				out[row[characters.CODENAME_COLUMN].strip()] = int(row[characters.LEVEL_COLUMN])
 			except ValueError:
 				pass
 	return out

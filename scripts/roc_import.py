@@ -146,7 +146,6 @@ UI_SYMBOLS = frozenset({"UIIT_MSG_QUEST_ROC_BERSERKER_AGAIN"})
 QUEST_NESTS = Path(__file__).resolve().parent / "data" / "roc" / "quest-nests.json"
 QUEST_NESTS_FORMAT = "opensro-roc-quest-nests-v1"
 
-LEVEL_COLUMN = 57
 GRADE_COLUMN = 15
 
 # The admitted kinds and the (grade, level) each must author in the
@@ -341,8 +340,8 @@ def select_kinds(later):
 		row = later.get(code)
 		if row is None:
 			raise ValueError(f"the VSRO client has no Roc kind {code}")
-		if (int(row[GRADE_COLUMN]), int(row[LEVEL_COLUMN])) != (grade, level):
-			raise ValueError(f"Roc kind {code} authors grade {row[GRADE_COLUMN]} level {row[LEVEL_COLUMN]}, want {grade} {level}")
+		if (int(row[GRADE_COLUMN]), int(row[characters.LEVEL_COLUMN])) != (grade, level):
+			raise ValueError(f"Roc kind {code} authors grade {row[GRADE_COLUMN]} level {row[characters.LEVEL_COLUMN]}, want {grade} {level}")
 		refs[code] = characters.convert_character(row)
 	return refs
 

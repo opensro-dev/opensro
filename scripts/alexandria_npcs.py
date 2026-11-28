@@ -42,13 +42,33 @@ from pathlib import Path
 
 from variant_files import TEXTDATA, replace_file
 
+# Characterdata columns. This module owns the layout: the columns
+# below are the same in the later clients' 104 and v1.150's 120 (they
+# sit before RESISTANCE_AT), and convert_character is the one map
+# between the two. later_tables reads the codename column for its own
+# shape checks, so it names it first.
 SERVICE_COLUMN = 0
 ID_COLUMN = 1
-CODENAME_COLUMN = 2
+CODENAME_COLUMN = later_tables.CHARACTER_CODE_COLUMN
 NAME_STRING_COLUMN = 3
+# A leveled kind's rows chain: each names its first and its next form
+# (COS_P_WOLF_050: COS_P_WOLF_001 and COS_P_WOLF_051).
+FIRST_FORM_COLUMN = 4
 NAME_KEY_COLUMN = 5
+NEXT_FORM_COLUMN = 6
 CHAR_BIT_COLUMN = 8
 TID_COLUMNS = (9, 10, 11)
+TID4_COLUMN = 12
+# The body: walk and run speeds, scale (percent) and collision radius.
+WALK_SPEED_COLUMN = 46
+RUN_SPEED_COLUMN = 47
+SCALE_COLUMN = 48
+BODY_RADIUS_COLUMN = 50
+BODY_COLUMNS = (WALK_SPEED_COLUMN, RUN_SPEED_COLUMN, SCALE_COLUMN, BODY_RADIUS_COLUMN)
+MODEL_COLUMN = 52
+ICON_COLUMN = 54
+LEVEL_COLUMN = 57
+MAX_HP_COLUMN = 59
 UNUSED_NAME = "xxx"
 
 VSRO_CHARACTER_COLUMNS = 104
@@ -58,12 +78,32 @@ RESISTANCE_AT = 61
 RESISTANCE_COUNT = 6
 SKILL_PAIRS_AT = 93
 SKILL_PAIR_COUNT = 5
+# The ten DefaultSkillIDs: in the later layout from column 83, and in
+# v1.150's after the six resistances convert_character inserts before
+# them (83 + 6 = 89).
+DEFAULT_SKILL_COUNT = 10
+LATER_DEFAULT_SKILL_AT = 83
+LATER_DEFAULT_SKILL_END = LATER_DEFAULT_SKILL_AT + DEFAULT_SKILL_COUNT
+NATIVE_DEFAULT_SKILL_AT = LATER_DEFAULT_SKILL_AT + RESISTANCE_COUNT
+NATIVE_DEFAULT_SKILL_END = NATIVE_DEFAULT_SKILL_AT + DEFAULT_SKILL_COUNT
 # The native table that new rows join (its ids end below the city's).
 CHARACTER_TARGET = "characterdata_25000.txt"
 
 # CICNPC's class gate (GIDObject_SelectRuntimeClassAndSpawn), as the server's npcworlddata.go tests it.
 NPC_TID_MASK = 0x7FE
 NPC_TID_WORD = 0x0146
+
+# Object text (textdata_object, textdata_equip&skill, textzonename ...)
+# in the VSRO layout translation_rows returns: the key, then the language
+# cells from the Korean one, English the ninth cell. The later clients'
+# raw rows carry one more leading column, so their English is one on.
+TEXT_KEY_COLUMN = 1
+TEXT_FIRST_LANGUAGE_COLUMN = 2
+TEXT_ENGLISH_COLUMN = 8
+# translation_rows joins a wrapped line onto a row of fewer cells than
+# this whose key is a name symbol.
+WRAPPED_ROW_CELLS = 10
+NAME_SYMBOL_PREFIX = "SN_"
 
 SKILL_EFFECT_COLUMNS = 13
 SKILL_EFFECT_KEPT = 12
@@ -84,7 +124,6 @@ RESTORED_ARMOR_NPCS = {
 	"NPC_SD_T_AREA_ARMOR": (ARMOR_POSITION, ARMOR_MODEL),
 	"NPC_SD_M_AREA_ARMOR": (SHARON_POSITION, SHARON_MODEL),
 }
-MODEL_COLUMN = 52
 
 
 # ================
@@ -114,13 +153,11 @@ def is_placeholder_text(value):
 # The pinned VSRO client's text tables hold none (census on #4785); the
 # join keeps a client that does from losing the row's language cells.
 # ================
-WRAPPED_ROW_CELLS = 10
-
-
 def translation_rows(raw):
 	rows = []
 	for row in stage1.table_rows(raw):
-		if rows and 1 < len(rows[-1]) < WRAPPED_ROW_CELLS and rows[-1][1].startswith("SN_") and not row[0].isdigit():
+		last = rows[-1] if rows else None
+		if last and TEXT_KEY_COLUMN < len(last) < WRAPPED_ROW_CELLS and last[TEXT_KEY_COLUMN].startswith(NAME_SYMBOL_PREFIX) and not row[0].isdigit():
 			rows[-1][-1] += " " + row[0].strip()
 			rows[-1].extend(row[1:])
 		else:

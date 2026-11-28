@@ -37,23 +37,18 @@ template's, so a listed scroll always has a picture.
 ===========================================================================
 """
 import re
+import alexandria_npcs as characters
 
 import cap110_items as items
+import pet_rows
 
 # Character row columns in the later clients' 104-column layout (the rows
 # this module returns are that layout; pet_import converts them).
-CHAR_CODE = 2
-CHAR_NAME_KEY = 5
-CHAR_ICON = 54
 # Item columns: the description key, and the associated character a
-# summon scroll names (pet_import.ITEM_ASSOCIATED_CHAR, itemrefs.go).
-ITEM_DESC_KEY = 6
-ITEM_ASSOCIATED_CHAR = 119
+# summon scroll names (pet_import.items.SUMMONED_CHARACTER, itemrefs.go).
+items.DESCRIPTION_KEY = 6
 # Object text: key column and the English name column (VSRO layout,
-# later_world_import.NAME_ENGLISH).
-TEXT_KEY = 1
-TEXT_FIRST_LANGUAGE = 2
-TEXT_ENGLISH = 8
+# alexandria_npcs.TEXT_ENGLISH_COLUMN).
 INTEGER = re.compile(r"-?\d+$")
 
 INFERRED_KINDS = (
@@ -82,16 +77,6 @@ INFERRED_KINDS = (
 		"names": {"Goldclad": "Dragonclad"},
 	},
 )
-
-
-# ================
-# family_of
-#
-# pet_import's family rule (the codename minus a trailing level number),
-# kept here so this module needs nothing from its caller.
-# ================
-def family_of(codename):
-	return re.sub(r"_\d+$", "", codename)
 
 
 # ================
@@ -134,21 +119,6 @@ def extrapolate(tiers):
 
 
 # ================
-# scroll_rows
-#
-# The later item rows that summon one of codes (column 119), the plain
-# ones only: event and premium copies are rewards or a mall this port
-# does not carry.
-# ================
-def scroll_rows(later_items, codes):
-	return [
-		row for row in later_items
-		if len(row) > ITEM_ASSOCIATED_CHAR and row[ITEM_ASSOCIATED_CHAR].strip() in codes
-		and not row[items.CODENAME].startswith(("ITEM_EVENT_", "ITEM_PRE_"))
-	]
-
-
-# ================
 # infer_kind
 #
 # One kind's character and scroll rows, or None when its template is not
@@ -160,7 +130,7 @@ def infer_kind(kind, by_code, by_family, later_items):
 		if any(row is None for row in tiers):
 			return None
 		chars = [rewrite(extrapolate(tiers), kind["replace"])]
-		tier_scrolls = [scroll_rows(later_items, {code}) for code in kind["tiers"]]
+		tier_scrolls = [pet_rows.scroll_rows(later_items, {code}) for code in kind["tiers"]]
 		if any(len(found) != 1 for found in tier_scrolls):
 			return None
 		scrolls = [rewrite(extrapolate([found[0] for found in tier_scrolls]), kind["replace"])]
@@ -168,8 +138,8 @@ def infer_kind(kind, by_code, by_family, later_items):
 	template = by_family.get(kind["template"])
 	if not template:
 		return None
-	codes = {row[CHAR_CODE] for row in template} | {kind["template"]}
-	scrolls = [rewrite(row, kind["replace"]) for row in scroll_rows(later_items, codes)]
+	codes = {row[characters.CODENAME_COLUMN] for row in template} | {kind["template"]}
+	scrolls = [rewrite(row, kind["replace"]) for row in pet_rows.scroll_rows(later_items, codes)]
 	return [rewrite(row, kind["replace"]) for row in template], scrolls
 
 
@@ -186,14 +156,14 @@ def name_rows(kind, keys, texts):
 	undo = [(new, old) for old, new in kind["replace"]]
 	for key in sorted(keys):
 		source = texts.get(rewrite([key], undo)[0])
-		if source is None or len(source) <= TEXT_ENGLISH:
+		if source is None or len(source) <= characters.TEXT_ENGLISH_COLUMN:
 			continue
-		english = source[TEXT_ENGLISH]
+		english = source[characters.TEXT_ENGLISH_COLUMN]
 		for old, new in kind["names"].items():
 			english = english.replace(old, new)
 		row = list(source)
-		row[TEXT_KEY] = key
-		for column in range(TEXT_FIRST_LANGUAGE, len(row)):
+		row[characters.TEXT_KEY_COLUMN] = key
+		for column in range(characters.TEXT_FIRST_LANGUAGE_COLUMN, len(row)):
 			if row[column].strip() and not row[column].isdigit():
 				row[column] = english
 		rows.append(row)
@@ -212,7 +182,7 @@ def name_rows(kind, keys, texts):
 def icon_fallbacks(kind, by_code, column):
 	if "tiers" in kind:
 		return [by_code[code][column] for code in reversed(kind["tiers"]) if code in by_code]
-	template = [row for code, row in sorted(by_code.items()) if family_of(code) == kind["template"]]
+	template = [row for code, row in sorted(by_code.items()) if pet_rows.family_of(code) == kind["template"]]
 	return [template[0][column]] if template else []
 
 
@@ -234,11 +204,11 @@ def held_icon(icon, fallbacks, has_icon):
 # scroll icon none holds takes its template scroll's.
 # ================
 def infer_kinds(later_chars, later_items, texts, has_icon=lambda name: True):
-	by_code = {row[CHAR_CODE]: row for row in later_chars if len(row) > CHAR_ICON}
+	by_code = {row[characters.CODENAME_COLUMN]: row for row in later_chars if len(row) > characters.ICON_COLUMN}
 	by_family = {}
 	for row in later_chars:
-		if len(row) > CHAR_ICON:
-			by_family.setdefault(family_of(row[CHAR_CODE]), []).append(row)
+		if len(row) > characters.ICON_COLUMN:
+			by_family.setdefault(pet_rows.family_of(row[characters.CODENAME_COLUMN]), []).append(row)
 	chars, scrolls, text_rows = [], [], []
 	for kind in INFERRED_KINDS:
 		inferred = infer_kind(kind, by_code, by_family, later_items)
@@ -247,11 +217,11 @@ def infer_kinds(later_chars, later_items, texts, has_icon=lambda name: True):
 		kind_chars, kind_scrolls = inferred
 		undo = [(new, old) for old, new in kind["replace"]]
 		for row in kind_chars:
-			row[CHAR_ICON] = held_icon(row[CHAR_ICON], icon_fallbacks(kind, by_code, CHAR_ICON), has_icon)
+			row[characters.ICON_COLUMN] = held_icon(row[characters.ICON_COLUMN], icon_fallbacks(kind, by_code, characters.ICON_COLUMN), has_icon)
 		for row in kind_scrolls:
 			row[items.ICON] = held_icon(row[items.ICON], [rewrite([row[items.ICON]], undo)[0]], has_icon)
-		keys = {row[CHAR_NAME_KEY] for row in kind_chars}
-		keys |= {row[column] for row in kind_scrolls for column in (items.NAME_KEY, ITEM_DESC_KEY)}
+		keys = {row[characters.NAME_KEY_COLUMN] for row in kind_chars}
+		keys |= {row[column] for row in kind_scrolls for column in (items.NAME_KEY, items.DESCRIPTION_KEY)}
 		chars += kind_chars
 		scrolls += kind_scrolls
 		text_rows += name_rows(kind, keys, texts)

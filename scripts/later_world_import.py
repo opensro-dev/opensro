@@ -72,7 +72,6 @@ TEXT_ROOT = Path("Media_extracted") / tables.TEXTDATA
 PIN_FORMAT = "opensro-vsro-archive-pins-v1"
 # The English cell of a staged textdataname row, in the v1.150 layout
 # (alexandria_map_tables.native_text_row).
-NAME_ENGLISH = 8
 
 _verified_archives = set()
 # The v1.696 archives a region merge reads. Particles carries the effect
@@ -352,8 +351,8 @@ def add_monsters(spec, v1696_root, native, output, source_root, enabled, sub_ena
 # ================
 def fill_layer_english(texts, english):
 	for row in texts:
-		if row[1] in english and characters.is_placeholder_text(row[NAME_ENGLISH]):
-			row[NAME_ENGLISH] = english[row[1]]
+		if row[1] in english and characters.is_placeholder_text(row[characters.TEXT_ENGLISH_COLUMN]):
+			row[characters.TEXT_ENGLISH_COLUMN] = english[row[1]]
 
 
 # ================

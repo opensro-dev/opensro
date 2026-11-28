@@ -199,8 +199,8 @@ class ArabiaQuestTablesTest(unittest.TestCase):
 		families = quest_tables.later_text_rows(later_tables.Archive.of(files))
 		for rows in families:
 			self.assertEqual(len(rows), 1)
-			self.assertEqual(rows[0][quest_tables.blue.KEY_COLUMN], "SN_PAYCON_QNO_AR_071")
-			self.assertEqual(rows[0][quest_tables.blue.ENGLISH_COLUMN], english)
+			self.assertEqual(rows[0][characters.TEXT_KEY_COLUMN], "SN_PAYCON_QNO_AR_071")
+			self.assertEqual(rows[0][characters.TEXT_ENGLISH_COLUMN], english)
 
 	# ================
 	# test_a_row_broken_over_lines_is_not_padded

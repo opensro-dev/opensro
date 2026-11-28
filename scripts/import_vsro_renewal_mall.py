@@ -32,6 +32,7 @@ import tempfile
 from pathlib import Path
 
 import later_tables
+import alexandria_npcs as characters
 import sro_pk2
 from convert_images import save_image_payload
 from import_vsro_alexandria import decode_table, records, verify_vsro_archive
@@ -91,7 +92,6 @@ CHROME_PICTURES = (
 
 TEXT_TABLE = "textuisystem.txt"
 # Native 791F50 selects English column 8 (textResources.mjs buildTextCatalog).
-ENGLISH_COLUMN = 8
 
 # Caption keys the window draws that no layout control names: the title,
 # the rail's categories and the card popup
@@ -233,11 +233,11 @@ def layout_strings(text, keys):
 	strings = {}
 	for line in records(text):
 		columns = line.split("\t")
-		if len(columns) <= ENGLISH_COLUMN or columns[0].strip() != "1":
+		if len(columns) <= characters.TEXT_ENGLISH_COLUMN or columns[0].strip() != "1":
 			continue
 		key = columns[1].strip()
 		if key in wanted:
-			strings[key] = columns[ENGLISH_COLUMN].strip().replace("\\n", "\n")
+			strings[key] = columns[characters.TEXT_ENGLISH_COLUMN].strip().replace("\\n", "\n")
 	return strings
 
 

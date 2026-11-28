@@ -243,7 +243,7 @@ def head_help_rows(read, guide):
 	if not keys:
 		return []
 	rows = (map_tables.later_text_row(row) for row in read.rows(HELP_TABLE))
-	return [row for row in rows if len(row) > blue.ENGLISH_COLUMN and row[blue.KEY_COLUMN] in keys]
+	return [row for row in rows if len(row) > characters.TEXT_ENGLISH_COLUMN and row[characters.TEXT_KEY_COLUMN] in keys]
 
 
 # ================
@@ -276,7 +276,7 @@ def guide_rows(rows, quests, texts):
 # defects are fixed, not copied).
 # ================
 def composed_guide_bodies(guide, later_texts):
-	by_key = {row[blue.KEY_COLUMN]: row for rows in later_texts for row in rows if len(row) > blue.KEY_COLUMN}
+	by_key = {row[characters.TEXT_KEY_COLUMN]: row for rows in later_texts for row in rows if len(row) > characters.TEXT_KEY_COLUMN}
 	out = []
 	for row in guide:
 		if len(row) <= GUIDE_QUEST_COLUMN or row[GUIDE_DEPTH_COLUMN] != "1" or row[GUIDE_CONTENT_COLUMN] in by_key:
@@ -289,7 +289,7 @@ def composed_guide_bodies(guide, later_texts):
 		if not tasks or form is None:
 			continue
 		body = list(form)
-		body[blue.KEY_COLUMN] = row[GUIDE_CONTENT_COLUMN]
+		body[characters.TEXT_KEY_COLUMN] = row[GUIDE_CONTENT_COLUMN]
 		for column in range(blue.KOREAN_COLUMN, len(body)):
 			if not form[column]:
 				continue
@@ -381,8 +381,8 @@ def later_text_rows(read):
 def text_symbols(later_texts):
 	found = []
 	for rows in later_texts:
-		found += [row[blue.KEY_COLUMN] for row in rows if len(row) > blue.ENGLISH_COLUMN + 1
-			and QUEST_CODE.search(row[blue.KEY_COLUMN])]
+		found += [row[characters.TEXT_KEY_COLUMN] for row in rows if len(row) > characters.TEXT_ENGLISH_COLUMN + 1
+			and QUEST_CODE.search(row[characters.TEXT_KEY_COLUMN])]
 	return tuple(dict.fromkeys(found))
 
 
@@ -399,10 +399,10 @@ def text_symbols(later_texts):
 def complete_english(rows):
 	out, missing = [], []
 	for row in rows:
-		if len(row) <= blue.ENGLISH_COLUMN or not characters.is_placeholder_text(row[blue.ENGLISH_COLUMN]):
+		if len(row) <= characters.TEXT_ENGLISH_COLUMN or not characters.is_placeholder_text(row[characters.TEXT_ENGLISH_COLUMN]):
 			out.append(row)
 			continue
-		key = row[blue.KEY_COLUMN]
+		key = row[characters.TEXT_KEY_COLUMN]
 		authored = QUEST_ENGLISH.get(key)
 		if authored is None:
 			if QUEST_CODE.search(key):
@@ -413,7 +413,7 @@ def complete_english(rows):
 		if source.strip() != row[blue.KOREAN_COLUMN].strip():
 			raise ValueError(f"stale Arabia quest English for {key}: the v1.696 Korean changed")
 		row = list(row)
-		row[blue.ENGLISH_COLUMN] = line
+		row[characters.TEXT_ENGLISH_COLUMN] = line
 		out.append(row)
 	if missing:
 		raise ValueError("the v1.696 client ships no English for: " + ", ".join(sorted(set(missing)))
@@ -482,7 +482,7 @@ def add_quest_tables(read, archive_sha, output):
 		marker.unlink()
 	quests = read.rows(QUEST_TABLE)
 	later_texts = [complete_english(rows) for rows in later_text_rows(read)]
-	known = {row[blue.KEY_COLUMN] for rows in later_texts for row in rows if len(row) > blue.KEY_COLUMN}
+	known = {row[characters.TEXT_KEY_COLUMN] for rows in later_texts for row in rows if len(row) > characters.TEXT_KEY_COLUMN}
 	later = {QUEST_TABLE: quests, CONTENTS_TABLE: tables.table_rows(read(CONTENTS_TABLE)),
 		GUIDE_TABLE: guide_rows(read.rows(GUIDE_TABLE), quests, known)}
 	variant = {name: tables.table_rows(safe_target(text_root, name).read_bytes()) for name in KEYS}
@@ -491,11 +491,11 @@ def add_quest_tables(read, archive_sha, output):
 	heads = head_help_rows(read, new_rows[GUIDE_TABLE])
 	later_texts.append(heads)
 	symbols = text_symbols(later_texts)
-	symbols += tuple(row[blue.KEY_COLUMN] for row in heads if row[blue.KEY_COLUMN] not in symbols)
-	by_key = {row[blue.KEY_COLUMN]: row for rows in later_texts for row in rows if len(row) > blue.ENGLISH_COLUMN + 1}
+	symbols += tuple(row[characters.TEXT_KEY_COLUMN] for row in heads if row[characters.TEXT_KEY_COLUMN] not in symbols)
+	by_key = {row[characters.TEXT_KEY_COLUMN]: row for rows in later_texts for row in rows if len(row) > characters.TEXT_ENGLISH_COLUMN + 1}
 	text_path = safe_target(text_root, TEXT_FILE)
-	variant_text = {row[blue.KEY_COLUMN] for row in tables.table_rows(text_path.read_bytes()) if len(row) > blue.KEY_COLUMN}
-	check_guide_text(new_rows[GUIDE_TABLE], {k: row[blue.ENGLISH_COLUMN] for k, row in by_key.items()}, variant_text)
+	variant_text = {row[characters.TEXT_KEY_COLUMN] for row in tables.table_rows(text_path.read_bytes()) if len(row) > characters.TEXT_KEY_COLUMN}
+	check_guide_text(new_rows[GUIDE_TABLE], {k: row[characters.TEXT_ENGLISH_COLUMN] for k, row in by_key.items()}, variant_text)
 	raw, appended, replaced = blue.fill_text(text_path.read_bytes(), by_key, symbols)
 	ended = {}
 	for name, rows in new_rows.items():

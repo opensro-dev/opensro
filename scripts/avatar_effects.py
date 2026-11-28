@@ -21,8 +21,8 @@ import re
 
 import cap110_item_import as shared
 import cap110_items as items
+import later_tables
 
-SERVICE_ON = "1"
 # The later client's worn-avatar particles (skilleffectset rows keyed by the
 # avatar's name): column layout of one 30-cell row.
 EFFECT_TABLE = "skilleffectset.txt"
@@ -154,7 +154,7 @@ def loop_effect(row, has_particle):
 def avatar_effects(later_rows, avatars, has_particle):
 	by_key = collections.defaultdict(list)
 	for row in later_rows:
-		if len(row) == EFFECT_COLUMNS and row[EFFECT_SERVICE] == SERVICE_ON:
+		if len(row) == EFFECT_COLUMNS and row[EFFECT_SERVICE] == later_tables.SERVICE_ON:
 			by_key[row[EFFECT_KEY].strip()].append(row)
 	effects, refused = {}, []
 	for avatar_row in avatars:

@@ -38,6 +38,9 @@ import sro_pk2
 from import_vsro_alexandria import TEXTDATA, archive_index, decode_table, table_rows
 
 CHARACTER_CODE_COLUMN = 2
+# Every ref table's first column: 1 is a row in service, 0 one the
+# client ships but never uses.
+SERVICE_ON = "1"
 # is_index reads a file's first line from this much of its head: a
 # table's first line holds a tab well inside it, and a whole file is
 # decoded only when the head reads like an index.
