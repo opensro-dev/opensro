@@ -40,7 +40,37 @@ the first hour of an even UTC hour pair, outside the quiet hours.
 ================
 */
 func (e ChristmasEvent) SnowingAt(now time.Time) bool {
-	if !e.ActiveAt(now) {
+	return christmasSnowingAt(e.SeasonalEvent, now)
+}
+
+/*
+================
+ChristmasDecoration.SnowfallAt
+
+The decoration's snowfalls fall on the winter event's timetable (owner,
+2026-11-28: the season snows in decoration mode too), so the two modes
+share one schedule. Returns the falling snowfall's start, which names
+it (action/seasonal_sky.go draws its strength from it), and false
+outside a snowfall.
+================
+*/
+func (d ChristmasDecoration) SnowfallAt(now time.Time) (time.Time, bool) {
+	if !christmasSnowingAt(d.SeasonalEvent, now) {
+		return time.Time{}, false
+	}
+	return snowfallStart(now), true
+}
+
+/*
+================
+christmasSnowingAt
+
+The one snowfall rule: inside the window, during the first hour of an
+even UTC hour pair, outside the quiet hours.
+================
+*/
+func christmasSnowingAt(event SeasonalEvent, now time.Time) bool {
+	if !event.ActiveAt(now) {
 		return false
 	}
 	start := snowfallStart(now)

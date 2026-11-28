@@ -578,6 +578,18 @@ function warpFrame( region: number, x: number, y: number, z: number, heading: nu
 
 /*
 ================
+isGmWeatherRequest
+
+Whether a frame gmRequest built is the port's /WEATHER (port-only, not
+native): the worker drops the console's weather hold when it sends one.
+================
+*/
+export function isGmWeatherRequest( frame: { readonly opcode: number; readonly payload: Uint8Array; } ): boolean {
+	return frame.opcode === OP_GM_COMMAND && frame.payload[0] === GM_WEATHER;
+}
+
+/*
+================
 gmRequest
 
 The verified name and scalar arms of 509CF0. monster resolves a typed

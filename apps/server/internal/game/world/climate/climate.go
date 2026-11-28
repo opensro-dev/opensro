@@ -177,6 +177,8 @@ type State struct {
 	step           int
 	random         Rand
 	initialWeather Weather
+	// gm is true while a GM's spell (Force) runs, until it fades home.
+	gm bool
 }
 
 /*
@@ -215,6 +217,16 @@ func (s *State) Current() Weather { return s.cur }
 
 /*
 ================
+State.GMSpell
+
+Whether a GM's spell (Force) holds the climate: from the command until
+the spell runs out. A seasonal sky gives way to it (action/seasonal_sky.go).
+================
+*/
+func (s *State) GMSpell() bool { return s.gm }
+
+/*
+================
 State.Update
 
 One server tick. Reports whether the current weather changed, which is
@@ -238,6 +250,7 @@ func (s *State) Update(nowMs int64) bool {
 		// stored row value, not a drawn one (no shipped row has zero).
 		s.target = s.initialWeather
 		s.eventDuration = 0
+		s.gm = false
 		s.updateStep()
 	}
 	return s.fade(nowMs)
@@ -289,6 +302,7 @@ func (s *State) Force(nowMs int64, weather Weather, durationMs int64) Weather {
 		weather.Amount = s.forceAmount(weather.Kind)
 	}
 	s.target = weather
+	s.gm = true
 	s.eventStartAt = nowMs
 	s.eventDuration = min(max(durationMs, MinForceDurationMs), MaxForceDurationMs)
 	s.updateStep()

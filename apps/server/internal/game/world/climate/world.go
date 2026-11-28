@@ -165,6 +165,15 @@ func (w *World) Current(index int) Weather { return w.states[index].Current() }
 
 /*
 ================
+World.GMSpell
+
+Whether a GM's spell holds the climate at an index (State.GMSpell).
+================
+*/
+func (w *World) GMSpell(index int) bool { return w.states[index].GMSpell() }
+
+/*
+================
 World.RegionWeather
 
 The current weather a region's players see; false for a region without

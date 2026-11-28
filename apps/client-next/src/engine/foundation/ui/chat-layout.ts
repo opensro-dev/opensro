@@ -87,6 +87,22 @@ function chatTagText( tag: string ): string {
 	return tag.endsWith( " " ) ? tag : tag + " ";
 }
 
+/*
+================
+chatTaggedName
+
+The sender's name as a line led by its staff tag shows it: a name that
+already starts with the tag ("[GM]Test2" under "[GM]") drops that copy,
+so the line reads "[GM] Test2:" and not "[GM] [GM]Test2:" (owner,
+2026-11-28). The whisper target keeps the full name.
+================
+*/
+export function chatTaggedName( name: string, tag: string ): string {
+	const bare = tag.trim();
+	if ( !bare || !name.startsWith( bare ) ) return name;
+	return name.slice( bare.length ).trimStart() || name;
+}
+
 export function chatLeadSpans(
 	contributor: boolean,
 	staff: { readonly tag: string; } | undefined
@@ -455,7 +471,11 @@ button
 							tag = lead.map( span => span.text ).join( "" ),
 							// Port-only item links: each marker shows its item's label. A line
 							// without a marker takes none of this path (the per-frame budget).
-							raw = tag + chatLineText( l, copy ),
+							raw = tag +
+								chatLineText(
+									staff?.tag && l.name ? { ...l, name: chatTaggedName( l.name, staff.tag ) } : l,
+									copy
+								),
 							labelled = raw.includes( CHAT_LINK_MARKER ) ?
 								chatLinkSpans( raw, l.links, state.chatItemLinks === true ) :
 								null,

@@ -285,3 +285,13 @@ test("a staff sender's role tag is its own span, spaced and coloured like the Co
 	// No staff roster: the GM's line is one plain run, nothing tagged.
 	assert.equal( chatDraws( lines, undefined ).filter( d => d.value.startsWith( "[GM]" ) ).length, 0 );
 });
+
+test("a staff name that already starts with its tag shows the tag once (owner, 2026-11-28)", () => {
+	// Local worlds name a GM "[GM]Test2" and roster it too; production
+	// rosters plain names, which keep their whole name after the tag.
+	const gm = { name: "[GM]Test2", tag: "[GM]", nameColor: 0xffffd87a, chatColor: 0xffffaec3 };
+	const draws = chatDraws( [ { channel: 3, name: "[GM]Test2", text: "hey", outgoing: false } ], undefined, [ gm ] );
+	assert.equal( draws.filter( d => d.value === "[GM] " ).length, 1 );
+	assert.ok( draws.some( d => d.value.startsWith( "Test2:hey" ) ), JSON.stringify( draws.map( d => d.value ) ) );
+	assert.ok( !draws.some( d => d.value.includes( "[GM]Test2" ) ), "the name's own [GM] was drawn after the tag" );
+});

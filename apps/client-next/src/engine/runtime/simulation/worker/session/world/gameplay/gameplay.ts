@@ -151,6 +151,7 @@ import { type EquipmentSet, publishedEquipmentSets } from "@/engine/foundation/g
 import {
 	gmCatalog as decodeGmCatalog,
 	gmRequest,
+	isGmWeatherRequest,
 	gmReply,
 	gmItemReferences,
 	type GmCatalog,
@@ -277,6 +278,7 @@ import {
 } from "@/engine/foundation/gameplay/abnormal-snapshot";
 import {
 	debugWeather,
+	releaseDebugWeather,
 	entryEnvironment,
 	environmentPacket,
 	eventMusicMode,
@@ -3363,6 +3365,11 @@ state here before a command can claim a native wire conversation.
 					local?.heading ?? 0,
 					{ monster: worldReferences.monster, targetGid: targeting.selectionIntent() }
 				);
+				if ( frame && isGmWeatherRequest( frame ) ) {
+					// The server's weather replaces a console hold (event-environment.ts).
+					environment = releaseDebugWeather( environment );
+					dirty = true;
+				}
 				if ( frame ) return sendFrame( frame );
 				// The client-local family (gm-local-commands.ts): commands
 				// 509CF0 executes without a 0x75B6 frame. The chat text,

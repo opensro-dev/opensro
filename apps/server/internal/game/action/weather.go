@@ -27,9 +27,11 @@ sends the new region's word (the PR's native-claims table cites both). A scene t
 starts in one sends nothing, since the client already reset its weather.
 A GM's /WEATHER (SetWeatherGM; port-only, not native) puts a spell on the
 GM's climate; its fade reaches players through the same tick delivery.
-The Christmas snow needs no
-case here: while event group 1 is on, the client draws its own snow
-whatever 0x3BDE says.
+The seasonal skies (seasonal_sky.go: the decoration's snowfalls and the
+town snow) are laid over the climate's weather at every delivery, and a
+snowfall's start or end sends every player its sky again. The winter
+event's snow needs no case here: while event group 1 is on, the client
+draws its own snow whatever 0x3BDE says.
 
 ===========================================================================
 */
@@ -78,6 +80,9 @@ type weatherState struct {
 	mu               sync.Mutex
 	world            *climate.World
 	crossings, spare []weatherCrossing
+	// snowfall is the decoration snowfall the tick last delivered
+	// (Runtime.snowfallKey); the tick goroutine alone touches it.
+	snowfall int64
 }
 
 /*
@@ -122,7 +127,7 @@ func (rt *Runtime) SceneWeatherFrames(divisionID string, character *enterworld.C
 	if rt.weather.world == nil {
 		return nil
 	}
-	weather, ok := rt.weather.world.RegionWeather(region)
+	weather, ok := rt.skyWeather(rt.weather.world, region, rt.snowfallKey(rt.Now()))
 	if !ok {
 		return nil
 	}
@@ -193,28 +198,39 @@ crossed it allocates nothing.
 */
 func (rt *Runtime) advanceWeather(nowMs int64) []simulation.DivisionFrames {
 	world, changed, crossings := rt.stepWeather(nowMs)
-	if world == nil || changed == 0 && len(crossings) == 0 {
+	if world == nil {
+		return nil
+	}
+	// A snowfall starting or ending changes every player's sky.
+	snowfall := rt.snowfallKey(rt.Now())
+	skyTurned := snowfall != rt.weather.snowfall
+	rt.weather.snowfall = snowfall
+	if changed == 0 && len(crossings) == 0 && !skyTurned {
 		return nil
 	}
 	var out []simulation.DivisionFrames
-	if changed != 0 {
+	if changed != 0 || skyTurned {
 		rt.characterAdmissions.Range(func(_, value any) bool {
 			owner := value.(populationAdmission)
 			if !owner.regionBound {
 				return true
 			}
 			index, ok := climate.RegionClimate(owner.region)
-			if !ok || changed&(1<<index) == 0 {
+			if !skyTurned && (!ok || changed&(1<<index) == 0) {
 				return true
 			}
-			out = rt.appendWeatherFrame(out, owner.division, owner.name, world.Current(index))
+			weather, ok := rt.skyWeather(world, owner.region, snowfall)
+			if !ok {
+				weather = climate.Weather{}
+			}
+			out = rt.appendWeatherFrame(out, owner.division, owner.name, weather)
 			return true
 		})
 	}
 	for _, crossing := range crossings {
 		// A region without a climate keeps the zero weather word (see the
 		// file banner), so the crossing still sends it.
-		weather, ok := world.RegionWeather(crossing.region)
+		weather, ok := rt.skyWeather(world, crossing.region, snowfall)
 		if !ok {
 			weather = climate.Weather{}
 		}
