@@ -18,6 +18,8 @@ import { createEntityLod } from "@/engine/foundation/animation/entity-lod";
 import { createModifierDelta } from "@/engine/foundation/rendering/modifier-delta";
 import { createPresentationIds } from "@/engine/foundation/animation/presentation-ids";
 import { createModelEmission } from "@/engine/foundation/animation/model-emission";
+import { actorQueryRows } from "@/engine/foundation/animation/actor-query-rows";
+import { clocked, type FrameClocks } from "@/engine/foundation/animation/actor-clock";
 import { createStructureVisuals } from "./structure-visuals";
 import type { GroundVisualClock } from "@/engine/foundation/animation/ground-visual";
 import { createSceneryEmission } from "@/engine/foundation/animation/scenery-emission";
@@ -192,6 +194,7 @@ export function createCharacterPresentation(
 	// The frame's published results; several phases write them (presentation-contract.ts).
 	const output: PresentationOutput = {
 		displayed: new Map<number, CharacterActor>(),
+		displayedClocks: new Map(),
 		failure: null,
 		failureCause: null,
 		cameraTarget: null,
@@ -356,6 +359,7 @@ export function createCharacterPresentation(
 		states.clear();
 		presentationActions.resetClocks();
 		output.displayed.clear();
+		output.displayedClocks = new Map();
 		displayedDependencies.clear();
 	}
 	// ============================================================================
@@ -443,7 +447,9 @@ export function createCharacterPresentation(
 	*/
 	function retireDespawned( seconds: number, entities: readonly EntityState[] ) {
 		for ( const gid of retiring ) {
-			const actor = vanishing.has( gid ) ? undefined : output.displayed.get( gid );
+			const shown = vanishing.has( gid ) ? undefined : output.displayed.get( gid );
+			// The copy fades on from the clocks it was last drawn with.
+			const actor = shown && clocked( shown, output.displayedClocks );
 			if ( actor ) {
 				const id = allocateActor(), state = states.get( gid );
 				// A gid that respawned before its copy faded is a new instance:
@@ -471,7 +477,7 @@ export function createCharacterPresentation(
 					animation,
 					children: [ ...(auxiliaryActors.get( gid )?.values() ?? []) ].flatMap( child => {
 						const actor = output.displayed.get( child.gid );
-						return actor ? [ actor ] : [];
+						return actor ? [ clocked( actor, output.displayedClocks ) ] : [];
 					} ).map( child => ({ ...child, attachment: { ...child.attachment!, gid: id } }) )
 				} );
 			}
@@ -723,6 +729,9 @@ export function createCharacterPresentation(
 			published
 		);
 		const active = new Set( entities.map( entity => entity.gid ) ), next = new Map<number, CharacterActor>();
+		// The clocks of the actors next republishes unchanged: a new table each
+		// frame, published with next (actor-clock.ts).
+		const clocks: FrameClocks = new Map();
 		// Admission order owns idle RNG, before distance/camera presentation selection.
 		const deadGids = new Set( gameplay?.vitals.filter( v => v.hp === 0 ).map( v => v.gid ) ?? [] );
 		probe?.detailEnd( "presentation-events" );
@@ -740,6 +749,7 @@ export function createCharacterPresentation(
 			pendingDeaths,
 			active,
 			next,
+			clocks,
 			deadGids
 		};
 	}
@@ -779,6 +789,7 @@ export function createCharacterPresentation(
 			pendingDeaths,
 			active,
 			next,
+			clocks,
 			deadGids,
 			entitiesByGid
 		} = events;
@@ -820,6 +831,7 @@ export function createCharacterPresentation(
 			logicalPose,
 			nativeServerName,
 			next,
+			clocks,
 			normalFortressClothes,
 			pendingDeaths,
 			probe,
@@ -852,7 +864,8 @@ export function createCharacterPresentation(
 		const { entities, seconds, cameraPitch, blindHeld } = input;
 		const { animationDeltaMs, localMover } = begun;
 		const { local } = presented;
-		const { gameplay, active, next, castByActor, actionLayersByActor, entitiesByGid, effectActors } = events;
+		const { gameplay, active, next, clocks, castByActor, actionLayersByActor, entitiesByGid, effectActors } =
+			events;
 		const { animationHolders, particleHolders } = actors;
 		probe?.detailBegin( "presentation-finalize" );
 		for ( const gid of states.keys() ) {
@@ -881,14 +894,14 @@ export function createCharacterPresentation(
 				}
 			}
 		}
-		// The socket callback runs only inside orbs.step, while next is fixed:
-		// build its actor list once, on the first orb that needs a socket.
-		let socketActors: CharacterActor[] | null = null;
+		// The socket reads only the holder and its mount chain, at the clocks
+		// this frame publishes (actor-clock.ts clocked).
 		const orbActors = orbs.step(
 			entities,
 			seconds,
 			settled,
-			( gid, bone ) => renderer.characterSocket( socketActors ??= [ ...next.values() ], gid, bone, [ 0, 0, 0 ] ),
+			( gid, bone ) =>
+				renderer.characterSocket( actorQueryRows( next, [ next.get( gid ) ], clocks ), gid, bone, [ 0, 0, 0 ] ),
 			resources.ready,
 			resources.duration,
 			ORB_DETAIL_FULL,
@@ -916,6 +929,7 @@ export function createCharacterPresentation(
 				entities,
 				seconds,
 				next,
+				clocks,
 				gameplay,
 				localMover,
 				castByActor,
@@ -940,14 +954,14 @@ export function createCharacterPresentation(
 		posePresentation.retain( active );
 		selectCameraTarget( { local, gameplay, next, entitiesByGid }, output, published );
 		applyCharacterVisibility(
-			{ entities, next, local, gameplay, seconds, cameraPitch, concealmentSkills, entityLod },
+			{ entities, next, clocks, local, gameplay, seconds, cameraPitch, concealmentSkills, entityLod },
 			output
 		);
 		presentDisappearing(
 			{ disappearing, seconds, next, animationDeltaMs, resources, animationHolders, particleHolders }
 		);
 		const modelParticles = presentEmission(
-			{ entities, next, seconds, hideSilkCos, particleHolders, animationHolders, frameWork },
+			{ entities, next, clocks, seconds, hideSilkCos, particleHolders, animationHolders, frameWork },
 			{
 				resources,
 				renderer,
@@ -959,7 +973,7 @@ export function createCharacterPresentation(
 			}
 		);
 		publishCharacters(
-			{ local, gameplay, next, seconds, blindHeld, modelParticles },
+			{ local, gameplay, next, clocks, seconds, blindHeld, modelParticles },
 			output,
 			published,
 			{ renderer, resources, mallPreview, costumeDoll, portraitEmission }

@@ -10,6 +10,7 @@ the per-actor loop: a loop `continue` is `return null` here.
 
 ===========================================================================
 */
+import { carryClock } from "@/engine/foundation/animation/actor-clock";
 import { dressedAvatars } from "@/engine/foundation/gameplay/avatar-socket";
 import { visualChangeAvatars } from "@/engine/foundation/animation/visual-changes";
 import { fortressAppearance } from "@/engine/foundation/animation/fortress-appearance";
@@ -216,7 +217,7 @@ export function createActorAppearance( owner: ActorOwner ) {
 				wornEquipment,
 				presentationState
 			} = owner;
-			const { gameplay, nativeServerName, next, normalFortressClothes, seconds } = frame;
+			const { gameplay, nativeServerName, next, clocks, normalFortressClothes, seconds } = frame;
 			const { localEntity, particleHolders } = pass;
 			if ( frame !== presentedFrame ) {
 				presentedFrame = frame;
@@ -327,6 +328,7 @@ export function createActorAppearance( owner: ActorOwner ) {
 					paths = displayedDependencies.get( entity.gid );
 				if ( previous && paths && resources.plan( paths ) ) {
 					next.set( entity.gid, previous );
+					carryClock( previous, output.displayedClocks, clocks );
 					displayedDependencies.set( entity.gid, paths );
 				}
 				return null;

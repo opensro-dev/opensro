@@ -15,6 +15,7 @@ other owners have already chosen each actor's opacity.
 
 ===========================================================================
 */
+import { republished, type FrameClocks } from "@/engine/foundation/animation/actor-clock";
 import { spawnFadeAlpha, spawnFadeKind } from "@/engine/foundation/animation/spawn-fade";
 import type { CharacterActor } from "@/engine/contracts/character";
 import type { EntityState } from "@/engine/contracts/world";
@@ -27,14 +28,19 @@ Advances one armed ramp, keyed by its spawned entity, onto one drawn actor:
 the clock starts on the actor's first drawable frame and retires at 1.
 ================
 */
-function fadeActor(
-	ramps: Map<number, number | null>,
-	key: number,
-	gid: number,
-	next: Map<number, CharacterActor>,
-	seconds: number
-) {
-	const start = ramps.get( key ), actor = next.get( gid );
+export interface FadeFrame {
+	readonly next: Map<number, CharacterActor>;
+	readonly clocks: FrameClocks;
+	readonly seconds: number;
+}
+
+/*
+================
+fadeActor
+================
+*/
+function fadeActor( ramps: Map<number, number | null>, key: number, gid: number, frame: FadeFrame ) {
+	const { next, clocks, seconds } = frame, start = ramps.get( key ), actor = next.get( gid );
 	if ( start === undefined || !actor ) return;
 	if ( start === null ) ramps.set( key, seconds );
 	const alpha = spawnFadeAlpha( seconds - (start ?? seconds) );
@@ -42,7 +48,7 @@ function fadeActor(
 		ramps.delete( key );
 		return;
 	}
-	next.set( gid, { ...actor, opacity: (actor.opacity ?? 1) * alpha } );
+	next.set( gid, republished( actor, { opacity: (actor.opacity ?? 1) * alpha }, clocks ) );
 }
 
 /*
@@ -72,7 +78,7 @@ export function createSpawnFades( linkedRides: ReadonlyMap<number, number> ) {
 		pop in. A monster's linked ride carries its own equal ramp (861EE2).
 		================
 		*/
-		apply( entities: readonly EntityState[], next: Map<number, CharacterActor>, seconds: number ) {
+		apply( entities: readonly EntityState[], frame: FadeFrame ) {
 			fadePresent = new Set();
 			for ( const entity of entities ) {
 				fadePresent.add( entity.gid );
@@ -82,11 +88,11 @@ export function createSpawnFades( linkedRides: ReadonlyMap<number, number> ) {
 					spawnFades.set( entity.gid, null );
 					rideFades.set( entity.gid, null );
 				}
-				fadeActor( spawnFades, entity.gid, entity.gid, next, seconds );
+				fadeActor( spawnFades, entity.gid, entity.gid, frame );
 				// 861EE2 gives the linked ride its own CIDecoAppear: its ramp starts
 				// when the ride itself can draw, which may be after the rider's ends.
 				const rideGid = linkedRides.get( entity.gid );
-				if ( rideGid !== undefined ) fadeActor( rideFades, entity.gid, rideGid, next, seconds );
+				if ( rideGid !== undefined ) fadeActor( rideFades, entity.gid, rideGid, frame );
 			}
 			for ( const gid of fadeSeen ) {
 				if ( fadePresent.has( gid ) ) continue;

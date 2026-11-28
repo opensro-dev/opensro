@@ -34,6 +34,7 @@ async function load( entry ) {
 const { createCharacterPresentation } = await load( "src/engine/runtime/characters/characters.ts" );
 const { createCharacters } = await load( "src/engine/runtime/renderer/characters/characters.ts" );
 const { createPresentationRandom } = await load( "src/engine/runtime/random/random.ts" );
+const { clocked } = await load( "src/engine/foundation/animation/actor-clock.ts" );
 const identity = () => new Float32Array( [ 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1 ] );
 /*
 ================
@@ -193,11 +194,14 @@ export function presentationRig( spec ) {
 		/*
 		================
 		setCharacterActors
+
+		The rig's actors are the rows as drawn: a republished actor's clocks
+		come from the call's table (actor-clock.ts).
 		================
 		*/
-		setCharacterActors( value, portraits = [] ) {
-			actors = value;
-			characters.actors( value, portraits );
+		setCharacterActors( value, portraits = [], clocks = undefined ) {
+			actors = value.map( actor => clocked( actor, clocks ) );
+			characters.actors( value, portraits, clocks );
 		},
 		...spec.port?.( characters )
 	};

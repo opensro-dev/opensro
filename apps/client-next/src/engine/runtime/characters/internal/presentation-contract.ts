@@ -11,6 +11,8 @@ assembly, animation and sound phase reads.
 ===========================================================================
 */
 
+import type { ActorClocks } from "@/engine/contracts/character";
+import type { FrameClocks } from "@/engine/foundation/animation/actor-clock";
 import type { RandomIdle } from "@/engine/foundation/animation/random-idle";
 import type { Posture } from "@/engine/foundation/animation/posture";
 import type { Disappear } from "@/engine/foundation/animation/disappear";
@@ -56,6 +58,8 @@ and passes it to each phase that writes it.
 */
 export interface PresentationOutput {
 	displayed: Map<number, CharacterActor>;
+	// The clocks displayed was published with (actor-clock.ts).
+	displayedClocks: ActorClocks;
 	failure: string | null;
 	// The thrown value behind failure, when a phase caught one: the
 	// incident report needs its stack, the HUD line only its text (#2559).
@@ -791,6 +795,8 @@ export interface ActorFrame {
 	readonly logicalPose: ( entity: EntityState ) => Pose;
 	readonly nativeServerName: string | undefined;
 	readonly next: Map<number, CharacterActor>;
+	// The clocks of the actors next republishes unchanged (actor-clock.ts).
+	readonly clocks: FrameClocks;
 	readonly normalFortressClothes: boolean;
 	readonly pendingDeaths: ReadonlySet<number>;
 	readonly probe: { detailBegin( stage: string ): void; detailEnd( stage: string ): void; } | undefined;

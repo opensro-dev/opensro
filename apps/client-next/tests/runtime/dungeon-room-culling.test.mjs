@@ -323,6 +323,7 @@ test("publishCharacters publishes selected actors without a second room-culling 
 		local: undefined,
 		gameplay: { navigationBlock: WEST_ROOM },
 		next: new Map( [ 1, 2 ].map( gid => [ gid, { gid, model: "m" + gid, blindable: gid === 2 } ] ) ),
+		clocks: new Map(),
 		seconds: 0,
 		blindHeld: true,
 		modelParticles: 0
@@ -338,7 +339,7 @@ test("publishCharacters publishes selected actors without a second room-culling 
 		mallPreview: { skin: () => null, step: () => [] }
 	});
 	const catalog = /** @type {any} */ ({ catalog: new Map(), dress: null, manifest: 0 });
-	publishCharacters( frame, { displayed: new Map() }, catalog, bindings );
+	publishCharacters( frame, { displayed: new Map(), displayedClocks: new Map() }, catalog, bindings );
 	const byGid = new Map( published.map( a => [ a.gid, a ] ) );
 	assert.equal( byGid.get( 1 ).opacity, undefined );
 	assert.equal( byGid.get( 2 ).opacity, 0 );
@@ -351,6 +352,7 @@ test("publishCharacters drops the /hideme local player's body", () => {
 		local: { gid: 1, refObjId: 9, debugHidden: true },
 		gameplay: undefined,
 		next: new Map( [ 1, 2 ].map( gid => [ gid, { gid, model: "m" + gid } ] ) ),
+		clocks: new Map(),
 		seconds: 0,
 		blindHeld: false,
 		modelParticles: 0
@@ -366,7 +368,7 @@ test("publishCharacters drops the /hideme local player's body", () => {
 		mallPreview: { skin: () => null, step: () => [] }
 	});
 	const catalog = /** @type {any} */ ({ catalog: new Map(), dress: null, manifest: 0 });
-	publishCharacters( frame, { displayed: new Map() }, catalog, bindings );
+	publishCharacters( frame, { displayed: new Map(), displayedClocks: new Map() }, catalog, bindings );
 	const byGid = new Map( published.map( a => [ a.gid, a ] ) );
 	assert.equal( byGid.get( 1 ).opacity, 0 );
 	assert.equal( byGid.get( 1 ).pickable, false );

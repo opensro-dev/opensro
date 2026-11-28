@@ -13,6 +13,7 @@ that order, for every actor every frame.
 
 ===========================================================================
 */
+import { actorQueryRows } from "@/engine/foundation/animation/actor-query-rows";
 import { movementEntryRate, transitionActionStates } from "@/engine/foundation/animation/action-refresh";
 import { selectAvatarOverride } from "@/engine/foundation/animation/avatar-override";
 import { castAnimating } from "@/engine/foundation/animation/auxiliary-motion";
@@ -585,7 +586,7 @@ export function createActorMotion( owner: ActorOwner ) {
 						for ( const right of [ false, true ] ) {
 							footContact(
 								entity,
-								[ ...output.displayed.values() ],
+								actorQueryRows( output.displayed, [ actor ], output.displayedClocks ),
 								actor,
 								nativePose,
 								right,

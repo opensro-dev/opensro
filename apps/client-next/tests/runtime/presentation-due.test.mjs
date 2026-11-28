@@ -85,9 +85,12 @@ async function replay( session, rules ) {
 	};
 	const harness = await createPresentationHarness( ROOT, session, {
 		due: { appearance: counted( "appearance" ), motion: counted( "motion" ), record: counted( "record" ) },
-		actors: actors => {
+		actors: ( actors, portraits, clocks = new Map() ) => {
 			for ( const actor of actors ) freezeDeep( actor );
-			if ( !sameRow( reused.update( actors ), full.update( actors ) ) && rowsDiffer < 0 ) rowsDiffer = frame;
+			for ( const clock of clocks.values() ) freezeDeep( clock );
+			if ( !sameRow( reused.update( actors, clocks ), full.update( actors, clocks ) ) && rowsDiffer < 0 ) {
+				rowsDiffer = frame;
+			}
 		}
 	} );
 	const frames = [];

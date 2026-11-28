@@ -20,8 +20,8 @@ import { blindableCharacter, blindableCompanion } from "@/engine/foundation/ui/n
 import { cosScale, monsterScale } from "@/engine/foundation/rendering/monster-scale";
 import { characterHeadingYaw } from "@/engine/foundation/math/angles";
 import type { EntityState } from "@/engine/contracts/world";
-import type { CharacterActor } from "@/engine/contracts/character";
 import { carriedLod, carriedPose, carriedTint } from "./actor-values";
+import { actorQueryRows } from "@/engine/foundation/animation/actor-query-rows";
 import type {
 	ActorAppearance,
 	ActorFrame,
@@ -126,6 +126,7 @@ export function createActorAdvance( owner: ActorOwner ) {
 				gameplay,
 				localMover,
 				next,
+				clocks,
 				probe,
 				sampleActorDetails,
 				seconds,
@@ -239,8 +240,9 @@ export function createActorAdvance( owner: ActorOwner ) {
 				state.modifierResource = resource;
 				state.modifierLayers = layers;
 				state.lastDrawnPose = { ...renderPose };
-				const actor: CharacterActor = Object.freeze( {
-					...kept.actor,
+				// The kept actor itself is published again; its clocks travel in
+				// the frame's table (actor-clock.ts), so nothing is copied.
+				clocks.set( kept.actor, {
 					modelAnimation: resource.modifierBindings?.length ?
 						(state.modelAnimation ??= createModelAnimation()).step(
 							dispatch,
@@ -257,9 +259,9 @@ export function createActorAdvance( owner: ActorOwner ) {
 						layers[0]!.time :
 						Math.max( 0, seconds - state.started )
 				} );
-				next.set( entity.gid, actor );
+				next.set( entity.gid, kept.actor );
 				if ( sampleActorDetails ) probe?.detailEnd( "actor-record" );
-				record = { actor, stamp: kept.stamp };
+				record = { actor: kept.actor, stamp: kept.stamp };
 			} else {
 				displayedDependencies.set( entity.gid, dependencies );
 				if ( auxiliaryCommit !== undefined ) committedAuxiliary.set( entity.gid, auxiliaryCommit );
@@ -366,7 +368,7 @@ export function createActorAdvance( owner: ActorOwner ) {
 							if ( event.eventCode === 2 && event.cursorMs > from && event.cursorMs <= to ) {
 								footContact(
 									entity,
-									[ ...next.values() ],
+									actorQueryRows( next, [ actor ], clocks ),
 									actor,
 									nativePose,
 									event.param0 !== 0,
