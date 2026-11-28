@@ -43,8 +43,8 @@ const (
 	// The v1.150 client's numbers: CIFCOSStatus_OnDialogConfirm (6A9E30)
 	// sends 0x71DC (6FF980) and CPSMission_OnCosSellResult0xB1DC (7782E0)
 	// reads the answer. The v1.188 server takes the same body on 0x70C7
-	// (CGObjPC_HandleCOSNpcRequest70C7 511F40); its number never reaches
-	// this client, so the lane listened on a request nothing sends.
+	// (its handler at 511F40); that number never reaches this client,
+	// so the lane listened on a request nothing sends.
 	opCosSellRequest  uint16 = 0x71dc
 	opCosSellResponse uint16 = 0xb1dc
 
