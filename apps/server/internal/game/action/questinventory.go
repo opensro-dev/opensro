@@ -32,6 +32,40 @@ mutates the character: all removals and grants must fit before rewards commit.
 ================
 */
 func (rt *Runtime) PlanQuestInventory(c *enterworld.Character, consume, grant []inventory.ItemAmount) ([]enterworld.InventoryRow, []wire.Frame, error) {
+	before, inv, err := planQuestConsumption(c, consume)
+	if err != nil {
+		return nil, nil, err
+	}
+	return rt.planInventoryGrant(c, before, inv, grant, nil)
+}
+
+/*
+================
+planQuestInventoryItems
+
+PlanQuestInventory for grants already prepared as items (a rolled
+equipment piece with its plus and options): the same removals, then the
+items placed as they are.
+================
+*/
+func (rt *Runtime) planQuestInventoryItems(c *enterworld.Character, consume []inventory.ItemAmount, grant []inventory.Item) ([]enterworld.InventoryRow, []wire.Frame, error) {
+	before, inv, err := planQuestConsumption(c, consume)
+	if err != nil {
+		return nil, nil, err
+	}
+	return rt.planInventoryItemsGrant(c, before, inv, grant, nil)
+}
+
+/*
+================
+planQuestConsumption
+
+The removals of a quest-style change against a detached bag copy: the
+bag as it stood and the copy with every request taken, lowest slot first.
+Any request the bag cannot cover refuses the whole change.
+================
+*/
+func planQuestConsumption(c *enterworld.Character, consume []inventory.ItemAmount) ([]inventory.Item, *inventory.Inventory, error) {
 	if c == nil || c.DeletePending {
 		return nil, nil, fmt.Errorf("quest inventory: unavailable character")
 	}
@@ -67,7 +101,7 @@ func (rt *Runtime) PlanQuestInventory(c *enterworld.Character, consume, grant []
 			return nil, nil, fmt.Errorf("missing quest item %s", request.Codename)
 		}
 	}
-	return rt.planInventoryGrant(c, before, inv, grant, nil)
+	return before, inv, nil
 }
 
 /*

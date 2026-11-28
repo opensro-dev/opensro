@@ -771,6 +771,13 @@ func (rt *Runtime) planMonsterKillLoot(
 		box.OwnerJID = ownerJID
 		admitted = append(admitted, rt.scatterMonsterDrop(box, at, monster.Rarity()))
 	}
+	// Port-only switch, native rule (#4810): with the Ch'in Tomb boxes on,
+	// a tomb monster's death rolls each box's key (tombbox.go), after
+	// admission and the drop cap like the event boxes above.
+	for _, key := range rt.tombKeyDrops(monster, at, snapshot.Name, now) {
+		key.OwnerJID = ownerJID
+		admitted = append(admitted, rt.scatterMonsterDrop(key, at, monster.Rarity()))
+	}
 	return admitted
 }
 

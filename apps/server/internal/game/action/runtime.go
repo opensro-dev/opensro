@@ -820,6 +820,9 @@ type Runtime struct {
 	// consignment refusals (SRO_MAGIC_CUBE; game/magiccube; port-only,
 	// not native, #3906). False is native: no Magic Cube ops.
 	MagicCube bool
+	// TombBoxes is SRO_TOMB_TREASURE_BOXES (tombbox.go, #4810): the
+	// Ch'in Tomb boxes open and tomb monsters drop their keys.
+	TombBoxes bool
 	// PetInventoryPages raises grab pet and transport bags to their
 	// configured pages, each kind on its own (companion inventorypages.go;
 	// port-only, not native; owner 2026-11-07). Zero is native.
