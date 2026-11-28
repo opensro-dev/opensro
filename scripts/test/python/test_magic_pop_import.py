@@ -6,7 +6,8 @@ On by default (SRO_MAGIC_POP_V1696 unset), the import writes the v1.696
 pool's set 1 and 2 rows with each reward rewritten to this tree's id by
 codename, the machine map and the category tree verbatim, and stages the
 event gear the tree lacks in its own shard with the socket parameter
-reset. Degree 11 rows and the WITHHELD prizes leave the pool and are not
+reset, and the lose set's expendables with their parameters verbatim.
+Degree 11 rows and the WITHHELD prizes leave the pool and are not
 imported; a prize with no import lane, or an unknown reward id, refuses.
 Off (or no v1.696 client) reaps every output and leaves the tree as the
 earlier steps wrote it.
@@ -69,7 +70,20 @@ def gear_row(code, identity, item_class, sockets="3"):
 def plain_row(code, identity, kind=("3", "3", "1", "1")):
 	row = ["0"] * items.ITEM_COLUMNS
 	row[items.SERVICE], row[items.IDENTITY], row[items.CODENAME] = "1", str(identity), code
+	row[items.NAME_KEY], row[items.DESCRIPTION_KEY] = "SN_" + code, "xxx"
 	row[items.TYPE_FIRST:items.TYPE_FOURTH + 1] = list(kind)
+	return row
+
+
+# ================
+# flower_row
+#
+# The v1.696 summon flower: an expendable whose first parameter names the
+# structure it places.
+# ================
+def flower_row():
+	row = plain_row("ITEM_ETC_SUMMON_FLOWER_01", LATER_FLOWER, ("3", "3", "3", "20"))
+	row[items.PARAM_FIRST], row[items.PARAM_FIRST + 1] = "0", "STRUCTURE_SUMMON_FLOWER_01"
 	return row
 
 
@@ -123,7 +137,7 @@ class MagicPopImportTest(unittest.TestCase):
 				gear_row("ITEM_EVENT_CH_BOW_10_A_RARE", LATER_EVENT_BOW, 28, sockets="0"),
 				gear_row("ITEM_EVENT_CH_SWORD_11_A_RARE", LATER_DEGREE11, 31),
 				plain_row("ITEM_EVENT_SKILLPOINT_SCROLL", LATER_SP_SCROLL, ("3", "3", "3", "12")),
-				plain_row("ITEM_ETC_SUMMON_FLOWER_01", LATER_FLOWER, ("3", "3", "3", "20")),
+				flower_row(),
 				plain_row("ITEM_EVENT_PET2_SCROLL_ASS_DINOSAUR_A", LATER_PET2, ("3", "2", "1", "3")),
 				# Native in this tree under another id: the pool takes the native id.
 				plain_row("ITEM_ETC_E060517_MON_GENERATION_BOX", 99999, ("3", "3", "15", "1")),
@@ -142,7 +156,9 @@ class MagicPopImportTest(unittest.TestCase):
 				pool_row(3, LATER_EVENT_SWORD, 3000, 9),
 				pool_row(1, LATER_EVENT_SWORD, 3000, 10, enabled="0"),
 			]
-		names = [text_row("SN_ITEM_CH_BOW_10_A_RARE", "Bow ten")]
+		names = [text_row("SN_ITEM_CH_BOW_10_A_RARE", "Bow ten"),
+			text_row("SN_ITEM_EVENT_SKILLPOINT_SCROLL", "Skill point scroll"),
+			text_row("SN_ITEM_ETC_SUMMON_FLOWER_01", "Summon flower")]
 		self.media = archive_bytes({
 			"itemdata.txt": utf16([["itemdata_25000.txt"]]),
 			"itemdata_25000.txt": utf16(later_items),
@@ -187,9 +203,11 @@ class MagicPopImportTest(unittest.TestCase):
 			self.assertIs(source, avatars.V1696_SOURCE)
 			return {"Media": (data, index)}, {"Media": "fixture"}
 
+		self.closure_worn = {}
+
 		def copy_asset_closure(rows, native_root, output_root, archives, worn=True):
-			self.assertTrue(worn)
-			self.closure_rows = [row[items.CODENAME] for row in rows]
+			self.closure_rows += [row[items.CODENAME] for row in rows]
+			self.closure_worn.update({row[items.CODENAME]: worn for row in rows})
 			path = "icon/item/china/weapon/event_fixture.ddj"
 			target = output_root / shared.FOLDERS["Media"] / path
 			target.parent.mkdir(parents=True, exist_ok=True)
@@ -233,7 +251,7 @@ class MagicPopImportTest(unittest.TestCase):
 			rows = self.pool(text_root)
 			by_entry = {row[pop.POOL_ENTRY]: row for row in rows}
 			# Sets 3/4, disabled rows, degree 11 and withheld prizes leave.
-			self.assertEqual(sorted(by_entry), ["1", "2", "5", "8"])
+			self.assertEqual(sorted(by_entry), ["1", "2", "5", "6", "7", "8"])
 			self.assertEqual({row[pop.POOL_SET] for row in rows}, {"1", "2"})
 			# Native items take the tree's id, never the later one.
 			self.assertEqual(by_entry["5"][pop.POOL_REWARD], str(NATIVE_GEAR))
@@ -244,34 +262,47 @@ class MagicPopImportTest(unittest.TestCase):
 			# Every other column is the later row's.
 			self.assertEqual(by_entry["2"][pop.POOL_MIN_LEVEL], "91")
 			self.assertEqual(by_entry["1"][8], "[BIIV]<M:str,1,3><M:int,1,3><O:3>")
-			self.assertEqual(summary["pool"]["perSet"], {"1": 3, "2": 1})
+			self.assertEqual(summary["pool"]["perSet"], {"1": 3, "2": 3})
+			# The lose set keeps every native prize (owner, 2026-11-28).
+			self.assertEqual(by_entry["6"][pop.POOL_REWARD], str(summary["items"]["ITEM_EVENT_SKILLPOINT_SCROLL"]))
+			self.assertEqual(by_entry["7"][pop.POOL_REWARD], str(summary["items"]["ITEM_ETC_SUMMON_FLOWER_01"]))
 			self.assertEqual(summary["pool"]["dropped"], {
 				"dropped: PET2 fellow pet scroll": 1, "dropped: degree 11": 1,
-				"dropped: skill point scroll": 1, "pending: summon flower": 1,
 			})
 
 	# ================
-	# test_imports_only_missing_gear_with_sockets_reset
+	# test_imports_missing_gear_and_lose_expendables
+	#
+	# Missing gear is staged with its socket parameter reset and a worn
+	# mesh; a missing lose-set expendable keeps every parameter and is
+	# carried (icon and drop model only).
 	# ================
-	def test_imports_only_missing_gear_with_sockets_reset(self):
+	def test_imports_missing_gear_and_lose_expendables(self):
 		with tempfile.TemporaryDirectory() as root:
 			later, native, output, text_root = self.fixture(Path(root))
 			summary = self.run_import(later, native, output, {})
-			self.assertEqual(sorted(summary["items"]), ["ITEM_EVENT_CH_BOW_10_A_RARE", "ITEM_EVENT_CH_SWORD_01_A_RARE"])
+			gear = ["ITEM_EVENT_CH_BOW_10_A_RARE", "ITEM_EVENT_CH_SWORD_01_A_RARE"]
+			carried = ["ITEM_ETC_SUMMON_FLOWER_01", "ITEM_EVENT_SKILLPOINT_SCROLL"]
+			self.assertEqual(sorted(summary["items"]), sorted(gear + carried))
 			self.assertEqual(sorted(self.closure_rows), sorted(summary["items"]))
+			self.assertEqual(self.closure_worn, {**{code: True for code in gear}, **{code: False for code in carried}})
 			for identity in summary["items"].values():
-				self.assertNotIn(identity, (LATER_EVENT_SWORD, LATER_EVENT_BOW, NATIVE_GEAR, NATIVE_BOX))
-			shard = [line.split("\t") for line in
-				(text_root / pop.ITEM_SHARD).read_bytes().decode("utf-16").splitlines() if line.strip()]
-			self.assertEqual(len(shard), 2)
-			for row in shard:
-				self.assertEqual(row[pop.SOCKET_PARAM:pop.SOCKET_PARAM + 2], ["-1", items.UNUSED])
-				self.assertEqual(row[items.PLACEHOLDER_NAME], items.UNUSED)
+				self.assertNotIn(identity, (LATER_EVENT_SWORD, LATER_EVENT_BOW, LATER_SP_SCROLL, LATER_FLOWER, NATIVE_GEAR, NATIVE_BOX))
+			shard = {row[items.CODENAME]: row for row in (line.split("\t") for line in
+				(text_root / pop.ITEM_SHARD).read_bytes().decode("utf-16").splitlines() if line.strip())}
+			self.assertEqual(sorted(shard), sorted(gear + carried))
+			for code in gear:
+				self.assertEqual(shard[code][pop.SOCKET_PARAM:pop.SOCKET_PARAM + 2], ["-1", items.UNUSED])
+			for code in gear + carried:
+				self.assertEqual(shard[code][items.PLACEHOLDER_NAME], items.UNUSED)
+			# A carried prize keeps the later row's parameters as authored.
+			self.assertEqual(shard["ITEM_ETC_SUMMON_FLOWER_01"][items.PARAM_FIRST + 1], "STRUCTURE_SUMMON_FLOWER_01")
 			manifest = (text_root / "itemdata.txt").read_bytes().decode("utf-16")
 			self.assertIn(pop.ITEM_SHARD, manifest)
 			names = (text_root / pop.NAME_TABLE).read_bytes().decode("utf-16")
 			self.assertIn("Bow ten", names)
-			self.assertEqual(summary["texts"], ["SN_ITEM_CH_BOW_10_A_RARE"])
+			self.assertEqual(summary["texts"], ["SN_ITEM_CH_BOW_10_A_RARE", "SN_ITEM_ETC_SUMMON_FLOWER_01",
+				"SN_ITEM_EVENT_SKILLPOINT_SCROLL"])
 			again = self.run_import(later, native, output, {})
 			self.assertEqual(again["items"], summary["items"])
 			self.assertEqual((text_root / pop.NAME_TABLE).read_bytes().decode("utf-16").count("Bow ten"), 1)
@@ -327,17 +358,20 @@ class MagicPopImportTest(unittest.TestCase):
 	# ================
 	# test_prize_without_lane_refuses
 	#
-	# A missing prize that is neither withheld nor degree 1-10 equipment.
+	# A missing prize that is neither withheld, degree 1-10 equipment, nor
+	# a lose-set expendable: an expendable in the win set, and a lose-set
+	# prize that is no expendable.
 	# ================
 	def test_prize_without_lane_refuses(self):
-		with tempfile.TemporaryDirectory() as root:
-			later_items = [gear_row("ITEM_EVENT_CH_SWORD_01_A_RARE", LATER_EVENT_SWORD, 1),
-				plain_row("ITEM_ETC_UNKNOWN_SCROLL", LATER_POTION),
-				plain_row("ITEM_ETC_E060517_MON_GENERATION_BOX", 99999, ("3", "3", "15", "1"))]
-			later, native, output, _ = self.fixture(Path(root), later_items=later_items, pool_rows=[
-				pool_row(1, LATER_EVENT_SWORD, 3000, 1), pool_row(2, 99999, 50, 2), pool_row(2, LATER_POTION, 50, 3)])
-			with self.assertRaisesRegex(ValueError, "ITEM_ETC_UNKNOWN_SCROLL has no import lane"):
-				self.run_import(later, native, output, {})
+		for set_id, kind, reason in ((1, ("3", "3", "1", "1"), "not degree 1-"), (2, ("3", "2", "1", "3"), "not an expendable")):
+			with self.subTest(set_id=set_id), tempfile.TemporaryDirectory() as root:
+				later_items = [gear_row("ITEM_EVENT_CH_SWORD_01_A_RARE", LATER_EVENT_SWORD, 1),
+					plain_row("ITEM_ETC_UNKNOWN_SCROLL", LATER_POTION, kind),
+					plain_row("ITEM_ETC_E060517_MON_GENERATION_BOX", 99999, ("3", "3", "15", "1"))]
+				later, native, output, _ = self.fixture(Path(root), later_items=later_items, pool_rows=[
+					pool_row(1, LATER_EVENT_SWORD, 3000, 1), pool_row(2, 99999, 50, 2), pool_row(set_id, LATER_POTION, 50, 3)])
+				with self.assertRaisesRegex(ValueError, "ITEM_ETC_UNKNOWN_SCROLL has no import lane \\(" + reason):
+					self.run_import(later, native, output, {})
 
 	# ================
 	# test_unread_parameter_refuses
@@ -369,22 +403,20 @@ class MagicPopImportTest(unittest.TestCase):
 		cases = {
 			"ITEM_EVENT_PET2_SCROLL_ASS_DINOSAUR_A": "dropped",
 			"ITEM_PRE_PET2_SCROLL_ENC_CAT_A": "dropped",
-			"ITEM_EVENT_SKILLPOINT_SCROLL": "dropped",
 			"ITEM_EVENT_AVATAR_M_NASRUN_UNIQUE": "pending: event Spirit",
 			"ITEM_EVENT_AVATAR_W_AMALRUN_UNIQUE": "pending: event Spirit",
 			"ITEM_EVENT_AVATAR_M_SPARTA_HAT": "pending: event avatar",
 			"ITEM_ETC_E090429_ROC_M": "pending: Roc flag",
 			"ITEM_ETC_E090429_GACHA_ROC_W": "pending: Roc flag",
 			"ITEM_ETC_E060529_GACHA_GOLDDRAGONFLAG_F": "pending: gold dragon flag",
-			"ITEM_EVENT_ARCHEMY_REINFORCE_RATIO_100": "pending: alchemy catalyst",
-			"ITEM_MALL_ARCHEMY_REINFORCE_RATIO_100": "pending: alchemy catalyst",
-			"ITEM_ETC_SUMMON_FLOWER_05": "pending: summon flower",
-			"ITEM_ETC_WHAN_LOOK_CHANGE_C_PANDA": "pending: Hwan look change",
 		}
 		for code, reason in cases.items():
 			self.assertTrue((pop.withheld_reason(code) or "").startswith(reason), code)
 		for code in ("ITEM_EVENT_CH_SWORD_01_A_RARE", "ITEM_ETC_E060517_MON_GENERATION_BOX",
-				"ITEM_ETC_E060529_GOLDDRAGONFLAG_M", "ITEM_ETC_ARCHEMY_MAGICSTONE_LUCK_01"):
+				"ITEM_ETC_E060529_GOLDDRAGONFLAG_M", "ITEM_ETC_ARCHEMY_MAGICSTONE_LUCK_01",
+				# The lose set ships as native (owner, 2026-11-28).
+				"ITEM_EVENT_SKILLPOINT_SCROLL", "ITEM_EVENT_ARCHEMY_REINFORCE_RATIO_100",
+				"ITEM_ETC_SUMMON_FLOWER_05", "ITEM_ETC_WHAN_LOOK_CHANGE_C_PANDA"):
 			self.assertIsNone(pop.withheld_reason(code), code)
 
 	# ================

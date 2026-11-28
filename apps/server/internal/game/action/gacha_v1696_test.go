@@ -452,3 +452,33 @@ func TestGachaV1696ZeroDurabilityPrizeKeepsZero(t *testing.T) {
 		}
 	}
 }
+
+/*
+================
+TestV1696LosePrizesWithoutAnEffectAreRefused
+
+The owner ships the v1.696 lose set as native (2026-11-28), effects or
+not. Until a prize's effect lands, its use must be refused with nothing
+spent, never reach another family: the skill point scroll (3/3/3/12), the
+alchemy catalyst (3/3/11/17), the summon flowers (3/3/3/20) and the Hwan
+look items (3/3/13/13, Param1 6).
+================
+*/
+func TestV1696LosePrizesWithoutAnEffectAreRefused(t *testing.T) {
+	for _, tc := range []struct {
+		codename string
+		typeIDs  [4]int64
+		param1   float64
+	}{
+		{"ITEM_EVENT_SKILLPOINT_SCROLL", [4]int64{3, 3, 3, 12}, 0},
+		{"ITEM_EVENT_ARCHEMY_REINFORCE_RATIO_100", [4]int64{3, 3, 11, 17}, 0},
+		{"ITEM_ETC_SUMMON_FLOWER_01", [4]int64{3, 3, 3, 20}, 0},
+		{"ITEM_ETC_WHAN_LOOK_CHANGE_C_PANDA", [4]int64{3, 3, 13, 13}, 6},
+	} {
+		ref := &enterworld.ItemRef{Codename: tc.codename, TypeIDs: tc.typeIDs,
+			NativeFields: enterworld.NewNativeFields(map[string]float64{"itemParam1_29c": tc.param1})}
+		if got := admittedItemUseFamily(ref); got != itemUseUnsupported {
+			t.Errorf("%s: family %d, want unsupported", tc.codename, got)
+		}
+	}
+}

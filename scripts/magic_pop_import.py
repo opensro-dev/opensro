@@ -34,11 +34,15 @@ The pool rules (owner, 2026-11-27):
   - no degree-11 prize: a row whose minimum level cap (column 16) is 101
     or more is dropped (degree 10 rows, cap 91, stay; the server
     opens them at cap 90, gacha/catalog.go degree10OpensAt);
-  - WITHHELD below: prizes the owner dropped, and prizes whose use or
-    wear effect a later change adds (each such change deletes its line).
+  - WITHHELD below: prizes the owner dropped, and win prizes whose wear
+    effect a later change adds (each such change deletes its line);
+  - the lose set ships every native prize as it is (owner, 2026-11-28):
+    an expendable the tree lacks is staged with its v1.696 parameters
+    verbatim, whether or not the server serves its use yet (one the
+    server does not know is refused on use and nothing is spent).
 
-A prize the tree lacks that is neither withheld nor equipment refuses the
-build: the pool never pays an item with no lane.
+A prize the tree lacks that is neither withheld, equipment, nor a lose-set
+expendable refuses the build: the pool never pays an item with no lane.
 
 ===========================================================================
 """
@@ -111,8 +115,6 @@ CHARACTER_ID, CHARACTER_CODE = 1, 2
 WITHHELD = (
 	# Owner, 2026-11-27: the v1.696 fellow pets have no server lane.
 	(re.compile(r"^ITEM_(EVENT|PRE)_PET2_SCROLL_"), "dropped: PET2 fellow pet scroll"),
-	# Owner, 2026-11-27: no native amount for the random SP grant.
-	(re.compile(r"^ITEM_EVENT_SKILLPOINT_SCROLL"), "dropped: skill point scroll"),
 	# Pending: event Spirits (3.1.14.x) grant no ability yet.
 	(re.compile(r"^ITEM_EVENT_AVATAR_[MW]_(NASRUN|AMALRUN)_UNIQUE$"), "pending: event Spirit"),
 	# Pending: event avatars (3.1.13.x) need their own import.
@@ -120,14 +122,13 @@ WITHHELD = (
 	# Pending: the attach-slot flags (3.1.13.4); the Roc has no worn model.
 	(re.compile(r"^ITEM_ETC_E090429_(GACHA_)?ROC_[MW]$"), "pending: Roc flag"),
 	(re.compile(r"^ITEM_ETC_E060529_GACHA_GOLDDRAGONFLAG_"), "pending: gold dragon flag"),
-	# Pending: the alchemy catalyst (3.3.11.17) has no stone-alchemy slot.
-	(re.compile(r"^ITEM_[A-Z_]*ARCHEMY_REINFORCE_RATIO_100$"), "pending: alchemy catalyst"),
-	# Pending: the summon flowers (3.3.3.20) have no placement lane.
-	(re.compile(r"^ITEM_ETC_SUMMON_FLOWER_"), "pending: summon flower"),
-	# Pending: the Hwan look items (3.3.13.13, Param1 6) would reach the
-	# stat recall today.
-	(re.compile(r"^ITEM_ETC_WHAN_LOOK_CHANGE_"), "pending: Hwan look change"),
+	# Owner, 2026-11-28: the lose set's prizes (the skill point scroll, the
+	# alchemy catalyst, the summon flowers, the Hwan look items) are no
+	# longer withheld; they ship as native and their effects follow.
 )
+# The lose set (gachanpcmap column 4 of the normal card).
+LOSE_SET = "2"
+EXPENDABLE = ("3", "3")
 
 # The v1.696 event gear's twentieth parameter (0-based cells 156, 157):
 # "maximum sockets the item may hold", 0 or 3. The v1.150 rare row keeps
@@ -320,6 +321,26 @@ def ui_labels(ui_raw, tree_rows, media, index):
 # The variant step (variant_later_layers): stage the pool, its tables and
 # its missing prize items, or reap a previous import.
 # ================
+# convert_carried
+#
+# One v1.696 lose-set expendable (TID 3.3) under identity, every parameter
+# kept as the later client authors it: the owner ships the lose set as
+# native, and each prize's effect change reads those parameters.
+# ================
+def convert_carried(row, identity):
+	code = row[items.CODENAME]
+	if len(row) != items.ITEM_COLUMNS:
+		raise ValueError(f"Magic POP prize {code} is not a {items.ITEM_COLUMNS}-column item row")
+	if tuple(row[items.TYPE_FIRST:items.TYPE_SECOND + 1]) != EXPENDABLE:
+		raise ValueError(f"Magic POP prize {code} has no import lane (not an expendable)")
+	if not 0 < identity <= items.MAX_ID:
+		raise ValueError("imported item ID exceeds the wire width")
+	converted = list(row)
+	converted[items.IDENTITY], converted[items.PLACEHOLDER_NAME] = str(identity), items.UNUSED
+	return converted
+
+
+# ================
 def add_magic_pop(native, output, v1696_root=None, env=os.environ):
 	native, output = Path(native).resolve(), Path(output).resolve()
 	if trees_overlap(native, output):
@@ -367,8 +388,12 @@ def add_magic_pop(native, output, v1696_root=None, env=os.environ):
 		missing = sorted({code for _, code in pool if code not in present})
 		occupied = published_ids.occupied_objects(text_root, (ITEM_SHARD,))
 		allocated = published_ids.allocate(published_ids.OBJECTS, occupied, missing, prior.get("items", {}))
-		staged = [convert_gear(later_by_code[code], allocated[code]) for code in missing]
-		items.plain_worn_models(staged)
+		lose_codes = {code for row, code in pool if row[POOL_SET] == LOSE_SET}
+		carried_codes = {code for code in missing if code in lose_codes and gear_degree(later_by_code[code]) == 0}
+		gear = [convert_gear(later_by_code[code], allocated[code]) for code in missing if code not in carried_codes]
+		carried = [convert_carried(later_by_code[code], allocated[code]) for code in missing if code in carried_codes]
+		items.plain_worn_models(gear)
+		staged = gear + carried
 
 		later_texts = [row for name in nasrun.LATER_TEXT_TABLES for row in avatars.later_text_rows(media, index, name)]
 		base_names = name_path.read_bytes() if name_path.exists() else (native / TEXT_ROOT / NAME_TABLE).read_bytes()
@@ -378,7 +403,10 @@ def add_magic_pop(native, output, v1696_root=None, env=os.environ):
 		ui_path = safe_target(text_root, UI_TABLE)
 		ui_raw = read(UI_TABLE)
 		labels, absent_labels = ui_labels(ui_raw, tree_rows, media, index)
-		assets = shared.copy_asset_closure(staged, native, output, archives, worn=True) if staged else []
+		# Carried prizes have an icon and a drop model but no worn mesh.
+		assets = shared.copy_asset_closure(gear, native, output, archives, worn=True) if gear else []
+		if carried:
+			assets += shared.copy_asset_closure(carried, native, output, archives, worn=False)
 	kept_paths = {(record["archive"], record["path"]) for record in assets}
 	remove_assets(output, [record for record in prior.get("assets", [])
 		if (record["archive"], record["path"]) not in kept_paths])
