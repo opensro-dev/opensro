@@ -471,18 +471,13 @@ def merge_object_catalog_remap(current_raw, later_raw, used_ids):
 # source never translated.
 # ================
 def later_object_texts(read):
-	manifest = tables.table_rows(read("textdata_object.txt"))
-	shards = [row[0].lower() for row in manifest if row and row[0].lower().endswith(".txt")]
-	if not shards:
-		raise ValueError("v1.696 textdata_object.txt names no shards")
 	rows = []
-	for shard in shards:
-		for row in characters.translation_rows(read(shard)):
-			if len(row) < 10 or not row[2]:
-				continue
-			english = next((row[at] for at in (9, 13, 14, 15, 16)
-				if len(row) > at and row[at] not in ("0", "")), "")
-			rows.append([row[0], row[2], row[3], "", "", "", "", "", english, ""])
+	for row in tables.later_table_rows(read, "textdata_object.txt", characters.translation_rows, indexed_only=True):
+		if len(row) < 10 or not row[2]:
+			continue
+		english = next((row[at] for at in (9, 13, 14, 15, 16)
+			if len(row) > at and row[at] not in ("0", "")), "")
+		rows.append([row[0], row[2], row[3], "", "", "", "", "", english, ""])
 	return rows
 
 

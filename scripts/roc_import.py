@@ -267,7 +267,7 @@ def without_previous_gates(current, building_codes):
 # ================
 def add_gates(read, text_root):
 	source = {name: read(name) for name in TELEPORT_TABLES}
-	source["text"] = read("textdata_object.txt")
+	source["text"] = b"\xff\xfe" + tables.later_table_text(read, "textdata_object.txt").encode("utf-16-le")
 	data_rows = [row for row in tables.table_rows(source["teleportdata.txt"]) if len(row) > 3 and row[2] in GATE_CODES]
 	building_ids = {row[3] for row in data_rows if row[3] != "0"}
 	building_codes = {row[2] for row in tables.table_rows(source["teleportbuilding.txt"])

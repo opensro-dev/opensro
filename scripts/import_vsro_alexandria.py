@@ -160,25 +160,53 @@ def table_rows(raw):
 # ================
 def later_table_shards(rows):
 	listed = [row[0].strip() for row in rows if row and row[0].strip()]
-	if listed and all(len(row) == 1 and row[0].strip().lower().endswith(".txt") for row in rows if row and row[0].strip()):
-		return listed
-	return []
+	if not listed or not all(len(row) == 1 and row[0].strip().lower().endswith(".txt") for row in rows if row and row[0].strip()):
+		return []
+	# A shard is a file beside its index, named once: a path or a
+	# repeat would read outside the folder or count rows twice.
+	folded = [sro_pk2.fold_ascii(shard) for shard in listed]
+	if any("/" in shard or "\\" in shard or shard.startswith(".") for shard in folded) or len(set(folded)) != len(folded):
+		raise ValueError(f"invalid shard index entries: {listed}")
+	return listed
+
+
+# ================
+# later_shard_files
+#
+# The files a later table's rows come from: its shards (names folded to
+# lower case, as the archive index keys them) when the file is an index,
+# else the file itself. The one walk the row and text readers share.
+# ================
+def later_shard_files(read, name):
+	shards = later_table_shards(table_rows(read(name)))
+	return [sro_pk2.fold_ascii(shard) for shard in shards] or [name]
 
 
 # ================
 # later_table_rows
 #
-# A later table's rows through its shard index (later_table_shards), or
-# its own rows when the file is the table. read(name) returns a textdata
-# file's bytes; shard names are passed folded to lower case, as the
-# archive index keys them.
+# A later table's rows through its shard index, or its own rows when the
+# file is the table. read(name) returns a textdata file's bytes. parse
+# reads one file's bytes into rows (table_rows; a text table passes
+# alexandria_npcs.translation_rows, which joins a row the archive wraps
+# over lines), and runs per file so a join never crosses two shards.
+# indexed_only refuses a flat file: a reader of v1.696's layout (an id
+# cell after the service cell) must not misread VSRO's.
 # ================
-def later_table_rows(read, name):
-	rows = table_rows(read(name))
-	shards = later_table_shards(rows)
-	if not shards:
-		return rows
-	return [row for shard in shards for row in table_rows(read(sro_pk2.fold_ascii(shard)))]
+def later_table_rows(read, name, parse=table_rows, indexed_only=False):
+	files = later_shard_files(read, name)
+	if indexed_only and files == [name]:
+		raise ValueError(f"{name} is not a v1.696 shard index")
+	return [row for part in files for row in parse(read(part))]
+
+
+# ================
+# later_table_text
+#
+# A later table as one decoded text, its shards in index order.
+# ================
+def later_table_text(read, name):
+	return "".join(decode_table(read(part)) for part in later_shard_files(read, name))
 
 
 CHARACTER_CODE_COLUMN = 2

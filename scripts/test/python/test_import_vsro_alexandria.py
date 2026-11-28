@@ -43,6 +43,67 @@ def terrain(texture_ids):
 	return bytes(data)
 
 
+# ================
+# ShardTests
+#
+# The one owner of later shard indexes: what it follows, what it reads
+# as itself, and what it refuses.
+# ================
+class ShardTests(unittest.TestCase):
+	FILES = {
+		"textdata_object.txt": utf16_table([["TextData_Object_100.txt"], ["TextData_Object_200.txt"]]),
+		# A row the archive wraps over two lines, at the end of a shard.
+		"textdata_object_100.txt": utf16_table([["1", "SN_A", "Kor"], [" tail", "x"]]),
+		"textdata_object_200.txt": utf16_table([["1", "SN_B", "Kor"]]),
+		"flat.txt": utf16_table([["1", "SN_F", "Kor"]]),
+	}
+
+	# ================
+	# read
+	# ================
+	def read(self, name):
+		return self.FILES[name]
+
+	# ================
+	# test_the_parser_runs_per_shard
+	#
+	# translation_rows joins a wrapped row; run per file, the join never
+	# swallows the next shard's first row.
+	# ================
+	def test_the_parser_runs_per_shard(self):
+		import alexandria_npcs as characters
+		rows = alex.later_table_rows(self.read, "textdata_object.txt", characters.translation_rows)
+		self.assertEqual([row[1] for row in rows], ["SN_A", "SN_B"])
+		self.assertEqual(rows[0][-1], "x")
+
+	# ================
+	# test_text_and_rows_follow_the_same_files
+	# ================
+	def test_text_and_rows_follow_the_same_files(self):
+		text = alex.later_table_text(self.read, "textdata_object.txt")
+		self.assertIn("SN_A", text)
+		self.assertIn("SN_B", text)
+		self.assertNotIn("TextData_Object_100", text)
+		self.assertIn("SN_F", alex.later_table_text(self.read, "flat.txt"))
+
+	# ================
+	# test_a_v1696_reader_refuses_a_flat_table
+	# ================
+	def test_a_v1696_reader_refuses_a_flat_table(self):
+		self.assertEqual(len(alex.later_table_rows(self.read, "flat.txt")), 1)
+		with self.assertRaisesRegex(ValueError, "not a v1.696 shard index"):
+			alex.later_table_rows(self.read, "flat.txt", indexed_only=True)
+
+	# ================
+	# test_an_index_naming_a_path_or_a_repeat_refuses
+	# ================
+	def test_an_index_naming_a_path_or_a_repeat_refuses(self):
+		for entries in ([["../itemdata_5000.txt"]], [["sub/itemdata_5000.txt"]], [["ItemData_5000.txt"], ["itemdata_5000.txt"]]):
+			files = {"itemdata.txt": utf16_table(entries)}
+			with self.subTest(entries=entries), self.assertRaisesRegex(ValueError, "invalid shard index entries"):
+				alex.later_table_rows(files.__getitem__, "itemdata.txt")
+
+
 class FlagTests(unittest.TestCase):
 	def test_unset_and_off_values_are_native(self):
 		for env in ({}, {alex.FLAG_ENV: ""}, {alex.FLAG_ENV: "0"}, {alex.FLAG_ENV: "off"}, {alex.FLAG_ENV: "no"}):

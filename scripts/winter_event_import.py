@@ -281,8 +281,7 @@ def replace_text_rows(raw, symbols, rows):
 def add_winter_items(native, output, read, archives, prior):
 	text_root = output / later_world_import.TEXT_ROOT
 	native_text = Path(native) / later_world_import.TEXT_ROOT
-	later_items = {row[2]: row for name in tables.table_rows(read("itemdata.txt"))
-		for row in tables.table_rows(read(name[0])) if len(row) > 2 and row[0] == "1"}
+	later_items = {row[2]: row for row in tables.later_table_rows(read, "itemdata.txt") if len(row) > 2 and row[0] == "1"}
 	rows = []
 	for code in ITEMS:
 		row = later_items.get(code)

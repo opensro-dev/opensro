@@ -165,7 +165,7 @@ def map_page_rows(spec, read):
 	if spec.map_page is None:
 		return [], []
 	page = str(spec.map_page)
-	pages = [row[:MAPINFO_COLUMNS] for row in tables.table_rows(read("worldmap_mapinfo.txt"))
+	pages = [row[:MAPINFO_COLUMNS] for row in tables.later_table_rows(read, "worldmap_mapinfo.txt")
 		if len(row) >= MAPINFO_COLUMNS and row[0] == page]
 	if len(pages) != 1:
 		raise ValueError(f"{spec.source_label} worldmap_mapinfo names {len(pages)} rows "

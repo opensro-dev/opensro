@@ -63,7 +63,6 @@ import later_world_population
 import published_ids
 import skilldata_enc as skill_tables
 import sro_pk2
-from isror_nest_table import require_native_nest_table
 from pin_file import read_pin_field
 from prepare_client_resources import file_digest, write_atomically
 from sro_paths import trees_overlap
@@ -222,17 +221,12 @@ def require_pairing(spec, env=os.environ):
 # ================
 # later_object_text
 #
-# The later client's name table as one text. In v1.696
-# textdata_object.txt is a shard index (it lists TextData_Object_<n>
-# parts) where the VSRO client's was one file: follow the index when
-# the named file is one, and read a flat table as itself.
+# The later client's name table as one text: v1.696's shard index
+# followed, a VSRO flat table read as itself (the shard owner,
+# import_vsro_alexandria.later_table_text).
 # ================
 def later_object_text(read):
-	rows = tables.table_rows(read("textdata_object.txt"))
-	shards = [row[0] for row in rows if row]
-	if shards and all(len(row) == 1 and row[0].lower().endswith(".txt") for row in rows if row):
-		return "".join(tables.decode_table(read(name)) for name in shards)
-	return tables.decode_table(read("textdata_object.txt"))
+	return tables.later_table_text(read, "textdata_object.txt")
 
 
 #============================================================================

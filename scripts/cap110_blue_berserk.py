@@ -287,10 +287,10 @@ def add_blue_berserk(vsro_root, native, output):
 		texts = {}
 		for name, source, symbols in TEXT_FILES:
 			path = safe_target(text_root, name)
-			by_key = {row[KEY_COLUMN]: row for row in tables.table_rows(read_later(source)) if len(row) > ENGLISH_COLUMN + 1}
+			by_key = {row[KEY_COLUMN]: row for row in tables.later_table_rows(read_later, source) if len(row) > ENGLISH_COLUMN + 1}
 			raw, appended, replaced = fill_text(path.read_bytes(), by_key, symbols)
 			texts[name] = {"appended": appended, "replaced": replaced, "raw": raw}
-		later_shop = {name: tables.table_rows(read_later(name)) for name in SHOP_TABLES if name != "refshopgoods.txt"}
+		later_shop = {name: tables.later_table_rows(read_later, name) for name in SHOP_TABLES if name != "refshopgoods.txt"}
 		later_shop["refshopgoods.txt"] = []
 		variant_shop = {name: tables.table_rows(safe_target(text_root, name).read_bytes()) for name in SHOP_TABLES}
 		new_shop = shop_rows(later_shop, variant_shop)

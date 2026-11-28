@@ -159,8 +159,7 @@ def add_stones(native, output, v1696_root=None):
 		def read(name):
 			return tables.table_text(media, index, name.lower())
 
-		later_rows = [row for name in tables.table_rows(read("itemdata.txt"))
-			for row in tables.table_rows(read(name[0]))]
+		later_rows = tables.later_table_rows(read, "itemdata.txt")
 		later_texts = [row for name in nasrun.LATER_TEXT_TABLES for row in avatars.later_text_rows(media, index, name)]
 	stones = select_stones(later_rows)
 	stone_codes = {stone[2] for stone in stones}

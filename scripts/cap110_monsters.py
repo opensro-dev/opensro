@@ -437,8 +437,8 @@ def client_field_population(placements, refs):
 def client_outdoor_regions(vsro_root):
 	with open(Path(vsro_root) / "Media.pk2", "rb") as handle, mmap.mmap(handle.fileno(), 0, access=mmap.ACCESS_READ) as media:
 		index = tables.archive_index(media)
-		later = {row[2]: row for shard in tables.table_rows(tables.table_text(media, index, "characterdata.txt"))
-			for row in tables.table_rows(tables.table_text(media, index, shard[0]))}
+		later = {row[2]: row for row in tables.later_table_rows(lambda name: tables.table_text(media, index, name),
+			"characterdata.txt")}
 		placements = npcpos_placements(tables.table_text(media, index, "npcpos.txt"), later)
 	admitted = select_references(later, {code: [FIELD_FAMILY] for code in client_claimed_codes(placements)})
 	return {(region & 255, region >> 8) for code, region, x, y, z in placements
@@ -691,7 +691,7 @@ def add_monsters(vsro_root, native, output, source_root=None):
 		base_text = (text_root / "textdataname.txt").read_bytes()
 		known = {r[1] for r in characters.translation_rows(base_text) if len(r) > 1}
 		wanted = {r[5] for r in refs.values()} - known
-		texts = [[r[0], r[1], r[2], "", "", r[5], r[4], r[7], r[8], r[9], ""] for r in characters.translation_rows(read("textdata_object.txt")) if len(r) >= 10 and r[1] in wanted]
+		texts = [[r[0], r[1], r[2], "", "", r[5], r[4], r[7], r[8], r[9], ""] for r in tables.later_table_rows(read, "textdata_object.txt", characters.translation_rows) if len(r) >= 10 and r[1] in wanted]
 		if wanted - {r[1] for r in texts}:
 			raise ValueError("missing field monster names")
 		# Name rows a family that is off this build owned leave with it: the
