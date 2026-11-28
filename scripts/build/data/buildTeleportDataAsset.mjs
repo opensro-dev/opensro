@@ -46,22 +46,26 @@ function readRows( filePath ) {
 
 /*
 ================
-linkMinLevel
+linkLevelBand
 
-Port-only, not native (#4136): the required level of one teleportlink
-row - the highest minimum among its five kind-1 (level band) condition
-triples, kind/min/max at columns 6..20, the same rows the server's
-portalAdmission checks. 0 when no kind-1 condition restricts the link.
+Port-only, not native (#4136, #3541): the level band of one
+teleportlink row - the highest minimum and the lowest maximum among its
+five kind-1 (level band) condition triples, kind/min/max at columns
+6..20, the same rows the server's portalAdmission checks (it refuses
+below the minimum and above the maximum). Both 0 when no kind-1
+condition restricts the link. The v1.150 table caps 18 beginner gates
+at 1-20 and opens the Donwhang cave exit at 50-999.
 ================
 */
-function linkMinLevel( columns ) {
-	let minLevel = 0;
+function linkLevelBand( columns ) {
+	let minLevel = 0, maxLevel = 0;
 	for ( let at = 6; at + 2 < columns.length; at += 3 ) {
-		if ( Number( columns[at] ) === 1 ) {
-			minLevel = Math.max( minLevel, Number( columns[at + 1] ) >>> 0 );
-		}
+		if ( Number( columns[at] ) !== 1 ) continue;
+		const minimum = Number( columns[at + 1] ) >>> 0, maximum = Number( columns[at + 2] ) >>> 0;
+		minLevel = Math.max( minLevel, minimum );
+		maxLevel = maxLevel === 0 ? maximum : Math.min( maxLevel, maximum );
 	}
-	return minLevel;
+	return { minLevel, maxLevel };
 }
 
 /*
@@ -150,7 +154,7 @@ export function buildTeleportDataAsset() {
 			sourceId: Number( columns[1] ) >>> 0,
 			destinationId: Number( columns[2] ) >>> 0,
 			fee: Number( columns[3] ) | 0,
-			minLevel: linkMinLevel( columns )
+			...linkLevelBand( columns )
 		}) );
 	const catalog = {
 		sourcePaths: [
