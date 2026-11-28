@@ -177,8 +177,11 @@ type State struct {
 	step           int
 	random         Rand
 	initialWeather Weather
-	// gm is true while a GM's spell (Force) runs, until it fades home.
-	gm bool
+	// gm is true while a GM's spell (Force) holds the climate: from the
+	// command until the spell's duration ends, before the fade home.
+	// gmReported is the value the last Update reported, so a flip is a
+	// change even when the weather word does not move.
+	gm, gmReported bool
 }
 
 /*
@@ -220,7 +223,8 @@ func (s *State) Current() Weather { return s.cur }
 State.GMSpell
 
 Whether a GM's spell (Force) holds the climate: from the command until
-the spell runs out. A seasonal sky gives way to it (action/seasonal_sky.go).
+the spell's duration ends, before the fade home. A seasonal sky gives way
+to it (action/seasonal_sky.go); Update reports each flip as a change.
 ================
 */
 func (s *State) GMSpell() bool { return s.gm }
@@ -239,7 +243,7 @@ func (s *State) Update(nowMs int64) bool {
 		// Natively such a climate never moves. Only a GM's spell (Force)
 		// sets it going; it runs out and fades home like any spell, and
 		// once home and idle the climate is still again.
-		if s.cur == s.target && s.eventDuration == 0 {
+		if s.cur == s.target && s.eventDuration == 0 && s.gm == s.gmReported {
 			return false
 		}
 	} else if nowMs > s.nextRollAt {
@@ -253,7 +257,15 @@ func (s *State) Update(nowMs int64) bool {
 		s.gm = false
 		s.updateStep()
 	}
-	return s.fade(nowMs)
+	moved := s.fade(nowMs)
+	// A spell starting or ending changes what a seasonal sky shows even
+	// when the weather word stands still (a spell on the weather already
+	// falling, or one ending on the climate's initial weather).
+	if s.gm != s.gmReported {
+		s.gmReported = s.gm
+		return true
+	}
+	return moved
 }
 
 /*
@@ -270,6 +282,9 @@ func (s *State) roll(nowMs int64) {
 	if nowMs-s.eventStartAt < s.eventDuration {
 		return
 	}
+	// A roll past the spell's end replaces a GM's spell as well as a rolled
+	// one, so the spell is over here too (Update reports the flip).
+	s.gm = false
 	s.eventStartAt = nowMs
 	r := s.rand(rollSpan) + 1
 	switch {

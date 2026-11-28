@@ -102,8 +102,11 @@ export function debugWeather( state: EventEnvironment, mode: 1 | 2 | 3 | undefin
 ================
 releaseDebugWeather
 
-Port-only, not native: a GM's /WEATHER (gm-command.ts) drops the
-console's weather hold, so the server's weather it asks for is drawn.
+Port-only, not native: a GM's /WEATHER the server accepts (its OK reply,
+gm-command.ts gmReply weatherSet) drops the console's weather hold, so
+the server's weather it asked for is drawn. The server's SRO_GM_WEATHER
+(default off, native) gates it: off, every /WEATHER is refused and the
+native hold stands.
 Natively a console /rain or /snow holds until a console /clear and
 discards every 0x3BDE meanwhile; with the port's server command beside
 it, a forgotten /rain made /WEATHER look broken (2026-11-28). The

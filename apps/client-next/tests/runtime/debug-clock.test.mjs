@@ -168,8 +168,9 @@ test("console rain and snow hold off server weather until /clear", () => {
 	assert.deepEqual( state.effective, { mode: 3, amount: 7 } );
 });
 
-// Port-only: a GM's /WEATHER drops the hold (the worker calls the release
-// as it sends the command), so the server weather it asked for is drawn.
+// Port-only: a GM's /WEATHER the server accepts drops the hold (the worker
+// calls the release on its OK reply), so the server weather it asked for is
+// drawn.
 test("a GM /WEATHER releases a console hold; the next 3BDE lands", () => {
 	let state = entryEnvironment( {} ).state;
 	state = environmentPacket( state, 0x3bde, Uint8Array.of( 2, 90 ) ).state;

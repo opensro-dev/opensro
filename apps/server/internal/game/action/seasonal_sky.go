@@ -17,7 +17,8 @@ as ordinary weather (0x3BDE) through weather.go:
     towns (the regions that forbid player combat) snow all the time.
 
 A GM's /WEATHER on a climate wins over both while its spell runs, so a
-GM can still show rain or a clear sky anywhere. The skies hold no state
+GM can still show rain or a clear sky anywhere. In a town a snowfall
+never falls lighter than the town snow, so a snowfall is never a lull. The skies hold no state
 but the snowfall a tick last delivered (weather.go): a snowfall's
 strength comes from its start time, so a restart keeps it.
 
@@ -101,21 +102,28 @@ func (rt *Runtime) snowfallKey(now time.Time) int64 {
 ================
 Runtime.skyWeather
 
-The weather a player in region sees: a GM's spell on its climate first,
-then a decoration snowfall, then the town snow, then the climate's own
-weather. False when none applies (a climate-less region outside every
+The weather a player in region sees: a GM's spell on its climate first
+(spells is World.GMSpells, read under the weather lock), then a
+decoration snowfall, then the town snow, then the climate's own weather.
+In a town with the town snow on, a snowfall falls at least as hard as the
+town snow. False when none applies (a climate-less region outside every
 seasonal sky), which weather.go treats as natively.
 ================
 */
-func (rt *Runtime) skyWeather(world *climate.World, region uint16, snowfall int64) (climate.Weather, bool) {
+func (rt *Runtime) skyWeather(world *climate.World, region uint16, snowfall int64, spells uint32) (climate.Weather, bool) {
 	index, hasClimate := climate.RegionClimate(region)
-	if hasClimate && world.GMSpell(index) {
+	if hasClimate && spells&(1<<index) != 0 {
 		return world.Current(index), true
 	}
+	town := rt.CitySnow && townRegion(region)
 	if snowfall != 0 {
-		return climate.Weather{Kind: climate.Snow, Amount: snowfallAmount(time.Unix(snowfall, 0))}, true
+		amount := snowfallAmount(time.Unix(snowfall, 0))
+		if town {
+			amount = max(amount, citySnowAmount)
+		}
+		return climate.Weather{Kind: climate.Snow, Amount: amount}, true
 	}
-	if rt.CitySnow && townRegion(region) {
+	if town {
 		return climate.Weather{Kind: climate.Snow, Amount: citySnowAmount}, true
 	}
 	if !hasClimate {

@@ -180,3 +180,71 @@ func TestGMSpellWinsOverTheSeasonalSky(t *testing.T) {
 		t.Fatalf("the spell on Jangan's climate reached the field: %v", got)
 	}
 }
+
+/*
+================
+TestTownSnowsBackAfterASpellOnItsWeather
+
+A GM's /WEATHER that repeats the town climate's standing weather moves no
+weather word. The town still gets the GM's sky while the spell holds and
+its town snow back the tick the spell ends, not at the next roll.
+================
+*/
+func TestTownSnowsBackAfterASpellOnItsWeather(t *testing.T) {
+	rt, characters := newWeatherTestRuntime(t, true, [2]uint16{weatherJangan, weatherSnowy})
+	rt.CitySnow, rt.GMWeather = true, true
+	// The GM's spell is stamped on rt.Now, the tick on its own clock: one
+	// clock, as TestGMWeatherFadesItsClimateIn does.
+	rt.Now = func() time.Time { return time.UnixMilli(0) }
+	rt.advanceWeather(1)
+	if _, ok := rt.SetWeatherGM(testDivision, characters[0].Name, 1, 180, 1); !ok {
+		t.Fatal("SetWeatherGM refused")
+	}
+	got := weatherDeliveries(t, rt.advanceWeather(3000))
+	if !bytes.Equal(got[characters[0].ID], []byte{1, 180}) {
+		t.Fatalf("the spell's start sent %v, want the GM's clear 01 B4 in the town", got)
+	}
+	// The town's next delivery: the field's own climate may roll meanwhile.
+	var back map[int64][]byte
+	for now := int64(3000); now < 3_600_000 && back == nil; now += 3000 {
+		if out := weatherDeliveries(t, rt.advanceWeather(now)); out[characters[0].ID] != nil {
+			back = out
+		}
+	}
+	if !bytes.Equal(back[characters[0].ID], []byte{3, citySnowAmount}) {
+		t.Fatalf("after the spell the town was sent %v, want its snow 03 %02X", back, citySnowAmount)
+	}
+}
+
+/*
+================
+TestTownSnowfallNeverLighterThanTownSnow
+
+With the town snow on, a decoration snowfall drawn lighter than it falls
+at the town snow's strength in town, and at its own in the field.
+================
+*/
+func TestTownSnowfallNeverLighterThanTownSnow(t *testing.T) {
+	rt, characters := newWeatherTestRuntime(t, true, [2]uint16{weatherJangan, weatherSnowy})
+	rt.CitySnow = true
+	setDecoration(t, rt, true)
+	// The first snowfall in the window drawn lighter than the town snow.
+	start := skySnowfallStart
+	for snowfallAmount(start) >= citySnowAmount {
+		start = start.Add(2 * time.Hour)
+	}
+	if !start.Before(skySnowfallStart.AddDate(0, 0, 13)) {
+		t.Fatal("fixture: no snowfall in the window draws under the town snow")
+	}
+	at := start.Add(10 * time.Minute)
+	if _, snowing := rt.ChristmasDecoration.SnowfallAt(at); !snowing {
+		t.Skipf("the light snowfall at %v falls in the quiet hours", start)
+	}
+	rt.Now = func() time.Time { return at }
+	if got := sceneWeather(t, rt, 0, characters); !bytes.Equal(got, []byte{3, citySnowAmount}) {
+		t.Fatalf("a light snowfall in town % X, want the town snow 03 %02X", got, citySnowAmount)
+	}
+	if got := sceneWeather(t, rt, 1, characters); !bytes.Equal(got, []byte{3, snowfallAmount(start)}) {
+		t.Fatalf("a light snowfall in the field % X, want its own % X", got, snowfallAmount(start))
+	}
+}

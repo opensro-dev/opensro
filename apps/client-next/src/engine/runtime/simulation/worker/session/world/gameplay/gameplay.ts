@@ -151,7 +151,6 @@ import { type EquipmentSet, publishedEquipmentSets } from "@/engine/foundation/g
 import {
 	gmCatalog as decodeGmCatalog,
 	gmRequest,
-	isGmWeatherRequest,
 	gmReply,
 	gmItemReferences,
 	type GmCatalog,
@@ -3365,11 +3364,6 @@ state here before a command can claim a native wire conversation.
 					local?.heading ?? 0,
 					{ monster: worldReferences.monster, targetGid: targeting.selectionIntent() }
 				);
-				if ( frame && isGmWeatherRequest( frame ) ) {
-					// The server's weather replaces a console hold (event-environment.ts).
-					environment = releaseDebugWeather( environment );
-					dirty = true;
-				}
 				if ( frame ) return sendFrame( frame );
 				// The client-local family (gm-local-commands.ts): commands
 				// 509CF0 executes without a 0x75B6 frame. The chat text,
@@ -5280,6 +5274,8 @@ Packet handling must not depend on which HUD panel is currently open.
 					const reply = gmReply( frame.payload );
 					if ( reply ) {
 						gmReplies = [ ...gmReplies.slice( -99 ), { ...reply, sequence: ++gmSequence } ];
+						// An accepted /WEATHER replaces a console hold (event-environment.ts).
+						if ( reply.weatherSet ) environment = releaseDebugWeather( environment );
 						dirty = true;
 					}
 					return true;

@@ -127,7 +127,7 @@ func (rt *Runtime) SceneWeatherFrames(divisionID string, character *enterworld.C
 	if rt.weather.world == nil {
 		return nil
 	}
-	weather, ok := rt.skyWeather(rt.weather.world, region, rt.snowfallKey(rt.Now()))
+	weather, ok := rt.skyWeather(rt.weather.world, region, rt.snowfallKey(rt.Now()), rt.weather.world.GMSpells())
 	if !ok {
 		return nil
 	}
@@ -168,21 +168,26 @@ Runtime.stepWeather
 
 The locked half of a weather tick: every climate's update, and the
 crossings noted since the last tick swapped out for delivery (two
-buffers trade places, so a quiet tick allocates nothing). The world is
-written only here, on the tick goroutine, so the tick reads it unlocked
-afterwards; handlers read it under the lock.
+buffers trade places, so a quiet tick allocates nothing). The weather
+words are written only here, on the tick goroutine, so the tick reads
+them unlocked afterwards; handlers read them under the lock. A GM's
+Force writes the spell state under the lock from a handler, so the
+spells mask the delivery decides by is read here too.
 ================
 */
-func (rt *Runtime) stepWeather(nowMs int64) (*climate.World, uint32, []weatherCrossing) {
+func (rt *Runtime) stepWeather(nowMs int64) (*climate.World, uint32, uint32, []weatherCrossing) {
 	rt.weather.mu.Lock()
 	defer rt.weather.mu.Unlock()
 	world := rt.weather.world
 	if world == nil {
-		return nil, 0, nil
+		return nil, 0, 0, nil
 	}
 	crossings := rt.weather.crossings
 	rt.weather.crossings, rt.weather.spare = rt.weather.spare[:0], crossings
-	return world, world.Update(nowMs), crossings
+	changed := world.Update(nowMs)
+	// The GM spells are read here, under the lock SetWeatherGM's Force
+	// takes: the delivery after the unlock decides each sky from them.
+	return world, changed, world.GMSpells(), crossings
 }
 
 /*
@@ -197,7 +202,7 @@ crossed it allocates nothing.
 ================
 */
 func (rt *Runtime) advanceWeather(nowMs int64) []simulation.DivisionFrames {
-	world, changed, crossings := rt.stepWeather(nowMs)
+	world, changed, spells, crossings := rt.stepWeather(nowMs)
 	if world == nil {
 		return nil
 	}
@@ -219,7 +224,7 @@ func (rt *Runtime) advanceWeather(nowMs int64) []simulation.DivisionFrames {
 			if !skyTurned && (!ok || changed&(1<<index) == 0) {
 				return true
 			}
-			weather, ok := rt.skyWeather(world, owner.region, snowfall)
+			weather, ok := rt.skyWeather(world, owner.region, snowfall, spells)
 			if !ok {
 				weather = climate.Weather{}
 			}
@@ -230,7 +235,7 @@ func (rt *Runtime) advanceWeather(nowMs int64) []simulation.DivisionFrames {
 	for _, crossing := range crossings {
 		// A region without a climate keeps the zero weather word (see the
 		// file banner), so the crossing still sends it.
-		weather, ok := rt.skyWeather(world, crossing.region, snowfall)
+		weather, ok := rt.skyWeather(world, crossing.region, snowfall, spells)
 		if !ok {
 			weather = climate.Weather{}
 		}

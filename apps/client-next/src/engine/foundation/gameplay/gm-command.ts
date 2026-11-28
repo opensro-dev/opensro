@@ -141,6 +141,9 @@ export interface GmReply {
 	readonly text?: string;
 	readonly key?: string;
 	readonly console: boolean;
+	// The server accepted a port /WEATHER (event-environment.ts
+	// releaseDebugWeather).
+	readonly weatherSet?: true;
 }
 
 /*
@@ -422,7 +425,10 @@ export function gmReply( p: Uint8Array ): GmReply | null {
 		// The port's moderation, notice and weather answers carry the
 		// server's text on both results (gmcommand/moderation.go, notice.go,
 		// admin.go), so the GM always reads why.
-		return { console: true, text: (result === 1 ? "-> " : "Failed. -> ") + string() };
+		const text = (result === 1 ? "-> " : "Failed. -> ") + string();
+		return code === GM_WEATHER && result === 1 ?
+			{ console: true, text, weatherSet: true } :
+			{ console: true, text };
 	}
 	if ( code === GM_FORGE ) {
 		// The port's /FORGE answer: one guide line per ack (the forged
@@ -574,18 +580,6 @@ function warpFrame( region: number, x: number, y: number, z: number, heading: nu
 	v.setFloat32( 11, z, true );
 	v.setUint16( 15, heading, true );
 	return { opcode: OP_GM_COMMAND, payload };
-}
-
-/*
-================
-isGmWeatherRequest
-
-Whether a frame gmRequest built is the port's /WEATHER (port-only, not
-native): the worker drops the console's weather hold when it sends one.
-================
-*/
-export function isGmWeatherRequest( frame: { readonly opcode: number; readonly payload: Uint8Array; } ): boolean {
-	return frame.opcode === OP_GM_COMMAND && frame.payload[0] === GM_WEATHER;
 }
 
 /*

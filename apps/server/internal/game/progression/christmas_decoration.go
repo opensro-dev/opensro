@@ -11,8 +11,9 @@ snowfalls on its timetable (owner, 2026-11-28; christmas_snow.go). The
 snowfalls are weather (action/seasonal_sky.go), not the event group: the
 client draws the group's snow at one fixed strength, and the owner asked
 for each snowfall's strength to vary. Nothing else: no event notices, no
-Snow Slaves or flakes, no Jewel Boxes, no Server Missions. It shares the Christmas switch and window,
-in its own mode, so it never runs beside another Christmas event
+Snow Slaves or flakes, no Jewel Boxes, no Server Missions. It shares the
+Christmas switch and window, in its own mode, so it never runs beside
+another Christmas event
 (christmas_mode.go).
 
 ===========================================================================
