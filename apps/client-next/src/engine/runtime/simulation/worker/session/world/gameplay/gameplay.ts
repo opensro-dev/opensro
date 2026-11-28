@@ -624,6 +624,9 @@ const ACTION_STATE_ARM = 1;
 const QUEUED_COMMANDS = 2;
 const ITEM_NOTICE_CATEGORY = 1;
 const ITEM_INTERACTION_REFUSAL = 0x35;
+// 6CB5C0 prints {1, 0x34} (UIIT_MSG_STRGERR_STORAGE_OPERATION_BLOCKED)
+// when an Item Mall purchase is confirmed while the interface is busy.
+const MALL_PURCHASE_BLOCKED = 0x34;
 // 6FCD50's skill-use notices: category 4, code 0x11 refuses a targetless press
 // of a target-required skill, code 0x21 refuses a rider.
 const SKILL_NOTICE_CATEGORY = 4;
@@ -4479,7 +4482,18 @@ state here before a command can claim a native wire conversation.
 				return inventory.move( command.source, command.destination, command.quantity, now );
 			}
 			if ( command.kind === "mall-open" ) return inventory.openMall( now );
-			if ( command.kind === "mall-buy" ) return inventory.purchaseMall( command.request, now );
+			if ( command.kind === "mall-buy" ) {
+				// CIFItemMall_OnPurchaseDialogResult (6CB5C0): the purchase
+				// box's OK (context 15) tests CGInterface_IsInteractionBlocked
+				// (67D090) first; while it holds, 6CB60F prints {1, 0x34},
+				// rebuilds the box and never reaches SubmitCartPurchase.
+				if ( interactionBlocked() ) {
+					const notice = constantNativeNotice( ITEM_NOTICE_CATEGORY, MALL_PURCHASE_BLOCKED );
+					if ( notice ) api.notice( notice );
+					return null;
+				}
+				return inventory.purchaseMall( command.request, now );
+			}
 			if ( command.kind === "mall-silk-inquire" ) return inventory.inquireMallSilkHistory( command.period, now );
 			if ( command.kind === "market" ) return inventory.requestMarket( command.request, now );
 			if ( command.kind === "shop-open" ) {
