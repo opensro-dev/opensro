@@ -264,3 +264,33 @@ func TestStableKeeperCreditSaturates(t *testing.T) {
 		t.Fatalf("gold %d, vehicle %+v", goldOf(c), c.ActiveCOS)
 	}
 }
+
+/*
+================
+TestStableKeeperSaleTravelsOnTheClientsOpcodes
+
+Through the hub: the v1.150 client's sale box sends 0x71DC (6FF980)
+and reads the answer on 0xB1DC (7782E0). The numbers are the client's,
+written here as literals - the v1.188 server's 0x70C7 never reaches it.
+================
+*/
+func TestStableKeeperSaleTravelsOnTheClientsOpcodes(t *testing.T) {
+	const clientSellRequest, clientSellAnswer uint16 = 0x71dc, 0xb1dc
+	rt, c, _ := stableFixture(t)
+	standVehicle(t, c, rt, 3910, "COS_T_DONKEY")
+	srv := wireStartServer(t, rt)
+	client := wireConnect(t, srv, testDivision, c.Name)
+
+	client.send(t, clientSellRequest, sellRequest(stableNpcGid, 3))
+	for range 64 {
+		frame := client.readFrame(t)
+		if frame.Opcode != clientSellAnswer {
+			continue
+		}
+		if !bytes.Equal(frame.Payload, []byte{1, 3}) {
+			t.Fatalf("the sale answered % X, want 01 03", frame.Payload)
+		}
+		return
+	}
+	t.Fatal("no 0xB1DC answer to the client's 0x71DC sale")
+}
