@@ -132,36 +132,36 @@ TestKeyHashesAreKeyedStableAndGrouped
 ================
 */
 func TestKeyHashesAreKeyedStableAndGrouped(t *testing.T) {
-	ipKey, netKey := keyHashes(testKey, "203.0.113.9")
+	ipKey, netKey := AddressKeys(testKey, "203.0.113.9")
 	if ipKey == "" || netKey == "" || ipKey == netKey {
 		t.Fatalf("hashes = %q, %q", ipKey, netKey)
 	}
 	// Stable within the key, also through a host:port peer form.
-	if again, _ := keyHashes(testKey, "203.0.113.9:5000"); again != ipKey {
+	if again, _ := AddressKeys(testKey, "203.0.113.9:5000"); again != ipKey {
 		t.Fatalf("same address hashed differently: %q != %q", again, ipKey)
 	}
 	// Another key names another client entirely.
-	if other, _ := keyHashes([]byte("another-key"), "203.0.113.9"); other == ipKey {
+	if other, _ := AddressKeys([]byte("another-key"), "203.0.113.9"); other == ipKey {
 		t.Fatal("hash does not depend on the key")
 	}
 	// Same /24: different addresses, one network.
-	_, neighbourNet := keyHashes(testKey, "203.0.113.200")
+	_, neighbourNet := AddressKeys(testKey, "203.0.113.200")
 	if neighbourNet != netKey {
 		t.Fatal("two addresses in one /24 hashed to different networks")
 	}
 	// Another /24: another network.
-	if _, otherNet := keyHashes(testKey, "203.0.114.9"); otherNet == netKey {
+	if _, otherNet := AddressKeys(testKey, "203.0.114.9"); otherNet == netKey {
 		t.Fatal("two /24 networks hashed alike")
 	}
 	// IPv6 groups at /48.
-	_, v6NetA := keyHashes(testKey, "2001:db8:1:2::1")
-	_, v6NetB := keyHashes(testKey, "2001:db8:1:9::5")
-	_, v6NetC := keyHashes(testKey, "2001:db8:2::1")
+	_, v6NetA := AddressKeys(testKey, "2001:db8:1:2::1")
+	_, v6NetB := AddressKeys(testKey, "2001:db8:1:9::5")
+	_, v6NetC := AddressKeys(testKey, "2001:db8:2::1")
 	if v6NetA != v6NetB || v6NetA == v6NetC {
 		t.Fatalf("ipv6 networks: %q %q %q", v6NetA, v6NetB, v6NetC)
 	}
 	// A stand-in peer hashes to nothing, never to a guess.
-	if ip, net := keyHashes(testKey, "fake:0"); ip != "" || net != "" {
+	if ip, net := AddressKeys(testKey, "fake:0"); ip != "" || net != "" {
 		t.Fatalf("unparseable address hashed: %q %q", ip, net)
 	}
 }
@@ -179,7 +179,7 @@ func TestEnteredRowClosesAtSessionEnd(t *testing.T) {
 	if open.ended != 0 || open.account != "alice" || open.character != "Hero" || open.transport != "websocket" {
 		t.Fatalf("open row = %+v", open)
 	}
-	if want, _ := keyHashes(testKey, "203.0.113.9"); open.ipKey != want {
+	if want, _ := AddressKeys(testKey, "203.0.113.9"); open.ipKey != want {
 		t.Fatalf("ip key = %q, want %q", open.ipKey, want)
 	}
 	journal.CloseSession("boot:1", nil)
