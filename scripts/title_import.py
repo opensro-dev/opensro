@@ -51,6 +51,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 import later_tables  # noqa: E402
 import sro_pk2  # noqa: E402
+from import_vsro_alexandria import records  # noqa: E402
 from pin_file import require_pinned_archive  # noqa: E402
 from prepare_client_resources import write_atomically  # noqa: E402
 from sro_paths import MAIN_CHECKOUT_ROOT  # noqa: E402
@@ -76,7 +77,7 @@ SPEECH_ENGLISH_FIELD = 9
 def parse_ref_titles(text):
 	"""RefTitle rows as (id, codename, category, SN code); strict."""
 	rows = []
-	for line in text.splitlines():
+	for line in records(text):
 		if not line.strip():
 			continue
 		fields = line.split("\t")
@@ -105,7 +106,7 @@ def parse_speech_formats(texts):
 	"""
 	formats = {}
 	for text in texts:
-		for line in text.splitlines():
+		for line in records(text):
 			fields = line.split("\t")
 			if len(fields) <= SPEECH_ENGLISH_FIELD:
 				continue

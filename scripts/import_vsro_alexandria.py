@@ -167,12 +167,24 @@ def end_last_record(text):
 	return text + "\r\n"
 
 
+def records(text):
+	"""
+	The records of decoded textdata text, by the rule above: split at CRLF
+	or a lone CR, or at LF in a text with no CR at all. The empty piece
+	after a final record end is dropped, as str.splitlines() drops it, so a
+	reader that rewrites a table with CRLF joins writes the records it read.
+	Every textdata reader splits through here, never with splitlines().
+	"""
+	parts = RECORD_END.split(text) if "\r" in text else text.split("\n")
+	if parts and parts[-1] == "":
+		parts.pop()
+	return parts
+
+
 def table_rows(raw):
 	"""Tab-split records of a textdata file, comment and blank records dropped."""
-	text = decode_table(raw)
-	records = RECORD_END.split(text) if "\r" in text else text.split("\n")
 	rows = []
-	for record in records:
+	for record in records(decode_table(raw)):
 		if not record.strip() or record.startswith("//"):
 			continue
 		rows.append(record.split("\t"))

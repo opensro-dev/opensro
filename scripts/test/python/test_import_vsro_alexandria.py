@@ -107,6 +107,21 @@ class RecordTests(unittest.TestCase):
 		table = alex.end_last_record("1\tA\r\n1\tB\tline\n") + "1\tC\r\n"
 		self.assertEqual([row[1] for row in alex.table_rows(table.encode("cp949"))], ["A", "B", "C"])
 
+	# ================
+	# test_records_keep_cell_breaks_and_rejoin_to_the_same_table
+	#
+	# records, the split every line-oriented reader shares: a cell's LF and
+	# U+2028 stay in their record, the empty piece after the last CRLF is
+	# dropped (as splitlines drops it), so a CRLF rejoin rewrites the table
+	# byte for byte.
+	# ================
+	def test_records_keep_cell_breaks_and_rejoin_to_the_same_table(self):
+		table = "1\tA\tone\ntwo\r\n1\tB\tsep x\r\n1\tC\r\n"
+		self.assertEqual(alex.records(table), ["1\tA\tone\ntwo", "1\tB\tsep x", "1\tC"])
+		self.assertEqual("\r\n".join(alex.records(table)) + "\r\n", table)
+		self.assertEqual(alex.records(""), [])
+		self.assertEqual(alex.records("1\tA\n2\tB"), ["1\tA", "2\tB"])
+
 
 class FlagTests(unittest.TestCase):
 	def test_unset_and_off_values_are_native(self):
