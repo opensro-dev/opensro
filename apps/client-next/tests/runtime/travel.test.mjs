@@ -98,7 +98,7 @@ test("portal catalogue carries each link's required level and defaults an unleve
 			{ id: 3, npcRefObjId: 0, nameSymbol: "SN_C", codeName: "GATE_C" }
 		],
 		linkRows: [
-			{ sourceId: 1, destinationId: 2, fee: 0, minLevel: 20 },
+			{ sourceId: 1, destinationId: 2, fee: 0, minLevel: 20, maxLevel: 999 },
 			// A catalogue published before the level was recorded
 			// decodes as unrestricted rather than failing the load.
 			{ sourceId: 1, destinationId: 3, fee: 5 }
@@ -106,7 +106,9 @@ test("portal catalogue carries each link's required level and defaults an unleve
 	};
 	const catalog = decodePortalCatalog( raw );
 	assert.equal( catalog.links[0]?.minLevel, 20 );
+	assert.equal( catalog.links[0]?.maxLevel, 999 );
 	assert.equal( catalog.links[1]?.minLevel, 0 );
+	assert.equal( catalog.links[1]?.maxLevel, 0 );
 	assert.throws( () =>
 		decodePortalCatalog( { ...raw, linkRows: [ { sourceId: 1, destinationId: 2, fee: 0, minLevel: -1 } ] } )
 	);
@@ -130,6 +132,16 @@ test("a noted level refusal names the required level after the native line; unno
 	assert.equal( noticeText( copy, unnoted ), "Cannot transport because n does not meet the requirement." );
 	// A noted level never annotates another refusal.
 	assert.equal( defined( portalNotice( 0xb495, Uint8Array.of( 2, 0x10 ), 20 ) ).suffix, undefined );
+});
+test("a capped band names both ends, an open band names its minimum (#3541)", () => {
+	const suffix = ( minLevel, maxLevel ) =>
+		defined( portalNotice( 0xb495, Uint8Array.of( 2, 0x15 ), minLevel, maxLevel ) ).suffix;
+	// The 18 beginner gates refuse a player above 20: the tag says so.
+	assert.equal( suffix( 1, 20 ), " [Lv: 1-20]" );
+	// 999 is teleportlink's "no cap" (the Donwhang cave exit, 50-999).
+	assert.equal( suffix( 50, 999 ), " [Lv: 50]" );
+	assert.equal( suffix( 90, 0 ), " [Lv: 90]" );
+	assert.equal( suffix( 0, 0 ), undefined );
 });
 test("a gate refusal answers with the noted level once, then the note is retired", () => {
 	const g = createGameplay( () => {} );
@@ -158,7 +170,7 @@ test("gate travel notes the level for its refusal without changing the native re
 	latch.writeUInt32LE( 7 );
 	core.receive( { opcode: 0x32a6, payload: latch }, 0 );
 	drain( core );
-	core.command( { kind: "travel-gate", gid: 7, type: 2, target: 9, minLevel: 20 }, 0 );
+	core.command( { kind: "travel-gate", gid: 7, type: 2, target: 9, minLevel: 1, maxLevel: 20 }, 0 );
 	// The noted level never reaches the wire.
 	assert.deepEqual(
 		sent.at( -1 ),
@@ -169,7 +181,7 @@ test("gate travel notes the level for its refusal without changing the native re
 	const batch = drain( core );
 	const states = (batch?.events ?? []).filter( e => e.kind === "gameplay" ).map( e => e.state );
 	const notices = states.flatMap( s => s.notices ?? [] );
-	assert.equal( notices.at( -1 )?.suffix, " [Lv: 20]" );
+	assert.equal( notices.at( -1 )?.suffix, " [Lv: 1-20]" );
 	core.dispose();
 });
 const bootstrap = {

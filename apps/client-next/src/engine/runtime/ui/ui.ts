@@ -4557,22 +4557,25 @@ export function createUi( ports: UiPorts ) {
 			const conversation = view.gameplay?.npcConversation;
 			if ( conversation && conversation.phase === "menu" ) {
 				const target = Number( id.slice( 11 ) );
-				// Port-only, not native (#4136): the clicked link's own
-				// required level rides the command (never the wire) so
-				// a level refusal can name it; unrestricted links and
-				// an unloaded catalogue note nothing.
+				// Port-only, not native (#4136, #3541): the clicked link's
+				// own level band rides the command (never the wire) so a
+				// level refusal can name it; unrestricted links and an
+				// unloaded catalogue note nothing.
 				const portals = hud.data()?.portals,
 					npc = view?.entities.find( e => e.gid === conversation.gid ),
 					source = portals?.destinations.find( d => d.ref === npc?.refObjId ),
-					minLevel = source ?
-						(portals?.links.find( l => l.source === source.id && l.target === target )?.minLevel ?? 0) :
-						0;
+					link = source ?
+						portals?.links.find( l => l.source === source.id && l.target === target ) :
+						undefined,
+					minLevel = link?.minLevel ?? 0,
+					maxLevel = link?.maxLevel ?? 0;
 				sendGameplay( {
 					kind: "travel-gate",
 					gid: conversation.gid,
 					type: 2,
 					target,
-					...(minLevel > 0 ? { minLevel } : {})
+					...(minLevel > 0 ? { minLevel } : {}),
+					...(maxLevel > 0 ? { maxLevel } : {})
 				} );
 			}
 			return;

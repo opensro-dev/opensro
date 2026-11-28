@@ -15,9 +15,16 @@ import { PORTAL_RESULT_OPCODE } from "@/engine/contracts/opcodes";
 export type PortalId = number & { readonly __portalId: unique symbol; };
 export interface PortalCatalog {
 	readonly destinations: readonly { id: PortalId; ref: number; name: string; code: string; }[];
-	// minLevel: the link's required level (its kind-1 condition's
-	// minimum, published by buildTeleportDataAsset); 0 = unrestricted.
-	readonly links: readonly { source: PortalId; target: PortalId; fee: number; minLevel: number; }[];
+	// minLevel/maxLevel: the link's level band (its kind-1 condition's
+	// minimum and maximum, published by buildTeleportDataAsset); 0 =
+	// unrestricted on that side.
+	readonly links: readonly {
+		source: PortalId;
+		target: PortalId;
+		fee: number;
+		minLevel: number;
+		maxLevel: number;
+	}[];
 }
 /*
 ================
@@ -53,15 +60,16 @@ export function decodePortalCatalog( value: unknown ): PortalCatalog {
 		const source = integer( r.sourceId, 1 ) as PortalId,
 			target = integer( r.destinationId, 1 ) as PortalId,
 			fee = integer( r.fee ),
-			// A catalogue published before #4136 carries no level: it
-			// decodes as unrestricted rather than failing the load.
-			minLevel = r.minLevel === undefined ? 0 : integer( r.minLevel );
+			// A catalogue published before #4136 (no level) or #3541 (no
+			// maximum) decodes as unrestricted rather than failing the load.
+			minLevel = r.minLevel === undefined ? 0 : integer( r.minLevel ),
+			maxLevel = r.maxLevel === undefined ? 0 : integer( r.maxLevel );
 		const key = source + ":" + target;
 		if ( !ids.has( source ) || !ids.has( target ) || seen.has( key ) ) {
 			throw Error( "Unresolved/duplicate portal link" );
 		}
 		seen.add( key );
-		return { source, target, fee, minLevel };
+		return { source, target, fee, minLevel, maxLevel };
 	} );
 	return { destinations, links };
 }
@@ -179,20 +187,45 @@ The 0xB495 refusal byte a link's kind-1 level condition answers with
 const PORTAL_LEVEL_REFUSAL_CODE = 0x15;
 /*
 ================
+PORTAL_LEVEL_OPEN_MAX
+
+The maximum teleportlink authors on a band with no real cap (the
+Donwhang cave exit, 50-999): no character reaches it, so the tag names
+the minimum alone.
+================
+*/
+const PORTAL_LEVEL_OPEN_MAX = 999;
+/*
+================
+portalLevelTag
+
+Port-only, not native (#4136, #3541): the suffix a level refusal
+carries for the noted band - " [Lv: 50]" for an open band, and
+" [Lv: 1-20]" for a capped one, where the refused player may be too
+high rather than too low. Empty when nothing restricts the link.
+================
+*/
+function portalLevelTag( minLevel: number, maxLevel: number ): string {
+	const capped = maxLevel > 0 && maxLevel < PORTAL_LEVEL_OPEN_MAX;
+	if ( capped ) return " [Lv: " + minLevel + "-" + maxLevel + "]";
+	return minLevel > 0 ? " [Lv: " + minLevel + "]" : "";
+}
+/*
+================
 portalNotice
 
 75B930 -> 689420 category 13. Preserve silent native codes and route
 authored refusals through the shared guide/banner owner.
 
 Port-only, not native (#4136, owner decision 2026-11-23, default on):
-when the answer refuses for level and the request's link requirement
-was noted (gameplay's gate-travel note), the notice carries the
-required level as a suffix the one text formatter appends after the
-native line. A refusal with nothing noted (a walk-in gate, whose link
+when the answer refuses for level and the request's link band was
+noted (gameplay's gate-travel note), the notice carries the band as a
+suffix the one text formatter appends after the native line
+(portalLevelTag). A refusal with nothing noted (a walk-in gate, whose link
 this client never chose) keeps the native line alone.
 ================
 */
-export function portalNotice( opcode: number, p: Uint8Array, requiredLevel = 0 ): SystemNotice | null {
+export function portalNotice( opcode: number, p: Uint8Array, minLevel = 0, maxLevel = 0 ): SystemNotice | null {
 	if ( opcode !== PORTAL_RESULT_OPCODE ) return null;
 	if ( p[0] === 1 ) {
 		if ( p.length !== 1 ) throw Error( "Invalid portal success" );
@@ -200,8 +233,7 @@ export function portalNotice( opcode: number, p: Uint8Array, requiredLevel = 0 )
 	}
 	if ( p.length !== 2 || p[0] !== 2 ) throw Error( "Invalid portal refusal" );
 	const notice = constantNativeNotice( 13, p[1]! );
-	if ( notice && p[1] === PORTAL_LEVEL_REFUSAL_CODE && requiredLevel > 0 ) {
-		return { ...notice, suffix: " [Lv: " + requiredLevel + "]" };
-	}
+	const tag = portalLevelTag( minLevel, maxLevel );
+	if ( notice && p[1] === PORTAL_LEVEL_REFUSAL_CODE && tag ) return { ...notice, suffix: tag };
 	return notice;
 }

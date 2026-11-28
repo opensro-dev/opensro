@@ -1551,12 +1551,12 @@ attack can arrive in the same batch as the previous close and starve the walk.
 	// success as "Location has been set."; keyed on the flight like the
 	// rename's, for the same reason.
 	let reverseFlight = 0;
-	// Port-only, not native (#4136): the required level of the gate link
-	// whose 0x7495 request is still unanswered, noted by the world core
-	// as the request goes out (noteGateTravel). The 0xB495 answer reads
-	// it (the level refusal names it) and retires it, whatever it says,
-	// so a later walk-in refusal never inherits a stale level.
-	let gateTravelLevel = 0;
+	// Port-only, not native (#4136, #3541): the level band of the gate
+	// link whose 0x7495 request is still unanswered, noted by the world
+	// core as the request goes out (noteGateTravel). The 0xB495 answer
+	// reads it (the level refusal names it) and retires it, whatever it
+	// says, so a later walk-in refusal never inherits a stale band.
+	let gateTravelMinLevel = 0, gateTravelMaxLevel = 0;
 	// A crest register upload (#2282) stays in flight until the upload
 	// lane answers; a second confirmed register is held while one is
 	// outstanding. The success box is the 0xB5BD answer's business, not
@@ -6694,9 +6694,9 @@ Packet handling must not depend on which HUD panel is currently open.
 					reverseFlight = 0;
 				}
 				// Port-only (#4136): a 0xB495 answer retires the noted
-				// gate level; the level refusal below reads the note.
-				const notedGateLevel = gateTravelLevel;
-				if ( frame.opcode === PORTAL_RESULT_OPCODE ) gateTravelLevel = 0;
+				// gate band; the level refusal below reads the note.
+				const notedMinLevel = gateTravelMinLevel, notedMaxLevel = gateTravelMaxLevel;
+				if ( frame.opcode === PORTAL_RESULT_OPCODE ) gateTravelMinLevel = gateTravelMaxLevel = 0;
 				const refusal = (portLine ?
 					{ key: "", value: 0, text: portLine, nativeType: 5 as const } :
 					undefined) ??
@@ -6710,7 +6710,7 @@ Packet handling must not depend on which HUD panel is currently open.
 						undefined) ??
 					recallAppointmentNotice( frame.opcode, frame.payload ) ??
 					targetNotice( frame.opcode, frame.payload ) ??
-					portalNotice( frame.opcode, frame.payload, notedGateLevel ) ??
+					portalNotice( frame.opcode, frame.payload, notedMinLevel, notedMaxLevel ) ??
 					repairNotice( frame.opcode, frame.payload ) ??
 					inventoryNotice( frame.opcode, frame.payload, localCountry, mallRequest ) ??
 					alchemyNotice( frame.opcode, frame.payload ) ??
@@ -6782,14 +6782,15 @@ Packet handling must not depend on which HUD panel is currently open.
 ================
 noteGateTravel
 
-Port-only, not native (#4136): the world core notes the clicked gate
-link's required level as its 0x7495 request goes out; the 0xB495
-answer reads the note (a level refusal names the level) and retires
-it. A level of 0 notes nothing.
+Port-only, not native (#4136, #3541): the world core notes the
+clicked gate link's level band as its 0x7495 request goes out; the
+0xB495 answer reads the note (a level refusal names the band) and
+retires it. A band of 0/0 notes nothing.
 ================
 		*/
-		noteGateTravel( level: number ) {
-			gateTravelLevel = level;
+		noteGateTravel( minLevel: number, maxLevel = 0 ) {
+			gateTravelMinLevel = minLevel;
+			gateTravelMaxLevel = maxLevel;
 		},
 		/*
 ================

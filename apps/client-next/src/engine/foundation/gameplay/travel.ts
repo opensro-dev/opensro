@@ -95,10 +95,11 @@ export type GateCommand = {
 	readonly gid: number;
 	readonly type: 1 | 2 | 5;
 	readonly target: number;
-	// Port-only, not native (#4136): the clicked link's required level,
-	// noted so a level refusal can name it. gateRequest never writes it
-	// to the wire; only the refusal mapper reads it.
+	// Port-only, not native (#4136, #3541): the clicked link's level
+	// band, noted so a level refusal can name it. gateRequest never
+	// writes it to the wire; only the refusal mapper reads it.
 	readonly minLevel?: number;
+	readonly maxLevel?: number;
 } | { readonly kind: "travel-instance"; readonly gid: number; readonly target: number; };
 
 /*
