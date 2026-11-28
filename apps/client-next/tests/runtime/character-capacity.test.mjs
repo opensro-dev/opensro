@@ -14,7 +14,7 @@ import { pathToFileURL as sourceFileUrl } from "node:url";
 import { test } from "node:test";
 import assert from "node:assert/strict";
 
-const { createCharacters } = await import(
+const { createCharacters, BATCH_IDLE_SECONDS } = await import(
 	sourceFileUrl( "src/engine/runtime/renderer/characters/characters.ts" ).href
 );
 const { CHARACTER_ASSEMBLIES, CHARACTER_MODELS, CHARACTER_RESIDENT_BYTES, characterBytes } = await import(
@@ -98,6 +98,21 @@ const visible = d => ({
 	count: d.count,
 	instances: d.instances.slice( 0, d.count * 16 ),
 	bones: d.bones.slice( 0, d.count * 16 )
+});
+/*
+================
+byActor
+
+A draw's rows, each its instance and its one-joint palette, in actor (x)
+order: an opaque batch's row order is not drawn (stable slots).
+================
+*/
+const byActor = d => ({
+	count: d.count,
+	rows: Array.from( { length: d.count }, ( _, i ) => ({
+		instance: Array.from( d.instances.slice( i * 16, i * 16 + 16 ) ),
+		bones: Array.from( d.bones.slice( i * 16, i * 16 + 16 ) )
+	}) ).sort( ( a, b ) => a.instance[12] - b.instance[12] )
 });
 
 test("the CPU evaluation total keeps the work of evaluators that retired", () => {
@@ -360,7 +375,7 @@ test("retained actor batches follow model and material variant changes", () => {
 			try {
 				oracle.owner.model( "other", model, [] );
 				oracle.owner.actors( rows );
-				assert.deepEqual( actual.map( visible ), oracle.owner.prepare( oracle.gpu, {}, 257 ).map( visible ) );
+				assert.deepEqual( actual.map( byActor ), oracle.owner.prepare( oracle.gpu, {}, 257 ).map( byActor ) );
 			} finally {
 				oracle.owner.dispose( oracle.gpu, null );
 			}
@@ -616,8 +631,10 @@ test("capacity changes retire obsolete batches before allocating replacement ban
 		assert.equal( held, 12 );
 		owner.actors( population( "b", 8, "a", 4 ) );
 		owner.prepare( gpu, {}, 257 );
-		assert.equal( held, 12 );
-		assert.equal( peak, 12 );
+		// "a" keeps its 8 rows of storage for 4 actors (one band, charged);
+		// "b" outgrew its 4 and retired them before allocating 8.
+		assert.equal( held, 16 );
+		assert.equal( peak, 16 );
 	} finally {
 		owner.dispose( gpu, null );
 	}
@@ -647,6 +664,121 @@ test("capacity retains geometry through membership changes with exact fresh-fram
 		f.owner.invalidate();
 		f.owner.prepare( f.gpu, {}, 257 );
 		assert.equal( f.stats().uploads, 3 );
+	} finally {
+		f.owner.dispose( f.gpu, null );
+	}
+});
+
+test("a batch keeps its storage a band down, and the render budget charges what it keeps", () => {
+	const f = fixture(), fresh = fixture();
+	try {
+		f.owner.actors( actors( [ 1, 2, 3, 4, 5, 6, 7, 8 ], 0 ) );
+		f.owner.prepare( f.gpu, {}, 257 );
+		const uploads = f.stats().uploads;
+		f.owner.actors( actors( [ 1, 2, 3, 4 ], 0 ) );
+		f.owner.prepare( f.gpu, {}, 257 );
+		assert.equal( f.stats().uploads, uploads, "four rows draw from the eight-row batch" );
+		assert.equal( f.stats().releases, 0 );
+		fresh.owner.actors( actors( [ 1, 2, 3, 4 ], 0 ) );
+		fresh.owner.prepare( fresh.gpu, {}, 257 );
+		assert.ok( f.owner.stats().renderBytes > fresh.owner.stats().renderBytes, "the kept band is charged" );
+		f.owner.actors( actors( [ 1 ], 0 ) );
+		f.owner.prepare( f.gpu, {}, 257 );
+		assert.equal( f.stats().releases, 1, "two bands down retires the batch" );
+	} finally {
+		f.owner.dispose( f.gpu, null );
+		fresh.owner.dispose( fresh.gpu, null );
+	}
+});
+test("an idle batch takes its key's next rows without an upload, and goes after its idle time", () => {
+	const f = fixture();
+	try {
+		f.owner.actors( actors( [ 1 ], 0 ) );
+		f.owner.prepare( f.gpu, {}, 257, undefined, false, 0 );
+		const uploads = f.stats().uploads;
+		f.owner.actors( [] );
+		assert.deepEqual( f.owner.prepare( f.gpu, {}, 257, undefined, false, .5 ), [] );
+		assert.equal( f.stats().releases, 0 );
+		assert.ok( f.owner.stats().renderBytes > 0, "the idle batch is charged" );
+		f.owner.actors( actors( [ 2 ], 0 ) );
+		const draws = f.owner.prepare( f.gpu, {}, 257, undefined, false, 1 );
+		assert.equal( f.stats().uploads, uploads );
+		assert.equal( draws[0].instances[12], 2, "the new actor's row" );
+		f.owner.actors( [] );
+		f.owner.prepare( f.gpu, {}, 257, undefined, false, 1.5 );
+		f.owner.prepare( f.gpu, {}, 257, undefined, false, 1.5 + BATCH_IDLE_SECONDS );
+		assert.equal( f.stats().releases, 0 );
+		f.owner.prepare( f.gpu, {}, 257, undefined, false, 1.6 + BATCH_IDLE_SECONDS );
+		assert.equal( f.stats().releases, 1 );
+	} finally {
+		f.owner.dispose( f.gpu, null );
+	}
+});
+test("opaque rows keep their slots and uploads carry only the changed rows, exactly", () => {
+	// The device fake applies only the rows an update names, as the GPU
+	// buffer does: any row the owner forgets to name stays stale.
+	const f = fixture(), ranges = [];
+	f.gpu.updateInstances = ( d, m, opacity, appearance, lights, offsets, rows ) => {
+		const next = new Float32Array( m.length );
+		next.set( d.instances.subarray( 0, Math.min( d.instances.length, m.length ) ) );
+		if ( rows ) next.set( m.subarray( rows.first * 16, rows.end * 16 ), rows.first * 16 );
+		else next.set( m );
+		ranges.push( rows ? [ rows.first, rows.end ] : "full" );
+		d.instances = next;
+		d.count = d.instanceCount = m.length / 16;
+		return d;
+	};
+	const populations = [
+		[ 1, 2, 3, 4 ],
+		[ 1, 3, 4 ],
+		[ 1, 3, 4, 5 ],
+		[ 3, 4, 5 ],
+		[ 3, 4, 5, 6 ],
+		[ 6, 7, 3, 4 ]
+	];
+	try {
+		populations.forEach( ( gids, frame ) => {
+			const rows = actors( gids, 0 );
+			f.owner.actors( rows );
+			ranges.length = 0;
+			const actual = f.owner.prepare( f.gpu, {}, 257 );
+			const oracle = fixture();
+			try {
+				oracle.owner.actors( rows );
+				const expected = oracle.owner.prepare( oracle.gpu, {}, 257 );
+				assert.deepEqual( actual.map( byActor ), expected.map( byActor ), `frame ${frame}` );
+			} finally {
+				oracle.owner.dispose( oracle.gpu, null );
+			}
+			if ( frame === 1 ) {
+				// Actor 2 left row 1: actor 4 moves from row 3 into it, alone.
+				assert.deepEqual( ranges, [ [ 1, 2 ] ] );
+				assert.deepEqual( Array.from( actual[0].instances.filter( ( _, i ) => i % 16 === 12 ) ), [ 1, 4, 3 ] );
+			}
+			if ( frame === 2 ) assert.deepEqual( ranges, [ [ 3, 4 ] ], "an arrival appends one row" );
+		} );
+	} finally {
+		f.owner.dispose( f.gpu, null );
+	}
+});
+test("a moved row keeps its actor for picking and shadows", () => {
+	const f = fixture();
+	const placed = gids => actors( gids, 0 ).map( a => ({ ...a, shadowSize: 1, pose: { ...a.pose, x: a.gid * 5 } }) );
+	// A ray down +z through x hits only the actor standing there.
+	const at = x => ({ start: [ x, 0, 0 ], delta: [ 0, 0, 100 ] });
+	try {
+		f.owner.actors( placed( [ 1, 2, 3, 4 ] ) );
+		f.owner.prepare( f.gpu, {}, 257 );
+		f.owner.actors( placed( [ 1, 3, 4 ] ) );
+		const draws = f.owner.prepare( f.gpu, {}, 257 );
+		// Actor 4 now draws from row 1 (stableSlots).
+		assert.deepEqual( Array.from( draws[0].instances.filter( ( _, i ) => i % 16 === 12 ) ), [ 5, 20, 15 ] );
+		assert.equal( f.owner.pick( [ at( 20 ) ], 0 )?.gid, 4 );
+		assert.equal( f.owner.pick( [ at( 15 ) ], 0 )?.gid, 3 );
+		assert.equal( f.owner.pick( [ at( 10 ) ], 0 ), null, "the departed actor's spot" );
+		// Nearest first from x 0: actors 1, 3, 4, each with its own row.
+		const rows = f.owner.shadowCandidates( draws, [ 0, 0, 10 ], 1 ).map( c => c.parts[0].instance );
+		assert.deepEqual( rows.map( row => draws[0].instances[row * 16 + 12] ), [ 5, 15, 20 ] );
 	} finally {
 		f.owner.dispose( f.gpu, null );
 	}

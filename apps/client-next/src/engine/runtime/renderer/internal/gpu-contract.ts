@@ -460,6 +460,11 @@ export interface DrawRelease {
 GeometryCommands
 ================
 */
+// A coalesced range of instance rows, [first, end).
+export interface InstanceRows {
+	first: number;
+	end: number;
+}
 export interface GeometryCommands {
 	// Port-only, not native: coverage-alpha siblings for the fullscreen HDR
 	// scratch target consumed by HdrDraw.encodePreview. Portraits use the
@@ -551,13 +556,16 @@ export interface GeometryCommands {
 	// Forgets a dynamicVertices draw's CPU mirror once its positions are final
 	// (a settled frontend scene); a later position or vertex write throws.
 	dropMirror( draw: GeometryDraw ): void;
+	// rows, when given, names the only rows whose values changed since the
+	// last update (a coalesced range); the other rows keep their packed bytes.
 	updateInstances(
 		draw: GeometryDraw,
 		instances: Float32Array,
 		opacity?: Float32Array,
 		appearance?: Float32Array,
 		pointLights?: Float32Array,
-		paletteOffsets?: Uint32Array
+		paletteOffsets?: Uint32Array,
+		rows?: InstanceRows
 	): GeometryDraw;
 	updateTransform( draw: GeometryDraw, transform: Float32Array ): void;
 	// The resident weather drops (weather-particles.ts): records of new drops

@@ -22,6 +22,8 @@ globalThis.GPUTextureUsage = { TEXTURE_BINDING: 1, COPY_DST: 2 };
 function fixture( dynamicVertices = true ) {
 	const samplers = [],
 		writes = [],
+		// The buffer each write landed in, in order.
+		targets = [],
 		gpu = {
 			createBuffer( { size } ) {
 				return { size, bytes: new Uint8Array( size ), destroy() {} };
@@ -50,6 +52,7 @@ function fixture( dynamicVertices = true ) {
 				writeBuffer( buffer, offset, data, start, length ) {
 					buffer.bytes.set( new Uint8Array( data, start, length ), offset );
 					writes.push( { offset, length } );
+					targets.push( buffer );
 				}
 			}
 		};
@@ -87,7 +90,7 @@ function fixture( dynamicVertices = true ) {
 	};
 	const draw = resources.commands.upload( data );
 	writes.length = 0;
-	return { resources, data, draw, writes, samplers };
+	return { resources, data, draw, writes, samplers, instanceStore: () => targets.at( -1 ) };
 }
 test("sparse writes are byte-identical to full repacking, including unchanged vertex attributes", () => {
 	const sparse = fixture(), full = fixture();
@@ -188,4 +191,46 @@ test("texture settings rebind retained geometry without uploading buffers and su
 	assert.notEqual( expanded.binding, grown );
 	assert.equal( expanded.instanceCount, 2 );
 	f.resources.dispose();
+});
+
+test("a ranged instance update writes only its rows, byte-identical to a full repack, cloth base included", () => {
+	for ( const cloth of [ false, true ] ) {
+		const run = ranged => {
+			const f = fixture();
+			const create = f.resources.commands;
+			// The draw under test: plain, or a skinned mesh with a cloth stream,
+			// whose rows carry the stream's base (markCloth).
+			const draw = cloth ?
+				create.upload( {
+					...f.data,
+					dynamicVertices: false,
+					joints: new Uint16Array( 400 ),
+					weights: Float32Array.from( { length: 400 }, ( _, i ) => i % 4 ? 0 : 1 ),
+					bones: Float32Array.of( 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1 ),
+					clothStream: Int32Array.of( 0, 1, 2 )
+				} ) :
+				f.draw;
+			const rows = count => Float32Array.from( { length: count * 16 }, ( _, i ) => i % 17 );
+			const opacity = count => Float32Array.from( { length: count }, ( _, i ) => (i + 1) / 10 );
+			let current = create.updateInstances( draw, rows( 8 ), opacity( 8 ) );
+			const next = rows( 8 ), fade = opacity( 8 );
+			for ( let i = 3 * 16; i < 6 * 16; i++ ) next[i] += 5;
+			for ( let i = 3; i < 6; i++ ) fade[i] = .05;
+			f.writes.length = 0;
+			current = ranged ?
+				create.updateInstances( current, next, fade, undefined, undefined, undefined, { first: 3, end: 6 } ) :
+				create.updateInstances( current, next, fade );
+			return { f, writes: f.writes.slice(), current };
+		};
+		const sparse = run( true ), full = run( false );
+		assert.equal( sparse.current.instanceCount, 8 );
+		assert.equal( sparse.writes.length, 1, "one coalesced write" );
+		assert.equal( sparse.writes[0].length, 3 * 160 );
+		assert.equal( sparse.writes[0].offset - full.writes[0].offset, 3 * 160, "written at row 3" );
+		// Every byte of the written instance store equals the full repack's.
+		const store = run => new Uint8Array( run.f.instanceStore().bytes );
+		assert.deepEqual( store( sparse ), store( full ), cloth ? "cloth" : "plain" );
+		sparse.f.resources.dispose();
+		full.f.resources.dispose();
+	}
 });

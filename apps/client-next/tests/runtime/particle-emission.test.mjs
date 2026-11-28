@@ -15,7 +15,9 @@ import assert from "node:assert/strict";
 const { particleEmission, particleBirthFrames } = await import(
 	"../../src/engine/foundation/animation/particle-emission.ts"
 );
-const { createCharacters } = await import( "../../src/engine/runtime/renderer/characters/characters.ts" );
+const { createCharacters, BATCH_IDLE_PREPARES } = await import(
+	"../../src/engine/runtime/renderer/characters/characters.ts"
+);
 const { createParticleReference } = await import( "../helpers/particle-reference.mjs" );
 const emitter = { start: 2, duration: 10, period: 2, limit: 3, rate: .5 };
 test("fractional emission accumulates across opportunities and stops at its cumulative cap", () => {
@@ -146,6 +148,8 @@ test("particle batches retain GPU storage while retired rows become empty and re
 		assert.equal( f.releases, 0 );
 	}
 	f.step( [] );
+	assert.equal( f.releases, 0, "an emptied batch idles for its key's next rows" );
+	for ( let i = 0; i < BATCH_IDLE_PREPARES; i++ ) f.step( [] );
 	assert.equal( f.releases, 1 );
 });
 

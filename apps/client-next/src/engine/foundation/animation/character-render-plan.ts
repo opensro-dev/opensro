@@ -121,6 +121,9 @@ export function createCharacterRenderPlan( model: CharacterModel, caches?: Chara
 			createParticleGraphPlan( model.particleGraph, model.primitives ) :
 			undefined,
 		sharedPalette: characterSharedPalette( model ),
+		// A primitive whose glow rides the row states once a batch holds more
+		// than one row (characterRowGlow): a one-row batch keeps the uniform.
+		rowGlow: model.primitives.some( p => characterRowGlow( p ) ),
 		particleBytes: model.primitives.reduce(
 			( sum, p ) => sum + (p.emission?.capacity ?? p.emission?.births.length ?? 0) * 320,
 			0

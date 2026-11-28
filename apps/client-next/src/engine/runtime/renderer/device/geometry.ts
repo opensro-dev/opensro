@@ -32,6 +32,7 @@ binding 16.
 import {
 	createInstancePacking,
 	instanceCapacity,
+	INSTANCE_ROW_BYTES,
 	ROW_STATE_FLOATS
 } from "@/engine/foundation/rendering/geometry-instances";
 import { CLOTH_NO_SLOT, CLOTH_STREAM_WORDS, validClothStreamSlots } from "@/engine/foundation/animation/cloth-stream";
@@ -57,7 +58,12 @@ import { DEFAULT_BLEND, type GeometryPipelineState, type SceneSurface } from "./
 import { D3DBLEND_SRCCOLOR, D3DBLEND_ZERO, type BlendPair } from "@/engine/foundation/rendering/blend-state";
 import type { Geometry } from "@/engine/contracts/geometry";
 import { meshArrays, packGeometryVertices, sameMesh } from "@/engine/foundation/rendering/geometry-vertices";
-import type { GeometryCommands, GeometryDraw, ImageDraw } from "@/engine/runtime/renderer/internal/gpu-contract";
+import type {
+	GeometryCommands,
+	GeometryDraw,
+	ImageDraw,
+	InstanceRows
+} from "@/engine/runtime/renderer/internal/gpu-contract";
 import type { ImageLeases } from "./images";
 
 // A bound slab range: buffer, offset and size are all set.
@@ -1148,7 +1154,8 @@ export function createGeometryResources(
 			opacity?: Float32Array,
 			appearance?: Float32Array,
 			pointLights?: Float32Array,
-			paletteOffsets?: Uint32Array
+			paletteOffsets?: Uint32Array,
+			rows?: InstanceRows
 		): GeometryDraw {
 			const gpu = current(), buffers = geometryBuffers.get( draw );
 			if ( !buffers ) {
@@ -1157,11 +1164,38 @@ export function createGeometryResources(
 			const meta = metadata.get( draw )!;
 			if ( meta.palette ) validatePaletteOffsets( paletteOffsets, meta.boneBytes, meta.jointMaximum );
 			else if ( paletteOffsets ) throw Error( "Palette offsets require shared bone storage" );
-			const count = instances.length / 16,
-				packed = markCloth(
-					packInstances( instances, opacity, appearance, pointLights, paletteOffsets ),
-					meta.clothBase
-				);
+			const count = instances.length / 16;
+			if ( rows && count <= draw.instanceCapacity ) {
+				const { first, end } = rows;
+				if ( !Number.isInteger( first ) || !Number.isInteger( end ) || first < 0 || end > count ) {
+					throw Error( "Invalid instance rows" );
+				}
+				if ( end > first ) {
+					const range = markCloth(
+						packInstances(
+							instances.subarray( first * 16, end * 16 ),
+							opacity?.subarray( first, end ),
+							appearance?.subarray( first * 8, end * 8 ),
+							pointLights?.subarray( first * 12, end * 12 ),
+							paletteOffsets?.subarray( first, end )
+						),
+						meta.clothBase
+					);
+					writeStream(
+						meta.instances.buffer,
+						meta.instances.offset + first * INSTANCE_ROW_BYTES,
+						range,
+						meta.cpuUploads
+					);
+				}
+				DeviceDraw.select( meta.selection, draw.count, count );
+				objectCull.refresh( meta.selection );
+				return draw;
+			}
+			const packed = markCloth(
+				packInstances( instances, opacity, appearance, pointLights, paletteOffsets ),
+				meta.clothBase
+			);
 			if ( count <= draw.instanceCapacity ) {
 				// As with position/index/bone writes, the device's uncaptured
 				// error listener owns write failures. Scopes are for allocation.

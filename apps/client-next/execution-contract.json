@@ -3388,6 +3388,20 @@
 		},
 		{
 			"file": "src/engine/runtime/renderer/characters/characters.ts",
+			"expression": "probe?.characterCount",
+			"function": "instanceRows",
+			"kind": "callback",
+			"reason": "Optional synchronous frame-owner observer; records render stages and pose counts without changing the frame. Replaces source rewriting."
+		},
+		{
+			"file": "src/engine/runtime/renderer/characters/characters.ts",
+			"expression": "probe?.characterCount",
+			"function": "admitBatch",
+			"kind": "callback",
+			"reason": "Optional synchronous frame-owner observer; records render stages and pose counts without changing the frame. Replaces source rewriting."
+		},
+		{
+			"file": "src/engine/runtime/renderer/characters/characters.ts",
 			"expression": "probe?.characterMark",
 			"function": "countPlan",
 			"kind": "callback",

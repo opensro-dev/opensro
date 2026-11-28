@@ -28,7 +28,7 @@ async function load( entry ) {
 	return import( sourceFileUrl( entry ).href );
 }
 const { createCharacterPresentation } = await load( "src/engine/runtime/characters/characters.ts" );
-const { createCharacters } = await load( "src/engine/runtime/renderer/characters/characters.ts" );
+const { createCharacters, BATCH_IDLE_PREPARES } = await load( "src/engine/runtime/renderer/characters/characters.ts" );
 const { createModelMaterialClocks } = await load( "src/engine/foundation/animation/model-material-clock.ts" );
 const { createPresentationRandom } = await load( "src/engine/runtime/random/random.ts" );
 let publishedRosterValue, publishedItemsValue;
@@ -1471,6 +1471,8 @@ test("failed model loading permits movement, despawn and a paced successful retr
 	f.failures.add( "http://localhost/assets/1.glb" );
 	f.step( [], 4 );
 	assert.deepEqual( f.actors, [] );
+	// The emptied batches idle, then go (this fixture's renderer clock stands still).
+	for ( let i = 0; i < BATCH_IDLE_PREPARES; i++ ) f.step( [], 4 );
 	assert.ok( f.released > 0 );
 	f.dispose();
 });
