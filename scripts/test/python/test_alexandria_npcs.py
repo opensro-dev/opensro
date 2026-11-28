@@ -3,9 +3,10 @@
 
 test_alexandria_npcs.py - the VSRO city's NPCs in the v1.150 layout
 
-Synthetic tables, no game data: the characterdata column conversion, the
-NPC class gate, and a merge of one NPC with its position, talk row, shop,
-size and texts.
+Synthetic tables: the characterdata column conversion and its element
+resists, the NPC class gate, and a merge of one NPC with its position,
+talk row, shop, size and texts. One census reads the built native tree
+when there is one.
 
 	py -3 -B -m unittest discover -s scripts/test/python
 
@@ -18,6 +19,12 @@ import unittest
 from pathlib import Path
 
 import alexandria_npcs as npcs  # noqa: E402
+import cap110_item_import  # noqa: E402
+import later_tables  # noqa: E402
+from sro_paths import EXTRACTED_ROOT  # noqa: E402
+
+CENSUS_ROOT = EXTRACTED_ROOT / cap110_item_import.TEXT_ROOT
+CENSUS_UNIQUE_ROWS = 27
 
 
 # ================
@@ -53,7 +60,8 @@ class ColumnTests(unittest.TestCase):
 		vsro = vsro_character(26792, "NPC_SD_M_AREA_POTION")
 		native = npcs.convert_character(vsro)
 		self.assertEqual(len(native), npcs.NATIVE_CHARACTER_COLUMNS)
-		# Columns 0..60 keep their place, the six resistances are zero.
+		# Columns 0..60 keep their place, the six resistances follow the
+		# level (an NPC row without one resists nothing).
 		self.assertEqual(native[:61][5], "SN_NPC_SD_M_AREA_POTION")
 		self.assertEqual(native[61:67], ["0"] * 6)
 		# VSRO 61 is native 67; the combat block (VSRO 71..) is native 77..
@@ -77,6 +85,42 @@ class ColumnTests(unittest.TestCase):
 	def test_a_row_of_another_width_is_refused(self):
 		with self.assertRaises(ValueError):
 			npcs.convert_character(vsro_character(1, "NPC_X")[:-1])
+
+
+# ================
+# ResistTests
+#
+# The six element resists a converted row takes: the native level curve,
+# none for a structure. The census pins the curve to the native tree
+# when one is built (#4802).
+# ================
+class ResistTests(unittest.TestCase):
+	def converted(self, level, tid=("1", "2", "1")):
+		row = vsro_character(1, "MOB_X", tid)
+		row[npcs.LEVEL_COLUMN] = str(level)
+		return npcs.convert_character(row)[npcs.RESISTANCE_AT:npcs.RESISTANCE_AT + npcs.RESISTANCE_COUNT]
+
+	def test_the_curve_doubles_the_level_then_steps(self):
+		self.assertEqual([npcs.level_resist(level) for level in (0, 1, 2, 20, 39, 40, 41, 42, 50, 94, 95, 136, 137, 140, 150)],
+			[0, 0, 4, 40, 78, 78, 78, 79, 82, 89, 90, 92, 93, 93, 93])
+
+	def test_a_converted_row_takes_its_levels_resist_in_all_six(self):
+		self.assertEqual(self.converted(50), ["82"] * npcs.RESISTANCE_COUNT)
+		self.assertEqual(self.converted(1), ["0"] * npcs.RESISTANCE_COUNT)
+
+	def test_a_structure_resists_nothing(self):
+		self.assertEqual(self.converted(5, ("1", "2", npcs.STRUCTURE_TYPE)), ["0"] * npcs.RESISTANCE_COUNT)
+
+	@unittest.skipUnless((CENSUS_ROOT / "characterdata.txt").is_file(), "no built native tree")
+	def test_the_curve_is_every_native_rows_but_the_uniques(self):
+		rows = later_tables.Archive.tree(CENSUS_ROOT).rows("characterdata.txt")
+		misses = [row[npcs.CODENAME_COLUMN] for row in rows
+			if len(row) == npcs.NATIVE_CHARACTER_COLUMNS and row[npcs.LEVEL_COLUMN].isdigit()
+			and row[npcs.RESISTANCE_AT:npcs.RESISTANCE_AT + npcs.RESISTANCE_COUNT] != [str(npcs.element_resist(row))] * npcs.RESISTANCE_COUNT]
+		# v1.150's own exceptions: 27 unique rows (and their clones) resist
+		# above their level; nothing else misses.
+		self.assertLessEqual(len(misses), CENSUS_UNIQUE_ROWS, misses[:5])
+		self.assertTrue(all(code.startswith("MOB_") for code in misses), misses[:5])
 
 
 # ================
@@ -178,12 +222,31 @@ def rows_of(merged, name):
 class MergeTests(unittest.TestCase):
 	# ================
 	# test_unquoted_translation_continuation_preserves_the_english_name
+	#
+	# VSRO's Tausert record as the archive holds it: a U+2028 inside the
+	# German cell. The record stays one, every cell keeps its own text,
+	# and a rewrite gives the bytes back (#4608).
 	# ================
 	def test_unquoted_translation_continuation_preserves_the_english_name(self):
-		raw = utf16([["1", "SN_NPC_SD_T_AREA_THIEF", "ko", "", "tw", "cn", "German"], [" Tausert", "ja", "Thief Union President Tausert", "vi", "pt", "ru", "tr", "es", "ar"]])
+		record = ["1", "SN_NPC_SD_T_AREA_THIEF", "ko", "", "tw", "cn", "Pr\u00e4sident der Diebe\u2028 Tausert", "ja",
+			"Thief Union President Tausert", "Tausert"]
+		raw = utf16([record, ["1", "SN_NEXT", "ko"]])
 		rows = npcs.translation_rows(raw)
-		self.assertEqual(len(rows), 1)
-		self.assertEqual(rows[0][8], "Thief Union President Tausert")
+		self.assertEqual(rows, [record, ["1", "SN_NEXT", "ko"]])
+		self.assertEqual(b"\xff\xfe" + npcs.table_text(rows).encode("utf-16-le"), raw)
+
+	# ================
+	# test_a_rewrite_keeps_an_in_cell_lf
+	#
+	# The v1.150 name table holds 2470 LFs inside cells; read and written
+	# back, each record stays one record (the old line split made it two:
+	# 11428 records became 12420).
+	# ================
+	def test_a_rewrite_keeps_an_in_cell_lf(self):
+		raw = b"\xff\xfe" + "1\tSN_A\tline one\nline two\tEnglish\r\n1\tSN_B\tko\tB\r\n".encode("utf-16-le")
+		rows = npcs.translation_rows(raw)
+		self.assertEqual([row[1] for row in rows], ["SN_A", "SN_B"])
+		self.assertEqual(b"\xff\xfe" + npcs.table_text(rows).encode("utf-16-le"), raw)
 
 	# ================
 	# test_missing_armor_placement_uses_the_authored_region_only

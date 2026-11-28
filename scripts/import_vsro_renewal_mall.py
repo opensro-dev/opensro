@@ -35,7 +35,7 @@ import later_tables
 import alexandria_npcs as characters
 import sro_pk2
 from convert_images import save_image_payload
-from import_vsro_alexandria import decode_table, verify_vsro_archive
+from import_vsro_alexandria import decode_table, records, verify_vsro_archive
 from import_vsro_tomb_minimap import ddj_payload
 from sro_paths import PUBLIC_ROOT
 
@@ -231,7 +231,7 @@ def layout_strings(text, keys):
 	"""
 	wanted = set(keys)
 	strings = {}
-	for line in text.splitlines():
+	for line in records(text):
 		columns = line.split("\t")
 		if len(columns) <= characters.TEXT_ENGLISH_COLUMN or columns[0].strip() != "1":
 			continue

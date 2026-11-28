@@ -105,6 +105,18 @@ class RenewalMallImportTest(unittest.TestCase):
 			{"UIIT_STT_SILKMALL_BUY_LIST": "Buying list"},
 		)
 
+	def test_a_caption_with_a_line_break_in_its_cell_is_whole(self):
+		# textuisystem holds in-cell LFs (56 records in v1.150's, 110 in
+		# iSRO-R's); a record ends only at CRLF (#4608).
+		table = (
+			"1\tUIIT_STT_SILKMALL_BUY_LIST\tkr\t\tzh\tcn\tde\tjp\tBuying\nlist\r\n"
+			"1\tUIIT_STT_UNUSED\tkr\t\tzh\tcn\tde\tjp\tUnused\r\n"
+		)
+		self.assertEqual(
+			layout_strings(table, ["UIIT_STT_SILKMALL_BUY_LIST"]),
+			{"UIIT_STT_SILKMALL_BUY_LIST": "Buying\nlist"},
+		)
+
 
 if __name__ == "__main__":
 	unittest.main()

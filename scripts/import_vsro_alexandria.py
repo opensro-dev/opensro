@@ -138,13 +138,56 @@ def decode_table(raw):
 	return raw.decode("cp949", errors="replace")
 
 
+# A textdata record ends at CRLF (or a lone CR): the asset build's reader
+# (textDataIo.mjs readLocalizedTextDataRowsSync) and the writers
+# (cap110_blue_berserk.fill_text) split the same way. A bare LF or a
+# U+2028 inside a record is cell text, and the clients ship plenty: the
+# v1.150 textdataname.txt 2470 in-cell LFs, its textquest.txt 19808, the
+# v1.696 textquest families about 43000, VSRO's Tausert name a U+2028.
+# Across the 2466 v1.696, 155 VSRO and 98 v1.150 textdata files no record
+# starts after one (#4608). str.splitlines() cut every one of them and
+# also splits on U+2028, \x85 and the other separators: a later quest's
+# English lost its tail, and a translation_rows rewrite of the v1.150 name
+# table grew it from 11428 records to 12420. A file with no CR at all
+# (only test fixtures, by that census) keeps LF as its record end.
+RECORD_END = re.compile(r"\r\n?")
+
+
+def end_last_record(text):
+	"""
+	text with its last record ended, by table_rows' rule, so rows appended
+	after it start a record of their own: CRLF is added unless the text is
+	empty or already ends at CRLF or a lone CR (or, with no CR anywhere,
+	at LF). A bare LF in a CRLF table is cell text, not an end (#4608).
+	"""
+	if not text or text.endswith("\r"):
+		return text
+	if text.endswith("\r\n") or (text.endswith("\n") and "\r" not in text):
+		return text
+	return text + "\r\n"
+
+
+def records(text):
+	"""
+	The records of decoded textdata text, by the rule above: split at CRLF
+	or a lone CR, or at LF in a text with no CR at all. The empty piece
+	after a final record end is dropped, as str.splitlines() drops it, so a
+	reader that rewrites a table with CRLF joins writes the records it read.
+	Every textdata reader splits through here, never with splitlines().
+	"""
+	parts = RECORD_END.split(text) if "\r" in text else text.split("\n")
+	if parts and parts[-1] == "":
+		parts.pop()
+	return parts
+
+
 def table_rows(raw):
-	"""Tab-split rows of a textdata file, comment and blank lines dropped."""
+	"""Tab-split records of a textdata file, comment and blank records dropped."""
 	rows = []
-	for line in decode_table(raw).splitlines():
-		if not line.strip() or line.startswith("//"):
+	for record in records(decode_table(raw)):
+		if not record.strip() or record.startswith("//"):
 			continue
-		rows.append(line.split("\t"))
+		rows.append(record.split("\t"))
 	return rows
 
 

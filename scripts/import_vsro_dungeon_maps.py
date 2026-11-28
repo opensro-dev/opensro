@@ -34,7 +34,7 @@ import later_tables
 import alexandria_npcs as characters
 import sro_pk2
 from convert_images import save_image_payload
-from import_vsro_alexandria import verify_vsro_archive
+from import_vsro_alexandria import records, verify_vsro_archive
 from import_vsro_tomb_minimap import ddj_payload, entry_name
 from sro_paths import PUBLIC_ROOT
 
@@ -65,13 +65,13 @@ LABEL_FONT_COLUMN = 14
 
 
 def table_text(raw):
-	"""A text table's lines; the client ships UTF-16 and CP949 ones."""
+	"""A text table's records; the client ships UTF-16 and CP949 ones."""
 	if raw[:2] == b"\xff\xfe":
-		return raw.decode("utf-16").splitlines()
+		return records(raw.decode("utf-16"))
 	try:
-		return raw.decode("utf-8").splitlines()
+		return records(raw.decode("utf-8"))
 	except UnicodeDecodeError:
-		return raw.decode("cp949", "replace").splitlines()
+		return records(raw.decode("cp949", "replace"))
 
 
 def map_rows(lines):

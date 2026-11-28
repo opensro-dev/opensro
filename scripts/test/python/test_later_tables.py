@@ -31,8 +31,8 @@ def utf16(rows):
 FILES = {
 	# v1.696: an index naming its shards in the archive's own mixed case.
 	"textdata_object.txt": utf16([["TextData_Object_100.txt"], ["TextData_Object_200.txt"]]),
-	# A row the archive wraps over two lines, at the end of a shard.
-	"textdata_object_100.txt": utf16([["1", "SN_A", "Kor"], [" tail", "x"]]),
+	# A record whose cell holds an LF, at the end of a shard.
+	"textdata_object_100.txt": b"\xff\xfe" + "1\tSN_A\tKor\n tail\tx\r\n".encode("utf-16-le"),
 	"textdata_object_200.txt": utf16([["1", "SN_B", "Kor"]]),
 	# VSRO: textdataname.txt indexes other tables' files.
 	"textdataname.txt": utf16([["TextData_Equip&Skill.txt"], ["TextData_Object_200.txt"]]),
@@ -82,8 +82,8 @@ class ArchiveTests(unittest.TestCase):
 	# ================
 	# test_rows_follow_the_index_and_parse_per_shard
 	#
-	# translation_rows joins a wrapped row; run per file, the join never
-	# swallows the next shard's first row.
+	# A record with an in-cell LF stays one; read per file, a record never
+	# runs into the next shard's first row.
 	# ================
 	def test_rows_follow_the_index_and_parse_per_shard(self):
 		rows = self.source.rows("TextData_Object.txt", characters.translation_rows)
@@ -132,7 +132,8 @@ class ArchiveTests(unittest.TestCase):
 	def test_a_v1696_reader_refuses_a_whole_table(self):
 		with self.assertRaisesRegex(ValueError, "not a v1.696 shard index"):
 			self.source.rows("flat.txt", indexed_only=True)
-		self.assertEqual(len(self.source.rows("textdata_object.txt", indexed_only=True)), 3)
+		# Two records: SN_A (its cell's LF kept) and SN_B.
+		self.assertEqual(len(self.source.rows("textdata_object.txt", indexed_only=True)), 2)
 
 	# ================
 	# test_a_missing_table_is_an_error_unless_optional

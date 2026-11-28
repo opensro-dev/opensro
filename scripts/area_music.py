@@ -320,9 +320,7 @@ def append_cp949(native_raw, rows):
 	"""The native CP949 table with rows appended (unchanged when there are none)."""
 	if not rows:
 		return native_raw
-	text = native_raw.decode("cp949")
-	if not text.endswith("\n"):
-		text += "\r\n"
+	text = stage1.end_last_record(native_raw.decode("cp949"))
 	return (text + "\r\n".join(rows) + "\r\n").encode("cp949")
 
 

@@ -389,7 +389,7 @@ def strip_joined(output, joined):
 		path = safe_target(output / TEXT_ROOT, name)
 		if not path.exists():
 			continue
-		lines = tables.decode_table(path.read_bytes()).splitlines()
+		lines = tables.records(tables.decode_table(path.read_bytes()))
 		kept = [line for line in lines if not joined_row(name, line.split("\t"), joined)]
 		if len(kept) != len(lines):
 			write_atomically(path, b"\xff\xfe" + ("\r\n".join(kept) + "\r\n").encode("utf-16-le"))
@@ -487,7 +487,7 @@ def strip_rent(output, terms):
 	path = safe_target(output / TEXT_ROOT, RENT_TABLE)
 	if not path.exists():
 		return
-	lines = tables.decode_table(path.read_bytes()).splitlines()
+	lines = tables.records(tables.decode_table(path.read_bytes()))
 	kept = [line for line in lines if not (len(line.split("\t")) > RENT_CODE and line.split("\t")[RENT_CODE] in terms)]
 	if len(kept) == len(lines):
 		return
