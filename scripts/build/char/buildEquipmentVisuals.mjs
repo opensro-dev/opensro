@@ -35,6 +35,7 @@ import { buildStatePath } from "../../lib/generatedRoot.mjs";
 import { parseCharacterBsr } from "./formats.mjs";
 import { loadEquipmentRecords } from "./equipmentVisualRecords.mjs";
 import { loadVisualChanges, NASRUN_SKILL_MARKER } from "./visualChanges.mjs";
+import { laterTransformAuras, loadLaterAnimationSources } from "./laterAnimationSets.mjs";
 import { wornEffectRows } from "./equipmentParticles.mjs";
 import { equipmentGlowCatalog, equipmentGlowModelIds, equipmentGlowGlb } from "./equipmentGlowMetadata.mjs";
 import { publishEquipmentParticleMetadata } from "./equipmentParticles.mjs";
@@ -79,7 +80,15 @@ export function itemSetAction( set, donorWithReads ) {
 		outputRoot: set.held ? PLAIN_ITEM_SET_ROOT : path.join( publicAssetsRoot, "char", "equipment" ),
 		outputs: [ fileName ],
 		code: [ MODULE_FILE ],
-		params: { key: set.key, donorBsr: set.donor.bsrPath, paths: set.paths, held: set.held },
+		// ownModifiers joins the params only when set, so a v1.150 item set's
+		// action key (and its GLB) is unchanged by the Spirit costume's rule.
+		params: {
+			key: set.key,
+			donorBsr: set.donor.bsrPath,
+			paths: set.paths,
+			held: set.held,
+			...(set.ownModifiers ? { ownModifiers: true } : {})
+		},
 		discoverRoots: ITEM_SET_READ_ROOTS,
 		run: async ( { outputRoot } ) => {
 			const { donor: found, reads } = await donorWithReads( set.donor );
@@ -90,6 +99,7 @@ export function itemSetAction( set, donorWithReads ) {
 				...found,
 				pieces: set.paths.map( ( itemBsrPath, i ) => ({ part: `EQ${i}`, itemBsrPath }) ),
 				outSubdir: "equipment",
+				ownModifiers: set.ownModifiers === true,
 				...(set.held ?
 					{ write: ( _diskPath, bytes ) => writePlainItemSet( path.join( outputRoot, fileName ), bytes ) } :
 					{})
@@ -275,18 +285,41 @@ costumeEffects
 
 Port-only (SRO_NASRUN, #4407): each costume piece that names an effect
 set carries that set's steady auras as a worn avatar's (avatarEffects),
-read from the Nasrun skill import's marker.
+read from the Nasrun skill import's marker, then its animation set's
+transformation auras (laterTransformAuras: keep03), so they stand, walk
+and run with the costume and leave with it. Only the piece that names
+the effect set (the body) carries them, so each aura is worn once.
 ================
 */
 function costumeEffects( pieces ) {
 	const marker = path.join( extractedRoot, NASRUN_SKILL_MARKER );
 	if ( !pieces.length || !existsSync( marker ) ) return {};
 	const sets = JSON.parse( readFileSync( marker, "utf8" ) ).costumeEffects ?? {}, out = {};
+	const auras = laterTransformAuras( loadLaterAnimationSources( extractedRoot ) );
 	for ( const piece of pieces ) {
-		const rows = piece.effectSet ? sets[piece.effectSet] : undefined;
-		if ( rows?.length ) out[piece.id] = wornEffectRows( piece.effectSet, rows );
+		if ( !piece.effectSet ) continue;
+		const rows = [ ...(sets[piece.effectSet] ?? []), ...(auras[piece.animation.toLowerCase()] ?? []) ];
+		if ( rows.length ) out[piece.id] = wornEffectRows( piece.effectSet, rows );
 	}
 	return out;
+}
+
+/*
+================
+spiritItemEffects
+
+Port-only (SRO_NASRUN): each Devil's Spirit's presentation records by
+transition, { codename: { equip, unequip, awake, expire: record name } },
+as the later client's itemeffect.txt names them (the Nasrun skill
+import's marker, nasrun_import.item_effects). The records themselves
+join the named effect table with the import's skilleffect rows. Empty
+without the import.
+================
+*/
+function spiritItemEffects() {
+	const marker = path.join( extractedRoot, NASRUN_SKILL_MARKER );
+	if ( !existsSync( marker ) ) return {};
+	return JSON.parse( readFileSync( marker, "utf8" ) ).itemEffects ?? {};
 }
 
 export async function buildEquipmentVisuals( dress, options = {} ) {
@@ -374,6 +407,7 @@ export async function buildEquipmentVisuals( dress, options = {} ) {
 	// Port-only (SRO_NASRUN, #4407): the lent Spirit skills' costume pieces,
 	// avatar records under reserved ids (visualChanges.mjs).
 	dress.visualChanges = {};
+	dress.spiritItemEffects = spiritItemEffects();
 	const visualPieces = loadVisualChanges( retailTextdataRoot );
 	for ( const piece of visualPieces ) {
 		const record = { ...piece.record, model: piece.models.M, bodies: {} };
@@ -409,7 +443,10 @@ export async function buildEquipmentVisuals( dress, options = {} ) {
 						paths,
 						code: record.code,
 						key: body + "_" + sha256Hex( key ).slice( 0, 20 ),
-						held: false
+						held: false,
+						// Port-only (SRO_NASRUN): the costume's own BSR modifiers
+						// draw its robe smoke (itemAttachments ownModifiers).
+						ownModifiers: true
 					} );
 				}
 				record.bodies[body] = entry;

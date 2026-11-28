@@ -27,6 +27,7 @@ export function uiPanels() {
 		"Academy Matching",
 		"Actions",
 		"Alchemy",
+		"Attendance Calendar",
 		"Auto Potion",
 		"Blocking",
 		"COS inventory",

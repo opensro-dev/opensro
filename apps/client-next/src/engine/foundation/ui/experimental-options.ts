@@ -308,6 +308,12 @@ export interface ExperimentalOptions {
 	// honor entry and the window never opens. The server sides it with
 	// SRO_JOB_HONOR; with that off nothing is ever sent.
 	readonly jobHonor: boolean;
+	// Port-only, not native (#3255): the Attendance Calendar window over
+	// the attendance feed. Off unless turned on; off, the System menu has
+	// no attendance entry, the window never opens and no 0x7FD2 is ever
+	// sent. The server sides it with SRO_ATTENDANCE; with that off no
+	// 0x3FD2 arrives and the window only waits.
+	readonly attendanceCalendar: boolean;
 	// Port-only, not native (#3925): the login and server-list screens
 	// show the running maintenance from the public schedule feed (#3520)
 	// as one notice line. Off by default; off, the title never reads the
@@ -551,6 +557,7 @@ export function experimentalOptions( value: unknown = null ): ExperimentalOption
 		sroMacro: record.sroMacro !== false,
 		eventCalendar: enabled( "eventCalendar" ),
 		jobHonor: enabled( "jobHonor" ),
+		attendanceCalendar: enabled( "attendanceCalendar" ),
 		maintenanceNotice: enabled( "maintenanceNotice" )
 	};
 }

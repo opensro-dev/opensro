@@ -305,6 +305,8 @@ import { fitUiGroup } from "@/engine/foundation/ui/layout";
 import { createExperimentalHud, experimentalRows, experimentalTabs } from "./hud/experimental-hud";
 import { createEventCalendarHud } from "./hud/event-calendar-hud";
 import { createMaintenanceNoticeHud } from "./hud/maintenance-notice-hud";
+import { createAttendanceHud } from "./hud/attendance-hud";
+import { ATTENDANCE_HEIGHT, ATTENDANCE_WIDTH, attendancePictures, attendanceView } from "./hud/attendance-view";
 import { createJobHonorHud } from "./hud/job-honor-hud";
 import {
 	JOB_HONOR_HEIGHT,
@@ -1051,7 +1053,8 @@ import {
 	EVENT_CALENDAR_MENU_ID,
 	MARKET_MENU_ID,
 	UNIQUE_STATUS_MENU_ID,
-	JOB_HONOR_MENU_ID
+	JOB_HONOR_MENU_ID,
+	ATTENDANCE_CALENDAR_MENU_ID
 } from "@/engine/foundation/ui/system-menu";
 import {
 	bagTabRow,
@@ -1539,6 +1542,8 @@ export function createUi( ports: UiPorts ) {
 	const maintenanceHud = createMaintenanceNoticeHud();
 	// Port-only, not native (#3530): the Job Honor Rank window's state.
 	const jobHonor = createJobHonorHud();
+	// Port-only, not native (#3255): the Attendance Calendar window's state.
+	const attendance = createAttendanceHud();
 	// Port-only, not native (#3648): the Styria Clash windows' state,
 	// and whether the manager's conversation stood open last frame
 	// (the registration window opens on its edge).
@@ -1556,7 +1561,8 @@ export function createUi( ports: UiPorts ) {
 		[EVENT_CALENDAR_MENU_ID]: { label: "Event Calendar", action: "open-window:Event Calendar" },
 		[UNIQUE_STATUS_MENU_ID]: { label: "Unique Status", action: "open-window:Unique Status" },
 		[MARKET_MENU_ID]: { label: "Consignment Market", action: "system-menu-market" },
-		[JOB_HONOR_MENU_ID]: { label: "Job Honor Rank", action: "open-window:Job Honor Rank" }
+		[JOB_HONOR_MENU_ID]: { label: "Job Honor Rank", action: "open-window:Job Honor Rank" },
+		[ATTENDANCE_CALENDAR_MENU_ID]: { label: "Attendance Calendar", action: "open-window:Attendance Calendar" }
 	};
 
 	/*
@@ -1570,6 +1576,7 @@ export function createUi( ports: UiPorts ) {
 		if ( experimental.state().saved.uniqueStatus ) extras.push( UNIQUE_STATUS_MENU_ID );
 		if ( experimental.state().saved.consignmentMarket ) extras.push( MARKET_MENU_ID );
 		if ( experimental.state().saved.jobHonor ) extras.push( JOB_HONOR_MENU_ID );
+		if ( experimental.state().saved.attendanceCalendar ) extras.push( ATTENDANCE_CALENDAR_MENU_ID );
 		return extras;
 	}
 	const companionPotions = createCompanionPotions( pageStorage() );
@@ -4128,6 +4135,13 @@ export function createUi( ports: UiPorts ) {
 			dirty = true;
 			return;
 		}
+		if ( panel === "Attendance Calendar" && id.startsWith( "attendance-" ) ) {
+			// Port-only (#3255): with the row off nothing is sent.
+			const request = experimental.state().saved.attendanceCalendar ? attendance.activate( id ) : null;
+			if ( request ) sendGameplay( request );
+			dirty = true;
+			return;
+		}
 		// CIFCOSStatus maps no left-click message (6A9BC0: only 0x8074 and
 		// 0xD7), so the portrait's own 0x27 does nothing natively; selection is
 		// the right-button release (6A9E40), a touch hold on touch screens.
@@ -4557,22 +4571,25 @@ export function createUi( ports: UiPorts ) {
 			const conversation = view.gameplay?.npcConversation;
 			if ( conversation && conversation.phase === "menu" ) {
 				const target = Number( id.slice( 11 ) );
-				// Port-only, not native (#4136): the clicked link's own
-				// required level rides the command (never the wire) so
-				// a level refusal can name it; unrestricted links and
-				// an unloaded catalogue note nothing.
+				// Port-only, not native (#4136, #3541): the clicked link's
+				// own level band rides the command (never the wire) so a
+				// level refusal can name it; unrestricted links and an
+				// unloaded catalogue note nothing.
 				const portals = hud.data()?.portals,
 					npc = view?.entities.find( e => e.gid === conversation.gid ),
 					source = portals?.destinations.find( d => d.ref === npc?.refObjId ),
-					minLevel = source ?
-						(portals?.links.find( l => l.source === source.id && l.target === target )?.minLevel ?? 0) :
-						0;
+					link = source ?
+						portals?.links.find( l => l.source === source.id && l.target === target ) :
+						undefined,
+					minLevel = link?.minLevel ?? 0,
+					maxLevel = link?.maxLevel ?? 0;
 				sendGameplay( {
 					kind: "travel-gate",
 					gid: conversation.gid,
 					type: 2,
 					target,
-					...(minLevel > 0 ? { minLevel } : {})
+					...(minLevel > 0 ? { minLevel } : {}),
+					...(maxLevel > 0 ? { maxLevel } : {})
 				} );
 			}
 			return;
@@ -11655,6 +11672,13 @@ export function createUi( ports: UiPorts ) {
 				experimental.state().saved.jobHonor,
 				Date.now()
 			);
+			// Port-only (#3255): the attendance window reads the worker's
+			// feed while the row is on; off, the feed is dropped.
+			attendance.reconcile(
+				phase === "world" ? next.gameplay?.attendance : null,
+				experimental.state().saved.attendanceCalendar,
+				Date.now()
+			);
 			// Port-only (#3648): the Styria windows read the worker's
 			// feed; a fresh result opens its window once, and the
 			// manager's conversation opening raises the registration.
@@ -11755,6 +11779,7 @@ export function createUi( ports: UiPorts ) {
 					uniqueStatusHud.reset();
 					eventCalendar.reset();
 					jobHonor.reset();
+					attendance.reset();
 					styria.reset();
 					styriaConversationWasOpen = false;
 					sroMacroHud.reset();
@@ -15421,6 +15446,49 @@ export function createUi( ports: UiPorts ) {
 								kind: "button",
 								selected: op.selected,
 								disabled: false
+							} );
+						}
+					}
+					endWindow( admission );
+				}
+				if ( panel === "Attendance Calendar" && hudData ) {
+					const admission = beginWindow();
+					// Port-only, not native (#3255): the window's drawing is
+					// hud/attendance-view.ts's ops; admission, the chrome and
+					// the op-to-quad loop stay here.
+					const [px, py] = windowOrigin( "Attendance Calendar", [
+						(w - ATTENDANCE_WIDTH) / 2,
+						(h - ATTENDANCE_HEIGHT) / 2,
+						ATTENDANCE_WIDTH,
+						ATTENDANCE_HEIGHT
+					] );
+					windowBox( "Attendance Calendar", px, py, ATTENDANCE_WIDTH, ATTENDANCE_HEIGHT );
+					closeButton( px + ATTENDANCE_WIDTH - 26, py + 10, panelCloseId( "Attendance Calendar" ) );
+					const ops = attendanceView( {
+						origin: [ px, py ],
+						tile: hudData.windows.ifoption!.GDR_OPTION_BGTILE!.texture,
+						state: attendance.state( Date.now() )
+					} );
+					paths.push( ...attendancePictures( ops ) );
+					for ( const op of ops ) {
+						if ( op.kind === "tile" ) {
+							quads.push( ...normalTile( op.rect, op.path, resources.size( op.path ), full ) );
+						} else if ( op.kind === "rect" ) {
+							rect( op.rect, op.color );
+						} else if ( op.kind === "text" ) {
+							quads.push( ...text.quads( op.value, op.rect, full, op.color, {
+								hAlign: op.hAlign,
+								vAlign: op.vAlign
+							} ) );
+						} else {
+							if ( op.texture && resources.has( op.texture ) ) rect( op.rect, op.color, op.texture );
+							controls.push( {
+								id: op.id,
+								label: op.label,
+								rect: op.rect,
+								kind: "button",
+								selected: op.selected,
+								disabled: op.disabled
 							} );
 						}
 					}

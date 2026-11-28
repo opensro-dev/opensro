@@ -338,6 +338,7 @@ import {
 import { skillBindings, quickSlotPacket } from "@/engine/foundation/gameplay/quickslots";
 import { decodeCosRecord } from "@/engine/foundation/gameplay/cos-record";
 import { decodeSpiritSkills, SPIRIT_SKILLS_OPCODE, spiritSkillList } from "@/engine/foundation/gameplay/spirit-skills";
+import { spiritLapsed } from "@/engine/foundation/gameplay/spirit-effects";
 import { decodeWorldClock } from "@/engine/foundation/gameplay/world-clock";
 import { vitalsUpdate } from "@/engine/foundation/gameplay/vitals";
 import {
@@ -429,9 +430,16 @@ import {
 	potionSlot
 } from "@/engine/foundation/gameplay/sro-macro";
 import { createTradeProgress } from "./trade-progress/trade-progress";
+import {
+	encodeAttendanceCheckIn,
+	encodeAttendanceClaimAccumulation,
+	encodeAttendanceClaimContinuity,
+	OP_ATTENDANCE_REQUEST
+} from "@/engine/foundation/gameplay/attendance";
 import { createCaravanHire } from "@/engine/foundation/gameplay/caravan-hire";
 import { createServerEvent } from "./server-event/server-event";
 import { createUniqueDamageRank } from "./unique-rank/unique-rank";
+import { createAttendance } from "./attendance/attendance";
 import { createJobHonor } from "./job-honor/job-honor";
 import { createJobHonorTiers } from "./job-honor/job-honor-tiers";
 import { createStyria } from "./styria/styria";
@@ -624,6 +632,9 @@ const ACTION_STATE_ARM = 1;
 const QUEUED_COMMANDS = 2;
 const ITEM_NOTICE_CATEGORY = 1;
 const ITEM_INTERACTION_REFUSAL = 0x35;
+// 6CB5C0 prints {1, 0x34} (UIIT_MSG_STRGERR_STORAGE_OPERATION_BLOCKED)
+// when an Item Mall purchase is confirmed while the interface is busy.
+const MALL_PURCHASE_BLOCKED = 0x34;
 // 6FCD50's skill-use notices: category 4, code 0x11 refuses a targetless press
 // of a target-required skill, code 0x21 refuses a rider.
 const SKILL_NOTICE_CATEGORY = 4;
@@ -838,6 +849,7 @@ export function createGameplay(
 		serverEvent = createServerEvent(),
 		uniqueRank = createUniqueDamageRank(),
 		jobHonor = createJobHonor(),
+		attendance = createAttendance(),
 		jobHonorTiers = createJobHonorTiers(),
 		styria = createStyria(),
 		uniqueStatus = createUniqueStatus(),
@@ -1548,12 +1560,12 @@ attack can arrive in the same batch as the previous close and starve the walk.
 	// success as "Location has been set."; keyed on the flight like the
 	// rename's, for the same reason.
 	let reverseFlight = 0;
-	// Port-only, not native (#4136): the required level of the gate link
-	// whose 0x7495 request is still unanswered, noted by the world core
-	// as the request goes out (noteGateTravel). The 0xB495 answer reads
-	// it (the level refusal names it) and retires it, whatever it says,
-	// so a later walk-in refusal never inherits a stale level.
-	let gateTravelLevel = 0;
+	// Port-only, not native (#4136, #3541): the level band of the gate
+	// link whose 0x7495 request is still unanswered, noted by the world
+	// core as the request goes out (noteGateTravel). The 0xB495 answer
+	// reads it (the level refusal names it) and retires it, whatever it
+	// says, so a later walk-in refusal never inherits a stale band.
+	let gateTravelMinLevel = 0, gateTravelMaxLevel = 0;
 	// A crest register upload (#2282) stays in flight until the upload
 	// lane answers; a second confirmed register is held while one is
 	// outstanding. The success box is the 0xB5BD answer's business, not
@@ -2232,6 +2244,7 @@ clears it when another character enters.
 		macroHuntLastActionAtMs = 0;
 		uniqueRank.clear();
 		jobHonor.clear();
+		attendance.clear();
 		jobHonorTiers.clear();
 		styria.clear();
 		uniqueStatus.clear();
@@ -2962,6 +2975,18 @@ state here before a command can claim a native wire conversation.
 					throw Error( "Invalid caravan hire" );
 				}
 				return sendFrame( caravanHire.request( command.operation, command.stars, command.name ) );
+			}
+			if ( command.kind === "attendance" ) {
+				// Port-only (#3255): 0x7FD2, the calendar's check-in and claims.
+				if ( !localGid ) throw Error( "Invalid attendance request" );
+				return sendFrame( {
+					opcode: OP_ATTENDANCE_REQUEST,
+					payload: command.operation === 0 ?
+						encodeAttendanceCheckIn() :
+						command.operation === 1 ?
+						encodeAttendanceClaimContinuity( command.tier ) :
+						encodeAttendanceClaimAccumulation( command.tier )
+				} );
 			}
 			if ( command.kind === "caravan-hire-close" ) {
 				caravanHire.clear();
@@ -4484,7 +4509,18 @@ state here before a command can claim a native wire conversation.
 				return inventory.move( command.source, command.destination, command.quantity, now );
 			}
 			if ( command.kind === "mall-open" ) return inventory.openMall( now );
-			if ( command.kind === "mall-buy" ) return inventory.purchaseMall( command.request, now );
+			if ( command.kind === "mall-buy" ) {
+				// CIFItemMall_OnPurchaseDialogResult (6CB5C0): the purchase
+				// box's OK (context 15) tests CGInterface_IsInteractionBlocked
+				// (67D090) first; while it holds, 6CB60F prints {1, 0x34},
+				// rebuilds the box and never reaches SubmitCartPurchase.
+				if ( interactionBlocked() ) {
+					const notice = constantNativeNotice( ITEM_NOTICE_CATEGORY, MALL_PURCHASE_BLOCKED );
+					if ( notice ) api.notice( notice );
+					return null;
+				}
+				return inventory.purchaseMall( command.request, now );
+			}
 			if ( command.kind === "mall-silk-inquire" ) return inventory.inquireMallSilkHistory( command.period, now );
 			if ( command.kind === "market" ) return inventory.requestMarket( command.request, now );
 			if ( command.kind === "shop-open" ) {
@@ -5059,8 +5095,27 @@ Packet handling must not depend on which HUD panel is currently open.
 					dirty = true;
 					return true;
 				}
+				// Port-only (#3255): the attendance month (attendance.ts),
+				// under SRO_ATTENDANCE.
+				if ( attendance.receive( frame ) ) {
+					dirty = true;
+					return true;
+				}
 				if ( frame.opcode === SPIRIT_SKILLS_OPCODE ) {
+					const lent = spiritSkills;
 					spiritSkills = decodeSpiritSkills( frame.payload );
+					// Port-only (SRO_NASRUN): the strip emptying under a worn
+					// Spirit is its clock running out (spirit-effects.ts).
+					const worn = inventory.wornSpirit();
+					if ( worn && localGid !== 0 && spiritLapsed( lent, spiritSkills, true ) ) {
+						publishFeedback( {
+							kind: "spirit-effect",
+							gid: localGid,
+							item: worn.refObjId,
+							typeFlags: worn.typeFlags,
+							transition: "expire"
+						} );
+					}
 					dirty = true;
 					return true;
 				}
@@ -6416,6 +6471,18 @@ Packet handling must not depend on which HUD panel is currently open.
 					if ( notice.text ) chat.notice( notice.text );
 					dirty = true;
 				}
+				// Port-only (SRO_NASRUN): a Spirit woken in the bag plays its
+				// dark force on its owner (spirit-effects.ts).
+				for ( const spirit of inventory.takeSpiritWakes() ) {
+					if ( localGid === 0 ) continue;
+					publishFeedback( {
+						kind: "spirit-effect",
+						gid: localGid,
+						item: spirit.refObjId,
+						typeFlags: spirit.typeFlags,
+						transition: "awake"
+					} );
+				}
 				if ( frame.opcode === ARENA_CHEST_OPCODE ) {
 					const chest = inventory.state().arenaChest;
 					if ( chest?.skillCooldowns ) combat.restoreCooldowns( chest, catalog, now );
@@ -6680,9 +6747,9 @@ Packet handling must not depend on which HUD panel is currently open.
 					reverseFlight = 0;
 				}
 				// Port-only (#4136): a 0xB495 answer retires the noted
-				// gate level; the level refusal below reads the note.
-				const notedGateLevel = gateTravelLevel;
-				if ( frame.opcode === PORTAL_RESULT_OPCODE ) gateTravelLevel = 0;
+				// gate band; the level refusal below reads the note.
+				const notedMinLevel = gateTravelMinLevel, notedMaxLevel = gateTravelMaxLevel;
+				if ( frame.opcode === PORTAL_RESULT_OPCODE ) gateTravelMinLevel = gateTravelMaxLevel = 0;
 				const refusal = (portLine ?
 					{ key: "", value: 0, text: portLine, nativeType: 5 as const } :
 					undefined) ??
@@ -6696,7 +6763,7 @@ Packet handling must not depend on which HUD panel is currently open.
 						undefined) ??
 					recallAppointmentNotice( frame.opcode, frame.payload ) ??
 					targetNotice( frame.opcode, frame.payload ) ??
-					portalNotice( frame.opcode, frame.payload, notedGateLevel ) ??
+					portalNotice( frame.opcode, frame.payload, notedMinLevel, notedMaxLevel ) ??
 					repairNotice( frame.opcode, frame.payload ) ??
 					inventoryNotice( frame.opcode, frame.payload, localCountry, mallRequest ) ??
 					alchemyNotice( frame.opcode, frame.payload ) ??
@@ -6768,14 +6835,15 @@ Packet handling must not depend on which HUD panel is currently open.
 ================
 noteGateTravel
 
-Port-only, not native (#4136): the world core notes the clicked gate
-link's required level as its 0x7495 request goes out; the 0xB495
-answer reads the note (a level refusal names the level) and retires
-it. A level of 0 notes nothing.
+Port-only, not native (#4136, #3541): the world core notes the
+clicked gate link's level band as its 0x7495 request goes out; the
+0xB495 answer reads the note (a level refusal names the band) and
+retires it. A band of 0/0 notes nothing.
 ================
 		*/
-		noteGateTravel( level: number ) {
-			gateTravelLevel = level;
+		noteGateTravel( minLevel: number, maxLevel = 0 ) {
+			gateTravelMinLevel = minLevel;
+			gateTravelMaxLevel = maxLevel;
 		},
 		/*
 ================
@@ -7280,6 +7348,9 @@ The published plane when something changed since the last take, else null.
 				...(sroMacro.view() ? { sroMacro: sroMacro.view() } : {}),
 				uniqueDamageRank: uniqueRank.current(),
 				jobHonor: jobHonor.current(),
+				// Port-only (#3255): the attendance month and tiers
+				// (attendance.ts), under SRO_ATTENDANCE.
+				attendance: attendance.view(),
 				// Port-only (#3648): the Styria Clash standing and its
 				// latched result (styria.ts), under SRO_STYRIA_CLASH.
 				styria: styria.current(),

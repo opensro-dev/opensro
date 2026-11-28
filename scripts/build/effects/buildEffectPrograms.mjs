@@ -45,7 +45,7 @@ import fs from "node:fs";
 import { createHash } from "node:crypto";
 import path from "node:path";
 import { isMainScript } from "../shared/fsUtils.mjs";
-import { laterStateModifiers, loadLaterAnimationSources } from "../char/laterAnimationSets.mjs";
+import { laterTransformAuras, loadLaterAnimationSources } from "../char/laterAnimationSets.mjs";
 
 import { writeJsonIfChangedSync } from "../shared/jsonOut.mjs";
 import { compareText } from "../shared/textOrder.mjs";
@@ -233,13 +233,10 @@ export function collectEffectReferences() {
 	for ( const rows of Object.values( equipmentEnchantSparks() ) ) for ( const row of rows ) add( row.effectPath );
 	// Port-only, not native: the later mall avatars' worn auras (avatarWornEffects).
 	for ( const rows of Object.values( avatarWornEffects() ) ) for ( const row of rows ) add( row.effectPath );
-	// Port-only (SRO_NASRUN, #4407): the transformation's state-bound auras the
-	// player bodies publish (buildRoster.mjs laterStateModifiers).
-	const laterSets = loadLaterAnimationSources( extractedRoot );
-	for ( const bsrPath of laterSets?.sources.keys() ?? [] ) {
-		for ( const modifier of laterStateModifiers( bsrPath, laterSets )?.particleModifiers ?? [] ) {
-			for ( const entry of modifier.entries ) add( entry.effectPath );
-		}
+	// Port-only (SRO_NASRUN, #4407): the transformation's persistent auras the
+	// costume wears (laterAnimationSets.mjs laterTransformAuras).
+	for ( const rows of Object.values( laterTransformAuras( loadLaterAnimationSources( extractedRoot ) ) ) ) {
+		for ( const row of rows ) add( row.effectPath );
 	}
 	for ( const modifiers of equipmentAmbientParticles().values() ) {
 		for ( const modifier of modifiers ) for ( const entry of modifier.entries ) add( entry.effectPath );

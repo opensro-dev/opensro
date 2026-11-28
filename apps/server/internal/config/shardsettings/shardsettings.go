@@ -484,6 +484,10 @@ var Settings = []Setting{
 	// Owner, 2026-11-15 (#3530 spec): job honor points, a shared account
 	// cap and daily tiers. Port-only; off is native: nothing scores.
 	{Env: "SRO_JOB_HONOR", NomadVar: "job_honor", Default: "off"},
+	// Owner, 2026-11-12 (#3255): a monthly attendance calendar with
+	// continuity and accumulation tiers. Port-only; off is native:
+	// nothing opens and no snapshot is sent.
+	{Env: "SRO_ATTENDANCE", NomadVar: "attendance", Default: "off"},
 	// Owner, 2026-10-26 (#1604 P13, #1691): the staff seal census counts
 	// seal items on the shard by degree and tier, name-free, staff-only.
 	// Off is native: the route does not exist.

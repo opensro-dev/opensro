@@ -5,7 +5,12 @@ entities.ts - The entity journal owns wire admission and ordered lifecycle publi
 
 ===========================================================================
 */
-import { AVATAR_STORAGE_CAPACITY, avatarSlotFits, isAvatarItem } from "@/engine/foundation/gameplay/avatar-socket";
+import {
+	AVATAR_STORAGE_CAPACITY,
+	avatarSlotFits,
+	isAvatarItem,
+	isSpiritItem
+} from "@/engine/foundation/gameplay/avatar-socket";
 import { petNameUpdate } from "@/engine/foundation/gameplay/pet-name";
 import { decodePeerGuildAppearance, decodePeerGuildCleared } from "@/engine/foundation/gameplay/peer-guild-face";
 import { decodePetBondPulse } from "@/engine/foundation/gameplay/damage-feedback";
@@ -1495,6 +1500,19 @@ export function createEntities(
 				}
 				const entity = entities.get( gid );
 				if ( !entity ) return;
+				// Port-only (SRO_NASRUN): a Devil's Spirit put on or taken off plays
+				// its dark force on the wearer for every viewer (spirit-effects.ts).
+				// Only this visual is a transition: a spawn or re-entry wears the
+				// Spirit without it.
+				if ( typeFlags !== undefined && isSpiritItem( typeFlags ) ) {
+					append( {
+						kind: "spirit-effect",
+						gid,
+						item: refObjId,
+						typeFlags,
+						transition: equip ? "equip" : "unequip"
+					} );
+				}
 				const key = avatar ? "avatars" : "equipment",
 					slot = avatar ? -1 : equip ? equipmentSlot( typeFlags! ) : p[4]!;
 				// 868a80 returns -1 for non-visual equipment (including jewelry).

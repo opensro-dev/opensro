@@ -138,6 +138,9 @@ export const OFF = Object.freeze( {
 	// System menu has no calendar entry.
 	eventCalendar: false,
 	jobHonor: false,
+	// Off by default (#3255): the Attendance Calendar is port-only; off,
+	// the System menu has no attendance entry.
+	attendanceCalendar: false,
 	// Off by default (#3925): the login maintenance notice is port-only;
 	// off, the title never reads the schedule feed.
 	maintenanceNotice: false

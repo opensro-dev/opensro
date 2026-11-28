@@ -210,6 +210,13 @@ func (game *gameplayPlane) newMissionTicker(peerReferences *action.PeerReference
 			return game.jobHonorTierTick(ticker, nowMs)
 		}})
 	}
+	// Port-only (#3255): the attendance calendar's snapshots; the
+	// service paces the pass and sends only what changed.
+	if game.attendanceFeed != nil {
+		hooks = append(hooks, simulation.NamedTickHook{Name: "attendance", Hook: func(nowMs int64) []simulation.DivisionFrames {
+			return game.attendanceTick(ticker, nowMs)
+		}})
+	}
 	// Port-only (#3531): the Unique Status feed's snapshots and
 	// updates; the service paces the pass itself.
 	if game.uniqueStatus != nil {

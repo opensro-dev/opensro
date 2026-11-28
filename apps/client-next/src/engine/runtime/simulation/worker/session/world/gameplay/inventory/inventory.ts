@@ -12,8 +12,10 @@ import {
 	AVATAR_STORAGE_CAPACITY,
 	avatarSlotFits,
 	isAvatarItem,
-	isSpiritItem
+	isSpiritItem,
+	SPIRIT_SLOT
 } from "@/engine/foundation/gameplay/avatar-socket";
+import { spiritWoke } from "@/engine/foundation/gameplay/spirit-effects";
 import {
 	companionItemUseNotice,
 	cosItemUseTail,
@@ -165,6 +167,9 @@ export function createInventory(
 	const companionRentals = createCompanionRentals();
 	let mallDelivery: { prepared: ReturnType<typeof decodeShopItems>; slots: number[]; } | null = null;
 	let avatars = new Map<number, InventoryItem>();
+	// Port-only (SRO_NASRUN): the Spirits woken since takeSpiritWakes last
+	// ran, the wake's 0x31E8 clock frame in arrival order.
+	let spiritWakes: InventoryItem[] = [];
 	let slots = new Map<number, InventoryItem>(),
 		pending: {
 			receivedSlots?: readonly number[];
@@ -675,6 +680,30 @@ transfer
 		else next.delete( source );
 	}
 	return {
+		/*
+================
+wornSpirit
+
+Port-only (SRO_NASRUN): the Devil's Spirit in the avatar socket, if any.
+================
+		*/
+		wornSpirit(): InventoryItem | undefined {
+			const spirit = avatars.get( SPIRIT_SLOT );
+			return spirit && isSpiritItem( spirit.typeFlags ) ? spirit : undefined;
+		},
+		/*
+================
+takeSpiritWakes
+
+Port-only (SRO_NASRUN): the Spirits woken since the last call
+(spirit-effects.ts), each once.
+================
+		*/
+		takeSpiritWakes(): InventoryItem[] {
+			const woken = spiritWakes;
+			spiritWakes = [];
+			return woken;
+		},
 		/*
 ================
 noticeItem
@@ -2425,7 +2454,9 @@ receive
 				// written silently: no repair cue or flash.
 				const spirit = slots.get( n );
 				if ( spirit && isSpiritItem( spirit.typeFlags ) ) {
-					slots.set( n, { ...spirit, durability: viewOf( p ).getUint32( 1, true ) } );
+					const clock = viewOf( p ).getUint32( 1, true );
+					if ( spiritWoke( spirit.durability, clock ) ) spiritWakes.push( spirit );
+					slots.set( n, { ...spirit, durability: clock } );
 					published = null;
 					return true;
 				}
