@@ -35,6 +35,7 @@ package transport
 
 import (
 	"errors"
+	"net"
 	"os"
 
 	log "github.com/sirupsen/logrus"
@@ -315,6 +316,28 @@ func (s *Session) writeLoop() {
 
 /*
 ================
+writeStalled
+
+Whether a failed write died on the stall deadline (conn.go's stall
+bound), by the error's identity, never its text (#4731). The raw
+socket and the WebTransport stream surface os.ErrDeadlineExceeded
+(quic-go's deadlineError unwraps to it), but a frame large enough to
+go through gorilla's message writer (the catalogue, EnterWorld) comes
+back as gorilla's own net.Error: its hideTempErr rewraps a temporary
+error by text and drops the chain, keeping only Timeout(). Both forms
+count.
+================
+*/
+func writeStalled(err error) bool {
+	if errors.Is(err, os.ErrDeadlineExceeded) {
+		return true
+	}
+	var netErr net.Error
+	return errors.As(err, &netErr) && netErr.Timeout()
+}
+
+/*
+================
 flushWriteBatch
 
 Writes the batch to its attachment in one transport write and runs what
@@ -339,10 +362,7 @@ func (s *Session) flushWriteBatch(b *writeBatch) bool {
 		failedBytes := b.bytes
 		b.reset()
 		s.hub.metrics.writeErrors.Add(1)
-		// A stall is the write deadline expiring; both lanes surface
-		// it as os.ErrDeadlineExceeded (conn.go's stall bound), never
-		// mind what the error's text says (#4731).
-		if errors.Is(err, os.ErrDeadlineExceeded) {
+		if writeStalled(err) {
 			s.hub.noteWriteStall(failedBytes)
 		}
 		s.detachGen(gen, err)

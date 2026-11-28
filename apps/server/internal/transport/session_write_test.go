@@ -411,3 +411,41 @@ func TestWSWriteFramesIsTheSameWire(t *testing.T) {
 		t.Fatalf("WriteFrames wire bytes differ from one WriteFrame per frame at byte %d (lengths %d, %d)", at, len(single), len(batched))
 	}
 }
+
+// gorillaTimeoutError is the shape gorilla's hideTempErr returns for a
+// write that hit its deadline: a net.Error that says Timeout() and no
+// longer wraps os.ErrDeadlineExceeded.
+type gorillaTimeoutError struct{}
+
+func (gorillaTimeoutError) Error() string   { return "write tcp: i/o timeout" }
+func (gorillaTimeoutError) Timeout() bool   { return true }
+func (gorillaTimeoutError) Temporary() bool { return true }
+
+/*
+================
+TestWriteStalledKnowsEveryLanesStall
+
+writeStalled counts a stall in each form a lane surfaces it: the raw
+socket's and the WebTransport stream's os.ErrDeadlineExceeded, and the
+WebSocket message writer's rewrapped net.Error, which carries the large
+records #4731 asks about. A plain failure whose text says "deadline"
+is not a stall.
+================
+*/
+func TestWriteStalledKnowsEveryLanesStall(t *testing.T) {
+	cases := []struct {
+		name string
+		err  error
+		want bool
+	}{
+		{"wrapped os deadline", fmt.Errorf("stream write: %w", os.ErrDeadlineExceeded), true},
+		{"gorilla message writer timeout", fmt.Errorf("ws: %w", gorillaTimeoutError{}), true},
+		{"plain failure naming a deadline", errors.New("write: deadline passed"), false},
+		{"connection reset", errors.New("write: connection reset by peer"), false},
+	}
+	for _, c := range cases {
+		if got := writeStalled(c.err); got != c.want {
+			t.Errorf("%s: writeStalled = %v, want %v", c.name, got, c.want)
+		}
+	}
+}
