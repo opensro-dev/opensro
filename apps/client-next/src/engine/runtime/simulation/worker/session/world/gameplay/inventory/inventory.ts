@@ -77,6 +77,7 @@ import { createAlchemy, stoneDesignatedAttribute } from "./alchemy/alchemy";
 import { REPAIR_ONE_SLOT, REPAIR_RESPONSE_OPCODE, repairRequest } from "@/engine/foundation/gameplay/repair";
 import { createGacha } from "./gacha/gacha";
 import { gachaPrizes } from "@/engine/foundation/gameplay/gacha-catalog";
+import { decodeGachaPool, gachaOptionMagic } from "@/engine/foundation/gameplay/gacha-pool";
 import { isGachaVoucher } from "@/engine/foundation/ui/gacha-window";
 import type { SystemNotice } from "@/engine/foundation/gameplay/system-notices";
 import { createMagicOptionGrant } from "./magic-option/magic-option";
@@ -84,7 +85,7 @@ import { itemStateDelta } from "@/engine/foundation/gameplay/item-state-delta";
 import { itemSlotFlashKinds } from "@/engine/foundation/ui/item-slot-effects";
 import { itemMagicDefinitions } from "@/engine/foundation/ui/item-tooltip-magic";
 import { itemMaxDurability } from "@/engine/foundation/ui/item-tooltip-stats";
-import type { GachaPrizeRow, ItemProcessCommand } from "@/engine/contracts/item-process";
+import type { GachaPrizeRow, GachaState, ItemProcessCommand } from "@/engine/contracts/item-process";
 import {
 	saleResult,
 	soldInventory,
@@ -397,10 +398,28 @@ present
 			tooltip,
 			nativeFields: tooltip?.fields,
 			magicReferences: itemMagicDefinitions( item.magic, magicRefs, tooltip?.fields.itemClass ),
-			...(linked ? { linkedStorage: linked } : {})
+			...(linked ? { linkedStorage: linked } : {}),
+			...gachaPrizeOf( item )
 		};
 		presentations.set( item, result );
 		return result;
+	}
+	/*
+	================
+	gachaPrizeOf
+
+	v1.696 B89F6A..B8A1C5: a 3.3.14 card with at least two params gets the
+	"Can be changed to [name][quantity]" line from key 0 (the prize's
+	RefObjID) and key 1 (its quantity). The v1.150 client has no such line,
+	so it is resolved only while the v1.696 pool is published.
+	================
+	*/
+	function gachaPrizeOf( item: InventoryItem ): { gachaPrize?: InventoryItem["gachaPrize"]; } {
+		if ( !gacha.pool() || !isGachaVoucher( item.typeFlags ) || item.magic.length < 2 ) return {};
+		const reward = Number( BigInt( item.magic[0]! ) & 0xffffffffn );
+		return {
+			gachaPrize: { name: names.get( reward ) ?? "", quantity: Number( BigInt( item.magic[1]! ) & 0xffffffffn ) }
+		};
 	}
 	/*
 	================
@@ -414,7 +433,12 @@ present
 	itself has not arrived.
 	================
 	*/
-	function referenceItem( refObjId: number, quantity: number ): InventoryItem | undefined {
+	function referenceItem(
+		refObjId: number,
+		quantity: number,
+		plus = 0,
+		magic: readonly string[] = []
+	): InventoryItem | undefined {
 		const typeFlags = refs.get( refObjId );
 		if ( typeFlags === undefined ) return undefined;
 		const item = present( {
@@ -422,19 +446,40 @@ present
 			refObjId,
 			typeFlags,
 			quantity,
-			plus: 0,
+			plus,
 			durability: 0,
 			variance: "0",
-			magic: []
+			magic: [ ...magic ]
 		} );
 		return { ...item, durability: itemMaxDurability( item ) };
+	}
+	/*
+	================
+	gachaView
+
+	The Magic Pang state the UI reads. The v1.696 pool's rows run to
+	thousands, so they ride the view only while the window is open, the one
+	time the select window and the grid read them.
+	================
+	*/
+	function gachaView(): GachaState {
+		const pool = gacha.pool(), state = gacha.state();
+		if ( !pool ) return { ...state, prizes: gachaPrizeRows() };
+		return {
+			...state,
+			prizes: state.visible ? gachaPrizeRows() : [],
+			pool: { levelCap: pool.levelCap, tree: pool.tree }
+		};
 	}
 	/*
 	================
 	gachaPrizeRows
 
 	The Magic Pang prizes with reference icons. Icons arrive after the first frame, so
-	the cached rows are rebuilt when the icon table has grown.
+	the cached rows are rebuilt when the icon table has grown. With the v1.696
+	pool, every row the level cap shows, in list order, each carrying what the
+	select window filters on; the hover item takes the row's <O:n> plus and its
+	<M:...> options (0xB815D0 / 0xB98460 draw them in the gacha tooltip).
 	================
 	*/
 	function gachaPrizeRows(): readonly GachaPrizeRow[] {
@@ -444,14 +489,33 @@ present
 			gachaRows.nameCount === names.size &&
 			gachaRows.tooltipCount === tooltipRefs.size
 		) return gachaRows.rows;
-		const rows = gachaPrizes( refs ).map( prize => ({
-			entry: prize.entry,
-			refObjId: prize.refObjId,
-			quantity: prize.quantity,
-			nameSymbol: prize.nameSymbol,
-			icon: icons.get( prize.refObjId ),
-			item: referenceItem( prize.refObjId, prize.quantity )
-		}) );
+		const pool = gacha.pool();
+		const rows: GachaPrizeRow[] = pool ?
+			pool.entries.filter( row => row.minLevelCap <= pool.levelCap ).map( row => {
+				const codename = codenames.get( row.refObjId ), typeFlags = refs.get( row.refObjId );
+				const itemClass = tooltipRefs.get( row.refObjId )?.fields.itemClass;
+				return {
+					entry: row.entry,
+					refObjId: row.refObjId,
+					quantity: row.quantity,
+					// The reference's own name key (the imported prizes' keys
+					// are not SN_<codename>); the codename form is the fallback.
+					nameSymbol: names.get( row.refObjId ) ?? (codename ? "SN_" + codename : ""),
+					icon: icons.get( row.refObjId ),
+					item: referenceItem( row.refObjId, row.quantity, row.plus, gachaOptionMagic( row.options ) ),
+					minLevelCap: row.minLevelCap,
+					...(typeFlags === undefined ? {} : { typeFlags }),
+					...(itemClass === undefined ? {} : { itemClass })
+				};
+			} ) :
+			gachaPrizes( refs ).map( prize => ({
+				entry: prize.entry,
+				refObjId: prize.refObjId,
+				quantity: prize.quantity,
+				nameSymbol: prize.nameSymbol,
+				icon: icons.get( prize.refObjId ),
+				item: referenceItem( prize.refObjId, prize.quantity )
+			}) );
 		gachaRows = {
 			iconCount: icons.size,
 			refCount: refs.size,
@@ -1029,6 +1093,7 @@ bootstrap
 			alchemy.quickFuse( (value as { quickFuse?: unknown; } | null)?.quickFuse === true );
 			companionRentals.reset();
 			gacha.reset();
+			gacha.setPool( decodeGachaPool( (value as { gachaPool?: unknown; } | null)?.gachaPool ) );
 			exchange = emptyExchange();
 			// Keep naming identity and the log sequence when an empty phase is not
 			// published to the UI.
@@ -3074,7 +3139,7 @@ state
 				itemCooldowns,
 				avatarInventory: [ ...avatars.values() ].map( present ),
 				alchemy: alchemy.state(),
-				gacha: { ...gacha.state(), prizes: gachaPrizeRows() },
+				gacha: gachaView(),
 				exchange: exchange.open || exchange.requesting ?
 					{
 						...exchange,

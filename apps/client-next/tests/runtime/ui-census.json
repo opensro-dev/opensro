@@ -755,6 +755,10 @@
 					"reads": 1,
 					"writes": 0
 				},
+				"comboPopupList": {
+					"reads": 1,
+					"writes": 0
+				},
 				"createUi": {
 					"reads": 1,
 					"writes": 0
@@ -869,10 +873,6 @@
 				},
 				"retainedHud#anon1": {
 					"reads": 2,
-					"writes": 0
-				},
-				"stallNetworkWindow": {
-					"reads": 1,
 					"writes": 0
 				},
 				"step": {
@@ -1705,6 +1705,10 @@
 					"reads": 1,
 					"writes": 0
 				},
+				"comboPopupList": {
+					"reads": 2,
+					"writes": 0
+				},
 				"createUi": {
 					"reads": 1,
 					"writes": 0
@@ -1946,7 +1950,7 @@
 					"writes": 0
 				},
 				"stallNetworkWindow": {
-					"reads": 4,
+					"reads": 2,
 					"writes": 0
 				},
 				"stallWindow": {
@@ -4073,6 +4077,10 @@
 					"reads": 1,
 					"writes": 0
 				},
+				"comboPopupList": {
+					"reads": 3,
+					"writes": 0
+				},
 				"disconnect": {
 					"reads": 0,
 					"writes": 1
@@ -4147,10 +4155,6 @@
 				},
 				"panel:Unique Status": {
 					"reads": 2,
-					"writes": 0
-				},
-				"stallNetworkWindow": {
-					"reads": 3,
 					"writes": 0
 				},
 				"stallWindow": {
@@ -5433,6 +5437,10 @@
 					"reads": 1,
 					"writes": 0
 				},
+				"comboPopupList": {
+					"reads": 2,
+					"writes": 0
+				},
 				"createUi": {
 					"reads": 1,
 					"writes": 0
@@ -5599,10 +5607,6 @@
 				},
 				"sprite": {
 					"reads": 1,
-					"writes": 0
-				},
-				"stallNetworkWindow": {
-					"reads": 2,
 					"writes": 0
 				},
 				"stallWindow": {
@@ -5937,6 +5941,10 @@
 		},
 		{
 			"buckets": {
+				"comboPopupList": {
+					"reads": 3,
+					"writes": 0
+				},
 				"disconnect": {
 					"reads": 0,
 					"writes": 1
@@ -6011,10 +6019,6 @@
 				},
 				"panel:Unique Status": {
 					"reads": 1,
-					"writes": 0
-				},
-				"stallNetworkWindow": {
-					"reads": 3,
 					"writes": 0
 				},
 				"stallWindow": {
@@ -7729,7 +7733,15 @@
 					"reads": 5,
 					"writes": 0
 				},
+				"gachaGrid": {
+					"reads": 1,
+					"writes": 0
+				},
 				"gachaInput": {
+					"reads": 2,
+					"writes": 0
+				},
+				"gachaSelectNow": {
 					"reads": 2,
 					"writes": 0
 				},
@@ -9110,6 +9122,24 @@
 			"kind": "exact",
 			"ordinal": 1,
 			"pattern": "gacha-play"
+		},
+		{
+			"fn": "activate",
+			"kind": "exact",
+			"ordinal": 1,
+			"pattern": "gacha-select-combo-scroll-down"
+		},
+		{
+			"fn": "activate",
+			"kind": "exact",
+			"ordinal": 1,
+			"pattern": "gacha-select-combo-scroll-up"
+		},
+		{
+			"fn": "activate",
+			"kind": "exact",
+			"ordinal": 1,
+			"pattern": "gacha-select-start"
 		},
 		{
 			"fn": "activate",
@@ -11239,7 +11269,25 @@
 			"fn": "activate",
 			"kind": "prefix",
 			"ordinal": 1,
+			"pattern": "gacha-page:"
+		},
+		{
+			"fn": "activate",
+			"kind": "prefix",
+			"ordinal": 1,
 			"pattern": "gacha-prize:"
+		},
+		{
+			"fn": "activate",
+			"kind": "prefix",
+			"ordinal": 1,
+			"pattern": "gacha-select-choice:"
+		},
+		{
+			"fn": "activate",
+			"kind": "prefix",
+			"ordinal": 1,
+			"pattern": "gacha-select-combo:"
 		},
 		{
 			"fn": "activate",
@@ -13327,7 +13375,7 @@
 	"source": "src/engine/runtime/ui/ui.ts",
 	"summary": {
 		"fields": 309,
-		"routes": 867,
+		"routes": 873,
 		"sharedFields": 252
 	}
 }

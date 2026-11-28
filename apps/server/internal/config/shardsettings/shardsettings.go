@@ -199,6 +199,12 @@ var Settings = []Setting{
 	// gates and quests (scripts/roc_import.py); the switch admits the
 	// quest kinds' nests here (monster/roc.go). "off" is native.
 	{Env: "SRO_ROC", NomadVar: "roc", Default: "off", Catalogue: true},
+	// Port-only switch, native content: the Ch'in Tomb's four treasure
+	// boxes on its second floor, their open event and the key drop from
+	// tomb monsters (game/tombbox, #4810). The later client deleted the
+	// boxes, so "off" (no box, no key) is the default. Not a catalogue
+	// setting: the catalogue publishes no NPC talk or event drop.
+	{Env: "SRO_TOMB_TREASURE_BOXES", NomadVar: "tomb_treasure_boxes", Default: "off"},
 	// Port-only, not native: the Arabia continent population and its
 	// dungeon world from the v1.696 client (monster/arabia.go). The
 	// continent rides the Alexandria variant build; the switch admits
@@ -466,9 +472,15 @@ var Settings = []Setting{
 	{Env: "SRO_MOONLIT_THIEF_SUIT", NomadVar: "moonlit_thief_suit", Default: "on"},
 	// Owner, 2026-10-14: no transport summon during the Bandit Den countdown.
 	{Env: "SRO_DEN_NO_TRANSPORT_SUMMON", NomadVar: "den_no_transport_summon", Default: "on"},
+	// Owner, 2026-11-27: the v1.696 Magic POP is the default machine
+	// (its tables, select window and published pool); "off" is the
+	// v1.150 machine. Server and browser: the pool rides the public
+	// references, not the catalogue.
+	{Env: "SRO_MAGIC_POP_V1696", NomadVar: "magic_pop_v1696", Default: "on"},
 	// Owner, 2026-10-20: Magic Pop prize pool v2 (port-only). Server
 	// only: the catalogue publishes no Magic Pop pool, so nothing it
 	// publishes changes; a pool export is its own change (#2542).
+	// Applies only while SRO_MAGIC_POP_V1696 is off.
 	{Env: "SRO_GACHA_POOL_V2", NomadVar: "gacha_pool_v2", Default: "on"},
 	// Owner, 2026-10-14: a trader's goods drop on rider death and field logout.
 	{Env: "SRO_TRADER_CARGO_DROP", NomadVar: "trader_cargo_drop", Default: "on"},

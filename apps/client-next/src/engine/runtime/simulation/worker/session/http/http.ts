@@ -14,6 +14,7 @@ import { HUNTING_GUIDE_BYTES_LIMIT } from "@/engine/contracts/hunting-guide";
 import { isResponseByteLimitError, readBytes } from "@/engine/foundation/assets/read-bytes";
 import { sha256Hex } from "@/engine/foundation/assets/sha256";
 import { decodeReverseMapPoints } from "@/engine/foundation/gameplay/reverse-return-map";
+import { decodeGachaPool } from "@/engine/foundation/gameplay/gacha-pool";
 import {
 	RELEASE_OUTDATED_STATUS,
 	REFERENCES_CONTRACT,
@@ -194,6 +195,7 @@ async function loadWorldReferences(
 	itemCommandReferences?: unknown[];
 	huntingGuide?: import("@/engine/contracts/hunting-guide").HuntingGuideSource;
 	reverseMapPoints?: unknown[];
+	gachaPool?: import("@/engine/foundation/gameplay/gacha-pool").GachaPool;
 }> {
 	const ref = value as { spawnAtlas?: unknown; huntingGuide?: unknown; } | null;
 	const source = referenceSource( value, base, REFERENCE_BYTES_LIMIT );
@@ -209,13 +211,15 @@ async function loadWorldReferences(
 		itemCommandReferences?: unknown;
 		// Port-only: present only when the server's SRO_REVERSE_RETURN_MAP is on.
 		reverseMapPoints?: unknown;
+		// Present only while the server's v1.696 Magic POP pool is active.
+		gachaPool?: unknown;
 	};
 	if (
 		!parsed ||
 		Object.keys( parsed ).some( key =>
 			key !== "referencesVersion" && key !== "skillLifecycleVersion" && key !== "refSkillSnapshot" &&
 			key !== "refItemSnapshot" && key !== "refObjSnapshot" && key !== "itemCommandReferences" &&
-			key !== "reverseMapPoints"
+			key !== "reverseMapPoints" && key !== "gachaPool"
 		) ||
 		!Array.isArray( parsed.refSkillSnapshot ) || parsed.refSkillSnapshot.length > REFERENCE_ROWS_LIMIT
 	) throw Error( "Invalid world references" );
@@ -244,6 +248,7 @@ async function loadWorldReferences(
 	const atlas = huntingGuideSource( ref.spawnAtlas, base ) ?? overlay;
 	const guide = atlas ? { ...atlas, ...(overlay ? { overlay: true } : {}) } : undefined;
 	const reverseMapPoints = decodeReverseMapPoints( parsed.reverseMapPoints );
+	const gachaPool = decodeGachaPool( parsed.gachaPool );
 	return {
 		...(guide ? { huntingGuide: guide } : {}),
 		refSkillSnapshot: parsed.refSkillSnapshot,
@@ -252,7 +257,8 @@ async function loadWorldReferences(
 		...(parsed.itemCommandReferences === undefined ?
 			{} :
 			{ itemCommandReferences: parsed.itemCommandReferences as unknown[] }),
-		...(reverseMapPoints.length ? { reverseMapPoints: [ ...reverseMapPoints ] } : {})
+		...(reverseMapPoints.length ? { reverseMapPoints: [ ...reverseMapPoints ] } : {}),
+		...(gachaPool ? { gachaPool } : {})
 	};
 }
 

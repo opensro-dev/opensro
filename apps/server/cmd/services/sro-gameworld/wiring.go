@@ -404,6 +404,8 @@ func newGameWorldApplication(
 		HuntingGuide:        gameplay.deps.MonsterState,
 		// Empty unless SRO_REVERSE_RETURN_MAP is on (port-only, not native).
 		ReverseMapPoints: gameplay.items.ReverseReturnMapPoints(),
+		// Nil unless the v1.696 Magic POP tables are active.
+		GachaPool: gameplay.items.GachaPoolReference(),
 	})
 	if err != nil {
 		return nil, fmt.Errorf("browser references: %w", err)

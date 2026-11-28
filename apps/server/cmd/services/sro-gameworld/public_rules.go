@@ -40,6 +40,7 @@ import (
 	"opensro.online/server/internal/game/social/contributor"
 	"opensro.online/server/internal/game/social/eventbot"
 	"opensro.online/server/internal/game/sookarena"
+	"opensro.online/server/internal/game/tombbox"
 	"opensro.online/server/internal/game/tunables"
 	"opensro.online/server/internal/game/uniquestatus"
 	"opensro.online/server/internal/game/world/alexandria"
@@ -171,11 +172,13 @@ func equipSwitchOn(env string) bool {
 ================
 publicRules
 
-Built once at boot: the switches are read from the environment at startup,
-so the list cannot change while the GameWorld runs.
+Built once at boot from the runtime it describes: the switches are read
+from the environment at startup, and the Magic POP entries from the state
+ConfigureGacha settled (a flag whose tables were absent serves the v1.150
+machine, so the page must say so).
 ================
 */
-func publicRules() publicstats.RulesResponse {
+func publicRules(items *action.Runtime) publicstats.RulesResponse {
 	silkRate, _ := action.BetaSilkFromEnv()
 	silkActiveOnly, _ := action.BetaSilkActiveOnlyFromEnv()
 	earnedTradable, _ := action.EarnedSilkTradableFromEnv()
@@ -194,6 +197,10 @@ func publicRules() publicstats.RulesResponse {
 	}
 	betaMasteryEarly, _ := enterworld.BetaMasteryEarlyFromEnv()
 	levelCap, _ := progression.LevelCapFromEnv()
+	// The Magic POP page reports what the machine serves, not just the
+	// switch: the flag is on while its tables are absent, and the v1.150
+	// machine and pool v2 are what ConfigureGacha settled.
+	gachaV1696, gachaPoolV2 := items.GachaRuleState()
 	pharaohGear, _ := monster.PharaohGearRateFromEnv()
 	alexandriaOn, _ := alexandria.EnabledFromEnv()
 	shopGoods, _ := commerce.ExtraGoodsFromEnv()
@@ -427,6 +434,7 @@ func publicRules() publicstats.RulesResponse {
 				Now:    "No monster drops an item above degree 9: equipment, elixirs, Lucky Powder, stones, tablets or elements. Every degree-9-and-below drop keeps its chance, and items already owned are kept.",
 				Why:    "The level cap stays 90 while community polls decide what the new areas drop; this keeps new degree-10 gear out of the economy until they close."},
 			{Flag: nasrun.Env, On: nasrun.Enabled(os.Getenv(nasrun.Env)), Native: "Avatar storage holds four avatars: hat, dress, attachment and flag.", Now: "A fifth avatar socket holds a Devil's Spirit.", Why: "Optional port-only step toward the later Devil's Spirit (#3456)."},
+			{Flag: tombbox.Env, On: tombbox.Enabled(os.Getenv(tombbox.Env)), Native: "The Ch'in Tomb's second floor holds no treasure box, and no monster drops the boxes' keys.", Now: "Four treasure boxes stand on the tomb's second floor. Tomb monsters can drop their keys, and a key opens its box for gold, potions, a recipe, a top-degree item, damage or guards.", Why: "The v1.150 client defines the boxes, keys and talk; the later client removed the boxes (#4810)."},
 			{Flag: magiccube.Env, On: magiccube.Enabled(os.Getenv(magiccube.Env)), Native: "The game has no Magic Cube: elixirs stay in the bag.", Now: "The Item Mall sells sixteen Magic Cubes that hold matching elixirs (weapon, armor, accessory or shield); a cube refuses sale or consignment while it holds any, and dropping, trading or stalling one keeps its elixirs with it.", Why: "Optional port-only step toward the later Magic Cube (#3906)."},
 			{Flag: macro.Env, On: macro.Enabled(os.Getenv), Native: "The game has no macro window: only the v1.150 auto-potion.", Now: "The server keeps each character's SRO Macro settings (auto-potion, auto-skill and auto-hunt) and their on/off states, and returns them at every login.", Why: "Optional port-only step toward the later official SRO Macro (#3907)."},
 			{Flag: sookarena.Env, On: sookarena.Enabled(os.Getenv(sookarena.Env)), Native: "Event So-ok offers no solo survival arena.", Now: "Three private survival entries per account per UTC day, shared by its characters, five stages, fivefold EXP/SP and checkpoint reward chests.", Why: "Optional port-only survival event."},
@@ -718,9 +726,13 @@ func publicRules() publicstats.RulesResponse {
 				Native: "A transport can be summoned while the Bandit Den Return Scroll counts down.",
 				Now:    "No transport can be summoned during that countdown.",
 				Why:    "Thieves left stolen goods on the ground and loaded them just before arriving; the original rule returns with one setting."},
-			{Flag: action.EnvGachaPoolV2, On: action.GachaPoolV2FromEnv(),
-				Native: "Magic Pop's six weapon prizes are the plain Lv76 weapons, and the losing pool carries no Hwan scroll.",
-				Now:    "The six weapons pay their Star (Seal of Star) step at 30 in 10000 each, and a losing ticket can draw a Hwan scroll at 300 in 10000.",
+			{Flag: action.EnvMagicPopV1696, On: gachaV1696,
+				Native: "The Magic Pop machine offers twelve fixed prizes on one page: six degree 7-8 Seal of Star weapons and six consumables.",
+				Now:    "The machine is the later client's Magic POP: a select window picks a class, type and degree, and its prize table pages through event Seal gear and more.",
+				Why:    "The owner chose the later client's Magic POP as the default; the original machine returns with one setting."},
+			{Flag: action.EnvGachaPoolV2, On: gachaPoolV2,
+				Native: "Magic Pop's six weapon prizes are the degree 7-8 Seal of Star weapons, and the losing pool carries no Hwan scroll.",
+				Now:    "The six weapons pay their degree-9 Star (Seal of Star) step at 30 in 10000 each, and a losing ticket can draw a Hwan scroll at 300 in 10000. Applies only while the v1.696 Magic POP is off.",
 				Why:    "Owner-approved for the beta so a ticket can pay a Star weapon; the retail pool returns with one setting."},
 			{Flag: action.EnvTraderCargoDrop, On: action.TraderCargoDropFromEnv(),
 				Native: "A trader killed while riding a transport, or logging out with one, takes the goods with it; only the transport's own death drops them.",

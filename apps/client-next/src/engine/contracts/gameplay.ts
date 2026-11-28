@@ -614,6 +614,11 @@ export interface InventoryItem {
 	// _RentItemInfo PeriodEndTime, #4240); absent on every other row.
 	// The tooltip's Time Remains counts down from it.
 	readonly rentExpiresUnixMs?: number;
+	// A Magic Pop result card's recorded prize (3.3.14.2, params key 0 =
+	// RefObjID, key 1 = quantity), resolved for its tooltip line. Only
+	// while the server publishes the v1.696 pool (gachaPool); absent on
+	// every other row and on the v1.150 machine.
+	readonly gachaPrize?: { readonly name: string; readonly quantity: number; };
 	readonly name?: string;
 	// The reference's codename, as the server's reference rows name it;
 	// the port-only scrolls that are build-staged items (their RefObjID is

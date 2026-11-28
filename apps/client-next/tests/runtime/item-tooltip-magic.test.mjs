@@ -221,6 +221,30 @@ test("a Magic Pop result voucher shows no magic option lines for its reward pair
 	assert.equal( itemTooltipMagic( { ...voucher, typeFlags: 13100 }, s => s ).length, 1 );
 });
 
+test("a v1.696 Magic Pop result voucher names its prize (B8A00C UIIT_STT_GACHA_WIN_ITEM)", () => {
+	// v1.696 InsertItemGhaChaInfo formats key 0's item name and key 1's
+	// quantity into "Can be changed to [%s][%d]."; the worker resolves the
+	// pair to gachaPrize only while the v1.696 pool is published.
+	const voucher = {
+		slot: 13,
+		refObjId: 9239,
+		typeFlags: 5996,
+		quantity: 1,
+		plus: 0,
+		durability: 0,
+		variance: "0",
+		magic: [ "4140", "3" ],
+		gachaPrize: { name: "Blade of the Dawn", quantity: 3 }
+	};
+	const text = s => s === "UIIT_STT_GACHA_WIN_ITEM" ? "Can be changed to [%s][%d]." : s;
+	assert.deepEqual( itemTooltipMagic( voucher, text ), [
+		{ value: "Can be changed to [Blade of the Dawn][3].", color: 0xffffffff }
+	] );
+	// Without the resolved prize (the v1.150 machine) the line stays out.
+	const { gachaPrize: _, ...legacy } = voucher;
+	assert.deepEqual( itemTooltipMagic( legacy, text ), [] );
+});
+
 test("v1.188 avatar Lucky and 4x stacking dress options format via avatarMagicOptionText", () => {
 	for ( const suffix of [ "", "_2", "_3", "_4" ] ) {
 		const lucky = optionItem( `MATTR_AVATAR_LUCK${suffix}`, 1 );

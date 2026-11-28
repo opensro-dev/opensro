@@ -27,6 +27,7 @@ import hunting2_import
 import jupiter_import
 import later_mall_items
 import magic_cube_import
+import magic_pop_import
 import muhan_import
 import pharaoh_temple_import
 import reset_scroll_import
@@ -35,6 +36,7 @@ import skytemple_import
 import styria_import
 import styria_items_import
 import switch_scroll_import
+import tomb_box_import
 import winter_event_import
 
 # (variant manifest key, layer entry point taking (native, out)), in
@@ -82,6 +84,11 @@ LATER_LAYERS = (
 	# The mall Magic Cubes (port-only, #3906): SRO_MAGIC_CUBE stages the
 	# sixteen v1.696 rows in their own shard (190002).
 	("magicCubes", magic_cube_import.add_magic_cubes),
+	# The Ch'in Tomb treasure boxes' guards (#4810): SRO_TOMB_TREASURE_BOXES
+	# (the server's own switch) stages the two kinds the open event
+	# summons, from the pinned VSRO client, in their own band (350000),
+	# no placement.
+	("tombBoxes", tomb_box_import.add_tomb_boxes),
 	# The Item Mall reset scrolls (port-only): each its own switch
 	# (SRO_STAT_RESET_SCROLL, SRO_SKILL_RESET_SCROLL) stages its v1.696
 	# item in its own shard (300000).
@@ -98,6 +105,11 @@ LATER_LAYERS = (
 	# there, like the sources every layer above reads; band 320000,
 	# no placement.
 	("rigidScrolls", rigid_import.add_rigid),
+	# The v1.696 Magic POP pool (later-native, the port's default;
+	# SRO_MAGIC_POP_V1696 off restores v1.150's): its prize gear in its
+	# own shard (340000) and the three gacha tables the server reads.
+	# Before the later mall items, after every other item layer.
+	("magicPop", magic_pop_import.add_magic_pop),
 	# The v1.696 Item Mall items the later goods sell (#4240 part 3):
 	# later-native, no switch, on whenever the v1.696 client root is
 	# named; last of the layers, so the later mall goods step that

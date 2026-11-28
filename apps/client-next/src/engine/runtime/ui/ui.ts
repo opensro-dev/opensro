@@ -901,12 +901,27 @@ import { catalogMessage } from "@/engine/foundation/ui/catalog-message";
 import {
 	GACHA_FUNCTION,
 	GACHA_OPERATOR_FUNCTION,
+	GACHA_PRIZE_SLOT_FIRST,
 	gachaPrizeEntry,
 	gachaSheet,
 	gachaSheetFrameRect,
 	isGachaVoucher
 } from "@/engine/foundation/ui/gacha-window";
-import { createGachaHud } from "./hud/gacha-hud";
+import {
+	createGachaHud,
+	GACHA_SELECT_COMBO_CLASS,
+	GACHA_SELECT_COMBO_DEGREE,
+	GACHA_SELECT_COMBO_ROWS,
+	GACHA_SELECT_COMBO_TYPE
+} from "./hud/gacha-hud";
+import { gachaLastPage, gachaPageRows, gachaSelectBoxes } from "@/engine/foundation/gameplay/gacha-pool";
+import {
+	GACHA_SELECT_CAPTION_IDS,
+	GACHA_SELECT_START_ID,
+	GACHA_SPIN_PAGE_RECT,
+	gachaSelectLayout,
+	gachaSelectRoot
+} from "@/engine/foundation/ui/gacha-select-layout";
 import {
 	quickSlotCommand,
 	quickSlotItemSlot,
@@ -2525,6 +2540,35 @@ export function createUi( ports: UiPorts ) {
 			now: view?.simulationTimeMs ?? uiNow,
 			items: gameplay?.inventory ?? []
 		};
+	}
+	/*
+	================
+	gachaSelectNow
+
+	The v1.696 select window's boxes for the current choice, or null without a
+	published pool. The country is the local character's (0xA75740 reads it).
+	================
+	*/
+	function gachaSelectNow() {
+		const gameplay = view?.gameplay, pool = gameplay?.gacha?.pool;
+		if ( !pool ) return null;
+		const country = view?.entities?.find( entity => entity.gid === gameplay.localGid )?.countryByte9c;
+		return gachaSelectBoxes( gachaHud.treeGroups( pool.tree ), country, gachaHud.selectState().choice );
+	}
+	/*
+	================
+	gachaGrid
+
+	The v1.696 grid's page: the filtered list's rows on the current page and the
+	last page (0xA715FC), or null for the v1.150 window.
+	================
+	*/
+	function gachaGrid() {
+		const gacha = view?.gameplay?.gacha, pool = gacha?.pool;
+		if ( !pool ) return null;
+		const rows = gachaHud.filtered( gacha.prizes ?? [], pool.levelCap );
+		const last = gachaLastPage( rows.length ), page = gachaHud.page( last );
+		return { rows: gachaPageRows( rows, page ), page, last };
 	}
 	/*
 	================
@@ -5167,7 +5211,15 @@ export function createUi( ports: UiPorts ) {
 			// 642550: a prize slot click while no roll is in flight.
 			gachaHud.select( Number( id.slice( 12 ) ), gachaHud.frame( gachaInput() ).busy );
 		} else if ( id.startsWith( "gacha-bag-page:" ) ) gachaHud.setBag( Number( id.slice( 15 ) ) );
-		else if ( id === "gacha-play" ) {
+		else if ( id.startsWith( "gacha-select-combo:" ) ) gachaHud.toggleCombo( Number( id.slice( 19 ) ) );
+		else if ( id === "gacha-select-combo-scroll-up" || id === "gacha-select-combo-scroll-down" ) {
+			gachaHud.scrollCombo( id.endsWith( "-up" ) ? -1 : 1 );
+		} else if ( id.startsWith( "gacha-select-choice:" ) ) gachaHud.chooseCombo( Number( id.slice( 20 ) ) );
+		else if ( id === "gacha-select-start" ) gachaHud.startSelect( gachaSelectNow()?.filter ?? null );
+		else if ( id.startsWith( "gacha-page:" ) ) {
+			const grid = gachaGrid();
+			if ( grid ) gachaHud.setPage( Number( id.slice( 11 ) ), grid.last, gachaHud.frame( gachaInput() ).busy );
+		} else if ( id === "gacha-play" ) {
 			const roll = gachaHud.play( gachaInput() );
 			if ( roll ) sendGameplay( { kind: "gacha-roll", ...roll } );
 		} else if ( id === "process-next" ) processPage++;
@@ -22018,6 +22070,197 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 				}
 				/*
 				================
+				comboPopupList
+
+				CIFComboBox_OpenList (51EA20): the open list under its box, one button per
+				visible row (<prefix>-choice:<index>) and the scroll bar
+				(<prefix>-combo-scroll) when the entries outrun the rows. Returns the
+				list's scroll range.
+				================
+				*/
+				function comboPopupList( list: {
+					anchor: UiRect;
+					entries: readonly string[];
+					rows: number;
+					first: number;
+					prefix: string;
+				} ) {
+					const layout = comboListLayout(
+						list.anchor,
+						list.entries.length,
+						list.rows,
+						text.height(),
+						list.first
+					);
+					rect( layout.popup, [ 0, 0, 0, 1 ] );
+					const ring = stretchRing(
+						layout.popup,
+						ROOT + "interface/ifcommon/com_blacksquare_",
+						resources.size,
+						full
+					);
+					paths.push( ...ring.paths );
+					quads.push( ...ring.quads );
+					blocks.push( layout.popup );
+					for ( const { index, rect: entry } of layout.rows ) {
+						const id = list.prefix + "-choice:" + index;
+						// The popup list's row look (combo-box.ts POPUP_LIST_*): a bar
+						// behind the hovered row, pressed text blue, hovered pale
+						// yellow, else white.
+						if ( hover === id || pressed === id ) {
+							quads.push( {
+								rect: popupListRowBar( entry, text.height() ),
+								uv: [ 0, 0, 1, 1 ],
+								color: POPUP_LIST_HOVER_BAR,
+								rightColor: POPUP_LIST_HOVER_BAR,
+								texture: "",
+								clip: full
+							} );
+						}
+						const color: UiQuad["color"] = pressed === id ?
+							POPUP_LIST_PRESSED_TEXT :
+							hover === id ?
+							POPUP_LIST_HOVER_TEXT :
+							white;
+						quads.push( ...text.quads( list.entries[index]!, entry, entry, color ) );
+						controls.push( { id, label: list.entries[index]!, rect: entry, kind: "button" } );
+					}
+					if ( layout.track ) {
+						const scroll = chatScrollbar(
+							list.prefix + "-combo-scroll",
+							layout.track,
+							list.entries.length,
+							list.rows,
+							layout.range - layout.first,
+							resources.size,
+							full,
+							hover,
+							pressed
+						);
+						paths.push( ...scroll.paths );
+						quads.push( ...scroll.quads );
+						controls.push( ...scroll.controls );
+					}
+					return layout.range;
+				}
+				/*
+				================
+				gachaSpinner
+
+				GDR_GHACHA_SPIN_PAGE (CIFSpinButtonCtrl 700, ifghacha.txt under
+				GACHA_SECOND_VER) drawn with the ifspincontrol.txt children every spin
+				control uses: the page number and the two arrows.
+				================
+				*/
+				function gachaSpinner( grid: { page: number; last: number; }, px: number, py: number, busy: boolean ) {
+					const spin = hudData?.windows.ifspincontrol;
+					if ( !spin ) return;
+					const at = ( id: number ) => Object.values( spin ).find( node => node.id === id )!;
+					const sx = px + GACHA_SPIN_PAGE_RECT[0], sy = py + GACHA_SPIN_PAGE_RECT[1];
+					authoredText( at( 0 ), sx, sy, String( grid.page + 1 ) );
+					for ( const [id, delta] of [ [ 1, -1 ], [ 2, 1 ] ] as const ) {
+						const next = grid.page + delta;
+						authoredButton(
+							at( id ),
+							sx,
+							sy,
+							"gacha-page:" + next,
+							"",
+							busy || next < 0 || next > grid.last
+						);
+					}
+				}
+				/*
+				================
+				gachaSelectWindow
+
+				CIFGhachaSelectWnd (ifghacha.txt section GhachaSelect, window 600, and
+				ifghachaselectwnd.txt; gacha-select-layout.ts): Class, Type and Degree
+				combo boxes over the published tree, and Start, which needs the first
+				two chosen (0xA75A30). Its close closes the machine (0xA75F90).
+				================
+				*/
+				function gachaSelectWindow() {
+					const boxes = gachaSelectNow();
+					if ( !boxes || !game ) return;
+					const root = gachaSelectRoot(),
+						layout = gachaSelectLayout(),
+						select = gachaHud.selectState(),
+						admission = beginWindow(),
+						[px, py] = windowOrigin( "Magic Pang", [
+							Math.max( 0, (w - root.rect[2]) / 2 ),
+							Math.max( 0, (h - root.rect[3]) / 2 ),
+							root.rect[2],
+							root.rect[3]
+						] ),
+						choose = hudCopy( "UIIT_CTL_WARENETWORK_SCAN_SELECT" ),
+						degreeWord = hudCopy( "UIIT_STT_CLASS" ),
+						captions = GACHA_SELECT_CAPTION_IDS.map( id =>
+							hudCopy( Object.values( layout ).find( node => node.id === id )!.text )
+						),
+						// 0xA75440: "%d %s" for each degree, or a single "None".
+						combos = [
+							{
+								id: GACHA_SELECT_COMBO_CLASS,
+								entries: [ choose, ...boxes.groups.map( group => hudCopy( group.label ) ) ],
+								index: select.choice.group,
+								disabled: false
+							},
+							{
+								id: GACHA_SELECT_COMBO_TYPE,
+								entries: [ choose, ...boxes.subs.map( sub => hudCopy( sub.label ) ) ],
+								index: select.choice.sub,
+								disabled: select.choice.group < 1
+							},
+							{
+								id: GACHA_SELECT_COMBO_DEGREE,
+								entries: boxes.degrees ?
+									[
+										choose,
+										...Array.from( { length: boxes.degrees }, ( _, i ) => `${i + 1} ${degreeWord}` )
+									] :
+									[ hudCopy( "UIIT_CTL_WARENETWORK_SCAN_END" ) ],
+								index: boxes.degrees ? select.choice.degree : 0,
+								disabled: select.choice.sub < 1
+							}
+						];
+					nativeFrame( root, px, py, "", panelCloseId( "Magic Pang" ) );
+					for ( const node of authoredPaintOrder( layout ) ) {
+						const combo = combos.find( row => row.id === node.id && node.type === "CIFComboBox" );
+						if ( combo ) {
+							comboBox(
+								authoredRect( node, px, py ),
+								"gacha-select-combo:" + combo.id,
+								captions[combo.id - GACHA_SELECT_COMBO_CLASS]!,
+								combo.entries[combo.index] ?? combo.entries[0]!,
+								combo.disabled
+							);
+						} else if ( node.id === GACHA_SELECT_START_ID ) {
+							authoredLabeledButton(
+								node,
+								px,
+								py,
+								"gacha-select-start",
+								hudCopy( node.text ),
+								!boxes.filter
+							);
+						} else authoredChrome( node, px, py );
+					}
+					const open = combos.find( row => row.id === select.combo && !row.disabled );
+					if ( open ) {
+						const anchor = Object.values( layout ).find( node => node.id === open.id )!;
+						gachaHud.setComboRange( comboPopupList( {
+							anchor: authoredRect( anchor, px, py ),
+							entries: open.entries,
+							rows: GACHA_SELECT_COMBO_ROWS,
+							first: select.comboFirst,
+							prefix: "gacha-select"
+						} ) );
+					}
+					endWindow( admission, "service:Magic Pang" );
+				}
+				/*
+				================
 				gachaWindow
 
 				CIFGhaCha (ginterface GDR_GHACHA, resinfo\ifghacha.txt, 6450F0). The authored
@@ -22039,6 +22282,7 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 						] ),
 						frame = gachaHud.frame( gachaInput() ),
 						prizes = game.gacha?.prizes ?? [],
+						grid = gachaGrid(),
 						art = ( name: string ) => ROOT + "interface/game/" + name + ".png",
 						digits = ( n: number, width: number ) => String( n ).padStart( width, "0" );
 					// 645180 is the window's own drop handler (vtable 27), not the card slot's: a bag item
@@ -22099,8 +22343,12 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 								!frame.playEnabled
 							);
 						} else if ( node.type === "CIFSlotWithHelp" ) {
-							const entry = gachaPrizeEntry( node.id ), prize = prizes.find( row => row.entry === entry );
-							if ( !prize || entry === null ) continue;
+							// The v1.696 grid's slot i shows the filtered page's row i (0xA716A2).
+							const prize = grid ?
+								grid.rows[node.id - GACHA_PRIZE_SLOT_FIRST] :
+								prizes.find( row => row.entry === gachaPrizeEntry( node.id ) );
+							if ( !prize ) continue;
+							const entry = prize.entry;
 							const icon = iconPath( prize.icon );
 							if ( icon ) image( r, icon );
 							itemCount( { quantity: prize.quantity }, r );
@@ -22117,7 +22365,7 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 							}
 							controls.push( {
 								id: "gacha-prize:" + entry,
-								label: localization.text( prize.nameSymbol, "" ) + " x" + prize.quantity,
+								label: localization.text( prize.nameSymbol, prize.nameSymbol ) + " x" + prize.quantity,
 								rect: r,
 								kind: "button",
 								disabled: frame.busy,
@@ -22129,12 +22377,13 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 								const line = frame.result === "win" ?
 									hudCopy( "UIIT_MSG_GACHA_WIN" ).replace(
 										"%s",
-										() =>
-											localization.text(
-												prizes.find( row => row.refObjId === frame.reward?.refObjId )
-													?.nameSymbol,
-												""
-											)
+										() => {
+											// A v1.696 prize's name is the item reference's
+											// own English name, not a text symbol.
+											const name = prizes.find( row => row.refObjId === frame.reward?.refObjId )
+												?.nameSymbol;
+											return localization.text( name, name ?? "" );
+										}
 									).replace( "%d", () => String( frame.reward?.quantity ?? 0 ) ) :
 									frame.result === "lose" ?
 									hudCopy( "UIIT_MSG_GACHA_LOSE" ) :
@@ -22145,6 +22394,7 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 							}
 						}
 					}
+					if ( grid ) gachaSpinner( grid, px, py, frame.busy );
 					// The Inventory section's bag, with the main bag's page tabs (above its frame).
 					const bagFrame = page.GDR_INVENTORY_FRAME;
 					if ( bagFrame ) {
@@ -22695,65 +22945,14 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 					);
 					const open = combos.find( combo => combo.id === draft.combo && !combo.disabled );
 					if ( open ) {
-						// CIFComboBox_OpenList (51EA20) with the twelve visible rows
-						// CIFStallNetwork_OnCreate sets on each combo.
-						const list = comboListLayout(
-							authoredRect( at( open.id ), px, py ),
-							open.entries.length,
-							STALL_COMBO_ROWS,
-							text.height(),
-							draft.comboFirst
-						);
-						stallComboRange = list.range;
-						rect( list.popup, [ 0, 0, 0, 1 ] );
-						const ring = stretchRing(
-							list.popup,
-							ROOT + "interface/ifcommon/com_blacksquare_",
-							resources.size,
-							full
-						);
-						paths.push( ...ring.paths );
-						quads.push( ...ring.quads );
-						blocks.push( list.popup );
-						for ( const { index, rect: entry } of list.rows ) {
-							const id = "stall-net-choice:" + index;
-							// The popup list's row look (combo-box.ts POPUP_LIST_*): a bar
-							// behind the hovered row, pressed text blue, hovered pale
-							// yellow, else white.
-							if ( hover === id || pressed === id ) {
-								quads.push( {
-									rect: popupListRowBar( entry, text.height() ),
-									uv: [ 0, 0, 1, 1 ],
-									color: POPUP_LIST_HOVER_BAR,
-									rightColor: POPUP_LIST_HOVER_BAR,
-									texture: "",
-									clip: full
-								} );
-							}
-							const color: UiQuad["color"] = pressed === id ?
-								POPUP_LIST_PRESSED_TEXT :
-								hover === id ?
-								POPUP_LIST_HOVER_TEXT :
-								white;
-							quads.push( ...text.quads( open.entries[index]!, entry, entry, color ) );
-							controls.push( { id, label: open.entries[index]!, rect: entry, kind: "button" } );
-						}
-						if ( list.track ) {
-							const scroll = chatScrollbar(
-								"stall-net-combo-scroll",
-								list.track,
-								open.entries.length,
-								STALL_COMBO_ROWS,
-								list.range - list.first,
-								resources.size,
-								full,
-								hover,
-								pressed
-							);
-							paths.push( ...scroll.paths );
-							quads.push( ...scroll.quads );
-							controls.push( ...scroll.controls );
-						}
+						// The twelve visible rows CIFStallNetwork_OnCreate sets on each combo.
+						stallComboRange = comboPopupList( {
+							anchor: authoredRect( at( open.id ), px, py ),
+							entries: open.entries,
+							rows: STALL_COMBO_ROWS,
+							first: draft.comboFirst,
+							prefix: "stall-net"
+						} );
 					}
 					endWindow( admission, "service:Stall network" );
 				}
@@ -24600,7 +24799,12 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 						if ( letterDeleting >= 0 ) letterDialogBox();
 					}
 				}
-				if ( panel === "Magic Pang" ) gachaWindow();
+				if ( panel === "Magic Pang" ) {
+					// The v1.696 machine opens on its select window (0xA73200) and
+					// shows the grid only after Start.
+					if ( game?.gacha?.pool && gachaHud.selectState().open ) gachaSelectWindow();
+					else gachaWindow();
+				}
 				if ( panel === "Chat" ) {
 					const admission = beginWindow();
 					const px = Math.max( 12, (w - 380) / 2 ), py = Math.max( 150, (h - 440) / 2 );
