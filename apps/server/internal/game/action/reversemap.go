@@ -10,7 +10,10 @@ followed by a u32 point id that the client looks up in its own table of
 destinations. v1.150 ships no such table, so the port builds one at boot. When the operator imported the VSRO client's own
 table (world/optionalteleport, scripts/import_vsro_optional_teleport.py),
 it serves those rows, and a use outside a row's level band is refused.
-Without the import the port infers one.
+Its dungeon groups come too: a group's flag is drawn like any point and
+opens a menu of the group's floors (the v1.188 client's own menu, see
+world/optionalteleport); a use names a floor, and naming the flag is
+refused. Without the import the port infers one.
 
 Either way the public ids run 1..n over the published points, the
 contract every shipped client decodes (an open tab from before the import
@@ -191,15 +194,17 @@ func (rt *Runtime) AddReverseReturnMapPoints(extra []enterworld.ReverseMapPoint)
 ================
 useImportedReverseMap
 
-The imported field points in table order, published under the dense ids
-1..n with their level bands kept by public id.
+The imported points in table order, published under the dense ids 1..n
+with their level bands kept by public id. A group keeps the table's own
+group number: the browser only matches a flag to its floors by it.
 ================
 */
 func (rt *Runtime) useImportedReverseMap(imported []optionalteleport.Point) {
 	rt.reverseMapLevels = make(map[uint32]optionalteleport.Point, len(imported))
 	for _, point := range imported {
-		public := enterworld.ReverseMapPoint{Name: point.Name, RegionID: point.RegionID, X: point.X, Y: point.Y, Z: point.Z}
-		if !reverseMapPointValid(public) {
+		public := enterworld.ReverseMapPoint{Name: point.Name, RegionID: point.RegionID, X: point.X, Y: point.Y, Z: point.Z,
+			Group: point.Group, Floor: point.Floor}
+		if point.Floor && !reverseMapFloorValid(public) || !point.Floor && !reverseMapPointValid(public) {
 			continue
 		}
 		if len(rt.reverseMapPoints) == maxReverseMapPoints {
@@ -232,6 +237,26 @@ func reverseMapPointValid(point enterworld.ReverseMapPoint) bool {
 
 /*
 ================
+reverseMapFloorValid
+
+A dungeon group's floor: a dungeon region with finite coordinates (a
+floor's locals have no fixed extent).
+================
+*/
+func reverseMapFloorValid(point enterworld.ReverseMapPoint) bool {
+	if point.Group == 0 || simulation.PlaneKindOf(point.RegionID) != simulation.PlaneCave {
+		return false
+	}
+	for _, v := range [3]float64{point.X, point.Y, point.Z} {
+		if math.IsNaN(v) || math.IsInf(v, 0) {
+			return false
+		}
+	}
+	return true
+}
+
+/*
+================
 ReverseReturnMapPoints
 
 The public table: empty when the option is off.
@@ -245,8 +270,10 @@ func (rt *Runtime) ReverseReturnMapPoints() []enterworld.ReverseMapPoint {
 ================
 reverseMapDestination
 
-The field point an id names, or false for an unknown id or a disabled
-option. The public ids index the table: 1..n.
+The point an id names, or false for an unknown id, a disabled option or
+a dungeon group's flag (the table marks it "flag position only"; the
+v1.188 menu lists only the group's floors). The public ids index the
+table: 1..n.
 ================
 */
 func (rt *Runtime) reverseMapDestination(id uint32) (travelPoint, bool) {
@@ -254,6 +281,9 @@ func (rt *Runtime) reverseMapDestination(id uint32) (travelPoint, bool) {
 		return travelPoint{}, false
 	}
 	point := rt.reverseMapPoints[id-1]
+	if point.Group != 0 && !point.Floor {
+		return travelPoint{}, false
+	}
 	destination := travelPoint{world: instance.ID(domain.DefaultWorldInstance)}
 	destination.spawn.RegionID = point.RegionID
 	destination.spawn.X, destination.spawn.Y, destination.spawn.Z = point.X, point.Y, point.Z

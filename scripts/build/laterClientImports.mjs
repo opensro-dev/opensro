@@ -217,7 +217,10 @@ export function laterWorldMapButtonPublicPaths() {
 		"guide/gd_long_contents_event",
 		"worldmap/map/xy_returnicon",
 		"worldmap/map/xy_returnicon_focus",
-		"worldmap/map/xy_returnicon_press"
+		"worldmap/map/xy_returnicon_press",
+		"worldmap/map/map_return",
+		"worldmap/map/map_return_focus",
+		"worldmap/map/map_return_press"
 	].map( ( name ) => LATER_WORLDMAP_BUTTON_ROOT + name + ".png" );
 }
 

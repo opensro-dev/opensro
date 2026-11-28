@@ -99,7 +99,10 @@ ReverseMapPoint
 
 A reverse return map destination (port-only, not native). The browser paints
 it from these coordinates; a use names only its ID, which the server
-resolves (action/reversemap.go).
+resolves (action/reversemap.go). Group names a dungeon group of the
+imported table (0, omitted, for a field point): the group's map point is
+its flag, which opens a menu of the group's Floor points and is never a
+destination itself.
 ================
 */
 type ReverseMapPoint struct {
@@ -109,6 +112,8 @@ type ReverseMapPoint struct {
 	X        float64 `json:"x"`
 	Y        float64 `json:"y"`
 	Z        float64 `json:"z"`
+	Group    uint32  `json:"group,omitempty"`
+	Floor    bool    `json:"floor,omitempty"`
 }
 
 /*

@@ -192,6 +192,7 @@ import {
 import { jobContributionSelf, jobRankPage, jobRankPages } from "@/engine/foundation/gameplay/job-rank";
 import { columnHeadKey, columnHeadLayout } from "@/engine/foundation/ui/column-heads";
 import { createMapTeleport } from "./hud/map-teleport";
+import { REVERSE_MAP_FLOOR, reverseMapDestination } from "@/engine/foundation/gameplay/reverse-return-map";
 import { createGmHelper, GM_HELPER_HEIGHT, GM_HELPER_ROWS, GM_HELPER_ROW_HEIGHT } from "./hud/gm-helper";
 import type { GmCatalog } from "@/engine/foundation/gameplay/gm-command";
 import { gmLocalCommand } from "@/engine/foundation/gameplay/gm-local-commands";
@@ -6135,13 +6136,18 @@ export function createUi( ports: UiPorts ) {
 		} else if ( id === "reverse-window-close" ) {
 			reverseScrollHud.back();
 			dirty = true;
-		} else if ( id.startsWith( "reverse-map-point:" ) ) {
+		} else if ( id.startsWith( "reverse-map-point:" ) || id.startsWith( REVERSE_MAP_FLOOR ) ) {
+			const floor = id.startsWith( REVERSE_MAP_FLOOR );
 			const point = reverseScrollHud.mapping() ?
 				view.gameplay?.reverseMapPoints?.find( row =>
-					row.id === Number( id.slice( "reverse-map-point:".length ) )
+					row.id === Number( id.slice( floor ? REVERSE_MAP_FLOOR.length : "reverse-map-point:".length ) )
 				) :
 				undefined;
-			if ( point ) {
+			if ( point && !reverseMapDestination( point ) ) {
+				// A dungeon group's flag: its floor menu (v1.188 0x6971c8).
+				reverseScrollHud.openMenu( point.group! );
+			} else if ( point && (floor ? point.floor === true : !point.floor) ) {
+				reverseScrollHud.closeMenu();
 				mapTeleport.choose( {
 					regionId: point.regionId,
 					x: point.x,
@@ -7282,6 +7288,25 @@ export function createUi( ports: UiPorts ) {
 				) return;
 			}
 			if ( reverseScrollHud.reconcile( view ) ) dirty = true;
+			// The reverse map's floor menu: Escape hides it before it leaves
+			// the map, and pressing any other control (the map surface among
+			// them) hides it, as the v1.188 map's button-up on any other spot
+			// does. A press with no id is only a release or the pointer
+			// leaving a control: moving onto the menu must not hide it.
+			if ( reverseScrollHud.menu() !== null ) {
+				if ( event.kind === "key" && event.code === "Escape" ) {
+					reverseScrollHud.closeMenu();
+					dirty = true;
+					return;
+				}
+				if (
+					event.kind === "press" && event.id !== null && !event.id.startsWith( REVERSE_MAP_FLOOR ) &&
+					!event.id.startsWith( "reverse-map-point:" )
+				) {
+					reverseScrollHud.closeMenu();
+					dirty = true;
+				}
+			}
 			if ( reverseScrollHud.active() || reverseScrollHud.party() || reverseScrollHud.user() ) {
 				const inBox = reverseScrollHud.active();
 				const boxControl = ( id: string | null ) =>

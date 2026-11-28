@@ -15,6 +15,10 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { defined } from "../helpers/defined.mjs";
 import { uiFixture } from "../helpers/ui-fixture.mjs";
+
+const { worldMapDungeonPose } = await import( "../../src/engine/foundation/ui/world-map.ts" );
+// The Ch'in Tomb's first floor, whose door the world page draws at Jangan.
+const TOMB_FIRST_REGION = 0x8002;
 const { createGameplay } = await import(
 	"../../src/engine/runtime/simulation/worker/session/world/gameplay/gameplay.ts"
 );
@@ -299,7 +303,9 @@ test("an answer during a busy inventory is held, not lost", () => {
 // Port-only, not native: the map choice (reverse-return-map.ts)
 // ============================================================================
 
-const { decodeReverseMapPoints } = await import( "../../src/engine/foundation/gameplay/reverse-return-map.ts" );
+const { decodeReverseMapPoints, reverseMapDestination, reverseMapFloors } = await import(
+	"../../src/engine/foundation/gameplay/reverse-return-map.ts"
+);
 
 /*
 ================
@@ -743,8 +749,157 @@ test("the published table is checked: ids in order, field regions, local coordin
 			{ ...good, x: 1920 },
 			{ ...good, z: -1 },
 			{ ...good, y: Infinity },
-			{ ...good, name: 5 }
+			{ ...good, name: 5 },
+			{ ...good, group: 0 },
+			{ ...good, group: 1.5 },
+			{ ...good, floor: true },
+			{ ...good, group: 2, floor: true },
+			{ ...good, floor: false }
 		]
 	) assert.throws( () => decodeReverseMapPoints( [ bad ] ) );
 	assert.throws( () => decodeReverseMapPoints( "points" ) );
+});
+
+test("a dungeon group decodes as its flag and its floors, in the floor's own frame", () => {
+	const flag = { id: 1, name: "Tomb-King Shi", regionId: 26284, x: 960, y: 111, z: 1662, group: 2 };
+	const floor = {
+		id: 2,
+		name: "Tomb of Qin-Shi Emperor lv.2",
+		regionId: 0x8006,
+		x: -11719,
+		y: -47,
+		z: 5742,
+		group: 2,
+		floor: true
+	};
+	const points = decodeReverseMapPoints( [ flag, floor ] );
+	assert.deepEqual( points, [ flag, floor ] );
+	assert.equal( reverseMapDestination( points[0] ), false, "the flag is no destination" );
+	assert.equal( reverseMapDestination( points[1] ), true );
+	assert.deepEqual( reverseMapFloors( points, points[0] ), [ points[1] ] );
+	assert.deepEqual( reverseMapFloors( points, points[1] ), [], "a floor lists nothing" );
+});
+
+/*
+================
+withCaveGroup
+
+The open fixture with a published dungeon group: its flag at the local
+player's own position, the Ch'in Tomb door's map point (the world page
+draws the tomb's entrance icon right under it), and two floors.
+================
+*/
+function withCaveGroup( f ) {
+	const pose = defined( worldMapDungeonPose( TOMB_FIRST_REGION ) );
+	f.state.gameplay = /** @type {any} */ ({
+		...f.state.gameplay,
+		pose,
+		reverseMapPoints: [
+			{ id: 1, name: "Tomb-King Shi", regionId: pose.regionId, x: pose.x, y: pose.y, z: pose.z, group: 2 },
+			{
+				id: 2,
+				name: "Tomb of Qin-Shi Emperor lv.2",
+				regionId: 0x8006,
+				x: -11719,
+				y: -47,
+				z: 5742,
+				group: 2,
+				floor: true
+			},
+			{
+				id: 3,
+				name: "Tomb of Qin-Shi Emperor lv.3",
+				regionId: 0x8005,
+				x: 397,
+				y: 72,
+				z: 55,
+				group: 2,
+				floor: true
+			}
+		]
+	});
+	return f;
+}
+
+/*
+================
+openMapScene
+
+Opens the box's map row and steps until the map shows point 1.
+================
+*/
+function openMapScene( f ) {
+	f.ui.event( { kind: "double-activate", id: "slot:13" } );
+	f.ui.step( f.state, 1300 );
+	f.ui.event( { kind: "activate", id: "reverse-scroll-map" } );
+	let scene = f.ui.step( f.state, 1400 );
+	for ( let time = 1500; time < 3000 && !scene?.controls.some( c => c.id === "reverse-map-point:1" ); time += 100 ) {
+		scene = f.ui.step( f.state, time ) ?? scene;
+	}
+	return scene;
+}
+
+test("a dungeon flag opens its floor menu, and a floor asks, then sends choice 7 with its id", () => {
+	const sent = [], f = withCaveGroup( open( sent ) );
+	try {
+		const scene = defined( openMapScene( f ) );
+		const ids = scene.controls.map( c => c.id );
+		assert.ok( ids.includes( "reverse-map-point:1" ), "the flag is drawn" );
+		assert.ok(
+			!ids.some( id => id.startsWith( "map-dungeon-icon:" ) || id.startsWith( "map-town:" ) ),
+			"the tomb's entrance under the flag takes no click"
+		);
+		assert.ok( !ids.some( id => id.startsWith( "reverse-map-floor:" ) ), "the menu waits for the flag" );
+		assert.ok( !ids.includes( "reverse-map-point:2" ), "a floor is never drawn on the map" );
+		f.ui.event( { kind: "activate", id: "reverse-map-point:1" } );
+		const menu = defined( f.ui.step( f.state, 3100 ) );
+		const entries = menu.controls.filter( c => c.id.startsWith( "reverse-map-floor:" ) );
+		assert.deepEqual( entries.map( c => c.id ), [ "reverse-map-floor:2", "reverse-map-floor:3" ] );
+		assert.ok( f.hasText( "Tomb of Qin-Shi Emperor lv.2" ) && f.hasText( "Tomb of Qin-Shi Emperor lv.3" ) );
+		assert.ok( !f.hasText( "Move here?" ), "the flag itself asks nothing" );
+		assert.equal( sent.filter( row => row.kind === "gameplay" ).length, 0 );
+		f.ui.event( { kind: "activate", id: "reverse-map-floor:3" } );
+		const asked = defined( f.ui.step( f.state, 3200 ) ?? menu );
+		assert.ok( f.hasText( "Move here?" ) && asked.controls.some( c => c.id === "map-teleport-confirm" ) );
+		f.ui.event( { kind: "activate", id: "map-teleport-confirm" } );
+		assert.deepEqual( sent.filter( row => row.kind === "gameplay" ), [
+			{ kind: "gameplay", command: { kind: "item-use", slot: 13, reverseChoice: 7, reverseMapPoint: 3 } }
+		] );
+	} finally {
+		f.dispose();
+	}
+});
+
+test("the floor menu closes on Escape and on a press elsewhere, keeping the map", () => {
+	const sent = [], f = withCaveGroup( open( sent ) );
+	try {
+		openMapScene( f );
+		let time = 3000;
+		let last = /** @type {{ controls: { id: string }[] } | null} */ (null);
+		const menuShown = () => {
+			last = f.ui.step( f.state, time += 100 ) ?? last;
+			return defined( last ).controls.some( c => c.id.startsWith( "reverse-map-floor:" ) );
+		};
+		f.ui.event( { kind: "activate", id: "reverse-map-point:1" } );
+		assert.equal( menuShown(), true, "the menu is up" );
+		// The pointer leaving the flag for the menu: the platform reports the
+		// release as a press with no id, then hovers the entry.
+		f.ui.event( { kind: "press", id: null } );
+		f.ui.event( { kind: "hover", id: "reverse-map-floor:2" } );
+		assert.equal( menuShown(), true, "moving onto the menu keeps it" );
+		f.ui.event( { kind: "key", code: "Escape" } );
+		assert.equal( menuShown(), false, "Escape hides the menu" );
+		assert.ok( defined( last ).controls.some( c => c.id === "reverse-map-point:1" ), "the map stays" );
+		f.ui.event( { kind: "activate", id: "reverse-map-point:1" } );
+		assert.equal( menuShown(), true );
+		f.ui.event( { kind: "press", id: "map-pan" } );
+		assert.equal( menuShown(), false, "a press on the map hides the menu" );
+		f.ui.event( { kind: "activate", id: "reverse-map-point:1" } );
+		assert.equal( menuShown(), true );
+		f.ui.event( { kind: "press", id: "reverse-map-floor:2" } );
+		assert.equal( menuShown(), true, "a press on an entry keeps it" );
+		assert.equal( sent.filter( row => row.kind === "gameplay" ).length, 0 );
+	} finally {
+		f.dispose();
+	}
 });
