@@ -18,8 +18,8 @@ dropping cargo. The reference server's order:
   - the player rides it: 0x4409, UIIT_MSG_COSERR_CANT_SELL_RIDING_COS.
 
 The v1.150 client reads the answer as [1][kind] or [2][code] in
-notification category 12 (7782E0), so the word errors travel as their low byte
-(cosCancelResult's grammar). Codes 3 and 5 name no category-12 text
+notification category 12 (client 7782E0), so the word errors travel as
+their low byte (cosCancelResult's grammar). Codes 3 and 5 name no category-12 text
 and stay silent there.
 
 The native handler first demands an interaction state this port does
