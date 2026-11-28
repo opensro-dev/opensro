@@ -20,6 +20,7 @@ const WORLD_MAP_ROOT = "/assets/images/Media_extracted/interface/worldmap/map/";
 // worldmap_mapinfo.txt row 0 widens it for a client that ships more map).
 // The local player's map sign, drawn last (57ce80).
 export const MAP_LOCAL_MARKER = "/assets/images/Media_extracted/interface/minimap/mm_sign_character.png";
+const MAP_SIGN_ROOT = "/assets/images/Media_extracted/interface/minimap/";
 const WORLD_TILE_SIZE = 128;
 const WORLD_TILE_REGIONS = 4;
 // 575660 measures map points from this sector, in 192-unit sectors.
@@ -337,6 +338,24 @@ function worldMapTownPages() {
 			bounds: [ 77, 108, 81, 102, 0, 48, 192, 96 ]
 		}
 	] as const;
+}
+
+/*
+================
+betaPlayerSign
+
+Port-only, not native: the sign a beta-roster player (beta-map.ts,
+SRO_BETA_PLAYER_MAP) wears on a map page. An [AI] trader wears the NPC
+sign and an [AI] thief the monster sign, so a caravan reads apart from
+its raiders; every other player wears the other-player sign. ai says the
+row is an AI player, which the world page draws larger.
+================
+*/
+export function betaPlayerSign( name: string ): { readonly path: string; readonly ai: boolean; } {
+	const ai = name.startsWith( "[AI]" );
+	if ( ai && name.includes( "Trader" ) ) return { path: MAP_SIGN_ROOT + "mm_sign_npc.png", ai };
+	if ( ai && name.includes( "Thief" ) ) return { path: MAP_SIGN_ROOT + "mm_sign_monster.png", ai };
+	return { path: MAP_SIGN_ROOT + "mm_sign_otherplayer.png", ai };
 }
 /*
 ================
