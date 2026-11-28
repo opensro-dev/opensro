@@ -11,14 +11,25 @@ its own table of map destinations. The operator imports the VSRO client's refopt
 it as textdata/vsro-optional-teleport.json; without the import there is no
 file and the action runtime keeps its inferred table (reversemap.go).
 
-This package owns which rows the port serves: the outdoor map points of the
-loaded world. A row is served when it is in service, in the field world
-(WorldID 1), drawn on the map (MapPoint 1) and not part of a dungeon group
-(RegionIDGroup -1), and its region is an outdoor region the loaded textdata
-names (textzonename) and the Alexandria overlay does not hide. That drops the
-dungeon floors and their entrance flags (the port's map has no dungeon
-destinations), and drops Alexandria's rows unless its regions are loaded and
-SRO_ALEXANDRIA is on.
+This package owns which rows the port serves: the map points of the
+loaded world and the dungeon floors they open. A field row is served when
+it is in service, in the field world (WorldID 1), drawn on the map
+(MapPoint 1), and its region is an outdoor region the loaded textdata
+names (textzonename) and the Alexandria overlay does not hide; that drops
+Alexandria's rows unless its regions are loaded and SRO_ALEXANDRIA is on.
+
+A dungeon group (RegionIDGroup other than -1) is one map row, the flag,
+and the floor rows of the same group (MapPoint 0). The v1.188 client
+draws the flag like any other point; clicking it opens a small menu of
+the group's floors, labelled with each floor row's ZoneName128 text
+(in the v1.188 client, its button-up handler 0x6971c8..0x6973bd lists
+the group's rows whose MapPoint is not 1 through client 0x94d270, and
+client 0x631d60 adds one 155 x 22 map_return button per row; research
+findings/reverse-return-dungeon-groups-v1188.md). The flag itself is
+never a destination: the shipped row 31 names itself "flag position
+only". A floor is served when its region is a dungeon floor the shard
+has open (the Ch'in Tomb floors only while SRO_QINSHI_TOMB is on); a
+group is served only with its flag and at least one floor.
 
 INFERENCE: LevelMin / LevelMax are the table's level band (0 means no
 limit); the port refuses a use outside it. The shipped rows use 0/0,
@@ -46,7 +57,9 @@ import (
 	"strconv"
 
 	"opensro.online/server/internal/game/enterworld"
+	worldgeom "opensro.online/server/internal/game/world"
 	"opensro.online/server/internal/game/world/alexandria"
+	"opensro.online/server/internal/game/world/monster"
 	"opensro.online/server/internal/game/world/simulation"
 )
 
@@ -71,13 +84,20 @@ const (
 	zoneNameColumns = 9
 	zoneNameRegion  = 1
 	zoneNameEnglish = 8
+	// The Ch'in Tomb's dungeon ids, floors 6 down to 1 (geometry.go
+	// DungeonRegionID: 0x8002..0x8007).
+	tombFirstDungeon = 2
+	tombLastDungeon  = 7
 )
 
 /*
 ================
 Point
 
-One served destination, by the table's own id.
+One served row, by the table's own id. Group is the row's dungeon group
+(0 for a plain field point). A Floor row is a dungeon destination its
+group's flag lists; a grouped row that is not a Floor is that flag, drawn
+on the map but never a destination.
 ================
 */
 type Point struct {
@@ -87,6 +107,19 @@ type Point struct {
 	X, Y, Z  float64
 	LevelMin int64
 	LevelMax int64
+	Group    uint32
+	Floor    bool
+}
+
+/*
+================
+Point.Destination
+
+Whether a use may name this row: a field point or a floor, never a flag.
+================
+*/
+func (p Point) Destination() bool {
+	return p.Group == 0 || p.Floor
 }
 
 /*
@@ -183,7 +216,7 @@ func Load(textdataDir string) ([]Point, error) {
 	if err != nil {
 		return nil, err
 	}
-	return selectPoints(raw.Rows, zoneNames(textdataDir), hidden)
+	return selectPoints(raw.Rows, zoneNames(textdataDir), hidden, monster.QinShiTombFromEnv())
 }
 
 /*
@@ -215,10 +248,11 @@ func zoneNames(textdataDir string) map[uint16]string {
 selectPoints
 
 The rows the port serves (see the file header), sorted by id. A repeated
-id refuses the table.
+id refuses the table. tombOpen is SRO_QINSHI_TOMB: the Ch'in Tomb floors
+are served only while the tomb is open.
 ================
 */
-func selectPoints(rows []importRow, zones map[uint16]string, hidden *alexandria.Overlay) ([]Point, error) {
+func selectPoints(rows []importRow, zones map[uint16]string, hidden *alexandria.Overlay, tombOpen bool) ([]Point, error) {
 	var points []Point
 	seen := map[int64]bool{}
 	for _, row := range rows {
@@ -226,30 +260,126 @@ func selectPoints(rows []importRow, zones map[uint16]string, hidden *alexandria.
 			return nil, fmt.Errorf("optional teleport: row id %d is not a new positive id", row.ID)
 		}
 		seen[row.ID] = true
-		if row.Service != serviceOn || row.WorldID != fieldWorldID || row.MapPoint != mapPointShown ||
-			row.RegionGroup != noRegionGroup || row.RegionID < 1 || row.RegionID > math.MaxUint16 {
-			continue
+		point, served := servedRow(row, zones, hidden, tombOpen)
+		if served {
+			points = append(points, point)
 		}
-		region := uint16(row.RegionID)
-		zone, known := zones[region]
-		if !known || simulation.PlaneKindOf(region) == simulation.PlaneCave || hidden.HidesRegion(region) || !inRegion(row) {
-			continue
-		}
-		name := row.Name
-		if name == "" {
-			name = zone
-		}
-		if name == "" || len(name) > maxNameBytes {
-			continue
-		}
-		points = append(points, Point{ID: uint32(row.ID), Name: name, RegionID: region,
-			X: row.X, Y: row.Y, Z: row.Z, LevelMin: row.LevelMin, LevelMax: row.LevelMax})
 	}
+	points = completeGroups(points)
 	if len(points) > maxPoints {
 		return nil, fmt.Errorf("optional teleport: %d points, at most %d", len(points), maxPoints)
 	}
 	sort.Slice(points, func(i, j int) bool { return points[i].ID < points[j].ID })
 	return points, nil
+}
+
+/*
+================
+servedRow
+
+One row as a served point: a field map point or a group's flag on a named
+outdoor region, or a group's floor on an open dungeon floor.
+================
+*/
+func servedRow(row importRow, zones map[uint16]string, hidden *alexandria.Overlay, tombOpen bool) (Point, bool) {
+	if row.Service != serviceOn || row.WorldID != fieldWorldID {
+		return Point{}, false
+	}
+	var group uint32
+	if row.RegionGroup != noRegionGroup {
+		if row.RegionGroup < 1 || row.RegionGroup > math.MaxUint32 {
+			return Point{}, false
+		}
+		group = uint32(row.RegionGroup)
+	}
+	// The table's dungeon regions are signed (-32762 is 0x8006).
+	if row.RegionID < math.MinInt16 || row.RegionID > math.MaxUint16 || row.RegionID == 0 {
+		return Point{}, false
+	}
+	region := uint16(row.RegionID)
+	if row.MapPoint != mapPointShown {
+		if group == 0 || !floorOpen(region, tombOpen) || !finite(row) || row.Name == "" || len(row.Name) > maxNameBytes {
+			return Point{}, false
+		}
+		return Point{ID: uint32(row.ID), Name: row.Name, RegionID: region, X: row.X, Y: row.Y, Z: row.Z,
+			LevelMin: row.LevelMin, LevelMax: row.LevelMax, Group: group, Floor: true}, true
+	}
+	zone, known := zones[region]
+	if !known || simulation.PlaneKindOf(region) == simulation.PlaneCave || hidden.HidesRegion(region) || !inRegion(row) {
+		return Point{}, false
+	}
+	name := row.Name
+	if name == "" {
+		name = zone
+	}
+	if name == "" || len(name) > maxNameBytes {
+		return Point{}, false
+	}
+	return Point{ID: uint32(row.ID), Name: name, RegionID: region, X: row.X, Y: row.Y, Z: row.Z,
+		LevelMin: row.LevelMin, LevelMax: row.LevelMax, Group: group}, true
+}
+
+/*
+================
+floorOpen
+
+A dungeon floor region the shard can land on: the Ch'in Tomb floors while
+the tomb is open, any other dungeon (Donwhang Stone Cave) always.
+================
+*/
+func floorOpen(region uint16, tombOpen bool) bool {
+	if simulation.PlaneKindOf(region) != simulation.PlaneCave {
+		return false
+	}
+	if region >= worldgeom.DungeonRegionID(tombFirstDungeon) && region <= worldgeom.DungeonRegionID(tombLastDungeon) {
+		return tombOpen
+	}
+	return true
+}
+
+/*
+================
+completeGroups
+
+Drops a group's rows unless it has exactly one flag and at least one
+floor: a flag without floors would open an empty menu, and a floor
+without its flag could never be chosen.
+================
+*/
+func completeGroups(points []Point) []Point {
+	flags, floors := map[uint32]int{}, map[uint32]int{}
+	for _, point := range points {
+		switch {
+		case point.Group == 0:
+		case point.Floor:
+			floors[point.Group]++
+		default:
+			flags[point.Group]++
+		}
+	}
+	kept := points[:0]
+	for _, point := range points {
+		if point.Group == 0 || flags[point.Group] == 1 && floors[point.Group] > 0 {
+			kept = append(kept, point)
+		}
+	}
+	return kept
+}
+
+/*
+================
+finite
+
+Finite coordinates (a floor's locals have no fixed extent).
+================
+*/
+func finite(row importRow) bool {
+	for _, v := range [3]float64{row.X, row.Y, row.Z} {
+		if math.IsNaN(v) || math.IsInf(v, 0) {
+			return false
+		}
+	}
+	return true
 }
 
 /*
@@ -260,10 +390,8 @@ Finite coordinates inside the region's local extent.
 ================
 */
 func inRegion(row importRow) bool {
-	for _, v := range [3]float64{row.X, row.Y, row.Z} {
-		if math.IsNaN(v) || math.IsInf(v, 0) {
-			return false
-		}
+	if !finite(row) {
+		return false
 	}
 	return row.X >= 0 && row.X < regionSize && row.Z >= 0 && row.Z < regionSize
 }

@@ -78,10 +78,11 @@ const POSE = { regionId: 93 * 256 + 167, x: 230, y: 0, z: 1200, angle: 0 };
 mapHud
 
 A map window over the fixture icons; frame() presents one frame and returns
-its caption and controls.
+its caption and controls. reverseMapping is a reverse return scroll holding
+the map.
 ================
 */
-function mapHud( iconRows = [ FORT_ICON ] ) {
+function mapHud( iconRows = [ FORT_ICON ], reverseMapping = false ) {
 	const hud = createWorldMapHud( {
 		assets: { available: () => 0, request: () => 0, take: () => null, cancel: () => {} },
 		base: "http://fixture.invalid",
@@ -105,7 +106,7 @@ function mapHud( iconRows = [ FORT_ICON ] ) {
 				trackedQuest: 0,
 				minimapResources: { positions: () => undefined },
 				mapTeleport: { view: () => {}, viewCave: () => {}, hide: () => {} },
-				reverseScrollHud: { mapping: () => false },
+				reverseScrollHud: { mapping: () => reverseMapping, menu: () => null },
 				text: {
 					path: () => null,
 					run: ( value ) => ({ width: value.length * 6 }),
@@ -191,5 +192,22 @@ test("the three fortress icons are three distinct controls that each open the fo
 		}
 	} finally {
 		hud.dispose();
+	}
+});
+
+test("while a reverse return scroll holds the map, the page icons take no click", () => {
+	// v1.188 0x6971c8: in reverse mode the button-up tests only the return
+	// icons; the town and dungeon icons (0x6973e3) answer outside it.
+	const { hud, frame } = mapHud( [ FORT_ICON ], true );
+	try {
+		assert.equal( frame().controls.some( row => row.id.startsWith( "map-town:" ) ), false );
+	} finally {
+		hud.dispose();
+	}
+	const plain = mapHud( [ FORT_ICON ], false );
+	try {
+		assert.ok( plain.frame().controls.some( row => row.id === "map-town:1001" ), "outside reverse mode it opens" );
+	} finally {
+		plain.hud.dispose();
 	}
 });

@@ -288,6 +288,7 @@ function paint( hud, over = {} ) {
 		strings: { SN_ZONE_23001: "Fixture Tomb", SN_ZONE_23002: "Fixture Cave" },
 		levelNote: "Fixture note",
 		icons: [],
+		doors: true,
 		text: TEXT,
 		page: 0,
 		pan: [ 0, 0 ],
@@ -641,6 +642,14 @@ test("a door is named by the client's text and its control is the icon drawn the
 	// A door the text does not name stays the plain icon.
 	view = paint( hud, { center, strings: { SN_ZONE_23001: "Fixture Tomb" } } );
 	assert.equal( control( view, "map-dungeon-icon:1" ), undefined );
+	hud.dispose();
+});
+
+test("no door takes a click while a reverse return scroll holds the map", () => {
+	const hud = tools();
+	const center = defined( worldMapDungeonPose( 0x8001 ) );
+	defined( control( paint( hud, { center } ), "map-dungeon-icon:1" ), "the door is offered" );
+	assert.equal( control( paint( hud, { center, doors: false } ), "map-dungeon-icon:1" ), undefined );
 	hud.dispose();
 });
 

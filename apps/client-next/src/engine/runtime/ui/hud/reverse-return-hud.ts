@@ -11,7 +11,9 @@ invalidation: the box keeps the choice and the answer waits for it.
 Port-only, not native: when the server publishes a map table
 (SRO_REVERSE_RETURN_MAP), the box has a third row. It hands the same
 pending scroll to the world map, where a published point is the answer
-(reverse-return-map.ts).
+(reverse-return-map.ts). A dungeon group's flag answers nothing itself:
+it opens the small menu of the group's floors, as the v1.188 map does,
+and a floor is the answer. This module owns which flag's menu is open.
 
 Later-native (#3903): the box's party row hands the scroll to the party
 window (a member is the answer) and its user row to the user settings
@@ -24,7 +26,7 @@ import type { GameplayCommand, GameplayState, InventoryItem } from "@/engine/con
 import type { UiView } from "@/engine/contracts/ui";
 import { isReverseReturnScroll } from "@/engine/foundation/gameplay/cos-item-use";
 import { REVERSE_RETURN_LAST_DEATH, REVERSE_RETURN_LAST_RECALL } from "@/engine/foundation/gameplay/count-job";
-import { REVERSE_RETURN_MAP } from "@/engine/foundation/gameplay/reverse-return-map";
+import { REVERSE_RETURN_MAP, reverseMapDestination } from "@/engine/foundation/gameplay/reverse-return-map";
 import {
 	REVERSE_RETURN_ENROLL,
 	REVERSE_RETURN_PARTY,
@@ -40,6 +42,9 @@ export function createReverseReturnHud() {
 	let pending: { slot: number; refObjId: number; gid: number; } | null = null;
 	// mapping: the box handed the pending scroll to the world map.
 	let mapping = false;
+	// menu: the dungeon group whose floor menu the map shows (port of the
+	// v1.188 popup, reverse-map-buttons.ts), or null.
+	let menu: number | null = null;
 	// window: the box handed the pending scroll to its party or user
 	// window (#3903); enroll asks before it overwrites a saved location.
 	let window: "party" | "user" | null = null;
@@ -74,6 +79,7 @@ export function createReverseReturnHud() {
 		}
 		pending = null;
 		mapping = false;
+		menu = null;
 		window = null;
 		confirmEnroll = false;
 		return true;
@@ -101,6 +107,7 @@ export function createReverseReturnHud() {
 		open( item: InventoryItem, gid: number ) {
 			pending = { slot: item.slot, refObjId: item.refObjId, gid };
 			mapping = false;
+			menu = null;
 			window = null;
 			confirmEnroll = false;
 		},
@@ -135,18 +142,53 @@ export function createReverseReturnHud() {
 			reconcile( view );
 			if ( !pending || !view?.gameplay?.reverseMapPoints?.length ) return false;
 			mapping = true;
+			menu = null;
 			return true;
+		},
+		/*
+		================
+		menu
+
+		The dungeon group whose floor menu is open on the map, or null.
+		================
+		*/
+		menu(): number | null {
+			return pending !== null && mapping ? menu : null;
+		},
+		/*
+		================
+		openMenu
+
+		A group's flag was clicked: its floor menu opens, replacing any
+		other (v1.188 0x6971c8 refills the one popup). Clicking the open
+		flag again keeps it open.
+		================
+		*/
+		openMenu( group: number ) {
+			if ( pending !== null && mapping ) menu = group;
+		},
+		/*
+		================
+		closeMenu
+		================
+		*/
+		closeMenu() {
+			menu = null;
 		},
 		/*
 		================
 		choosePoint
 
-		A published map point answers the pending scroll (choice 7).
+		A published map point answers the pending scroll (choice 7). A
+		dungeon group's flag is no answer: only its floors are.
 		================
 		*/
 		choosePoint( id: number, view: UiView | null ): GameplayCommand | null {
 			reconcile( view );
-			if ( !pending || !mapping || !view?.gameplay?.reverseMapPoints?.some( point => point.id === id ) ) {
+			if (
+				!pending || !mapping ||
+				!view?.gameplay?.reverseMapPoints?.some( point => point.id === id && reverseMapDestination( point ) )
+			) {
 				return null;
 			}
 			// A busy bag is a round trip in flight (the worker refuses item
@@ -156,6 +198,7 @@ export function createReverseReturnHud() {
 			const slot = pending.slot;
 			pending = null;
 			mapping = false;
+			menu = null;
 			window = null;
 			confirmEnroll = false;
 			return { kind: "item-use", slot, reverseChoice: REVERSE_RETURN_MAP, reverseMapPoint: id };
@@ -316,6 +359,7 @@ export function createReverseReturnHud() {
 		close() {
 			pending = null;
 			mapping = false;
+			menu = null;
 			window = null;
 			confirmEnroll = false;
 		},

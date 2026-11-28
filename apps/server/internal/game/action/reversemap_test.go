@@ -309,3 +309,44 @@ func TestReverseMapExtraPointsJoinTheTableDenseAndOnlyWhileOn(t *testing.T) {
 		t.Fatalf("arrived at %+v, not the extra point", got)
 	}
 }
+
+/*
+================
+TestReverseMapImportedDungeonGroupServesItsFloorsNotItsFlag
+
+The imported Ch'in Tomb group: its flag and floor are published with the
+group, the floor keeps its dungeon coordinates, a use naming the flag
+spends nothing, and a use naming the floor lands on it.
+================
+*/
+func TestReverseMapImportedDungeonGroupServesItsFloorsNotItsFlag(t *testing.T) {
+	rt, c, clock := reverseReturnFixture(t)
+	level := int64(70)
+	c.Level = &level
+	rt.ConfigureReverseReturnMap(true, []optionalteleport.Point{
+		{ID: 7, Name: "Test Field", RegionID: reverseMapTestRegion, X: 100, Y: 5, Z: 200},
+		{ID: 31, Name: "Jangan", RegionID: reverseMapTestRegion, X: 960, Y: 111, Z: 1662, Group: 2},
+		{ID: 32, Name: "Tomb of Qin-Shi Emperor lv.2", RegionID: 0x8006, X: -11719, Y: -47, Z: 5742,
+			LevelMin: 70, LevelMax: 999, Group: 2, Floor: true},
+	})
+	points := rt.ReverseReturnMapPoints()
+	if len(points) != 3 || points[1].Group != 2 || points[1].Floor || points[2].Group != 2 || !points[2].Floor ||
+		points[2].ID != 3 || points[2].RegionID != 0x8006 || points[2].X != -11719 {
+		t.Fatalf("published points %+v, want the field point, the flag and the floor", points)
+	}
+	useReverseScroll(rt, c, reverseMapTail(points[1].ID)...)
+	if c.MissionInventory[len(c.MissionInventory)-1].StackCount != 2 || c.NativeTeleportMode != 0 {
+		t.Fatal("the group's flag was accepted as a destination")
+	}
+	useReverseScroll(rt, c, reverseMapTail(points[2].ID)...)
+	if c.MissionInventory[len(c.MissionInventory)-1].StackCount != 1 || c.NativeTeleportMode != 1 {
+		t.Fatal("the floor did not start the cast")
+	}
+	rt.PushCharacterFrames = func(string, string, []wire.Frame) {}
+	clock.Advance(time.Second)
+	rt.TickHook()(clock.NowMs())
+	rt.processReturnArrivals()
+	if got := missionSpawnFromWorld(c.World.Spawn, simulation.Spawn{}); got.RegionID != 0x8006 || got.X != -11719 || got.Z != 5742 {
+		t.Fatalf("arrived at %+v, not the tomb floor", got)
+	}
+}

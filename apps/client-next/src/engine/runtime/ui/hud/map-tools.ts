@@ -157,6 +157,10 @@ interface MapToolsPaint {
 	offerUniqueSpawns?: boolean;
 	// The screen rects of the icons the world page drew (its click hits).
 	icons: readonly UiRect[];
+	// Whether the dungeon entrances take clicks: not while a reverse
+	// return scroll holds the map (v1.188 0x6971c8 tests only the return
+	// icons in that mode, the dungeon icons only outside it).
+	doors: boolean;
 	text: MapToolsText;
 	page: number;
 	pan: readonly [number, number];
@@ -848,7 +852,7 @@ export function createMapToolsHud( options: {
 			// the plain icon. The page's own label names the place; a second
 			// label here drew it twice (#3516).
 			const anchors: { dungeon: number; label: string; pose: Pose; }[] = [];
-			for ( const door of input.center && !input.cave ? DUNGEON_DOORS : [] ) {
+			for ( const door of input.center && !input.cave && input.doors ? DUNGEON_DOORS : [] ) {
 				const label = input.strings?.[door.name];
 				const pose = worldMapDungeonPose( dungeonRegionId( door.dungeon ) );
 				if ( label && pose ) anchors.push( { dungeon: door.dungeon, label, pose } );

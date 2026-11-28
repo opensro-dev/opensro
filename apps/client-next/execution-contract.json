@@ -2666,7 +2666,8 @@
 			"consumer": "src/engine/runtime/ui/hud/world-map.ts",
 			"provider": "src/engine/runtime/ui/hud/reverse-return-hud.ts",
 			"functions": [
-				"mapping"
+				"mapping",
+				"menu"
 			]
 		},
 		{
