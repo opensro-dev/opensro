@@ -25,10 +25,17 @@ the transport's RefObjCommon run speed:
 
 	column 47 -> +0x104 Speed2 (m_nSpeed2, asserted nonzero there)
 
+The stable keeper's sale (CIFMerchant_OnSlotTransfer 5B6CA0, the sale box
+CIFCOSStatus_OpenUseItemQuantityDialog 6A9F50) reads two more:
+
+	column 17 -> +0xA5 CanSell: zero refuses with UIIT_MSG_COSERR_CANT_SELL_REQUESTED_COS
+	column 31 -> +0xC4 SellPrice, the price the box shows
+
 Every in-service COS reference (TypeID 1/2/3, TID4 band 1..6) ships, keyed by
 its RefObj id: refObjId -> [icon, maxHp, rideable, physicalDefence,
 magicalDefence, parry, hit, skills]. The run speeds sit in their own
-refObjId -> speed2 map, so a reader of the rows alone keeps working.
+refObjId -> speed2 map, so a reader of the rows alone keeps working; the
+rows that can be sold have their SellPrice in a refObjId -> price sale map.
 
 ===========================================================================
 */
@@ -45,6 +52,8 @@ const COLUMN_TYPE_ID1 = 9;
 const COLUMN_TYPE_ID2 = 10;
 const COLUMN_TYPE_ID3 = 11;
 const COLUMN_TYPE_ID4 = 12;
+const COLUMN_CAN_SELL = 17;
+const COLUMN_SELL_PRICE = 31;
 const COLUMN_SPEED2 = 47;
 const COLUMN_ICON = 54;
 const COLUMN_MAX_HP = 59;
@@ -65,7 +74,7 @@ buildCosPresentationAsset
 */
 export async function buildCosPresentationAsset( options = {} ) {
 	const textdataRoot = options.textdataRoot ?? retailTextdataRoot;
-	const rows = {}, speed2 = {};
+	const rows = {}, speed2 = {}, sale = {};
 	for ( const shard of listTextDataShardNamesSync( textdataRoot, /^characterdata.*\.txt$/i ) ) {
 		for ( const cols of readTextDataRowsSync( path.join( textdataRoot, shard ) ) ) {
 			const band = Number( cols[COLUMN_TYPE_ID4] );
@@ -105,12 +114,13 @@ export async function buildCosPresentationAsset( options = {} ) {
 				skills
 			];
 			speed2[String( id )] = stat( COLUMN_SPEED2 );
+			if ( stat( COLUMN_CAN_SELL ) !== 0 ) sale[String( id )] = stat( COLUMN_SELL_PRICE );
 		}
 	}
 	const { outPath } = exportDataAsset( {
 		publicRoot: options.publicRoot ?? publicRoot,
 		outputFileName: "cosPresentation.json",
-		value: { format: "sro-cos-presentation", version: 1, rows, speed2 }
+		value: { format: "sro-cos-presentation", version: 1, rows, speed2, sale }
 	} );
 	// The packs carry the compressed sidecars; a stale one would ship the
 	// previous rows.

@@ -82,6 +82,9 @@ export interface CosReference {
 	// The catalogue always fills it (0 for a row without one); a reference
 	// built elsewhere may leave it out.
 	readonly speed2?: number;
+	// RefObjCommon +0xC4 SellPrice, present only when +0xA5 CanSell is set:
+	// what the stable keeper pays (5B6CA0 / 6A9F50).
+	readonly sellPrice?: number;
 }
 
 /*
@@ -471,12 +474,13 @@ decodeCosReferences
 
 /assets/data/cosPresentation.json (buildCosPresentationAsset.mjs):
 refObjId -> [icon, maxHp, rideable, physicalDefence, magicalDefence, parry,
-hit, skills], and a refObjId -> speed2 map beside the rows (0 when a row
-has none: no trade scale). Malformed rows reject the catalog.
+hit, skills], a refObjId -> speed2 map beside the rows (0 when a row
+has none: no trade scale), and a refObjId -> SellPrice sale map of the rows
+that can be sold. Malformed rows reject the catalog.
 ================
 */
 export function decodeCosReferences( raw: unknown ): ReadonlyMap<number, CosReference> {
-	const value = raw as { format?: unknown; rows?: unknown; speed2?: unknown; };
+	const value = raw as { format?: unknown; rows?: unknown; speed2?: unknown; sale?: unknown; };
 	if ( value?.format !== "sro-cos-presentation" || !value.rows || typeof value.rows !== "object" ) {
 		throw Error( "Invalid COS presentation catalog" );
 	}
@@ -484,6 +488,7 @@ export function decodeCosReferences( raw: unknown ): ReadonlyMap<number, CosRefe
 	const speeds = value.speed2 && typeof value.speed2 === "object" ?
 		value.speed2 as Record<string, unknown> :
 		undefined;
+	const prices = value.sale && typeof value.sale === "object" ? value.sale as Record<string, unknown> : undefined;
 	for ( const [key, row] of Object.entries( value.rows as Record<string, unknown> ) ) {
 		const id = Number( key );
 		if (
@@ -496,6 +501,10 @@ export function decodeCosReferences( raw: unknown ): ReadonlyMap<number, CosRefe
 		if ( speed !== undefined && !(Number.isSafeInteger( speed ) && (speed as number) >= 0) ) {
 			throw Error( "Invalid COS presentation speed " + key );
 		}
+		const price = prices?.[key];
+		if ( price !== undefined && !(Number.isSafeInteger( price ) && (price as number) >= 0) ) {
+			throw Error( "Invalid COS presentation sale price " + key );
+		}
 		references.set( id, {
 			icon: row[0],
 			maxHp: row[1],
@@ -505,7 +514,8 @@ export function decodeCosReferences( raw: unknown ): ReadonlyMap<number, CosRefe
 			parry: row[5],
 			hit: row[6],
 			skills: row[7],
-			speed2: (speed as number | undefined) ?? 0
+			speed2: (speed as number | undefined) ?? 0,
+			...(price === undefined ? {} : { sellPrice: price as number })
 		} );
 	}
 	return references;
