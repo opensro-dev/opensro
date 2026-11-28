@@ -213,9 +213,9 @@ type Config struct {
 	// BenchmarkFixtureControl registers the development-only deterministic
 	// fixture reset authority. Production deployments must leave it false.
 	BenchmarkFixtureControl bool
-	// SkillGroup resolves a skill id to its group for the fixture loadout;
-	// nil refuses any loadout that names skills.
-	SkillGroup SkillGroupResolver
+	// Skill reads a skill row's group, rank and requirements for the fixture
+	// loadout; nil refuses any loadout that names skills.
+	Skill SkillResolver
 	// LevelCap is the game's level cap (progression.LevelCap), the bound of a
 	// fixture loadout's level; 0 refuses every loadout.
 	LevelCap int64
@@ -287,7 +287,7 @@ type API struct {
 	marksDir                string // "" = no crest art hosted
 	crests                  CrestResolver
 	benchmarkFixtureControl bool
-	skillGroup              SkillGroupResolver
+	skill                   SkillResolver
 	levelCap                int64
 	characterInPlay         func(divisionID, characterName string) bool
 	acquireCharacterControl func(divisionID, characterName string) (release func(), acquired bool)
@@ -368,7 +368,7 @@ func New(config Config) (*API, error) {
 		marksDir:                config.MarksDir,
 		crests:                  config.Crests,
 		benchmarkFixtureControl: config.BenchmarkFixtureControl,
-		skillGroup:              config.SkillGroup,
+		skill:                   config.Skill,
 		levelCap:                config.LevelCap,
 		characterInPlay:         config.CharacterInPlay,
 		acquireCharacterControl: config.AcquireCharacterControl,

@@ -562,23 +562,53 @@ export async function selectFrameLimit( page, limit ) {
 
 /*
 ================
+pageMetrics
+
+Chrome's Performance.getMetrics for a CDP session as { name: value }
+(TaskDuration, JSHeapUsedSize, JSHeapTotalSize, Nodes, JSEventListeners,
+...). The session must have sent Performance.enable.
+================
+*/
+export async function pageMetrics( cdp ) {
+	const { metrics } = await cdp.send( "Performance.getMetrics" );
+	return Object.fromEntries( metrics.map( metric => [ metric.name, metric.value ] ) );
+}
+
+// --memory samples the heap this often inside a span: often enough to see a
+// sawtooth's peaks at a few collections a second, rare enough to cost the
+// page nothing measurable.
+const MEMORY_SAMPLE_MS = 250;
+
+/*
+================
 createCaptures
 
 Optional captures around spans of a run: a CPU profile and a sampled
 allocation profile per span (written to dir as NAME.cpuprofile and
-NAME.heapprofile), and one Chrome trace of the whole run. stop() returns
-the span's sampled allocation in bytes, or null without --heap.
+NAME.heapprofile), the JS heap's start, peak and end per span (memory),
+and one Chrome trace of the whole run. stop() returns the span's sampled
+allocation in bytes, or null without --heap; memorySpan() the last span's
+heap, or null without memory.
 ================
 */
 /**
  * @param {import("playwright-core").Page} page
- * @param {{ dir?: string | null, cpu?: boolean, heap?: boolean, trace?: string | null }} options
+ * @param {{ dir?: string | null, cpu?: boolean, heap?: boolean, memory?: boolean, trace?: string | null }} options
  */
-export async function createCaptures( page, { dir = null, cpu = false, heap = false, trace = null } = {} ) {
+export async function createCaptures(
+	page,
+	{ dir = null, cpu = false, heap = false, memory = false, trace = null } = {}
+) {
 	// A sampled trace already starts V8's internal CPU profiler. Keep each
 	// capture to one sampler; separate runs also make their overhead explicit.
 	if ( cpu && trace ) throw Error( "Choose --cpu or --trace per run; sampled traces already include CPU profiles" );
-	const cdp = cpu || heap ? await page.context().newCDPSession( page ) : null;
+	const cdp = cpu || heap || memory ? await page.context().newCDPSession( page ) : null;
+	if ( memory ) await cdp.send( "Performance.enable" );
+	let sampler = null, heapSamples = [], lastMemory = null;
+	const sampleHeap = async () => {
+		const metrics = await pageMetrics( cdp );
+		heapSamples.push( { used: metrics.JSHeapUsedSize, total: metrics.JSHeapTotalSize, nodes: metrics.Nodes } );
+	};
 	if ( dir ) await mkdir( dir, { recursive: true } );
 	if ( cpu ) {
 		await cdp.send( "Profiler.enable" );
@@ -597,6 +627,11 @@ export async function createCaptures( page, { dir = null, cpu = false, heap = fa
 		================
 		*/
 		async start() {
+			if ( memory ) {
+				heapSamples = [];
+				await sampleHeap();
+				sampler = setInterval( () => void sampleHeap().catch( () => {} ), MEMORY_SAMPLE_MS );
+			}
 			if ( cpu ) await cdp.send( "Profiler.start" );
 			if ( heap ) {
 				await cdp.send( "HeapProfiler.startSampling", {
@@ -612,6 +647,23 @@ export async function createCaptures( page, { dir = null, cpu = false, heap = fa
 		================
 		*/
 		async stop( name ) {
+			if ( memory ) {
+				clearInterval( sampler );
+				await sampleHeap();
+				const used = heapSamples.map( sample => sample.used );
+				lastMemory = {
+					startMB: used[0] / 1048576,
+					peakMB: Math.max( ...used ) / 1048576,
+					endMB: used[used.length - 1] / 1048576,
+					// Drops between samples are collections: the sum of what each
+					// freed is garbage made in the span, a floor on allocation.
+					collectedMB: used.reduce( ( sum, value, i ) =>
+						sum + Math.max( 0, (used[i - 1] ?? value) - value ), 0 ) /
+						1048576,
+					nodes: heapSamples[heapSamples.length - 1].nodes,
+					samples: used.length
+				};
+			}
 			if ( cpu ) {
 				const { profile } = await cdp.send( "Profiler.stop" );
 				await writeFile( `${dir}/${name}.cpuprofile`, JSON.stringify( profile ) );
@@ -621,6 +673,12 @@ export async function createCaptures( page, { dir = null, cpu = false, heap = fa
 			await writeFile( `${dir}/${name}.heapprofile`, JSON.stringify( profile ) );
 			return profile.samples.reduce( ( sum, sample ) => sum + sample.size, 0 );
 		},
+		/*
+		================
+		memorySpan
+		================
+		*/
+		memorySpan: () => lastMemory,
 		/*
 		================
 		finish

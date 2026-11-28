@@ -12,7 +12,7 @@ Reports CPU core equivalents, not percentages of the entire host machine.
 import assert from "node:assert/strict";
 import { mkdir, writeFile } from "node:fs/promises";
 import { MISSION_MOVEMENT_FIXTURES } from "../../../../../scripts/lib/missionMovementFixture.mjs";
-import { openClient, closeClient, measure, selectFrameLimit } from "../core/client.mjs";
+import { openClient, closeClient, measure, pageMetrics, selectFrameLimit } from "../core/client.mjs";
 import { keepGoing } from "./scenarios.mjs";
 
 const SECONDS = 8;
@@ -26,11 +26,10 @@ cpuSample
 */
 async function cpuSample( browserSession, pageSession ) {
 	const { processInfo } = await browserSession.send( "SystemInfo.getProcessInfo" );
-	const { metrics } = await pageSession.send( "Performance.getMetrics" );
 	return {
 		at: performance.now(),
 		processes: processInfo,
-		main: metrics.find( metric => metric.name === "TaskDuration" ).value
+		main: (await pageMetrics( pageSession )).TaskDuration
 	};
 }
 

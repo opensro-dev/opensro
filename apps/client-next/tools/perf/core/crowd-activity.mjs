@@ -11,6 +11,20 @@ draws its whole script from its own generator seeded by (seed, index), so
 the same seed gives every peer the same sequence of clicks and lines no
 matter how the timers interleave.
 
+Roamers never stand: they re-target before they arrive, so every roaming
+peer is mid-walk on every frame (the moving crowd a camera-drag bench
+needs, where walkers idle most of the time). Busy peers roam too and, on
+their own clocks, take their chest garment off into the bag and put it
+back, and recast the cold imbue each time its cooldown has passed: the
+appearance changes and skill effects a living town draws.
+
+A busy crowd is created qualified for that script (busyCreation,
+BUSY_LOADOUT): clothes from character creation, and a loadout the
+benchmark fixture only teaches once the character meets the imbue's
+requirements (its cold mastery, raised by the fixture) with the level and
+intellect to pay its MP. A refusal still happens and is counted, never
+hidden: the evidence keeps every accepted and refused move and cast.
+
 Frames are what the replacement client sends: chat goes through the
 client's own chat owner (chat.ts createChat, with its acknowledgement and
 deadline), a ground click through the movement owner's predicted envelope
@@ -27,6 +41,8 @@ const { createChat } = await import(
 	"../../../src/engine/runtime/simulation/worker/session/world/gameplay/chat/chat.ts"
 );
 const { REGION_SIZE } = await import( "../../../src/engine/foundation/world/world-space.ts" );
+const { skillRequest } = await import( "../../../src/engine/foundation/gameplay/skill-request.ts" );
+const { inventoryMoveRequest } = await import( "../../../src/engine/foundation/gameplay/inventory-move-request.ts" );
 
 // The replacement client's predicted-movement envelope (movement.ts
 // OP_PREDICTED_MOVE, transport.OpPredictedMove) and its player kind byte;
@@ -43,6 +59,10 @@ const CHAT_ALL_CHANNEL = 1, OP_CHAT_ACK = 0xb367, CHAT_ACK_OK = 1;
 // while waiting, not a bot pinned to one rate.
 export const WALK_RADIUS = 25;
 const WALK_MIN_MS = 1500, WALK_MAX_MS = 6000;
+// A roamer clicks every 0.8 to 1.4 s, a point ROAM_MIN_DISTANCE to
+// WALK_RADIUS from its spot: two such points lie further apart than a
+// player runs in that time on average, so it re-targets mid-walk.
+const ROAM_MIN_MS = 800, ROAM_MAX_MS = 1400, ROAM_MIN_DISTANCE = 12;
 // A chatter speaks every 8 to 30 s.
 const CHAT_MIN_MS = 8000, CHAT_MAX_MS = 30000;
 const CHAT_LINES = Object.freeze( [
@@ -55,32 +75,58 @@ const CHAT_LINES = Object.freeze( [
 	"hello all",
 	"how much for elixirs?"
 ] );
-export const ACTIVITY_ROLES = Object.freeze( [ "walk", "chat" ] );
+// Busy peers: SKILL_CH_COLD_GIGONGTA_A_01 (skilldata id 90, the Cold Force
+// weapon imbue: enterworld/skillimbue.go admits the row; cold mastery 273 at
+// 5, no prerequisite, 5000 ms cooldown, any weapon) recast every 5.5 to 8 s
+// with no target (an instant self effect: targetinteract.go admits only an
+// untargeted press, and the walk goes on, casthalt.go), and the chest garment (socket 1, inventory/slots.go SocketBody) taken off
+// or put back every 3 to 6 s. The take-off asks for a bag slot; the server
+// answers where it put the garment (0xB06D [1][0][src][dst]...), and the
+// put-back moves it from there. A refused take-off asks for the next slot.
+export const BUSY_IMBUE_SKILL = 90;
+const IMBUE_MIN_MS = 5500, IMBUE_MAX_MS = 8000, DRESS_MIN_MS = 3000, DRESS_MAX_MS = 6000;
+const CHEST_SOCKET = 1, BAG_SLOTS = Object.freeze( [ 40, 39, 38, 37, 36, 35, 34, 33, 32, 31, 30 ] );
+const OP_ITEM_MOVE_RESULT = 0xb06d, ITEM_MOVE_OK = 1, ITEM_MOVE_DESTINATION = 3;
+const OP_SKILL_CAST_RESULT = 0xb245, CAST_OK = 1, CAST_SUCCESS_BYTES = 10;
+
+// The level and intellect a busy peer is taught at: past the imbue's
+// mastery 5, with MP for a cast every cooldown.
+export const BUSY_LOADOUT = Object.freeze( {
+	level: 40,
+	intellect: 200,
+	skills: Object.freeze( [ BUSY_IMBUE_SKILL ] )
+} );
+// China protector choice 3 (enterworld/loadout.go chinaProtectorKinds):
+// the CLOTHES set, chest legs and feet.
+const CLOTHES_PROTECTOR = 3;
+export const ACTIVITY_ROLES = Object.freeze( [ "walk", "chat", "roam", "busy" ] );
 const STILL = "still";
 
 /*
 ================
 parseActivity
 
-"walk=0.5,chat=0.2" (or "" / "still") into shares of the crowd. The shares
+"walk=0.5,chat=0.2,roam=0.3" (or "" / "still") into shares of the crowd. The shares
 are disjoint roles; whatever they leave stands still. label is canonical,
 so two spellings of the same activity key the same held crowd.
 ================
 */
 export function parseActivity( text ) {
-	const shares = { walk: 0, chat: 0 };
+	const shares = noShares();
 	const spec = String( text ?? "" ).trim();
 	if ( spec && spec !== STILL ) {
 		for ( const part of spec.split( "," ) ) {
 			const [name, value, extra] = part.split( "=" ).map( item => item.trim() );
 			const share = Number( value );
 			if ( !ACTIVITY_ROLES.includes( name ) || extra !== undefined || !(share >= 0 && share <= 1) ) {
-				throw Error( `bad --act part "${part}": expected walk=SHARE or chat=SHARE, SHARE in [0, 1]` );
+				throw Error(
+					`bad --act part "${part}": expected ${ACTIVITY_ROLES.join( "|" )}=SHARE, SHARE in [0, 1]`
+				);
 			}
 			shares[name] = share;
 		}
 	}
-	if ( shares.walk + shares.chat > 1 + 1e-9 ) throw Error( `--act shares sum past 1: ${spec}` );
+	if ( sharedOut( shares ) > 1 + 1e-9 ) throw Error( `--act shares sum past 1: ${spec}` );
 	const label =
 		ACTIVITY_ROLES.filter( role => shares[role] > 0 ).map( role => `${role}=${shares[role]}` ).join( "," ) ||
 		STILL;
@@ -89,16 +135,36 @@ export function parseActivity( text ) {
 
 /*
 ================
+noShares, sharedOut
+
+The shares of a standing crowd, and the part of the crowd a set of shares
+gives a role (the rest stands).
+================
+*/
+/** @returns {Record<"walk" | "chat" | "roam" | "busy", number>} */
+function noShares() {
+	return Object.fromEntries( ACTIVITY_ROLES.map( role => [ role, 0 ] ) );
+}
+
+function sharedOut( shares ) {
+	return ACTIVITY_ROLES.reduce( ( sum, role ) => sum + (shares[role] ?? 0), 0 );
+}
+
+/*
+================
 apportionRoles
 
-How many of count peers take each role: largest remainder over walk, chat
+How many of count peers take each role: largest remainder over the roles
 and still, so the counts always sum to count (rounding each share alone
 can give 2 + 2 of 3). Ties go to the earlier role.
 ================
 */
 export function apportionRoles( count, shares ) {
 	const roles = [ ...ACTIVITY_ROLES, STILL ];
-	const wanted = [ shares.walk * count, shares.chat * count, Math.max( 0, 1 - shares.walk - shares.chat ) * count ];
+	const wanted = [
+		...ACTIVITY_ROLES.map( role => (shares[role] ?? 0) * count ),
+		Math.max( 0, 1 - sharedOut( shares ) ) * count
+	];
 	const counts = wanted.map( Math.floor );
 	let left = count - counts.reduce( ( a, b ) => a + b, 0 );
 	const order = roles.map( ( _, i ) => i ).sort( ( a, b ) =>
@@ -171,7 +237,12 @@ within one interval, so the crowd does not act in step.
 */
 export function peerScript( { role, index, seed, spot } ) {
 	const random = createRandom( streamSeed( seed, index + 1 ) );
-	const [min, max] = role === "walk" ? [ WALK_MIN_MS, WALK_MAX_MS ] : [ CHAT_MIN_MS, CHAT_MAX_MS ];
+	const [min, max] = role === "walk" ?
+		[ WALK_MIN_MS, WALK_MAX_MS ] :
+		role === "roam" || role === "busy" ?
+		[ ROAM_MIN_MS, ROAM_MAX_MS ] :
+		[ CHAT_MIN_MS, CHAT_MAX_MS ];
+	const [near, far] = role === "roam" || role === "busy" ? [ ROAM_MIN_DISTANCE, WALK_RADIUS ] : [ 0, WALK_RADIUS ];
 	let first = true;
 	return () => {
 		const delayMs = Math.round( first ? random() * max : min + random() * (max - min) );
@@ -179,7 +250,8 @@ export function peerScript( { role, index, seed, spot } ) {
 		if ( role === "chat" ) {
 			return { delayMs, kind: "chat", text: CHAT_LINES[Math.floor( random() * CHAT_LINES.length )] };
 		}
-		const angle = random() * Math.PI * 2, distance = Math.sqrt( random() ) * WALK_RADIUS;
+		const angle = random() * Math.PI * 2,
+			distance = Math.sqrt( near * near + random() * (far * far - near * near) );
 		return {
 			delayMs,
 			kind: "walk",
@@ -190,6 +262,39 @@ export function peerScript( { role, index, seed, spot } ) {
 			}
 		};
 	};
+}
+
+/*
+================
+busyScript
+
+A busy peer's second and third clocks, from their own streams of the
+peer's seed so adding them leaves its walk script unchanged: the waits
+between imbue casts and between dress changes.
+================
+*/
+export function busyScript( { index, seed } ) {
+	const imbue = createRandom( streamSeed( seed, 0x10000 + index ) );
+	const dress = createRandom( streamSeed( seed, 0x20000 + index ) );
+	const wait = ( random, min, max ) => Math.round( min + random() * (max - min) );
+	return {
+		imbueMs: () => wait( imbue, IMBUE_MIN_MS, IMBUE_MAX_MS ),
+		dressMs: () => wait( dress, DRESS_MIN_MS, DRESS_MAX_MS )
+	};
+}
+
+/*
+================
+busyCreation
+
+What a crowd's peers are created with: a crowd with busy peers wears the
+clothes set it takes off and puts on, any other keeps the bare starter.
+================
+*/
+export function busyCreation( activity ) {
+	return activity.busy > 0 ?
+		{ protectorIndex: CLOTHES_PROTECTOR, armorSelected: true } :
+		{ protectorIndex: 0, armorSelected: false };
 }
 
 /*
@@ -255,7 +360,7 @@ export function startActivity( { crowd, count, activity, seed, spotFor } ) {
 	const evidence = {
 		act: activity.label,
 		seed: activity.label === STILL ? null : seed,
-		peers: apportionRoles( count, activity.label === STILL ? { walk: 0, chat: 0 } : activity ),
+		peers: apportionRoles( count, activity.label === STILL ? noShares() : activity ),
 		clicks: 0,
 		moveAccepted: 0,
 		moveRefused: 0,
@@ -263,8 +368,22 @@ export function startActivity( { crowd, count, activity, seed, spotFor } ) {
 		chatAcked: 0,
 		chatRefused: 0,
 		// A line due while the previous one still waits for its receipt.
-		chatBusy: 0
+		chatBusy: 0,
+		// Busy peers: dress changes sent and answered, imbue presses, the
+		// caster's refusals, and the distinct casters seen succeeding (every
+		// peer hears its neighbours' 0xB245, so successes are by caster).
+		dressMoves: 0,
+		dressAccepted: 0,
+		dressRefused: 0,
+		undressed: 0,
+		imbues: 0,
+		imbueRefused: 0,
+		// Refusal codes by count ("0x11": 3), the server's reason in its words.
+		imbueRefusals: {},
+		dressRefusals: {},
+		imbueCasters: []
 	};
+	const casters = new Set();
 	const timers = new Set(), started = performance.now();
 	let running = true;
 	/*
@@ -287,7 +406,8 @@ export function startActivity( { crowd, count, activity, seed, spotFor } ) {
 		const role = roles[index];
 		if ( role === STILL ) continue;
 		const next = peerScript( { role, index, seed, spot: spotFor( index ) } );
-		if ( role === "walk" ) {
+		if ( role === "busy" ) startBusy( { crowd, index, seed, evidence, casters, schedule } );
+		if ( role === "walk" || role === "roam" || role === "busy" ) {
 			let id = 0;
 			crowd.listen( index, frame => {
 				if ( frame.opcode !== OP_PREDICTED_MOVE_RESULT ) return;
@@ -327,4 +447,71 @@ export function startActivity( { crowd, count, activity, seed, spotFor } ) {
 			timers.clear();
 		}
 	};
+}
+
+/*
+================
+startBusy
+
+A busy peer's dress and imbue clocks. One dress move is in flight at a
+time; its 0xB06D answers it (a peer receives only its own). An accepted
+take-off leaves the garment at that bag slot for the put-back; a refused
+one tries the next bag slot.
+================
+*/
+function startBusy( { crowd, index, seed, evidence, casters, schedule } ) {
+	const clocks = busyScript( { index, seed } );
+	let bag = 0, stored = 0, worn = true, pending = null;
+	const tally = ( counts, code ) => {
+		const key = `0x${(code ?? 0).toString( 16 )}`;
+		counts[key] = (counts[key] ?? 0) + 1;
+	};
+	crowd.listen( index, frame => {
+		if ( frame.opcode === OP_ITEM_MOVE_RESULT && pending ) {
+			if ( frame.payload[0] === ITEM_MOVE_OK ) {
+				evidence.dressAccepted++;
+				worn = pending === "on";
+				if ( !worn ) {
+					evidence.undressed++;
+					stored = frame.payload[ITEM_MOVE_DESTINATION] ?? BAG_SLOTS[bag];
+				}
+			} else {
+				evidence.dressRefused++;
+				tally( evidence.dressRefusals, frame.payload[1] );
+				if ( pending === "off" ) bag = (bag + 1) % BAG_SLOTS.length;
+			}
+			pending = null;
+			return;
+		}
+		if ( frame.opcode !== OP_SKILL_CAST_RESULT ) return;
+		// A refusal ([2][code]) reaches only its caster; a success reaches
+		// every peer in sight and names its caster.
+		if ( frame.payload[0] !== CAST_OK ) {
+			evidence.imbueRefused++;
+			tally( evidence.imbueRefusals, frame.payload[1] );
+			return;
+		}
+		if ( frame.payload.length < CAST_SUCCESS_BYTES ) return;
+		const view = new DataView( frame.payload.buffer, frame.payload.byteOffset, frame.payload.byteLength );
+		if ( view.getUint32( 2, true ) !== BUSY_IMBUE_SKILL ) return;
+		const caster = view.getUint32( 6, true );
+		if ( !casters.has( caster ) ) {
+			casters.add( caster );
+			evidence.imbueCasters.push( caster );
+		}
+	} );
+	schedule( () => ({ delayMs: clocks.dressMs() }), () => {
+		if ( pending ) return;
+		pending = worn ? "off" : "on";
+		const frame = worn ?
+			inventoryMoveRequest( CHEST_SOCKET, BAG_SLOTS[bag], 1 ) :
+			inventoryMoveRequest( stored, CHEST_SOCKET, 1 );
+		crowd.send( index, frame.opcode, frame.payload );
+		evidence.dressMoves++;
+	} );
+	schedule( () => ({ delayMs: clocks.imbueMs() }), () => {
+		const frame = skillRequest( BUSY_IMBUE_SKILL );
+		crowd.send( index, frame.opcode, frame.payload );
+		evidence.imbues++;
+	} );
 }
