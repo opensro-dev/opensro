@@ -394,8 +394,10 @@ export function createRenderer(
 			// first. The occlusion-only scene pick answers that for one
 			// ray at the hit's depth; water and blend-add surfaces never
 			// veto (world.pick's occlusion material rules).
-			const visible = ( ray: number, depth: number ) =>
-				world.pick( rays[ray]!, depth, true, false, true ) === null;
+			// One occlusion scope for the whole pick: a skinned prop is posed
+			// once for all nine rays and every candidate (world.occlusionScope).
+			const occludes = world.occlusionScope(),
+				visible = ( ray: number, depth: number ) => !occludes( rays[ray]!, depth );
 			let hit = characters.pick( rays, excluded, blindHeld, filtered, visible ),
 				best = hit ?
 					hit.depth * hypot3( rays[hit.ray]!.delta[0]!, rays[hit.ray]!.delta[1]!, rays[hit.ray]!.delta[2]! ) :

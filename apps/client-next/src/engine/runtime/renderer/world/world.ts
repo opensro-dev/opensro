@@ -53,6 +53,7 @@ import {
 	selectionTextures
 } from "@/engine/foundation/rendering/terrain-interaction";
 import { createWeather } from "../weather/weather";
+import type { Geometry } from "@/engine/contracts/geometry";
 import type { PresentationRandom } from "@/engine/contracts/presentation-random";
 import type { WorldSceneLease } from "@/engine/contracts/world-admission";
 import { skyGroups } from "@/engine/foundation/rendering/sky-geometry";
@@ -71,7 +72,9 @@ import {
 	rayIntersectsBounds,
 	type PickBounds,
 	type PickRay,
-	type PickAlpha
+	createSkinnedPickVertices,
+	type PickAlpha,
+	type SkinnedPickVertices
 } from "@/engine/foundation/rendering/picking";
 import {
 	cameraCollisionParts,
@@ -1092,16 +1095,34 @@ export function createWorldRenderer(
 	}
 	/*
 	================
-	pick
+	PickScan
+
+	One scene query. occlusionOnly answers on the first accepted surface
+	before limit. skinned, present for one occlusion scope (occlusionScope),
+	keeps each skinned instance's posed vertices across the scope's queries.
 	================
 	*/
-	function pick( ray: PickRay, limit: number, excludeWater = false, terrainOnly = false, occlusionOnly = false ) {
+	type PickScan = {
+		readonly excludeWater: boolean;
+		readonly terrainOnly: boolean;
+		readonly occlusionOnly: boolean;
+		readonly skinned?: Map<WorldGroup, SkinnedPickVertices[]>;
+	};
+	/*
+	================
+	scan
+
+	The mesh view, texture alpha and block table are per group, so they are
+	read once per group, not once per instance.
+	================
+	*/
+	function scan( ray: PickRay, limit: number, query: PickScan ) {
 		let nearest = limit;
 		for ( const group of pickGroups ) {
-			if ( terrainOnly && !group.material.terrain && !group.material.water ) continue;
+			if ( query.terrainOnly && !group.material.terrain && !group.material.water ) continue;
 			if (
 				group.material.sky || group.material.lightmap || blendAdds( group.material ) ||
-				excludeWater && group.material.water
+				query.excludeWater && group.material.water
 			) continue;
 			const cache = selections.get( group ), draw = draws.get( group );
 			if ( !draw ) continue;
@@ -1109,13 +1130,18 @@ export function createWorldRenderer(
 				indices = cache && group.ranges ? cache.indices.subarray( 0, cache.indexCount ?? 0 ) : source.indices;
 			const instances = cache?.instances ?? source.instances!,
 				count = cache?.instances ? cache.instanceCount ?? 0 : instances.length / 16;
+			if ( !count ) continue;
 			let bounds = pickBounds.get( source.positions );
 			if ( !bounds && !source.bones ) {
 				bounds = geometryPickBounds( source.positions );
 				pickBounds.set( source.positions, bounds );
 			}
+			let mesh: Geometry | undefined, alpha: PickAlpha | undefined;
+			const blocks = pickBlocks.get( group ), ranges = group.ranges ? cache?.chosen : undefined;
+			const skinned = source.bones && query.skinned ?
+				query.skinned.get( group ) ?? query.skinned.set( group, [] ).get( group )! :
+				undefined;
 			for ( let i = 0; i < count; i++ ) {
-				const matrix = instances.subarray( i * 16, i * 16 + 16 );
 				if ( group.instanceRadius !== undefined && pickFrustum ) {
 					const inFrustum = bounds ?
 						visibleFrustumBox( pickFrustum, bounds, instances, i * 16 ) :
@@ -1128,20 +1154,27 @@ export function createWorldRenderer(
 						);
 					if ( !inFrustum ) continue;
 				}
+				const matrix = instances.subarray( i * 16, i * 16 + 16 );
 				if ( bounds && !rayIntersectsBounds( ray, bounds, matrix, nearest ) ) continue;
-				const paths = texturePaths( group ),
-					path = paths.length ? paths[Math.floor( pickSeconds * 10 ) % paths.length] : undefined,
-					image = path ? images.get( path )?.source : undefined;
-				const alpha = image ? pickMask( image ) : undefined;
-				const mesh = { ...source, indices, material: group.material },
-					surface = {
-						alpha,
-						opacity: cache?.opacity?.[i] ?? 1,
-						blocks: pickBlocks.get( group ),
-						ranges: group.ranges ? cache?.chosen : undefined
-					};
-				if ( occlusionOnly ) {
-					if ( occludesGeometry( ray, mesh, matrix, nearest, source.bones, surface ) ) return 0;
+				if ( !mesh ) {
+					const paths = texturePaths( group ),
+						path = paths.length ? paths[Math.floor( pickSeconds * 10 ) % paths.length] : undefined,
+						image = path ? images.get( path )?.source : undefined;
+					alpha = image ? pickMask( image ) : undefined;
+					mesh = { ...source, indices, material: group.material };
+				}
+				const surface = { alpha, opacity: cache?.opacity?.[i] ?? 1, blocks, ranges };
+				if ( query.occlusionOnly ) {
+					const posed = skinned ? skinned[i] ??= createSkinnedPickVertices( source ) : undefined;
+					if (
+						occludesGeometry( ray, mesh, matrix, nearest, {
+							palette: source.bones,
+							surface,
+							skinned: posed
+						} )
+					) {
+						return 0;
+					}
 					continue;
 				}
 				const depth = pickGeometry( ray, mesh, matrix, source.bones, surface );
@@ -1149,6 +1182,14 @@ export function createWorldRenderer(
 			}
 		}
 		return nearest < limit ? nearest : null;
+	}
+	/*
+	================
+	pick
+	================
+	*/
+	function pick( ray: PickRay, limit: number, excludeWater = false, terrainOnly = false, occlusionOnly = false ) {
+		return scan( ray, limit, { excludeWater, terrainOnly, occlusionOnly } );
 	}
 	return {
 		/*
@@ -1372,6 +1413,22 @@ export function createWorldRenderer(
 		*/
 		occludes( ray: PickRay, limit: number ) {
 			return pick( ray, limit, false, false, true ) !== null;
+		},
+		/*
+		================
+		occlusionScope
+
+		An occlusion test for the queries of one pick: the hover pick's nine
+		rays against each candidate's hit depth. Water never occludes (the
+		hover rule). A skinned prop is skinned at most once in the scope, not
+		once per query; the scope must not outlive the frame's poses, so the
+		caller drops it when its pick returns.
+		================
+		*/
+		occlusionScope() {
+			const skinned = new Map<WorldGroup, SkinnedPickVertices[]>(),
+				query: PickScan = { excludeWater: true, terrainOnly: false, occlusionOnly: true, skinned };
+			return ( ray: PickRay, limit: number ) => scan( ray, limit, query ) !== null;
 		},
 		/*
 		================

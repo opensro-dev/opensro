@@ -34,6 +34,50 @@ export interface PickSurface {
 	}[];
 }
 export type PickBounds = readonly [number, number, number, number, number, number];
+
+/*
+================
+SkinnedPickVertices
+
+One posed instance's skinned world-space vertices, filled lazily as the
+triangle walk reaches them. A caller that asks several questions of the same
+pose (every ray of one hover pick) passes the same record to each query, so
+a vertex is skinned once per pose rather than once per query. It is valid
+only while the palette and the instance matrix it was filled under hold:
+the owner drops it when the pick ends.
+================
+*/
+export interface SkinnedPickVertices {
+	readonly positions: Float64Array;
+	readonly ready: Uint8Array;
+}
+
+/*
+================
+createSkinnedPickVertices
+================
+*/
+export function createSkinnedPickVertices( geometry: Geometry ): SkinnedPickVertices {
+	return {
+		positions: new Float64Array( geometry.positions.length ),
+		ready: new Uint8Array( geometry.positions.length / 3 )
+	};
+}
+
+/*
+================
+OcclusionQuery
+
+What occludesGeometry needs besides the ray, mesh, instance and depth: the
+skinning palette, the surface rules and, for a skinned mesh, the shared
+vertex record of this pose.
+================
+*/
+export interface OcclusionQuery {
+	readonly palette?: Float32Array;
+	readonly surface?: PickSurface;
+	readonly skinned?: SkinnedPickVertices;
+}
 export const PICK_BLOCK_INDICES = 96;
 // Only for immutable, unskinned geometry. Index order and exact surface tests
 // remain unchanged; a rejected block cannot contain a segment intersection.
@@ -241,11 +285,10 @@ export function occludesGeometry(
 	geometry: Geometry,
 	instance: Float32Array,
 	limit: number,
-	palette?: Float32Array,
-	surface?: PickSurface
+	query: OcclusionQuery = {}
 ): boolean {
 	if ( !Number.isFinite( limit ) || limit < 0 ) throw Error( "Invalid occlusion depth" );
-	return intersectGeometry( ray, geometry, instance, { palette, surface, stopBefore: limit } ) !== null;
+	return intersectGeometry( ray, geometry, instance, { ...query, stopBefore: limit } ) !== null;
 }
 // One intersection query. surface brings alpha, winding and opacity rules
 // (and its own blocks or ranges); blocks alone only culls.
@@ -254,6 +297,7 @@ type IntersectQuery = {
 	readonly surface?: PickSurface;
 	readonly stopBefore?: number;
 	readonly blocks?: Float64Array;
+	readonly skinned?: SkinnedPickVertices;
 };
 /*
 ================
@@ -359,7 +403,8 @@ function intersectGeometry(
 	// An unskinned mesh transforms each corner directly into a nine-value
 	// scratch: a mesh-sized cache per query cost more to allocate and clear
 	// than the three matrix products it saved.
-	let vertices: Float64Array | undefined, ready: Uint8Array | undefined;
+	let vertices: Float64Array | undefined = query.skinned?.positions,
+		ready: Uint8Array | undefined = query.skinned?.ready;
 	const skinned = !!(palette && geometry.joints && geometry.weights);
 	const local = skinned ? null : localRay( ray, instance );
 	const corners = skinned || local ? undefined : new Float64Array( 9 );

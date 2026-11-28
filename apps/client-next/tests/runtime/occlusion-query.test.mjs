@@ -36,7 +36,7 @@ test("any-hit agrees with nearest-hit visibility including transparent front fac
 					nearest = pickGeometry( ray, geometry, I, undefined, surface );
 				for ( const limit of [ 0, .1, .2, .5, .7, 1, nearest ?? 0, (nearest ?? 0) + 1e-8 ] ) {
 					assert.equal(
-						occludesGeometry( ray, geometry, I, limit, undefined, surface ),
+						occludesGeometry( ray, geometry, I, limit, { surface } ),
 						nearest !== null && nearest < limit
 					);
 				}

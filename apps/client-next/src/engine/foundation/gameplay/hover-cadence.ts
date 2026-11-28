@@ -42,7 +42,9 @@ export function createHoverCadence( intervalMs = HOVER_PICK_INTERVAL_MS ): Hover
 	return {
 		due( now ) {
 			if ( now - last < intervalMs && now >= last ) return false;
-			last = now;
+			// Whole intervals keep the average at the interval; after a stall
+			// (or a clock that stepped back) the cadence restarts at now.
+			last = now - last < 2 * intervalMs && now >= last ? last + intervalMs : now;
 			return true;
 		},
 		reset() {
