@@ -59,6 +59,7 @@ import cap110_monsters as cap110
 import import_vsro_alexandria as tables
 import jupiter_import as jupiter
 import later_mall_goods as goods
+import later_tables
 import mall_avatar_import as avatars
 import nasrun_import as nasrun
 import published_ids
@@ -243,12 +244,10 @@ def select_pool(pool_rows, later_codes):
 # ================
 def tree_item_ids(read):
 	ids = {}
-	raw = read("itemdata.txt")
-	for row in tables.table_rows(raw or b""):
-		if not row or not row[0].strip() or sro_pk2.fold_ascii(row[0].strip()) == ITEM_SHARD:
+	for shard in read.files("itemdata.txt"):
+		if shard == ITEM_SHARD:
 			continue
-		shard = read(sro_pk2.fold_ascii(row[0].strip()))
-		for cells in tables.table_rows(shard or b""):
+		for cells in read.rows(shard):
 			if len(cells) > items.CODENAME and cells[items.SERVICE] == "1":
 				ids.setdefault(cells[items.CODENAME], int(cells[items.IDENTITY]))
 	return ids
@@ -307,10 +306,10 @@ def remove_import(output, prior, marker, text_root):
 # English. A label the later client has no text for is reported, never
 # synthesized.
 # ================
-def ui_labels(ui_raw, tree_rows, media, index):
+def ui_labels(ui_raw, tree_rows, source):
 	known = {row[1] for row in tables.table_rows(ui_raw or b"") if len(row) > 1}
 	wanted = sorted({row[column] for row in tree_rows for column in TREE_LABELS} - known)
-	found = goods.later_label_texts(media, index, set(wanted))
+	found = goods.later_label_texts(source, set(wanted))
 	return [goods.tab_label_row(symbol, found[symbol]) for symbol in wanted if symbol in found], \
 		[symbol for symbol in wanted if symbol not in found]
 
@@ -364,12 +363,7 @@ def add_magic_pop(native, output, v1696_root=None, env=os.environ):
 	with ExitStack() as stack:
 		archives, identities = avatars.open_archives(stack, root, avatars.V1696_SOURCE)
 		media, index = archives["Media"]
-
-		# ================
-		# read_later
-		# ================
-		def read_later(name):
-			return tables.table_text(media, index, name)
+		read_later = later_tables.Archive.media(media, index)
 
 		later_rows = [row for row in shared.read_item_tables(read_later)
 			if len(row) == items.ITEM_COLUMNS and row[items.SERVICE] == "1"]
@@ -377,9 +371,9 @@ def add_magic_pop(native, output, v1696_root=None, env=os.environ):
 		for row in later_rows:
 			later_by_code.setdefault(row[items.CODENAME], row)
 		later_codes = {row[items.IDENTITY]: row[items.CODENAME] for row in later_rows}
-		pool, dropped = select_pool(tables.table_rows(read_later(SOURCE_POOL)), later_codes)
-		npc_rows = [row for row in tables.table_rows(read_later(SOURCE_NPC_MAP)) if row and row[0].strip()]
-		tree_rows = [row for row in tables.table_rows(read_later(SOURCE_TREE)) if row and row[0].strip()]
+		pool, dropped = select_pool(read_later.rows(SOURCE_POOL), later_codes)
+		npc_rows = [row for row in read_later.rows(SOURCE_NPC_MAP) if row and row[0].strip()]
+		tree_rows = [row for row in read_later.rows(SOURCE_TREE) if row and row[0].strip()]
 		if any(len(row) != TREE_COLUMNS for row in tree_rows):
 			raise ValueError(f"refgachatreeforclientuidata rows must have {TREE_COLUMNS} columns")
 		check_machine(read, npc_rows)
@@ -395,14 +389,14 @@ def add_magic_pop(native, output, v1696_root=None, env=os.environ):
 		items.plain_worn_models(gear)
 		staged = gear + carried
 
-		later_texts = [row for name in nasrun.LATER_TEXT_TABLES for row in avatars.later_text_rows(media, index, name)]
+		later_texts = [row for name in nasrun.LATER_TEXT_TABLES for row in avatars.later_text_rows(read_later, name)]
 		base_names = name_path.read_bytes() if name_path.exists() else (native / TEXT_ROOT / NAME_TABLE).read_bytes()
 		merged_names, absent_descriptions = items.merge_texts(base_names, later_texts, staged)
 		known = {row[1] for row in tables.table_rows(base_names) if len(row) > 1}
 		added_texts = sorted({row[1] for row in tables.table_rows(merged_names) if len(row) > 1} - known)
 		ui_path = safe_target(text_root, UI_TABLE)
-		ui_raw = read(UI_TABLE)
-		labels, absent_labels = ui_labels(ui_raw, tree_rows, media, index)
+		ui_raw = read.file(UI_TABLE, missing=b"")
+		labels, absent_labels = ui_labels(ui_raw, tree_rows, read_later)
 		# Carried prizes have an icon and a drop model but no worn mesh.
 		assets = shared.copy_asset_closure(gear, native, output, archives, worn=True) if gear else []
 		if carried:
@@ -419,7 +413,9 @@ def add_magic_pop(native, output, v1696_root=None, env=os.environ):
 		pool_out.append(cells)
 	staged.sort(key=lambda row: int(row[items.IDENTITY]))
 	manifest = safe_target(text_root, "itemdata.txt")
-	current = read("itemdata.txt")
+	# The manifest itself is an index, which the tree reader refuses to
+	# hand back raw: read the file this layer rewrites, or the native one.
+	current = manifest.read_bytes() if manifest.exists() else (native / TEXT_ROOT / "itemdata.txt").read_bytes()
 	names = [row[0] for row in tables.table_rows(current or b"") if row]
 	names = [name for name in names if sro_pk2.fold_ascii(name) != ITEM_SHARD]
 	if staged:
