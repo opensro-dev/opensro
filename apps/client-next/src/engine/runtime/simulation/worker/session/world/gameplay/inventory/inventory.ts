@@ -1314,6 +1314,17 @@ visitor (67D0AE), the gacha machine (67D0CB) and the stall network (67D0D6).
 		},
 		/*
 ================
+alchemyVisible
+
+The alchemy box shows (CGInterface_GetAlchemyBoxControl visible, the
+test 698C30 and 6FE91A make before a stall visit or a trade request).
+================
+		*/
+		alchemyVisible() {
+			return alchemy.state().visible;
+		},
+		/*
+================
 tradePinned
 
 The player keeps a stall, stands at one or has an exchange open: the
