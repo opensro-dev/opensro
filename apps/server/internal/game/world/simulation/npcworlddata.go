@@ -128,6 +128,9 @@ func LoadNpcWorldRoster(textdataDir string) []NpcDef {
 		}
 	}
 	roster = appendMagicPopMachines(roster, refs, lookups)
+	// Port-only switch, native content (#4810): the Ch'in Tomb boxes join
+	// at their later nest positions while SRO_TOMB_TREASURE_BOXES is on.
+	roster = appendTombBoxes(roster, refs, lookups)
 	// Port-only (#3648): the Styria Clash arena manager joins at its
 	// authored stands while its switch is on (npcstyria.go).
 	return appendArenaManager(roster, lookups)

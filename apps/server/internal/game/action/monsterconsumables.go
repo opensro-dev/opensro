@@ -50,25 +50,43 @@ prepareSelectedDrop
 ================
 */
 func (rt *Runtime) prepareSelectedDrop(chosen loot.DropItem, at simulation.Spawn, owner string, now time.Time) (grounditem.Item, bool) {
+	row, ok := rt.prepareSelectedItem(chosen, owner)
+	if !ok {
+		return grounditem.Item{}, false
+	}
+	return PlanItemDrop(row, chosen.Count, at, owner, now), true
+}
+
+/*
+================
+prepareSelectedItem
+
+The item one loot pick makes, before it lands anywhere: the beta-balance
+refusals every drop meets, then the equipment variance, options and
+non-repair mark. A treasure box hands the same item straight to the bag
+(tombbox.go), so the two paths cannot drift.
+================
+*/
+func (rt *Runtime) prepareSelectedItem(chosen loot.DropItem, owner string) (inventory.Item, bool) {
 	items := rt.deps.ItemReferences()
 	if items == nil || chosen.Count == 0 {
-		return grounditem.Item{}, false
+		return inventory.Item{}, false
 	}
 	ref, ok := items.ItemRefByCodename(chosen.Codename)
 	if !ok || ref == nil {
-		return grounditem.Item{}, false
+		return inventory.Item{}, false
 	}
 	// Port-only, not native, beta balance (owner 2026-10-13): every monster
 	// drop path ends here, so with elixir drops off an elixir pick drops
 	// nothing; the blacksmith sells them (progression/elixirdrops.go).
 	if rt.ElixirDrops.Excludes(ref.TypeIDs) {
-		return grounditem.Item{}, false
+		return inventory.Item{}, false
 	}
 	// Port-only, not native, beta balance (owner 2026-10-14): alchemy
 	// materials piled up as junk on every hunting ground, so their pick
 	// drops nothing (progression/materialdrops.go).
 	if rt.MaterialDrops.Excludes(ref.TypeIDs) {
-		return grounditem.Item{}, false
+		return inventory.Item{}, false
 	}
 	// Port-only, not native (owner 2026-11-16, #general): while the area
 	// polls run, no degree-10 or degree-11 item enters the economy, unique
@@ -76,12 +94,12 @@ func (rt *Runtime) prepareSelectedDrop(chosen loot.DropItem, at simulation.Spawn
 	// every degree-9-and-below chance is unchanged
 	// (progression/abovedegree9drops.go).
 	if rt.AboveDegree9Drops.Excludes(ref.TypeIDs, enterworld.ItemDegree(ref)) {
-		return grounditem.Item{}, false
+		return inventory.Item{}, false
 	}
 	// Port-only, not native, beta balance (owner 2026-10-13): degree-9
 	// alchemy goods come only from the shop, so their pick drops nothing.
 	if itemClass, _ := ref.NativeFields.Lookup("itemClass"); rt.ShopOnly.Excludes(ref.TypeIDs, int(itemClass)) {
-		return grounditem.Item{}, false
+		return inventory.Item{}, false
 	}
 	// Port-only, not native (owner 2026-10-14; narrowed 2026-10-18 to
 	// non-unique kills): while the Sun event rule is on, degree-9 Seal of Sun
@@ -90,7 +108,7 @@ func (rt *Runtime) prepareSelectedDrop(chosen loot.DropItem, at simulation.Spawn
 	// (action/sunevent.go). The deployment default is off since 2026-10-20,
 	// when drops became the Sun source (the rate above).
 	if !chosen.FromUnique && SunExcludes(rt.SunEventOnly, ref) {
-		return grounditem.Item{}, false
+		return inventory.Item{}, false
 	}
 	// Port-only, not native, beta balance (owner 2026-10-20): a degree-9
 	// Sun drop is the rate's whole product; name each one in the log so
@@ -106,7 +124,7 @@ func (rt *Runtime) prepareSelectedDrop(chosen loot.DropItem, at simulation.Spawn
 	if ref.TypeIDs[1] == 1 {
 		variance, durability, ok := rt.rollDroppedEquipmentVariance(ref)
 		if !ok {
-			return grounditem.Item{}, false
+			return inventory.Item{}, false
 		}
 		row.VarianceBits, row.Durability = variance, durability
 		// The native loot step initializes variance and authored options, not random blues.
@@ -114,7 +132,7 @@ func (rt *Runtime) prepareSelectedDrop(chosen loot.DropItem, at simulation.Spawn
 		if !chosen.Assigned {
 			magic, entered, err := loot.EquipmentMagic(chosen.Codename, rt.DropRoll)
 			if err != nil || chosen.Special && !entered {
-				return grounditem.Item{}, false
+				return inventory.Item{}, false
 			}
 			row.MagicOptions = magic
 		}
@@ -125,5 +143,5 @@ func (rt *Runtime) prepareSelectedDrop(chosen loot.DropItem, at simulation.Spawn
 			}
 		}
 	}
-	return PlanItemDrop(row, chosen.Count, at, owner, now), true
+	return row, true
 }

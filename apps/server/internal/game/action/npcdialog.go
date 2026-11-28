@@ -16,11 +16,13 @@ import (
 	"fmt"
 	"opensro.online/server/internal/game/sookarena"
 	"opensro.online/server/internal/game/world/styria"
+	"strings"
 	"sync"
 
 	log "github.com/sirupsen/logrus"
 	"opensro.online/server/internal/game/enterworld"
 	"opensro.online/server/internal/game/item/wire"
+	"opensro.online/server/internal/game/tombbox"
 	"opensro.online/server/internal/transport"
 )
 
@@ -413,6 +415,16 @@ func (rt *Runtime) HandleNpcDialogResponse(divisionID string, character *enterwo
 			if conversation.Pending.Codename == styria.ServiceCancel {
 				rt.NpcDialogs.Clear(divisionID, character.Name)
 				return rt.styriaCancel(divisionID, character), ""
+			}
+			// Port-only switch (#4810): a Ch'in Tomb box's open row.
+			if strings.HasPrefix(conversation.Pending.Codename, tombbox.ServicePrefix) {
+				rt.NpcDialogs.Clear(divisionID, character.Name)
+				frames, err := rt.openTombBox(divisionID, character, conversation.NpcCode)
+				if err != nil {
+					log.Debugf("npcdialog: tomb box %s refused: %v", conversation.NpcCode, err)
+					return []wire.Frame{{Opcode: wire.OpNpcDialog, Payload: wire.EncodeNpcDialogAnswer(conversation.DefaultSymbol)}}, ""
+				}
+				return frames, ""
 			}
 			if rt.NpcQuests.Finish == nil {
 				return rt.refuseNpcDialogChoice(divisionID, character, conversation, npcDialogRefusalOwnerMissing, "NPC service owner is unavailable")
