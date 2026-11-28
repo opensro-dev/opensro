@@ -10,6 +10,7 @@ import, the on/off/on rebuild and the absent-client skip.
 ===========================================================================
 """
 import script_paths  # noqa: F401  (puts scripts/ and its build folders on sys.path, #3410)
+import alexandria_npcs as characters  # noqa: E402
 import later_fixtures  # noqa: E402
 import json
 import os
@@ -137,7 +138,7 @@ class TextLayoutTests(unittest.TestCase):
 		cells = importer.vsro_text_row(row)
 		self.assertEqual(len(cells), importer.VSRO_TEXT_COLUMNS)
 		self.assertEqual(cells[:4], ["1", "SN_X", "ko", ""])
-		self.assertEqual(cells[importer.TEXT_ENGLISH], "Devil")
+		self.assertEqual(cells[characters.TEXT_ENGLISH_COLUMN], "Devil")
 		self.assertNotIn(importer.V1696_ABSENT, cells[3:])
 
 	# ================

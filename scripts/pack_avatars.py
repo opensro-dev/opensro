@@ -46,6 +46,7 @@ import cap110_items as items
 import import_vsro_alexandria as tables
 import mall_avatar_import as importer
 import pet_import as pets
+import pet_rows
 import skilldata_enc as skill_tables
 import sro_pk2
 import later_tables
@@ -181,9 +182,9 @@ def normalize_item_row(row):
 # name-text rule skips the avatar and reports it.
 # ================
 def export_text_row(row):
-	if len(row) <= importer.TEXT_ENGLISH + 1:
+	if len(row) <= text_tables.TEXT_ENGLISH_COLUMN + 1:
 		return None
-	english = row[importer.TEXT_ENGLISH + 1]
+	english = row[text_tables.TEXT_ENGLISH_COLUMN + 1]
 	if english in ("", "0"):
 		return None
 	return [row[0], row[1], row[2]] + ["0"] * 5 + [english] + ["0"] * (importer.VSRO_TEXT_COLUMNS - 9)
@@ -369,7 +370,7 @@ def table_bytes(rows):
 # A character row's model cell as a res/ path (the cells use backslashes).
 # ================
 def model_path(row):
-	return row[pets.CHAR_MODEL].replace("\\", "/").lower() if len(row) > pets.CHAR_MODEL else ""
+	return row[text_tables.MODEL_COLUMN].replace("\\", "/").lower() if len(row) > text_tables.MODEL_COLUMN else ""
 
 
 # ================
@@ -402,7 +403,7 @@ def pack_pets(archives, native, closure=None):
 	char_rows, item_rows, entries, families, excluded = [], [], {}, [], list(selection["skipped"])
 	for added in selection["added"]:
 		family = added["family"]
-		rows = [row for row in later_chars if len(row) > pets.CHAR_CODE and pets.family_of(row[pets.CHAR_CODE]) == family]
+		rows = [row for row in later_chars if len(row) > text_tables.CODENAME_COLUMN and pet_rows.family_of(row[text_tables.CODENAME_COLUMN]) == family]
 		codes = set(added["scrolls"])
 		scrolls = [normalize_item_row(row) for row in later_items if row[items.CODENAME] in codes]
 		if any(row is None for row in scrolls):
@@ -426,7 +427,7 @@ def pack_pets(archives, native, closure=None):
 		item_rows += scrolls
 		families.append(family)
 	needed = {
-		value for row in char_rows for value in row[pets.CHAR_DEFAULT_SKILL1:pets.CHAR_DEFAULT_SKILL_N + 1]
+		value for row in char_rows for value in row[text_tables.NATIVE_DEFAULT_SKILL_AT:text_tables.NATIVE_DEFAULT_SKILL_END]
 		if value.isdigit() and int(value)
 	}
 	skill_rows = []
@@ -505,7 +506,7 @@ def pack(export_root, native, output, screen=screen_models, completeness=closure
 			entries[f"{record['archive'].lower()}/{record['path']}"] = raw
 	entries.update(pet_entries)
 	wanted = {row[column] for row in final + pet_items for column in (items.NAME_KEY, items.DESCRIPTION_KEY)}
-	wanted |= {row[pets.CHAR_NAME_KEY] for row in pet_chars if len(row) > pets.CHAR_NAME_KEY}
+	wanted |= {row[text_tables.NAME_KEY_COLUMN] for row in pet_chars if len(row) > text_tables.NAME_KEY_COLUMN}
 	wanted -= {items.UNUSED, ""}
 	per_table = {name: [] for name in TEXT_TABLES}
 	for key in sorted(wanted):

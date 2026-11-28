@@ -41,6 +41,9 @@ SET = 62
 PARAM_FIRST = 118
 PARAM_END = 158
 PARAM_DESCRIPTION = 119
+# A summon scroll's first parameter names the COS it summons (the
+# server's itemrefs.go reads the same column).
+SUMMONED_CHARACTER = PARAM_DESCRIPTION
 PARAM_STRIDE = 2
 PARAM_LAST = 156
 DEGREES = (10, 11)

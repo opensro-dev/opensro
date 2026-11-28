@@ -57,7 +57,7 @@ import published_ids
 import sro_pk2
 import later_tables
 from mall_tables import (  # noqa: F401  (re-exported: the tests and callers read them here)
-	MALL_PRICE_AMOUNT, MALL_SLOTS, MALL_TABLES, NATIVE_SOURCE, PACKAGE_FLAG_COLUMN, SERVICE_ON, SILK_CURRENCY,
+	MALL_PRICE_AMOUNT, MALL_SLOTS, MALL_TABLES, NATIVE_SOURCE, PACKAGE_FLAG_COLUMN, SILK_CURRENCY,
 	LaterPackage, copy_later_package, in_packages, strip_mall, without_packages,
 )
 from prepare_client_resources import safe_target, write_atomically
@@ -161,7 +161,7 @@ def enabled(env=os.environ, flag=FLAG):
 def candidate(row, any_prefix=False):
 	code = row[items.CODENAME]
 	return (
-		row[items.SERVICE] == SERVICE_ON and row[items.TYPE_FIRST:items.TYPE_THIRD + 1] == AVATAR_TYPES
+		row[items.SERVICE] == later_tables.SERVICE_ON and row[items.TYPE_FIRST:items.TYPE_THIRD + 1] == AVATAR_TYPES
 		and (any_prefix or code.startswith(CODE_PREFIX)) and not any(word in code for word in EXCLUDED_WORDS)
 	)
 
@@ -270,12 +270,12 @@ def avatar_kind(code):
 # unlisted and are reported.
 # ================
 def mall_rows(later, avatars, current, native_package_ids, list_all=False):
-	scrap_of = {row[3]: row[2] for row in later["refscrapofpackageitem.txt"] if row[0] == SERVICE_ON and len(row) >= 20}
-	package_row = {row[3]: row for row in later["refpackageitem.txt"] if row[0] == SERVICE_ON and len(row) >= 9}
-	sale = {row[3]: (row[2], int(row[4])) for row in later["refshopgoods.txt"] if row[0] == SERVICE_ON and len(row) >= 5}
+	scrap_of = {row[3]: row[2] for row in later["refscrapofpackageitem.txt"] if row[0] == later_tables.SERVICE_ON and len(row) >= 20}
+	package_row = {row[3]: row for row in later["refpackageitem.txt"] if row[0] == later_tables.SERVICE_ON and len(row) >= 9}
+	sale = {row[3]: (row[2], int(row[4])) for row in later["refshopgoods.txt"] if row[0] == later_tables.SERVICE_ON and len(row) >= 5}
 	prices = collections.defaultdict(list)
 	for row in later["refpricepolicyofitem.txt"]:
-		if row[0] == SERVICE_ON and len(row) > MALL_PRICE_AMOUNT:
+		if row[0] == later_tables.SERVICE_ON and len(row) > MALL_PRICE_AMOUNT:
 			prices[row[2]].append(row)
 	# Slots follow the present goods. The caller has already dropped a
 	# later source's stale goods (without_packages): counting them walked
@@ -332,7 +332,7 @@ def mall_rows(later, avatars, current, native_package_ids, list_all=False):
 def attach_tab_row(current, later):
 	if any(len(row) > SHOP_TAB_CODE and row[SHOP_TAB_CODE] == ATTACH_TAB for row in current):
 		return None
-	authored = [row for row in later if len(row) > SHOP_TAB_CODE and row[0] == SERVICE_ON and row[SHOP_TAB_CODE] == ATTACH_TAB]
+	authored = [row for row in later if len(row) > SHOP_TAB_CODE and row[0] == later_tables.SERVICE_ON and row[SHOP_TAB_CODE] == ATTACH_TAB]
 	if not authored:
 		raise ValueError(f"the later client has no {ATTACH_TAB} tab to carry over")
 	row = list(authored[0])
@@ -598,7 +598,6 @@ def later_text_rows(source, name):
 # English one the port reads, and the VSRO client repeats English in 6,
 # 10, 12, 13 and 14 where it has no translation.
 VSRO_TEXT_COLUMNS = 15
-TEXT_ENGLISH = 8
 V1696_TEXT_COLUMNS = 17
 V1696_ABSENT = "0"
 
@@ -618,7 +617,7 @@ def vsro_text_row(row):
 	if len(row) != V1696_TEXT_COLUMNS or not row[1].strip().isdigit():
 		return row
 	cells = [row[0]] + row[2:2 + VSRO_TEXT_COLUMNS - 1]
-	english = cells[TEXT_ENGLISH]
+	english = cells[text_tables.TEXT_ENGLISH_COLUMN]
 	for column in range(3, VSRO_TEXT_COLUMNS):
 		if cells[column] == V1696_ABSENT:
 			cells[column] = "" if column == 3 else english

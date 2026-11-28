@@ -39,6 +39,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import import_vsro_alexandria as stage1  # noqa: E402
 import later_tables  # noqa: E402
+import alexandria_npcs as characters
 from prepare_client_resources import file_digest, safe_target, write_atomically  # noqa: E402
 from sro_paths import EXTRACTED_ROOT  # noqa: E402
 
@@ -59,7 +60,6 @@ TABLE_COLUMNS = 19
 # textdata_object.txt: Service, CodeName128, then the languages; English is
 # column 8.
 NAMES_CODE_COLUMN = 1
-NAMES_ENGLISH_COLUMN = 8
 MAX_NAME_CHARS = 64
 
 
@@ -95,8 +95,8 @@ ZoneName128 code -> English name, from textdata_object.txt.
 def english_names(raw):
 	names = {}
 	for row in decode_table(raw):
-		if len(row) > NAMES_ENGLISH_COLUMN and row[0] == "1":
-			names[row[NAMES_CODE_COLUMN]] = row[NAMES_ENGLISH_COLUMN].strip()
+		if len(row) > characters.TEXT_ENGLISH_COLUMN and row[0] == "1":
+			names[row[NAMES_CODE_COLUMN]] = row[characters.TEXT_ENGLISH_COLUMN].strip()
 	return names
 
 
