@@ -60,7 +60,6 @@ func TestShippedStructureAuraRows(t *testing.T) {
 		}},
 	}
 	for tier, value := range []uint32{3, 6, 10, 14, 18} {
-		value := value
 		want["SKILL_FORT_STRUCTURE_DEFENSIVE_POSITION_0"+string(rune('1'+tier))] = struct {
 			radius, max uint32
 			check       func(t *testing.T, row SkillRow)
