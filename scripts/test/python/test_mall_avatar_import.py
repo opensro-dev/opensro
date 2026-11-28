@@ -231,14 +231,17 @@ class SelectionTests(unittest.TestCase):
 		self.assertEqual(summary["skipped"][0]["missing"], ["model"])
 
 	# ================
-	# test_unrenderable_rows_are_skipped
+	# test_environment_mapped_hats_are_imported
+	#
+	# The Earth Spirit hats were held out while the item-model builder
+	# refused a material-scoped environment map; characterEnvironment.mjs
+	# now draws that scope, so the hats import like every other avatar.
 	# ================
-	def test_unrenderable_rows_are_skipped(self):
+	def test_environment_mapped_hats_are_imported(self):
 		rows = later_rows() + [avatar("ITEM_MALL_AVATAR_M_EARTHSPIRIT_HAT", FIRST_ID + 9)]
 		added, summary = importer.select_avatars([native_row(10)], rows)
-		self.assertEqual(summary["added"], 4)
-		self.assertEqual(summary["skipped"][0]["code"], "ITEM_MALL_AVATAR_M_EARTHSPIRIT_HAT")
-		self.assertEqual(summary["skipped"][0]["missing"], ["environment-mapped material"])
+		self.assertIn("ITEM_MALL_AVATAR_M_EARTHSPIRIT_HAT", [row[items.CODENAME] for row in added])
+		self.assertEqual(summary["skipped"], [])
 
 	# ================
 	# test_rows_without_name_text_are_skipped

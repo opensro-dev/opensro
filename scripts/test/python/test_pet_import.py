@@ -88,6 +88,13 @@ class KindTests(unittest.TestCase):
 		self.assertEqual(importer.kind_of("COS_GUARD_CH", [char_row("COS_GUARD_CH", 1)]), "excluded")
 
 
+	# ================
+	# test_test_rows_are_no_kind
+	# ================
+	def test_test_rows_are_no_kind(self):
+		self.assertEqual(importer.kind_of("COS_T_BEHEMOTH_TEST", [char_row("COS_T_BEHEMOTH_TEST", 1)]), "excluded")
+
+
 class SelectionTests(unittest.TestCase):
 	def select(self, later_chars, later_items, native=None, earlier=(), previous=None, missing=lambda family, rows: []):
 		native_chars, native_items = native or native_wolf()
@@ -325,6 +332,44 @@ class ArchiveTests(unittest.TestCase):
 			self._run(zip_path, pin_path, native, output, env={})
 			self.assertFalse([row for row in rows("refshopgoods.txt") if row[3] == "PACKAGE_ITEM_PET_DOG"])
 			self.assertEqual(len(rows("refshopgoods.txt")), 3)
+
+	# ================
+	# test_a_native_scroll_nobody_sells_lists_on_its_tab
+	#
+	# Owner 2026-11-28: every pet is in the game. A native pickup kind
+	# whose scroll no package sells lists on the pickup tab at its price;
+	# one some package already sells, and an event copy, do not; a
+	# rebuild lists it once.
+	# ================
+	def test_a_native_scroll_nobody_sells_lists_on_its_tab(self):
+		with tempfile.TemporaryDirectory() as folder:
+			base = Path(folder)
+			native, output = base / "native", base / "out"
+			chars = [char_row("COS_P_GGLIDER", 23229), char_row("COS_P_SOLD", 23230)]
+			# ITEM_PACKAGE_A sells (the mall fixture's PACKAGE_A), so its
+			# kind's second scroll needs no listing of its own.
+			scrolls = [scroll("ITEM_COS_P_GGLIDER_SCROLL", 23300, "COS_P_GGLIDER"),
+				scroll("ITEM_EVENT_COS_P_GGLIDER_SCROLL", 23301, "COS_P_GGLIDER"),
+				scroll("ITEM_PACKAGE_A", 23302, "COS_P_SOLD"), scroll("ITEM_COS_P_SOLD_SILK", 23303, "COS_P_SOLD")]
+			self._tree(native, chars, scrolls)
+			self._mall(native)
+			output.mkdir()
+			goods = importer.native_scrolls(chars, scrolls)
+			self.assertEqual([(row[items.CODENAME], kind, family) for row, kind, family in goods], [
+				("ITEM_COS_P_GGLIDER_SCROLL", "pickup", "COS_P_GGLIDER"), ("ITEM_EVENT_COS_P_GGLIDER_SCROLL", "pickup", "COS_P_GGLIDER"),
+				("ITEM_PACKAGE_A", "pickup", "COS_P_SOLD"), ("ITEM_COS_P_SOLD_SILK", "pickup", "COS_P_SOLD")])
+			for _ in range(2):
+				report = {"_prior": {}}
+				prior = importer.read_marker(output, importer.VSRO_SOURCE)
+				importer._list_in_mall(output, native, [], report, prior, importer.VSRO_SOURCE, goods)
+				importer._write_pass(output, importer.VSRO_SOURCE, [], [], report)
+			self.assertEqual(report["mall"]["packages"], ["PACKAGE_ITEM_COS_P_GGLIDER_SCROLL"])
+			self.assertEqual(sorted((entry["code"], entry["reason"]) for entry in report["mall"]["unlisted"]), [
+				("ITEM_COS_P_SOLD_SILK", "kind already sold"), ("ITEM_EVENT_COS_P_GGLIDER_SCROLL", "event copy"),
+				("ITEM_PACKAGE_A", "already sold")])
+			listed = [row for row in importer.tables.table_rows((output / importer.TEXT_ROOT / "refshopgoods.txt").read_bytes())
+				if row[3] == "PACKAGE_ITEM_COS_P_GGLIDER_SCROLL"]
+			self.assertEqual([row[2] for row in listed], ["MALL_PET_B_SILK"])
 
 	# ================
 	# test_two_sources_rebuilt_on_a_kept_tree_keep_their_slots
