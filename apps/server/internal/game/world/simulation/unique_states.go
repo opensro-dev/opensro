@@ -31,7 +31,7 @@ One unique reference's living copies in a division, keyed by gid, and its
 last spawn. A reference can stand more than once at a time: the Ch'in Tomb's
 Sarin generals have their own Floor 3 nests, and the Floor 6 South stage
 raises the same four references again (the v1.188 server's Floor 6 spawner
-setup, 0x5EF9B0). A per-reference counter with one spawn time showed a killed
+setup). A per-reference counter with one spawn time showed a killed
 copy's neighbour as "up since" the dead copy's spawn; each copy is its own
 row here, and a death or despawn removes exactly the copy it names.
 ================
