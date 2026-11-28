@@ -93,7 +93,7 @@ func (rt *Runtime) acceptCombatTrap(division string, c, snapshot *enterworld.Cha
 	// The release does not install an effect on the caster, so nothing else
 	// closes the bracket: without the closing B505 the client keeps the
 	// casting aura on the ground indefinitely.
-	rt.queueDetachedCastClose(division, c.Name, gid, pending.token, now+int64(skill.ActionDurationMs))
+	rt.queueDetachedCastClose(division, c.Name, gid, pending.token, pending.castCloseAtMs(now, skill.ActionCastingTimeMs, int64(skill.ActionDurationMs)))
 	public := append([]wire.Frame{released}, effects...)
 	return OpResult{Frames: append([]wire.Frame{vitals}, public...), Broadcast: public, ActorPrivate: []wire.Frame{vitals}}, skillCastAccepted
 }

@@ -505,7 +505,7 @@ func (rt *Runtime) strikePlayerTarget(st offensiveStage, target combatTarget, ca
 		rt.queueSkillFinalize(division, snapshot.Name, caster, now+int64(skill.ActionCastingTimeMs), wire.SkillCastReleaseFrame(token, target.gid))
 	} else {
 		frame = wire.SkillCastReleaseResultFrame(result)
-		closeAt = now + int64(skill.ActionDurationMs)
+		closeAt = st.release.castCloseAtMs(now, skill.ActionCastingTimeMs, int64(skill.ActionDurationMs))
 	}
 	if skill.ActionHandler == enterworld.SkillActionProjectile {
 		closeAt = max(closeAt, now+projectileFlightMs(casterAt, target.at, skill.ProjectileSpeed)+1)
