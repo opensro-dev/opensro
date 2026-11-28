@@ -25,6 +25,7 @@ import (
 	"opensro.online/server/internal/platform/connjournal"
 	"opensro.online/server/internal/platform/history"
 	"opensro.online/server/internal/security/auth"
+	"opensro.online/server/internal/testsupport/wait"
 )
 
 var loginSourceTestKey = []byte("login-source-test-key-0123456789")
@@ -157,17 +158,18 @@ The newest event of kind, once the journal's writer has stored it.
 */
 func waitLoginEvent(t *testing.T, journal *history.Journal, kind string) history.Event {
 	t.Helper()
-	deadline := time.Now().Add(5 * time.Second)
-	for time.Now().Before(deadline) {
+	var event history.Event
+	wait.Eventually(t, 5*time.Second, "a journaled "+kind+" event", func() bool {
 		page, err := journal.Query(history.Filter{Kind: kind, Limit: 1})
 		if err != nil {
 			t.Fatal(err)
 		}
-		if rows, _ := page["events"].([]history.EventRow); len(rows) > 0 {
-			return rows[0].Event
+		rows, _ := page["events"].([]history.EventRow)
+		if len(rows) == 0 {
+			return false
 		}
-		time.Sleep(20 * time.Millisecond)
-	}
-	t.Fatalf("no %s event was journaled", kind)
-	return history.Event{}
+		event = rows[0].Event
+		return true
+	})
+	return event
 }
