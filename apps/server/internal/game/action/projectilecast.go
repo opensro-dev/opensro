@@ -57,11 +57,33 @@ type pendingProjectileCast struct {
 	cast        wire.SkillAction
 	token       uint32
 	rootID      uint32
+	startedAtMs int64
 	releaseAtMs int64
 	// stealthStrike is command flag 0x10: issued in body mode 6.
 	// The release reads it, not the live body, which the cast's own event
 	// retirement has already ended.
 	stealthStrike bool
+}
+
+/*
+================
+castCloseAtMs
+
+The reference server times a cast's whole action from its start: once the
+casting instance closes, the next command waits until now - castStart >
+ActionCastingTimeMs + ActionDurationMs, so any tick overrun on release is
+absorbed by the recovery tail rather than shifting the cast close forward.
+================
+*/
+func (p *pendingProjectileCast) castCloseAtMs(nowMs int64, castingMs uint32, durationMs int64) int64 {
+	if p == nil {
+		return nowMs + int64(castingMs) + durationMs
+	}
+	started := p.startedAtMs
+	if started == 0 && p.releaseAtMs > 0 {
+		started = p.releaseAtMs - int64(castingMs) - 1
+	}
+	return max(nowMs, started+int64(castingMs)+durationMs)
 }
 
 /*
@@ -119,6 +141,7 @@ func (rt *Runtime) prepareSelfCast(division string, c *enterworld.Character, cas
 	p.characterID = c.ID
 	p.cast = cast
 	p.token = atomic.AddUint32(&rt.castTokenCounter, 1)
+	p.startedAtMs = now
 	p.releaseAtMs = now + int64(skill.ActionCastingTimeMs) + 1
 	rt.pendingSkillFinalizesMu.Lock()
 	rt.pendingProjectileCasts = append(rt.pendingProjectileCasts, p)
@@ -146,6 +169,7 @@ func (rt *Runtime) prepareProjectileCast(division string, c *enterworld.Characte
 	pending.cast = cast
 	pending.rootID = rootID
 	pending.token = atomic.AddUint32(&rt.castTokenCounter, 1)
+	pending.startedAtMs = now
 	pending.releaseAtMs = now + int64(skill.ActionCastingTimeMs) + 1
 	pending.stealthStrike = c.NativeBodyStatus == 6
 	rt.pendingSkillFinalizesMu.Lock()

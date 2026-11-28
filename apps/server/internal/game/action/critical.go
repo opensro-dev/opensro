@@ -14,6 +14,7 @@ import (
 
 	"opensro.online/server/internal/game/combat"
 	"opensro.online/server/internal/game/enterworld"
+	"opensro.online/server/internal/game/item/wire"
 )
 
 // ignoreDefenseProbabilityPrefix is the reference server's probability-history
@@ -237,13 +238,26 @@ func (rt *Runtime) resolveCombatRequest(request combatRequest) (combat.WallOutco
 		Attack: skill.Attack, OriginalFlags: skill.Attack.Flags, Lanes: request.lanes,
 		Player: actor.monster == 0, Critical: critical, IgnoreDefense: ignoreDefense,
 	}
-	if wall != nil {
+	switch {
+	case !skill.Attack.Present && skill.RatioDamage.Present:
+		// A program with no attack block lands its ratio record alone:
+		// the lanes would only refuse it, and no wall takes a share of
+		// it (the row's bypass tag). The fortress towers' only hit is
+		// this shape.
+		out.Defender = combat.Result{Damage: combat.HPRatioDamage(skill.RatioDamage.Percent, defender.MaxHP), ResultFlags: 1}
+	case wall != nil:
 		out, err = combat.ResolveCalculationAgainstWall(attacker, defender, combat.WallCalculation{Attack: calculation, Wall: *wall}, rt.CombatRoll)
-	} else {
+	default:
 		out.Defender, err = combat.ResolveCalculation(attacker, defender, calculation, rt.CombatRoll)
 	}
 	if err != nil {
 		return combat.WallOutcome{}, err
+	}
+	// A program with both an attack block and the ratio tag adds the
+	// ratio amount to the lanes' total, after the wall's split (the
+	// tag bypasses the absorb) and under the same ceiling.
+	if skill.Attack.Present && skill.RatioDamage.Present {
+		out.Defender.Damage = min(out.Defender.Damage+combat.HPRatioDamage(skill.RatioDamage.Percent, defender.MaxHP), wire.MaxSkillActionDamage)
 	}
 	// After the wall's share, every impact of an attack
 	// skill rolls the target's block chance on the attacker's history

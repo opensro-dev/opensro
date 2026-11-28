@@ -224,6 +224,9 @@ test("a refused prediction blends out and leaves no action", () => {
 // ============================================================================
 // gameplay.ts: when a press predicts
 
+const { experimentalGameplay, experimentalOptions } = await import(
+	"../../src/engine/foundation/ui/experimental-options.ts"
+);
 const { createGameplay } = await import(
 	"../../src/engine/runtime/simulation/worker/session/world/gameplay/gameplay.ts"
 );
@@ -467,4 +470,328 @@ test("held release events fire at the answer, in order, never back-dated", () =>
 	assert.deepEqual( released.map( event => event.event ), [ 1, 2, 3 ] );
 	assert.ok( released.every( event => event.adopted === true ) );
 	assert.equal( held[0]?.at, 2.1, "the held events were mutated" );
+});
+
+/**
+ * @param {number} id
+ * @param {{
+ *   group?: number,
+ *   targetRequired?: boolean,
+ *   targetSelf?: boolean,
+ *   groundTarget?: boolean,
+ *   targets?: number,
+ *   admit?: object,
+ *   cooldownMs?: number,
+ *   actionMs?: number,
+ *   range?: number,
+ *   holdsCaster?: boolean,
+ *   chain?: boolean
+ * }} [over]
+ */
+function queuedChainSkillRef( id, over = {} ) {
+	return {
+		id,
+		group: over.group ?? id,
+		level: 1,
+		status: false,
+		effectRider: false,
+		ui: {
+			name: `CHAIN_${id}`,
+			trainable: true,
+			spCost: 1,
+			targetRequired: over.targetRequired ?? true,
+			targetSelf: over.targetSelf === true,
+			groundTarget: over.groundTarget === true,
+			targets: over.targets ?? (1 | 4),
+			admit: over.admit ?? { weaponKinds: [ 255, 255 ] },
+			cooldownMs: over.cooldownMs ?? 0,
+			actionMs: over.actionMs,
+			range: over.range ?? 200,
+			...(over.holdsCaster ? { holdsCaster: true } : {}),
+			...(over.chain ? { chain: true } : {}),
+			masteries: [ { ID: 0, Level: 0 }, { ID: 0, Level: 0 } ],
+			prerequisites: [ { ID: 0, Level: 0 }, { ID: 0, Level: 0 }, { ID: 0, Level: 0 } ]
+		}
+	};
+}
+
+/**
+ * @param {number} skillId
+ * @param {number} casterGid
+ * @param {number} token
+ * @param {number} targetGid
+ */
+function buildCastOpenPayload( skillId, casterGid, token, targetGid ) {
+	const buf = Buffer.alloc( 19 );
+	buf[0] = 1;
+	buf[1] = 0;
+	buf.writeUInt32LE( skillId, 2 );
+	buf.writeUInt32LE( casterGid, 6 );
+	buf.writeUInt32LE( token, 10 );
+	buf.writeUInt32LE( targetGid, 14 );
+	buf[18] = 0;
+	return new Uint8Array( buf );
+}
+
+/** @param {number} token */
+function buildCastClosePayload( token ) {
+	const buf = Buffer.alloc( 6 );
+	buf[0] = 2;
+	buf.writeUInt32LE( token, 2 );
+	return new Uint8Array( buf );
+}
+
+/**
+ * @param {{
+ *   spellA?: ReturnType<typeof queuedChainSkillRef>,
+ *   spellB?: ReturnType<typeof queuedChainSkillRef>,
+ *   extraSkills?: ReturnType<typeof queuedChainSkillRef>[],
+ *   actorOverrides?: Partial<import("../../src/engine/contracts/world").EntityState>,
+ *   mobOverrides?: Partial<import("../../src/engine/contracts/world").EntityState>,
+ *   predictedQueuedCast?: boolean
+ * }} [opts]
+ */
+function createQueuedChainGame( {
+	spellA = queuedChainSkillRef( 9101, { actionMs: 3000 } ),
+	spellB = queuedChainSkillRef( 9102, { actionMs: 1000 } ),
+	extraSkills = /** @type {ReturnType<typeof queuedChainSkillRef>[]} */ ([]),
+	actorOverrides = {},
+	mobOverrides = {},
+	// The Experimental "Start queued skills early" row (#4740): on for the
+	// prediction cases, off for the native default.
+	predictedQueuedCast = true
+} = {} ) {
+	/** @type {import("../../src/engine/contracts/world").EntityState} */
+	const actor = {
+		gid: 7001,
+		refObjId: 1907,
+		name: "Wizard",
+		kind: "player",
+		regionId: 0x62a8,
+		x: 100,
+		y: 20,
+		z: 100,
+		heading: 0,
+		appearanceState: [ 1, 0, 0 ],
+		...actorOverrides
+	};
+	/** @type {import("../../src/engine/contracts/world").EntityState} */
+	const mob = {
+		gid: 8001,
+		refObjId: 2001,
+		name: "Mob",
+		kind: "monster",
+		regionId: 0x62a8,
+		x: 150,
+		y: 20,
+		z: 100,
+		heading: 0,
+		appearanceState: [ 1, 0, 0 ],
+		...mobOverrides
+	};
+	/** @type {Map<number, import("../../src/engine/contracts/world").EntityState>} */
+	const entities = new Map( [ [ actor.gid, actor ], [ mob.gid, mob ] ] );
+	const skills = [ spellA, spellB, ...extraSkills ];
+	/** @type {unknown[]} */
+	const sent = [];
+	const game = createGameplay( frame => sent.push( frame ), () => {}, () => {}, gid => entities.get( gid ) );
+	game.bootstrap( {
+		simulationProtocolVersion: 1,
+		character: {
+			skills: skills.map( s => s.id ),
+			hp: 1000,
+			maxHp: 1000,
+			mp: 1000,
+			maxMp: 1000
+		},
+		refSkillSnapshot: skills
+	} );
+	game.experimental( experimentalGameplay( experimentalOptions( { predictedQueuedCast } ) ) );
+	game.worldReady();
+	game.seed( actor );
+	game.step( 0, actor );
+	return { game, actor, mob, entities, sent, spellA, spellB };
+}
+
+test("queued press predicts Spell B one one-way latency early at 200 ms RTT and B245 adopts it", () => {
+	const { game, actor, mob, spellA, spellB } = createQueuedChainGame();
+	// Cast Spell A at t=0; 200 ms later (oneWay = 100 ms), B245 + B2CD [1, 1] arrive.
+	game.command( { kind: "skill", skillId: spellA.id, gid: mob.gid }, 0, mob, actor );
+	game.receive( { opcode: 0xb245, payload: buildCastOpenPayload( spellA.id, actor.gid, 101, mob.gid ) }, 200 );
+	game.receive( { opcode: 0xb2cd, payload: Uint8Array.of( 1, 1 ) }, 200 );
+
+	// Press Spell B mid-cast at t=800; server queue ack arrives at t=1000.
+	game.command( { kind: "skill", skillId: spellB.id, gid: mob.gid }, 800, mob, actor );
+	game.receive( { opcode: 0xb2cd, payload: Uint8Array.of( 1, 2 ) }, 1000 );
+	assert.equal( game.take()?.castPrediction, undefined, "queue ack must cancel initial prediction" );
+
+	// Spell A receivedAtMs=200, actionMs=3000, oneWay=100 => blockingEnd=3100.
+	game.step( 3099, actor );
+	assert.equal( game.take()?.castPrediction, undefined, "must stay silent 1 ms before blockingEnd" );
+
+	game.step( 3100, actor );
+	const predicted = game.take()?.castPrediction;
+	assert.ok( predicted, "Spell B should start predicting at blockingEnd = 3100 ms" );
+	assert.equal( predicted.skill, spellB.id );
+	assert.equal( predicted.target, mob.gid );
+	const predictedToken = predicted.token;
+
+	// Server close for Spell A + open for Spell B arrive at t=3200 and adopt predictedToken.
+	game.receive( { opcode: 0xb505, payload: buildCastClosePayload( 101 ) }, 3200 );
+	game.receive( { opcode: 0xb245, payload: buildCastOpenPayload( spellB.id, actor.gid, 102, mob.gid ) }, 3200 );
+	game.receive( { opcode: 0xb2cd, payload: Uint8Array.of( 2, 1 ) }, 3200 );
+	const adoptedState = game.take();
+	assert.equal( adoptedState?.castPrediction, undefined, "adopted prediction must leave castPrediction slot" );
+	const serverCastB = adoptedState?.casts.find( c => c.token === 102 );
+	assert.equal( serverCastB?.predictedToken, predictedToken, "server cast B must adopt the queued prediction token" );
+	game.dispose();
+});
+
+test("queued prediction stays blocked behind unclosed chain roots and holding walls", () => {
+	for ( const mode of [ "chain", "holdsCaster" ] ) {
+		const spellA = queuedChainSkillRef( 9111, {
+			actionMs: 1000,
+			chain: mode === "chain",
+			holdsCaster: mode === "holdsCaster"
+		} );
+		const { game, actor, mob, spellB } = createQueuedChainGame( { spellA } );
+		game.command( { kind: "skill", skillId: spellA.id, gid: mob.gid }, 0, mob, actor );
+		game.receive( { opcode: 0xb245, payload: buildCastOpenPayload( spellA.id, actor.gid, 201, mob.gid ) }, 200 );
+		game.receive( { opcode: 0xb2cd, payload: Uint8Array.of( 1, 1 ) }, 200 );
+		game.command( { kind: "skill", skillId: spellB.id, gid: mob.gid }, 500, mob, actor );
+		game.receive( { opcode: 0xb2cd, payload: Uint8Array.of( 1, 2 ) }, 700 );
+
+		game.step( 1200, actor );
+		assert.equal( game.take()?.castPrediction, undefined, `${mode} must block queued cast prediction` );
+		game.dispose();
+	}
+});
+
+test("queued prediction stays silent if target dies or moves out of reach before blockingEnd", () => {
+	for ( const reason of [ "dead", "out-of-range" ] ) {
+		const { game, actor, mob, entities, spellA, spellB } = createQueuedChainGame();
+		game.command( { kind: "skill", skillId: spellA.id, gid: mob.gid }, 0, mob, actor );
+		game.receive( { opcode: 0xb245, payload: buildCastOpenPayload( spellA.id, actor.gid, 301, mob.gid ) }, 200 );
+		game.receive( { opcode: 0xb2cd, payload: Uint8Array.of( 1, 1 ) }, 200 );
+		game.command( { kind: "skill", skillId: spellB.id, gid: mob.gid }, 800, mob, actor );
+		game.receive( { opcode: 0xb2cd, payload: Uint8Array.of( 1, 2 ) }, 1000 );
+
+		if ( reason === "dead" ) {
+			entities.set( mob.gid, { ...mob, appearanceState: [ 2, 0, 0 ] } );
+		} else {
+			entities.set( mob.gid, { ...mob, x: 500 } );
+		}
+		game.step( 3100, actor );
+		assert.equal( game.take()?.castPrediction, undefined, `${reason} target must block queued prediction` );
+		game.dispose();
+	}
+});
+
+test("queued prediction scales front cast duration by local.animationRate", () => {
+	const slowActor = { animationRate: 0.8 };
+	const { game, actor, mob, spellA, spellB } = createQueuedChainGame( {
+		spellA: queuedChainSkillRef( 9121, { actionMs: 2000 } ),
+		actorOverrides: slowActor
+	} );
+	game.command( { kind: "skill", skillId: spellA.id, gid: mob.gid }, 0, mob, actor );
+	game.receive( { opcode: 0xb245, payload: buildCastOpenPayload( spellA.id, actor.gid, 401, mob.gid ) }, 200 );
+	game.receive( { opcode: 0xb2cd, payload: Uint8Array.of( 1, 1 ) }, 200 );
+	game.command( { kind: "skill", skillId: spellB.id, gid: mob.gid }, 800, mob, actor );
+	game.receive( { opcode: 0xb2cd, payload: Uint8Array.of( 1, 2 ) }, 1000 );
+
+	// 2000 / 0.8 = 2500 ms => blockingEnd = 200 - 100 + 2500 = 2600 ms (not unscaled 2100).
+	game.step( 2599, actor );
+	assert.equal( game.take()?.castPrediction, undefined, "must wait for animationRate-scaled end at 2600 ms" );
+	game.step( 2600, actor );
+	assert.equal( game.take()?.castPrediction?.skill, spellB.id );
+	game.dispose();
+});
+
+test("queued prediction latches once per B2CD queue slot even after a B245 refusal", () => {
+	const { game, actor, mob, spellA, spellB } = createQueuedChainGame();
+	game.command( { kind: "skill", skillId: spellA.id, gid: mob.gid }, 0, mob, actor );
+	game.receive( { opcode: 0xb245, payload: buildCastOpenPayload( spellA.id, actor.gid, 501, mob.gid ) }, 200 );
+	game.receive( { opcode: 0xb2cd, payload: Uint8Array.of( 1, 1 ) }, 200 );
+	game.command( { kind: "skill", skillId: spellB.id, gid: mob.gid }, 800, mob, actor );
+	game.receive( { opcode: 0xb2cd, payload: Uint8Array.of( 1, 2 ) }, 1000 );
+
+	game.step( 3100, actor );
+	assert.equal( game.take()?.castPrediction?.skill, spellB.id );
+	// Refusal arrives while B2CD count hasn't drained yet; prediction blends out
+	// cleanly and must not re-predict on subsequent steps.
+	game.receive( { opcode: 0xb245, payload: Uint8Array.of( 2, 0x05 ) }, 3150 );
+	assert.equal( game.take()?.castPrediction?.cancelledAtMs, 3150 );
+	for ( let t = 3200; t <= 4500; t += 100 ) {
+		game.step( t, actor );
+		const pred = game.take()?.castPrediction;
+		assert.ok(
+			!pred || pred.cancelledAtMs === 3150,
+			"single-prediction latch must prevent re-prediction after B245 refusal"
+		);
+	}
+	assert.equal( game.take()?.castPrediction, undefined, "cancelled prediction must finish blending out" );
+	game.dispose();
+});
+
+test("queued prediction does not fire when measured oneWayMs is zero", () => {
+	const { game, actor, mob, spellA, spellB } = createQueuedChainGame();
+	// Immediate same-timestamp answer yields RTT=0, oneWayMs=0.
+	game.command( { kind: "skill", skillId: spellA.id, gid: mob.gid }, 100, mob, actor );
+	game.receive( { opcode: 0xb245, payload: buildCastOpenPayload( spellA.id, actor.gid, 601, mob.gid ) }, 100 );
+	game.receive( { opcode: 0xb2cd, payload: Uint8Array.of( 1, 1 ) }, 100 );
+	game.command( { kind: "skill", skillId: spellB.id, gid: mob.gid }, 500, mob, actor );
+	game.receive( { opcode: 0xb2cd, payload: Uint8Array.of( 1, 2 ) }, 500 );
+
+	game.step( 3100, actor );
+	assert.equal( game.take()?.castPrediction, undefined, "zero latency must not predict early" );
+	game.dispose();
+});
+
+test("queued prediction ignores lingering finished aura cast and anchors on the active blocking cast", () => {
+	const aura = queuedChainSkillRef( 9130, { actionMs: 400, targetRequired: false } );
+	const { game, actor, mob, spellA, spellB } = createQueuedChainGame( { extraSkills: [ aura ] } );
+	// Primer press at 0->200 to seed oneWayMs = 100 and start lingering aura.
+	game.command( { kind: "skill", skillId: aura.id }, 0, undefined, actor );
+	game.receive( { opcode: 0xb245, payload: buildCastOpenPayload( aura.id, actor.gid, 700, 0 ) }, 200 );
+	game.receive( { opcode: 0xb2cd, payload: Uint8Array.of( 1, 0 ) }, 200 );
+	// Aura actionMs (400) finishes at 200 + 400 = 600, while aura cast entry lingers unclosed.
+	// Start Spell A at 1000 (answer 1200) and queue Spell B at 1500 (queued ack 1700).
+	game.command( { kind: "skill", skillId: spellA.id, gid: mob.gid }, 1000, mob, actor );
+	game.receive( { opcode: 0xb245, payload: buildCastOpenPayload( spellA.id, actor.gid, 701, mob.gid ) }, 1200 );
+	game.receive( { opcode: 0xb2cd, payload: Uint8Array.of( 1, 1 ) }, 1200 );
+	game.command( { kind: "skill", skillId: spellB.id, gid: mob.gid }, 1500, mob, actor );
+	game.receive( { opcode: 0xb2cd, payload: Uint8Array.of( 1, 2 ) }, 1700 );
+
+	// Lingering aura finished at 600 <= queued.sinceMs (1700), so Spell A's end (1200 - 100 + 3000 = 4100) wins.
+	game.step( 4099, actor );
+	assert.equal( game.take()?.castPrediction, undefined );
+	game.step( 4100, actor );
+	assert.equal( game.take()?.castPrediction?.skill, spellB.id );
+	game.dispose();
+});
+
+test("with the Experimental row off, a queued press waits for the server's B245, as natively (#4740)", () => {
+	const { game, actor, mob, spellA, spellB } = createQueuedChainGame( { predictedQueuedCast: false } );
+	game.command( { kind: "skill", skillId: spellA.id, gid: mob.gid }, 0, mob, actor );
+	game.receive( { opcode: 0xb245, payload: buildCastOpenPayload( spellA.id, actor.gid, 101, mob.gid ) }, 200 );
+	game.receive( { opcode: 0xb2cd, payload: Uint8Array.of( 1, 1 ) }, 200 );
+	game.command( { kind: "skill", skillId: spellB.id, gid: mob.gid }, 800, mob, actor );
+	game.receive( { opcode: 0xb2cd, payload: Uint8Array.of( 1, 2 ) }, 1000 );
+	game.take();
+	for ( const now of [ 3100, 3150, 3199 ] ) {
+		game.step( now, actor );
+		assert.equal( game.take()?.castPrediction, undefined, `no prediction at ${now} with the row off` );
+	}
+	game.dispose();
+});
+
+test("the queued-cast row maps to the gameplay slice and defaults off (#4740)", async () => {
+	const { experimentalGameplay, experimentalOptions } = await import(
+		"../../src/engine/foundation/ui/experimental-options.ts"
+	);
+	assert.equal( experimentalGameplay( experimentalOptions( {} ) ).predictedQueuedCast, false );
+	assert.equal(
+		experimentalGameplay( experimentalOptions( { predictedQueuedCast: true } ) ).predictedQueuedCast,
+		true
+	);
 });

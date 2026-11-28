@@ -127,6 +127,7 @@ test("the later client's party summon lines complete the v1.150 table", () => {
 	assert.equal( entries.UIIT_STT_PARTY_SUMMON_LIMIT_COUNT, "Entry Remaining" );
 	assert.match( entries.UIIT_STT_STORAGE_EXPANSION_INVENTORY_ADDITION_ITEM_USE, /^Inventory .* 32 rooms/ );
 	assert.match( entries.UIIT_STT_STORAGE_EXPANSION_WAREHOUSE_ADDITION_ITEM_USE, /^Personal Storage .* 30 rooms/ );
+	assert.equal( entries.UIIT_STT_STORAGE_EXPANSION_USE_ERORR, "Limit is reached, unable to use it." );
 	// Fill-if-blank only: a shipped row would win over the completion.
 	const shipped = { UIIT_PAG_PARTY_SUMMON: "Shipped" };
 	completeUiText( shipped );

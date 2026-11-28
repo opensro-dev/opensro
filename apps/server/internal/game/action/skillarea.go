@@ -721,22 +721,21 @@ func (rt *Runtime) acceptSkillAreaAt(division string, character, snapshot *enter
 		token = atomic.AddUint32(&rt.castTokenCounter, 1)
 	}
 	success := wire.SkillCastAreaFrame(wire.SkillCastSuccess{SkillId: skill.ID, CasterGid: caster, InstanceToken: token}, primary.gid, published.targets)
-	lifetime, _ := skill.ActionLifecycleMs()
+	durationMs := rt.wolfHowlActionMs(division, snapshot, skill.ActionDurationMs)
+	closeAt := release.castCloseAtMs(nowMs, skill.ActionCastingTimeMs, durationMs)
 	if release == nil {
 		rt.queueSkillFinalize(division, snapshot.Name, caster, nowMs+int64(skill.ActionCastingTimeMs), wire.SkillCastReleaseFrame(token, primary.gid))
 	} else {
 		success = wire.SkillCastAreaReleaseFrame(wire.SkillCastSuccess{SkillId: skill.ID, CasterGid: caster, InstanceToken: token}, primary.gid, published.targets)
-		lifetime = uint64(skill.ActionDurationMs)
 	}
-	lifetime = lifetime - uint64(skill.ActionDurationMs) + uint64(rt.wolfHowlActionMs(division, snapshot, skill.ActionDurationMs))
 	if skill.ActionHandler == enterworld.SkillActionProjectile {
 		// The original target sample determines flight, even when impact
 		// displaces or kills it. Zero-preparation area shots retain it too.
 		pose := plan.victims[0].pose
 		flight := projectileFlightMs(rt.liveSpawn(simulation.WorldKey(division, snapshot.Name), snapshot, nowMs), simulation.Spawn{RegionID: pose.RegionID, X: pose.X, Y: pose.Y, Z: pose.Z}, skill.ProjectileSpeed)
-		lifetime = uint64(max(int64(lifetime), flight+1))
+		closeAt = max(closeAt, nowMs+flight+1)
 	}
-	rt.queueSkillCastClose(division, snapshot.Name, caster, token, skill, rootID, nowMs+int64(lifetime))
+	rt.queueSkillCastClose(division, snapshot.Name, caster, token, skill, rootID, closeAt)
 	public := append([]wire.Frame{success}, published.after...)
 	if stolen.Opcode != 0 {
 		public = append(public, stolen)

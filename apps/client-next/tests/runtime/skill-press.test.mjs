@@ -43,11 +43,26 @@ test("a nearly ready skill is held to arrive just after the server's cooldown en
 	assert.equal( d.fireAtMs + 75 - (1000 + 300), ARRIVAL_MARGIN_MS );
 });
 
-test("a skill further off than the queue window is denied", () => {
-	assert.deepEqual( decidePress( QUEUE_WINDOW_MS + 1, 75, 1000 ), {
+test("a skill further off than the ping-scaled queue window is denied", () => {
+	assert.deepEqual( decidePress( QUEUE_WINDOW_MS, 0, 1000 ), {
+		kind: "queue",
+		fireAtMs: 1000 + QUEUE_WINDOW_MS + ARRIVAL_MARGIN_MS
+	} );
+	assert.deepEqual( decidePress( QUEUE_WINDOW_MS + 1, 0, 1000 ), {
 		kind: "deny",
 		remainingMs: QUEUE_WINDOW_MS + 1
 	} );
+	// 500 ms one-way: 900 ms left, far outside the old local window, is held.
+	for ( const oneWayMs of [ 75, 100, 500 ] ) {
+		assert.deepEqual( decidePress( QUEUE_WINDOW_MS + oneWayMs, oneWayMs, 1000 ), {
+			kind: "queue",
+			fireAtMs: 1000 + QUEUE_WINDOW_MS + ARRIVAL_MARGIN_MS
+		} );
+		assert.deepEqual( decidePress( QUEUE_WINDOW_MS + oneWayMs + 1, oneWayMs, 1000 ), {
+			kind: "deny",
+			remainingMs: QUEUE_WINDOW_MS + oneWayMs + 1
+		} );
+	}
 });
 
 // ============================================================================
@@ -281,6 +296,43 @@ test("only the local player's own answers time the round trip", () => {
 	assert.equal( game.command( { kind: "skill", skillId: QUICK }, 1100, undefined, local ), null );
 	// One delivery is 30 ms: 200 ms left, sent 30 ms early, plus the margin.
 	assert.equal( game.take()?.skillQueue?.fireAtMs, 1100 + 200 - 30 + ARRIVAL_MARGIN_MS );
+	game.dispose();
+});
+
+/*
+================
+castOpen
+
+A B245 that opens the local caster's cast of skill: result 1, the skill,
+the caster and cast token 1, no target.
+================
+*/
+function castOpen( skill ) {
+	const open = Buffer.alloc( 19 );
+	open[0] = 1;
+	open.writeUInt32LE( skill, 2 );
+	open.writeUInt32LE( LOCAL_GID, 6 );
+	open.writeUInt32LE( 1, 10 );
+	return new Uint8Array( open );
+}
+
+test("the queue window counts from arrival: at 100 ms one-way, 450 ms left is held, 501 ms denied", () => {
+	const { game, presses } = presser();
+	// Cast at 1000; its B245 open lands at 1200, a 200 ms round trip, so the
+	// cooldown started one delivery earlier (1100) and ends at 6100.
+	game.command( { kind: "skill", skillId: SLOW }, 1000, undefined, local );
+	game.receive( { opcode: 0xb245, payload: castOpen( SLOW ) }, 1200 );
+	// 501 ms left arrives with 401 to wait: outside the window.
+	assert.equal( game.command( { kind: "skill", skillId: SLOW }, 5599, undefined, local ), null );
+	assert.equal( game.take()?.skillQueue, undefined );
+	// 450 ms left arrives with 350 to wait: held, and sent 80 ms before the
+	// local end so it lands ARRIVAL_MARGIN_MS after it.
+	assert.equal( game.command( { kind: "skill", skillId: SLOW }, 5650, undefined, local ), null );
+	assert.equal( game.take()?.skillQueue?.fireAtMs, 5650 + 450 - 100 + ARRIVAL_MARGIN_MS );
+	game.step( 6019, local );
+	assert.equal( presses().length, 1, "the held press left early" );
+	game.step( 6020, local );
+	assert.equal( presses().length, 2, "the held press never left" );
 	game.dispose();
 });
 

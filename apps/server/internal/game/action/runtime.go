@@ -472,6 +472,14 @@ type Runtime struct {
 	// pulseAreas are the owners of live pulse areas (skillpulsearea.go).
 	pulseAreas            pulseAreaClock
 	commerceReferenceSeed []wire.Frame
+	// structurePulses are the next pulse times of the standing fortress
+	// towers and stones, by division and structure
+	// (fortress_structure_pulse.go). Tick-owned.
+	structurePulses map[string]map[uint32]int64
+	// structureAuras are the standing holds of the fortress structures'
+	// holder-side auras, by division and structure
+	// (fortress_structure_aura.go). Tick-owned.
+	structureAuras map[string]map[uint32]*structureAuraHold
 
 	// UnlimitedItems names the item codenames whose use is never spent (the
 	// operator's beta starter kit, SRO_BETA_STARTER_KIT). Set once at wiring.

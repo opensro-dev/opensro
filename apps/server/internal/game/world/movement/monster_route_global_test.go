@@ -58,9 +58,24 @@ func TestGlobalRouteCrossesTheGorgeRim(t *testing.T) {
 		t.Fatalf("the bounded search unexpectedly crosses the rim; the wedge premise is gone")
 	}
 
+	// The homing search runs in slices: each call answers pending
+	// until it settles, and no call spends much more than a slice.
 	start = time.Now()
-	global := v.PlanMonsterGlobalRoute(from, goal)
-	t.Logf("global: status=%v probes=%d points=%d in %v", global.Status(), global.Probes(), global.Len(), time.Since(start))
+	global, calls := v.PlanMonsterGlobalRoute(from, goal), 1
+	for global.Status() == monster.NavigationSearchPending {
+		if global.Probes() > monsterGlobalRouteSliceProbes+8 {
+			t.Fatalf("one homing call spent %d probes, over the slice %d", global.Probes(), monsterGlobalRouteSliceProbes)
+		}
+		global, calls = v.PlanMonsterGlobalRoute(from, goal), calls+1
+	}
+	t.Logf("global: status=%v probes=%d points=%d in %d calls, %v", global.Status(), global.Probes(), global.Len(), calls, time.Since(start))
+	if calls < 2 {
+		t.Fatalf("the crossing settled in one call; the search is not sliced")
+	}
+	whole := findMonsterRouteWithBudget(from, goal, v.probeMonsterRouteStep, monsterGlobalRouteProbeBudget)
+	if whole.Probes() != global.Probes() || whole.Len() != global.Len() {
+		t.Fatalf("sliced crossing %d probes/%d points, one-shot %d/%d", global.Probes(), global.Len(), whole.Probes(), whole.Len())
+	}
 	if global.Status() != monster.NavigationRouteReady || global.Len() == 0 {
 		t.Fatalf("the homing search does not cross the rim: status=%v", global.Status())
 	}

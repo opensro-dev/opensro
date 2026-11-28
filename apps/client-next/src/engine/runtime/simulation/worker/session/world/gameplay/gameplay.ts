@@ -970,7 +970,7 @@ when the cast finally started.
 	): WireFrame {
 		const oneWay = skillPress.oneWayMs();
 		sendFrame( frame );
-		skillPress.sent( now, skillId );
+		skillPress.sent( now, skillId, target || undefined );
 		if ( prediction === "cast" ) {
 			combat.pressed( skillId, now + oneWay, now + 4 * oneWay + SKILL_ANSWER_SLACK_MS, now );
 		} // The HUD shows it as next while the server runs the caster there.
@@ -1255,6 +1255,63 @@ would turn it.
 		}
 		const oneWay = skillPress.oneWayMs();
 		combat.predict( metadata.id, target?.gid ?? 0, now, now + 4 * oneWay + SKILL_ANSWER_SLACK_MS );
+	}
+	/*
+================
+predictQueuedCast
+
+When a press is confirmed queued on the server (B2CD arm count 2) behind
+a timed local cast, begin its windup one one-way latency before the
+server's B245 arrives so adoption hands off seamlessly at steady high ping.
+================
+	*/
+	function predictQueuedCast( now: number, local: EntityState | undefined ) {
+		if ( !predictedQueuedCast ) return;
+		const oneWay = skillPress.oneWayMs();
+		if ( oneWay <= 0 ) return;
+		const queued = skillPress.serverQueued();
+		if ( !queued || queued.predicted ) return;
+		if ( combat.predicting() || skillPress.queued() || combat.guidedActive( localGid, now ) ) return;
+		const walking = movement.state(), pose = walking.pose;
+		if (
+			!pose || walking.moving || !local || local.mountedOn ||
+			local.movementMode === MOVEMENT_SEATED || local.appearanceState?.[0] === 2
+		) return;
+		const rate = local.animationRate && local.animationRate < 1 ? local.animationRate : 1;
+		let blockingEnd = -Infinity, hasBlocking = false;
+		for ( const c of combat.state().casts ) {
+			if ( c.caster !== localGid || c.cancelledAtMs !== undefined ) continue;
+			const row = catalog.find( entry => entry.id === c.skill );
+			if (
+				!row?.actionMs || c.receivedAtMs === undefined || row.holdsCaster ||
+				(row.chain && c.cancellationRequestedAtMs === undefined)
+			) return;
+			const effectiveActionMs = row.actionMs / rate;
+			if ( c.receivedAtMs + effectiveActionMs <= queued.sinceMs ) continue;
+			const serverEnd = c.receivedAtMs - oneWay + effectiveActionMs;
+			if ( serverEnd > blockingEnd ) blockingEnd = serverEnd;
+			hasBlocking = true;
+		}
+		if ( !hasBlocking || now < blockingEnd ) return;
+		const metadata = catalog.find( row => row.id === queued.skill );
+		if ( !metadata?.actionMs || metadata.groundTarget ) return;
+		if ( !pressAdmitted( metadata, local ) ) return;
+		if ( skillCooldown( combat.state().skillCooldowns, queued.skill, metadata.cooldownGroup ?? 0, now ) ) return;
+		if ( metadata.targetRequired && queued.target === undefined ) return;
+		const target = queued.target !== undefined ? readEntity( queued.target ) : undefined;
+		if ( queued.target !== undefined ) {
+			if ( !target || !skillAdmitsPredictedTarget( metadata, target, localGid ) ) return;
+			if (
+				target.gid !== localGid &&
+				((target.kind === "monster" && target.appearanceState?.[0] === 2) || !withinReach( metadata, target ))
+			) return;
+		}
+		skillPress.markServerQueuedPredicted();
+		if ( target && target.gid !== localGid ) {
+			movement.heading( movementHeading( pose, { ...target, angle: target.heading } ) );
+		}
+		combat.predict( metadata.id, target?.gid ?? 0, now, now + 4 * oneWay + SKILL_ANSWER_SLACK_MS );
+		dirty = true;
 	}
 	/*
 ================
@@ -1658,6 +1715,9 @@ pending copy, and the next settings replay repairs what it commits.
 	// (sendAmmoReloadPreference), declared at every worldReady while on
 	// and whenever the row changes under a live world.
 	let ammoReloadSmallest = false;
+	// The Experimental "Start queued skills early" row (#4740, port-only):
+	// off is the native start of a queued skill on its 0xB245.
+	let predictedQueuedCast = false;
 	// Port-only (#3907): the Experimental "SRO Macro" row, and the macro
 	// auto-potion's row order (checkMacroPotion), auto-skill cursors
 	// (checkMacroSkill), and auto-hunt start clock (checkMacroHunt).
@@ -2379,6 +2439,7 @@ The Experimental window's gameplay rows (experimentalGameplay).
 				if ( live ) sendAmmoReloadPreference();
 			}
 			sroMacroEnabled = value.sroMacro === true;
+			predictedQueuedCast = value.predictedQueuedCast === true;
 		},
 		/*
 ================
@@ -4704,7 +4765,13 @@ state here before a command can claim a native wire conversation.
 					const frame = combat.skill( skillId, localGid );
 					if ( pressAdmitted( metadata, local ) ) movement.holdForCast( now );
 					predictCast( metadata, undefined, local, now );
-					return sendSkillPress( frame, skillId, now, pressAdmitted( metadata, local ) ? "cast" : null );
+					return sendSkillPress(
+						frame,
+						skillId,
+						now,
+						pressAdmitted( metadata, local ) ? "cast" : null,
+						localGid
+					);
 				}
 			}
 			if ( command.kind === "skill" && command.gid === undefined ) {
@@ -4831,7 +4898,7 @@ state here before a command can claim a native wire conversation.
 			// server's to refuse, and its stand-in showed a cooldown that vanished.
 			if ( !admitted ) {
 				sendFrame( frame );
-				skillPress.sent( now, command.skillId );
+				skillPress.sent( now, command.skillId, entity.gid );
 				return frame;
 			}
 			return sendSkillPress(
@@ -6939,6 +7006,7 @@ before take assembles the presentation snapshot.
 				mp: vital?.mp ?? potionFacts.mp,
 				abnormal: vital?.abnormal ?? potionFacts.abnormal
 			};
+			predictQueuedCast( now, local );
 			const low = [
 				vitalWarning( potionFacts.hp, potionFacts.maxHp ),
 				vitalWarning( potionFacts.mp, potionFacts.maxMp )

@@ -24,6 +24,10 @@ const (
 	NavigationGeometryUnavailable
 	NavigationRouteBlocked
 	NavigationSearchExhausted
+	// NavigationSearchPending is a sliced search still under way (the
+	// homing search, movement's homingSearches): no route and no failure
+	// yet, so the mover checks back soon and nothing is memoised.
+	NavigationSearchPending
 )
 
 func UnresolvedNavigationRoute(goal Pose, status NavigationRouteStatus) *NavigationRoute {

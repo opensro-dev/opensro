@@ -318,6 +318,13 @@ func noteParameterIndex(fields []string, row *SkillRow) {
 					row.CkChance = uint8(chance)
 				}
 			}
+			// pdm2's word is the percent of the target's maximum hit
+			// points its hit adds (skillratiodamage.go).
+			if tag == tagRatioDamage {
+				if percent, ok := word(i + 1); ok {
+					row.RatioDamage = SkillRatioDamage{Present: true, Percent: percent}
+				}
+			}
 		case 0x6f6e6666: // onff
 			period, periodOK := word(i + 1)
 			cost, costOK := word(i + 2)

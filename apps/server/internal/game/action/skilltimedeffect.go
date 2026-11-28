@@ -156,7 +156,7 @@ func (rt *Runtime) acceptTimedSelfEffect(division string, c, snapshot *enterworl
 	// closing B505 after the recovery phase, or the client keeps the
 	// casting aura on the ground. The release already ended action
 	// ownership, so the close must not hold the caster busy.
-	rt.queueDetachedCastClose(division, c.Name, gid, token, now+int64(skill.ActionDurationMs))
+	rt.queueDetachedCastClose(division, c.Name, gid, token, pending.castCloseAtMs(now, skill.ActionCastingTimeMs, int64(skill.ActionDurationMs)))
 	frames = append(frames, private...)
 	frames = append(frames, released...)
 	broadcast = append(broadcast, released...)

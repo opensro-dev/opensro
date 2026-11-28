@@ -54,10 +54,11 @@ const (
 	navBlocked
 	navExhausted
 	navUnavailable
+	navPending
 	navOutcomeCount
 )
 
-var navOutcomeNames = [navOutcomeCount]string{"ready_direct", "ready_detour", "blocked", "exhausted", "unavailable"}
+var navOutcomeNames = [navOutcomeCount]string{"ready_direct", "ready_detour", "blocked", "exhausted", "unavailable", "pending"}
 
 // navProbeBounds are the upper bounds of the probes-per-plan histogram;
 // one more bucket holds the rest (the 256 budget, monster_route.go).
@@ -132,6 +133,8 @@ func navOutcomeProbes(route *monster.NavigationRoute) (navOutcome, int) {
 		return navBlocked, probes
 	case monster.NavigationSearchExhausted:
 		return navExhausted, probes
+	case monster.NavigationSearchPending:
+		return navPending, probes
 	}
 	return navUnavailable, probes
 }

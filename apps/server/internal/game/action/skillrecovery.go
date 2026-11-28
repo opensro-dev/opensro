@@ -389,12 +389,11 @@ func (rt *Runtime) acceptSupportSkillPhase(
 
 	lifetime, _ := skill.ActionLifecycleMs()
 	if release != nil {
-		started := release.releaseAtMs - int64(skill.ActionCastingTimeMs) - 1
 		rt.queueSkillFinalize(
 			division,
 			snapshot.Name,
 			enterworld.ObjectIDForCharacter(snapshot),
-			max(now+1, started+int64(lifetime)),
+			release.castCloseAtMs(now, skill.ActionCastingTimeMs, int64(skill.ActionDurationMs)),
 			wire.SkillCastFinalizeFrame(token),
 		)
 
