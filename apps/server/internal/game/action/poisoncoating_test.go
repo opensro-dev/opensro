@@ -255,3 +255,35 @@ func TestPoisonCoatingVictimLifetimeAndModifiers(t *testing.T) {
 		})
 	}
 }
+
+/*
+================
+TestPoisonCoatingEndsWhenTheWeaponComesOff
+
+The coating row carries reqi for the Rogue weapon. The reference server
+installs an untargeted self effect in context mode 1 and re-checks reqi only
+on mode-1 effects, so moving the weapon out of its slot retires the coating.
+================
+*/
+func TestPoisonCoatingEndsWhenTheWeaponComesOff(t *testing.T) {
+	rt, _, c, row, _ := poisonCoatingFixture(t)
+	if !row.Reqi.Present {
+		t.Fatalf("coating row has no reqi: %+v", row.Reqi)
+	}
+	out := rt.HandleTargetInteract(testDivision, c, wire.SkillAction{ActionId: row.ID}.Encode())
+	if _, ok := findFrame(out.Frames, wire.OpAttachedEffect); !ok {
+		t.Fatalf("activation refused: %+v", out)
+	}
+	effects := rt.effects.Snapshot(testDivision, c.Name)
+	if len(effects) != 1 || effects[0].Phase != 1 {
+		t.Fatalf("coating committed as %+v, want one mode-1 effect", effects)
+	}
+
+	move := rt.HandleItemMove(testDivision, c, []byte{0, 6, 13, 1, 0})
+	if len(move.Frames) == 0 || move.Frames[0].Payload[0] != 1 {
+		t.Fatalf("unequip weapon refused: %+v", move)
+	}
+	if left := rt.effects.Snapshot(testDivision, c.Name); len(left) != 0 {
+		t.Fatalf("coating outlived its weapon: %+v", left)
+	}
+}

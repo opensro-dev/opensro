@@ -40,6 +40,8 @@ func spiritSkillRow(id uint32, activity string, tail ...uint32) string {
 	}
 	if activity == "2" {
 		fields[11], fields[12], fields[13], fields[18] = "166", "1", "800", "1795162206"
+	} else {
+		fields[14], fields[18], fields[60] = "1200000", "-872415232", "1"
 	}
 	fields[61], fields[62], fields[63], fields[64], fields[65] = "x.ddj", "SN_X", "xxx", "SN_X_TT_DESC", "xxx"
 	fields[68] = "3"
@@ -87,12 +89,23 @@ percent; an instant row with anything else still takes no buff program.
 ================
 */
 func TestSpiritIgnoreSkillCarriesMsid(t *testing.T) {
-	skills := loadDuplicateRows(t, spiritSkillRow(31151, "1", tagDura, 300000, tagTimedIgnoreDefense, 2, tagReqi, 14, 1))
-	row, ok := skills.SkillByID(31151)
-	if !ok || !row.TimedEffect.Pinned || row.TimedEffect.IgnoreDefense != 2 {
-		t.Fatalf("ignore skill: %+v (refusal %q)", row.TimedEffect, row.ReplacementRefusal)
+	for _, tc := range []struct {
+		id, percent uint32
+	}{
+		{31150, 1},
+		{31151, 2},
+	} {
+		skills := loadDuplicateRows(t, spiritSkillRow(tc.id, "1", tagDura, 300000, tagTimedIgnoreDefense, tc.percent, tagReqi, 14, 1))
+		row, ok := skills.SkillByID(tc.id)
+		if !ok || !row.ReplacementPinned || row.Replacement.PackedStates != 0xCC000000 || row.CoolTimeGroup != 0xCC {
+			t.Fatalf("ignore skill %d replacement/group = %+v group %#x (refusal %q)",
+				tc.id, row.Replacement, row.CoolTimeGroup, row.ReplacementRefusal)
+		}
+		if !row.TimedEffect.Pinned || row.TimedEffect.IgnoreDefense != tc.percent {
+			t.Fatalf("ignore skill %d timed = %+v, want IgnoreDefense=%d", tc.id, row.TimedEffect, tc.percent)
+		}
 	}
-	skills = loadDuplicateRows(t, spiritSkillRow(31152, "1", tagDura, 300000, tagTimedIgnoreDefense, 2, tagTimedIndependent, 10))
+	skills := loadDuplicateRows(t, spiritSkillRow(31152, "1", tagDura, 300000, tagTimedIgnoreDefense, 2, tagTimedIndependent, 10))
 	if row, _ := skills.SkillByID(31152); row.TimedEffect.Pinned && !row.TimedEffect.ItemProgram {
 		t.Fatalf("an instant msid row with a lane took the buff program: %+v", row.TimedEffect)
 	}

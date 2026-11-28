@@ -13,6 +13,7 @@ switch is off.
 package action
 
 import (
+	"bytes"
 	"os"
 	"path/filepath"
 	"slices"
@@ -29,11 +30,13 @@ import (
 )
 
 const (
-	spiritTestCodename   = "ITEM_MALL_AVATAR_M_NASRUN"
-	spiritTestConfusion  = 31143
-	spiritTestIgnore     = 31151
-	spiritTestPlus       = 3
-	spiritTestLifeSecond = 3600
+	spiritTestCodename    = "ITEM_MALL_AVATAR_M_NASRUN"
+	spiritTestConfusion   = 31143
+	spiritTestDestroy     = 31144
+	spiritTestIgnore      = 31151
+	spiritTestIgnoreRank2 = 31152
+	spiritTestPlus        = 3
+	spiritTestLifeSecond  = 3600
 )
 
 /*
@@ -170,20 +173,20 @@ an instant buff of dura, msid 1 and reqi 14 1.
 */
 func spiritSkillTable(t *testing.T) *enterworld.TextdataSkills {
 	t.Helper()
-	row := func(id uint32, code, activity string, tail ...uint32) string {
+	row := func(id, group uint32, level, code, activity string, tail ...uint32) string {
 		fields := make([]string, 118)
 		for i := range fields {
 			fields[i] = "0"
 		}
-		// Each row its own group, as the client's (881 Confusion, 883
-		// Ignore): a shared group would share the cooldown.
-		fields[0], fields[1], fields[2], fields[3], fields[4], fields[5] = "1", strconv.FormatUint(uint64(id), 10), strconv.FormatUint(uint64(id), 10), code, "x", code
-		fields[7], fields[8], fields[14], fields[34], fields[47] = "1", activity, "1800000", "1", "3"
+		fields[0], fields[1], fields[2], fields[3], fields[4], fields[5] = "1", strconv.FormatUint(uint64(id), 10), strconv.FormatUint(uint64(group), 10), code, "x", code
+		fields[7], fields[8], fields[14], fields[34], fields[47] = level, activity, "1800000", "1", "3"
 		for _, col := range []int{50, 51, 57, 58, 59} {
 			fields[col] = "255"
 		}
 		if activity == "2" {
 			fields[11], fields[12], fields[13], fields[18] = "166", "1", "800", "1795162206"
+		} else {
+			fields[14], fields[18], fields[60] = "1200000", "-872415232", "1"
 		}
 		fields[61], fields[62], fields[63], fields[64], fields[65], fields[68] = "x.ddj", "SN_X", "xxx", "SN_X_TT_DESC", "xxx", "3"
 		for i, word := range tail {
@@ -194,8 +197,10 @@ func spiritSkillTable(t *testing.T) *enterworld.TextdataSkills {
 	const dura, dru, hst3, reqi, msid = 0x64757261, 0x647275, 0x68737433, 0x72657169, 0x6d736964
 	dir := t.TempDir()
 	rows := []string{
-		row(spiritTestConfusion, "SKILL_MALL_NASRUN_THEDEVILCONFUSION_01", "2", dura, 600000, dru, 20, 20, hst3, 10, reqi, 14, 1),
-		row(spiritTestIgnore, "SKILL_MALL_NASRUN_MOBDEFENCEIGNORE_01", "1", dura, 300000, msid, 1, reqi, 14, 1),
+		row(spiritTestConfusion, 881, "1", "SKILL_MALL_NASRUN_THEDEVILCONFUSION_01", "2", dura, 600000, dru, 20, 20, hst3, 10, reqi, 14, 1),
+		row(spiritTestDestroy, 882, "1", "SKILL_MALL_NASRUN_DESTROYTHEDEVIL_01", "2", dura, 600000, dru, 30, 30, hst3, 20, reqi, 14, 1),
+		row(spiritTestIgnore, 883, "1", "SKILL_MALL_NASRUN_MOBDEFENCEIGNORE_01", "1", dura, 300000, msid, 1, reqi, 14, 1),
+		row(spiritTestIgnoreRank2, 883, "2", "SKILL_MALL_NASRUN_MOBDEFENCEIGNORE_02", "1", dura, 300000, msid, 2, reqi, 14, 1),
 	}
 	if err := os.WriteFile(filepath.Join(dir, "skilldata.txt"), []byte("shard_a.txt\n"), 0o644); err != nil {
 		t.Fatal(err)
@@ -277,6 +282,72 @@ func TestWornSpiritsSkillsCastAndApply(t *testing.T) {
 	}
 	if got := rates(); got != baseRates {
 		t.Fatalf("damage rates %v after the Spirit came off, want the base %v: the dru outlived its buff", got, baseRates)
+	}
+}
+
+/*
+================
+TestPlusSixSpiritIgnoreSkillCastsInstantlyWithSignedOverlap
+
+A +6 Spirit lends Destroy the Devil and Monster Defence Ignore 2 (staged
+with signed column 18 "-872415232" = 0xCC000000). Ignore 2 casts
+immediately without clearing an active combat intent, sets 0xBC to 2,
+arms the 0xCC shared cooldown, and ends when the Spirit comes off.
+================
+*/
+func TestPlusSixSpiritIgnoreSkillCastsInstantlyWithSignedOverlap(t *testing.T) {
+	c, rt, _ := abilityCharacter(t, true)
+	c.MissionInventory[0].Plus = 6
+	skills := spiritSkillTable(t)
+	rt.deps.(*enterworld.Deps).Skills = skills
+	c.CurrentMP = testInt64(10000)
+
+	wear := rt.HandleItemMove(testDivision, c, []byte{0x24, 20, nasrun.SpiritSlot})
+	if len(wear.Frames) == 0 || wear.Frames[0].Payload[0] != 1 {
+		t.Fatalf("wear +6 Spirit: %+v", wear)
+	}
+	wantSkills := []uint32{spiritTestDestroy, spiritTestIgnoreRank2}
+	if s := c.AvatarInventory.Spirit; s == nil || s.Plus != 6 || !slices.Equal(s.Skills, wantSkills) {
+		t.Fatalf("worn +6 Spirit effect = %+v, want skills %v", s, wantSkills)
+	}
+
+	rt.setCombatIntent(basicAttackIntent{DivisionID: testDivision, CharacterName: c.Name, TargetGid: 99999})
+	result := castSelf(rt, c, spiritTestIgnoreRank2)
+	if !openedCast(result) {
+		t.Fatalf("Ignore 2 refused: %q %+v", result.DiagnosticRefusal, result.Frames)
+	}
+	if !hasSkillEffect(rt, c.Name, spiritTestIgnoreRank2) {
+		t.Fatal("Ignore 2 did not attach immediately")
+	}
+	if intent, exists := rt.combatIntentFor(testDivision, c.Name); !exists || intent.TargetGid != 99999 {
+		t.Fatalf("instant Ignore 2 cleared active combat intent: %+v (%v)", intent, exists)
+	}
+	stats, _, err := rt.playerCombatStats(testDivision, c)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if v, _ := stats.Param(0xbc); v != 2 {
+		t.Fatalf("ignore-defence chance %v after Ignore 2, want 2", v)
+	}
+	if c.SharedSkillCooldowns[0xCC] == 0 {
+		t.Fatalf("Ignore 2 did not arm the 0xCC shared cooldown: %v", c.SharedSkillCooldowns)
+	}
+
+	again := castSelf(rt, c, spiritTestIgnoreRank2)
+	if len(again.Frames) != 1 || !bytes.Equal(again.Frames[0].Payload, []byte{2, 0x05}) {
+		t.Fatalf("second Ignore 2 press = %+v, want cooldown refusal 0x3005", again.Frames)
+	}
+
+	rt.HandleItemMove(testDivision, c, []byte{0x23, nasrun.SpiritSlot, 20})
+	if hasSkillEffect(rt, c.Name, spiritTestIgnoreRank2) {
+		t.Fatal("Ignore 2 outlived its Spirit")
+	}
+	stats, _, err = rt.playerCombatStats(testDivision, c)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if v, _ := stats.Param(0xbc); v != 0 {
+		t.Fatalf("ignore-defence chance %v after Spirit came off, want 0", v)
 	}
 }
 
