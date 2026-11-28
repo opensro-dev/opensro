@@ -82,14 +82,32 @@ test("the beta roster's other players stand on the page of their own region", ()
 		{ gid: 3, regionId: 0x8005, x: 0, z: 0, name: "below" },
 		{ gid: 4, regionId: 0x63a6, x: 0, z: 0, name: "outside" }
 	];
-	const signs = cavePlayerSigns( PAGE, players, 1 );
+	const signs = cavePlayerSigns( PAGE, players, 1, new Set() );
 	// Only the peer on this floor's region; the local player has their own sign.
 	assert.equal( signs.length, 1 );
 	const shown = view( { roster: signs } );
 	const sign = shown.quads.find( quad => quad.texture.endsWith( "mm_sign_otherplayer.png" ) );
 	assert.deepEqual( sign?.rect, [ CLIP[0] + 150 - 8, CLIP[1] + 150 - 8, 16, 16 ] );
 	assert.equal( shown.quads.at( -1 )?.texture.endsWith( "mm_sign_character.png" ), true );
-	assert.deepEqual( cavePlayerSigns( PAGE, [], 1 ), [] );
+	assert.deepEqual( cavePlayerSigns( PAGE, [], 1, new Set() ), [] );
+});
+
+test("a player the party pass draws wears one sign, and an AI wears the world page's", () => {
+	const players = [
+		{ gid: 2, regionId: 0x8006, x: 0, z: 0, name: "partner" },
+		{ gid: 3, regionId: 0x8006, x: 0, z: 0, name: "stranger" },
+		{ gid: 4, regionId: 0x8006, x: 0, z: 0, name: "[AI] Trader 1" },
+		{ gid: 5, regionId: 0x8006, x: 0, z: 0, name: "[AI] Thief 2" }
+	];
+	// The partner is in the floor's party rows, so only the party sign
+	// stands for them (#4846); off their floor the beta sign is their only one.
+	const signs = cavePlayerSigns( PAGE, players, 1, new Set( [ "partner" ] ) );
+	assert.deepEqual( signs.map( sign => sign.path.split( "/" ).at( -1 ) ), [
+		"mm_sign_otherplayer.png",
+		"mm_sign_npc.png",
+		"mm_sign_monster.png"
+	] );
+	assert.equal( cavePlayerSigns( PAGE, players, 1, new Set() ).length, 4 );
 });
 
 test("one image holds the floor, with world zero on tile 128's corner", () => {
