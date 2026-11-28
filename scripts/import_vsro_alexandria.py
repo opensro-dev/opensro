@@ -148,6 +148,53 @@ def table_rows(raw):
 	return rows
 
 
+# ================
+# later_table_shards
+#
+# The shard names a later table's file lists, or [] when the file is the
+# table itself. The later clients split their big tables (characterdata,
+# skilldata, questdata, Skillaniset, Skilleffectset, characterinfo,
+# textdata_object ...) into shards the old name indexes: every non-blank
+# row is then one cell naming a .txt file. VSRO keeps some of the same
+# names as whole tables, so the shape, not the name, decides.
+# ================
+def later_table_shards(rows):
+	listed = [row[0].strip() for row in rows if row and row[0].strip()]
+	if listed and all(len(row) == 1 and row[0].strip().lower().endswith(".txt") for row in rows if row and row[0].strip()):
+		return listed
+	return []
+
+
+# ================
+# later_table_rows
+#
+# A later table's rows through its shard index (later_table_shards), or
+# its own rows when the file is the table. read(name) returns a textdata
+# file's bytes; shard names are passed folded to lower case, as the
+# archive index keys them.
+# ================
+def later_table_rows(read, name):
+	rows = table_rows(read(name))
+	shards = later_table_shards(rows)
+	if not shards:
+		return rows
+	return [row for shard in shards for row in table_rows(read(sro_pk2.fold_ascii(shard)))]
+
+
+CHARACTER_CODE_COLUMN = 2
+
+
+# ================
+# later_characters
+#
+# A later client's characterdata rows by codename (its third cell),
+# through the characterdata.txt shard index.
+# ================
+def later_characters(read):
+	return {row[CHARACTER_CODE_COLUMN]: row for row in later_table_rows(read, "characterdata.txt")
+		if len(row) > CHARACTER_CODE_COLUMN}
+
+
 #============================================================================
 # Regions
 #============================================================================

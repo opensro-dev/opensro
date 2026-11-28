@@ -133,19 +133,15 @@ def tree_reader(native, output):
 # ================
 # sharded_rows
 #
-# The rows of one sharded table (itemdata, characterdata): its index
-# names the shard files, each read from the tree.
+# The rows of one sharded table of the tree (itemdata, characterdata),
+# through the shard owner, import_vsro_alexandria.later_table_rows. A
+# tree without the table yields none; a listed shard the tree lacks is an
+# error, never a silent loss of its rows.
 # ================
 def sharded_rows(read, index_name):
-	raw = read(index_name)
-	if raw is None:
+	if read(index_name) is None:
 		return
-	for row in tables.table_rows(raw):
-		if not row or not row[0].strip():
-			continue
-		shard = read(sro_pk2.fold_ascii(row[0].strip()))
-		if shard is not None:
-			yield from tables.table_rows(shard)
+	yield from tables.later_table_rows(read, index_name)
 
 
 # ================

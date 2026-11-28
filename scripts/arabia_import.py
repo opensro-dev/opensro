@@ -450,8 +450,7 @@ def add_arabia(native, output, source=None, nests=None, closure=arabia_resource_
 		def read(name):
 			return tables.table_text(media, media_index, name.lower())
 
-		later = {row[2]: row for shard in tables.table_rows(read("characterdata.txt"))
-			for row in tables.table_rows(read(shard[0].lower())) if len(row) > 2}
+		later = tables.later_characters(read)
 		codename_by_id = {row[1]: row[2] for row in later.values()}
 		regions = continent_regions(tables.table_rows(read("regioncode.txt")))
 		extraction = load_nests(nests, regions)
@@ -680,23 +679,8 @@ def add_arabia(native, output, source=None, nests=None, closure=arabia_resource_
 		# marker by arabia_quest_tables.
 		quest_summary = arabia_quest_tables.add_quest_tables(read, archive_hashes["Media"], output)
 
-		effect_path = text_root / "skilleffect.txt"
-		effect_text = tables.decode_table(effect_path.read_bytes())
-		later_effects = tables.decode_table(read("skilleffect.txt"))
-		selected = effects.select_later_rows(later_effects, {r[3] for r in added} - effects.native_bases(effect_text))
-		unknown = effects.missing_animation_states(
-			[line for rows in selected.values() for _, line in rows], effect_text)
-		if unknown:
-			raise ValueError("monster animation states absent natively: " + str(sorted(unknown)))
-		effect_text, _ = effects.merge_skill_effect_text(effect_text, selected)
-		known_info = {r[0] for r in tables.table_rows(effect_text.encode("utf-16")) if r}
-		info = [r[:characters.SKILL_EFFECT_KEPT] for r in tables.table_rows(read("skilleffect.txt"))
-			if len(r) == characters.SKILL_EFFECT_COLUMNS and r[0] in all_refs and r[0] not in known_info]
-		owned_info = monsters.characterinfo_codenames(effect_text) & set(all_refs)
-		stale_info = set(prior.get("characterInfo", [])) - owned_info
-		if stale_info:
-			effect_text = monsters.drop_characterinfo_rows(effect_text, stale_info)
-		write_atomically(effect_path, characters.skill_effect_section(effect_text.encode("utf-16"), info))
+		presentation = effects.stage_later_effects(effects.LaterEffects(text_root, effects.later_skill_effect_text(read),
+			{r[3] for r in added}, lambda code: code in all_refs, all_refs, prior))
 
 		# Region codes and zone names, on the rules the Alexandria map
 		# merge uses: a code row joins where the current row is absent or
@@ -891,9 +875,7 @@ def add_arabia(native, output, source=None, nests=None, closure=arabia_resource_
 			} | {
 				row[5] for row in tables.table_rows(gate_tables["teleportbuilding.txt"]) if len(row) > 5
 			}) - native_text_keys) | set(prior.get("gateTextSymbols", []))),
-			"animationBases": sorted(set(prior.get("animationBases", []))
-				| {base for rows in selected.values() for base, _ in rows}),
-			"characterInfo": sorted(owned_info | {row[0] for row in info}),
+			**presentation,
 			# Owned names follow characters.owned_name_symbols
 			# (#3767): the old union with the base table claimed rows
 			# an earlier layer added, and the off strip drops them.

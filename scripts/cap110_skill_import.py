@@ -177,7 +177,7 @@ def add_skill_effects(vsro_root, native, output):
 	if not enabled():
 		if target.exists() and prior:
 			text, utf16 = decode_skill_effect(target.read_bytes())
-			merged = skill_effects.remove_animation_bases(text, set(prior["bases"]))
+			merged = skill_effects.remove_presentation(text, set(prior["bases"]), set(prior.get("effectBases", [])))
 			encoded = b"\xff\xfe" + merged.encode("utf-16-le") if utf16 else merged.encode("latin1")
 			write_atomically(target, encoded)
 			marker.unlink()
@@ -197,20 +197,21 @@ def add_skill_effects(vsro_root, native, output):
 		handle = stack.enter_context(open(Path(vsro_root) / "Media.pk2", "rb"))
 		media = stack.enter_context(mmap.mmap(handle.fileno(), 0, access=mmap.ACCESS_READ))
 		index = {sro_pk2.fold_ascii(entry.path): entry for entry in sro_pk2.read_directory(media)}
-		later_raw = tables.table_text(media, index, "skilleffect.txt")
-	later_text, _later_utf16 = decode_skill_effect(later_raw)
+		later_text = skill_effects.later_skill_effect_text(lambda name: tables.table_text(media, index, name))
 	selected = skill_effects.select_later_rows(later_text, wanted)
-	missing = skill_effects.missing_animation_states(
-		[line for rows in selected.values() for _base, line in rows], native_text
-	)
-	if missing:
-		raise ValueError(f"later animation sets use unknown native states: {sorted(missing)}")
+	unplayable = skill_effects.player_skill_faults(selected, skill_effects.client_effect_text(source.parent, native_text))
+	if unplayable:
+		raise ValueError(f"later skills the v1.150 client cannot play: {unplayable}")
+	# The stages of a base the tree presents natively stay native; the
+	# marker names only the stages this pass inserts, for the off path.
+	effect_bases = ({base for base, _line in selected.get(skill_effects.EFFECT_SET_SECTION, [])}
+		- skill_effects.native_bases(native_text) - skill_effects.effect_set_keys(native_text))
 	merged, inserted = skill_effects.merge_skill_effect_text(target_text, selected)
 	encoded = (b"\xff\xfe" + merged.encode("utf-16-le")) if utf16 else merged.encode("latin1")
 	if encoded != target_raw:
 		write_atomically(target, encoded)
 	owned_bases = sorted({base for rows in selected.values() for base, _line in rows})
-	write_atomically(marker, (json.dumps({"bases": owned_bases}, indent=2) + "\n").encode("utf-8"))
+	write_atomically(marker, (json.dumps({"bases": owned_bases, "effectBases": sorted(effect_bases)}, indent=2) + "\n").encode("utf-8"))
 	return {
 		"enabled": True, "inserted": inserted, "importedBases": len(imported_bases),
 		"missingBasesNeedingLaterRows": len(wanted),

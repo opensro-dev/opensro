@@ -309,17 +309,9 @@ def select_pets(native_chars, native_items, earlier_codes, later_chars, later_it
 # Every source's tables come off a Media (bytes, index) pair: a pk2
 # source mmaps its client archive, the pinned archive's Media comes
 # from avatar_archive. Both return (character rows, item rows, object
-# text table) with shards resolved through their manifests.
+# text table) with shards resolved by their owner,
+# import_vsro_alexandria.later_table_rows.
 # ================
-def _shard_rows(read, manifest_name, prefix):
-	names = [row[0] for row in tables.table_rows(read(manifest_name)) if row and row[0]]
-	rows = []
-	for name in names:
-		if Path(name).name.lower().startswith(prefix):
-			rows.extend(tables.table_rows(read(name)))
-	return rows
-
-
 def later_tables_from_media(media, index, object_text_required=True):
 	def read(name):
 		return tables.table_text(media, index, name.lower())
@@ -335,8 +327,8 @@ def later_tables_from_media(media, index, object_text_required=True):
 		object_text = b"\xff\xfe" + later_world_import.later_object_text(read).encode("utf-16-le")
 	else:
 		object_text = b""
-	return (_shard_rows(read, "characterdata.txt", "characterdata"),
-		_shard_rows(read, "itemdata.txt", "itemdata"),
+	return (tables.later_table_rows(read, "characterdata.txt"),
+		tables.later_table_rows(read, "itemdata.txt"),
 		object_text)
 
 

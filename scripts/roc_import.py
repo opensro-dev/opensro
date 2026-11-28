@@ -542,7 +542,7 @@ def stage(vsro_root, native, output):
 		# step below appends onto what it leaves.
 		gates = add_gates(read, text_root)
 		native_codes = {row[2] for row in cap110.tree_characters(text_root, CHARACTER_SHARD) if len(row) > 2}
-		refs = select_kinds(later_world_import.later_characters(read))
+		refs = select_kinds(tables.later_characters(read))
 		# The Roc's hour-mark enrage is cast by the summit's event, not
 		# named in any kind's skill columns (#4054).
 		staged = later_world_import.stage_kinds("Roc", read, has, refs, text_root, prior, CHARACTER_SHARD, SKILL_SHARD,
@@ -568,7 +568,7 @@ def stage(vsro_root, native, output):
 	summary = {
 		"enabled": True, "format": "opensro-roc-v4", "source": "vsro",
 		"characters": staged["characters"], "skills": staged["skills"],
-		"animationBases": staged["animationBases"], "characterInfo": staged["characterInfo"],
+		"animationBases": staged["animationBases"], "effectBases": staged["effectBases"], "characterInfo": staged["characterInfo"],
 		"nameSymbols": staged["nameSymbols"], "gates": gates, "quests": quests, "contents": contents, "uiTexts": ui_texts,
 		"population": population,
 		"rewards": rewards,

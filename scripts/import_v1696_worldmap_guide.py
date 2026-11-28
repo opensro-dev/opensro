@@ -46,7 +46,7 @@ from PIL import Image
 
 import sro_pk2
 from convert_images import save_image_payload
-from import_vsro_alexandria import archive_index, table_rows
+from import_vsro_alexandria import archive_index, later_table_rows, table_rows
 from import_vsro_tomb_minimap import ddj_payload
 from pin_file import require_pinned_archive
 from sro_paths import PUBLIC_ROOT
@@ -138,11 +138,8 @@ class Archive:
 		return table_rows(self.read(TEXTDATA + name))
 
 	def sharded(self, name):
-		"""A table that is an index of shards (v1.696 text and character data)."""
-		rows = self.table(name)
-		if rows and all(len(row) == 1 and row[0].strip().lower().endswith(".txt") for row in rows):
-			return [row for shard in rows for row in self.table(shard[0].strip())]
-		return rows
+		"""A table that is an index of shards (v1.696 text and character data), through its owner."""
+		return later_table_rows(lambda part: self.read(TEXTDATA + part), name)
 
 
 #============================================================================

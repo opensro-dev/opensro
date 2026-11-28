@@ -55,6 +55,7 @@ import avatar_effects as avatar_fx
 import cap110_item_import as shared
 import cap110_items as items
 import cap110_monsters as cap110
+import cap110_skill_effects as skill_effects
 import published_ids
 import import_vsro_alexandria as tables
 import mall_avatar_import as avatars
@@ -415,35 +416,20 @@ def effect_key(section, line):
 # merge_skill_effects
 #
 # The tree's skilleffect.txt with the previous pass's rows (by key) taken
-# out and later's rows of keys appended at the end of their sections.
+# out and later's rows of keys joined at the end of their sections, through
+# the one skill-effect owner (cap110_skill_effects, #4730). Returns the
+# text and the (archive, path) files the joined rows name.
 # ================
 def merge_skill_effects(tree_text, later_text, keys, previous):
-	header, sections = effect_sections(tree_text)
-	ending = "\r\n" if "\r\n" in tree_text else "\n"
-	_, later_sections = effect_sections(later_text)
-	added, efps = {name: [] for name in EFFECT_SECTIONS}, set()
-	for name, lines in later_sections:
-		if name not in EFFECT_SECTIONS:
-			continue
-		for line in lines[1:]:
-			if effect_key(name, line) not in keys:
-				continue
-			cells = line.rstrip("\r\n").split("\t")
-			if name == "skilleffectset":
-				efps.update(cell for cell in cells if cell.lower().endswith(".efp"))
-			added[name].append("\t".join(cells) + ending)
-	out = list(header)
-	for name, lines in sections:
-		kept = [line for line in lines if effect_key(name, line) not in previous]
-		if added.get(name):
-			if kept and not kept[-1].endswith(("\n", "\r")):
-				kept[-1] += ending
-			kept += added[name]
-		out += kept
-	missing = [name for name in EFFECT_SECTIONS if added[name] and name not in {n for n, _ in sections}]
+	kept = skill_effects.remove_presentation(tree_text, previous, previous)
+	selected = skill_effects.select_later_rows(later_text, keys)
+	sections = {skill_effects.section_name(line) for line in tree_text.splitlines()}
+	missing = sorted(name for name in selected if name not in sections)
 	if missing:
 		raise ValueError(f"the tree's skilleffect.txt has no {missing} section")
-	return "".join(out), sorted(efps)
+	merged, _ = skill_effects.merge_skill_effect_text(kept, selected)
+	rows = [(section, line.split("\t")) for section, lines in selected.items() for _, line in lines]
+	return merged, sorted(skill_effects.row_resources(rows))
 
 
 # ================
@@ -631,8 +617,7 @@ def add_nasrun_skills(vsro_root, native, output):
 		if tree_effects is not None and tables.TEXTDATA + SKILL_EFFECT_TABLE in index:
 			merged_effects, efps = merge_skill_effects(tables.decode_table(tree_effects),
 				tables.decode_table(read_later(SKILL_EFFECT_TABLE)), effect_keys, set(prior.get("effectKeys", [])))
-		for efp in efps:
-			icons.add(("Particles", "system/" + shared.normalized_path(efp)))
+		icons.update(efps)
 		# The transformation's animation sets and clips.
 		bodies, clips = {}, set()
 		if merged_effects is not None and "Data" in archives:

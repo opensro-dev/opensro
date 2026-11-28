@@ -427,8 +427,7 @@ def add_fortress(spec, native, output, source=None, closure=sky.copy_resource_cl
 		def read(name):
 			return tables.table_text(media, media_index, name.lower())
 
-		later = {row[2]: row for shard in tables.table_rows(read("characterdata.txt"))
-			for row in tables.table_rows(read(shard[0].lower())) if len(row) > 2}
+		later = tables.later_characters(read)
 		codename_by_id = {row[1]: row[2] for row in later.values()}
 		regions = fortress_regions(spec, tables.table_rows(read("regioncode.txt")))
 		zones = fortress_zones(spec, tables.table_rows(read("eventzonedata.txt")))

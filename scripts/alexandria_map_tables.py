@@ -97,24 +97,6 @@ def later_text_row(row):
 	return cells
 
 
-# v1.696 names its zone-name shards TextZoneName_<n>.txt.
-ZONE_NAME_SHARD = re.compile(r"textzonename_\d+\.txt", re.IGNORECASE)
-
-
-# ================
-# zone_name_shards
-# ================
-def zone_name_shards(rows):
-	"""
-	The shard names a later textzonename.txt lists, or [] when the file is
-	the table itself (VSRO keeps one table; v1.696 an index of shards).
-	"""
-	listed = [row[0].strip() for row in rows if row and row[0].strip()]
-	if listed and all(len(row) == 1 and ZONE_NAME_SHARD.fullmatch(row[0].strip()) for row in rows if row and row[0].strip()):
-		return listed
-	return []
-
-
 # ================
 # later_zone_rows
 # ================
@@ -127,11 +109,7 @@ def later_zone_rows(read):
 	name at all, so Arabia's 264 and Jupiter's 93 regions shipped with
 	an empty minimap title (2026-11-17).
 	"""
-	rows = stage1.table_rows(read("textzonename.txt"))
-	shards = zone_name_shards(rows)
-	if shards:
-		rows = [row for shard in shards for row in stage1.table_rows(read(shard.lower()))]
-	return [later_text_row(row) for row in rows]
+	return [later_text_row(row) for row in stage1.later_table_rows(read, "textzonename.txt")]
 
 
 # ================
