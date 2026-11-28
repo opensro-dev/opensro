@@ -39,6 +39,7 @@
 		"compound-sockets.test.mjs",
 		"confirm-box-text.test.mjs",
 		"contributor-titles.test.mjs",
+		"cos-sale-ui.test.mjs",
 		"crest-register-box.test.mjs",
 		"crests-war-buffs.test.mjs",
 		"damage-visuals.test.mjs",
