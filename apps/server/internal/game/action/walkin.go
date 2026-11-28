@@ -165,15 +165,21 @@ const (
 	tombFloor6NorthZoneName         = "GATE_JINSI_06X01_06"
 )
 
-// tombFloor5ExitZones are the Floor 5 walk-in exits down to Floor 6.
-// The native chain creates that portal (Chins_Floor5_Portal) only when
-// the Flame Master dies, so the zones stay inert until the tomb chain
-// opens the gate (#2372).
-var tombFloor5ExitZones = map[string]bool{
-	"GATE_JINSI_05X01-1": true,
-	"GATE_JINSI_05X01-2": true,
-	"GATE_JINSI_05X01-3": true,
+// tombFloor5ExitZones are the Floor 5 walk-in exits down to Floor 6,
+// each mapped to its exit place (simulation.TombFloor5Destination). The
+// native chain creates that portal (Chins_Floor5_Portal) only when the
+// Flame Master dies, so the zones stay inert until the tomb chain opens
+// the gate (#2372).
+var tombFloor5ExitZones = map[string]int{
+	"GATE_JINSI_05X01-1": 0, // (1498, 59, 1650)
+	"GATE_JINSI_05X01-3": 1, // (1815, 68, -1334)
+	"GATE_JINSI_05X01-2": 2, // (-1349, 68, 1101)
 }
+
+// tombFloor6Arrivals are the teleportdata rows of the Floor 6 arrivals a
+// Floor 5 portal leads to, by portal: East (7086, 140, 73), South
+// (69, 140, -7092), West (-7089, 140, -71).
+var tombFloor6Arrivals = [simulation.TombFloor5Places]uint32{139, 141, 140}
 
 // tombFloor6ArenaZones maps each Floor 6 walk-in zone to the tomb chain
 // gate that creates its portal: the four arena entries open only with
@@ -322,10 +328,17 @@ func (rt *Runtime) stepWalkIn(key string, owner populationAdmission, nowMs int64
 	if !ok {
 		return OpResult{}
 	}
-	if tombFloor5ExitZones[zone] && (rt.Monsters == nil || !rt.Monsters.TombGateOpen(owner.division, simulation.TombGateFloor6Entry)) {
-		// The Floor 6 portal does not exist until the Flame Master
-		// dies: walking through its zone does nothing (#2372).
-		return OpResult{}
+	if place, exit := tombFloor5ExitZones[zone]; exit {
+		if rt.Monsters == nil || !rt.Monsters.TombGateOpen(owner.division, simulation.TombGateFloor6Entry) {
+			// The Floor 6 portal does not exist until the Flame Master
+			// dies: walking through its zone does nothing (#2372).
+			return OpResult{}
+		}
+		// The portal standing at this place leads to the arrival the
+		// floor's setup drew for it (#4814).
+		if portal, ok := rt.Monsters.TombFloor5Destination(owner.division, place); ok {
+			link.target = tombFloor6Arrivals[portal]
+		}
 	}
 	if gate, gated := tombFloor6ArenaZones[zone]; gated && (rt.Monsters == nil || !rt.Monsters.TombGateOpen(owner.division, gate)) {
 		// The arena portal does not exist until its compass stage

@@ -631,3 +631,33 @@ func TestTombChainFloor6StagesArmFireAndRearm(t *testing.T) {
 		}
 	}
 }
+
+/*
+================
+TestTombFloor5PortalsStandInTheDrawnOrder
+
+The floor's setup draws one of six orders by rand() % 6: under each
+draw, the portal to East, South and West stands at the place the order
+names. Before the chain arms there is no order to read.
+================
+*/
+func TestTombFloor5PortalsStandInTheDrawnOrder(t *testing.T) {
+	// The arrival each exit place leads to, by draw (inverse of the order).
+	want := [6][TombFloor5Places]int{{0, 1, 2}, {0, 2, 1}, {1, 0, 2}, {2, 0, 1}, {1, 2, 0}, {2, 1, 0}}
+	for word := range want {
+		s := newTombChainWorld(t, true)
+		if _, ok := s.TombFloor5Destination("division", 0); ok {
+			t.Fatal("an order before the chain armed")
+		}
+		s.SetRandomSource(constantWord(uint32(word)))
+		tombAdvance(s, 1000)
+		for place, arrival := range want[word] {
+			if got, ok := s.TombFloor5Destination("division", place); !ok || got != arrival {
+				t.Fatalf("draw %d place %d leads to %d (%v), want %d", word, place, got, ok, arrival)
+			}
+		}
+		if _, ok := s.TombFloor5Destination("division", TombFloor5Places); ok {
+			t.Fatal("a fourth place answered")
+		}
+	}
+}
