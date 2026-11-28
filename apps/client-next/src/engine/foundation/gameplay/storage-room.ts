@@ -342,9 +342,20 @@ only through apply(), fed by the inventory transaction that owns them.
 */
 export function createStorageRoom( send: ( frame: WireFrame ) => void ) {
 	let room: StorageRoom | null = null;
-	// The room a close left while a move it admitted may still be answered:
-	// the warehouse data outlives its window, so the echo settles here.
+	// The last open room while no room is open: a move it admitted may
+	// still be answered after a close, or after a reopen whose list has not
+	// arrived yet (#4737), so the echo settles here. The server answers the
+	// move before the list it was sent ahead of, and that list replaces it.
 	let closed: StorageRoom | null = null;
+	/*
+	================
+	lastOpenRoom
+
+	The room a pending move was planned on: the open one, else the one a
+	close or a reopen left behind.
+	================
+	*/
+	const lastOpenRoom = (): StorageRoom | null => room?.phase === "open" ? room : closed;
 	let gold = "0";
 	return {
 		/*
@@ -356,7 +367,7 @@ The talk menu's storage row: list the room, then ask for the function.
 		*/
 		open( npc: number ) {
 			if ( !Number.isInteger( npc ) || npc < 1 || npc > 0xffffffff ) throw Error( "Invalid storage NPC" );
-			closed = null;
+			closed = lastOpenRoom();
 			room = { npc, phase: "listing", capacity: 0, gold, items: [] };
 			send( storageListRequest( npc ) );
 		},
@@ -369,7 +380,7 @@ The guild manager's warehouse row: ask for the function, then the room.
 		*/
 		openGuild( npc: number ) {
 			if ( !Number.isInteger( npc ) || npc < 1 || npc > 0xffffffff ) throw Error( "Invalid guild manager" );
-			closed = null;
+			closed = lastOpenRoom();
 			room = { npc, guild: true, phase: "function", capacity: 0, gold: "0", items: [] };
 			send( guildStorageFunctionRequest( npc ) );
 		},
@@ -464,9 +475,10 @@ or not the window is still open.
 ================
 		*/
 		apply( next: StorageRoom ) {
-			// A move answered after its window closed changes the data, never
-			// the window: the closed room takes it and stays closed.
-			if ( room ) room = next;
+			// A move answered after its window closed, or while a reopened
+			// room still lists, changes the data, never the window: the room
+			// it was planned on takes it, and the server's list follows.
+			if ( room?.phase === "open" ) room = next;
 			else closed = next;
 			if ( next.guild ) return;
 			gold = next.gold;
@@ -489,11 +501,11 @@ close still settles.
 settling
 
 The room a pending move's answer applies to: the open one, or the one a
-close left behind.
+close or a not-yet-listed reopen left behind.
 ================
 		*/
 		settling(): StorageRoom | null {
-			return room ?? closed;
+			return lastOpenRoom();
 		},
 		/*
 ================
