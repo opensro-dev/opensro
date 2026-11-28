@@ -290,12 +290,50 @@ export function occludesGeometry(
 	if ( !Number.isFinite( limit ) || limit < 0 ) throw Error( "Invalid occlusion depth" );
 	return intersectGeometry( ray, geometry, instance, { ...query, stopBefore: limit } ) !== null;
 }
+/*
+================
+createOcclusionMemo
+
+Occlusion queries over a few rays, many depths each (every candidate on
+a ray asks about the same ray): nearest( ray, limit ) finds the nearest
+occluder before limit, or null. Each ray is scanned once for the depth
+asked, and later queries are answered from it - occluded exactly when
+that nearest occluder lies before the query's depth - scanning again
+only for a depth past every one scanned with nothing found.
+================
+*/
+export function createOcclusionMemo( nearest: ( ray: PickRay, limit: number ) => number | null ) {
+	const reached = new Map<PickRay, { limit: number; nearest: number; }>();
+	return ( ray: PickRay, limit: number ): boolean => {
+		const known = reached.get( ray );
+		if ( known && (known.nearest < limit || limit <= known.limit) ) return known.nearest < limit;
+		const depth = nearest( ray, limit ) ?? Infinity;
+		reached.set( ray, { limit, nearest: depth } );
+		return depth < limit;
+	};
+}
+
+// The nearest accepted surface before limit, by occludesGeometry's rules,
+// or null: occludesGeometry( limit ) is true exactly when this is not null,
+// and the depth answers every shorter limit on the same ray too.
+export function nearestOccluder(
+	ray: PickRay,
+	geometry: Geometry,
+	instance: Float32Array,
+	limit: number,
+	query: OcclusionQuery = {}
+): number | null {
+	if ( !Number.isFinite( limit ) || limit < 0 ) throw Error( "Invalid occlusion depth" );
+	return intersectGeometry( ray, geometry, instance, { ...query, within: limit } );
+}
 // One intersection query. surface brings alpha, winding and opacity rules
 // (and its own blocks or ranges); blocks alone only culls.
 type IntersectQuery = {
 	readonly palette?: Float32Array;
 	readonly surface?: PickSurface;
 	readonly stopBefore?: number;
+	// The nearest hit only before this (nearestOccluder): culls as stopBefore does.
+	readonly within?: number;
 	readonly blocks?: Float64Array;
 	readonly skinned?: SkinnedPickVertices;
 };
@@ -421,7 +459,7 @@ function intersectGeometry(
 		}
 		return index * 3;
 	};
-	let nearest = stopBefore ?? Infinity, rangeIndex = 0, rangeEnd = 0;
+	let nearest = stopBefore ?? query.within ?? Infinity, rangeIndex = 0, rangeEnd = 0;
 	const rangeBounds: [number, number, number, number, number, number] | undefined = surface?.ranges ?
 		[ 0, 0, 0, 0, 0, 0 ] :
 		undefined;
@@ -528,5 +566,5 @@ function intersectGeometry(
 		if ( stopBefore !== undefined ) return t;
 		nearest = t;
 	}
-	return stopBefore === undefined && Number.isFinite( nearest ) ? nearest : null;
+	return stopBefore === undefined && nearest < (query.within ?? Infinity) ? nearest : null;
 }

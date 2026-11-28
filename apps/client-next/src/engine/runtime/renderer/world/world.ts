@@ -67,12 +67,14 @@ import { flareUniforms } from "@/engine/foundation/rendering/flares";
 import {
 	pickGeometry,
 	occludesGeometry,
+	nearestOccluder,
 	geometryPickBounds,
 	geometryPickBlocks,
 	rayIntersectsBounds,
 	type PickBounds,
 	type PickRay,
 	createSkinnedPickVertices,
+	createOcclusionMemo,
 	type PickAlpha,
 	type SkinnedPickVertices
 } from "@/engine/foundation/rendering/picking";
@@ -1107,6 +1109,8 @@ export function createWorldRenderer(
 		readonly terrainOnly: boolean;
 		readonly occlusionOnly: boolean;
 		readonly skinned?: Map<WorldGroup, SkinnedPickVertices[]>;
+		// With occlusionOnly: the nearest occluder before the limit instead of the first.
+		readonly nearestOccluder?: boolean;
 	};
 	/*
 	================
@@ -1165,16 +1169,12 @@ export function createWorldRenderer(
 				}
 				const surface = { alpha, opacity: cache?.opacity?.[i] ?? 1, blocks, ranges };
 				if ( query.occlusionOnly ) {
-					const posed = skinned ? skinned[i] ??= createSkinnedPickVertices( source ) : undefined;
-					if (
-						occludesGeometry( ray, mesh, matrix, nearest, {
-							palette: source.bones,
-							surface,
-							skinned: posed
-						} )
-					) {
-						return 0;
-					}
+					const posed = skinned ? skinned[i] ??= createSkinnedPickVertices( source ) : undefined,
+						occlusion = { palette: source.bones, surface, skinned: posed };
+					if ( query.nearestOccluder ) {
+						const depth = nearestOccluder( ray, mesh, matrix, nearest, occlusion );
+						if ( depth !== null ) nearest = depth;
+					} else if ( occludesGeometry( ray, mesh, matrix, nearest, occlusion ) ) return 0;
 					continue;
 				}
 				const depth = pickGeometry( ray, mesh, matrix, source.bones, surface );
@@ -1423,12 +1423,21 @@ export function createWorldRenderer(
 		hover rule). A skinned prop is skinned at most once in the scope, not
 		once per query; the scope must not outlive the frame's poses, so the
 		caller drops it when its pick returns.
+
+		Every candidate on a ray asks about the same ray, so the scope scans
+		each ray once for its nearest occluder (createOcclusionMemo).
 		================
 		*/
 		occlusionScope() {
 			const skinned = new Map<WorldGroup, SkinnedPickVertices[]>(),
-				query: PickScan = { excludeWater: true, terrainOnly: false, occlusionOnly: true, skinned };
-			return ( ray: PickRay, limit: number ) => scan( ray, limit, query ) !== null;
+				query: PickScan = {
+					excludeWater: true,
+					terrainOnly: false,
+					occlusionOnly: true,
+					skinned,
+					nearestOccluder: true
+				};
+			return createOcclusionMemo( ( ray, limit ) => scan( ray, limit, query ) );
 		},
 		/*
 		================

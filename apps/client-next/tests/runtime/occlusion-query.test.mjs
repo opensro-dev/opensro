@@ -13,7 +13,7 @@ import "../helpers/native-source-loader.mjs";
 import { pathToFileURL as sourceFileUrl } from "node:url";
 import { test } from "node:test";
 import assert from "node:assert/strict";
-const { pickGeometry, occludesGeometry, geometryPickBlocks } = await import(
+const { pickGeometry, occludesGeometry, nearestOccluder, createOcclusionMemo, geometryPickBlocks } = await import(
 	sourceFileUrl( "src/engine/foundation/rendering/picking.ts" ).href
 );
 const I = Float32Array.of( 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1 );
@@ -39,6 +39,11 @@ test("any-hit agrees with nearest-hit visibility including transparent front fac
 						occludesGeometry( ray, geometry, I, limit, { surface } ),
 						nearest !== null && nearest < limit
 					);
+					// The nearest occluder before limit: the first-hit answer, and the depth.
+					assert.equal(
+						nearestOccluder( ray, geometry, I, limit, { surface } ),
+						nearest !== null && nearest < limit ? nearest : null
+					);
 				}
 			}
 		}
@@ -59,4 +64,25 @@ test("blocking query stops before touching later triangles", () => {
 	};
 	assert.equal( occludesGeometry( { start: [ 0, 0, 0 ], delta: [ 0, 0, 1 ] }, geometry, I, .5 ), true );
 	assert.throws( () => pickGeometry( { start: [ 0, 0, 0 ], delta: [ 0, 0, 1 ] }, geometry, I ), /unneeded triangle/ );
+});
+
+test("an occlusion memo answers every depth on a ray as a fresh first-hit query would, scanning each ray at most as needed", () => {
+	// Three rays: an occluder at .4, one at .9, none. Queries arrive in a
+	// shuffled order of depths, as candidates do.
+	const occluders = new Map( [ [ "a", .4 ], [ "b", .9 ], [ "c", Infinity ] ] ), rays = [ ...occluders.keys() ];
+	let scans = 0;
+	const memo = createOcclusionMemo( ( ray, limit ) => {
+		scans++;
+		const at = occluders.get( ray );
+		return at < limit ? at : null;
+	} );
+	let seed = 7;
+	const random = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
+	for ( let i = 0; i < 400; i++ ) {
+		const ray = rays[Math.floor( random() * rays.length )], limit = random();
+		assert.equal( memo( ray, limit ), occluders.get( ray ) < limit, `${ray} at ${limit}` );
+	}
+	// A found occluder answers every later depth; a clear ray rescans only for
+	// a depth past every one asked.
+	assert.ok( scans < 40, `${scans} scans for 400 queries` );
 });
