@@ -64,9 +64,11 @@ const (
 	ServicePrefix = "QET_TQ_TREASUREBOX:open:"
 )
 
-// MinFreeSlots is the room the open demands before it looks for the key:
-// with fewer free bag slots it answers the bag-full line.
-const MinFreeSlots = 2
+// MinFreeSlots is the room the talk choice demands once the key is held:
+// with fewer free bag slots it answers the bag-full line. (The open
+// itself re-checks the key only when more than one slot is free; that
+// guard is not a refusal.)
+const MinFreeSlots = 1
 
 // GuardRadius is the ring the guards land in around the opener.
 const GuardRadius = 30
