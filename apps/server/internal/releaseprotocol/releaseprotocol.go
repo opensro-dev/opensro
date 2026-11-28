@@ -61,14 +61,12 @@ type Contracts struct {
 // Current is the release protocol this build speaks, and the contract
 // versions it fixes. Encoders version their payloads from these.
 const (
-	// Protocol 24 lets the trade table's gold travel as a u64 above the
-	// u32 range (item/wire WideGoldMove: the 0x706D move 0x0D, its echo and
-	// the partner's 0x30BB; #4264), only on a SRO_WIDE_TRADE_GOLD shard and
-	// only for an amount a protocol-24 tab chose to send. A protocol-22 or
-	// 23 partner ignores the longer 0x30BB and keeps showing the last
-	// narrow amount, which is never more than the table holds (every wide
-	// amount exceeds every narrow one), so it is never shown more gold than
-	// it receives; Oldest stays, per the rule below.
+	// Protocol 25 publishes the v1.696 Magic POP pool and category tree
+	// (gachaPool, reference file contract 4): the server rolls that
+	// table's entry ids 1..12, which a protocol-24 tab shows as its own
+	// hard-coded v1.150 prizes (client gacha-catalog.ts), so it would
+	// pay a prize other than the one it shows. A roll is ordinary play,
+	// so Oldest moves with Current.
 	// Protocol 23 admits the port-only smallest-stack reload control
 	// (opcode 22, client commerce-controls.ts AMMO_RELOAD_CONTROL;
 	// action/ammunitionpreference.go, #4527): one byte the client
@@ -99,7 +97,7 @@ const (
 	// rewards and tags the seasonal decoration's placements with their
 	// world layer (see WorldContract 1). Protocol 16 grows a pet chat
 	// link to name its pet (see ChatContract 2).
-	Current = 24
+	Current = 25
 	// Oldest is the oldest protocol this server still serves. A bump
 	// whose change an older client cannot survive in ordinary play moves
 	// Oldest with Current; a bump whose change only a new, opt-in action
@@ -116,7 +114,14 @@ const (
 	// new frame (see Current), so an open 22 tab is never locked out.
 	// 24 serves 22 and 23: only a wide amount a protocol-24 tab sends
 	// reaches the wide frames (see Current).
-	Oldest = 22
+	// 25 serves only 25: a 24 tab (or 23 or 22, which share its
+	// contracts) reads no gachaPool, so it shows the twelve v1.150
+	// prizes its client hard-codes while the server rolls the v1.696
+	// table's entry ids 1..12, and a roll would pay a prize other than
+	// the one shown. The reference fetch that carries the pool is
+	// ordinary play, so all three are refused with the 426 that
+	// reloads them.
+	Oldest = 25
 	// The market contract: 1 carries the port-only consignment market
 	// (SRO_CONSIGNMENT) on control opcode 20 both ways, and the server
 	// pushes it unasked: a sale's proceeds and notice to an online
@@ -202,10 +207,12 @@ const (
 	// digest the bootstrap named (#4421); 2 was the first browser DTO.
 	BootstrapContract = 3
 	RosterContract    = 2 // the character list: worn items as (RefItemID, plus)
-	// The reference file: 3 adds every creatable monster's row
-	// (refObjSnapshot, #369); 2 published the static item rows a login used
-	// to repeat (refItemSnapshot); 1 held skills and item commands only.
-	ReferencesContract = 3
+	// The reference file: 4 adds the v1.696 Magic POP pool and category
+	// tree (gachaPool) a protocol-24 tab cannot read; 3 adds every
+	// creatable monster's row (refObjSnapshot, #369); 2 published the
+	// static item rows a login used to repeat (refItemSnapshot); 1 held
+	// skills and item commands only.
+	ReferencesContract = 4
 )
 
 // history names every protocol a release has shipped. A browser and a
@@ -228,6 +235,7 @@ var history = map[int]Contracts{
 	16: {Bootstrap: 2, Roster: 2, References: 3, Companions: 3, Effects: 1, Friends: 1, Notices: 1, Movement: 1, Wanted: 2, Chat: 2},
 	17: {Bootstrap: 2, Roster: 2, References: 3, Companions: 3, Effects: 1, Friends: 1, Notices: 1, Movement: 1, Wanted: 2, Chat: 2, World: 1},
 	21: {Bootstrap: 2, Roster: 2, References: 3, Companions: 3, Effects: 1, Friends: 1, Notices: 1, Movement: 1, Wanted: 2, Chat: 2, World: 1, Market: 1},
+	24: {Bootstrap: 3, Roster: 2, References: 3, Companions: 3, Effects: 1, Friends: 1, Notices: 1, Movement: 1, Wanted: 2, Chat: 2, World: 1, Market: 1},
 	Current: {Bootstrap: BootstrapContract, Roster: RosterContract, References: ReferencesContract, Companions: CompanionsContract,
 		Effects: EffectsContract, Friends: FriendsContract, Notices: NoticesContract, Movement: MovementContract, Wanted: WantedContract,
 		Chat: ChatContract, World: WorldContract, Market: MarketContract},

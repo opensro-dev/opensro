@@ -163,6 +163,7 @@ var catalogueExempt = map[string]string{
 	"SRO_MOONLIT_THIEF_SUIT":                   "a worn suit's look; the catalogue publishes no rendering",
 	"SRO_DEN_NO_TRANSPORT_SUMMON":              "a summon refusal during a countdown; no catalogue file carries it",
 	"SRO_GACHA_POOL_V2":                        "the Magic Pop prize pool; the catalogue publishes no Magic Pop pool",
+	"SRO_MAGIC_POP_V1696":                      "the v1.696 Magic POP tables; the pool rides the game's public references, not the catalogue",
 	"SRO_TELEPORT_GRACE":                       "an arrival grace at runtime; the catalogue publishes no arrival timing, and the rules page states it",
 	"SRO_TRADER_CARGO_DROP":                    "what a killed trader's transport drops at runtime; the catalogue publishes no transport state",
 	"SRO_MALL_TRANSPORT_SPEED":                 "a ridden transport's speed at runtime; the catalogue publishes no movement speeds",

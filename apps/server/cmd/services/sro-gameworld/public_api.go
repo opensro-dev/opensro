@@ -443,7 +443,7 @@ func publicSources(gameplay *gameplayPlane, hub *transport.Hub, authority *store
 			}
 			return false
 		},
-		Rules: publicRules(),
+		Rules: publicRules(gameplay.items),
 		Shard: "beta",
 		SetHidden: func(account, name string, hidden bool) error {
 			return setPrivacyFlag(authority, shard, account, name, "public-hidden", hidden,

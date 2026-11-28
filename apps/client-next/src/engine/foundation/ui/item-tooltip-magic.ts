@@ -11,7 +11,7 @@ go through MagicOption_FormatAvatarParam (553980).
 ===========================================================================
 */
 import type { InventoryItem } from "@/engine/contracts/gameplay";
-import type { TooltipRow } from "./tooltip-rows";
+import { type TooltipRow, tooltipFormat } from "./tooltip-rows";
 import { avatarMagicOptionText } from "@/engine/foundation/gameplay/avatar-magic-option";
 import { isGachaVoucher } from "./gacha-window";
 import type { ItemMagicReference } from "@/engine/foundation/gameplay/item-tooltip-reference";
@@ -66,7 +66,18 @@ export function itemTooltipMagic( item: InventoryItem, text: ( symbol: string ) 
 	// and defect fixes ship plain). The name keeps its blue: the native
 	// name colour reads the raw param count (0x564230), which the pair
 	// still raises.
-	if ( isGachaVoucher( item.typeFlags ) ) return [];
+	// v1.696 (B8A00C InsertItemGhaChaInfo) prints the pair instead, as
+	// UIIT_STT_GACHA_WIN_ITEM "Can be changed to [%s][%d]."; the worker
+	// resolves it only while the v1.696 pool is published.
+	if ( isGachaVoucher( item.typeFlags ) ) {
+		const prize = item.gachaPrize;
+		return prize ?
+			[ {
+				value: tooltipFormat( text( "UIIT_STT_GACHA_WIN_ITEM" ), prize.name, prize.quantity ),
+				color: 0xffffffff
+			} ] :
+			[];
+	}
 	const rows: TooltipRow[] = [],
 		references = item.magicReferences ?? [],
 		// 55B608 uses signed division toward zero: class zero still selects degree one.

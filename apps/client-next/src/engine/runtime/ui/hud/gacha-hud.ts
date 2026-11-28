@@ -12,6 +12,10 @@ The three native timers (643070) are replayed from the simulation clock: each
 has a next-fire time and fires in order up to `now`, so a stalled frame
 catches up exactly as the repeating timers would have.
 
+With the v1.696 pool the window opens on CIFGhachaSelectWnd: the three
+combo boxes' choice, then the filter Start sets and the grid's page
+(0xA73200, 0xA75A30, 0xA72330). Without a pool the select state is unused.
+
 ===========================================================================
 */
 import {
@@ -26,7 +30,14 @@ import {
 } from "@/engine/foundation/ui/gacha-window";
 import type { GachaSheetKind } from "@/engine/foundation/ui/gacha-window";
 import { isGachaTicket } from "@/engine/foundation/gameplay/gacha-catalog";
-import type { GachaState } from "@/engine/contracts/item-process";
+import { gachaFilterPrizes, gachaTreeGroups } from "@/engine/foundation/gameplay/gacha-pool";
+import type {
+	GachaFilter,
+	GachaSelectChoice,
+	GachaTreeGroup,
+	GachaTreeRow
+} from "@/engine/foundation/gameplay/gacha-pool";
+import type { GachaPrizeRow, GachaState } from "@/engine/contracts/item-process";
 import type { InventoryItem } from "@/engine/contracts/gameplay";
 
 // 643070 id 4 stops the success sheet when its frame reaches 14.
@@ -35,6 +46,30 @@ const SUCCESS_LAST_FRAME = 14;
 const MAX_TIMER_FIRES = 256;
 // Bag slots start at 13 (642170 adds 0xD to the card slot index).
 const FIRST_BAG_SLOT = 13;
+// ifghachaselectwnd.txt's combo boxes: Class, Type, Degree.
+export const GACHA_SELECT_COMBO_CLASS = 41;
+export const GACHA_SELECT_COMBO_TYPE = 42;
+export const GACHA_SELECT_COMBO_DEGREE = 43;
+const NO_COMBO = 0;
+// INFERENCE: CIFGhachaSelectWnd's OnCreate (0xA75D60) was not read for a row
+// count; the stall network's twelve (CIFStallNetwork_OnCreate) stand in.
+export const GACHA_SELECT_COMBO_ROWS = 12;
+const EMPTY_CHOICE: GachaSelectChoice = { group: 0, sub: 0, degree: 0 };
+
+/*
+================
+GachaSelectState
+
+The select window's own state: open while the machine shows it, the combo
+whose list is open and that list's first visible row, and the choice.
+================
+*/
+export interface GachaSelectState {
+	readonly open: boolean;
+	readonly combo: number;
+	readonly comboFirst: number;
+	readonly choice: GachaSelectChoice;
+}
 
 export interface GachaFrameInput {
 	readonly gacha: GachaState | undefined;
@@ -76,6 +111,17 @@ export function createGachaHud() {
 	let rollStarted = -1, resultApplied = -1, spinning = false, bagPage = 0;
 	// The operator whose "no voucher" line the talk window shows (5DB746), or 0.
 	let noVoucherNpc = 0;
+	// The v1.696 select window and the grid's filter and page.
+	let select: GachaSelectState = { open: true, combo: NO_COMBO, comboFirst: 0, choice: EMPTY_CHOICE };
+	let filter: GachaFilter | null = null, page = 0, comboRange = 0;
+	// The tree and the filtered grid are rebuilt only when their inputs change.
+	let treeCache: { tree: readonly GachaTreeRow[]; groups: GachaTreeGroup[]; } | null = null;
+	let gridCache: {
+		prizes: readonly GachaPrizeRow[];
+		filter: GachaFilter;
+		cap: number;
+		rows: GachaPrizeRow[];
+	} | null = null;
 
 	/*
 	================
@@ -243,6 +289,131 @@ export function createGachaHud() {
 			entry = 0;
 			cardSlot = -1;
 			override = null;
+			// 0xA71D00 ends with 0xA73200(1): every open starts on the select window.
+			select = { open: true, combo: NO_COMBO, comboFirst: 0, choice: EMPTY_CHOICE };
+			filter = null;
+			page = 0;
+			gridCache = null;
+		},
+		/*
+		================
+		selectState
+		================
+		*/
+		selectState: (): GachaSelectState => select,
+		/*
+		================
+		toggleCombo
+
+		A press on a combo box opens its list, or closes the one already open.
+		================
+		*/
+		toggleCombo( id: number ) {
+			select = { ...select, combo: select.combo === id ? NO_COMBO : id, comboFirst: 0 };
+		},
+		/*
+		================
+		scrollCombo
+
+		The open list's scroll range is the one its last paint reported.
+		================
+		*/
+		scrollCombo( delta: number ) {
+			select = { ...select, comboFirst: Math.max( 0, Math.min( comboRange, select.comboFirst + delta ) ) };
+		},
+		setComboRange( range: number ) {
+			comboRange = Math.max( 0, range );
+		},
+		/*
+		================
+		treeGroups
+
+		The published tree's groups (gacha-pool.ts gachaTreeGroups).
+		================
+		*/
+		treeGroups( tree: readonly GachaTreeRow[] ) {
+			if ( treeCache?.tree !== tree ) treeCache = { tree, groups: gachaTreeGroups( tree ) };
+			return treeCache.groups;
+		},
+		/*
+		================
+		filtered
+
+		The grid's list for the filter Start set: the published prizes that pass
+		0xA71220's cap, type and degree tests, in list order. Empty before Start.
+		================
+		*/
+		filtered( prizes: readonly GachaPrizeRow[], cap: number ): readonly GachaPrizeRow[] {
+			if ( !filter ) return [];
+			if ( gridCache?.prizes !== prizes || gridCache.filter !== filter || gridCache.cap !== cap ) {
+				gridCache = { prizes, filter, cap, rows: gachaFilterPrizes( prizes, filter, cap ) };
+			}
+			return gridCache.rows;
+		},
+		/*
+		================
+		chooseCombo
+
+		0xA75740 / 0xA74F70: a new class empties the type and degree boxes, a
+		new type empties the degree box.
+		================
+		*/
+		chooseCombo( index: number ) {
+			const choice = select.choice;
+			const next = select.combo === GACHA_SELECT_COMBO_CLASS ?
+				{ group: index, sub: 0, degree: 0 } :
+				select.combo === GACHA_SELECT_COMBO_TYPE ?
+				{ ...choice, sub: index, degree: 0 } :
+				select.combo === GACHA_SELECT_COMBO_DEGREE ?
+				{ ...choice, degree: index } :
+				choice;
+			select = { ...select, combo: NO_COMBO, comboFirst: 0, choice: next };
+		},
+		/*
+		================
+		startSelect
+
+		0xA75A30: SetFilter, rebuild on the first page, show the grid and destroy
+		the select window. A refused Start (no filter) changes nothing.
+		================
+		*/
+		startSelect( next: GachaFilter | null ) {
+			if ( !select.open || !next ) return false;
+			filter = next;
+			page = 0;
+			entry = 0;
+			override = null;
+			select = { ...select, open: false, combo: NO_COMBO };
+			return true;
+		},
+		filter: () => filter,
+		/*
+		================
+		page
+
+		The grid's page, clamped to the last page the filtered list has.
+		================
+		*/
+		page( last: number ) {
+			page = Math.max( 0, Math.min( last, page ) );
+			return page;
+		},
+		/*
+		================
+		setPage
+
+		0xA72330: a page change clears the selection and rebuilds. Refused while
+		a roll is in flight, as every grid input is.
+		================
+		*/
+		setPage( next: number, last: number, busy: boolean ) {
+			if ( busy ) return false;
+			const clamped = Math.max( 0, Math.min( last, next ) );
+			if ( clamped === page ) return false;
+			page = clamped;
+			entry = 0;
+			override = null;
+			return true;
 		},
 		/*
 		================

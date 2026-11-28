@@ -36,16 +36,20 @@ shard may not hold; a missing kind takes the nearest lower level whose
 kind the shard holds (inference: the scroll should never answer
 nothing to a high-level user).
 
-The scroll reaches players only through So-Ok's Christmas Gift
-(progression/sook_christmas.go), so it is served while that event's mode
-is selected (SRO_CHRISTMAS_EVENT_MODE=so_ok_2006), window or not; in any
-other mode it is dead stock, as the native v1.150 server leaves it.
+The scroll reaches players through So-Ok's Christmas Gift
+(progression/sook_christmas.go) and through the v1.696 Magic POP's lose set
+(gacha.go), so it is served while that event's mode is selected
+(SRO_CHRISTMAS_EVENT_MODE=so_ok_2006, window or not) or while the loaded
+v1.696 catalog pays it (summonEventItemServed); otherwise it is dead stock,
+as the native v1.150 server leaves it.
 
 ===========================================================================
 */
 package action
 
 import (
+	"slices"
+
 	"opensro.online/server/internal/game/enterworld"
 	"opensro.online/server/internal/game/item/wire"
 	"opensro.online/server/internal/game/world"
@@ -273,6 +277,26 @@ func (rt *Runtime) landStrongSummon(use persistentSummonUse, summon strongSummon
 
 /*
 ================
+Runtime.summonEventItemServed
+
+Whether a summon-event item (the party scroll, Pandora's Box) has a source
+on this shard: So-Ok's Christmas Gift's mode, or a loaded v1.696 Magic POP
+catalog that pays it (its lose set holds both): the port opens them only
+where a player can get one.
+================
+*/
+func (rt *Runtime) summonEventItemServed(codename string) bool {
+	if rt.SoOkChristmas.Selected() {
+		return true
+	}
+	if v1696, _ := rt.GachaRuleState(); !v1696 {
+		return false
+	}
+	return slices.Contains(rt.GachaCatalog.RewardCodenames(), codename)
+}
+
+/*
+================
 Runtime.usePartySummonScroll
 
 The native refusals answer first and spend nothing; then one monster per
@@ -281,8 +305,8 @@ party member lands around the user and the scroll is spent.
 */
 func (rt *Runtime) usePartySummonScroll(use persistentSummonUse, result *OpResult) bool {
 	c := use.character
-	if !rt.SoOkChristmas.Selected() {
-		result.DiagnosticRefusal = "item-use: the party summon scroll is served only in So-Ok's Christmas Gift's mode"
+	if !rt.summonEventItemServed(PartySummonScrollItem) {
+		result.DiagnosticRefusal = "item-use: the party summon scroll is served only in So-Ok's Christmas Gift's mode or by the v1.696 Magic POP"
 		return false
 	}
 	if rt.Monsters == nil || !enterworld.CharacterAlive(c) || c.Level == nil {
