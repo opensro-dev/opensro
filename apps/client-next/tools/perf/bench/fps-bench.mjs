@@ -829,6 +829,23 @@ async function session( options, location, results ) {
 			results.push( result );
 			if ( options.json ) await writeFile( options.json, JSON.stringify( results, null, 2 ) );
 			console.log( row( result ) );
+			// The world's resident and visible counts after the window (#4692):
+			// static groups (GPU-culled, never walked), walked and walk-visible
+			// groups, and the frame's bundle recordings so far. A bundle without
+			// the stats prints null.
+			const world = await client.page.evaluate( () => {
+				const stats = globalThis.__benchRuntime.worldStats?.();
+				return stats ?
+					{
+						residentGroups: stats.residentGroups,
+						staticGroups: stats.staticGroups,
+						walkedGroups: stats.walkedGroups,
+						visibleGroups: stats.visibleGroups,
+						bundleRecords: stats.bundleRecords
+					} :
+					null;
+			} );
+			console.log( `  verify world ${name}: ${JSON.stringify( world )}` );
 			if ( options.snow || options.rain ) {
 				// The held mode and the weather owner's drop counters after
 				// the window: an A/B's two sides must hold the same weather.
