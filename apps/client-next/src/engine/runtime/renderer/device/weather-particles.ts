@@ -60,6 +60,13 @@ so a draw binds its own (binding 17):
 
 ===========================================================================
 */
+import {
+	PARTICLE_ALIVE,
+	PARTICLE_BIRTH_WORD,
+	PARTICLE_WORDS,
+	WEATHER_CAPACITY,
+	WEATHER_REGIONS
+} from "@/engine/foundation/rendering/gpu-record-layouts";
 import { DeviceDraw } from "./device-draw";
 import type { Retire } from "./retirement";
 import type { GpuTimingFrame, WeatherStep } from "../internal/gpu-contract";
@@ -69,16 +76,11 @@ import type { GpuTimingFrame, WeatherStep } from "../internal/gpu-contract";
 // alive; these hold several times the steady state of the strongest
 // native emission (live-weather tests). Multiples of WORKGROUP, at most
 // WORKGROUP * MAX_REGION_BLOCKS.
-export const WEATHER_REGIONS = 3;
-export const WEATHER_CAPACITY: readonly number[] = [ 8192, 16384, 8192 ];
 // The kind code each region steps (weather.ts particle kinds).
 const REGION_KIND = [ 0, 2, 3 ];
-export const PARTICLE_WORDS = 8;
-export const PARTICLE_ALIVE = 1;
 const PARTICLE_DRIFT_X = 2;
 const PARTICLE_DRIFT_Z = 4;
 const PARTICLE_VISIBLE = 8;
-export const PARTICLE_BIRTH_WORD = 7;
 export const WEATHER_HEADER_WORDS = 32;
 // The header's capacity word; the draw's baseVertex follows it.
 export const WEATHER_CAPACITY_WORD = 28;

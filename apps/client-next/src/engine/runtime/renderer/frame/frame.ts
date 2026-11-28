@@ -22,7 +22,7 @@ import type {
 const PERSISTENT_RUN = 64;
 
 import { BLOOM_BLEND_BYTE } from "@/engine/foundation/rendering/blend-state";
-import { issueIndexedDraw } from "@/engine/runtime/renderer/device/indexed-draw";
+import { issueIndexedDraw } from "@/engine/foundation/rendering/indexed-draw";
 /*
 ================
 drawList

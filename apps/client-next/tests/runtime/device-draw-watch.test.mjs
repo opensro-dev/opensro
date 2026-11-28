@@ -15,31 +15,34 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 const { DeviceDraw } = await import( "../../src/engine/runtime/renderer/device/device-draw.ts" );
 
+// A stand-in for a GPU object: the draw only stores and compares it.
+const stub = ( value = {} ) => /** @type {any} */ (value);
+
 /*
 ================
 make
 ================
 */
 function make() {
-	return new DeviceDraw( { pipeline: {}, vertices: {}, indices: {}, count: 3 }, {}, 1, 1 );
+	return new DeviceDraw( stub( { pipeline: {}, vertices: {}, indices: {}, count: 3 } ), stub(), 1, 1 );
 }
 
 test("only a watched draw's binding, pipeline or arguments move the revision", () => {
 	const watched = make(), other = make();
 	DeviceDraw.watch( watched );
 	const start = DeviceDraw.revision;
-	DeviceDraw.rebind( other, {} );
-	DeviceDraw.repipeline( other, {}, {} );
-	DeviceDraw.drawIndirect( other, {}, 0 );
+	DeviceDraw.rebind( other, stub() );
+	DeviceDraw.repipeline( other, stub(), stub() );
+	DeviceDraw.drawIndirect( other, stub(), 0 );
 	DeviceDraw.select( watched, 3, 0 );
 	assert.equal( DeviceDraw.revision, start, "unwatched changes and counts leave it" );
-	DeviceDraw.rebind( watched, {} );
+	DeviceDraw.rebind( watched, stub() );
 	assert.equal( DeviceDraw.revision, start + 1 );
-	DeviceDraw.repipeline( watched, {}, {} );
-	DeviceDraw.drawIndirect( watched, {}, 20 );
+	DeviceDraw.repipeline( watched, stub(), stub() );
+	DeviceDraw.drawIndirect( watched, stub(), 20 );
 	assert.equal( DeviceDraw.revision, start + 3 );
 	DeviceDraw.unwatch( watched );
 	const after = DeviceDraw.revision;
-	DeviceDraw.rebind( watched, {} );
+	DeviceDraw.rebind( watched, stub() );
 	assert.equal( DeviceDraw.revision, after, "an unwatched draw no longer counts" );
 });

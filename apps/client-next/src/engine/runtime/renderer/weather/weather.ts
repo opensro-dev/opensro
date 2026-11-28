@@ -47,7 +47,7 @@ import {
 	PARTICLE_WORDS,
 	WEATHER_CAPACITY,
 	WEATHER_REGIONS
-} from "../device/weather-particles";
+} from "@/engine/foundation/rendering/gpu-record-layouts";
 
 // The particle kinds (native factories) and each one's region: rain
 // (CWRain), snow (CWSnow) and rare snow (CWSnow2); kind 1 has no factory.

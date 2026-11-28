@@ -33,7 +33,7 @@ indexed.
 */
 import type { TerrainRange, WorldGroup, WorldScene } from "@/engine/contracts/scene";
 import type { GeometryCommands, GeometryDraw, ImageDraw } from "../internal/gpu-contract";
-import { RANGE_WORDS } from "../device/index-cull";
+import { RANGE_WORDS } from "@/engine/foundation/rendering/gpu-record-layouts";
 
 // Packed floats per vertex (packGeometryVertices).
 const VERTEX_FLOATS = 14;

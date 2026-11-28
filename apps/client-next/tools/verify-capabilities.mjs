@@ -101,6 +101,11 @@ const geometryUploads = runtime + "renderer/device/geometry-uploads.ts";
 const bufferSlabs = runtime + "renderer/device/buffer-slabs.ts";
 const deviceInternals = [
 	allocationMeter,
+	// The GPU-resident culls and weather drops (#4692) take the device as
+	// particles.ts does: created and retired by geometry preparation.
+	indexCull,
+	weatherParticles,
+	objectCull,
 	waterReflection,
 	bloom,
 	finish,
@@ -589,6 +594,9 @@ export function verifyCapabilities( base = root ) {
 				!([
 					animation,
 					particles,
+					indexCull,
+					weatherParticles,
+					objectCull,
 					geometry,
 					shadows,
 					sunShadow,

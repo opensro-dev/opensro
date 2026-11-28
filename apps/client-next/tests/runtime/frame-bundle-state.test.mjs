@@ -162,7 +162,12 @@ test("static runs record once, replay in their places, and re-record only when w
 	});
 	const walked = [ draw( "w0" ), draw( "w1" ), draw( "w2" ) ];
 	const runs = [ [ draw( "s0", true ) ], [ draw( "s11", true ), draw( "s222", true ) ] ];
-	const persistent = ( drawRevision, at = [ 1, 2 ] ) => ({ blocks: runs, at, revision: 1, drawRevision });
+	const persistent = ( drawRevision, at = [ 1, 2 ] ) => /** @type {any} */ ({
+		blocks: runs,
+		at,
+		revision: 1,
+		drawRevision
+	});
 	const order = executed => executed.map( row => row[4] === args ? "s" + row[5] / 20 : row[4] );
 	// Walked draws 0 | run 0 | walked 1 | run 1 | walked 2.
 	assert.deepEqual( order( f.draw( walked, [], persistent( 0 ) ) ), [ 3, "s2", 3, "s3", "s4", 3 ] );

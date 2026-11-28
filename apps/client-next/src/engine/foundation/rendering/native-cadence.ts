@@ -21,7 +21,7 @@ answer between (one frame of a 60 Hz client):
 */
 
 // The native client's frame time at 60 frames a second.
-export const NATIVE_FRAME_MS = 1000 / 60;
+export const NATIVE_FRAME_MS = 16.666666666666668; // 1000 / 60
 
 /*
 ================

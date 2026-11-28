@@ -10,7 +10,7 @@ already recorded for the same frame. Capture bindings never sample the target.
 */
 import { WATER_REFLECTION_SIZE, waterTextureProjection } from "@/engine/foundation/rendering/water-reflection";
 import type { GeometryDraw } from "../internal/gpu-contract";
-import { issueIndexedDraw } from "./indexed-draw";
+import { issueIndexedDraw } from "@/engine/foundation/rendering/indexed-draw";
 import type { Retire } from "./retirement";
 const UNIFORM_BYTES = 112;
 

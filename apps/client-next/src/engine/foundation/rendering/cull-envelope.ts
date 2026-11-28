@@ -33,7 +33,7 @@ import { cameraBasis, projectionTangents, viewProjection } from "./world-math";
 
 // The widening of each frustum half-angle: a drag re-culls about once per
 // this much turn (35 pixels at the native 0.005 rad per pixel).
-export const CULL_MARGIN_RAD = 10 * Math.PI / 180;
+export const CULL_MARGIN_RAD = 0.17453292519943295; // 10 degrees
 // How far the eye may drift from the envelope's eye, in world units: an
 // orbit at the default 80-unit distance moves the eye 14 units per 10
 // degrees.
@@ -43,7 +43,7 @@ export const CULL_EYE_SLACK = 32;
 const ENVELOPE_NEAR_SCALE = 1e-3;
 // The widest half-angle a widened projection may take (just under 90
 // degrees: tan stays finite).
-const MAX_HALF_ANGLE = Math.PI / 2 - 0.01;
+const MAX_HALF_ANGLE = 1.5607963267948965; // pi / 2 - 0.01
 
 export interface CullEnvelope {
 	// The widened view-projection to cull with, and the slack every tested

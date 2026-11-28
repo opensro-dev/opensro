@@ -10,11 +10,8 @@ mip generation, and the samplers they bind.
 */
 import { NATIVE_CHARACTER_LIGHTING } from "@/engine/foundation/rendering/video-options";
 import { MSAA_SAMPLE_COUNT } from "./msaa";
-import {
-	PARTICLE_WORDS as WEATHER_PARTICLE_WORDS,
-	WEATHER_CAPACITY_WORD,
-	WEATHER_HEADER_WORDS
-} from "./weather-particles";
+import { PARTICLE_WORDS as WEATHER_PARTICLE_WORDS } from "@/engine/foundation/rendering/gpu-record-layouts";
+import { WEATHER_CAPACITY_WORD, WEATHER_HEADER_WORDS } from "./weather-particles";
 import {
 	D3DBLEND_BLENDFACTOR,
 	D3DBLEND_BOTHINVSRCALPHA,

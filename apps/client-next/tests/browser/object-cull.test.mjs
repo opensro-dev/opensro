@@ -27,7 +27,8 @@ test( "the GPU object cull keeps every draw the CPU rule kept", { timeout: 12000
 			const { viewProjection, prepareViewFrustum, visibleFrustumSphere } = await import(
 				"/src/engine/foundation/rendering/world-math.ts"
 			);
-			const adapter = await navigator.gpu.requestAdapter(), gpu = await adapter.requestDevice();
+			const adapter = await navigator.gpu.requestAdapter(),
+				gpu = await /** @type {GPUAdapter} */ (adapter).requestDevice();
 			const cull = createObjectCull( gpu, resource => resource.destroy?.() );
 			await cull.ready;
 			let seed = 7;

@@ -446,7 +446,7 @@ test("a terrain layer merges member indices at their slots and survives growth",
 	const first = layers.admit( geometry, scene, a, undefined );
 	assert.equal( layers.admit( geometry, scene, b, undefined ), first, "one texture key, one draw" );
 	assert.deepEqual( indices.get( first ), [ 0, 1, 2, 600, 601, 602 ], "b's indices are offset by its slot" );
-	const range = { center: [ 0, 0, 0 ], radius: 1, indexStart: 0, indexCount: 3 };
+	const range = /** @type {any} */ ({ center: [ 0, 0, 0 ], radius: 1, indexStart: 0, indexCount: 3 });
 	layers.select( a, [ range ] );
 	layers.select( b, [ range ] );
 	layers.flush( geometry );

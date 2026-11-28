@@ -23,7 +23,7 @@ import {
 	sunShadowMatrix
 } from "@/engine/foundation/rendering/sun-shadow-math";
 import type { GeometryDraw, GpuTimingFrame } from "../internal/gpu-contract";
-import { issueIndexedDraw } from "./indexed-draw";
+import { issueIndexedDraw } from "@/engine/foundation/rendering/indexed-draw";
 import { destroyNow, type Retire } from "./retirement";
 
 // Slope-scaled depth bias on the caster pass: the receiver compares its own

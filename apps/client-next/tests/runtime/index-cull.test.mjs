@@ -19,9 +19,8 @@ import assert from "node:assert/strict";
 import { GPU_BUFFER_USAGE } from "../helpers/strict-gpu.mjs";
 
 globalThis.GPUBufferUsage = GPU_BUFFER_USAGE;
-const { createIndexCull, RANGE_WORDS } = await import(
-	sourceFileUrl( "src/engine/runtime/renderer/device/index-cull.ts" ).href
-);
+const { createIndexCull } = await import( sourceFileUrl( "src/engine/runtime/renderer/device/index-cull.ts" ).href );
+const { RANGE_WORDS } = await import( sourceFileUrl( "src/engine/foundation/rendering/gpu-record-layouts.ts" ).href );
 const { DeviceDraw } = await import( sourceFileUrl( "src/engine/runtime/renderer/device/device-draw.ts" ).href );
 const { createFrame } = await import( sourceFileUrl( "src/engine/runtime/renderer/frame/frame.ts" ).href );
 
@@ -58,7 +57,7 @@ function fakeDevice() {
 	};
 	const encoder = {
 		beginComputePass() {
-			const pass = { dispatches: [] };
+			const pass = { dispatches: /** @type {any[]} */ ([]) };
 			passes.push( pass );
 			let current;
 			return {

@@ -45,6 +45,7 @@ a still camera dispatches nothing and the arguments keep their counts.
 
 ===========================================================================
 */
+import { RANGE_WORDS } from "@/engine/foundation/rendering/gpu-record-layouts";
 import { createBufferSlabs, type BufferSlice } from "./buffer-slabs";
 import { DeviceDraw } from "./device-draw";
 import type { Retire } from "./retirement";
@@ -54,9 +55,7 @@ import type { GpuTimingFrame } from "../internal/gpu-contract";
 const ARG_WORDS = 5;
 const ARG_BYTES = ARG_WORDS * 4;
 const MIN_SLOTS = 64;
-// A range: centre xyz and radius (float), source start, index count, the
-// draw's slot and a pad (uint).
-export const RANGE_WORDS = 8;
+// A range's words: gpu-record-layouts.ts.
 const RANGE_BYTES = RANGE_WORDS * 4;
 export const RANGE_SLOT_WORD = 6;
 const MIN_RANGES = 16;

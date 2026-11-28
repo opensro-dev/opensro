@@ -28,7 +28,7 @@ function orbit( yaw, pitch, drift = [ 0, 0, 0 ] ) {
 		TARGET[1] + Math.sin( pitch ) * DISTANCE + drift[1],
 		TARGET[2] + Math.cos( pitch ) * Math.cos( yaw ) * DISTANCE + drift[2]
 	];
-	return { eye, target: TARGET.map( ( v, i ) => v + drift[i] ), fov: 1, near: 1, far: 3500 };
+	return /** @type {any} */ ({ eye, target: TARGET.map( ( v, i ) => v + drift[i] ), fov: 1, near: 1, far: 3500 });
 }
 
 // A seeded generator: the same spheres every run.

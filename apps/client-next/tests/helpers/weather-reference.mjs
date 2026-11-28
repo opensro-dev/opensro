@@ -52,13 +52,18 @@ counts spawns written over a slot whose drop was alive.
 ================
 */
 export function createWeatherReference() {
-	const regions = REFERENCE_CAPACITY.map( capacity => ({
-		words: new Uint32Array( capacity * 8 ),
-		floats: null,
-		visible: []
-	}) );
-	for ( const region of regions ) region.floats = new Float32Array( region.words.buffer );
-	const state = { overwrites: 0, steps: 0, spawns: 0, uploads: [], releases: 0, refuse: false };
+	const regions = REFERENCE_CAPACITY.map( capacity => {
+		const words = new Uint32Array( capacity * 8 );
+		return { words, floats: new Float32Array( words.buffer ), visible: /** @type {number[]} */ ([]) };
+	} );
+	const state = {
+		overwrites: 0,
+		steps: 0,
+		spawns: 0,
+		uploads: /** @type {any[]} */ ([]),
+		releases: 0,
+		refuse: false
+	};
 	/*
 	================
 	advance
