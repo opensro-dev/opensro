@@ -412,10 +412,7 @@ func openAuthorityPlane(
 		AuthoredAreas:           devPaths.AuthoredAreas,
 		BenchmarkFixtureControl: os.Getenv(agentapi.EnvBenchmarkFixtureControl) == "1",
 		LevelCap:                levelCap,
-		SkillGroup: func(id uint32) (uint32, bool) {
-			row, ok := textdata.Skills.SkillByID(id)
-			return row.Group, ok
-		},
+		Skill:                   benchmarkSkills(textdata.Skills),
 	}
 	config.CharacterInPlay = func(divisionID, characterName string) bool {
 		key := divisionID + ":" + strings.ToLower(characterName)
@@ -630,4 +627,45 @@ func logAuthorityReady(authorityStore *store.Store, deps *enterworld.Deps) {
 		ground.ItemCount(),
 		meta.GidCounter,
 	)
+}
+
+/*
+================
+benchmarkSkills
+
+The fixture's view of a skill row (agentapi.BenchmarkSkill): group, rank,
+and the masteries and prerequisite groups it requires, empty slots (id 0)
+left out.
+================
+*/
+func benchmarkSkills(skills *enterworld.TextdataSkills) agentapi.SkillResolver {
+	return func(id uint32) (agentapi.BenchmarkSkill, bool) {
+		return benchmarkSkill(skills, id)
+	}
+}
+
+/*
+================
+benchmarkSkill
+================
+*/
+func benchmarkSkill(skills *enterworld.TextdataSkills, id uint32) (agentapi.BenchmarkSkill, bool) {
+	row, ok := skills.SkillByID(id)
+	if !ok {
+		return agentapi.BenchmarkSkill{}, false
+	}
+	_, rank, _ := skills.SkillGroupRank(id)
+	skill := agentapi.BenchmarkSkill{Group: row.Group, Rank: rank}
+	for _, mastery := range row.Masteries {
+		if mastery.ID != 0 {
+			skill.Masteries = append(skill.Masteries, domain.CharacterMastery{ID: mastery.ID, Level: mastery.Level})
+		}
+	}
+	for _, prerequisite := range row.Prerequisites {
+		if prerequisite.ID != 0 {
+			skill.Prerequisites = append(skill.Prerequisites,
+				agentapi.BenchmarkSkillPrerequisite{Group: prerequisite.ID, Rank: prerequisite.Level})
+		}
+	}
+	return skill, true
 }

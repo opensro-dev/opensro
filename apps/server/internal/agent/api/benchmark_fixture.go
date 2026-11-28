@@ -5,7 +5,11 @@ benchmark_fixture.go - the development-only scenario reset
 
 POST /development/benchmark-fixture/reset puts one offline probe character
 into a known state: its spawn, movement mode and, optionally, a loadout
-(level, intellect, skills) a scenario needs. It exists only when the
+(level, intellect, skills) a scenario needs. A loadout skill is taught only
+when the character then qualifies for it as a player would: its masteries
+are raised to the skill's requirement, its prerequisites ride in the same
+loadout, and a skill the loadout's level or the character's race cannot
+reach is refused rather than taught to a character that could not cast it. It exists only when the
 development gate is on, mutates through the GameWorld's own store under the
 offline character-mutation control, and never runs on production workers.
 
@@ -23,9 +27,33 @@ import (
 	"opensro.online/server/internal/domain/charactervitals"
 )
 
-// SkillGroupResolver names a skill's group (all ranks of one skill share
-// it). ok=false for an id the server's skill data does not know.
-type SkillGroupResolver func(id uint32) (group uint32, ok bool)
+/*
+================
+BenchmarkSkill
+
+What the fixture needs of one skill row: its group and rank (all ranks of
+one skill share the group), the masteries it requires and the skill groups
+that must be known at a rank first (enterworld.SkillRow Masteries and
+Prerequisites, the server's one record of a skill's requirements).
+================
+*/
+type BenchmarkSkill struct {
+	Group         uint32
+	Rank          int64
+	Masteries     []domain.CharacterMastery
+	Prerequisites []BenchmarkSkillPrerequisite
+}
+
+// BenchmarkSkillPrerequisite is a skill group that must be known at Rank or
+// higher.
+type BenchmarkSkillPrerequisite struct {
+	Group uint32
+	Rank  int64
+}
+
+// SkillResolver reads one skill row for the fixture. ok=false for an id the
+// server's skill data does not know.
+type SkillResolver func(id uint32) (skill BenchmarkSkill, ok bool)
 
 // BenchmarkFixtureResetPath is routed through Agent to the selected
 // GameWorld. The GameWorld registers it only when the explicit development
@@ -113,7 +141,7 @@ func (api *API) handleBenchmarkFixtureReset(w http.ResponseWriter, r *http.Reque
 	}
 	var request benchmarkFixtureResetRequest
 	if err := decodeJSONRequest(r.Body, &request); err != nil || !validBenchmarkFixtureReset(request, api.levelCap) ||
-		!api.knownBenchmarkFixtureSkills(request.Loadout) {
+		!api.reachableBenchmarkFixtureSkills(request.Loadout) {
 		writeJSON(w, http.StatusBadRequest, map[string]any{"ok": false, "code": "BAD_REQUEST"})
 		return
 	}
@@ -141,12 +169,16 @@ func (api *API) handleBenchmarkFixtureReset(w http.ResponseWriter, r *http.Reque
 		}
 		// A corpse is never a fixture's known state: a scenario starts alive.
 		dead := !charactervitals.Alive(character)
+		if !benchmarkFixtureMasteriesHeld(character, request.Loadout, api.skill) {
+			refusal = "MASTERY_UNAVAILABLE"
+			return false
+		}
 		if !dead && benchmarkFixtureWorldMatches(character.World, request) &&
-			benchmarkFixtureLoadoutMatches(character, request.Loadout, api.skillGroup) {
+			benchmarkFixtureLoadoutMatches(character, request.Loadout, api.skill) {
 			outcome = "already-reset"
 			return false
 		}
-		applyBenchmarkFixtureLoadout(character, request.Loadout, api.skillGroup)
+		applyBenchmarkFixtureLoadout(character, request.Loadout, api.skill)
 		if dead {
 			// Unset vitals are full at the derived maximum (charactervitals),
 			// the same reset the loadout applies.
@@ -236,23 +268,44 @@ func validBenchmarkFixtureLoadout(loadout *benchmarkFixtureLoadout, levelCap int
 
 /*
 ================
-API.knownBenchmarkFixtureSkills
+API.reachableBenchmarkFixtureSkills
 
 Every requested skill must exist in the server's skill data, so a typo is
-refused here instead of failing later at login or cast. Without a resolver
-no loadout skill can be checked, so none is accepted.
+refused here instead of failing later at login or cast, and must be one the
+loadout can qualify for: each required mastery at or below the loadout's
+level (a mastery never trains past the character's level), and each
+prerequisite group taught by the same loadout at the required rank or
+higher. Without a resolver no loadout skill can be checked, so none is
+accepted.
 ================
 */
-func (api *API) knownBenchmarkFixtureSkills(loadout *benchmarkFixtureLoadout) bool {
+func (api *API) reachableBenchmarkFixtureSkills(loadout *benchmarkFixtureLoadout) bool {
 	if loadout == nil || len(loadout.Skills) == 0 {
 		return true
 	}
-	if api.skillGroup == nil {
+	if api.skill == nil {
 		return false
 	}
+	ranks := map[uint32]int64{}
+	skills := make([]BenchmarkSkill, 0, len(loadout.Skills))
 	for _, id := range loadout.Skills {
-		if _, ok := api.skillGroup(id); !ok {
+		skill, ok := api.skill(id)
+		if !ok {
 			return false
+		}
+		ranks[skill.Group] = max(ranks[skill.Group], skill.Rank)
+		skills = append(skills, skill)
+	}
+	for _, skill := range skills {
+		for _, mastery := range skill.Masteries {
+			if mastery.Level > loadout.Level {
+				return false
+			}
+		}
+		for _, prerequisite := range skill.Prerequisites {
+			if ranks[prerequisite.Group] < prerequisite.Rank {
+				return false
+			}
 		}
 	}
 	return true
@@ -260,13 +313,54 @@ func (api *API) knownBenchmarkFixtureSkills(loadout *benchmarkFixtureLoadout) bo
 
 /*
 ================
+benchmarkFixtureMasteriesHeld
+
+Every mastery the loadout's skills require is one of the character's own
+racial set (domain.Character.Masteries holds the complete set from
+creation): a Chinese skill on a European character is refused, never taught.
+================
+*/
+func benchmarkFixtureMasteriesHeld(character *domain.Character, loadout *benchmarkFixtureLoadout, skill SkillResolver) bool {
+	if loadout == nil {
+		return true
+	}
+	for _, id := range loadout.Skills {
+		row, _ := skill(id)
+		for _, required := range row.Masteries {
+			if benchmarkFixtureMastery(character, required.ID) < 0 {
+				return false
+			}
+		}
+	}
+	return true
+}
+
+/*
+================
+benchmarkFixtureMastery
+
+The index of mastery id in the character's set, or -1.
+================
+*/
+func benchmarkFixtureMastery(character *domain.Character, id uint32) int {
+	for index, mastery := range character.Masteries {
+		if mastery.ID == id {
+			return index
+		}
+	}
+	return -1
+}
+
+/*
+================
 benchmarkFixtureLoadoutMatches
 
 Already at the loadout: the level, intellect, every requested skill as the
-only rank of its group, and no stored MP or HP left to clamp the next login.
+only rank of its group, every mastery those skills require at its level, and
+no stored MP or HP left to clamp the next login.
 ================
 */
-func benchmarkFixtureLoadoutMatches(character *domain.Character, loadout *benchmarkFixtureLoadout, group SkillGroupResolver) bool {
+func benchmarkFixtureLoadoutMatches(character *domain.Character, loadout *benchmarkFixtureLoadout, skill SkillResolver) bool {
 	if loadout == nil {
 		return true
 	}
@@ -279,7 +373,16 @@ func benchmarkFixtureLoadoutMatches(character *domain.Character, loadout *benchm
 	if loadout.Strength != 0 && (character.Strength == nil || *character.Strength != loadout.Strength) {
 		return false
 	}
-	want := mergeBenchmarkFixtureSkills(character.Skills, loadout.Skills, group)
+	for _, id := range loadout.Skills {
+		row, _ := skill(id)
+		for _, required := range row.Masteries {
+			index := benchmarkFixtureMastery(character, required.ID)
+			if index < 0 || character.Masteries[index].Level < required.Level {
+				return false
+			}
+		}
+	}
+	want := mergeBenchmarkFixtureSkills(character.Skills, loadout.Skills, skill)
 	if len(want) != len(character.Skills) {
 		return false
 	}
@@ -296,11 +399,14 @@ func benchmarkFixtureLoadoutMatches(character *domain.Character, loadout *benchm
 applyBenchmarkFixtureLoadout
 
 Teaches the requested skills, replacing another rank of the same group so a
-character keeps one current id per skill group, and clears stored vitals so
-they are derived full at the next login.
+character keeps one current id per skill group, raises each mastery those
+skills require to its required level (never lowers one), and clears stored
+vitals so they are derived full at the next login.
+benchmarkFixtureMasteriesHeld has already proven every mastery is the
+character's own.
 ================
 */
-func applyBenchmarkFixtureLoadout(character *domain.Character, loadout *benchmarkFixtureLoadout, group SkillGroupResolver) {
+func applyBenchmarkFixtureLoadout(character *domain.Character, loadout *benchmarkFixtureLoadout, skill SkillResolver) {
 	if loadout == nil {
 		return
 	}
@@ -316,7 +422,16 @@ func applyBenchmarkFixtureLoadout(character *domain.Character, loadout *benchmar
 		maxLevel := level
 		character.MaxLevel = &maxLevel
 	}
-	character.Skills = mergeBenchmarkFixtureSkills(character.Skills, loadout.Skills, group)
+	for _, id := range loadout.Skills {
+		row, _ := skill(id)
+		for _, required := range row.Masteries {
+			if index := benchmarkFixtureMastery(character, required.ID); index >= 0 &&
+				character.Masteries[index].Level < required.Level {
+				character.Masteries[index].Level = required.Level
+			}
+		}
+	}
+	character.Skills = mergeBenchmarkFixtureSkills(character.Skills, loadout.Skills, skill)
 	character.CurrentMP = nil
 	character.CurrentHP = nil
 }
@@ -330,17 +445,17 @@ its group in place, or is appended when its group is new. Skills whose
 group cannot be resolved are kept as they are.
 ================
 */
-func mergeBenchmarkFixtureSkills(known, requested []uint32, group SkillGroupResolver) []uint32 {
+func mergeBenchmarkFixtureSkills(known, requested []uint32, skill SkillResolver) []uint32 {
 	merged := append([]uint32(nil), known...)
 	for _, id := range requested {
-		requestedGroup, ok := group(id)
+		requestedSkill, ok := skill(id)
 		replaced := false
 		for index, current := range merged {
 			if current == id {
 				replaced = true
 				break
 			}
-			if currentGroup, known := group(current); ok && known && currentGroup == requestedGroup {
+			if currentSkill, known := skill(current); ok && known && currentSkill.Group == requestedSkill.Group {
 				merged[index] = id
 				replaced = true
 				break
