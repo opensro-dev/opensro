@@ -23,7 +23,7 @@ export const MEDIA_ERR_DECODE = 3;
 export const MEDIA_ERR_SRC_NOT_SUPPORTED = 4;
 
 // A decode error whose message names the output sink, not the stream.
-const SINK_FAILURE = /MEDIASINK|audio\s*sink|audio\s*output/i;
+const SINK_FAILURE_MARKS = [ "mediasink", "audio sink", "audio output" ] as const;
 
 /*
 ================
@@ -51,7 +51,7 @@ export function musicElementError( error: MusicMediaError | null | undefined, pa
 	if ( !error ) {
 		what = "Music element failed";
 	} else if ( error.code === MEDIA_ERR_DECODE ) {
-		what = SINK_FAILURE.test( message ) ?
+		what = SINK_FAILURE_MARKS.some( mark => message.toLowerCase().includes( mark ) ) ?
 			"Music could not play: the audio output is unavailable" :
 			"Music could not be decoded";
 	} else if ( error.code === MEDIA_ERR_SRC_NOT_SUPPORTED ) {
