@@ -317,7 +317,7 @@ class NasrunSkillImportTest(unittest.TestCase):
 		native_skill = ["0"] * nasrun.SKILL_COLUMNS
 		native_skill[0], native_skill[1], native_skill[3] = "1", str(self.NATIVE_SKILL), "SKILL_NATIVE_THING"
 		(native / nasrun.TEXT_ROOT / "skilldata_5000.txt").write_bytes(utf16([native_skill]))
-		(text_root / "skilldata.txt").write_bytes(utf16([["skilldata_5000.txt"], ["skilldata_110000.txt"]]))
+		(text_root / "skilldata.txt").write_bytes(later_fixtures.index("skilldata_5000.txt", "skilldata_110000.txt"))
 		# The earlier layer's shard the index lists.
 		(text_root / "skilldata_110000.txt").write_bytes(utf16([]))
 		(text_root / nasrun.NAME_TABLE).write_bytes(utf16([["1", "SN_NATIVE_A", "", "", "", "", "", "", "Native A"]]))
@@ -364,7 +364,7 @@ class NasrunSkillImportTest(unittest.TestCase):
 			self.assertEqual(staged["SKILL_MALL_NASRUN_ECCENTRICDEMON_01"][nasrun.SKILL_BASIC_LEVEL], "1")
 			self.assertNotIn("	" + str(self.LATER_SKILL) + "	", shard)
 			manifest = [line for line in (text_root / "skilldata.txt").read_bytes().decode("utf-16").splitlines() if line]
-			self.assertEqual(manifest, ["skilldata_5000.txt", "skilldata_110000.txt", nasrun.SKILL_SHARD])
+			self.assertEqual(manifest, [later_fixtures.archive_case("skilldata_5000.txt"), later_fixtures.archive_case("skilldata_110000.txt"), nasrun.SKILL_SHARD])
 			names = (text_root / nasrun.NAME_TABLE).read_bytes().decode("utf-16")
 			self.assertIn("SN_SKILL_MALL_NASRUN_MOBDEFENCEIGNORE	", names)
 			# The skills' icons, and the worn Spirit's active edge (#4384).

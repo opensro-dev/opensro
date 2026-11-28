@@ -435,7 +435,7 @@ class Cap110MonstersTest(unittest.TestCase):
 		(text_root / "skilleffect.txt").write_bytes(utf16([
 			["#section", "characterinfo"], ["MOB_NATIVE"] + ["0"] * 12, ["#section", "skillaniset"]]))
 		media = {
-			"characterdata.txt": utf16([["characterdata_6000.txt"]]),
+			"characterdata.txt": later_fixtures.index("characterdata_6000.txt"),
 			"characterdata_6000.txt": utf16([later_monster(code, symbol, level)
 				for code, symbol, level, _name, _cell in species]),
 			**later_fixtures.sharded("skilldata.txt", {"skilldata_6000.txt": []}),
@@ -851,7 +851,7 @@ class Cap110MonstersTest(unittest.TestCase):
 		(text_root / "skilleffect.txt").write_bytes(utf16([
 			["#section", "characterinfo"], ["MOB_NATIVE"] + ["0"] * 12, ["#section", "skillaniset"]]))
 		media = {
-			"characterdata.txt": utf16([["characterdata_6000.txt"]]),
+			"characterdata.txt": later_fixtures.index("characterdata_6000.txt"),
 			"characterdata_6000.txt": utf16([
 				later_monster("MOB_SD_FIELD", 7001, "UIO_OBJ_MOB_SD_FIELD", 105),
 				later_monster("MOB_SD_LOW", 7003, "UIO_OBJ_MOB_SD_LOW", 99)]),

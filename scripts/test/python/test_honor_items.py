@@ -13,6 +13,7 @@ has.
 ===========================================================================
 """
 import script_paths  # noqa: F401  (puts scripts/ and its build folders on sys.path, #3410)
+import later_fixtures  # noqa: E402
 import os
 import tempfile
 import unittest
@@ -78,7 +79,7 @@ def build_tree(root):
 	# manifest and the name table too.
 	names = [["1", "SN_" + honor.stone_code(9), "x", "x", "x", "x", "x", "x", "Repair stone (9 degree)"]]
 	for base in (native, output):
-		(base / shared.TEXT_ROOT / honor.MANIFEST).write_bytes(utf16([["itemdata_5000.txt"]]))
+		(base / shared.TEXT_ROOT / honor.MANIFEST).write_bytes(later_fixtures.index("itemdata_5000.txt"))
 		(base / shared.TEXT_ROOT / honor.NAME_TABLE).write_bytes(utf16(names))
 	(native / shared.GLOW_ROOT).mkdir(parents=True)
 	(native / shared.GLOW_ROOT / shared.GLOW_TABLE).write_bytes(b"ITEM_CH_BLADE_10_A_RARE\t2\r\n")

@@ -508,7 +508,7 @@ class BuildTests(unittest.TestCase):
 		base.mkdir(parents=True)
 		(output / importer.TEXT_ROOT).mkdir(parents=True)
 		later.mkdir()
-		manifest = utf16([["itemdata_5000.txt"]])
+		manifest = later_fixtures.index("itemdata_5000.txt")
 		(base / "itemdata.txt").write_bytes(manifest)
 		(base / "itemdata_5000.txt").write_bytes(utf16([native_row(10)]))
 		(base / "textdataname.txt").write_bytes(utf16([]))
@@ -555,13 +555,13 @@ class BuildTests(unittest.TestCase):
 				first = importer.add_avatars(later, native, output)
 				self.assertTrue(first["enabled"])
 				self.assertEqual(first["added"], 4)
-				self.assertEqual(self.manifest_names(output), ["itemdata_5000.txt", importer.OUTPUT_SHARD])
+				self.assertEqual(self.manifest_names(output), [later_fixtures.archive_case("itemdata_5000.txt"), importer.OUTPUT_SHARD])
 				second = importer.add_avatars(later, native, output)
 				self.assertEqual(first["idMap"], second["idMap"])
-				self.assertEqual(self.manifest_names(output), ["itemdata_5000.txt", importer.OUTPUT_SHARD])
+				self.assertEqual(self.manifest_names(output), [later_fixtures.archive_case("itemdata_5000.txt"), importer.OUTPUT_SHARD])
 				with patch.dict(os.environ, {importer.FLAG: "off"}):
 					self.assertFalse(importer.add_avatars(later, native, output)["enabled"])
-				self.assertEqual(self.manifest_names(output), ["itemdata_5000.txt"])
+				self.assertEqual(self.manifest_names(output), [later_fixtures.archive_case("itemdata_5000.txt")])
 				self.assertFalse((output / importer.TEXT_ROOT / importer.OUTPUT_SHARD).exists())
 				self.assertFalse((output / importer.REPORT_NAME).exists())
 				self.assertTrue(importer.add_avatars(later, native, output)["enabled"])
@@ -581,7 +581,7 @@ class BuildTests(unittest.TestCase):
 			["1", str(5000 + index), row[5], "ko"] + ["0"] * 5 + ["Devil"] + ["0"] * 3 + ["Devil"] * 4
 			for index, row in enumerate(rows)
 		]
-		manifest = utf16([["itemdata_100001.txt"]])
+		manifest = later_fixtures.index("itemdata_100001.txt")
 		files = {
 			"itemdata.txt": manifest, "itemdata_100001.txt": utf16(rows),
 			**later_fixtures.sharded("textdata_equip&skill.txt", {"textdata_equip&skill_1.txt": texts}),
@@ -616,7 +616,7 @@ class BuildTests(unittest.TestCase):
 			self.assertFalse(targets[0] & targets[1])
 			self.assertEqual(
 				self.manifest_names(output),
-				["itemdata_5000.txt", importer.OUTPUT_SHARD, importer.V1696_SOURCE["shard"]],
+				[later_fixtures.archive_case("itemdata_5000.txt"), importer.OUTPUT_SHARD, importer.V1696_SOURCE["shard"]],
 			)
 			names = (output / importer.TEXT_ROOT / "textdataname.txt").read_bytes().decode("utf-16")
 			self.assertIn("Devil", names)

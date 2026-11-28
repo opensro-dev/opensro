@@ -203,7 +203,7 @@ class RigidItemStagingTest(unittest.TestCase):
 		icon.write_bytes(b"JMXVDDJ 0101")
 		text_root = out / rigid.later_world_import.TEXT_ROOT
 		text_root.mkdir(parents=True)
-		(text_root / "itemdata.txt").write_bytes(utf16([["itemdata_5000.txt"]]))
+		(text_root / "itemdata.txt").write_bytes(later_fixtures.index("itemdata_5000.txt"))
 		(text_root / "textdataname.txt").write_bytes(utf16([["1", "SN_NATIVE", "x", "", "", "Native", "", "", "", "", ""]]))
 		return native, out, text_root
 
@@ -237,7 +237,7 @@ class RigidItemStagingTest(unittest.TestCase):
 			self.assertEqual(len(set(ids)), 8)
 			self.assertEqual({row[rigid.ITEM_CODE] for row in shard_rows}, set(rigid.SCROLLS))
 			manifest = [row[0] for row in rigid.tables.table_rows((text_root / "itemdata.txt").read_bytes()) if row]
-			self.assertEqual(manifest, ["itemdata_5000.txt", rigid.ITEM_SHARD])
+			self.assertEqual(manifest, [later_fixtures.archive_case("itemdata_5000.txt"), rigid.ITEM_SHARD])
 			names = (text_root / "textdataname.txt").read_bytes().decode("utf-16")
 			for symbol in summary["itemSymbols"]:
 				self.assertIn(symbol, names)
@@ -251,7 +251,7 @@ class RigidItemStagingTest(unittest.TestCase):
 			rigid.reap_items(out, again)
 			self.assertFalse((text_root / rigid.ITEM_SHARD).exists())
 			manifest = [row[0] for row in rigid.tables.table_rows((text_root / "itemdata.txt").read_bytes()) if row]
-			self.assertEqual(manifest, ["itemdata_5000.txt"])
+			self.assertEqual(manifest, [later_fixtures.archive_case("itemdata_5000.txt")])
 			names = (text_root / "textdataname.txt").read_bytes().decode("utf-16")
 			self.assertIn("SN_NATIVE", names)
 			for symbol in summary["itemSymbols"]:

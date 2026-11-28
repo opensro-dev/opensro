@@ -129,7 +129,7 @@ class RocRewardsTest(unittest.TestCase):
 	def test_add_rewards_writes_only_what_it_keeps(self):
 		with tempfile.TemporaryDirectory() as root:
 			text_root = Path(root)
-			(text_root / "itemdata.txt").write_bytes(utf16([["itemdata_5000.txt"], ["itemdata_110000.txt"]]))
+			(text_root / "itemdata.txt").write_bytes(later_fixtures.index("itemdata_5000.txt", "itemdata_110000.txt"))
 			(text_root / "itemdata_5000.txt").write_bytes(utf16([item_row(7, "ITEM_ETC_NATIVE", ("3", "3", "1", "1"))]))
 			(text_root / "itemdata_110000.txt").write_bytes(utf16([item_row(8, BLADE)]))
 			summary = rewards.add_rewards(text_root)

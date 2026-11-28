@@ -510,7 +510,7 @@ def build_trees(base, hideout=False):
 		return ["1", "11880", key, "Korean", "0", "0", "0", "0", "0", english, "0", "0", "0", english, english, english, english]
 
 	media_files = {
-		"characterdata.txt": utf16([["characterdata_5000.txt"]]),
+		"characterdata.txt": later_fixtures.index("characterdata_5000.txt"),
 		"characterdata_5000.txt": utf16([
 			character(50001, "MOB_AR_TEST", level=125),
 			character(50002, "MOB_ARABIA_UNIQUE", level=130),

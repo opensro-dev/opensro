@@ -236,7 +236,7 @@ class Hunting2ImportTest(unittest.TestCase):
 	def standing_row(self, text_root, code, identity, level, grade=0):
 		row = ["0"] * 120
 		row[1], row[2], row[15], row[57] = str(identity), code, str(grade), str(level)
-		(text_root / "characterdata.txt").write_bytes(utf16([["characterdata_5000.txt"], ["characterdata_7000.txt"]]))
+		(text_root / "characterdata.txt").write_bytes(later_fixtures.index("characterdata_5000.txt", "characterdata_7000.txt"))
 		(text_root / "characterdata_7000.txt").write_bytes(utf16([row]))
 
 	# ================

@@ -186,7 +186,7 @@ class RocImportTest(unittest.TestCase):
 			rows = [row if old[2] == code else old for old in rows]
 		media = {
 			**later_fixtures.sharded("characterdata.txt", {"characterdata_6000.txt": rows}),
-			"skilldata.txt": utf16([["skilldata_6000.txt"]]),
+			"skilldata.txt": later_fixtures.index("skilldata_6000.txt"),
 			"skilldata_6000.txt": utf16([skill_row(ROC_SKILL, "MSKILL_RM_ROC_TEST"),
 				skill_row(ROC_ENRAGE_SKILL, "MSKILL_RM_ROC_ATTACK10")]),
 			"textdata_object.txt": utf16([[str(at), symbol_of(code), "x", "x", code, "f", "x", "a", "b", "c"]
@@ -283,7 +283,7 @@ class RocImportTest(unittest.TestCase):
 	def test_the_summit_link_names_the_variant_key_item(self):
 		with tempfile.TemporaryDirectory() as root:
 			vsro, native, output, text_root, pins = self.fixture(Path(root))
-			(text_root / "itemdata.txt").write_bytes(utf16([["itemdata_5000.txt"], ["itemdata_25000.txt"]]))
+			(text_root / "itemdata.txt").write_bytes(later_fixtures.index("itemdata_5000.txt", "itemdata_25000.txt"))
 			(text_root / "itemdata_25000.txt").write_bytes(utf16([["1", VARIANT_KEY_ID, KEY_ITEM]]))
 			summary = self.run_import(vsro, native, output, pins, "on")
 			summit = next(row for row in self.links(text_root) if row[1:3] == ["160", "162"])
@@ -371,7 +371,7 @@ class RocImportTest(unittest.TestCase):
 			vsro, native, output, text_root, pins = self.fixture(Path(root))
 			piece = ["0"] * 13
 			piece[0], piece[1], piece[2], piece[9:13] = "1", "8", "ITEM_CH_BLADE_11_A", ["3", "1", "6", "2"]
-			(text_root / "itemdata.txt").write_bytes(utf16([["itemdata_5000.txt"], ["itemdata_110000.txt"]]))
+			(text_root / "itemdata.txt").write_bytes(later_fixtures.index("itemdata_5000.txt", "itemdata_110000.txt"))
 			(text_root / "itemdata_110000.txt").write_bytes(utf16([piece]))
 			summary = self.run_import(vsro, native, output, pins, "on")
 			self.assertEqual(summary["rewards"]["random"], 8)
@@ -521,7 +521,7 @@ class RocImportTest(unittest.TestCase):
 			vsro, native, output, text_root, pins = self.fixture(Path(root))
 			row = ["0"] * 120
 			row[1], row[2] = "200", "MOB_RM_ROC"
-			(text_root / "characterdata.txt").write_bytes(utf16([["characterdata_5000.txt"], ["characterdata_7000.txt"]]))
+			(text_root / "characterdata.txt").write_bytes(later_fixtures.index("characterdata_5000.txt", "characterdata_7000.txt"))
 			(text_root / "characterdata_7000.txt").write_bytes(utf16([row]))
 			with self.assertRaisesRegex(ValueError, "already stands"):
 				self.run_import(vsro, native, output, pins, "on")

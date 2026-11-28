@@ -7,6 +7,7 @@ A test that feeds an importer a later client's tables builds them here,
 so every such test meets the shapes later_tables must handle (#4762),
 not a flat table it happens to read correctly:
 
+	index                     one shard index's bytes, shards in archive case
 	sharded / write_sharded   an index naming its shards in the archive's
 	                          own mixed case (SkillData_5000.txt), the
 	                          shards stored under folded names, as an
@@ -49,6 +50,16 @@ def archive_case(name):
 
 
 # ================
+# index
+#
+# One shard index's bytes: each shard named in archive case, in the
+# order given. For a fixture whose shards are written apart from it.
+# ================
+def index(*shards):
+	return utf16([[archive_case(name)] for name in shards])
+
+
+# ================
 # sharded
 #
 # {file name: bytes} for one sharded table: the index (table) listing
@@ -56,7 +67,7 @@ def archive_case(name):
 # under its folded name.
 # ================
 def sharded(table, shards):
-	files = {table: utf16([[archive_case(name)] for name in shards])}
+	files = {table: index(*shards)}
 	for name, rows in shards.items():
 		files[name.lower()] = rows if isinstance(rows, bytes) else utf16(rows)
 	return files

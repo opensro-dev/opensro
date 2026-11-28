@@ -14,6 +14,7 @@ their public add functions, pinned below.
 ===========================================================================
 """
 import script_paths  # noqa: F401  (puts scripts/ and its build folders on sys.path, #3410)
+import later_fixtures  # noqa: E402
 import dataclasses
 import json
 import os
@@ -69,7 +70,7 @@ class LaterWorldReapTest(unittest.TestCase):
 		(text_root / "skilleffect.txt").write_bytes(utf16([
 			["#section", "characterinfo"], ["MOB_NATIVE"] + ["0"] * 12, ["#section", "skillaniset"]]))
 		(text_root / "textdataname.txt").write_bytes(utf16([["1", "UIO_OBJ_MOB_NATIVE", "Native"]]))
-		(text_root / "skilldata.txt").write_bytes(utf16([["skilldata_5000.txt"]]))
+		(text_root / "skilldata.txt").write_bytes(later_fixtures.index("skilldata_5000.txt"))
 		(text_root / jupiter.CHARACTER_SHARD).write_bytes(utf16([]))
 		for relative in ("Map_extracted/85/129.m", "Data_extracted/navmesh/nv_55f1.nvm",
 				"Media_extracted/minimap/129x85.ddj", "Map_extracted/keep.txt"):
@@ -198,7 +199,7 @@ class LaterWorldReapTest(unittest.TestCase):
 		(text_root / "skilleffect.txt").write_bytes(utf16([
 			["#section", "characterinfo"], ["MOB_NATIVE"] + ["0"] * 12, ["#section", "skillaniset"]]))
 		(text_root / "textdataname.txt").write_bytes(utf16([["1", "UIO_OBJ_MOB_NATIVE", "Native"]]))
-		(text_root / "skilldata.txt").write_bytes(utf16([["skilldata_5000.txt"]]))
+		(text_root / "skilldata.txt").write_bytes(later_fixtures.index("skilldata_5000.txt"))
 		sector_relative = f"Map_extracted/{sector[1]}/{sector[0]}.m"
 		for relative in (sector_relative, "Map_extracted/keep.txt"):
 			target = out / relative
@@ -645,7 +646,7 @@ class LaterWorldStagedRefsTest(unittest.TestCase):
 	def test_a_placing_spec_leaves_a_standing_kind_on_its_row(self):
 		with tempfile.TemporaryDirectory() as temp:
 			text_root = Path(temp)
-			(text_root / "characterdata.txt").write_bytes(utf16([["characterdata_120000.txt"]]))
+			(text_root / "characterdata.txt").write_bytes(later_fixtures.index("characterdata_120000.txt"))
 			(text_root / "characterdata_120000.txt").write_bytes(utf16([
 				["1", "38210", "MOB_SD_OSIRIS_3"] + ["0"] * 10,
 				["1", "38211", "MOB_SD_OTHER"] + ["0"] * 10]))
