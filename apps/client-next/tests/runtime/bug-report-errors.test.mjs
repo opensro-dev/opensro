@@ -629,3 +629,61 @@ test("a failure that ran only another origin's code files as foreign, under its 
 	assert.equal( filed[1].foreign, false, "bare native frames prove nothing" );
 	assert.equal( uncaughtIncidentCode( filed[1] ), "uncaught_error" );
 });
+
+/*
+================
+foreign blind spots
+
+A same-origin frame whose script the list never saw load may be ours, so
+it never files as foreign; a stackless error is classified from the
+window event's own source (58 of the 91 live overflows had no stack).
+================
+*/
+test("a same-origin frame the script list missed keeps the failure ours", t => {
+	const { page, filed } = incidentPage( t );
+	const missed = new RangeError( "Maximum call stack size exceeded" );
+	missed.stack = [
+		"RangeError: Maximum call stack size exceeded",
+		`    at walk (${ORIGIN}/assets/late-chunk-123.js:4:2)`,
+		"    at walk (chrome-extension://abcdef/inject.js:3:9)"
+	].join( "\n" );
+	throwNow( page, missed );
+	assert.equal( filed.length, 1 );
+	assert.deepEqual( filed[0].frames, [ "    at <same-origin>", "    at <extension>" ] );
+	assert.equal( filed[0].foreign, false );
+});
+
+/*
+================
+throwStackless
+
+Dispatches one uncaught error with no stack, as a cross-script or
+overflowing throw arrives, and the event's own source.
+================
+*/
+function throwStackless( page, filename, lineno = 7, colno = 3 ) {
+	const error = new RangeError( "Maximum call stack size exceeded" );
+	error.stack = "";
+	const event = new Event( "error" );
+	Object.assign( event, { error, message: error.message, filename, lineno, colno } );
+	page.window.dispatchEvent( event );
+}
+
+test("a stackless error names its source: our script by path, another by class", t => {
+	const { page, filed } = incidentPage( t );
+	throwStackless( page, ORIGIN + "/src/stall.ts" );
+	page.advance( 1000 );
+	throwStackless( page, "chrome-extension://abcdef/inject.js" );
+	page.advance( 1000 );
+	throwStackless( page, "" );
+	assert.equal( filed.length, 1, "repeats of one message file once" );
+	assert.deepEqual( filed[0].frames, [ "    at /src/stall.ts:7:3" ] );
+	assert.equal( filed[0].foreign, false );
+});
+
+test("a stackless error thrown by an extension files as foreign", t => {
+	const { page, filed } = incidentPage( t );
+	throwStackless( page, "chrome-extension://abcdef/inject.js" );
+	assert.deepEqual( filed[0].frames, [ "    at <extension>" ] );
+	assert.equal( filed[0].foreign, true );
+});
