@@ -27,6 +27,8 @@ import { REGION_SIZE } from "@/engine/foundation/world/world-space";
 export const REVERSE_RETURN_MAP = 7;
 // REVERSE_MAP_FLOOR prefixes a floor menu entry's control id; its point id follows.
 export const REVERSE_MAP_FLOOR = "reverse-map-floor:";
+// REVERSE_MAP_POINT prefixes a map point button's control id; its point id follows.
+export const REVERSE_MAP_POINT = "reverse-map-point:";
 // MAX_REVERSE_MAP_POINTS bounds the published table (server maxReverseMapPoints).
 const MAX_REVERSE_MAP_POINTS = 4096;
 // MAX_REVERSE_MAP_NAME bounds a point name (server maxReverseMapNameBytes).

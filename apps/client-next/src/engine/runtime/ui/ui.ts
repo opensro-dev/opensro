@@ -192,7 +192,11 @@ import {
 import { jobContributionSelf, jobRankPage, jobRankPages } from "@/engine/foundation/gameplay/job-rank";
 import { columnHeadKey, columnHeadLayout } from "@/engine/foundation/ui/column-heads";
 import { createMapTeleport } from "./hud/map-teleport";
-import { REVERSE_MAP_FLOOR, reverseMapDestination } from "@/engine/foundation/gameplay/reverse-return-map";
+import {
+	REVERSE_MAP_FLOOR,
+	REVERSE_MAP_POINT,
+	reverseMapDestination
+} from "@/engine/foundation/gameplay/reverse-return-map";
 import { createGmHelper, GM_HELPER_HEIGHT, GM_HELPER_ROWS, GM_HELPER_ROW_HEIGHT } from "./hud/gm-helper";
 import type { GmCatalog } from "@/engine/foundation/gameplay/gm-command";
 import { gmLocalCommand } from "@/engine/foundation/gameplay/gm-local-commands";
@@ -6136,11 +6140,11 @@ export function createUi( ports: UiPorts ) {
 		} else if ( id === "reverse-window-close" ) {
 			reverseScrollHud.back();
 			dirty = true;
-		} else if ( id.startsWith( "reverse-map-point:" ) || id.startsWith( REVERSE_MAP_FLOOR ) ) {
+		} else if ( id.startsWith( REVERSE_MAP_POINT ) || id.startsWith( REVERSE_MAP_FLOOR ) ) {
 			const floor = id.startsWith( REVERSE_MAP_FLOOR );
 			const point = reverseScrollHud.mapping() ?
 				view.gameplay?.reverseMapPoints?.find( row =>
-					row.id === Number( id.slice( floor ? REVERSE_MAP_FLOOR.length : "reverse-map-point:".length ) )
+					row.id === Number( id.slice( floor ? REVERSE_MAP_FLOOR.length : REVERSE_MAP_POINT.length ) )
 				) :
 				undefined;
 			if ( point && !reverseMapDestination( point ) ) {
@@ -7295,13 +7299,16 @@ export function createUi( ports: UiPorts ) {
 			// leaving a control: moving onto the menu must not hide it.
 			if ( reverseScrollHud.menu() !== null ) {
 				if ( event.kind === "key" && event.code === "Escape" ) {
+					// Only a menu on screen takes the key: one whose flag is panned
+					// off the page closes quietly and Escape goes on to the map.
+					const drawn = controls.some( control => control.id.startsWith( REVERSE_MAP_FLOOR ) );
 					reverseScrollHud.closeMenu();
 					dirty = true;
-					return;
+					if ( drawn ) return;
 				}
 				if (
 					event.kind === "press" && event.id !== null && !event.id.startsWith( REVERSE_MAP_FLOOR ) &&
-					!event.id.startsWith( "reverse-map-point:" )
+					!event.id.startsWith( REVERSE_MAP_POINT )
 				) {
 					reverseScrollHud.closeMenu();
 					dirty = true;

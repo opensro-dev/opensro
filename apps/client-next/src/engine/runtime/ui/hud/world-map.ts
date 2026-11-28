@@ -55,7 +55,7 @@ import { HUNTING_AREA_PREFIX, HUNTING_MONSTER_SIGN } from "@/engine/foundation/u
 import { UNIQUE_NEST_SIGN } from "@/engine/foundation/ui/unique-nests";
 import { createHuntingGuideHud } from "./hunting-guide";
 import { createUniqueNestsHud } from "./unique-nests";
-import { reverseMapButtons } from "./reverse-map-buttons";
+import { type ReverseMapLayer, reverseMapButtons } from "./reverse-map-buttons";
 import { reverseMapFloors } from "@/engine/foundation/gameplay/reverse-return-map";
 import { cavePageHits, cavePageImages, mapSignName } from "./map-cave-page";
 import {
@@ -592,6 +592,7 @@ export function createWorldMapHud( options: MapHudOptions ) {
 			const mapGuideEnabled = guideAvailable && experimental.state().saved.monsterGuide;
 			const mapClip: UiRect = mapPanel( [ mapLeft, mapTop, mapWidth, mapHeight ] );
 			const mapHits: UiControl[] = [];
+			let reverseMenu: ReverseMapLayer | null = null;
 			// 57FE60's marker passes, in its order: quest NPCs (57B1C0), hunting points
 			// (57B550), then the apprenticeship and party rosters (57CE80). Each is a
 			// 16x16 quad centred on the projected world position; the world map has no
@@ -1010,10 +1011,12 @@ export function createWorldMapHud( options: MapHudOptions ) {
 					} ),
 					menu: flag && group !== null ? { group, floors: reverseMapFloors( published, flag ) } : null,
 					clip: mapClip,
+					screen: full,
 					hover,
 					has: path => resources.has( path )
 				} );
-				paths.push( ...buttons.paths );
+				reverseMenu = buttons.menu;
+				paths.push( ...buttons.paths, ...buttons.menu.images.map( quad => quad.texture ).filter( Boolean ) );
 				mapImages.push(
 					...buttons.images,
 					...buttons.labels.flatMap( label =>
@@ -1159,6 +1162,21 @@ export function createWorldMapHud( options: MapHudOptions ) {
 				paths.push( ...tools.paths );
 				quads.push( ...tools.quads );
 				controls.push( ...tools.controls );
+				// The reverse floor menu is its own window in the v1.188
+				// client: above the map, its tools and the window edge.
+				if ( reverseMenu ) {
+					quads.push(
+						...reverseMenu.images,
+						...reverseMenu.labels.flatMap( label =>
+							text.quads( label.value, label.rect, full, WHITE_TEXT, {
+								hAlign: 1,
+								vAlign: 1,
+								overflow: "clip"
+							} )
+						)
+					);
+					controls.push( ...reverseMenu.hits );
+				}
 				// The page tiles reach past the window through mapClip; the
 				// window rect is what the compact fit must measure.
 				endWindow( admission, "primary", [ mx, my, mw, mh + MAP_FOOT_DEPTH ] );
