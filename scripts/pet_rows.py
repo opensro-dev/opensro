@@ -13,6 +13,11 @@ the growth lane) agree on them:
 	scroll_rows   the plain summon scrolls that name a kind (column 119);
 	              event and premium copies are rewards or a mall this port
 	              does not carry (owner 2026-11-25: no Premium Mall)
+	is_premium_scroll  a v1.696 Premium Mall twin (ITEM_PRE_): never ported
+	                   (owner 2026-11-25), whichever lane its kind runs on
+	is_fellow     a v1.696 Fellow pet (COS_PET2_*), one level-1 row per kind
+	is_evolution  a Fellow's rebirth summon (COS_PET2_ASS_EVOLUTION_A), no
+	              kind of its own: column 4 names the kind it reborns
 
 The column layouts are their tables' owners': characterdata is
 alexandria_npcs', itemdata is cap110_items'.
@@ -29,6 +34,8 @@ LEVEL_SUFFIX = re.compile(r"_\d+$")
 EVENT_SCROLL_PREFIX = "ITEM_EVENT_"
 PREMIUM_SCROLL_PREFIX = "ITEM_PRE_"
 UNSOLD_SCROLL_PREFIXES = (EVENT_SCROLL_PREFIX, PREMIUM_SCROLL_PREFIX)
+FELLOW_PREFIX = "COS_PET2_"
+EVOLUTION_MARK = "_EVOLUTION_"
 
 
 # ================
@@ -49,3 +56,21 @@ def scroll_rows(later_items, codes):
 		if len(row) > items.SUMMONED_CHARACTER and row[items.SUMMONED_CHARACTER].strip() in codes
 		and not row[items.CODENAME].startswith(UNSOLD_SCROLL_PREFIXES)
 	]
+
+
+# ================
+# is_fellow / is_evolution
+# ================
+def is_fellow(codename):
+	return codename.startswith(FELLOW_PREFIX)
+
+
+def is_evolution(codename):
+	return is_fellow(codename) and EVOLUTION_MARK in codename
+
+
+# ================
+# is_premium_scroll
+# ================
+def is_premium_scroll(codename):
+	return codename.startswith(PREMIUM_SCROLL_PREFIX)

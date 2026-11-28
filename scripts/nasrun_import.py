@@ -447,7 +447,7 @@ def costume_effects(later_text, keys, has_particle):
 				continue
 			# The VSRO row in the v1.150 layout, shifted to the later one
 			# avatar_effects reads (service and id columns first).
-			row = [avatar_fx.SERVICE_ON, "0"] + line.rstrip("\r\n").split("\t")
+			row = [later_tables.SERVICE_ON, "0"] + line.rstrip("\r\n").split("\t")
 			row += [avatar_fx.NO_VALUE] * max(0, avatar_fx.EFFECT_COLUMNS - len(row))
 			if row[avatar_fx.EFFECT_SCALE].startswith(CHAR_SCALE_TOKEN):
 				row[avatar_fx.EFFECT_SCALE] = avatar_fx.NO_VALUE

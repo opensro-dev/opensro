@@ -548,13 +548,8 @@ class SkillStagingTests(unittest.TestCase):
 			char[characters.NATIVE_DEFAULT_SKILL_AT] = "5001"
 			client = {5001: self._skill_row(5001, "PSKILL_P_FOX_01_ATTACK01")}
 
-			read = later_tables.Archive.of({
-				"skilldata.txt": importer._encode([["skilldata_9000.txt"]]),
-				"skilldata_9000.txt": importer._encode([client[5001]]),
-			})
-
 			chars, skills = importer.stage_pet_skills(
-				read, text_root, "skilldata_140000.txt", [char])
+				[client[5001]], text_root, "skilldata_140000.txt", [char])
 			self.assertEqual(set(skills), {"PSKILL_P_FOX_01_ATTACK01"})
 			assigned = skills["PSKILL_P_FOX_01_ATTACK01"]
 			self.assertEqual(chars[0][characters.NATIVE_DEFAULT_SKILL_AT], str(assigned))
@@ -573,7 +568,7 @@ class SkillStagingTests(unittest.TestCase):
 				self._skill_row(5001, "PSKILL_STALE")]))
 			char = ["0"] * characters.NATIVE_CHARACTER_COLUMNS
 			chars, skills = importer.stage_pet_skills(
-				later_tables.Archive.of({}), text_root, "skilldata_140000.txt", [char])
+				[], text_root, "skilldata_140000.txt", [char])
 			self.assertEqual((skills, chars[0][characters.NATIVE_DEFAULT_SKILL_AT]), ({}, "0"))
 			self.assertFalse((text_root / "skilldata_140000.txt").exists())
 			manifest = [row[0] for row in importer.tables.table_rows((text_root / "skilldata.txt").read_bytes()) if row]
