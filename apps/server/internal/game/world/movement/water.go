@@ -87,6 +87,9 @@ type WaterValidator struct {
 	// validation and terrain lookup server-wide behind a disk read. Losers
 	// of a load race discard their copy and adopt the published one.
 	mu sync.Mutex
+	// homing holds the open homing searches between their slices
+	// (monster_route_homing.go); it has its own lock.
+	homing homingSearches
 	// scanEveryPlacement builds every placement with an unknown reach, so
 	// no scan skips it (objectnav_reach.go): tests compare the skipping
 	// scans against this brute-force reference. Set before first use;
