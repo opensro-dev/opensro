@@ -145,8 +145,8 @@ func TestShippedCatalog(t *testing.T) {
 ================
 TestListedWithoutPriceNamesEachUnpricedPackageOnce
 
-The native load check's report set (v1.188 RefPackageItem_ValidatePrices
-0x6a9840): a live goods row whose package has no price the shop takes is
+The native load check's report set (the v1.188 server's package
+price check): a live goods row whose package has no price the shop takes is
 named once, sorted; a priced or condition-held package, a retired row
 and a short row are not.
 ================

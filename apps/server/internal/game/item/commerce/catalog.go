@@ -94,7 +94,7 @@ the mall on its own package, #4658) carries both shops' rows; each
 catalogue reads its own and leaves the other's alone. v1.150's own data
 never shares a package (NPC goods are priced {1}, {1,32} or {1,8}; the
 mall's {2,4,16}), and the client keeps every device a package names in
-one price list (CRefPackageItemData_AddPrice 0x812990), so the split is
+one price list (the v1.188 server's package price list), so the split is
 the inferred native rule: a shop window shows and charges its own
 devices. A device neither owns stays refused by both.
 ================
@@ -122,7 +122,7 @@ type Catalog struct {
 	// Unpriced lists, sorted and once each, the packages a shop tab sells
 	// that carry no gold, guild point or honor price row. The goods are
 	// left out of the tabs; the native load check names each one too
-	// (v1.188 RefPackageItem_ValidatePrices 0x6a9840, "(%s) register gold
+	// (the v1.188 server's package price check, "(%s) register gold
 	// price."), so a data defect is reported instead of a silent gap.
 	Unpriced []string
 }
@@ -328,7 +328,7 @@ listedWithoutPrice
 The packages live refshopgoods rows list that settled does not cover
 (settled: priced in a currency the shop takes, or held back by a sell
 condition), sorted and once each: the native load check's report set
-(v1.188 RefPackageItem_ValidatePrices 0x6a9840).
+(the v1.188 server's package price check).
 ================
 */
 func listedWithoutPrice(goods [][]string, settled func(code string) bool) []string {

@@ -49,8 +49,8 @@ func (rt *Runtime) ConfigureCommerce(dir string, extra []commerce.ExtraGood) err
 	if e != nil {
 		return e
 	}
-	// The native load check's report (v1.188 RefPackageItem_ValidatePrices
-	// 0x6a9840): a listed package with no price the shop can take.
+	// The native load check's report (the v1.188 server's package
+	// price check): a listed package with no price the shop can take.
 	for _, code := range c.Unpriced {
 		log.Warnf("commerce: (%s) register gold price.", code)
 	}
