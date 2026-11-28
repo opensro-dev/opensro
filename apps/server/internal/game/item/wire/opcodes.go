@@ -148,6 +148,14 @@ const (
 	// has no 01:F9 entry, so its client shows nothing, as for any code it
 	// lacks.
 	ErrCodeSpiritAsleep uint8 = 0xF9
+	// ErrCodeStorageAdditionLimit is the later v1.696 client's 0x18FE,
+	// UIIT_STT_STORAGE_EXPANSION_USE_ERORR ("Limit is reached, unable to
+	// use it."): its category-1 jump (base 0x180F) sends index 0xEF to
+	// that text. A bag addition already spent or a full bag, and a
+	// warehouse addition past its two uses or the room's ceiling, answer
+	// it (expansion.go, #3904). The v1.150 notice table has no 01:FE row;
+	// the port's client adds it beside the other later-client rows.
+	ErrCodeStorageAdditionLimit uint8 = 0xFE
 	// ErrCodeCannotEnterCosBag is UIIT_MSG_COSPETERR_CANT_MOVETO_SUMITEM
 	// (01:B1, a banner): an item class that never enters a companion's
 	// bag. The generic code leaves such a refusal silent; this names the
