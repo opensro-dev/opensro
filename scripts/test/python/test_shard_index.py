@@ -69,5 +69,22 @@ class ShardIndexTest(unittest.TestCase):
 			monsters.unlist_shard(Path(temp) / "absent", "characterdata.txt", "characterdata_120000.txt")
 
 
+# ================
+# ShardCaseTest
+#
+# An index line names a file, and the tree folds file-name case: a shard
+# named in another case is the same line, so a rerun never adds a second.
+# ================
+class ShardCaseTest(unittest.TestCase):
+	def test_a_shard_in_another_case_is_the_same_line(self):
+		with tempfile.TemporaryDirectory() as temp:
+			root = Path(temp)
+			(root / "skilldata.txt").write_bytes(utf16([["skilldata_5000.txt"], ["SkillData_340000.txt"]]))
+			monsters.list_shard(root, "skilldata.txt", "SKILLDATA_340000.txt")
+			self.assertEqual((root / "skilldata.txt").read_bytes(), utf16([["skilldata_5000.txt"], ["SkillData_340000.txt"]]))
+			monsters.unlist_shard(root, "skilldata.txt", "skilldata_340000.txt")
+			self.assertEqual((root / "skilldata.txt").read_bytes(), utf16([["skilldata_5000.txt"]]))
+
+
 if __name__ == "__main__":
 	unittest.main()

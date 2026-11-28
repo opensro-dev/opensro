@@ -498,7 +498,8 @@ def list_shard(text_root, index_name, shard):
 	if not path.exists():
 		raise SystemExit(f"{path} is missing: {shard} cannot be listed, so no later layer would read it")
 	rows = tables.table_rows(path.read_bytes())
-	if not any(row and row[0].lower() == shard for row in rows):
+	# Index lines name files, and the tree's file names are case-folded.
+	if not any(row and row[0].lower() == shard.lower() for row in rows):
 		write_atomically(path, encode_rows(rows + [[shard]]))
 
 
@@ -512,7 +513,7 @@ def unlist_shard(text_root, index_name, shard):
 	path = Path(text_root) / index_name
 	if path.exists():
 		rows = tables.table_rows(path.read_bytes())
-		kept = [row for row in rows if not row or row[0].lower() != shard]
+		kept = [row for row in rows if not row or row[0].lower() != shard.lower()]
 		if kept != rows:
 			write_atomically(path, encode_rows(kept))
 
