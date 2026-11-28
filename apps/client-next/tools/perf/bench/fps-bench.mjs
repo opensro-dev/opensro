@@ -6,6 +6,7 @@ fps-bench.mjs - frame rate of the real client in the scenarios that matter
 Usage:
   node tools/perf/bench/fps-bench.mjs [--seconds N] [--at a,b] [--only a,b]
        [--counts] [--spans] [--cpu] [--heap] [--out DIR] [--trace] [--gpu-process] [--json FILE]
+       [--screenshot]
        [--paced] [--cpu-rate N] [--frame-limit 0|60|120|240] [--shadow-detail 0|1|2]
 
 For each location (--at) resets the scratch character there, boots the dev
@@ -47,6 +48,9 @@ main thread's frame and world-preparation time per frame. Options add:
   --heap    a sampled allocation profile per scenario (.heapprofile) and
             the allocation rate in the row;
   --trace   a Chrome trace per location, OUT/<location>.json.
+  --screenshot  the page as each timed window ends, OUT/<location>-<scenario>.png
+            (taken after the window, so it never touches the timed numbers):
+            the before/after picture a performance PR carries.
   --gpu-process  CPU time in Chrome's GPU process per frame: after each
             timed window, a second, traced window of the same scenario
             (reduced as it arrives; no trace file); the row gains the
@@ -164,7 +168,7 @@ const LOCATIONS = [ {
 	scenarios: [ "still", "drag" ]
 } ];
 const USAGE = "fps-bench.mjs [--seconds N] [--at a,b] [--only a,b] [--counts] [--spans] [--cpu] [--heap] [--out DIR] " +
-	"[--trace] [--gpu-process] [--json FILE] [--paced] [--cpu-rate N] [--frame-limit 0|60|120|240] [--shadow-detail 0|1|2] " +
+	"[--trace] [--screenshot] [--gpu-process] [--json FILE] [--paced] [--cpu-rate N] [--frame-limit 0|60|120|240] [--shadow-detail 0|1|2] " +
 	"[--combat codename:count:CHAMP|GIANT|NORMAL] [--vulnerable] [--crowd N] [--crowd-fixture FILE.json] " +
 	"[--crowd-host URL] [--act walk=SHARE,chat=SHARE] [--seed N] [--provisioning URL] [--token FILE]";
 // --gpu-process trace categories, the fewest that serve processCosts:
@@ -608,6 +612,10 @@ async function session( options, location, results ) {
 			capturing = true;
 			const started = Date.now();
 			const result = await measure( client.page, `${location.name}/${name}`, ms, input );
+			if ( options.screenshot ) {
+				await mkdir( options.out, { recursive: true } );
+				await client.page.screenshot( { path: `${options.out}/${location.name}-${name}.png` } );
+			}
 			// The page's frame probe fills the intervals; none means the client
 			// never called it, as in a release bundle, which compiles it away.
 			if ( result.frames < 2 ) {
@@ -785,6 +793,7 @@ const options = parseOptions( process.argv.slice( 2 ), {
 	cpu: false,
 	heap: false,
 	trace: false,
+	screenshot: false,
 	gpuProcess: false,
 	combat: "MOB_CH_TIGER:10:GIANT",
 	vulnerable: false,
