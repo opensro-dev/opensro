@@ -4,7 +4,7 @@
 gearsstones_test.go - the gears magic stones on the native stone path
 
 Port-only, not native (issue #3257): the later client's leveled magic
-stones (commerce.GearsStoneKinds, degrees 1-7) name shipped
+stones (scripts/gears_stone_import.py, degrees 1-7) name shipped
 magicoption rows, so the native Stone application admits them with
 no catalog addition. The first half proves the option resolution
 for all 112 against the shipped tables; the second applies one

@@ -112,17 +112,19 @@ export function effectMeshFile( key: string ): string {
 effectProgramIndexFiles
 
 Every published file an index names: one per effect (archive-absent ones
-included) and one per mesh. The packs, the delivery check and the portrait
+and a variant's closure-gap ones included) and one per mesh. The packs, the delivery check and the portrait
 fingerprint all enumerate the closure through this.
 ================
 */
 export function effectProgramIndexFiles( index: {
 	effects: readonly string[];
 	nativeUnavailable: { effects: readonly string[]; };
+	closureGaps?: { effects: Readonly<Record<string, readonly string[]>>; };
 	meshes: readonly string[];
 } ): string[] {
+	const gaps = Object.keys( index.closureGaps?.effects ?? {} );
 	return [
-		...[ ...index.effects, ...index.nativeUnavailable.effects ].map( effectProgramFile ),
+		...[ ...index.effects, ...index.nativeUnavailable.effects, ...gaps ].map( effectProgramFile ),
 		...index.meshes.map( effectMeshFile )
 	];
 }

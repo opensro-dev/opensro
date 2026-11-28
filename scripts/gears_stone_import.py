@@ -7,8 +7,8 @@ Port-only, not native. Off unless SRO_MALL_CATEGORIES is "1", "on" or
 "true" (the same switch the server's mall layout reads; an unset or
 off build is byte-identical to today).
 
-The later mall's Premium > Gears tab sells sixteen kinds of leveled
-magic stone, ITEM_ETC_ARCHEMY_LEVEL_MAGICSTONE_<kind>_<degree> at
+The Item Mall no longer lists the sixteen kinds of leveled magic
+stone, ITEM_ETC_ARCHEMY_LEVEL_MAGICSTONE_<kind>_<degree> at
 degrees 1-7 (112 rows). v1.150 has no such rows, but the stones need
 nothing new to work: each is a native magic stone (type 3/3/11/1)
 whose Descriptions[0] names a shipped magicoption (MATTR_STR and its
@@ -19,9 +19,9 @@ the pinned v1.696 client (SRO_V1696_ROOT, v1696_archive_pins.json),
 byte for byte except their identities: the later client's numeric
 ids are its own, so each row takes a fresh identity above every
 published row, remembered in the marker so a rebuild never moves an
-item. The server authors the mall listing itself
-(commerce/gearsStoneGoods, Imported): a build without this import
-lists none of the stones and boots the rest.
+item. The import keeps these rows so stones already bought stay
+valid in alchemy. The owner dropped their mall listing on 2026-11-28
+(#3257): the v1.696 client has no shop or package row selling them.
 
 A switch off removes exactly what the marker records: the shard, its
 manifest line, the name rows it added and the marker itself. Each
@@ -58,8 +58,8 @@ ITEM_SHARD = "itemdata_190000.txt"
 NAME_TABLE = "textdataname.txt"
 TEXT_ROOT = Path("Media_extracted") / tables.TEXTDATA
 
-# The sixteen option kinds and their degree span, authored in one
-# place (commerce.GearsStoneKinds mirrors this list for the listing).
+# KINDS and DEGREES own the imported rows' option kinds and degree
+# span; the alchemy path serves them even though the mall no longer lists them.
 KINDS = (
 	"STR", "INT", "HP", "MP", "HR", "DUR", "ER", "SOLID",
 	"BURN", "POISON", "FROSTBITE", "ZOMBIE", "ESHOCK",
@@ -97,7 +97,8 @@ def stone_codenames():
 # The admitted rows of the later item tables: exactly the 112 gears
 # stones, each a magic-stone row naming its kind's option at its
 # degree. A missing, miscast or mislabelled row refuses: a partial
-# import would list stones the game cannot use.
+# import would leave owned stones without the row that makes them
+# usable.
 # ================
 def select_stones(later_rows):
 	by_code = {}
@@ -190,8 +191,8 @@ def add_stones(native, output, v1696_root=None):
 		"kinds": list(KINDS), "source": "v1696",
 		"texts": added_texts, "absentDescriptions": absent_descriptions,
 		"limits": [
-			"Listed in Premium > Gears only while SRO_MALL_CATEGORIES is on (commerce authors the listing).",
-			"No drop or event reward is added; the rows arrive by mall purchase or GM grant alone.",
+			"Not listed in the Item Mall (dropped 2026-11-28, #3257); the rows stay so stones already bought stay valid.",
+			"No drop or event reward is added; new stones arrive by GM grant alone.",
 		]}
 	write_atomically(marker, (json.dumps(summary, indent=2) + "\n").encode())
 	return summary

@@ -29,10 +29,13 @@ packages' own authored ones; the Rondo's authored package takes the
 alchemy stones' 5-silk tier, as a balance the shard owner can retune in
 this one place.
 
-Premium's Gears tab holds the gears magic stones below (the gears
-items of #3257). The sixteen weapon model switchers stand in HOT shop
-> Halloween Models at the later mall's 600 silk, badged hot; their use
-is action/modelswitcher.go. Both families' rows ride the optional
+The gears magic stones were dropped from the listing (owner decision
+2026-11-28, #3257): the v1.696 client has no shop, package or price
+row for them. The import keeps their item rows so stones
+already bought stay valid on the alchemy path. Premium's Gears tab
+stays for nasrunGoods below. The sixteen weapon model switchers stand
+in HOT shop > Halloween Models at the later mall's 600 silk, badged
+hot; their use is action/modelswitcher.go. Their rows ride the optional
 later-client import, so a catalogue built without it lists none of
 them rather than refusing the boot (Imported below). The summon
 scrolls stand in Premium's Others tab below: the three shipped
@@ -139,48 +142,6 @@ var mallCategoryTabs = []mallCategoryTab{
 	{Shop: "MALL_ARCHEMY", Code: "MALL_ARCHEMY_OTHERS", Group: "MALL_ARCHEMY_GROUP1", Label: "UIIT_STT_SILKMALL_ETC"},
 }
 
-// GearsStoneKinds are the sixteen option kinds of the gears magic
-// stones (issue #3257): the later client's leveled magic stones,
-// ITEM_ETC_ARCHEMY_LEVEL_MAGICSTONE_<kind>_<degree>. Their rows ride
-// the optional later-client import (scripts/gears_stone_import.py);
-// each names a shipped magicoption at its degree, so the native
-// alchemy stone path serves them unchanged once imported.
-var GearsStoneKinds = []string{
-	"STR", "INT", "HP", "MP", "HR", "DUR", "ER", "SOLID",
-	"BURN", "POISON", "FROSTBITE", "ZOMBIE", "ESHOCK",
-	"EVADE_BLOCK", "EVADE_CRITICAL", "LUCK",
-}
-
-// gearsStoneDegrees is the authored degree span of every kind.
-const gearsStoneDegrees = 7
-
-// gearsStoneSilk is the authored price of every gears stone: the
-// summon scrolls' 30-silk tier, retunable here.
-const gearsStoneSilk = 30
-
-/*
-================
-gearsStoneGoods
-
-One Premium > Gears listing per gears stone (16 kinds at degrees
-1-7, 112 goods), each its own authored package, PACKAGE_ plus the
-item codename, at the authored price, badged new. The rows only
-exist when the optional import wrote them (Imported), so a build
-without the later client lists none and still boots.
-================
-*/
-func gearsStoneGoods() []mallCategoryGood {
-	goods := make([]mallCategoryGood, 0, len(GearsStoneKinds)*gearsStoneDegrees)
-	for _, kind := range GearsStoneKinds {
-		for degree := 1; degree <= gearsStoneDegrees; degree++ {
-			item := fmt.Sprintf("ITEM_ETC_ARCHEMY_LEVEL_MAGICSTONE_%s_%02d", kind, degree)
-			goods = append(goods, mallCategoryGood{Tab: "MALL_PREMIUM_GEARS", Package: "PACKAGE_" + item,
-				Item: item, Silk: gearsStoneSilk, Badge: mallBadgeNew, Imported: true})
-		}
-	}
-	return goods
-}
-
 // The Devil's Spirit prices. The v1.696 mall sells each Spirit at
 // 150 silk on its MALL_PREMIUM_NASRUN tab (packages 51522-51527,
 // one per Spirit) and the extension gear at 50 on
@@ -231,9 +192,8 @@ func nasrunGoods() []mallCategoryGood {
 }
 
 // mallCategoryGoods is the layout's whole stock: the authored rows
-// below plus the gears stones' and the model switchers' generated
-// listings.
-var mallCategoryGoods = slices.Concat(mallLayoutGoods, gearsStoneGoods(), nasrunGoods(), modelSwitcherGoods(), petScrollGoods())
+// below plus the Devil's Spirit, model switcher and pet scroll listings.
+var mallCategoryGoods = slices.Concat(mallLayoutGoods, nasrunGoods(), modelSwitcherGoods(), petScrollGoods())
 
 var mallLayoutGoods = []mallCategoryGood{
 	// Halloween Exclusive: the two attachment pieces; Models: the

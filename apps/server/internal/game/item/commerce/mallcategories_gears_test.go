@@ -1,12 +1,12 @@
 /*
 ===========================================================================
 
-mallcategories_gears_test.go - the gears magic stones in Premium > Gears
+mallcategories_gears_test.go - Premium > Gears excludes gears magic stones
 
-Port-only, not native (issue #3257): the 112 gears stones list only
-while the item table holds their imported rows; without them the
-layout is the shipped 91 offers and the Gears tab stands empty.
-Their use is the native alchemy stone path (alchemy package).
+Port-only, not native (issue #3257): the 112 gears stones stay
+unlisted even when their imported rows stand. The layout keeps its
+93 offers and its empty Gears tab without Nasrun goods. Bought stones
+still use the alchemy stone path (alchemy package).
 
 ===========================================================================
 */
@@ -65,15 +65,14 @@ func (s gearsStubRefs) ItemRefByID(id uint32) (*enterworld.ItemRef, bool) {
 
 /*
 ================
-TestMallCategoriesGearsListOnlyImportedStones
+TestMallCategoriesGearsNeverListStones
 
-One imported gears stone lists alone in Premium's Gears tab (shop
-4, tab 1) at the authored price, badged new, and its quote resolves;
-the other 111 stay unlisted and every shipped address stands.
+An imported gears stone stays unlisted: the catalogue keeps its 93
+layout offers and Premium's Gears tab (shop 4, tab 1) stays empty.
 ================
 */
-func TestMallCategoriesGearsListOnlyImportedStones(t *testing.T) {
-	tier.Long(t, "gears stones list behind their imported rows")
+func TestMallCategoriesGearsNeverListStones(t *testing.T) {
+	tier.Long(t, "gears stones stay unlisted despite their imported rows")
 	dir := gamedatatest.TextdataDir(t)
 	stone := "ITEM_ETC_ARCHEMY_LEVEL_MAGICSTONE_STR_05"
 	refs := gearsStubRefs{base: enterworld.NewTextdataItems(dir), extra: map[string]*enterworld.ItemRef{
@@ -85,32 +84,17 @@ func TestMallCategoriesGearsListOnlyImportedStones(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	// The 93 layout offers plus the one imported stone.
-	if len(catalog.Offers) != 94 {
-		t.Fatalf("layout mall with one gears row: %d offers, want 94", len(catalog.Offers))
+	if len(catalog.Offers) != 93 {
+		t.Fatalf("layout mall with one gears row: %d offers, want 93", len(catalog.Offers))
 	}
-	gears := mallOffersOn(catalog, 4, 1)
-	if len(gears) != 1 || gears[0].Code != "PACKAGE_"+stone {
-		t.Fatalf("Gears tab holds %+v, want the one imported stone", gears)
+	if listed := mallOfferNamed(catalog, "PACKAGE_"+stone); listed != nil {
+		t.Fatalf("mall lists imported gears stone: %+v", listed)
 	}
-	listed := gears[0]
-	if listed.Silk != gearsStoneSilk || listed.Badge != mallBadgeNew {
-		t.Fatalf("%s = %d silk badged %q, want %d silk badged new",
-			listed.Code, listed.Silk, listed.Badge, gearsStoneSilk)
+	if gears := mallOffersOn(catalog, 4, 1); len(gears) != 0 {
+		t.Fatalf("Gears tab holds %+v with an imported stone, want empty", gears)
 	}
 	if err := catalog.Hydrate(refs); err != nil {
 		t.Fatal(err)
-	}
-	listed = *mallOfferNamed(catalog, "PACKAGE_"+stone)
-	if len(listed.ItemIDs) != 1 || listed.ItemIDs[0] != 39262 {
-		t.Fatalf("gears contents = %v, want the imported stone id", listed.ItemIDs)
-	}
-	quote, err := catalog.Quote(wire.MallPurchase{
-		Group: listed.Group, Shop: listed.Shop, Tab: listed.Tab, Slot: listed.Slot,
-		Package: listed.PackageID, Quantity: 1,
-	})
-	if err != nil || quote.Cost.Silk != gearsStoneSilk {
-		t.Fatalf("gears quote = %+v, %v; want %d silk", quote.Cost, err, gearsStoneSilk)
 	}
 }
 
@@ -119,7 +103,7 @@ func TestMallCategoriesGearsListOnlyImportedStones(t *testing.T) {
 TestMallCategoriesGearsAbsentWithoutImport
 
 No imported rows, no listings: the Gears tab stands empty at the
-shipped 91 offers, exactly the catalogue a build without the
+93 layout offers, exactly the catalogue a build without the
 later client boots.
 ================
 */
@@ -136,10 +120,6 @@ func TestMallCategoriesGearsAbsentWithoutImport(t *testing.T) {
 	}
 	if gears := mallOffersOn(catalog, 4, 1); len(gears) != 0 {
 		t.Fatalf("Gears tab holds %+v without the import, want empty", gears)
-	}
-	if len(GearsStoneKinds)*gearsStoneDegrees != 112 {
-		t.Fatalf("gears stock = %d kinds at %d degrees, want 112",
-			len(GearsStoneKinds), gearsStoneDegrees)
 	}
 }
 
