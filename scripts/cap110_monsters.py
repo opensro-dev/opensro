@@ -481,6 +481,42 @@ def tree_skills(text_root, own):
 
 
 # ================
+# list_shard
+#
+# Lists shard in the tree's index (characterdata.txt, skilldata.txt)
+# when the index does not yet name it. Every reader of a built tree
+# follows the index (later_tables.Archive, #4770), so a shard an import
+# writes but leaves unlisted is invisible to every later layer: the
+# hunting2 merge then restaged 37 kinds an earlier layer already held and
+# its identities collided (#4843). A listed shard keeps its place, so a
+# rerun writes the same bytes as the first build. A tree without the
+# index is left alone: a new one-line index would hide every native shard.
+# ================
+def list_shard(text_root, index_name, shard):
+	path = Path(text_root) / index_name
+	if not path.exists():
+		return
+	rows = tables.table_rows(path.read_bytes())
+	if not any(row and row[0].lower() == shard for row in rows):
+		write_atomically(path, encode_rows(rows + [[shard]]))
+
+
+# ================
+# unlist_shard
+#
+# The switch-off half of list_shard: the line goes with the shard file,
+# since a listed but missing shard stops every read of the tree.
+# ================
+def unlist_shard(text_root, index_name, shard):
+	path = Path(text_root) / index_name
+	if path.exists():
+		rows = tables.table_rows(path.read_bytes())
+		kept = [row for row in rows if not row or row[0].lower() != shard]
+		if kept != rows:
+			write_atomically(path, encode_rows(kept))
+
+
+# ================
 # allocate_characters
 #
 # allocate_identities for character rows under the published pin of the
@@ -597,9 +633,8 @@ def add_monsters(vsro_root, native, output, source_root=None):
 			write_atomically(text_path, encode_rows(drop_symboled_rows(characters.translation_rows(text_path.read_bytes()), set(prior.get("nameSymbols", [])))))
 		for name in (CHARACTER_SHARD, SKILL_SHARD, *(family["File"] for family in FAMILIES), "cap110-equipment.txt"):
 			(text_root / name).unlink(missing_ok=True)
-		manifest = text_root / "skilldata.txt"
-		if manifest.exists():
-			write_atomically(manifest, encode_rows([r for r in tables.table_rows(manifest.read_bytes()) if r[0].lower() != SKILL_SHARD]))
+		unlist_shard(text_root, "characterdata.txt", CHARACTER_SHARD)
+		unlist_shard(text_root, "skilldata.txt", SKILL_SHARD)
 		marker.unlink(missing_ok=True)
 		return {"enabled": False}
 	# The database export is optional (#3246): named, it is pinned and
@@ -691,9 +726,8 @@ def add_monsters(vsro_root, native, output, source_root=None):
 		# rebuild should write the same bytes.
 		write_atomically(text_root / CHARACTER_SHARD, encode_rows(sorted(refs.values(), key=lambda row: int(row[1]))))
 		write_atomically(text_root / SKILL_SHARD, encode_rows(added))
-		manifest = tables.table_rows((text_root / "skilldata.txt").read_bytes())
-		manifest = [r for r in manifest if r[0].lower() != SKILL_SHARD] + [[SKILL_SHARD]]
-		write_atomically(text_root / "skilldata.txt", encode_rows(manifest))
+		list_shard(text_root, "characterdata.txt", CHARACTER_SHARD)
+		list_shard(text_root, "skilldata.txt", SKILL_SHARD)
 		for family in FAMILIES:
 			path = text_root / family["File"]
 			if family["Name"] in populations:

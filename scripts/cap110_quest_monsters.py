@@ -108,10 +108,8 @@ def needed_skills(refs):
 def remove_owned(text_root, prior):
 	for name in (CHARACTER_SHARD, SKILL_SHARD):
 		(text_root / name).unlink(missing_ok=True)
-	manifest = text_root / "skilldata.txt"
-	if manifest.exists():
-		kept = [row for row in tables.table_rows(manifest.read_bytes()) if row[0].lower() != SKILL_SHARD]
-		write_atomically(manifest, monsters.encode_rows(kept))
+	monsters.unlist_shard(text_root, "characterdata.txt", CHARACTER_SHARD)
+	monsters.unlist_shard(text_root, "skilldata.txt", SKILL_SHARD)
 	if prior and (text_root / effects.SKILL_EFFECT_TABLE).exists():
 		effects.reap_later_effects(text_root, prior)
 
@@ -172,8 +170,8 @@ def add_quest_monsters(vsro_root, native, output):
 			{row[3] for row in added}, lambda code: code in refs, refs, prior))
 		write_atomically(text_root / CHARACTER_SHARD, monsters.encode_rows(sorted(refs.values(), key=lambda row: int(row[1]))))
 		write_atomically(text_root / SKILL_SHARD, monsters.encode_rows(added))
-		manifest = [row for row in tables.table_rows((text_root / "skilldata.txt").read_bytes()) if row[0].lower() != SKILL_SHARD]
-		write_atomically(text_root / "skilldata.txt", monsters.encode_rows(manifest + [[SKILL_SHARD]]))
+		monsters.list_shard(text_root, "characterdata.txt", CHARACTER_SHARD)
+		monsters.list_shard(text_root, "skilldata.txt", SKILL_SHARD)
 		summary = {"enabled": True, "format": FORMAT, "portOnly": True,
 			"characters": {code: int(row[1]) for code, row in sorted(refs.items())},
 			"alreadyNative": sorted(set(MONSTERS) - set(refs)),

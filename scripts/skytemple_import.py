@@ -567,10 +567,8 @@ def remove_owned(output, prior, character_shard=CHARACTER_SHARD, skill_shard=SKI
 					if len(row) <= 2 or row[1] not in region_ids or not row[2].startswith(region_prefix)]))
 	for name in (character_shard, skill_shard, population_file):
 		(text_root / name).unlink(missing_ok=True)
-	manifest = text_root / "skilldata.txt"
-	if manifest.exists():
-		write_atomically(manifest, monsters.encode_rows(
-			[r for r in tables.table_rows(manifest.read_bytes()) if r[0].lower() != skill_shard]))
+	monsters.unlist_shard(text_root, "characterdata.txt", character_shard)
+	monsters.unlist_shard(text_root, "skilldata.txt", skill_shard)
 	for relative in prior.get("files", []):
 		safe_target(output, relative).unlink(missing_ok=True)
 	(output / marker).unlink(missing_ok=True)
@@ -668,9 +666,8 @@ def add_skytemple(native, output, source=None, closure=copy_resource_closure):
 		write_atomically(text_root / CHARACTER_SHARD,
 			monsters.encode_rows(sorted(refs.values(), key=lambda row: int(row[1]))))
 		write_atomically(text_root / SKILL_SHARD, monsters.encode_rows(added))
-		manifest = tables.table_rows((text_root / "skilldata.txt").read_bytes())
-		manifest = [r for r in manifest if r[0].lower() != SKILL_SHARD] + [[SKILL_SHARD]]
-		write_atomically(text_root / "skilldata.txt", monsters.encode_rows(manifest))
+		monsters.list_shard(text_root, "characterdata.txt", CHARACTER_SHARD)
+		monsters.list_shard(text_root, "skilldata.txt", SKILL_SHARD)
 
 		base_text = (text_root / "textdataname.txt").read_bytes()
 		known = {r[1] for r in characters.translation_rows(base_text) if len(r) > 1}
