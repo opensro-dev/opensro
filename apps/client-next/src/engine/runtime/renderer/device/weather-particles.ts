@@ -91,7 +91,8 @@ const ARG_BYTES = ARG_WORDS * 4;
 const WORKGROUP = 64;
 // The block counts one compact workgroup sums, WORKGROUP at a time.
 const MAX_REGION_BLOCKS = 256;
-// The frame bits (native 8D1910): wrap on bit 4, drift flips on bit 16.
+// The frame bits: the snow step wraps on bit 4 (native 8D1670), the snow
+// render flips the drift on bit 16 (native 8D1910).
 const WRAP_BIT = 4;
 const FLIP_BIT = 16;
 // One step's uniform: matrix, reference + death height, motion, counts,

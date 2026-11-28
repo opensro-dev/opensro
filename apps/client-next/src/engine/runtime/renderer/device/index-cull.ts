@@ -4,8 +4,8 @@
 index-cull.ts - GPU-driven culling of terrain layer ranges
 
 Port-only, not native (owner 2026-11-28: "dragging camera should have no
-cost"). The native client culls each terrain range's sphere against the
-view on the CPU every frame (A2D1B0) and draws the survivors. Here the
+cost"). The native client culls each terrain range's bounding box against
+the view on the CPU every frame (A2D1B0) and draws the survivors. Here the
 CPU hands each culled draw its candidate ranges once (when the eye
 crosses a cell or a member joins), and a compute pass tests every range
 against the live frustum and the water mirror's, packs the survivors'
