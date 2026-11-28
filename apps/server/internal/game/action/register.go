@@ -56,6 +56,8 @@ Register
 func (rt *Runtime) Register(hub *transport.Hub) {
 	hub.Handle(opArenaDecision, rt.hubHandler(hub, rt.HandleArenaDecision))
 	hub.Handle(OpCaravanHireRequest, rt.hubHandler(hub, rt.HandleCaravanHire))
+	// 0x7FD2 attendance check-in (attendance.go; port-only, silent while off).
+	hub.Handle(wire.OpAttendanceCheckIn, rt.hubHandler(hub, rt.HandleAttendanceCheckIn))
 	// 0x7554 SRO Macro settings (macro.go; port-only, silent while off).
 	hub.Handle(macro.OpRequest, rt.hubHandler(hub, rt.HandleMacroRequest))
 	rt.registerDeparture(hub)

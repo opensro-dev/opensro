@@ -6,8 +6,8 @@ system-menu.ts - Escape menu geometry and its experimental entry
 Native 5D1920 removes customer support and compacts four controls. The
 approved Experimental entry adds one row below Options using the same art.
 Port-only entries (the Event Calendar's, #3532; the Unique Status window's,
-#3531; the Consignment Market's, #3529; the Job Honor Rank window's, #3530)
-add their rows below that while their Experimental rows are on, in the same
+#3531; the Consignment Market's, #3529; the Job Honor Rank window's, #3530;
+the Attendance Calendar's, #3255) add their rows below that while their Experimental rows are on, in the same
 art; with none on, the menu is exactly the native-plus-Experimental one.
 
 ===========================================================================
@@ -21,6 +21,7 @@ export const EVENT_CALENDAR_MENU_ID = 16;
 export const UNIQUE_STATUS_MENU_ID = 17;
 export const MARKET_MENU_ID = 18;
 export const JOB_HONOR_MENU_ID = 19;
+export const ATTENDANCE_CALENDAR_MENU_ID = 20;
 const ROW_HEIGHT = 34;
 
 /*

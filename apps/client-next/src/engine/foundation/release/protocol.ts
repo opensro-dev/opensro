@@ -26,6 +26,9 @@ checks) reads the same numbers the client ships.
 // protocol 20 unbumped the same way: only a shard running the arena
 // sends it, and a tab that predates it drops the frame and simply
 // never shows the arena windows.
+// The port-only 0x3FD2 / 0x7FD2 attendance calendar snapshot and request
+// (attendance.ts, #3255) ride protocol 20 unbumped like Styria's 0x3FC8: a
+// tab that predates them drops the snapshot and never sends the request.
 // Protocol 20 admits the port-only skill reset control (opcode 21,
 // commerce-controls.ts SKILL_RECALL_CONTROL; SRO_SKILL_RESET_SCROLL), which
 // 19's world gate ended the session on.
