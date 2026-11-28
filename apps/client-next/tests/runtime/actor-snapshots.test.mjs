@@ -412,3 +412,25 @@ test("the drawn palette follows a spine aim armed, turned and released after the
 	assert.deepEqual( tip( { ...base, time: .3 }, .3 ), [ 0, 2 ], "a released aim straightens the spine" );
 	c.dispose( gpu, null );
 });
+
+test("rows past the actor cap are never admitted, and a row the cap pushes out is retired", () => {
+	const owner = createActorSnapshots(), cap = 640;
+	const gids = ( first, end ) => Array.from( { length: end - first }, ( _, i ) => actor( first + i, i ) );
+	const keys = () => [ ...owner.index.keys() ].sort( ( a, b ) => a - b );
+	const range = ( first, end ) => Array.from( { length: end - first }, ( _, i ) => first + i );
+	assert.equal( owner.update( gids( 0, cap + 2 ) ).length, cap );
+	assert.deepEqual( keys(), range( 0, cap ) );
+	// Five leave the front: the next five, two of them over the cap before, come in.
+	const shifted = gids( 5, cap + 6 );
+	assert.equal( owner.update( shifted ).length, cap );
+	assert.deepEqual( keys(), range( 5, cap + 5 ) );
+	// The same publication again changes nothing.
+	owner.update( shifted );
+	assert.deepEqual( keys(), range( 5, cap + 5 ) );
+	// An admitted row the publication moves past the cap is retired.
+	owner.update( [ ...gids( 6, cap + 6 ), actor( 5, 0 ) ] );
+	assert.deepEqual( keys(), range( 6, cap + 6 ) );
+	// Within the cap, the leavers alone are retired.
+	owner.update( gids( 100, 110 ) );
+	assert.deepEqual( keys(), range( 100, 110 ) );
+});

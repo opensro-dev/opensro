@@ -473,7 +473,6 @@ export function createActorSnapshots( reuse = true ) {
 				seen.add( actor.gid );
 			}
 			const count = Math.min( value.length, RENDERED_ACTORS );
-			seen = new Set();
 			for ( let i = 0; i < count; i++ ) {
 				const source = value[i]!;
 				let row = index.get( source.gid );
@@ -512,11 +511,16 @@ export function createActorSnapshots( reuse = true ) {
 				}
 				sources.set( source.gid, source );
 				rows[i] = row;
-				seen.add( source.gid );
 			}
 			rows.length = count;
+			// Every admitted gid has a row and the gids are distinct, so an
+			// index no larger than the admission holds no leaver: the common
+			// frame sweeps nothing. The validation above saw every gid; only a
+			// publication past the cap needs the admitted ones apart.
+			if ( index.size === count ) return rows;
+			const kept = count === value.length ? seen : new Set( rows.map( row => row.gid ) );
 			for ( const gid of index.keys() ) {
-				if ( !seen.has( gid ) ) {
+				if ( !kept.has( gid ) ) {
 					reference( index.get( gid )!.model, -1 );
 					index.delete( gid );
 					sources.delete( gid );
