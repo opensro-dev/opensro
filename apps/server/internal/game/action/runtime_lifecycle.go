@@ -151,6 +151,7 @@ func (rt *Runtime) TickHook() simulation.TickHook {
 		frames("drainStructureDeaths", rt.drainStructureDeaths)
 		step("advanceFortressStructures", func() { rt.advanceFortressStructures(nowMs) })
 		frames("advanceFortressStructurePulses", rt.advanceFortressStructurePulses)
+		step("advanceFortressStructureAppearances", func() { rt.advanceFortressStructureAppearances() })
 		frames("advanceFortressStructureAuras", rt.advanceFortressStructureAuras)
 		step("advanceFortressRosters", func() { rt.advanceFortressRosters(nowMs) })
 		step("advanceFortressForges", func() { rt.Fortresses.AdvanceItemForges(nowMs) })
