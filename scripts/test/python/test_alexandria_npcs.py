@@ -12,6 +12,7 @@ size and texts.
 ===========================================================================
 """
 import script_paths  # noqa: F401  (puts scripts/ and its build folders on sys.path, #3410)
+import later_fixtures  # noqa: E402
 import sys
 import unittest
 from pathlib import Path
@@ -143,12 +144,14 @@ def tables(extra_native_codes=()):
 		"skilleffect.txt": utf16([
 			["NPC_SD_M_AREA_POTION", "PLAYER", "2.0", "none", "none", "none", "none", "none", "0,13,-2", "none", "none", "0", "0", "", "", ""]
 		]),
-		"textdata_object.txt": utf16([
+		# The last row wraps inside its Korean cell, as the archive stores
+		# long rows (#4730).
+		"textdata_object.txt": utf16(later_fixtures.wrap_last([
 			["1", "SN_NPC_SD_M_AREA_POTION", "kor", "", "tw", "cn", "de", "ja", "en", "vi", "", "", "", "", ""],
 			["1", "SN_NPC_SD_M_AREA_POTION_BS", "kor", "", "tw", "cn", "de", "ja", "hello", "vi", "", "", "", "", ""],
-			["1", "SN_NPC_SD_M_AREA_POTION_PS", "kor", "", "tw", "cn", "de", "ja", "bye", "vi", "", "", "", "", ""],
-			["1", "SN_UNRELATED", "kor", "", "tw", "cn", "de", "ja", "no", "vi", "", "", "", "", ""]
-		])
+			["1", "SN_UNRELATED", "kor", "", "tw", "cn", "de", "ja", "no", "vi", "", "", "", "", ""],
+			["1", "SN_NPC_SD_M_AREA_POTION_PS", "kor text", "", "tw", "cn", "de", "ja", "bye", "vi", "", "", "", "", ""]
+		]))
 	}
 	return native, vsro
 
@@ -262,6 +265,9 @@ class MergeTests(unittest.TestCase):
 		merged, summary = merge(*tables())
 		added = {row[1]: row for row in rows_of(merged, "textdataname.txt")}
 		self.assertEqual(added["SN_NPC_SD_M_AREA_POTION_BS"][8], "hello")
+		# The wrapped last row comes back whole.
+		self.assertEqual(added["SN_NPC_SD_M_AREA_POTION_PS"][2], "kor text")
+		self.assertEqual(added["SN_NPC_SD_M_AREA_POTION_PS"][8], "bye")
 		self.assertNotIn("SN_UNRELATED", added)
 		self.assertIn("SN_OLD", added)
 

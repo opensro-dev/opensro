@@ -12,6 +12,7 @@ it, naming shard basenames only.
 ===========================================================================
 """
 import script_paths  # noqa: F401  (puts scripts/ and its build folders on sys.path, #3410)
+import later_fixtures  # noqa: E402
 
 import sys
 import unittest
@@ -75,15 +76,13 @@ class ClientSkillRows(unittest.TestCase):
 		source = self.archive({
 			"skilldataenc.txt": utf16([["SkillData_5000ENC.txt"]]),
 			"skilldata_5000enc.txt": encode(utf16([["1", "31659", "0", "MSKILL_NEW"]])),
-			"skilldata.txt": utf16([["SkillData_5000.txt"]]),
-			"skilldata_5000.txt": utf16([["1", "1", "0", "SKILL_OLD"]]),
+			**later_fixtures.sharded("skilldata.txt", {"skilldata_5000.txt": [["1", "1", "0", "SKILL_OLD"]]}),
 		})
 		self.assertEqual([row[3] for row in enc.client_skill_rows(source)], ["MSKILL_NEW"])
 
 	def test_without_one_the_plain_manifest_is_read(self):
 		source = self.archive({
-			"skilldata.txt": utf16([["SkillData_5000.txt"]]),
-			"skilldata_5000.txt": utf16([["1", "1", "0", "SKILL_OLD"]]),
+			**later_fixtures.sharded("skilldata.txt", {"skilldata_5000.txt": [["1", "1", "0", "SKILL_OLD"]]}),
 		})
 		self.assertEqual([row[3] for row in enc.client_skill_rows(source)], ["SKILL_OLD"])
 

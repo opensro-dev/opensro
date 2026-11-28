@@ -4,6 +4,7 @@ test_cap110_monsters.py - reference identity and optional equipment boundaries.
 ===========================================================================
 """
 import script_paths  # noqa: F401  (puts scripts/ and its build folders on sys.path, #3410)
+import later_fixtures  # noqa: E402
 import copy
 import json
 import tempfile
@@ -428,19 +429,16 @@ class Cap110MonstersTest(unittest.TestCase):
 
 		native_char = ["0"] * 104
 		native_char[1], native_char[2] = "100", "MOB_NATIVE"
-		(text_root / "characterdata.txt").write_bytes(utf16([["characterdata_5000.txt"]]))
-		(text_root / "characterdata_5000.txt").write_bytes(utf16([native_char]))
-		(text_root / "skilldata.txt").write_bytes(utf16([["skilldata_5000.txt"]]))
-		(text_root / "skilldata_5000.txt").write_bytes(utf16([]))
+		later_fixtures.write_sharded(text_root, "characterdata.txt", {"characterdata_5000.txt": [native_char]})
+		later_fixtures.write_sharded(text_root, "skilldata.txt", {"skilldata_5000.txt": []})
 		(text_root / "textdataname.txt").write_bytes(utf16([["1", "UIO_OBJ_MOB_NATIVE", "Native"]]))
 		(text_root / "skilleffect.txt").write_bytes(utf16([
 			["#section", "characterinfo"], ["MOB_NATIVE"] + ["0"] * 12, ["#section", "skillaniset"]]))
 		media = {
-			"characterdata.txt": utf16([["characterdata_6000.txt"]]),
+			"characterdata.txt": later_fixtures.index("characterdata_6000.txt"),
 			"characterdata_6000.txt": utf16([later_monster(code, symbol, level)
 				for code, symbol, level, _name, _cell in species]),
-			"skilldata.txt": utf16([["skilldata_6000.txt"]]),
-			"skilldata_6000.txt": utf16([]),
+			**later_fixtures.sharded("skilldata.txt", {"skilldata_6000.txt": []}),
 			"textdata_object.txt": utf16([
 				[str(i + 1), symbol, "x", "x", name, cell, "x", "a", "b", "c"]
 				for i, (_code, symbol, _level, name, cell) in enumerate(species)]),
@@ -816,8 +814,7 @@ class Cap110MonstersTest(unittest.TestCase):
 			low = self.later_row("MOB_SD_LOW", 0, 99)
 			low[1], low[5] = "7003", "UIO_OBJ_MOB_SD_LOW"
 			media = {
-				"characterdata.txt": utf16([["CharacterData_6000.txt"]]),
-				"characterdata_6000.txt": utf16([field, low]),
+				**later_fixtures.sharded("characterdata.txt", {"characterdata_6000.txt": [field, low]}),
 				"npcpos.txt": utf16([
 					["7001", "19001", "1.0", "0.0", "2.0"],
 					["7001", "-32767", "1.0", "0.0", "2.0"],
@@ -848,20 +845,17 @@ class Cap110MonstersTest(unittest.TestCase):
 
 		native_char = ["0"] * 104
 		native_char[1], native_char[2] = "100", "MOB_NATIVE"
-		(text_root / "characterdata.txt").write_bytes(utf16([["characterdata_5000.txt"]]))
-		(text_root / "characterdata_5000.txt").write_bytes(utf16([native_char]))
-		(text_root / "skilldata.txt").write_bytes(utf16([["skilldata_5000.txt"]]))
-		(text_root / "skilldata_5000.txt").write_bytes(utf16([]))
+		later_fixtures.write_sharded(text_root, "characterdata.txt", {"characterdata_5000.txt": [native_char]})
+		later_fixtures.write_sharded(text_root, "skilldata.txt", {"skilldata_5000.txt": []})
 		(text_root / "textdataname.txt").write_bytes(utf16([["1", "UIO_OBJ_MOB_NATIVE", "Native"]]))
 		(text_root / "skilleffect.txt").write_bytes(utf16([
 			["#section", "characterinfo"], ["MOB_NATIVE"] + ["0"] * 12, ["#section", "skillaniset"]]))
 		media = {
-			"characterdata.txt": utf16([["characterdata_6000.txt"]]),
+			"characterdata.txt": later_fixtures.index("characterdata_6000.txt"),
 			"characterdata_6000.txt": utf16([
 				later_monster("MOB_SD_FIELD", 7001, "UIO_OBJ_MOB_SD_FIELD", 105),
 				later_monster("MOB_SD_LOW", 7003, "UIO_OBJ_MOB_SD_LOW", 99)]),
-			"skilldata.txt": utf16([["skilldata_6000.txt"]]),
-			"skilldata_6000.txt": utf16([]),
+			**later_fixtures.sharded("skilldata.txt", {"skilldata_6000.txt": []}),
 			"npcpos.txt": utf16([
 				["7001", "19001", "10.5", "0.0", "20.25"],
 				["7001", "19001", "11.5", "0.0", "21.25"],

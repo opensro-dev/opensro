@@ -8,6 +8,7 @@ the wave file, and a switch off reaps exactly what the marker enrolled.
 ===========================================================================
 """
 import script_paths  # noqa: F401  (puts scripts/ and its build folders on sys.path, #3410)
+import later_fixtures  # noqa: E402
 import hashlib
 import json
 import os
@@ -155,19 +156,15 @@ class MuhanImportTest(unittest.TestCase):
 		source.mkdir()
 		native_char = ["0"] * 104
 		native_char[1], native_char[2] = "100", "MOB_NATIVE"
-		(text_root / "characterdata.txt").write_bytes(utf16([["characterdata_5000.txt"]]))
-		(text_root / "characterdata_5000.txt").write_bytes(utf16([native_char]))
-		(text_root / "skilldata.txt").write_bytes(utf16([["skilldata_5000.txt"]]))
-		(text_root / "skilldata_5000.txt").write_bytes(utf16([]))
+		later_fixtures.write_sharded(text_root, "characterdata.txt", {"characterdata_5000.txt": [native_char]})
+		later_fixtures.write_sharded(text_root, "skilldata.txt", {"skilldata_5000.txt": []})
 		(text_root / "textdataname.txt").write_bytes(utf16([["1", "UIO_OBJ_MOB_NATIVE", "Native"]]))
 		(text_root / "skilleffect.txt").write_bytes(utf16([
 			["#section", "characterinfo"], ["MOB_NATIVE"] + ["0"] * 12, ["#section", "skillaniset"]]))
 		extra = list(extra_rows)
 		media = {
-			"characterdata.txt": utf16([["characterdata_6000.txt"]]),
-			"characterdata_6000.txt": utf16(kinds + extra),
-			"skilldata.txt": utf16([["skilldata_6000.txt"]]),
-			"skilldata_6000.txt": utf16([skill_row(7001, "MSKILL_MUHAN_TEST"), skill_row(7002, "SKILL_MUHAN_A_75_BUFF01")]),
+			**later_fixtures.sharded("characterdata.txt", {"characterdata_6000.txt": kinds + extra}),
+			**later_fixtures.sharded("skilldata.txt", {"skilldata_6000.txt": [skill_row(7001, "MSKILL_MUHAN_TEST"), skill_row(7002, "SKILL_MUHAN_A_75_BUFF01")]}),
 			"textdata_object.txt": utf16(
 				[[str(1 + at), row[5], "x", "x", row[5], "f", "x", "a", "b", "c"] for at, row in enumerate(kinds + extra)
 					if row[5] not in {FORM_SYMBOL, *untranslated}]),

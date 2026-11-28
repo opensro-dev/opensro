@@ -9,6 +9,7 @@ precedence, the service-column offset and the unknown-animation-state refusal.
 ===========================================================================
 """
 import script_paths  # noqa: F401  (puts scripts/ and its build folders on sys.path, #3410)
+import later_fixtures  # noqa: E402
 import later_tables  # noqa: E402
 import sys
 import tempfile
@@ -149,8 +150,7 @@ class LaterTextTests(unittest.TestCase):
 	def test_the_stub_is_rebuilt_from_the_shards_in_the_native_layout(self):
 		files = {
 			"skilleffect.txt": utf16([["0"]]),
-			"characterinfo.txt": utf16([["Characterinfo_001.txt"]]),
-			"characterinfo_001.txt": utf16([["1", "5", "MOB_NEW", "MOB_NEW", "3.5"] + ["none"] * 10]),
+			**later_fixtures.sharded("characterinfo.txt", {"characterinfo_001.txt": [["1", "5", "MOB_NEW", "MOB_NEW", "3.5"] + ["none"] * 10]}),
 			"skillaniset.txt": utf16([["1", "9001", "new", "SKILL_C", "ANI_SKILL_5", "0"],
 				["0", "9002", "off", "SKILL_D", "ANI_SKILL_5", "0"]]),
 			"skilleffectset.txt": utf16([["1", "77", "x", "STAGE_A", "READY", "q", "FLASE"],
