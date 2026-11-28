@@ -298,6 +298,8 @@
     "src/engine/runtime/renderer/device/particle-shader.ts": "src/engine/runtime/renderer/device/device.ts",
     "src/engine/runtime/renderer/device/retirement.ts": "src/engine/runtime/renderer/device/device.ts",
     "src/engine/runtime/renderer/device/device-draw.ts": "src/engine/runtime/renderer/device/device.ts",
+    "src/engine/runtime/renderer/device/index-cull.ts": "src/engine/runtime/renderer/device/device.ts",
+    "src/engine/runtime/renderer/device/indexed-draw.ts": "src/engine/runtime/renderer/device/device.ts",
     "src/engine/runtime/assets/worker/install.ts": "src/engine/runtime/assets/worker/loader.ts",
     "src/engine/runtime/assets/worker/world/internal/dungeon-block-publication.ts": "src/engine/runtime/assets/worker/world/world.ts",
     "src/engine/runtime/bug-report/filing.ts": "src/engine/runtime/bug-report/bug-report.ts",

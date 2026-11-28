@@ -90,6 +90,7 @@ const portraitReadback = runtime + "renderer/device/portrait-readback.ts";
 // The device's bundle-encoder wrapper: finishes the raw encoder it wraps (#2560).
 const bundleEncoder = runtime + "renderer/device/bundle-encoder.ts";
 const particles = runtime + "renderer/device/particles.ts";
+const indexCull = runtime + "renderer/device/index-cull.ts";
 // The particle pass's resident material frame tables (#4692).
 const particleMaterials = runtime + "renderer/device/particle-materials.ts";
 const geometryUploads = runtime + "renderer/device/geometry-uploads.ts";
@@ -345,6 +346,18 @@ for (
 		"beginComputePass"
 	]
 ) rules[name].push( particles );
+// The terrain index cull (index-cull.ts), like skinning, is encoded by
+// geometry preparation on the frame encoder into the draws' own buffers.
+for (
+	const name of [
+		"createShaderModule",
+		"createComputePipelineAsync",
+		"createBuffer",
+		"createBindGroup",
+		"writeBuffer",
+		"beginComputePass"
+	]
+) rules[name].push( indexCull );
 // Its material tables: a store's buffer, written when a table first appears.
 for ( const name of [ "createBuffer", "writeBuffer" ] ) rules[name].push( particleMaterials );
 // Geometry preparation encodes device-owned skinning and shadow prepasses on

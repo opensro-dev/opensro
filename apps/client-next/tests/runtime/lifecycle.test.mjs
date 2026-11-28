@@ -591,7 +591,6 @@ test("retained geometry records once, reuses commands, and rebuilds changed bind
 		binding: "binding",
 		vertices: "vertices",
 		indices: "indices",
-		indirect: "arguments",
 		instanceCapacity: 1,
 		count: 6,
 		indexCount: 6,

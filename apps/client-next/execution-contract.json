@@ -335,7 +335,10 @@
 				"upload",
 				"release",
 				"streamVertices",
-				"updateIndices"
+				"cullDraw",
+				"cullSource",
+				"cullRanges",
+				"cullView"
 			]
 		},
 		{
@@ -712,8 +715,14 @@
 				"setVertexBuffer",
 				"setIndexBuffer",
 				"draw",
-				"drawIndexed",
 				"finish"
+			]
+		},
+		{
+			"consumer": "src/engine/runtime/renderer/frame/frame.ts",
+			"provider": "src/engine/runtime/renderer/device/indexed-draw.ts",
+			"functions": [
+				"issueIndexedDraw"
 			]
 		},
 		{
@@ -3050,6 +3059,13 @@
 			"function": "encode",
 			"kind": "callback",
 			"reason": "Optional device-owned GpuTimingFrame callback for the skeletal compute pass."
+		},
+		{
+			"file": "src/engine/runtime/renderer/device/index-cull.ts",
+			"expression": "timing?.pass",
+			"function": "encode",
+			"kind": "callback",
+			"reason": "Optional device-owned GpuTimingFrame callback for the terrain index cull compute pass."
 		},
 		{
 			"file": "src/engine/runtime/renderer/device/particles.ts",

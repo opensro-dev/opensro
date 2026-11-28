@@ -36,6 +36,7 @@ import {
 } from "@/engine/foundation/rendering/geometry-instances";
 import { CLOTH_NO_SLOT, CLOTH_STREAM_WORDS, validClothStreamSlots } from "@/engine/foundation/animation/cloth-stream";
 import { createWaterReflection } from "./water-reflection";
+import { createIndexCull } from "./index-cull";
 import { packTextureStage } from "@/engine/foundation/rendering/texture-stage";
 import type { GpuWork } from "@/engine/foundation/rendering/gpu-work";
 import { packMultiTexture } from "@/engine/foundation/rendering/multi-texture";
@@ -163,6 +164,8 @@ export function createGeometryResources(
 	// count; sceneBindings swaps every draw over to the current pair.
 	let floatScene = false, msaaScene = false, shadowEnabled = false;
 	const waterReflection = createWaterReflection( created, format, retire );
+	// GPU-culled terrain layer draws (index-cull.ts).
+	const indexCull = createIndexCull( created, retire );
 	// 8BA130 fixes water MIN/MAG to linear independently of the video filter.
 	const waterSampler = worldSampler;
 	const reflectedBindings = new WeakMap<GeometryDraw, { source: GPUBindGroup; draw: GeometryDraw; }>();
@@ -316,10 +319,12 @@ export function createGeometryResources(
 			retire,
 			VERTEX_BYTES
 		),
+		// STORAGE too: the index cull pass packs a culled draw's indices into
+		// its own range of these buffers (index-cull.ts).
 		indexSlabs = createBufferSlabs(
 			created,
 			"geometry-indices",
-			GPUBufferUsage.INDEX | GPUBufferUsage.COPY_DST,
+			GPUBufferUsage.INDEX | GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST,
 			retire,
 			INDEX_BYTES
 		);
@@ -647,8 +652,21 @@ export function createGeometryResources(
 			...cached.draw,
 			indexCount: draw.indexCount,
 			instanceCount: draw.instanceCount,
-			instanceCapacity: draw.instanceCapacity
+			instanceCapacity: draw.instanceCapacity,
+			indirect: draw.indirect,
+			indirectOffset: draw.indirectOffset
 		};
+	}
+	/*
+	================
+	liveDeviceDraw
+
+	draw as this owner's handle, refused once released or foreign.
+	================
+	*/
+	function liveDeviceDraw( draw: GeometryDraw ): DeviceDraw {
+		if ( !(draw instanceof DeviceDraw) || !metadata.has( draw ) ) throw new Error( "Unknown geometry draw" );
+		return draw;
 	}
 	const commands: GeometryCommands = Object.freeze( {
 		/*
@@ -723,12 +741,22 @@ export function createGeometryResources(
 							count: draw.count,
 							indexCount: draw.indexCount,
 							instanceCount: draw.instanceCount,
-							instanceCapacity: draw.instanceCapacity
+							instanceCapacity: draw.instanceCapacity,
+							indirect: draw.indirect,
+							indirectOffset: draw.indirectOffset
 						}
 					};
 					reflectedBindings.set( draw, cached );
 				}
-				reflected.push( { ...cached.draw, indexCount: draw.indexCount, instanceCount: draw.instanceCount } );
+				// The live counts and arguments: a culled draw's arguments buffer
+				// may have been regrown since the copy was made.
+				reflected.push( {
+					...cached.draw,
+					indexCount: draw.indexCount,
+					instanceCount: draw.instanceCount,
+					indirect: draw.indirect,
+					indirectOffset: draw.indirectOffset
+				} );
 			}
 			return {
 				encode( encoder: GPUCommandEncoder ) {
@@ -858,10 +886,33 @@ export function createGeometryResources(
 		},
 		/*
 		================
+		cullDraw
+
+		The GPU-culled draws (index-cull.ts): cullDraw adopts a live draw with
+		room for capacity source indices, cullSource and cullRanges fill it,
+		cullView sets the frame's frusta. A culled draw's indices are the
+		pass's, never updateIndices'.
+		================
+		*/
+		cullDraw( draw: GeometryDraw, capacity: number ) {
+			indexCull.adopt( liveDeviceDraw( draw ), capacity );
+		},
+		cullSource( draw: GeometryDraw, at: number, indices: Uint32Array ) {
+			indexCull.source( liveDeviceDraw( draw ), at, indices );
+		},
+		cullRanges( draw: GeometryDraw, table: Uint32Array, count: number ) {
+			indexCull.ranges( liveDeviceDraw( draw ), table, count );
+		},
+		cullView( main: Float64Array, mirror: Float64Array | null ) {
+			indexCull.view( main, mirror );
+		},
+		/*
+		================
 		updateIndices
 		================
 		*/
 		updateIndices( draw: GeometryDraw, indices: Uint32Array ) {
+			if ( draw.indirect ) throw new Error( "A culled draw's indices are the cull pass's" );
 			const gpu = current(), buffers = geometryBuffers.get( draw ), meta = metadata.get( draw );
 			// Other draws read a shared mesh's indices.
 			if ( drawMeshes.has( draw ) ) throw new Error( "A shared mesh's indices do not change" );
@@ -1606,6 +1657,7 @@ export function createGeometryResources(
 			}
 			shadows?.forget( draw );
 			sunShadows?.forget( draw );
+			if ( draw instanceof DeviceDraw ) indexCull.forget( draw );
 			for ( const buffer of geometryBuffers.get( draw ) ?? [] ) {
 				retire( buffer );
 			}
@@ -1679,13 +1731,14 @@ export function createGeometryResources(
 			}
 		},
 		commands,
-		ready: Promise.all( [ animation?.ready, particles?.ready ] ),
+		ready: Promise.all( [ animation?.ready, particles?.ready, indexCull.ready ] ),
 		/*
 		================
 		prepare
 		================
 		*/
 		prepare( encoder: GPUCommandEncoder, timing?: import("../internal/gpu-contract").GpuTimingFrame ) {
+			indexCull.encode( encoder, timing );
 			animation?.encode( encoder, timing );
 			particles?.encode( encoder, timing );
 			shadows?.encode( encoder, timing );
@@ -1827,6 +1880,7 @@ export function createGeometryResources(
 			instanceSlabs.dispose();
 			vertexSlabs.dispose();
 			indexSlabs.dispose();
+			indexCull.dispose();
 			for ( const buffer of ownedInstances ) buffer.destroy();
 			ownedInstances.clear();
 			geometryBuffers.clear();

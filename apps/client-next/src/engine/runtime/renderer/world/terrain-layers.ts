@@ -10,9 +10,12 @@ Drawn one by one, nine regions turned about 105 terrain draws into about
 
 A layer is the shared draw of every resident group with the same anchor,
 texture, blend and association order (same material, same paint order).
-Each member owns a slot of the layer's vertex buffer; selection writes the
-member's chosen indices, offset by its slot, into the layer's one index
-buffer. Members keep their own CPU geometry, ranges, seams and collision.
+Each member owns a slot of the layer's vertex buffer and a span of its cull
+source (its indices offset by that slot). The layer draw is GPU-culled
+(index-cull.ts, port-only): selection hands the layer each member's
+candidate ranges, flush sends them as one range table, and the cull pass
+packs the ranges the live view sees into the draw's index buffer. Members
+keep their own CPU geometry, ranges, seams and collision.
 A layer that runs out of room rebuilds at twice its live members' size,
 which reclaims released members' slots. A removal that leaves the members
 under a quarter of the layer rebuilds it smaller the same way: regions
@@ -28,8 +31,9 @@ indexed.
 
 ===========================================================================
 */
-import type { WorldGroup, WorldScene } from "@/engine/contracts/scene";
+import type { TerrainRange, WorldGroup, WorldScene } from "@/engine/contracts/scene";
 import type { GeometryCommands, GeometryDraw, ImageDraw } from "../internal/gpu-contract";
+import { RANGE_WORDS } from "../device/index-cull";
 
 // Packed floats per vertex (packGeometryVertices).
 const VERTEX_FLOATS = 14;
@@ -39,7 +43,9 @@ const LAYER_GROWTH = 2;
 const LAYER_SHRINK = 4;
 const IDENTITY = () => new Float32Array( [ 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1 ] );
 
-type Member = { layer: Layer; base: number; vertices: number; chosen: Uint32Array; count: number; };
+// base is the member's first vertex in the layer, source its first index
+// in the layer's cull source; ranges are its current candidates.
+type Member = { layer: Layer; base: number; vertices: number; source: number; ranges: readonly TerrainRange[]; };
 /*
 ================
 TerrainLayer
@@ -56,8 +62,11 @@ type Layer = {
 	vertexCapacity: number;
 	indexCapacity: number;
 	top: number;
+	// The next free index of the layer's cull source.
+	sourceTop: number;
 	members: Map<WorldGroup, Member>;
-	indices: Uint32Array;
+	// The range table flush sends, reused while it is large enough.
+	table: Uint32Array;
 	dirty: boolean;
 	// The submission pass that last took this layer's draw.
 	submitted: number;
@@ -142,12 +151,13 @@ export function createTerrainLayers() {
 	allocate
 
 	A layer's GPU geometry for the given capacities: an unindexed vertex
-	buffer and a zero index buffer, filled by streamVertices and
-	updateIndices. No dynamicVertices: the members hold the vertices.
+	buffer filled by streamVertices, and an index buffer the cull pass
+	fills from a source of the same capacity. No dynamicVertices: the
+	members hold the vertices.
 	================
 	*/
 	function allocate( geometry: GeometryCommands, layer: Omit<Layer, "draw">, vertices: number, indices: number ) {
-		return geometry.upload(
+		const draw = geometry.upload(
 			{
 				world: true,
 				material: layer.material,
@@ -158,6 +168,22 @@ export function createTerrainLayers() {
 			},
 			layer.image
 		);
+		geometry.cullDraw( draw, indices );
+		return draw;
+	}
+
+	/*
+	================
+	writeSource
+
+	A member's indices, offset by its vertex slot, at its span of the
+	layer's cull source.
+	================
+	*/
+	function writeSource( geometry: GeometryCommands, layer: Layer, group: WorldGroup, member: Member ) {
+		const own = group.geometry.indices, shifted = new Uint32Array( own.length );
+		for ( let i = 0; i < own.length; i++ ) shifted[i] = own[i]! + member.base;
+		geometry.cullSource( layer.draw, member.source, shifted );
 	}
 
 	/*
@@ -180,12 +206,15 @@ export function createTerrainLayers() {
 		geometry.release( layer.draw );
 		revision++;
 		layer.draw = allocate( geometry, layer, layer.vertexCapacity, layer.indexCapacity );
-		layer.indices = new Uint32Array( layer.indexCapacity );
 		layer.top = 0;
+		layer.sourceTop = 0;
 		for ( const [group, member] of layer.members ) {
 			member.base = layer.top;
+			member.source = layer.sourceTop;
 			geometry.streamVertices( layer.draw, member.base, group.geometry.vertices! );
+			writeSource( geometry, layer, group, member );
 			layer.top += member.vertices;
+			layer.sourceTop += group.geometry.indices.length;
 		}
 		layer.dirty = true;
 	}
@@ -221,29 +250,24 @@ export function createTerrainLayers() {
 					vertexCapacity: capacityFor( planned?.vertices ?? vertices * LAYER_GROWTH ),
 					indexCapacity: capacityFor( planned?.indices ?? indices * LAYER_GROWTH ),
 					top: 0,
+					sourceTop: 0,
 					members: new Map<WorldGroup, Member>(),
-					indices: new Uint32Array( 0 ),
+					table: new Uint32Array( 0 ),
 					dirty: true,
 					submitted: -1
 				};
 				layer = { ...shell, draw: allocate( geometry, shell, shell.vertexCapacity, shell.indexCapacity ) };
-				layer.indices = new Uint32Array( layer.indexCapacity );
 				layers.set( key, layer );
 			}
-			let indexTotal = indices;
-			for ( const other of layer.members.keys() ) indexTotal += other.geometry.indices.length;
-			if ( layer.top + vertices > layer.vertexCapacity || indexTotal > layer.indexCapacity ) {
+			// Released members leave holes in both spans; a rebuild compacts them.
+			if ( layer.top + vertices > layer.vertexCapacity || layer.sourceTop + indices > layer.indexCapacity ) {
 				rebuild( geometry, layer, vertices, indices );
 			}
-			const member: Member = {
-				layer,
-				base: layer.top,
-				vertices,
-				chosen: new Uint32Array( indices ),
-				count: 0
-			};
+			const member: Member = { layer, base: layer.top, vertices, source: layer.sourceTop, ranges: [] };
 			geometry.streamVertices( layer.draw, member.base, group.geometry.vertices! );
+			writeSource( geometry, layer, group, member );
 			layer.top += vertices;
+			layer.sourceTop += indices;
 			layer.members.set( group, member );
 			members.set( group, member );
 			layer.dirty = true;
@@ -318,13 +342,12 @@ export function createTerrainLayers() {
 		================
 		select
 
-		The member's chosen indices (member-local, the first count of indices).
+		The member's candidate ranges: the cull pass draws those the view sees.
 		================
 		*/
-		select( group: WorldGroup, indices: Uint32Array, count: number ) {
+		select( group: WorldGroup, ranges: readonly TerrainRange[] ) {
 			const member = members.get( group )!;
-			member.chosen.set( indices.subarray( 0, count ) );
-			member.count = count;
+			member.ranges = ranges;
 			member.layer.dirty = true;
 		},
 		/*
@@ -369,21 +392,46 @@ export function createTerrainLayers() {
 		},
 		/*
 		================
+		view
+
+		The frame's frustum and the water mirror's, which the cull pass tests
+		every layer's ranges against (index-cull.ts). Without a layer there is
+		nothing to cull.
+		================
+		*/
+		view( geometry: GeometryCommands, main: Float64Array, mirror: Float64Array | null ) {
+			if ( layers.size ) geometry.cullView( main, mirror );
+		},
+		/*
+		================
 		flush
 
-		Writes the merged index buffer of every layer whose selection changed.
+		Sends the range table of every layer whose candidates changed: each
+		range's sphere and its span of the layer's cull source.
 		================
 		*/
 		flush( geometry: GeometryCommands ) {
 			for ( const layer of layers.values() ) {
 				if ( !layer.dirty ) continue;
+				let count = 0;
+				for ( const member of layer.members.values() ) count += member.ranges.length;
+				if ( layer.table.length < count * RANGE_WORDS ) {
+					layer.table = new Uint32Array( count * RANGE_WORDS * 2 );
+				}
+				const words = layer.table, floats = new Float32Array( words.buffer );
 				let at = 0;
 				for ( const member of layer.members.values() ) {
-					const base = member.base, chosen = member.chosen;
-					for ( let i = 0; i < member.count; i++ ) layer.indices[at + i] = chosen[i]! + base;
-					at += member.count;
+					for ( const range of member.ranges ) {
+						floats[at] = range.center[0];
+						floats[at + 1] = range.center[1];
+						floats[at + 2] = range.center[2];
+						floats[at + 3] = range.radius;
+						words[at + 4] = member.source + range.indexStart;
+						words[at + 5] = range.indexCount;
+						at += RANGE_WORDS;
+					}
 				}
-				geometry.updateIndices( layer.draw, layer.indices.subarray( 0, at ) );
+				geometry.cullRanges( layer.draw, words, count );
 				layer.dirty = false;
 			}
 		},

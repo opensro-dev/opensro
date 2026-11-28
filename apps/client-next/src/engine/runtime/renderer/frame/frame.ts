@@ -18,6 +18,7 @@ import type {
 	FlareDraw
 } from "@/engine/runtime/renderer/internal/gpu-contract";
 import { BLOOM_BLEND_BYTE } from "@/engine/foundation/rendering/blend-state";
+import { issueIndexedDraw } from "@/engine/runtime/renderer/device/indexed-draw";
 /*
 ================
 drawList
@@ -32,7 +33,7 @@ function drawList( pass: GPURenderPassEncoder, draws: readonly GeometryDraw[] ) 
 		pass.setBindGroup( 0, draw.binding );
 		pass.setVertexBuffer( 0, draw.vertices );
 		pass.setIndexBuffer( draw.indices, "uint32" );
-		pass.drawIndexed( draw.indexCount, draw.instanceCount, draw.firstIndex ?? 0, draw.baseVertex ?? 0 );
+		issueIndexedDraw( pass, draw );
 	}
 }
 /*
@@ -62,6 +63,7 @@ export function createFrame( commands: FrameCommands ): FrameOwner {
 			draws: readonly GeometryDraw[];
 			counts: readonly number[];
 			bindings: readonly GPUBindGroup[];
+			indirects: readonly (GPUBuffer | null)[];
 			bundle: GPURenderBundle;
 		}
 	>();
@@ -74,11 +76,17 @@ export function createFrame( commands: FrameCommands ): FrameOwner {
 	bundleCurrent
 
 	True when cached still records live[start..end): the same draws, with
-	the same counts and bindings.
+	the same counts, bindings and indirect arguments buffers (a culled
+	draw's counts live in its buffer, which may be regrown).
 	================
 	*/
 	function bundleCurrent(
-		cached: { draws: readonly GeometryDraw[]; counts: readonly number[]; bindings: readonly GPUBindGroup[]; },
+		cached: {
+			draws: readonly GeometryDraw[];
+			counts: readonly number[];
+			bindings: readonly GPUBindGroup[];
+			indirects: readonly (GPUBuffer | null)[];
+		},
 		start: number,
 		end: number
 	): boolean {
@@ -87,6 +95,7 @@ export function createFrame( commands: FrameCommands ): FrameOwner {
 			const draw = live[start + i]!;
 			if (
 				draw !== cached.draws[i] || draw.binding !== cached.bindings[i] ||
+				draw.indirect !== cached.indirects[i] ||
 				draw.indexCount !== cached.counts[i * 2] || draw.instanceCount !== cached.counts[i * 2 + 1]
 			) return false;
 		}
@@ -141,15 +150,15 @@ export function createFrame( commands: FrameCommands ): FrameOwner {
 						encoder.setIndexBuffer( draw.indices, "uint32" );
 						indices = draw.indices;
 					}
-					encoder.drawIndexed(
-						draw.indexCount,
-						draw.instanceCount,
-						draw.firstIndex ?? 0,
-						draw.baseVertex ?? 0,
-						0
-					);
+					issueIndexedDraw( encoder, draw );
 				}
-				cached = { draws: run, counts, bindings: run.map( draw => draw.binding ), bundle: encoder.finish() };
+				cached = {
+					draws: run,
+					counts,
+					bindings: run.map( draw => draw.binding ),
+					indirects: run.map( draw => draw.indirect ),
+					bundle: encoder.finish()
+				};
 				geometryBundles.set( head, cached );
 			}
 			bundles.push( cached.bundle );

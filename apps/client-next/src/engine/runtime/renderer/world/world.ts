@@ -2173,6 +2173,7 @@ export function createWorldRenderer(
 			const sampleDetails = probe?.sampleDetails?.() ?? false;
 			const frustum = prepareViewFrustum( matrix ), visible: WorldGroup[] = [];
 			pickFrustum = frustum;
+			layers.view( geometry, frustum, reflectionFrustum ?? null );
 			if ( reflectionFrustum ) {
 				// The mirror follows the view exactly: choose per view, as natively.
 				if ( viewChanged || terrainChoiceKey !== "view" ) terrainChoiceStamp++;
@@ -2269,9 +2270,15 @@ export function createWorldRenderer(
 					// scratch list, so a view that culls the same set as the last
 					// one neither copies nor uploads indices again - the same draw
 					// lists as re-choosing every frame, without the per-frame work.
+					// A terrain layer member is culled on the GPU against the live
+					// view (index-cull.ts, port-only): its candidates are the whole
+					// LOD band, so only the eye cell re-chooses it.
+					const layered = layers.member( group );
 					const cellChanged = cache.cellX !== eyeCellX || cache.cellZ !== eyeCellZ ||
-						cache.viewStamp !== terrainChoiceStamp;
+						!layered && cache.viewStamp !== terrainChoiceStamp;
 					if ( cache.chosen && !cellChanged ) {
+						// A layer member's choice outlives the view: the table's fast path takes it next.
+						walk.terrainView[walked] = terrainChoiceStamp;
 						if ( cache.indexCount ) {
 							visible.push( group );
 							visibleMarks[walk.order[walked]!] = 1;
@@ -2311,9 +2318,10 @@ export function createWorldRenderer(
 						cache.lodKey = lodKey;
 					}
 					let chosen: readonly TerrainRange[];
-					if ( current?.terrainDetail === "full" ) {
+					if ( current?.terrainDetail === "full" || layered ) {
 						// The "full" detail's set is view-independent: every range
-						// at LOD 0 stays, so there is no frustum pass to run.
+						// at LOD 0 stays, so there is no frustum pass to run. A layer
+						// member's frustum pass is the GPU's.
 						chosen = cache.lodRanges;
 					} else {
 						const scratch = cache.scratch ?? (cache.scratch = []);
@@ -2428,7 +2436,7 @@ export function createWorldRenderer(
 					walk.terrainView[walked] = terrainChoiceStamp;
 					if ( sampleDetails ) probe?.detailBegin?.( "terrain-index-upload" );
 					if ( indicesDirty ) {
-						if ( layers.member( group ) ) layers.select( group, cache.indices, count );
+						if ( layered ) layers.select( group, chosen );
 						else geometry.updateIndices( draws.get( group )!, cache.indices.subarray( 0, count ) );
 						if ( group.material.terrain ) {
 							shadowSurfaces.replace( group, groupOrder.get( group )!, held, chosen );

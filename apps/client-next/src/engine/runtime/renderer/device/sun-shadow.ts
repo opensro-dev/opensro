@@ -23,6 +23,7 @@ import {
 	sunShadowMatrix
 } from "@/engine/foundation/rendering/sun-shadow-math";
 import type { GeometryDraw, GpuTimingFrame } from "../internal/gpu-contract";
+import { issueIndexedDraw } from "./indexed-draw";
 import { destroyNow, type Retire } from "./retirement";
 
 // Slope-scaled depth bias on the caster pass: the receiver compares its own
@@ -294,7 +295,7 @@ struct Out {@builtin(position) position:vec4f,@location(0) uv:vec2f}
 				pass.setBindGroup( 0, cached.binding );
 				pass.setVertexBuffer( 0, draw.vertices );
 				pass.setIndexBuffer( draw.indices, "uint32" );
-				pass.drawIndexed( draw.indexCount, draw.instanceCount, draw.firstIndex ?? 0, draw.baseVertex ?? 0 );
+				issueIndexedDraw( pass, draw );
 			}
 			pass.end();
 		},

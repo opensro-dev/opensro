@@ -34,6 +34,8 @@ export class DeviceDraw implements GeometryDraw {
 	#instanceCapacity: number;
 	#indexCount: number;
 	#instanceCount: number;
+	#indirect: GPUBuffer | null = null;
+	#indirectOffset = 0;
 
 	constructor(
 		fixed: Pick<
@@ -84,6 +86,27 @@ export class DeviceDraw implements GeometryDraw {
 
 	get instanceCount() {
 		return this.#instanceCount;
+	}
+
+	get indirect() {
+		return this.#indirect;
+	}
+
+	get indirectOffset() {
+		return this.#indirectOffset;
+	}
+
+	/*
+	================
+	indirect
+
+	The arguments a GPU-culled draw submits (index-cull.ts), or null to
+	submit its counts again. Only the geometry owner calls it.
+	================
+	*/
+	static drawIndirect( draw: DeviceDraw, buffer: GPUBuffer | null, offset = 0 ) {
+		draw.#indirect = buffer;
+		draw.#indirectOffset = offset;
 	}
 
 	/*

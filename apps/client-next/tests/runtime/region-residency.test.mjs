@@ -13,6 +13,7 @@ regions it adds are uploaded and only the regions it drops are released.
 import "../helpers/native-source-loader.mjs";
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import { CULL_COMMANDS } from "../helpers/cull-commands.mjs";
 
 const { createWorldRenderer } = await import( "../../src/engine/runtime/renderer/world/world.ts" );
 const { createWorldResidency } = await import( "../../src/engine/runtime/renderer/world/residency.ts" );
@@ -159,6 +160,7 @@ function devices() {
 		},
 		updateInstances: draw => draw,
 		updateIndices() {},
+		...CULL_COMMANDS,
 		updatePositions() {},
 		/*
 		================
@@ -383,7 +385,7 @@ test("a terrain layer merges member indices at their slots and survives growth",
 	/** @type {any} Only the anchor keys a layer. */
 	const scene = { originRegion: ANCHOR, groups: [] };
 	const layers = createTerrainLayers();
-	const draws = [], writes = [], indices = new Map();
+	const draws = [], writes = [], indices = new Map(), ranges = new Map();
 	/** @type {any} */
 	const geometry = {
 		/*
@@ -414,22 +416,44 @@ test("a terrain layer merges member indices at their slots and survives growth",
 		},
 		/*
 		================
-		updateIndices
+		cullSource
+
+		A culled draw's source: each member's indices offset by its slot.
 		================
 		*/
-		updateIndices( draw, values ) {
-			indices.set( draw, [ ...values ] );
+		cullSource( draw, at, values ) {
+			const source = indices.get( draw ) ?? [];
+			values.forEach( ( value, i ) => source[at + i] = value );
+			indices.set( draw, source );
 		},
+		/*
+		================
+		cullRanges
+
+		The candidate ranges as (source start, count) pairs.
+		================
+		*/
+		cullRanges( draw, table, count ) {
+			const pairs = [];
+			for ( let i = 0; i < count; i++ ) pairs.push( [ table[i * 8 + 4], table[i * 8 + 5] ] );
+			ranges.set( draw, pairs );
+		},
+		cullDraw() {},
 		updatePositions() {}
 	};
 	const a = layerMember( 600, 1 ), b = layerMember( 600, 2 );
 	/** @type {any} */
 	const first = layers.admit( geometry, scene, a, undefined );
 	assert.equal( layers.admit( geometry, scene, b, undefined ), first, "one texture key, one draw" );
-	layers.select( a, Uint32Array.of( 0, 1, 2 ), 3 );
-	layers.select( b, Uint32Array.of( 2, 1, 0 ), 3 );
+	assert.deepEqual( indices.get( first ), [ 0, 1, 2, 600, 601, 602 ], "b's indices are offset by its slot" );
+	const range = { center: [ 0, 0, 0 ], radius: 1, indexStart: 0, indexCount: 3 };
+	layers.select( a, [ range ] );
+	layers.select( b, [ range ] );
 	layers.flush( geometry );
-	assert.deepEqual( indices.get( first ), [ 0, 1, 2, 602, 601, 600 ], "b's indices are offset by its slot" );
+	assert.deepEqual( ranges.get( first ), [ [ 0, 3 ], [ 3, 3 ] ], "b's ranges address its own span of the source" );
+	layers.select( a, [] );
+	layers.flush( geometry );
+	assert.deepEqual( ranges.get( first ), [ [ 3, 3 ] ], "a member with no candidates sends none" );
 	// Past the capacity (2048 vertices): the layer rebuilds on a new draw.
 	const c = layerMember( 1500, 3 );
 	/** @type {any} */
@@ -463,6 +487,7 @@ test("a complete scene reserves each terrain layer once across incremental admis
 		streamVertices( draw, base, vertices ) {
 			writes.push( { draw, base, value: vertices[0] } );
 		},
+		...CULL_COMMANDS,
 		release: draw => releases.push( draw )
 	};
 	for ( let recovery = 0; recovery < 2; recovery++ ) {
@@ -494,6 +519,7 @@ test("a layer shrinks when the large regions it held move out of view", async ()
 			return draw;
 		},
 		streamVertices() {},
+		...CULL_COMMANDS,
 		release: draw => releases.push( draw )
 	};
 	// Nine large regions, then the camera walks on through small ones: each

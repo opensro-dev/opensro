@@ -10,6 +10,7 @@ already recorded for the same frame. Capture bindings never sample the target.
 */
 import { WATER_REFLECTION_SIZE, waterTextureProjection } from "@/engine/foundation/rendering/water-reflection";
 import type { GeometryDraw } from "../internal/gpu-contract";
+import { issueIndexedDraw } from "./indexed-draw";
 import type { Retire } from "./retirement";
 const UNIFORM_BYTES = 112;
 
@@ -198,7 +199,7 @@ export function createWaterReflection( device: GPUDevice, initialFormat: GPUText
 				pass.setBindGroup( 0, draw.binding );
 				pass.setVertexBuffer( 0, draw.vertices );
 				pass.setIndexBuffer( draw.indices, "uint32" );
-				pass.drawIndexed( draw.indexCount, draw.instanceCount, draw.firstIndex ?? 0, draw.baseVertex ?? 0 );
+				issueIndexedDraw( pass, draw );
 			}
 			pass.end();
 		},

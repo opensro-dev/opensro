@@ -358,6 +358,12 @@ export interface GeometryDraw {
 	readonly indexCount: number;
 	readonly instanceCount: number;
 	readonly instanceCapacity: number;
+	// A GPU-culled draw (index-cull.ts) takes its counts from these five
+	// words (drawIndexedIndirect) instead of indexCount and instanceCount;
+	// its indexCount stays the capacity, so a bundle that records it never
+	// re-records for a culling change. Null for a direct draw.
+	readonly indirect: GPUBuffer | null;
+	readonly indirectOffset: number;
 }
 // Indexed palettes share the exact source storage supplied at upload. Offsets
 // are matrix indices, one per instance; updateBones requires a monotonic revision
@@ -475,6 +481,17 @@ export interface GeometryCommands {
 	// frame; the draw has one instance and one joint a slot.
 	presentParticles( draw: GeometryDraw, particles: ParticlePresentation ): void;
 	updateIndices( draw: GeometryDraw, indices: Uint32Array ): void;
+	// GPU-driven terrain culling (index-cull.ts), port-only, not native.
+	// cullDraw makes a draw GPU-culled with room for capacity source indices;
+	// cullSource writes source indices (already offset by their vertex slot)
+	// at index at; cullRanges replaces its candidate ranges (RANGE_WORDS a
+	// range: centre xyz and radius as float bits, source start, count);
+	// cullView gives the frame's frustum and the water mirror's
+	// (prepareViewFrustum planes).
+	cullDraw( draw: GeometryDraw, capacity: number ): void;
+	cullSource( draw: GeometryDraw, at: number, indices: Uint32Array ): void;
+	cullRanges( draw: GeometryDraw, table: Uint32Array, count: number ): void;
+	cullView( main: Float64Array, mirror: Float64Array | null ): void;
 	// ranges are vertex start/count pairs within positions. Without a slot the
 	// positions cover the whole draw; with one (0 included) they are a terrain
 	// layer member's vertices at that vertex offset of the draw.
