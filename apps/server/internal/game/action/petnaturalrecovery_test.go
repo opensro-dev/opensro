@@ -13,6 +13,7 @@ import (
 
 	"opensro.online/server/internal/game/abnormal"
 	"opensro.online/server/internal/game/enterworld"
+	"opensro.online/server/internal/game/world/monster"
 	"opensro.online/server/internal/game/world/simulation"
 )
 
@@ -95,6 +96,29 @@ func TestPetNaturalRecoveryPulses(t *testing.T) {
 	rt.advancePets(1_008_000)
 	if pet.CurrentHP != 132 || pet.CurrentMP != 12 {
 		t.Fatalf("second pulse wrong: %d/%d", pet.CurrentHP, pet.CurrentMP)
+	}
+}
+
+/*
+================
+TestPetNaturalRecoveryWithAuraRecoveryWord
+
+A friendly irgc word (the headquarters' aura on a holder-side
+companion, #4490) raises the pulse by its rate's percent of each
+maximum: at a rate of 100 the pulse adds a whole maximum beside the
+native share, so a hurt pet recovers to full in one pulse.
+================
+*/
+func TestPetNaturalRecoveryWithAuraRecoveryWord(t *testing.T) {
+	rt, owner, pet, key := petRecoveryRuntime(t)
+	word := monster.SelfEffect{SkillID: 7, Token: 5, Tag: cosWordRecoveryTag, First: 100, Second: 100,
+		StartedAtMs: 1_000_000, UntilMs: 1_030_000}
+	if _, ok := rt.installCosWord(key.division, owner.Name, pet.GID, word, 1_000_000); !ok {
+		t.Fatal("recovery word refused")
+	}
+	rt.advancePets(1_004_000)
+	if pet.CurrentHP != 1000 || pet.CurrentMP != 100 {
+		t.Fatalf("pulse with the recovery word: %d/%d, want full 1000/100", pet.CurrentHP, pet.CurrentMP)
 	}
 }
 

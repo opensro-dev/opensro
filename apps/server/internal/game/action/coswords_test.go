@@ -1,11 +1,14 @@
 /*
 ===========================================================================
 
-coswords_test.go - Vital Spot on a companion: the COS recipient arm
+coswords_test.go - the effect words on a companion: both recipient arms
 
-The cast deals no damage and attributes no kill: the word installs on
-the pet, judged through its owner, lowers the pet's hit rate at both
-stat read sites, retires at expiry, and leaves with the pet's death.
+Vital Spot on a pet deals no damage and attributes no kill: the word
+installs on the pet, judged through its owner, lowers the pet's hit
+rate at both stat read sites, retires at expiry, and leaves with the
+pet's death. The friendly arm pins the aura words a holder-side
+companion holds beside them: dru and odar at the same stat sink, and
+the store's retire by skill.
 
 ===========================================================================
 */
@@ -16,6 +19,7 @@ import (
 	"encoding/binary"
 	"testing"
 
+	"opensro.online/server/internal/game/combat"
 	"opensro.online/server/internal/game/enterworld"
 	"opensro.online/server/internal/game/item/wire"
 	"opensro.online/server/internal/game/world/monster"
@@ -244,5 +248,71 @@ func TestCosWordAdmissionKeepsTheTauntRefusal(t *testing.T) {
 	}
 	if held := rt.cosWordsHeld(testDivision, owner.Name, pet.GID, now); len(held) != 1 {
 		t.Fatalf("accepted debuff held words %+v", held)
+	}
+}
+
+/*
+================
+TestCosWordBuffWordsRaiseAndAbsorb
+
+A friendly dru word adds its two flat words to the damage rates; an
+odar word multiplies each incoming-damage factor its bit pairs select
+by the word's percent, and a second odar word on the same parameter
+multiplies again. A parameter no pair selects keeps the empty factor.
+================
+*/
+func TestCosWordBuffWordsRaiseAndAbsorb(t *testing.T) {
+	stats := combat.Stats{}
+	applyCosBuffWords(&stats, []monster.SelfEffect{
+		{Token: 1, Tag: cosWordDamageTag, First: 10, Second: 30},
+		{Token: 2, Tag: cosWordAbsorbTag, First: 4 | 1, Second: 50},
+	})
+	if stats.PhysicalBasicRate != 10 || stats.PhysicalSkillRate != 10 ||
+		stats.MagicalBasicRate != 30 || stats.MagicalSkillRate != 30 {
+		t.Fatalf("damage rates after dru: %+v", stats)
+	}
+	if stats.PhysicalBasicTaken != 0.5 || stats.PhysicalSkillTaken != 0 ||
+		stats.MagicalBasicTaken != 0 || stats.MagicalSkillTaken != 0 {
+		t.Fatalf("taken factors after odar: %+v", stats)
+	}
+	applyCosBuffWords(&stats, []monster.SelfEffect{
+		{Token: 3, Tag: cosWordAbsorbTag, First: 4 | 1, Second: 50},
+	})
+	if stats.PhysicalBasicTaken != 0.25 {
+		t.Fatalf("stacked odar factor = %v, want 0.25", stats.PhysicalBasicTaken)
+	}
+}
+
+/*
+================
+TestCosWordRetireBySkillDropsOnlyThatSkill
+
+The aura's tracked retire removes one skill's words - hostile and
+friendly - and returns their live tokens; an expired word of the same
+skill leaves without a token, and another skill's word stays.
+================
+*/
+func TestCosWordRetireBySkillDropsOnlyThatSkill(t *testing.T) {
+	rt, _, _, _ := newCombatTestRuntime(t, 1000)
+	word := func(skill, token, tag uint32, until int64) monster.SelfEffect {
+		return monster.SelfEffect{SkillID: skill, Token: token, Tag: tag, First: 1, StartedAtMs: 0, UntilMs: until}
+	}
+	for _, w := range []monster.SelfEffect{
+		word(7, 11, cosWordDamageTag, 10_000),
+		word(7, 12, cosWordHitRateTag, 10_000),
+		word(7, 13, cosWordAbsorbTag, 500),
+		word(9, 14, cosWordEvasionTag, 10_000),
+	} {
+		if _, ok := rt.installCosWord(testDivision, "owner", 7, w, 0); !ok {
+			t.Fatalf("install %+v refused", w)
+		}
+	}
+	tokens := rt.retireCosWords(testDivision, "owner", 7, 7, 1000)
+	if len(tokens) != 2 || tokens[0] != 11 || tokens[1] != 12 {
+		t.Fatalf("retired tokens %v, want the two live words of skill 7", tokens)
+	}
+	held := rt.cosWordsHeld(testDivision, "owner", 7, 1000)
+	if len(held) != 1 || held[0].SkillID != 9 {
+		t.Fatalf("held after retire: %+v", held)
 	}
 }
