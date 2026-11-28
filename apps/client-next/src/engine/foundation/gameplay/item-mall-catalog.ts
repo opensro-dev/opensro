@@ -63,6 +63,22 @@ function gender( value: unknown ): MallGender | undefined {
 
 /*
 ================
+packCount
+
+How many of its one item a package delivers when more than one (the
+"_11" packs). Absent, malformed or 1 decodes as none: the count only
+names the goods, so it can never brick the catalogue, and a server
+predating the field shows every title as before.
+================
+*/
+function packCount( value: unknown ): number | undefined {
+	return Number.isInteger( value ) && (value as number) > 1 && (value as number) <= 65535 ?
+		value as number :
+		undefined;
+}
+
+/*
+================
 mallProjection
 ================
 */
@@ -149,7 +165,8 @@ export function mallProjection( payload: Uint8Array ) {
 			purchaseLimit: commerceInteger( row.purchaseLimit, 65535, 1 ),
 			itemIds: row.itemIds.map( id => commerceInteger( id, 0xffffffff, 1 ) ),
 			badge: badge( row.badge ),
-			gender: gender( row.gender )
+			gender: gender( row.gender ),
+			count: packCount( row.count )
 		};
 	} );
 	const state: MallState = {

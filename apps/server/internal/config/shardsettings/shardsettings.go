@@ -643,6 +643,10 @@ var Settings = []Setting{
 	// the gears stone import stages its shard behind it, and off is
 	// the shipped mall exactly (commerce/mallcategories.go).
 	{Env: "SRO_MALL_CATEGORIES", NomadVar: "mall_categories", Default: "off"},
+	// Owner, 2026-11-28: the damage, resurrection and instant return
+	// scrolls leave the Item Mall (port-only, not native; "off" is the
+	// shipped mall; commerce/mallp2wscrolls.go). Owned scrolls keep their use.
+	{Env: "SRO_MALL_P2W_SCROLLS_OFF", NomadVar: "mall_p2w_scrolls_off", Default: "off"},
 	{Env: "SRO_ALCHEMY_NO_ASSIMILATION", NomadVar: "alchemy_no_assimilation", Default: "on"},
 	// Owner, 2026-10-14: 8 per ambush (was 16), thieves and hunters alike.
 	{Env: "SRO_CARAVAN_BANDIT_CAP", NomadVar: "caravan_bandit_cap", Default: "8"},

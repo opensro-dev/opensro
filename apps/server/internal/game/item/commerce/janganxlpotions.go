@@ -16,12 +16,6 @@ restores the shipped v1.150 Jangan shop exactly.
 */
 package commerce
 
-import (
-	"fmt"
-	"os"
-	"strings"
-)
-
 // EnvJanganXLPotions names the switch: "on" (the default) or "off".
 const EnvJanganXLPotions = "SRO_JANGAN_XL_POTIONS"
 
@@ -42,13 +36,7 @@ but an off value is a boot error naming the setting.
 ================
 */
 func JanganXLPotionsFromEnv() (bool, error) {
-	switch strings.ToLower(strings.TrimSpace(os.Getenv(EnvJanganXLPotions))) {
-	case "", "1", "on", "true":
-		return true, nil
-	case "0", "off", "false":
-		return false, nil
-	}
-	return false, fmt.Errorf("%s=%q: want on or off", EnvJanganXLPotions, os.Getenv(EnvJanganXLPotions))
+	return switchFromEnv(EnvJanganXLPotions, true)
 }
 
 /*
