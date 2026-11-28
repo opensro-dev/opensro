@@ -437,3 +437,42 @@ test("the stream budget admits a stream at the limit and refuses one past it", a
 	f.owner.dispose();
 	assert.ok( f.buffers.every( buffer => buffer.destroyed === 1 ) );
 });
+
+test("node globals cost nothing unasked and are valid only for the frame that encoded them", async () => {
+	const f = fixture();
+	await f.owner.ready;
+	const s = stream( f, 2, [ .5, .25 ] );
+	const allocated = () => f.buffers.filter( buffer => buffer.label === "animation-globals" ).length;
+	// No consumer: the palette is GPU-sampled, no globals buffer exists.
+	assert.ok( f.owner.prepare( s.source, s.output, f.model, f.primitive, s.samples ) );
+	f.encode();
+	assert.equal( allocated(), 0 );
+	assert.equal( f.owner.globalsOf( s.source, 0 ), null );
+	// Frame 7 asks: valid after its encode, for frame 7 only.
+	assert.ok( f.owner.prepare( s.source, s.output, f.model, f.primitive, s.samples, 7 ) );
+	assert.equal( f.owner.globalsOf( s.source, 7 ), null, "not before the encode" );
+	f.encode();
+	assert.equal( allocated(), 1 );
+	const globals = f.owner.globalsOf( s.source, 7 );
+	assert.equal( globals?.nodes, f.model.nodes.length );
+	assert.equal( globals.buffer.size, 2 * f.model.nodes.length * 64 );
+	assert.equal( f.owner.globalsOf( s.source, 8 ), null, "another frame's request is not served" );
+	// A later prepare without the request, a cancel or a CPU refusal clears it.
+	assert.ok( f.owner.prepare( s.source, s.output, f.model, f.primitive, s.samples ) );
+	f.encode();
+	assert.equal( f.owner.globalsOf( s.source, 7 ), null );
+	assert.ok( f.owner.prepare( s.source, s.output, f.model, f.primitive, s.samples, 9 ) );
+	f.owner.cancel( s.source );
+	assert.equal( f.owner.globalsOf( s.source, 9 ), null, "a cancelled request" );
+	assert.ok( f.owner.prepare( s.source, s.output, f.model, f.primitive, s.samples, 10 ) );
+	f.encode();
+	assert.ok( f.owner.globalsOf( s.source, 10 ) );
+	const refused = stream( f, 2, [ -1, null ] );
+	assert.equal( f.owner.prepare( s.source, s.output, f.model, f.primitive, refused.samples, 11 ), false );
+	assert.equal( f.owner.globalsOf( s.source, 10 ), null, "a CPU refusal replaces the frame's globals" );
+	assert.equal( allocated(), 1, "the buffer is kept for the stream, never reallocated" );
+	f.owner.release( s.source );
+	assert.equal( f.owner.globalsOf( s.source, 10 ), null );
+	f.owner.dispose();
+	assert.ok( f.buffers.every( buffer => buffer.destroyed === 1 ) );
+});

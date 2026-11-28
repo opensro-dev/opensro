@@ -103,7 +103,7 @@ test( "shipping GPU pose owner matches CPU palettes across clocks, bindings, rel
 							}) )
 						} );
 					}
-					let maxError = 0, compared = 0, worst = null;
+					let maxError = 0, compared = 0, worst = null, socketError = 0, sockets = 0;
 					for (
 						const [model, primitive] of [
 							...m.primitives.map( p => [ m, p ] ),
@@ -121,15 +121,18 @@ test( "shipping GPU pose owner matches CPU palettes across clocks, bindings, rel
 								usage: GPUBufferUsage.COPY_DST | GPUBufferUsage.MAP_READ
 							} );
 						const cpu = new Float32Array( source.length ),
+							poses = [],
 							samples = cases.map( ( c, i ) => {
 								const pose = createCharacterPose( model );
 								if ( c.layers ) pose.evaluate( "", 0, false, c.layers );
 								else pose.evaluate( c.clip.name, c.time, c.loop );
 								if ( c.layers && !pose.gpuSample() ) throw Error( "A crossfade was refused the GPU" );
 								pose.palette( primitive, cpu, i * primitive.joints.length * 16 );
+								poses.push( pose );
 								return pose.gpuSample();
 							} );
-						if ( !owner.prepare( source, output, model, primitive, samples ) ) {
+						// Frame 1 asks for the node globals too.
+						if ( !owner.prepare( source, output, model, primitive, samples, 1 ) ) {
 							throw Error( "Published animation unexpectedly refused" );
 						}
 						if ( model === assembled && owner.stats().clipSets !== 1 ) {
@@ -138,6 +141,13 @@ test( "shipping GPU pose owner matches CPU palettes across clocks, bindings, rel
 						const encoder = device.createCommandEncoder();
 						owner.encode( encoder );
 						encoder.copyBufferToBuffer( output, 0, read, 0, size );
+						// The node globals (no inverse bind) GPU attachments read.
+						const globals = owner.globalsOf( source, 1 ),
+							readGlobals = device.createBuffer( {
+								size: globals.buffer.size,
+								usage: GPUBufferUsage.COPY_DST | GPUBufferUsage.MAP_READ
+							} );
+						encoder.copyBufferToBuffer( globals.buffer, 0, readGlobals, 0, globals.buffer.size );
 						device.queue.submit( [ encoder.finish() ] );
 						await read.mapAsync( GPUMapMode.READ );
 						const actual = new Float32Array( read.getMappedRange() );
@@ -156,6 +166,22 @@ test( "shipping GPU pose owner matches CPU palettes across clocks, bindings, rel
 							compared++;
 						}
 						read.unmap();
+						await readGlobals.mapAsync( GPUMapMode.READ );
+						const gpuGlobals = new Float32Array( readGlobals.getMappedRange() );
+						for ( const [slot, pose] of poses.entries() ) {
+							for ( let n = 0; n < model.nodes.length; n++ ) {
+								const name = model.nodes[n].name;
+								// The CPU looks a name up at its first node.
+								if ( model.nodes.findIndex( node => node.name === name ) !== n ) continue;
+								const socket = pose.socket( name ), at = (slot * globals.nodes + n) * 16;
+								for ( let k = 0; k < 16; k++ ) {
+									socketError = Math.max( socketError, Math.abs( socket[k] - gpuGlobals[at + k] ) );
+								}
+								sockets++;
+							}
+						}
+						readGlobals.unmap();
+						readGlobals.destroy();
 						// A retired output must not remain in the next command encoder.
 						owner.prepare( source, output, model, primitive, samples );
 						owner.release( source );
@@ -166,7 +192,7 @@ test( "shipping GPU pose owner matches CPU palettes across clocks, bindings, rel
 						read.destroy();
 					}
 					await device.queue.onSubmittedWorkDone();
-					runs.push( { maxError, worst, compared, stats: owner.stats() } );
+					runs.push( { maxError, worst, compared, socketError, sockets, stats: owner.stats() } );
 				} finally {
 					owner.dispose();
 					device.destroy();
@@ -179,6 +205,7 @@ test( "shipping GPU pose owner matches CPU palettes across clocks, bindings, rel
 		assert.deepEqual( result.errors, [] );
 		for ( const run of result.runs ) {
 			assert.ok( run.maxError < .0001, JSON.stringify( run ) );
+			assert.ok( run.sockets > 0 && run.socketError < .0001, JSON.stringify( run ) );
 			assert.equal( run.stats.streams, 0 );
 			assert.equal( run.stats.models, 0 );
 			assert.equal( run.stats.staticBytes, 0 );

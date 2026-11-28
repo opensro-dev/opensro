@@ -90,10 +90,21 @@ type Stream = {
 	data: Float32Array;
 	words: Uint32Array;
 	count: number;
+	// Every node's global matrix per palette slot (animation-shader.ts),
+	// allocated only once a consumer asks (prepare's globals).
+	globals: GPUBuffer | null;
+	// Whether the configuration has the globals write on; the palette slots
+	// the pending rows write globals for; the slots whose encoded globals
+	// stand (globalsOf). A CPU slot of a mixed stream never does.
+	globalsOn: boolean;
+	pendingSlots: Uint8Array;
+	validSlots: Uint8Array;
 };
-const STATIC_BYTES = 32 << 20, STREAM_BYTES = 8 << 20;
-// The Configuration uniform of animation-shader.ts.
-const CONFIGURATION_BYTES = 48;
+// The globals keep their own budget: asking for them never moves a
+// skinning stream onto the CPU.
+const STATIC_BYTES = 32 << 20, STREAM_BYTES = 8 << 20, GLOBALS_BYTES = 4 << 20;
+// The Configuration uniform of animation-shader.ts, and its globals word.
+const CONFIGURATION_BYTES = 48, GLOBALS_FLAG_BYTE = 44;
 
 /*
 ================
@@ -124,12 +135,19 @@ export function createGpuAnimationResources( device: GPUDevice, retire: Retire =
 		streamBytes = 0,
 		dispatches = 0,
 		inputUploads = 0,
-		poses = 0;
+		poses = 0,
+		globalBytes = 0;
 	const models = new Map<CharacterModel, Model>(),
 		clipSets = new Map<readonly CharacterClip[], ClipSet>(),
 		streams = new Map<Float32Array, Stream>(),
 		pending = new Set<Stream>(),
 		unsupported = new WeakSet<CharacterModel>(),
+		// The globals binding of every stream no consumer asked: never written.
+		placeholder = device.createBuffer( {
+			label: "animation-globals-none",
+			size: 64,
+			usage: GPUBufferUsage.STORAGE
+		} ),
 		inputs = createStagedSlabs(
 			device,
 			"animation-inputs",
@@ -290,6 +308,48 @@ export function createGpuAnimationResources( device: GPUDevice, retire: Retire =
 
 	/*
 	================
+	setGlobals
+
+	Turn a stream's globals write on or off for its pending rows. The buffer
+	is allocated at the first request that fits the globals budget and kept
+	until the stream is released; the configuration word changes only when
+	the setting does. The pending slots are the rows' GPU-sampled ones.
+	================
+	*/
+	function setGlobals( row: Stream, wanted: boolean, capacity: number, samples: readonly (Sample | null)[] ) {
+		let on = wanted;
+		if ( on && !row.globals ) {
+			const bytes = capacity * row.model.source.nodes.length * 64;
+			if ( globalBytes + bytes > GLOBALS_BYTES ) on = false;
+			else {
+				row.globals = device.createBuffer( {
+					label: "animation-globals",
+					size: bytes,
+					// COPY_SRC: the WebGPU parity test reads them back; the renderer never does.
+					usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC
+				} );
+				globalBytes += bytes;
+				row.binding = device.createBindGroup( {
+					layout: pipeline!.getBindGroupLayout( 0 ),
+					entries: [
+						{ binding: 0, resource: { buffer: row.model.buffer } },
+						{ binding: 1, resource: { buffer: row.model.clips.buffer } },
+						{ binding: 2, resource: row.input.binding },
+						{ binding: 3, resource: { buffer: row.output } },
+						{ binding: 4, resource: { buffer: row.configuration } },
+						{ binding: 5, resource: { buffer: row.globals } }
+					]
+				} );
+			}
+		}
+		row.pendingSlots.fill( 0 );
+		if ( on ) { for ( let i = 0; i < samples.length; i++ ) row.pendingSlots[i] = samples[i] ? 1 : 0; }
+		if ( on === row.globalsOn ) return;
+		row.globalsOn = on;
+		device.queue.writeBuffer( row.configuration, GLOBALS_FLAG_BYTE, Uint32Array.of( on ? 1 : 0 ) );
+	}
+	/*
+	================
 	release
 	================
 	*/
@@ -300,6 +360,9 @@ export function createGpuAnimationResources( device: GPUDevice, retire: Retire =
 		// A pass encoded earlier this frame may still bind the row.
 		inputs.free( row.input );
 		retire( row.configuration );
+		if ( row.globals ) retire( row.globals );
+		row.validSlots.fill( 0 );
+		globalBytes -= row.globals?.size ?? 0;
 		streamBytes -= row.data.byteLength + CONFIGURATION_BYTES;
 		streams.delete( source );
 		if ( !--row.model.refs ) {
@@ -318,7 +381,10 @@ export function createGpuAnimationResources( device: GPUDevice, retire: Retire =
 		prepare
 
 		Queues the bones of samples into source's palette; false leaves them to
-		the CPU path.
+		the CPU path. A consumer of the holders' sockets passes globals for
+		one stream per pose: its GPU-sampled slots also write every node's
+		global matrix (globalsOf). Globals that do not fit their budget are
+		left out, never the palette: the consumer keeps its CPU socket path.
 		================
 		*/
 		prepare(
@@ -326,9 +392,14 @@ export function createGpuAnimationResources( device: GPUDevice, retire: Retire =
 			output: GPUBuffer,
 			model: CharacterModel,
 			primitive: CharacterPrimitive,
-			samples: readonly (Sample | null)[]
+			samples: readonly (Sample | null)[],
+			globals = false
 		): boolean {
 			if ( disposed ) throw Error( "Disposed GPU animation owner" );
+			// Any prepare replaces what the stream's globals held, a refusal
+			// to the CPU path included.
+			const previousRow = streams.get( source );
+			previousRow?.validSlots.fill( 0 );
 			if (
 				!pipeline || unsupported.has( model ) || !samples.some( s => s !== null ) || !primitive.joints.length
 			) return false;
@@ -400,7 +471,8 @@ export function createGpuAnimationResources( device: GPUDevice, retire: Retire =
 							{ binding: 1, resource: { buffer: admitted.clips.buffer } },
 							{ binding: 2, resource: input.binding },
 							{ binding: 3, resource: { buffer: output } },
-							{ binding: 4, resource: { buffer: configuration } }
+							{ binding: 4, resource: { buffer: configuration } },
+							{ binding: 5, resource: { buffer: placeholder } }
 						]
 					} );
 					row = {
@@ -412,7 +484,11 @@ export function createGpuAnimationResources( device: GPUDevice, retire: Retire =
 						binding,
 						data,
 						words: new Uint32Array( data.buffer ),
-						count: 0
+						count: 0,
+						globals: null,
+						globalsOn: false,
+						pendingSlots: new Uint8Array( capacity ),
+						validSlots: new Uint8Array( capacity )
 					};
 					streams.set( source, row );
 					admitted.refs++;
@@ -441,6 +517,7 @@ export function createGpuAnimationResources( device: GPUDevice, retire: Retire =
 			}
 			row.count = count;
 			inputs.write( row.input, row.data, count * SAMPLE_WORDS * 4 );
+			setGlobals( row, globals, capacity, samples );
 			pending.add( row );
 			return true;
 		},
@@ -451,7 +528,9 @@ export function createGpuAnimationResources( device: GPUDevice, retire: Retire =
 		*/
 		cancel( source: Float32Array ) {
 			const row = streams.get( source );
-			if ( row ) pending.delete( row );
+			if ( !row ) return;
+			pending.delete( row );
+			row.validSlots.fill( 0 );
 		},
 		/*
 		================
@@ -474,6 +553,7 @@ export function createGpuAnimationResources( device: GPUDevice, retire: Retire =
 			} );
 			pass.setPipeline( pipeline! );
 			for ( const row of pending ) {
+				if ( row.globalsOn ) row.validSlots.set( row.pendingSlots );
 				pass.setBindGroup( 0, row.binding );
 				pass.dispatchWorkgroups( row.count );
 				dispatches++;
@@ -483,6 +563,29 @@ export function createGpuAnimationResources( device: GPUDevice, retire: Retire =
 			pending.clear();
 		},
 		release,
+		/*
+		================
+		globalsOf
+
+		The node globals of source's stream: palette slot s, node n is the
+		matrix at (s * nodes + n) * 64, read later in the same command buffer,
+		and valid(s) says whether the GPU wrote slot s for the stream's latest
+		encoded prepare. A later prepare (a CPU refusal included), a cancel or
+		a release clears every slot until its rows are encoded again; a CPU
+		slot of a mixed stream is never valid. The slots outlive frames while
+		nothing prepares the stream again (an unchanged pose skips its
+		prepare): whether a slot's pose is still the one written is the
+		palette owner's revision check (palette-streams.ts).
+		================
+		*/
+		globalsOf(
+			source: Float32Array
+		): { buffer: GPUBuffer; nodes: number; valid( slot: number ): boolean; } | null {
+			const row = streams.get( source );
+			if ( !row?.globals ) return null;
+			const slots = row.validSlots;
+			return { buffer: row.globals, nodes: row.model.source.nodes.length, valid: slot => slots[slot] === 1 };
+		},
 		stats: () => ({
 			enabled: !disposed,
 			ready: !!pipeline,
@@ -492,6 +595,7 @@ export function createGpuAnimationResources( device: GPUDevice, retire: Retire =
 			streams: streams.size,
 			staticBytes,
 			streamBytes,
+			globalBytes,
 			dispatches,
 			inputUploads,
 			poses
@@ -507,10 +611,11 @@ export function createGpuAnimationResources( device: GPUDevice, retire: Retire =
 			for ( const source of streams.keys() ) release( source );
 			for ( const [model, row] of [ ...models ] ) retireModel( model, row );
 			inputs.dispose();
+			placeholder.destroy();
 			models.clear();
 			clipSets.clear();
 			pending.clear();
-			staticBytes = streamBytes = 0;
+			staticBytes = streamBytes = globalBytes = 0;
 			pipeline = undefined;
 		}
 	};

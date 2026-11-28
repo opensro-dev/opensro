@@ -1762,6 +1762,31 @@ the next full prepare pass, so this may run between frames.
 	}
 	/*
 	================
+	countEmitter
+
+	Which emitter path a frame's advance takes (#4692): the particle graph,
+	a birth emitter whose particles run a program (its births read the
+	transform on the CPU), one that follows its holder every frame, or one
+	whose births only keep the transform they were born at.
+	================
+	*/
+	function countEmitter( model: CharacterModel, graph: boolean ) {
+		if ( graph ) {
+			probe?.characterCount( "emitter-graph" );
+			return;
+		}
+		let program = false, follow = false;
+		for ( const primitive of model.primitives ) {
+			if ( !primitive.emission ) continue;
+			program ||= !!primitive.particleProgram;
+			follow ||= !!primitive.emission.follow;
+		}
+		probe?.characterCount(
+			program ? "emitter-birth-program" : follow ? "emitter-birth-follow" : "emitter-birth-fixed"
+		);
+	}
+	/*
+	================
 	advanceEmitter
 
 	Advance an admitted emitter's history to the actor's time.
@@ -1773,6 +1798,7 @@ the next full prepare pass, so this may run between frames.
 		const transform = transformFor( actor, byGid, origin, frame.transforms );
 		if ( !transform ) return;
 		const shift = regionOffsetXZ( origin, history.origin );
+		if ( probe ) countEmitter( model, !!history.graph && !!model.particleGraph );
 		if ( history.graph && model.particleGraph ) {
 			advanceGraphEmitter( actor, model, history, graphHolderTransform( model, transform ), shift );
 		} else {

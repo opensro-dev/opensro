@@ -846,6 +846,26 @@ async function session( options, location, results ) {
 					null;
 			} );
 			console.log( `  verify world ${name}: ${JSON.stringify( world )}` );
+			// Distinct poses against skeleton work (#4692): the GPU skeleton
+			// pass's streams, and its dispatches and workgroups (one a sampled
+			// skeleton) so far; deltas between rows over a row's frames give
+			// the per-frame duplication.
+			const posing = await client.page.evaluate( () => {
+				const stats = globalThis.__benchRuntime.characterStats?.();
+				const gpu = stats?.gpuAnimation;
+				return stats ?
+					{
+						visibleActors: stats.visibleActors,
+						poseRequests: stats.poseRequests,
+						poseEvaluations: stats.poseEvaluations,
+						poseSharingHits: stats.poseSharingHits,
+						streams: gpu?.streams,
+						dispatches: gpu?.dispatches,
+						workgroups: gpu?.poses
+					} :
+					null;
+			} );
+			console.log( `  verify posing ${name}: ${JSON.stringify( { frames: result.frames, ...posing } )}` );
 			if ( options.snow || options.rain ) {
 				// The held mode and the weather owner's drop counters after
 				// the window: an A/B's two sides must hold the same weather.

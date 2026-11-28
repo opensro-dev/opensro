@@ -21,15 +21,23 @@ Rotations interpolate with polynomial arccos and sine (under 1e-7 on
 key-to-key slerp hides but a mix of two poses, whose angle is large, does
 not (5e-4 against the CPU palette, gpu-animation.test.mjs).
 
+The pass also writes every node's global matrix (no inverse bind: the
+CPU pose's globals, animation-pose.ts socket) at the sample's palette slot,
+so an attachment or emitter can read its holder's socket on the GPU
+instead of settling the socket's ancestor chain on the CPU (#4692). Only a
+stream a consumer asked for writes them (config.globals); the rest bind a
+placeholder and skip the write.
+
 ===========================================================================
 */
 export const animationShader = `
-struct Configuration {nodes:u32,depths:u32,joints:u32,jointAt:u32,parents:u32,rest:u32,fixed:u32,matrices:u32,depthAt:u32,clipNodes:u32,inverse:u32,padding:u32}
+struct Configuration {nodes:u32,depths:u32,joints:u32,jointAt:u32,parents:u32,rest:u32,fixed:u32,matrices:u32,depthAt:u32,clipNodes:u32,inverse:u32,globals:u32}
 @group(0) @binding(0) var<storage,read> skeleton:array<f32>;
 @group(0) @binding(1) var<storage,read> clips:array<f32>;
 @group(0) @binding(2) var<storage,read> actors:array<vec4f>;
 @group(0) @binding(3) var<storage,read_write> palettes:array<mat4x4f>;
 @group(0) @binding(4) var<uniform> config:Configuration;
+@group(0) @binding(5) var<storage,read_write> globals:array<mat4x4f>;
 var<workgroup> locals:array<mat4x4f,128>;
 var<workgroup> worlds:array<mat4x4f,128>;
 fn v4(at:u32)->vec4f{return vec4f(skeleton[at],skeleton[at+1],skeleton[at+2],skeleton[at+3]);}
@@ -71,5 +79,6 @@ fn compose(t:vec4f,qr:vec4f,s:vec4f)->mat4x4f{
   if(node<config.nodes&&u32(skeleton[config.depthAt+node])==depth){let parent=i32(skeleton[config.parents+node]);if(parent<0){worlds[node]=locals[node];}else{worlds[node]=worlds[u32(parent)]*locals[node];}}
   workgroupBarrier();
  }
+ if(config.globals>0u&&node<config.nodes){globals[u32(input.z)*config.nodes+node]=worlds[node];}
  for(var joint=node;joint<config.joints;joint+=128){palettes[u32(input.z)*config.joints+joint]=worlds[u32(skeleton[config.jointAt+joint])]*matrix(config.inverse+joint*16);}
 }`;
