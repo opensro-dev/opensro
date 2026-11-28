@@ -720,10 +720,11 @@
 			]
 		},
 		{
-			"consumer": "src/engine/runtime/renderer/frame/frame.ts",
-			"provider": "src/engine/runtime/renderer/device/indexed-draw.ts",
+			"consumer": "src/engine/foundation/rendering/indexed-draw.ts",
+			"provider": "src/engine/runtime/renderer/device/bundle-encoder.ts",
 			"functions": [
-				"issueIndexedDraw"
+				"drawIndexed",
+				"drawIndexedIndirect"
 			]
 		},
 		{

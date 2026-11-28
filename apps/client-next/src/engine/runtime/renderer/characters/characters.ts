@@ -2523,6 +2523,17 @@ the next full prepare pass, so this may run between frames.
 			batches.set( id, batch );
 			probe?.characterCount( "batch-creations" );
 		}
+		// A kept batch starts its cloth afresh where a batch used to be made
+		// anew: back from idle, or at a row count whose planned capacity
+		// differs. Its solvers' state (clothStreams, cloth, clothInputs) is
+		// the last wearer's, which a new wearer must not inherit.
+		const revived = Number.isFinite( batch.idleSince ) ||
+			plan.capacity( Math.max( batch.gids.length, 1 ) ) !== capacity;
+		if ( revived ) {
+			batch.clothStreams = undefined;
+			batch.cloth = undefined;
+			batch.clothInputs = undefined;
+		}
 		batch.idleSince = NaN;
 		const countChanged = batch.gids.length !== rows.length;
 		if ( membershipChanged ) {
