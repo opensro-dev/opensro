@@ -677,6 +677,16 @@ func TestFloor6WalkInWaitsForTheFlameMaster(t *testing.T) {
 	if got := *c.World.Spawn.RegionID; got != 0x8002 {
 		t.Fatalf("arrived in region %#x, want Floor 6 (0x8002)", got)
 	}
+	// The exit leads where the floor's drawn order stands its portal
+	// (#4814); the fixture's draw is not the identity, so a fixed
+	// pairing would land at East instead.
+	portal, ok := chain.TombFloor5Destination(testDivision, tombFloor5ExitZones["GATE_JINSI_05X01-1"])
+	if !ok || portal == 0 {
+		t.Fatalf("fixture order sends place 0 to portal %d (%v); want a non-identity draw", portal, ok)
+	}
+	if want := rt.portals.destinations[tombFloor6Arrivals[portal]].spawn.X; *c.World.Spawn.X != want {
+		t.Fatalf("arrived at x %v, want %v (portal %d)", *c.World.Spawn.X, want, portal)
+	}
 }
 
 /*

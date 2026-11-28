@@ -34,9 +34,9 @@ export async function bindPlayableRuntime( page ) {
 			.map( script => new URL( script.getAttribute( "src" ) ?? "", location.href ) )
 			.find( url => url.origin === location.origin && url.pathname === "/src/bootstrap.ts" );
 		const url = dev ? dev.href : new URL( "/assets/bench-runtime.js", location.href ).href;
-		let runtime;
+		let runtime, revision;
 		try {
-			runtime = (await import( url )).runtime;
+			({ runtime, revision } = await import( url ));
 		} catch ( error ) {
 			throw Error(
 				`${url} did not load (${error}): benchmark the dev server or a bench bundle (pnpm build:bench)`
@@ -44,6 +44,9 @@ export async function bindPlayableRuntime( page ) {
 		}
 		if ( !runtime ) throw Error( `${url} exports no runtime` );
 		globalThis.__playableRuntime = runtime;
+		// The served build's own stamp (bootstrap.ts revision): the measured
+		// commit, whichever checkout runs the harness.
+		globalThis.__playableRevision = typeof revision === "string" ? revision : "";
 	} );
 }
 /*
@@ -75,11 +78,16 @@ enterPlayableSession
 
 Log in and press Enter for the scratch character, without waiting for the
 world. A probe that changes the page between entry and arrival (a hidden
-tab) starts here; everything else uses bootPlayableSession.
+tab) starts here; everything else uses bootPlayableSession. search is the
+page URL's query (bootstrap.ts diagnosticsFromQuery reads it at boot: a
+probe that needs GPU timing passes "?gpu-timing=1").
 ================
 */
-/** @param {((page: import('playwright-core').Page) => Promise<void>) | undefined} [beforeLogin] */
-export async function enterPlayableSession( page, name, beforeLogin = undefined ) {
+/**
+ * @param {((page: import('playwright-core').Page) => Promise<void>) | undefined} [beforeLogin]
+ * @param {{ search?: string }} [options]
+ */
+export async function enterPlayableSession( page, name, beforeLogin = undefined, { search = "" } = {} ) {
 	const character = assertCharacterAllowed( name, { context: "client-next playable skill acceptance" } );
 	await page.setViewportSize( { width: 1024, height: 768 } );
 	await page.route( "**/character/list", async route => {
@@ -90,7 +98,7 @@ export async function enterPlayableSession( page, name, beforeLogin = undefined 
 			json: { ...body, characters: body.characters.filter( row => row.name === character ) }
 		} );
 	} );
-	await page.goto( CLIENT_NEXT_BASE_URL );
+	await page.goto( CLIENT_NEXT_BASE_URL + search );
 	await bindPlayableRuntime( page );
 	await page.waitForFunction( () => __playableRuntime.sessionState()?.phase === "signed-out" );
 	if ( beforeLogin ) await beforeLogin( page );
@@ -112,9 +120,12 @@ export async function enterPlayableSession( page, name, beforeLogin = undefined 
 bootPlayableSession
 ================
 */
-/** @param {((page: import('playwright-core').Page) => Promise<void>) | undefined} [beforeLogin] */
-export async function bootPlayableSession( page, name, beforeLogin = undefined ) {
-	const character = await enterPlayableSession( page, name, beforeLogin );
+/**
+ * @param {((page: import('playwright-core').Page) => Promise<void>) | undefined} [beforeLogin]
+ * @param {{ search?: string }} [options]
+ */
+export async function bootPlayableSession( page, name, beforeLogin = undefined, options = {} ) {
+	const character = await enterPlayableSession( page, name, beforeLogin, options );
 	await waitPlayableWorld( page, character );
 	return character;
 }

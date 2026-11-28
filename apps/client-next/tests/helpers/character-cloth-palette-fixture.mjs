@@ -308,6 +308,10 @@ function captureGeometry( tags, gpuAvailable, gpuTakes ) {
 	if ( gpuTakes ) {
 		commands.prepareGpuBones = ( source, model, primitive, samples ) => {
 			gpuCalls++;
+			// This stand-in replays one clip exactly; a crossfade's mix is the
+			// real pass's (gpu-animation.test.mjs parity), so it declines that
+			// batch and the CPU builds it, as a device that refuses would.
+			if ( samples.some( sample => sample?.next ) ) return false;
 			let memory = gpuMemory.get( source.buffer );
 			if ( !memory ) {
 				memory = new Float32Array( source.buffer.byteLength / 4 );

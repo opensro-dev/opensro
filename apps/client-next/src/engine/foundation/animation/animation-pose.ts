@@ -20,10 +20,17 @@ bone names (A981A0 searches compound branches in order for a marker).
 */
 import { createAttachmentBindPose } from "./equipment-sockets";
 import { clipNodeChannels, createAnimationTimelines, type ClipNodeChannelCache } from "./animation-timelines";
-import type { CharacterModel, CharacterPrimitive, CharacterLayer, CharacterClip } from "@/engine/contracts/character";
+import type {
+	CharacterClip,
+	CharacterGpuSample,
+	CharacterLayer,
+	CharacterModel,
+	CharacterPrimitive
+} from "@/engine/contracts/character";
 import { compose, multiplyDisjoint as multiply, multiplyQuaternion, slerp } from "@/engine/foundation/math/pose-math";
 import { paletteBindings } from "./palette-bindings";
 import { bodyBoneScale } from "./body-shape";
+import { gpuPoseRefusal, gpuPoseSample, type PoseLayer } from "./gpu-pose-layers";
 
 const DEFAULT_BODY_VOLUME = 2;
 // A node's materialization state in one evaluation (createCharacterPose ready).
@@ -33,6 +40,8 @@ const RADIAL_WORDS = [ 4, 5, 6, 8, 9, 10 ] as const;
 // Distinct missing clip names one evaluator records: a model is one
 // catalogue row, so a handful of names says everything about it.
 export const MAX_MISSING_CLIPS = 8;
+// The layers the GPU skeleton pass mixes, re-exported for its readers.
+export { MAX_GPU_LAYERS } from "./gpu-pose-layers";
 /*
 ================
 PoseDeferral
@@ -194,28 +203,26 @@ without changing skeleton storage, the selected layers or their revision.
     Validated sampling identity retained between frames.
     ================
     */
-	type ResolvedLayer = { clip: CharacterClip | undefined; time: number; weight: number; lane: "event" | "timed"; };
+	type ResolvedLayer = PoseLayer;
 	let resolved: ResolvedLayer[] = [], pendingLayers: ResolvedLayer[] = [], hasPose = false;
 	// One CCompChar bone rotator (spine-aim.ts): its node, rotation and whether
 	// it changed since the last evaluation. A released node recomposes once.
 	const boneRotation = new Float32Array( 4 );
 	let rotatedNode = -1, releasedNode = -1, rotationChanged = false;
 	let cpuPending = false, cpuEvaluations = 0;
-	const sampleRequest = { clip: model.clips[0]!, time: 0 };
+	const sampleRequest = { clip: model.clips[0]!, time: 0, next: null as CharacterClip | null, nextTime: 0, share: 0 };
 	/*
 ================
-gpuSample
+gpuRefusal / gpuSample
+
+The GPU skeleton pass's view of this pose (gpu-pose-layers.ts).
 ================
 	*/
-	function gpuSample(): { readonly clip: CharacterClip; readonly time: number; } | null {
-		const layer = resolved[0];
-		if (
-			volume !== DEFAULT_BODY_VOLUME || resolved.length !== 1 || !layer?.clip || layer.weight !== 1 ||
-			!gpuClips.has( layer.clip ) || rotatedNode >= 0
-		) return null;
-		sampleRequest.clip = layer.clip;
-		sampleRequest.time = layer.time;
-		return sampleRequest;
+	function gpuRefusal(): string | null {
+		return gpuPoseRefusal( resolved, gpuClips, volume === DEFAULT_BODY_VOLUME, rotatedNode );
+	}
+	function gpuSample(): CharacterGpuSample | null {
+		return gpuRefusal() ? null : gpuPoseSample( resolved, sampleRequest );
 	}
 	/*
 ================
@@ -356,10 +363,53 @@ clip's shared node index (clipNodeChannels).
 	}
 	/*
 ================
+blendChannel
+
+Accumulate one sampled channel of a layer into its node/path pass value:
+CRTBone 0xab56c0 weighs each track by w/(sum+w) within a lane.
+================
+	*/
+	function blendChannel( node: number, path: number, width: number, target: Float32Array, weight: number ) {
+		const index = node * 3 + path;
+		const out = pass[node]![path]!, before = weights[index]!, total = before + weight;
+		if ( before === 0 ) out.set( target );
+		else if ( path === 1 ) slerp( out, target, weight / total, out );
+		else {
+			for ( let c = 0; c < width; c++ ) out[c] = out[c]! + (target[c]! - out[c]!) * weight / total;
+		}
+		weights[index] = total;
+	}
+	/*
+================
+commitNode
+
+Commit node n's lane pass into its TRS: 0xab5780 caps the lane to the
+headroom earlier lanes left (event tracks precede timed tracks).
+================
+	*/
+	function commitNode( n: number ) {
+		for ( let path = 0; path < 3; path++ ) {
+			const index = n * 3 + path, weight = Math.min( weights[index]!, 1 - committed[index]! );
+			if ( weight <= 0 ) continue;
+			const out = path === 0 ? translations[n]! : path === 1 ? rotations[n]! : scales[n]!,
+				value = pass[n]![path]!,
+				previous = committed[index]!;
+			if ( previous === 0 ) out.set( value );
+			else if ( path === 1 ) slerp( out, value, weight / (previous + weight), out );
+			else {
+				for ( let c = 0; c < 3; c++ ) out[c] = out[c]! + (value[c]! - out[c]!) * weight / (previous + weight);
+			}
+			committed[index] = previous + weight;
+		}
+	}
+	/*
+================
 sampleLayers
 
-Sample every channel of the begun evaluation's unsettled nodes: all of
-them for a blended pass (begin), the rest of a direct pass (materialize).
+Sample every channel of the begun evaluation's unsettled nodes: the rest
+of a direct pass, or of a blended pass (materialize). Each node/path
+blends independently of every other, so sampling a blended pass by chains
+(sampleBlendedNodes) and the rest here gives the bytes of one whole pass.
 ================
 	*/
 	function sampleLayers() {
@@ -368,12 +418,13 @@ them for a blended pass (begin), the rest of a direct pass (materialize).
 		// blending to accumulate. Sample with the identical interpolation,
 		// then commit directly. Layered/duplicate-channel inputs keep the
 		// native event-before-timed accumulation below.
-		if ( !direct ) committed.fill( 0 );
-		// CRTBone 0xab56c0 accumulates each pass by w/(sum+w). 0xab5780
-		// caps the next pass to remaining headroom; event tracks precede timed tracks.
 		for ( let laneIndex = 0; laneIndex < (direct ? 1 : 2); laneIndex++ ) {
 			const lane = direct ? resolved[0]!.lane : laneIndex === 0 ? "event" : "timed";
-			if ( !direct ) weights.fill( 0 );
+			if ( !direct ) {
+				for ( let n = 0; n < model.nodes.length; n++ ) {
+					if ( ready[n] === 0 ) weights.fill( 0, n * 3, n * 3 + 3 );
+				}
+			}
 			for ( const layer of resolved ) {
 				if ( layer.lane !== lane || layer.weight === 0 ) continue;
 				if ( !layer.clip ) continue;
@@ -388,34 +439,49 @@ them for a blended pass (begin), the rest of a direct pass (materialize).
 					// float32 destination is the sampler output itself.
 					const target = direct ? directTarget( channel.node, path ) : width === 4 ? sample : sample3;
 					sampleChannel( layer.clip, clocks, channelIndex, target, width );
-					if ( direct ) continue;
-					const index = channel.node * 3 + path;
-					const out = pass[channel.node]![path]!, before = weights[index]!, total = before + layer.weight;
-					if ( before === 0 ) out.set( target );
-					else if ( path === 1 ) slerp( out, target, layer.weight / total, out );
-					else {for ( let c = 0; c < width; c++ ) {
-							out[c] = out[c]! + (target[c]! - out[c]!) * layer.weight / total;
-						}}
-					weights[index] = total;
+					if ( !direct ) blendChannel( channel.node, path, width, target, layer.weight );
 				}
 			}
 			if ( !direct ) {
 				for ( let n = 0; n < model.nodes.length; n++ ) {
-					for ( let path = 0; path < 3; path++ ) {
-						const index = n * 3 + path, weight = Math.min( weights[index]!, 1 - committed[index]! );
-						if ( weight <= 0 ) continue;
-						const out = path === 0 ? translations[n]! : path === 1 ? rotations[n]! : scales[n]!,
-							value = pass[n]![path]!,
-							previous = committed[index]!;
-						if ( previous === 0 ) out.set( value );
-						else if ( path === 1 ) slerp( out, value, weight / (previous + weight), out );
-						else {for ( let c = 0; c < 3; c++ ) {
-								out[c] = out[c]! + (value[c]! - out[c]!) * weight / (previous + weight);
-							}}
-						committed[index] = previous + weight;
+					if ( ready[n] === 0 ) commitNode( n );
+				}
+			}
+		}
+	}
+	/*
+================
+sampleBlendedNodes
+
+Sample a blended pass's channels of chain[0..count) alone, lane by lane,
+layer by layer, through each clip's node index: a socket of a casting
+peer needs its marker's ancestors, not the whole skeleton. Each layer's
+clock is sampled right before its channels, as sampleLayers does (two
+layers of one clip share its clock object).
+================
+	*/
+	function sampleBlendedNodes( count: number ) {
+		for ( let laneIndex = 0; laneIndex < 2; laneIndex++ ) {
+			const lane = laneIndex === 0 ? "event" : "timed";
+			for ( let i = 0; i < count; i++ ) weights.fill( 0, chain[i]! * 3, chain[i]! * 3 + 3 );
+			for ( const layer of resolved ) {
+				if ( layer.lane !== lane || layer.weight === 0 || !layer.clip ) continue;
+				const clip = layer.clip, clocks = clipClocks( clip, layer.time );
+				const index = clipNodeChannels( clip, nodeChannels ), indexed = index.first.length - 1;
+				for ( let i = 0; i < count; i++ ) {
+					const n = chain[i]!;
+					if ( n >= indexed ) continue;
+					for ( let k = index.first[n]!; k < index.first[n + 1]!; k++ ) {
+						const channelIndex = index.channels[k]!, kind = clip.channels[channelIndex]!.path;
+						const path = kind === "translation" ? 0 : kind === "rotation" ? 1 : 2,
+							width = path === 1 ? 4 : 3;
+						const target = width === 4 ? sample : sample3;
+						sampleChannel( clip, clocks, channelIndex, target, width );
+						blendChannel( n, path, width, target, layer.weight );
 					}
 				}
 			}
+			for ( let i = 0; i < count; i++ ) commitNode( chain[i]! );
 		}
 	}
 	/*
@@ -423,8 +489,8 @@ them for a blended pass (begin), the rest of a direct pass (materialize).
 begin
 
 Start materializing the pending evaluation: everything its nodes share. A
-blended pass accumulates every node's local TRS here. A direct pass (one
-full-weight layer with one channel per node/path) only prepares its clock:
+direct pass (one full-weight layer with one channel per node/path)
+prepares its clock; a blended pass clears its commit headroom. Either way
 each group of nodes samples its own channels before it settles.
 ================
 	*/
@@ -449,7 +515,7 @@ each group of nodes samples its own channels before it settles.
 		ready.fill( 0 );
 		readyCount = 0;
 		if ( direct && layer!.clip ) directClocks = clipClocks( layer!.clip, layer!.time );
-		else if ( !direct ) sampleLayers();
+		else if ( !direct ) committed.fill( 0 );
 		begun = true;
 		cpuEvaluations++;
 	}
@@ -557,6 +623,7 @@ publishes the evaluation, as materialize does.
 	*/
 	function settleGathered( count: number ) {
 		if ( directPass ) sampleNodes( count );
+		else sampleBlendedNodes( count );
 		settle( chain, 0, count );
 		if ( readyCount === model.nodes.length ) publishSettled();
 	}
@@ -598,7 +665,7 @@ Settle every node of the pending evaluation not yet settled.
 	function materialize() {
 		if ( !cpuPending ) return;
 		if ( !begun ) begin();
-		if ( directPass ) sampleLayers();
+		sampleLayers();
 		settle( order, 0, order.length );
 		publishSettled();
 	}
@@ -782,6 +849,7 @@ quaternion scratch is charged and allocated only when playback needs it.
 			return true;
 		},
 		gpuSample,
+		gpuRefusal,
 		cpuEvaluations: () => cpuEvaluations,
 		/*
         ================

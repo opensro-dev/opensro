@@ -28,6 +28,7 @@ function frame( { yaw = 0, x = 0, chest = 3001, imbued = false, mode = SNOW_MODE
 		camera: { yaw, pitch: 0.4, distance: 30 },
 		weather: { mode, amount: 255 },
 		heapMB: 40,
+		picture: { lumaMean: 120, lumaSpread: 45 },
 		peers: [ { gid: 7, x, z: 0, chest, imbued } ]
 	};
 }
@@ -51,13 +52,20 @@ test("a busy snowy drag passes only when every promise shows in the frames", () 
 		"no actor moved": good.map( f => ({ ...f, peers: f.peers.map( p => ({ ...p, x: 0 }) ) }) ),
 		"no actor changed clothes": good.map( f => ({ ...f, peers: f.peers.map( p => ({ ...p, chest: 3001 }) ) }) ),
 		"no actor wore the imbue": good.map( f => ({ ...f, peers: f.peers.map( p => ({ ...p, imbued: false }) ) }) ),
-		"not snowing in every frame": [ ...good.slice( 0, 2 ), { ...good[2], weather: { mode: 1, amount: 0 } } ]
+		"not snowing in every frame": [ ...good.slice( 0, 2 ), { ...good[2], weather: { mode: 1, amount: 0 } } ],
+		// The client held a living scene, but the page presented a blank white frame.
+		"a frame shows no drawn scene": [ ...good.slice( 0, 2 ), {
+			...good[2],
+			picture: { lumaMean: 254, lumaSpread: 1.2 }
+		} ]
 	};
 	for ( const [reason, frames] of Object.entries( broken ) ) {
 		const failed = judgeFrames( frames, ALL );
 		assert.equal( failed.pass, false, reason );
 		assert.deepEqual( failed.failed, [ reason ] );
 	}
+	// A frame without a picture record was never looked at: not drawn either.
+	assert.equal( judgeFrames( good.map( ( { picture, ...rest } ) => rest ), ALL ).pass, false );
 	// A still scene promises nothing it does not show.
 	assert.equal( judgeFrames( broken["camera never moved"], { ...ALL, camera: false } ).pass, true );
 });

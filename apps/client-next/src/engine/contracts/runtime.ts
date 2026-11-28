@@ -43,6 +43,10 @@ export interface CharacterStatistics {
 		readonly sharedPaletteSamples: number;
 		readonly clothSamples: number;
 		readonly gpuPaletteSamples: number;
+		/** Models whose poses stay on the CPU, with how many actors and the first primitive that keeps them there. */
+		/** Poses the GPU sampler refused, by its reason (layers, weight, body volume, bone rotation, ...). */
+		readonly cpuSampleReasons: Readonly<Record<string, number>>;
+		readonly cpuModels: readonly { readonly model: string; readonly actors: number; readonly reason: string; }[];
 	};
 	/**
 	 * The last main frame's admitted actors against their culling spheres:
@@ -537,6 +541,11 @@ export interface RuntimeControl extends Disposable {
 	characterActors(): readonly import("./character").CharacterActor[];
 	/** Copied counters and retained-pose eligibility; does not advance animation. */
 	characterStats(): CharacterStatistics;
+	/** The world's counters, the weather's among them. */
+	worldStats(): import("./scene").WorldRenderStats;
+	// The native graphic options' draw switches (GRAPHIC_OPTION_*), for a bench
+	// that weighs what each category costs the GPU.
+	setRenderMode( mode: number, enabled: boolean ): void;
 	/**
 	 * characterStats plus the posed culling ceiling. Reads displayed-pose
 	 * palettes, which can force CPU pose evaluation: diagnostics only, never

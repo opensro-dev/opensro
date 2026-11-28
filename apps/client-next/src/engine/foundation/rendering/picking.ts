@@ -34,6 +34,50 @@ export interface PickSurface {
 	}[];
 }
 export type PickBounds = readonly [number, number, number, number, number, number];
+
+/*
+================
+SkinnedPickVertices
+
+One posed instance's skinned world-space vertices, filled lazily as the
+triangle walk reaches them. A caller that asks several questions of the same
+pose (every ray of one hover pick) passes the same record to each query, so
+a vertex is skinned once per pose rather than once per query. It is valid
+only while the palette and the instance matrix it was filled under hold:
+the owner drops it when the pick ends.
+================
+*/
+export interface SkinnedPickVertices {
+	readonly positions: Float64Array;
+	readonly ready: Uint8Array;
+}
+
+/*
+================
+createSkinnedPickVertices
+================
+*/
+export function createSkinnedPickVertices( geometry: Geometry ): SkinnedPickVertices {
+	return {
+		positions: new Float64Array( geometry.positions.length ),
+		ready: new Uint8Array( geometry.positions.length / 3 )
+	};
+}
+
+/*
+================
+OcclusionQuery
+
+What occludesGeometry needs besides the ray, mesh, instance and depth: the
+skinning palette, the surface rules and, for a skinned mesh, the shared
+vertex record of this pose.
+================
+*/
+export interface OcclusionQuery {
+	readonly palette?: Float32Array;
+	readonly surface?: PickSurface;
+	readonly skinned?: SkinnedPickVertices;
+}
 export const PICK_BLOCK_INDICES = 96;
 // Only for immutable, unskinned geometry. Index order and exact surface tests
 // remain unchanged; a rejected block cannot contain a segment intersection.
@@ -241,11 +285,46 @@ export function occludesGeometry(
 	geometry: Geometry,
 	instance: Float32Array,
 	limit: number,
-	palette?: Float32Array,
-	surface?: PickSurface
+	query: OcclusionQuery = {}
 ): boolean {
 	if ( !Number.isFinite( limit ) || limit < 0 ) throw Error( "Invalid occlusion depth" );
-	return intersectGeometry( ray, geometry, instance, { palette, surface, stopBefore: limit } ) !== null;
+	return intersectGeometry( ray, geometry, instance, { ...query, stopBefore: limit } ) !== null;
+}
+/*
+================
+createOcclusionMemo
+
+Occlusion queries over a few rays, many depths each (every candidate on
+a ray asks about the same ray): nearest( ray, limit ) finds the nearest
+occluder before limit, or null. Each ray is scanned once for the depth
+asked, and later queries are answered from it - occluded exactly when
+that nearest occluder lies before the query's depth - scanning again
+only for a depth past every one scanned with nothing found.
+================
+*/
+export function createOcclusionMemo( nearest: ( ray: PickRay, limit: number ) => number | null ) {
+	const reached = new Map<PickRay, { limit: number; nearest: number; }>();
+	return ( ray: PickRay, limit: number ): boolean => {
+		const known = reached.get( ray );
+		if ( known && (known.nearest < limit || limit <= known.limit) ) return known.nearest < limit;
+		const depth = nearest( ray, limit ) ?? Infinity;
+		reached.set( ray, { limit, nearest: depth } );
+		return depth < limit;
+	};
+}
+
+// The nearest accepted surface before limit, by occludesGeometry's rules,
+// or null: occludesGeometry( limit ) is true exactly when this is not null,
+// and the depth answers every shorter limit on the same ray too.
+export function nearestOccluder(
+	ray: PickRay,
+	geometry: Geometry,
+	instance: Float32Array,
+	limit: number,
+	query: OcclusionQuery = {}
+): number | null {
+	if ( !Number.isFinite( limit ) || limit < 0 ) throw Error( "Invalid occlusion depth" );
+	return intersectGeometry( ray, geometry, instance, { ...query, within: limit } );
 }
 // One intersection query. surface brings alpha, winding and opacity rules
 // (and its own blocks or ranges); blocks alone only culls.
@@ -253,8 +332,102 @@ type IntersectQuery = {
 	readonly palette?: Float32Array;
 	readonly surface?: PickSurface;
 	readonly stopBefore?: number;
+	// The nearest hit only before this (nearestOccluder): culls as stopBefore does.
+	readonly within?: number;
 	readonly blocks?: Float64Array;
+	readonly skinned?: SkinnedPickVertices;
 };
+/*
+================
+LocalRay
+
+A world segment carried into an instance's model space: start and delta
+under the inverse of the instance matrix. An affine map keeps the segment
+parameter t and a triangle's barycentrics, so depths and surface reads
+are the same in either space; mirrored records a negative determinant,
+which flips a triangle's winding.
+================
+*/
+type LocalRay = { readonly start: Float64Array; readonly delta: Float64Array; readonly mirrored: boolean; };
+// Below this determinant the instance is treated as singular and the
+// query stays in world space.
+const SINGULAR_INSTANCE = 1e-12;
+
+/*
+================
+localRay
+
+Null for a singular (flattened) instance, which has no inverse.
+================
+*/
+function localRay( ray: PickRay, m: Float32Array ): LocalRay | null {
+	const a = m[0]!, b = m[4]!, c = m[8]!, d = m[1]!, e = m[5]!, f = m[9]!, g = m[2]!, h = m[6]!, k = m[10]!;
+	const A = e * k - f * h, B = f * g - d * k, C = d * h - e * g, det = a * A + b * B + c * C;
+	if ( !Number.isFinite( det ) || Math.abs( det ) < SINGULAR_INSTANCE ) return null;
+	// The inverse's rows, scaled by 1/det (adjugate).
+	const i00 = A / det, i01 = (c * h - b * k) / det, i02 = (b * f - c * e) / det;
+	const i10 = B / det, i11 = (a * k - c * g) / det, i12 = (c * d - a * f) / det;
+	const i20 = C / det, i21 = (b * g - a * h) / det, i22 = (a * e - b * d) / det;
+	const sx = ray.start[0]! - m[12]!, sy = ray.start[1]! - m[13]!, sz = ray.start[2]! - m[14]!;
+	const dx = ray.delta[0]!, dy = ray.delta[1]!, dz = ray.delta[2]!;
+	return {
+		start: Float64Array.of(
+			i00 * sx + i01 * sy + i02 * sz,
+			i10 * sx + i11 * sy + i12 * sz,
+			i20 * sx + i21 * sy + i22 * sz
+		),
+		delta: Float64Array.of(
+			i00 * dx + i01 * dy + i02 * dz,
+			i10 * dx + i11 * dy + i12 * dz,
+			i20 * dx + i21 * dy + i22 * dz
+		),
+		mirrored: det < 0
+	};
+}
+
+/*
+================
+localSegmentHitsBox
+
+The slab test of rayIntersectsBounds in model space: the box [min..max] at
+b[offset..offset + 6] against the local segment up to limit.
+================
+*/
+function localSegmentHitsBox(
+	ray: LocalRay,
+	b: ArrayLike<number>,
+	offset: number,
+	limit: number
+): boolean {
+	let enter = 0, exit = limit;
+	for ( let axis = 0; axis < 3; axis++ ) {
+		const delta = ray.delta[axis]!,
+			start = ray.start[axis]!,
+			low = b[offset + axis]! - 1e-5,
+			high = b[offset + axis + 3]! + 1e-5;
+		if ( Math.abs( delta ) < 1e-15 ) {
+			if ( start < low || start > high ) return false;
+			continue;
+		}
+		const p = (low - start) / delta, q = (high - start) / delta;
+		enter = Math.max( enter, Math.min( p, q ) );
+		exit = Math.min( exit, Math.max( p, q ) );
+		if ( enter > exit ) return false;
+	}
+	return true;
+}
+
+/*
+================
+intersectGeometry
+
+An unskinned mesh is tested in its own space (localRay): one inverse per
+query instead of three matrix products per triangle, and its block and
+range boxes are tested untransformed, which is tighter than their
+world-axis hull. A skinned mesh, or a singular instance, stays in world
+space.
+================
+*/
 function intersectGeometry(
 	ray: PickRay,
 	geometry: Geometry,
@@ -268,8 +441,13 @@ function intersectGeometry(
 	// An unskinned mesh transforms each corner directly into a nine-value
 	// scratch: a mesh-sized cache per query cost more to allocate and clear
 	// than the three matrix products it saved.
-	let vertices: Float64Array | undefined, ready: Uint8Array | undefined;
-	const corners = palette && geometry.joints && geometry.weights ? undefined : new Float64Array( 9 );
+	let vertices: Float64Array | undefined = query.skinned?.positions,
+		ready: Uint8Array | undefined = query.skinned?.ready;
+	const skinned = !!(palette && geometry.joints && geometry.weights);
+	const local = skinned ? null : localRay( ray, instance );
+	const corners = skinned || local ? undefined : new Float64Array( 9 );
+	// The segment the triangle test reads: model space when local.
+	const segment = local ?? ray;
 	const vertex = ( index: number ) => {
 		if ( !vertices ) {
 			vertices = new Float64Array( geometry.positions.length );
@@ -281,7 +459,7 @@ function intersectGeometry(
 		}
 		return index * 3;
 	};
-	let nearest = stopBefore ?? Infinity, rangeIndex = 0, rangeEnd = 0;
+	let nearest = stopBefore ?? query.within ?? Infinity, rangeIndex = 0, rangeEnd = 0;
 	const rangeBounds: [number, number, number, number, number, number] | undefined = surface?.ranges ?
 		[ 0, 0, 0, 0, 0, 0 ] :
 		undefined;
@@ -297,20 +475,30 @@ function intersectGeometry(
 				b[axis] = range.center[axis]! - range.radius;
 				b[axis + 3] = range.center[axis]! + range.radius;
 			}
-			if ( !rayIntersectsBounds( ray, rangeBounds!, instance, Math.min( 1, nearest ) ) ) {
+			const hits = local ?
+				localSegmentHitsBox( local, rangeBounds!, 0, Math.min( 1, nearest ) ) :
+				rayIntersectsBounds( ray, rangeBounds!, instance, Math.min( 1, nearest ) );
+			if ( !hits ) {
 				i = rangeEnd - 3;
 				continue;
 			}
 		}
 		if (
 			blocks && i % PICK_BLOCK_INDICES === 0 &&
-			!rayIntersectsBounds( ray, blocks, instance, Math.min( 1, nearest ), i / PICK_BLOCK_INDICES * 6 )
+			!(local ?
+				localSegmentHitsBox( local, blocks, i / PICK_BLOCK_INDICES * 6, Math.min( 1, nearest ) ) :
+				rayIntersectsBounds( ray, blocks, instance, Math.min( 1, nearest ), i / PICK_BLOCK_INDICES * 6 ))
 		) {
 			i += PICK_BLOCK_INDICES - 3;
 			continue;
 		}
-		let a = 0, b = 3, c = 6, points: Float64Array;
-		if ( corners ) {
+		let a = 0, b = 3, c = 6, points: ArrayLike<number>;
+		if ( local ) {
+			a = geometry.indices[i]! * 3;
+			b = geometry.indices[i + 1]! * 3;
+			c = geometry.indices[i + 2]! * 3;
+			points = geometry.positions;
+		} else if ( corners ) {
 			writeGeometryVertex( geometry, instance, geometry.indices[i]!, undefined, corners, 0 );
 			writeGeometryVertex( geometry, instance, geometry.indices[i + 1]!, undefined, corners, 3 );
 			writeGeometryVertex( geometry, instance, geometry.indices[i + 2]!, undefined, corners, 6 );
@@ -323,17 +511,17 @@ function intersectGeometry(
 		}
 		const ex = points[b]! - points[a]!, ey = points[b + 1]! - points[a + 1]!, ez = points[b + 2]! - points[a + 2]!;
 		const fx = points[c]! - points[a]!, fy = points[c + 1]! - points[a + 1]!, fz = points[c + 2]! - points[a + 2]!;
-		const dx = ray.delta[0]!,
-			dy = ray.delta[1]!,
-			dz = ray.delta[2]!,
+		const dx = segment.delta[0]!,
+			dy = segment.delta[1]!,
+			dz = segment.delta[2]!,
 			hx = dy * fz - dz * fy,
 			hy = dz * fx - dx * fz,
 			hz = dx * fy - dy * fx,
 			det = ex * hx + ey * hy + ez * hz;
 		if ( Math.abs( det ) < 1e-12 ) continue;
-		const sx = ray.start[0]! - points[a]!,
-			sy = ray.start[1]! - points[a + 1]!,
-			sz = ray.start[2]! - points[a + 2]!,
+		const sx = segment.start[0]! - points[a]!,
+			sy = segment.start[1]! - points[a + 1]!,
+			sz = segment.start[2]! - points[a + 2]!,
 			u = (sx * hx + sy * hy + sz * hz) / det;
 		if ( u < 0 || u > 1 ) continue;
 		const qx = sy * ez - sz * ey,
@@ -344,7 +532,8 @@ function intersectGeometry(
 		const t = (fx * qx + fy * qy + fz * qz) / det;
 		if ( t < 0 || t > 1 || t >= nearest ) continue;
 		if ( surface ) {
-			if ( geometry.material?.doubleSided === false && det < 0 ) continue;
+			// A mirrored instance turns its model-space winding over.
+			if ( geometry.material?.doubleSided === false && (local?.mirrored ? -det : det) < 0 ) continue;
 			const weights = [ 1 - u - v, u, v ];
 			let alpha = (geometry.material?.color[3] ?? 1) * (surface.opacity ?? 1);
 			// Terrain keeps its colours and uvs only in the packed stream
@@ -377,5 +566,5 @@ function intersectGeometry(
 		if ( stopBefore !== undefined ) return t;
 		nearest = t;
 	}
-	return stopBefore === undefined && Number.isFinite( nearest ) ? nearest : null;
+	return stopBefore === undefined && nearest < (query.within ?? Infinity) ? nearest : null;
 }

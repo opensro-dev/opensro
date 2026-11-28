@@ -38,6 +38,12 @@ export const DEFAULT_ACTIVITY_SEED = 1;
 const ADMISSION_TIMEOUT_MS = 30000;
 // A full 32-peer refill is (32 - 10) x 6 s; retries beyond that are a fault.
 const MAX_LOGIN_RETRIES = 40;
+// Name draws per peer before the crowd gives up (peerName); a refusal is
+// about one name in two hundred, so a second draw nearly always passes.
+const PEER_NAME_ATTEMPTS = 8;
+// The pre-check refusals a fresh name answers (characters.go nameRefusal):
+// UIO_MSG_ERROR_CHARACTER_NAME_STRING and the overlap code.
+const NAME_REFUSALS = [ 0x0c, 0x11 ];
 export const DEFAULT_RETRY_AFTER_S = 6;
 // The layout (crowdLayout): peers stand PITCH apart in rows across the
 // fixture's x, the first row LEAD units ahead of the observer along z, at
@@ -380,15 +386,52 @@ export async function createCrowd(
 	concurrently with the other peers; the login goes through the gate.
 	================
 	*/
+	/*
+	================
+	peerName
+
+	A name the server's own pre-check (/character/name-overlap, the
+	native shape, textdata abusefilter.txt and the taken names) accepts.
+	The random hex prefix often spells a filtered word: the filter holds
+	two-letter entries such as "c8": about one 16-peer crowd in twelve met
+	one (8%, simulated against the filter). Only those two refusals, the
+	filtered name (0x0c) and the taken one (0x11), draw a fresh tail; any
+	other answer is a fault and stops the crowd. The server's rules are
+	unchanged: the crowd only stops proposing names it refuses.
+	================
+	*/
+	const peerName = async ( session, index ) => {
+		for ( let attempt = 0; attempt < PEER_NAME_ATTEMPTS; attempt++ ) {
+			const tail = attempt ? randomBytes( 2 ).toString( "hex" ) : prefix;
+			const name = assertCharacterAllowed( `P${tail}${index}`, { context: "live crowd fixture" } );
+			const verdict = await fetchProbeSessionJson( session, "/character/name-overlap", {
+				method: "POST",
+				headers: { "content-type": "application/json" },
+				body: JSON.stringify( { characterName: name } )
+			} );
+			if ( verdict?.nativeResult === 1 ) return name;
+			if ( !NAME_REFUSALS.includes( verdict?.nativeErrorCode ) ) {
+				throw Error( `crowd peer ${index}: name check failed: ${JSON.stringify( verdict )}` );
+			}
+		}
+		throw Error( `crowd peer ${index}: no name the server accepts in ${PEER_NAME_ATTEMPTS} draws` );
+	};
 	const admit = async index => {
 		const id = `perf${prefix}${index}`, password = randomBytes( 24 ).toString( "hex" );
-		const character = assertCharacterAllowed( `P${prefix}${index}`, { context: "live crowd fixture" } );
 		await provision( "/v1/accounts", "POST", { id, password } );
-		accounts.push( id );
-		characters.push( character );
+		// The account and its character share one journal row, pushed
+		// together (admits run concurrently); the name is settled below.
+		const row = accounts.push( id ) - 1;
+		characters.push( `P${prefix}${index}` );
 		await journal();
 		const session = await login( id, password );
-		await fetchProbeSessionJson( session, "/character/create", {
+		const character = await peerName( session, index );
+		characters[row] = character;
+		await journal();
+		// A refused create answers 200 with nativeResult 0 (the native
+		// result byte): stop here with its code, not at the reset's
+		// UNKNOWN_CHARACTER.
+		const created = await fetchProbeSessionJson( session, "/character/create", {
 			method: "POST",
 			headers: { "content-type": "application/json" },
 			body: JSON.stringify( {
@@ -401,6 +444,9 @@ export async function createCrowd(
 				...busyCreation( activity )
 			} )
 		} );
+		if ( created?.nativeResult !== 1 ) {
+			throw Error( `crowd peer ${character} was not created: ${JSON.stringify( created )}` );
+		}
 		// A scenario names each peer's loadout; a busy crowd without one is
 		// taught the imbue its script casts.
 		const loadout = loadoutFor ? loadoutFor( index ) : activity.busy > 0 ? BUSY_LOADOUT : null;

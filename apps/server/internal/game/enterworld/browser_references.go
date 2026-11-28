@@ -85,6 +85,9 @@ type BrowserReferenceSources struct {
 	// ReverseMapPoints is the reverse return scroll's map table: empty
 	// unless the port-only SRO_REVERSE_RETURN_MAP option is on.
 	ReverseMapPoints []ReverseMapPoint
+	// GachaPool is the v1.696 Magic POP pool (gacha_pool_reference.go);
+	// nil unless that catalog is active.
+	GachaPool *GachaPoolReference
 }
 
 // maxReverseMapNameBytes bounds a published point name.
@@ -96,7 +99,10 @@ ReverseMapPoint
 
 A reverse return map destination (port-only, not native). The browser paints
 it from these coordinates; a use names only its ID, which the server
-resolves (action/reversemap.go).
+resolves (action/reversemap.go). Group names a dungeon group of the
+imported table (0, omitted, for a field point): the group's map point is
+its flag, which opens a menu of the group's Floor points and is never a
+destination itself.
 ================
 */
 type ReverseMapPoint struct {
@@ -106,6 +112,8 @@ type ReverseMapPoint struct {
 	X        float64 `json:"x"`
 	Y        float64 `json:"y"`
 	Z        float64 `json:"z"`
+	Group    uint32  `json:"group,omitempty"`
+	Floor    bool    `json:"floor,omitempty"`
 }
 
 /*
@@ -166,6 +174,9 @@ func NewBrowserReferences(sources BrowserReferenceSources) (*BrowserReferences, 
 			return nil, fmt.Errorf("invalid reverse map point %d", point.ID)
 		}
 	}
+	if err := validateGachaPool(sources.GachaPool, itemIDs); err != nil {
+		return nil, err
+	}
 	data, err := json.Marshal(struct {
 		ReferencesVersion     int                    `json:"referencesVersion"`
 		SkillLifecycleVersion int                    `json:"skillLifecycleVersion"`
@@ -174,7 +185,8 @@ func NewBrowserReferences(sources BrowserReferenceSources) (*BrowserReferences, 
 		RefObjSnapshot        []RefObjRow            `json:"refObjSnapshot"`
 		ItemCommandReferences []ItemCommandReference `json:"itemCommandReferences,omitempty"`
 		ReverseMapPoints      []ReverseMapPoint      `json:"reverseMapPoints,omitempty"`
-	}{releaseprotocol.ReferencesContract, 1, rows, itemRows, objectRows, commandRows, sources.ReverseMapPoints})
+		GachaPool             *GachaPoolReference    `json:"gachaPool,omitempty"`
+	}{releaseprotocol.ReferencesContract, 1, rows, itemRows, objectRows, commandRows, sources.ReverseMapPoints, sources.GachaPool})
 	if err != nil {
 		return nil, err
 	}

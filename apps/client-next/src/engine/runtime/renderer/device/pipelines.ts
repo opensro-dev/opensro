@@ -10,6 +10,8 @@ mip generation, and the samplers they bind.
 */
 import { NATIVE_CHARACTER_LIGHTING } from "@/engine/foundation/rendering/video-options";
 import { MSAA_SAMPLE_COUNT } from "./msaa";
+import { PARTICLE_WORDS as WEATHER_PARTICLE_WORDS } from "@/engine/foundation/rendering/gpu-record-layouts";
+import { WEATHER_CAPACITY_WORD, WEATHER_HEADER_WORDS } from "./weather-particles";
 import {
 	D3DBLEND_BLENDFACTOR,
 	D3DBLEND_BOTHINVSRCALPHA,
@@ -200,6 +202,17 @@ export interface GeometryPipelineState {
 
 /*
 ================
+GeometryVariant
+
+The shader variants: "rows" reads a draw's row states (Geometry.rowStates,
+binding 16), "weather" its region of the drop pool (Geometry.weather,
+binding 17, weather-particles.ts). Absent: the plain shader.
+================
+*/
+export type GeometryVariant = "rows" | "weather";
+
+/*
+================
 geometryPipelineKey
 ================
 */
@@ -376,8 +389,9 @@ fn skyNoise(p:vec2f)->f32{
 	binding 16, so no other bind group carries one.
 	================
 	*/
-	const geometrySource = ( rowStates: boolean ) =>
-		environmentStruct + `
+	const geometrySource = ( variant?: GeometryVariant ) => {
+		const rowStates = variant === "rows", weather = variant === "weather";
+		return environmentStruct + `
 const nativeCharacterLighting:bool=${NATIVE_CHARACTER_LIGHTING};
 @group(0) @binding(0) var<uniform> transform:mat4x4f;
 struct Instance {matrix:mat4x4f,opacity:vec4f,color:vec4f,window:vec4f,pointPosition:vec4f,pointAmbient:vec4f,pointDiffuse:vec4f}
@@ -387,6 +401,8 @@ struct Material {color:vec4f,options:vec4f,skin:vec4f,window:vec4f,lighting:vec4
 ${
 			rowStates ?
 				"@group(0) @binding(16) var<storage,read> rowStates:array<vec4f>;\n" :
+				weather ?
+				"@group(0) @binding(17) var<storage,read> weatherWords:array<u32>;\n" :
 				""
 		}// texture-stage.ts: D3D9 stage 0, every op it defines. CURRENT is the
 // diffuse colour at stage 0; TEMP starts at zero; SPECULAR is the vertex
@@ -493,7 +509,7 @@ fn waterBumpOffset(uv:vec2f)->vec2f{
 struct Out {@location(11) worldY:f32,@location(12) mirrorPosition:vec4f,@builtin(position) position:vec4f,@location(0) uv:vec2f,@location(1) normal:vec3f,@location(2) color:vec4f,@location(3) maskUV:vec2f,@location(4) viewZ:f32,@location(5) objectLighting:vec3f,@location(6) @interpolate(flat) opacity:f32,@location(7) worldXZ:vec2f,@location(8) @interpolate(flat) materialTint:vec3f,@location(9) sphereUV:vec2f,@location(10) equipmentUV:vec2f,@location(14) multiUV:vec2f${
 			rowStates ? ",@location(13) @interpolate(flat) equipmentColor:vec3f" : ""
 		}}
-@vertex fn vs(@location(0) position:vec3f,@location(1) normal:vec3f,@location(2) uv:vec2f,@location(3) color:vec4f,@location(4) maskUV:vec2f,@builtin(instance_index) i:u32,@builtin(vertex_index) vertex:u32)->Out {
+fn vertexBody(position:vec3f,normal:vec3f,uv:vec2f,color:vec4f,maskUV:vec2f,i:u32,vertex:u32)->Out {
  var o:Out;let instance=instances[i].matrix;o.opacity=instances[i].opacity.x;var p=vec4f(position,1);var n=vec4f(normal,0);
  // A cloth draw marks its instances with its vertex count V (opacity.w,
  // geometry.ts markCloth): a vertex's slot map entry (V + vertex) names its
@@ -762,15 +778,33 @@ if(env.stages2.w>0.5&&material.reflection.z>0.5&&material.skin.z==0.0&&material.
  let surfaceAlpha=select(select(color.a,clamp(input.color.a,0,1),animated),select(select(1.0,color.a,material.ambient.w>0.5),fadeAlpha,fading),material.lighting.z>0.5);
  return vec4f(mix(lit*select(vec3f(1),waterShading,animated),select(fogColor,terrainFogColor,material.options.z>0.5),fog),select(surfaceAlpha,1.0,material.stagePolicy.y>0.5));
 }
-@fragment fn fs(input:Out,@builtin(front_facing) frontFacing:bool)->@location(0) vec4f {return shadeGeometry(input,frontFacing);}
+${
+			weather ?
+				`// weather-particles.ts: a visible drop's slot from the region's list,
+// its position from the pool, one billboard corner a vertex.
+@vertex fn vsWeather(@builtin(instance_index) i:u32,@builtin(vertex_index) vertex:u32)->Out {
+ let capacity=weatherWords[${WEATHER_CAPACITY_WORD}u];let k=vertex-weatherWords[${
+					WEATHER_CAPACITY_WORD + 1
+				}u];let corner=k%3u;
+ let slot=weatherWords[${WEATHER_HEADER_WORDS}u+capacity*${WEATHER_PARTICLE_WORDS}u+k/3u];let at=${WEATHER_HEADER_WORDS}u+slot*${WEATHER_PARTICLE_WORDS}u;
+ let drop=vec3f(bitcast<f32>(weatherWords[at]),bitcast<f32>(weatherWords[at+1u]),bitcast<f32>(weatherWords[at+2u]));
+ let offset=vec3f(bitcast<f32>(weatherWords[corner*4u]),bitcast<f32>(weatherWords[corner*4u+1u]),bitcast<f32>(weatherWords[corner*4u+2u]));
+ let uv=vec2f(bitcast<f32>(weatherWords[12u+corner*2u]),bitcast<f32>(weatherWords[13u+corner*2u]));
+ return vertexBody(drop+offset,vec3f(0,1,0),uv,vec4f(1),vec2f(0),i,vertex);
+}
+` :
+				`@vertex fn vs(@location(0) position:vec3f,@location(1) normal:vec3f,@location(2) uv:vec2f,@location(3) color:vec4f,@location(4) maskUV:vec2f,@builtin(instance_index) i:u32,@builtin(vertex_index) vertex:u32)->Out {return vertexBody(position,normal,uv,color,maskUV,i,vertex);}
+`
+		}@fragment fn fs(input:Out,@builtin(front_facing) frontFacing:bool)->@location(0) vec4f {return shadeGeometry(input,frontFacing);}
 // Port-only, not native: an accepted unblended/cutout fragment covers the
 // scratch target fully. Alpha tests still discard inside shadeGeometry.
 @fragment fn fsPreviewOpaque(input:Out,@builtin(front_facing) frontFacing:bool)->@location(0) vec4f {
  let color=shadeGeometry(input,frontFacing);return vec4f(color.rgb,1.0);
 }`;
-	const geometryShader = created.createShaderModule( { code: geometrySource( false ) } );
-	// The row-state variant, compiled when the first draw with row states asks.
-	let rowStateShader: GPUShaderModule | undefined;
+	};
+	const geometryShader = created.createShaderModule( { code: geometrySource() } );
+	// The variants' modules, compiled when the first draw of each asks.
+	const variantShaders = new Map<GeometryVariant, GPUShaderModule>();
 	/*
 	================
 	geometryDescriptor
@@ -783,7 +817,8 @@ if(env.stages2.w>0.5&&material.reflection.z>0.5&&material.skin.z==0.0&&material.
 		state: GeometryPipelineState,
 		target: GPUTextureFormat = format,
 		previewCoverage = false,
-		module = geometryShader
+		module = geometryShader,
+		variant?: GeometryVariant
 	): GPURenderPipelineDescriptor => {
 		const blend = state.blend ? blendState( state.blend ) : undefined;
 		const overwrite = blend?.color.srcFactor === "one" && blend.color.dstFactor === "zero";
@@ -803,8 +838,9 @@ if(env.stages2.w>0.5&&material.reflection.z>0.5&&material.skin.z==0.0&&material.
 			layout: "auto",
 			vertex: {
 				module,
-				entryPoint: "vs",
-				buffers: [ {
+				entryPoint: variant === "weather" ? "vsWeather" : "vs",
+				// A weather draw reads its drops from binding 17, no vertex stream.
+				buffers: variant === "weather" ? [] : [ {
 					arrayStride: 56,
 					attributes: [
 						{ shaderLocation: 0, offset: 0, format: "float32x3" },
@@ -916,26 +952,31 @@ geometry
 
 The geometry pipeline for state, compiled on first use. The HDR stage's
 rgba16float sibling and the MSAA stage's 4x sibling compile lazily under
-the same rule, and so does each one's row-state variant (rowStates, for a
-draw uploaded with Geometry.rowStates).
+the same rule, and so does each one's shader variant (GeometryVariant).
 ================
 		*/
 		geometry(
 			state: GeometryPipelineState,
 			{ sceneFloat = false, fullscreenPreview = false, msaa = false }: SceneSurface = {},
-			rowStates = false
+			variant?: GeometryVariant
 		) {
 			const previewCoverage = sceneFloat && fullscreenPreview;
 			const key = geometryPipelineKey( state ) + (sceneFloat ? "|hdr" : "") +
-				(previewCoverage ? "|preview" : "") + (msaa ? "|msaa" : "") + (rowStates ? "|rows" : "");
+				(previewCoverage ? "|preview" : "") + (msaa ? "|msaa" : "") + (variant ? "|" + variant : "");
 			let selected = geometryPipelines.get( key );
 			if ( !selected ) {
-				if ( rowStates ) rowStateShader ??= created.createShaderModule( { code: geometrySource( true ) } );
+				let module = geometryShader;
+				if ( variant ) {
+					module = variantShaders.get( variant ) ??
+						created.createShaderModule( { code: geometrySource( variant ) } );
+					variantShaders.set( variant, module );
+				}
 				const descriptor = geometryDescriptor(
 					state,
 					sceneFloat ? SCENE_FLOAT_FORMAT : format,
 					previewCoverage,
-					rowStates ? rowStateShader : geometryShader
+					module,
+					variant
 				);
 				if ( msaa ) descriptor.multisample = { count: MSAA_SAMPLE_COUNT };
 				selected = created.createRenderPipeline( descriptor );

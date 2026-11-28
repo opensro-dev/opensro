@@ -76,7 +76,34 @@ test( "shipping GPU pose owner matches CPU palettes across clocks, bindings, rel
 							).slice( 0, 1 )
 						].flatMap( time => [ false, true ].map( loop => ({ clip, time, loop }) ) )
 					);
-					let maxError = 0, compared = 0;
+					// Crossfades: two layers in one lane, an event layer under a
+					// timed one (in either order, with and without headroom), a
+					// part-weight single layer, and clips that animate different
+					// nodes (the step oracle against the body clip).
+					const other = m.clips[1] ?? step;
+					for (
+						const layers of [
+							[ [ m.clips[0], .3, .6, "timed" ], [ other, .7, .4, "timed" ] ],
+							[ [ m.clips[0], .2, .4, "event" ], [ other, .9, 1, "timed" ] ],
+							[ [ other, .5, 1, "timed" ], [ m.clips[0], .1, .3, "event" ] ],
+							[ [ m.clips[0], .4, 1, "event" ], [ other, .2, .5, "timed" ] ],
+							// Weights under one: the timed share is its weight over the sum.
+							[ [ m.clips[0], .15, .3, "event" ], [ other, .35, .4, "timed" ] ],
+							[ [ m.clips[0], .45, .5, "timed" ] ],
+							[ [ step, .25, .5, "timed" ], [ m.clips[0], .6, .5, "timed" ] ]
+						]
+					) {
+						cases.push( {
+							layers: layers.map( ( [clip, time, weight, lane] ) => ({
+								clip: clip.name,
+								time,
+								weight,
+								lane,
+								loop: true
+							}) )
+						} );
+					}
+					let maxError = 0, compared = 0, worst = null;
 					for (
 						const [model, primitive] of [
 							...m.primitives.map( p => [ m, p ] ),
@@ -96,7 +123,9 @@ test( "shipping GPU pose owner matches CPU palettes across clocks, bindings, rel
 						const cpu = new Float32Array( source.length ),
 							samples = cases.map( ( c, i ) => {
 								const pose = createCharacterPose( model );
-								pose.evaluate( c.clip.name, c.time, c.loop );
+								if ( c.layers ) pose.evaluate( "", 0, false, c.layers );
+								else pose.evaluate( c.clip.name, c.time, c.loop );
+								if ( c.layers && !pose.gpuSample() ) throw Error( "A crossfade was refused the GPU" );
 								pose.palette( primitive, cpu, i * primitive.joints.length * 16 );
 								return pose.gpuSample();
 							} );
@@ -115,6 +144,14 @@ test( "shipping GPU pose owner matches CPU palettes across clocks, bindings, rel
 						for ( let i = 0; i < cpu.length; i++ ) {
 							const error = Math.abs( cpu[i] - actual[i] );
 							if ( !Number.isFinite( error ) ) throw Error( "Nonfinite GPU pose" );
+							if ( error > maxError ) {
+								const c = cases[Math.floor( i / (primitive.joints.length * 16) )];
+								worst = {
+									case: c.layers ?? { clip: c.clip.name, time: c.time },
+									cpu: cpu[i],
+									gpu: actual[i]
+								};
+							}
 							maxError = Math.max( maxError, error );
 							compared++;
 						}
@@ -129,7 +166,7 @@ test( "shipping GPU pose owner matches CPU palettes across clocks, bindings, rel
 						read.destroy();
 					}
 					await device.queue.onSubmittedWorkDone();
-					runs.push( { maxError, compared, stats: owner.stats() } );
+					runs.push( { maxError, worst, compared, stats: owner.stats() } );
 				} finally {
 					owner.dispose();
 					device.destroy();
@@ -153,7 +190,7 @@ test( "shipping GPU pose owner matches CPU palettes across clocks, bindings, rel
 } );
 
 test(
-	"published Manyang CPU and GPU rendering agrees through seeks and layer fallback",
+	"published Manyang CPU and GPU rendering agrees through seeks and crossfades",
 	{ timeout: 90000 },
 	async () => {
 		const bytes = readPublishedAssetBytesSync(

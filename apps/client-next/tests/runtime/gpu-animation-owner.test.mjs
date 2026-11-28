@@ -13,6 +13,18 @@ import "../helpers/native-source-loader.mjs";
 import { pathToFileURL as sourceFileUrl } from "node:url";
 import { test } from "node:test";
 import assert from "node:assert/strict";
+// A sample's input words (device/animation.ts): two vec4 records.
+const SAMPLE_WORDS = 8;
+
+/*
+================
+single
+
+A one-clip GPU sample (CharacterGpuSample with no second layer).
+================
+*/
+const single = ( clip, time ) => ({ clip, time, next: null, nextTime: 0, share: 0 });
+
 /*
 ================
 load
@@ -172,7 +184,7 @@ function fixture( { reject = false, failBinding = false } = {} ) {
 					*/
 					dispatchWorkgroups( count ) {
 						const { buffer, offset, size } = group.entries.find( e => e.binding === 2 ).resource;
-						const values = [ ...new Float32Array( buffer.bytes.buffer, offset, count * 4 ) ];
+						const values = [ ...new Float32Array( buffer.bytes.buffer, offset, count * SAMPLE_WORDS ) ];
 						dispatches.push( { count, buffer, offset, size, values } );
 					},
 					end() {}
@@ -196,9 +208,9 @@ function fixture( { reject = false, failBinding = false } = {} ) {
 test("an appended clip rebinds compute inputs while retaining the geometry palette", async () => {
 	const f = fixture();
 	await f.owner.ready;
-	assert.equal( f.owner.prepare( f.source, f.output, f.model, f.primitive, [ { clip: f.clip, time: .2 } ] ), true );
+	assert.equal( f.owner.prepare( f.source, f.output, f.model, f.primitive, [ single( f.clip, .2 ) ] ), true );
 	const clip = { ...f.clip, name: "new-action" }, model = { ...f.model, clips: [ f.clip, clip ] };
-	assert.equal( f.owner.prepare( f.source, f.output, model, f.primitive, [ { clip, time: .3 } ] ), true );
+	assert.equal( f.owner.prepare( f.source, f.output, model, f.primitive, [ single( clip, .3 ) ] ), true );
 	assert.equal( f.owner.stats().models, 1 );
 	assert.equal( f.encode()[0].values[1], 1, "new catalog selects the appended clip" );
 	assert.throws( () =>
@@ -207,7 +219,7 @@ test("an appended clip rebinds compute inputs while retaining the geometry palet
 			f.output,
 			{ ...model, nodes: [ ...model.nodes ] },
 			f.primitive,
-			[ { clip, time: .3 } ]
+			[ single( clip, .3 ) ]
 		), /stream identity/ );
 	f.owner.release( f.source );
 	f.owner.dispose();
@@ -218,10 +230,10 @@ test("STEP phase cannot round forward across a key; cancellation removes queued 
 	const f = fixture();
 	await f.owner.ready;
 	assert.ok(
-		f.owner.prepare( f.source, f.output, f.model, f.primitive, [ { clip: f.clip, time: .5 - Number.EPSILON } ] )
+		f.owner.prepare( f.source, f.output, f.model, f.primitive, [ single( f.clip, .5 - Number.EPSILON ) ] )
 	);
 	assert.ok( f.encode()[0].values[0] < .5 );
-	f.owner.prepare( f.source, f.output, f.model, f.primitive, [ { clip: f.clip, time: .2 } ] );
+	f.owner.prepare( f.source, f.output, f.model, f.primitive, [ single( f.clip, .2 ) ] );
 	f.owner.cancel( f.source );
 	f.owner.encode( {
 		/*
@@ -242,13 +254,13 @@ test("STEP phase cannot round forward across a key; cancellation removes queued 
 test("failed pipeline permits CPU fallback and partial allocation failure retires owned buffers", async () => {
 	const f = fixture( { reject: true } );
 	await f.owner.ready;
-	assert.equal( f.owner.prepare( f.source, f.output, f.model, f.primitive, [ { clip: f.clip, time: 0 } ] ), false );
+	assert.equal( f.owner.prepare( f.source, f.output, f.model, f.primitive, [ single( f.clip, 0 ) ] ), false );
 	assert.match( f.owner.stats().failure, /pipeline failed/ );
 	f.owner.dispose();
 	const g = fixture( { failBinding: true } );
 	await g.owner.ready;
 	assert.throws(
-		() => g.owner.prepare( g.source, g.output, g.model, g.primitive, [ { clip: g.clip, time: 0 } ] ),
+		() => g.owner.prepare( g.source, g.output, g.model, g.primitive, [ single( g.clip, 0 ) ] ),
 		/binding failed/
 	);
 	assert.equal( g.owner.stats().models, 0 );
@@ -260,13 +272,13 @@ test("invalid requests cannot admit orphan model storage; disposal invalidates p
 	const f = fixture();
 	await f.owner.ready;
 	assert.throws(
-		() => f.owner.prepare( f.source, { size: 1 }, f.model, f.primitive, [ { clip: f.clip, time: 0 } ] ),
+		() => f.owner.prepare( f.source, { size: 1 }, f.model, f.primitive, [ single( f.clip, 0 ) ] ),
 		/capacity/
 	);
 	assert.equal( f.owner.stats().models, 0 );
-	assert.equal( f.owner.prepare( f.source, f.output, f.model, f.primitive, [ { clip: f.clip, time: NaN } ] ), false );
+	assert.equal( f.owner.prepare( f.source, f.output, f.model, f.primitive, [ single( f.clip, NaN ) ] ), false );
 	assert.equal( f.owner.stats().models, 0 );
-	f.owner.prepare( f.source, f.output, f.model, f.primitive, [ { clip: f.clip, time: 0 } ] );
+	f.owner.prepare( f.source, f.output, f.model, f.primitive, [ single( f.clip, 0 ) ] );
 	f.owner.dispose();
 	assert.throws( () => f.owner.encode( {} ), /Disposed/ );
 	assert.ok( f.buffers.every( b => b.destroyed === 1 ) );
@@ -277,15 +289,15 @@ test("sparse GPU inputs preserve destination indices around CPU-owned slots", as
 	await f.owner.ready;
 	f.owner.prepare( new Float32Array( 64 ), { size: 256 }, f.model, f.primitive, [
 		null,
-		{ clip: f.clip, time: .1 },
+		single( f.clip, .1 ),
 		null,
-		{ clip: f.clip, time: .6 }
+		single( f.clip, .6 )
 	] );
 	const [dispatch] = f.encode();
 	const inputs = dispatch.values;
-	assert.equal( inputs.length, 8 );
+	assert.equal( inputs.length, 2 * SAMPLE_WORDS );
 	assert.equal( inputs[2], 1 );
-	assert.equal( inputs[6], 3 );
+	assert.equal( inputs[SAMPLE_WORDS + 2], 3 );
 	assert.equal( dispatch.count, 2 );
 	f.owner.dispose();
 });
@@ -304,8 +316,8 @@ test("models on the same clips share one clip buffer until the last one is relea
 	await f.owner.ready;
 	const assembled = { ...f.model, nodes: [ ...f.model.nodes ], primitives: [ { ...f.primitive } ] };
 	const other = new Float32Array( 16 );
-	assert.ok( f.owner.prepare( f.source, f.output, f.model, f.primitive, [ { clip: f.clip, time: .1 } ] ) );
-	assert.ok( f.owner.prepare( other, f.output, assembled, assembled.primitives[0], [ { clip: f.clip, time: .2 } ] ) );
+	assert.ok( f.owner.prepare( f.source, f.output, f.model, f.primitive, [ single( f.clip, .1 ) ] ) );
+	assert.ok( f.owner.prepare( other, f.output, assembled, assembled.primitives[0], [ single( f.clip, .2 ) ] ) );
 	assert.equal( f.owner.stats().models, 2 );
 	assert.equal( f.owner.stats().clipSets, 1 );
 	assert.equal( f.buffers.filter( b => b.label === "animation-clips" ).length, 1 );
@@ -329,8 +341,8 @@ the rows its samples must put in the bound input range.
 ================
 */
 function stream( f, capacity, times ) {
-	const samples = times.map( time => time === null ? null : { clip: f.clip, time } );
-	const rows = times.flatMap( ( time, i ) => time === null ? [] : [ time, 0, i, 0 ] );
+	const samples = times.map( time => time === null ? null : single( f.clip, time ) );
+	const rows = times.flatMap( ( time, i ) => time === null ? [] : [ time, 0, i, 0, 0, -1, 0, 0 ] );
 	return {
 		source: new Float32Array( capacity * 16 ),
 		output: { size: capacity * 64 },
@@ -370,7 +382,11 @@ test("stream inputs share one slab, uploaded once an encode, through release and
 		assert.equal( inputWrites( f, before ), 1, `${label}: one input write an encode` );
 		assert.equal( dispatches.length, streams.length );
 		dispatches.forEach( ( d, i ) => {
-			assert.equal( d.size, streams[i].capacity * 16, `${label}: the binding keeps its own buffer's size` );
+			assert.equal(
+				d.size,
+				streams[i].capacity * SAMPLE_WORDS * 4,
+				`${label}: the binding keeps its own buffer's size`
+			);
 			assert.equal( d.offset % ALIGNMENT, 0 );
 			assert.deepEqual( d.values, streams[i].rows, `${label}: stream ${i} reads its own rows` );
 		} );
@@ -409,8 +425,8 @@ stream at the budget fits the arena at its limit, one pose more does not.
 test("the stream budget admits a stream at the limit and refuses one past it", async () => {
 	const f = fixture();
 	await f.owner.ready;
-	// 16 bytes a pose plus the 48-byte configuration uniform, within 8 MB.
-	const fits = Math.floor( ((8 << 20) - 48) / 16 );
+	// Two 16-byte records a pose plus the 48-byte configuration uniform, within 8 MB.
+	const fits = Math.floor( ((8 << 20) - 48) / (SAMPLE_WORDS * 4) );
 	const over = stream( f, fits + 1, [ .5 ] );
 	assert.equal( f.owner.prepare( over.source, over.output, f.model, f.primitive, over.samples ), false );
 	assert.equal( f.owner.stats().models, 0 );

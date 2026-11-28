@@ -716,16 +716,47 @@ test("reverse return points are xy_returnicon buttons, the old sign without that
 	assert.ok( bare.paths.some( path => path.endsWith( "xy_returnicon.png" ) ), "the art is still asked for" );
 });
 
-test("the Qin-Shi entrance's reverse return icon is drawn lower, with the same target", async () => {
+test("an open dungeon flag's menu hangs its floors below the icon, 155 x 22 each", async () => {
 	const { reverseMapButtons } = await import( "../../src/engine/runtime/ui/hud/reverse-map-buttons.ts" );
 	const rect = /** @type {import("../../src/engine/contracts/ui").UiRect} */ ([ 100, 200, 16, 16 ]);
 	const clip = /** @type {import("../../src/engine/contracts/ui").UiRect} */ ([ 0, 0, 800, 600 ]);
-	const view = point => reverseMapButtons( { points: [ { point, rect } ], clip, hover: null, has: () => true } );
-	const other = view( { id: 1, name: "Jangan", regionId: 26292, x: 960, z: 1600 } );
-	const tomb = view( { id: 2, name: "Qin-Shi Tomb Entrance", regionId: 26284, x: 960, z: 1600 } );
-	assert.equal( tomb.images[0].rect[1], other.images[0].rect[1] + 40, "the tomb's icon sits lower" );
-	assert.deepEqual( tomb.hits[0].rect, tomb.images[0].rect, "the click follows the icon" );
-	assert.equal( tomb.hits[0].id, "reverse-map-point:2", "the point it names is unchanged" );
+	const points = [ { point: { id: 1, name: "Jangan" }, rect }, {
+		point: { id: 5, name: "Tomb-King Shi", group: 2 },
+		rect: /** @type {import("../../src/engine/contracts/ui").UiRect} */ ([ 300, 200, 16, 16 ])
+	} ];
+	const floors = [ { id: 6, name: "Tomb of Qin-Shi Emperor lv.2" }, { id: 7, name: "Tomb of Qin-Shi Emperor lv.3" } ];
+	const shut = reverseMapButtons( { points, clip, hover: null, has: () => true } );
+	assert.deepEqual( shut.labels, [], "no menu until the flag is clicked" );
+	const open = reverseMapButtons( {
+		points,
+		menu: { group: 2, floors },
+		clip,
+		hover: "reverse-map-floor:7",
+		has: () => true
+	} );
+	// The flag's icon is [292, 192, 32, 32]: the menu starts 4 px below its
+	// bottom-left corner, its first entry 1 px into it (v1.188 0x6973a5, 0x631d60).
+	assert.deepEqual( open.hits.slice( 2 ).map( hit => [ hit.id, hit.rect ] ), [
+		[ "reverse-map-floor:6", [ 292, 229, 155, 22 ] ],
+		[ "reverse-map-floor:7", [ 292, 251, 155, 22 ] ]
+	] );
+	assert.deepEqual( open.labels.map( label => label.value ), floors.map( floor => floor.name ) );
+	assert.ok( open.images[2].texture.endsWith( "/worldmap/map/map_return.png" ) );
+	assert.ok(
+		open.images[3].texture.endsWith( "/worldmap/map/map_return_focus.png" ),
+		"the hovered entry's focus face"
+	);
+	const bare = reverseMapButtons( { points, menu: { group: 2, floors }, clip, hover: null, has: () => false } );
+	assert.equal( bare.images[2].texture, "", "a plain plate without the later client's art" );
+	assert.deepEqual( bare.hits[2].rect, [ 300, 221, 155, 22 ], "below the old sign's own rect" );
+	const elsewhere = reverseMapButtons( {
+		points: points.slice( 0, 1 ),
+		menu: { group: 2, floors },
+		clip,
+		hover: null,
+		has: () => true
+	} );
+	assert.deepEqual( elsewhere.labels, [], "a flag off the page shows no menu" );
 });
 
 test("a long row name ends in an ellipsis with the whole name on hover, and gives up the badge first", () => {

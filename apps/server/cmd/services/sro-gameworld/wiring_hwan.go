@@ -57,17 +57,13 @@ func applyHwanKnobs(quests *quest.Runtime) error {
 // ritual NPCs' homes, whom the chains send the player to again and again, join with the quest rows built in
 // (SRO_CAP110_QUESTS); their native spawn rows are npcpos.txt 2017 and 7505, and the points are the owner's choice
 // of nearby open ground (the Exorcist's own spot is inside her house and a tree stands close by), given as map
-// coordinates. The Qin-Shi Tomb entrance joins whenever the tomb is on (SRO_QINSHI_TOMB), quest rows or not: the
-// 95 chain's bell comes from its stone ghosts, and shards at the 100 cap use the tomb too. All need
-// SRO_REVERSE_RETURN_MAP on.
+// coordinates. Both need SRO_REVERSE_RETURN_MAP on. The Ch'in Tomb is reached through the imported table's own
+// cave flag by Jangan, whose menu lists the tomb floors (world/optionalteleport).
 var (
 	hwanNpcReverseMapPoints = []enterworld.ReverseMapPoint{
 		{Name: "Exorcist's Home", RegionID: 25253, X: 150, Y: 225.27, Z: 730}, // map X 5775 Y 1225, by NPC_CH_SHAMAN near Jangan
 		{Name: "Sunset Witch", RegionID: 27728, X: 1800, Y: 715.26, Z: 1630},  // map X -10380 Y 3235, by NPC_EU_WITCH near Constantinople
 	}
-	// Near where the game places a player leaving the tomb: map X 7200 Y 2080 (Y 2100, a little further, put the
-	// player inside a staircase).
-	qinShiReverseMapPoint = enterworld.ReverseMapPoint{Name: "Qin-Shi Tomb Entrance", RegionID: 26284, X: 960, Y: 111.65, Z: 1600}
 )
 
 /*
@@ -81,9 +77,6 @@ func hwanReverseMapExtras(textdataDir string) []enterworld.ReverseMapPoint {
 	var points []enterworld.ReverseMapPoint
 	if hwanQuestsBuilt(textdataDir) {
 		points = append(points, hwanNpcReverseMapPoints...)
-	}
-	if monster.QinShiTombFromEnv() {
-		points = append(points, qinShiReverseMapPoint)
 	}
 	return points
 }

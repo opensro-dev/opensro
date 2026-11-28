@@ -269,10 +269,19 @@ export interface WorldRenderStats {
 	// its owner requests it again. Null once a scene is admitted.
 	readonly lostSceneId?: string | null;
 	readonly residentGroups: number;
+	// The groups the walk found visible; the static object groups
+	// (staticGroups, resident and submitted every frame) are the GPU's to
+	// cull and not among them. walkedGroups: those the last prepare visited.
 	readonly visibleGroups: number;
+	readonly staticGroups?: number;
+	readonly walkedGroups?: number;
+	// Render bundles the frame recorded so far (frame.ts stats).
+	readonly bundleRecords?: { readonly geometryRecords: number; readonly persistentRecords: number; };
 	readonly triangles: number;
 	readonly pendingTextures: number;
 	readonly bundleRebuilds: number;
+	// The weather owner's counters (weather.ts stats), for the frame benchmark.
+	readonly weather?: Readonly<Record<string, number | readonly number[]>>;
 }
 
 /*

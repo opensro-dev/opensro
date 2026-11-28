@@ -23,7 +23,7 @@ async function load( file ) {
 const { selectEquipmentGlow, createEquipmentGlowClock, validateEquipmentGlows } = await load(
 	"src/engine/foundation/rendering/equipment-glow.ts"
 );
-const { createCharacters } = await load( "src/engine/runtime/renderer/characters/characters.ts" );
+const { createCharacters, BATCH_IDLE_SECONDS } = await load( "src/engine/runtime/renderer/characters/characters.ts" );
 const { createCharacterDecoder } = await load( "src/engine/runtime/assets/worker/model/character/character.ts" );
 const identity = () => Float32Array.of( 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1 );
 const row = {
@@ -190,6 +190,8 @@ test("real assembly applies both handles, owns clocks, replaces enhancement and 
 	assert.ok( draws.every( d => !d.glow && d.secondary.id === 1 ) );
 	owner.actors( [] );
 	assert.equal( owner.prepare( gpu, imageOwner, 257, undefined, false, 2 ).length, 0 );
+	// Each variant's batch idles for its key's next rows, then goes.
+	owner.prepare( gpu, imageOwner, 257, undefined, false, 2.1 + BATCH_IDLE_SECONDS );
 	assert.ok( released >= 10 );
 	owner.dispose( gpu, imageOwner );
 });

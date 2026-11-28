@@ -10,6 +10,7 @@ modules the client ships, not a per-test bundle.
 ===========================================================================
 */
 import "../helpers/native-source-loader.mjs";
+import { OBJECT_CULL_COMMANDS } from "../helpers/cull-commands.mjs";
 import { pathToFileURL as sourceFileUrl } from "node:url";
 import { test } from "node:test";
 import assert from "node:assert/strict";
@@ -195,7 +196,7 @@ test("collision preparation keeps the old scene until complete and cancels obsol
 	wall.geometry.uvs = new Float32Array( 6 );
 	const scene = { id: "old", originRegion: 0, groups: [ wall ], warnings: [] };
 	const owner = createWorldRenderer(),
-		geometry = { upload: () => ({}), release() {} },
+		geometry = { ...OBJECT_CULL_COMMANDS, upload: () => ({}), release() {} },
 		textures = { upload: () => ({}), release() {} };
 	owner.camera( {
 		eye: [ 0, 0, 80 ],
@@ -371,7 +372,8 @@ test("animated collider updates before camera query, including an unchanged came
 			} ]
 		} ]
 	};
-	const world = createWorldRenderer(), geometry = { upload: () => ({}), release() {}, updateBones() {} };
+	const world = createWorldRenderer(),
+		geometry = { ...OBJECT_CULL_COMMANDS, upload: () => ({}), release() {}, updateBones() {} };
 	const camera = {
 		eye: [ 0, 0, 80 ],
 		target: [ 0, 0, 0 ],
@@ -438,6 +440,7 @@ test("world animation samples only draw/query demand and resumes shared poses at
 	};
 	const updates = [],
 		gpu = {
+			...OBJECT_CULL_COMMANDS,
 			upload: g => ({ x: g.instances[12] }),
 			release() {},
 			updateBones( draw, bones ) {
@@ -561,7 +564,7 @@ test("live renderer resolves collision before projection and retires it on scene
 		far: 3500
 	};
 	const world = createWorldRenderer(),
-		geometry = { upload: () => ({}), release() {} },
+		geometry = { ...OBJECT_CULL_COMMANDS, upload: () => ({}), release() {} },
 		textures = { upload: () => ({}), release() {} };
 	world.scene( source );
 	world.camera( camera );

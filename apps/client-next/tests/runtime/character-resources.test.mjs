@@ -26,7 +26,7 @@ async function load( entry ) {
 	return import( sourceFileUrl( entry ).href );
 }
 const { createLoader } = await load( "src/engine/runtime/assets/worker/loader.ts" );
-const { createCharacters } = await load( "src/engine/runtime/renderer/characters/characters.ts" );
+const { createCharacters, BATCH_IDLE_PREPARES } = await load( "src/engine/runtime/renderer/characters/characters.ts" );
 const { createCharacterDecoder } = await load( "src/engine/runtime/assets/worker/model/character/character.ts" );
 const { decodeNativeClip, bindNativeClip } = await load( "src/engine/foundation/animation/native-clip.ts" );
 const { skillMotionRole, skillMotionStateName } = await load( "src/engine/foundation/animation/skill-motion.ts" );
@@ -1258,6 +1258,9 @@ test("renderer budgets expanded instances across models and frees old batches be
 	characters.actors( [ { ...actor( "light" ), gid: 2 } ] );
 	characters.prepare( gpu, images, 1 );
 	assert.equal( characters.stats().deferredActors, 0 );
+	assert.ok( characters.stats().renderBytes <= 64 << 20, "idle batches stay within the budget" );
+	// The heavy batches idle out (this fixture's clock stands still).
+	for ( let i = 0; i < BATCH_IDLE_PREPARES; i++ ) characters.prepare( gpu, images, 1 );
 	assert.equal( held, 128 );
 	characters.dispose( gpu, images );
 	assert.equal( held, 0 );
@@ -1988,4 +1991,77 @@ test("an avatar skinned to the unbound palette root assembles onto a body withou
 		() => renderer.assembly( "caped", "body", [ { model: "cape", parts: [ "EQ0" ], covers: [] } ] ),
 		/Attachment joint Cape01 is absent from body/
 	);
+});
+
+test("under budget pressure, retained storage admits exactly the actors a fresh renderer admits", () => {
+	// Heavy models exhaust the render budget; light actors fill what is left.
+	const heavy = model();
+	heavy.images = [];
+	heavy.nodes = Array.from( { length: 512 }, ( _, i ) => ({ ...heavy.nodes[0], name: String( i ) }) );
+	const primitive = {
+		...heavy.primitives[0],
+		image: -1,
+		joints: Array.from( { length: 512 }, ( _, i ) => i ),
+		inverseBind: new Float32Array( 512 * 16 )
+	};
+	for ( let i = 0; i < 512; i++ ) primitive.inverseBind.set( identity(), i * 16 );
+	heavy.primitives = Array.from( { length: 128 }, () => primitive );
+	const light = model();
+	light.images = [];
+	light.primitives[0].image = -1;
+	const owner = () => {
+		const characters = createCharacters();
+		characters.model( "a", heavy, [] );
+		characters.model( "b", heavy, [] );
+		characters.model( "light", light, [] );
+		return characters;
+	};
+	const gpu = {
+		upload: data => ({ count: data.instances.length / 16, instances: data.instances.slice() }),
+		release() {},
+		updateInstances( draw, instances ) {
+			draw.count = instances.length / 16;
+			draw.instances = instances.slice();
+			return draw;
+		},
+		updateBones() {}
+	};
+	const images = { upload: () => ({}), release() {} };
+	// Each actor stands at x = its gid: the drawn rows name the admitted actors.
+	const drawnIds = draws => {
+		const ids = new Set();
+		for ( const d of draws ) for ( let i = 0; i < d.count; i++ ) ids.add( d.instances[i * 16 + 12] );
+		return [ ...ids ].sort( ( x, y ) => x - y );
+	};
+	// Shrinking, regrowing and swapping populations: retained batches hold
+	// a band or idle while a fresh renderer holds nothing.
+	const frames = [ [ 64, 8 ], [ 40, 8 ], [ 64, 2 ], [ 20, 16 ], [ 70, 4 ], [ 33, 8 ], [ 64, 8 ] ];
+	const retained = owner();
+	try {
+		frames.forEach( ( [heavies, lights], frame ) => {
+			const population = [
+				...Array.from( { length: heavies }, ( _, i ) => ({ ...actor( i % 2 ? "a" : "b" ), gid: 1 + i }) ),
+				...Array.from( { length: lights }, ( _, i ) => ({ ...actor( "light" ), gid: 500 + frame * 50 + i }) )
+			].map( a => ({ ...a, pose: { ...a.pose, x: a.gid } }) );
+			retained.actors( population );
+			const drawn = retained.prepare( gpu, images, 1, undefined, false, frame );
+			const fresh = owner();
+			try {
+				fresh.actors( population );
+				const expected = fresh.prepare( gpu, images, 1, undefined, false, frame );
+				const admitted = c => {
+					const s = c.stats();
+					return [ s.deferredActors, s.deferredBodies, s.visibleActors ];
+				};
+				assert.ok( fresh.stats().deferredActors > 0, `frame ${frame} is under pressure` );
+				assert.deepEqual( admitted( retained ), admitted( fresh ), `frame ${frame}` );
+				assert.deepEqual( drawnIds( drawn ), drawnIds( expected ), `frame ${frame} admitted actors` );
+				assert.ok( retained.stats().renderBytes <= 64 << 20 );
+			} finally {
+				fresh.dispose( gpu, images );
+			}
+		} );
+	} finally {
+		retained.dispose( gpu, images );
+	}
 });

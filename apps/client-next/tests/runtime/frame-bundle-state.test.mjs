@@ -50,6 +50,9 @@ function fixture() {
 				drawIndexed( ...args ) {
 					tape.push( [ pipeline, binding, vertices, indices, ...args ] );
 				},
+				drawIndexedIndirect( buffer, offset ) {
+					tape.push( [ pipeline, binding, vertices, indices, buffer, offset ] );
+				},
 				draw( ...args ) {
 					tape.push( [ pipeline, binding, ...args ] );
 				},
@@ -84,11 +87,13 @@ function fixture() {
 		draw
 		================
 		*/
-		draw( world, ui = [] ) {
+		draw( world, ui = [], persistent = undefined ) {
 			executed = [];
-			frame.draw( {}, undefined, undefined, undefined, world, ui );
+			const none = Array( 12 ).fill( undefined );
+			frame.draw( {}, undefined, undefined, undefined, world, ui, ...none, persistent );
 			return executed;
-		}
+		},
+		stats: () => frame.stats()
 	};
 }
 
@@ -141,4 +146,39 @@ test("UI bundles initialize their own state and retain draw instance ranges", ()
 	const before = { ...f.calls };
 	assert.deepEqual( f.draw( [], ui ), ui.map( draw => [ pipeline, binding, 6, draw.count, 0, draw.first ] ) );
 	assert.deepEqual( f.calls, before );
+});
+
+test("static runs record once, replay in their places, and re-record only when watched draws change", () => {
+	const f = fixture(), pipeline = {}, binding = {}, vertices = {}, indices = {}, args = {};
+	const draw = ( name, indirect ) => ({
+		name,
+		pipeline,
+		binding,
+		vertices,
+		indices,
+		indexCount: 3,
+		instanceCount: 1,
+		...(indirect ? { indirect: args, indirectOffset: name.length * 20 } : {})
+	});
+	const walked = [ draw( "w0" ), draw( "w1" ), draw( "w2" ) ];
+	const runs = [ [ draw( "s0", true ) ], [ draw( "s11", true ), draw( "s222", true ) ] ];
+	const persistent = ( drawRevision, at = [ 1, 2 ] ) => /** @type {any} */ ({
+		blocks: runs,
+		at,
+		revision: 1,
+		drawRevision
+	});
+	const order = executed => executed.map( row => row[4] === args ? "s" + row[5] / 20 : row[4] );
+	// Walked draws 0 | run 0 | walked 1 | run 1 | walked 2.
+	assert.deepEqual( order( f.draw( walked, [], persistent( 0 ) ) ), [ 3, "s2", 3, "s3", "s4", 3 ] );
+	const recorded = f.stats().persistentRecords;
+	assert.equal( recorded, 2 );
+	f.draw( walked, [], persistent( 0 ) );
+	assert.equal( f.stats().persistentRecords, recorded, "an unchanged frame replays the runs" );
+	// The walked list changes (a character's equipment, a cast): the runs hold.
+	f.draw( [ walked[0], draw( "w9" ), walked[1], walked[2] ], [], persistent( 0, [ 1, 3 ] ) );
+	assert.equal( f.stats().persistentRecords, recorded, "walked changes never re-record a run" );
+	// A watched draw's binding changed (DeviceDraw.revision): every run re-records.
+	f.draw( walked, [], persistent( 1 ) );
+	assert.equal( f.stats().persistentRecords, recorded + 2 );
 });

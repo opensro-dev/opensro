@@ -24,7 +24,12 @@ not its body's whole keyframe set again.
 ===========================================================================
 */
 
-import type { CharacterModel, CharacterPrimitive, CharacterClip } from "@/engine/contracts/character";
+import type {
+	CharacterClip,
+	CharacterGpuSample,
+	CharacterModel,
+	CharacterPrimitive
+} from "@/engine/contracts/character";
 import {
 	createGpuClipPlan,
 	createGpuSkeletonPlan,
@@ -36,12 +41,11 @@ import { animationShader } from "./animation-shader";
 import { destroyNow, type Retire } from "./retirement";
 import { createStagedSlabs, type BufferSlice } from "./buffer-slabs";
 import { isCharacterAnimationExtension } from "@/engine/foundation/animation/character-render-plan";
-/*
-================
-Sample
-================
-*/
-type Sample = { readonly clip: CharacterClip; readonly time: number; };
+type Sample = CharacterGpuSample;
+// One sample's input words (animation-shader.ts): the first clip's time,
+// clip and palette slot and the mix share, then the second clip's time and
+// clip (-1 for none).
+const SAMPLE_WORDS = 8;
 /*
 ================
 ClipSet
@@ -99,6 +103,19 @@ Device owns every GPU reference. Geometry owns output palettes; this owner
 borrows them only while their source stream is live. No readback is needed.
 ================
 */
+/*
+================
+writePhase
+
+A clip phase as f32, rounded down: a STEP phase must not round across an
+authored f32 key.
+================
+*/
+function writePhase( row: { data: Float32Array; words: Uint32Array; }, at: number, time: number ) {
+	row.data[at] = time;
+	if ( row.data[at]! > time ) row.words[at]!--;
+}
+
 export function createGpuAnimationResources( device: GPUDevice, retire: Retire = destroyNow ) {
 	let failure: string | null = null;
 	let disposed = false,
@@ -323,9 +340,17 @@ export function createGpuAnimationResources( device: GPUDevice, retire: Retire =
 				!Number.isInteger( capacity ) || samples.length > capacity ||
 				!streams.has( source ) && source.byteLength > output.size
 			) throw Error( "GPU animation palette capacity exceeded" );
-			if ( samples.some( s => s !== null && (!Number.isFinite( s.time ) || s.time < 0) ) ) return false;
+			if (
+				samples.some( s =>
+					s !== null &&
+					(!Number.isFinite( s.time ) || s.time < 0 ||
+						s.next && (!Number.isFinite( s.nextTime ) || s.nextTime < 0))
+				)
+			) return false;
 			if ( !model.primitives.includes( primitive ) ) throw Error( "Unknown GPU palette binding" );
-			if ( !streams.has( source ) && streamBytes + capacity * 16 + CONFIGURATION_BYTES > STREAM_BYTES ) {
+			if (
+				!streams.has( source ) && streamBytes + capacity * SAMPLE_WORDS * 4 + CONFIGURATION_BYTES > STREAM_BYTES
+			) {
 				return false;
 			}
 			// Eligibility belongs to the clip set; check it before admitting anything.
@@ -334,7 +359,13 @@ export function createGpuAnimationResources( device: GPUDevice, retire: Retire =
 				unsupported.add( model );
 				return false;
 			}
-			if ( samples.some( s => s !== null && !clipPlan.eligible.has( s.clip ) ) ) return false;
+			if (
+				samples.some( s =>
+					s !== null && (!clipPlan.eligible.has( s.clip ) || s.next && !clipPlan.eligible.has( s.next ))
+				)
+			) {
+				return false;
+			}
 			const previous = streams.get( source );
 			if ( previous && previous.model.source !== model ) {
 				if (
@@ -351,7 +382,7 @@ export function createGpuAnimationResources( device: GPUDevice, retire: Retire =
 			if ( !config ) throw Error( "Unknown GPU palette binding" );
 			let row = streams.get( source );
 			if ( !row ) {
-				const data = new Float32Array( capacity * 4 );
+				const data = new Float32Array( capacity * SAMPLE_WORDS );
 				if ( streamBytes + data.byteLength + CONFIGURATION_BYTES > STREAM_BYTES ) return false;
 				let input: BufferSlice | undefined, configuration: GPUBuffer | undefined;
 				try {
@@ -400,14 +431,16 @@ export function createGpuAnimationResources( device: GPUDevice, retire: Retire =
 			for ( let i = 0; i < samples.length; i++ ) {
 				const sample = samples[i];
 				if ( !sample ) continue;
-				const at = count++ * 4;
-				row.data[at] = sample.time; /* Do not round a STEP phase across an authored f32 key. */
-				if ( row.data[at]! > sample.time ) row.words[at]!--;
+				const at = count++ * SAMPLE_WORDS;
+				writePhase( row, at, sample.time );
 				row.data[at + 1] = clipPlan.index.get( sample.clip )!;
 				row.data[at + 2] = i;
+				row.data[at + 3] = sample.share;
+				writePhase( row, at + 4, sample.nextTime );
+				row.data[at + 5] = sample.next ? clipPlan.index.get( sample.next )! : -1;
 			}
 			row.count = count;
-			inputs.write( row.input, row.data, count * 16 );
+			inputs.write( row.input, row.data, count * SAMPLE_WORDS * 4 );
 			pending.add( row );
 			return true;
 		},

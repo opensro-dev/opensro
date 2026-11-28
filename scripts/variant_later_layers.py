@@ -27,6 +27,7 @@ import hunting2_import
 import jupiter_import
 import later_mall_items
 import magic_cube_import
+import magic_pop_import
 import muhan_import
 import pharaoh_temple_import
 import reset_scroll_import
@@ -104,6 +105,11 @@ LATER_LAYERS = (
 	# there, like the sources every layer above reads; band 320000,
 	# no placement.
 	("rigidScrolls", rigid_import.add_rigid),
+	# The v1.696 Magic POP pool (later-native, the port's default;
+	# SRO_MAGIC_POP_V1696 off restores v1.150's): its prize gear in its
+	# own shard (340000) and the three gacha tables the server reads.
+	# Before the later mall items, after every other item layer.
+	("magicPop", magic_pop_import.add_magic_pop),
 	# The v1.696 Item Mall items the later goods sell (#4240 part 3):
 	# later-native, no switch, on whenever the v1.696 client root is
 	# named; last of the layers, so the later mall goods step that

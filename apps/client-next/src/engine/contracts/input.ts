@@ -54,6 +54,9 @@ export interface InputOwner {
 	blindBinding( value: number ): void;
 	blindHeld(): boolean;
 	altHeld(): boolean;
+	// True while the mouse mode's camera-drag button is held over the world:
+	// an orbit is in progress (67CCA0).
+	orbiting(): boolean;
 	mouseMode( value: 0 | 1 ): void;
 	zoomRail( value: boolean ): void;
 	sight( value: import("@/engine/foundation/rendering/camera-options").SightMode ): void;

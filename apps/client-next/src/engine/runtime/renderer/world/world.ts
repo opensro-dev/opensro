@@ -53,6 +53,7 @@ import {
 	selectionTextures
 } from "@/engine/foundation/rendering/terrain-interaction";
 import { createWeather } from "../weather/weather";
+import type { Geometry } from "@/engine/contracts/geometry";
 import type { PresentationRandom } from "@/engine/contracts/presentation-random";
 import type { WorldSceneLease } from "@/engine/contracts/world-admission";
 import { skyGroups } from "@/engine/foundation/rendering/sky-geometry";
@@ -66,12 +67,16 @@ import { flareUniforms } from "@/engine/foundation/rendering/flares";
 import {
 	pickGeometry,
 	occludesGeometry,
+	nearestOccluder,
 	geometryPickBounds,
 	geometryPickBlocks,
 	rayIntersectsBounds,
 	type PickBounds,
 	type PickRay,
-	type PickAlpha
+	createSkinnedPickVertices,
+	createOcclusionMemo,
+	type PickAlpha,
+	type SkinnedPickVertices
 } from "@/engine/foundation/rendering/picking";
 import {
 	cameraCollisionParts,
@@ -113,6 +118,7 @@ import type { SceneryEmitter } from "@/engine/contracts/scenery";
 import { createTextureMotion } from "@/engine/foundation/rendering/texture-motion";
 import type {
 	GeometryCommands,
+	WorldPersistent,
 	GeometryDraw,
 	ImageCommands,
 	ImageDraw,
@@ -125,6 +131,7 @@ import {
 	visibleFrustumBox,
 	terrainLod
 } from "@/engine/foundation/rendering/world-math";
+import { createCullEnvelope } from "@/engine/foundation/rendering/cull-envelope";
 import { nativePickAlpha, validPickAlpha } from "@/engine/foundation/rendering/pick-alpha";
 import { hypot3 } from "@/engine/foundation/math/hypot";
 /*
@@ -141,6 +148,40 @@ function drawPhase( { material }: WorldGroup ): number {
 	if ( material.terrain ) return material.blend ? 1 : 0;
 	if ( material.objectFade ) return 3;
 	return material.blend ? 4 : 3;
+}
+
+/*
+================
+gpuCulledGroup
+
+Port-only, not native (#4692): whether the GPU decides the group's view
+visibility (device/object-cull.ts) instead of the walk. Only an opaque
+object draw (phase 3) qualifies: the transparent phase sorts its visible
+groups by distance on the CPU, terrain has its own choice, and an
+animated or cloth group's per-frame work is gated by the walk's verdict.
+================
+*/
+function gpuCulledGroup( group: WorldGroup, layered: boolean ): boolean {
+	return drawPhase( group ) === 3 && !group.material.blend && !group.animation &&
+		!group.geometry.cloth && !group.geometry.bones && !layered;
+}
+
+/*
+================
+staticObjectGroup
+
+Port-only, not native (#4692): a GPU-culled group the walk has no other
+work for, so it is never walked: one draw of fixed placements (not
+instanced, whose slots fade and follow the seasonal layers) outside any
+dungeon block (whose visibility follows the camera's block), without
+chosen ranges (the walk picks terrain LOD ranges by distance). Its
+visibility is the GPU's alone, so a camera move costs nothing per group.
+================
+*/
+function staticObjectGroup( group: WorldGroup, layered: boolean ): boolean {
+	// A fading group blends: it keeps its place after the opaque objects.
+	return gpuCulledGroup( group, layered ) && !group.material.objectFade && group.instanceRadius === undefined &&
+		group.dungeonBlock === undefined && !group.ranges;
 }
 
 // followInput's slots: target xyz, yaw, pitch, distance, height, mounted,
@@ -692,6 +733,9 @@ export function createWorldRenderer(
 	// Visible marks by draw order: the walk marks, ordering reads them back.
 	// The draw phase of each group, by draw order.
 	let visibleMarks = new Uint8Array( 0 ), orderPhase = new Int8Array( 0 );
+	// The order indices the walk marked, in walk order: ordering reads only
+	// these, never every group of the scene.
+	let marked = new Int32Array( 0 ), markedCount = 0;
 	// Per order index: the terrain layer the group draws through, else its own
 	// draw (orderGroups), so submission reads arrays, not maps; and the
 	// selection walk's scratch (visible order indices, transparent depths).
@@ -703,6 +747,24 @@ export function createWorldRenderer(
 	let walk = compileWalkTable( [], pickBounds );
 	// Instanced selection caches by walk index, so the walk does not look them up.
 	let walkCaches: (ReturnType<typeof instanceSelection> | undefined)[] = [];
+	// Port-only (#4692): by walk index, 1 when the GPU culls the group's draw
+	// (gpuCulledGroup); the draws already handed to it (object-cull.ts).
+	let walkGpuCull = new Uint8Array( 0 );
+	const objectCulled = new WeakSet<GeometryDraw>();
+	// Port-only (#4692): the static object groups (staticObjectGroup), never
+	// walked. Admission hands their draws to the GPU cull once; the frame
+	// submits them as one unchanging block at the head of the object phase.
+	let staticGroups: WorldGroup[] = [], staticDraws: GeometryDraw[] = [];
+	let staticSet: ReadonlySet<WorldGroup> = new Set(), staticTriangles = 0, staticAdopted = false;
+	// Whether the block is drawn (the map objects option), and the block the
+	// frame records once per revision (PersistentWorld).
+	let staticShown = false, staticRevision = 0;
+	// The runs, each run's first order index, and where the last submission
+	// placed each (an index of draws).
+	let staticSegments: GeometryDraw[][] = [], staticOrders = new Int32Array( 0 ), staticAt: number[] = [];
+	let staticBlock: WorldPersistent | undefined;
+	// Groups the last prepare visited (0 when the stationary early-out took it).
+	let walkedGroups = 0;
 	/*
 	================
 	orderGroups
@@ -717,14 +779,43 @@ export function createWorldRenderer(
 		orderedGroups = groups;
 		groupOrder = new Map( groups.map( ( group, index ) => [ group, index ] ) );
 		visibleMarks = new Uint8Array( groups.length );
+		marked = new Int32Array( groups.length );
 		orderPhase = Int8Array.from( groups, drawPhase );
 		orderLayers = groups.map( group => layers.layerOf( group ) );
 		orderDraws = groups.map( group => draws.get( group ) );
 		orderVisible = new Int32Array( groups.length );
 		orderDepth = new Float64Array( groups.length );
-		walk = compileWalkTable( sceneGroups, pickBounds, eventLayers );
-		walkCaches = new Array( sceneGroups.length );
-		for ( let i = 0; i < sceneGroups.length; i++ ) walk.order[i] = groupOrder.get( sceneGroups[i]! )!;
+		// Static groups keep their draw order inside their block.
+		staticGroups = groups.filter( group =>
+			staticObjectGroup( group, layers.member( group ) ) && !!draws.get( group ) && !draws.get( group )!.blended
+		);
+		staticSet = new Set( staticGroups );
+		staticDraws = staticGroups.map( group => draws.get( group )! );
+		staticTriangles = staticGroups.reduce( ( sum, group ) => sum + group.geometry.indices.length / 3, 0 );
+		staticAdopted = false;
+		// The static groups' runs in draw order: each run keeps its native
+		// place among the walked groups (submission inserts it before the
+		// first visible walked group ordered after it), so the submitted
+		// order is the native QueueObject order, ties and all.
+		const segments: GeometryDraw[][] = [], orders: number[] = [];
+		for ( let index = 0; index < groups.length; index++ ) {
+			if ( !staticSet.has( groups[index]! ) ) continue;
+			if ( !orders.length || !staticSet.has( groups[index - 1]! ) ) {
+				segments.push( [] );
+				orders.push( index );
+			}
+			segments.at( -1 )!.push( draws.get( groups[index]! )! );
+		}
+		staticSegments = segments;
+		staticOrders = Int32Array.from( orders );
+		staticRevision++;
+		staticAt = [];
+		staticBlock = undefined;
+		const walked = sceneGroups.filter( group => !staticSet.has( group ) );
+		walk = compileWalkTable( walked, pickBounds, eventLayers );
+		walkCaches = new Array( walked.length );
+		walkGpuCull = Uint8Array.from( walked, group => gpuCulledGroup( group, layers.member( group ) ) ? 1 : 0 );
+		for ( let i = 0; i < walked.length; i++ ) walk.order[i] = groupOrder.get( walked[i]! )!;
 		shadowSurfaces.reset();
 		shadowReceivers.clear();
 		shadowTopologies.clear();
@@ -733,6 +824,30 @@ export function createWorldRenderer(
 			if ( group.material.terrain && chosen ) shadowSurfaces.replace( group, index, undefined, chosen );
 		}
 		shadowSurfaces.commit();
+	}
+	/*
+	================
+	adoptObjectCull
+
+	A GPU-culled group stays in the frame's list while resident: its draw
+	is handed to the GPU cull once (object-cull.ts tests the same sphere
+	against the same planes each view), and the walk counts it visible.
+	================
+	*/
+	function adoptObjectCull(
+		geometry: GeometryCommands,
+		draw: GeometryDraw | undefined,
+		x: number,
+		y: number,
+		z: number,
+		radius: number
+	): boolean {
+		if ( !draw ) return false;
+		if ( !objectCulled.has( draw ) ) {
+			geometry.cullObject( draw, [ x, y, z, radius ] );
+			objectCulled.add( draw );
+		}
+		return true;
 	}
 	// Selection walks so far (walk-table.ts seen), and layer submission passes.
 	let walkStamp = 0, submitPass = 0;
@@ -978,9 +1093,14 @@ export function createWorldRenderer(
 	const retired: WorldScene[] = [];
 	let lastReflection = false;
 	let lastView: Float32Array | null = null, lastEye: WorldCamera["eye"] | null = null;
-	// The terrain stamp: bumped whenever the view changed, so a terrain
-	// group's frustum-culled choice (native A2D1B0) keys on cell AND view.
-	let terrainViewStamp = 0;
+	// The terrain choice stamp: a terrain group's frustum-culled choice
+	// (native A2D1B0) keys on its eye cell and on this stamp.
+	// Terrain culls against a widened frustum the camera stays inside
+	// (cull-envelope.ts, port-only): its choice is remade when the envelope
+	// is, not on every view change. terrainChoiceStamp is what the terrain
+	// caches key on; with a water mirror the exact per-view cull stands.
+	const terrainEnvelope = createCullEnvelope();
+	let terrainChoiceStamp = 0, terrainChoiceKey = "", terrainPlanes: Float64Array | null = null, terrainSlack = 0;
 	const residency = createWorldResidency();
 	let imageBytes = 0, disposed = false;
 	/*
@@ -1092,16 +1212,61 @@ export function createWorldRenderer(
 	}
 	/*
 	================
-	pick
+	PickScan
+
+	One scene query. occlusionOnly answers on the first accepted surface
+	before limit. skinned, present for one occlusion scope (occlusionScope),
+	keeps each skinned instance's posed vertices across the scope's queries.
 	================
 	*/
-	function pick( ray: PickRay, limit: number, excludeWater = false, terrainOnly = false, occlusionOnly = false ) {
+	type PickScan = {
+		readonly excludeWater: boolean;
+		readonly terrainOnly: boolean;
+		readonly occlusionOnly: boolean;
+		readonly skinned?: Map<WorldGroup, SkinnedPickVertices[]>;
+		// With occlusionOnly: the nearest occluder before the limit instead of the first.
+		readonly nearestOccluder?: boolean;
+	};
+	let pickListed: WorldGroup[] | null = null, pickListedFrom: WorldGroup[] | null = null, pickListedRevision = -1;
+	/*
+	================
+	pickCandidates
+
+	The groups a pick may hit: the walk's visible groups and the static ones
+	inside the last walked view (the GPU culls those, so the pick tests
+	their spheres itself). Built at most once a walk, and only when picked.
+	================
+	*/
+	function pickCandidates(): readonly WorldGroup[] {
+		if ( !staticGroups.length || !renderModes.mapObjects ) return pickGroups;
+		if ( pickListed && pickListedFrom === pickGroups && pickListedRevision === staticRevision ) return pickListed;
+		const listed = [ ...pickGroups ];
+		for ( const group of staticGroups ) {
+			if (
+				!pickFrustum ||
+				visibleFrustumSphere( pickFrustum, group.center[0], group.center[1], group.center[2], group.radius )
+			) listed.push( group );
+		}
+		pickListed = listed;
+		pickListedFrom = pickGroups;
+		pickListedRevision = staticRevision;
+		return listed;
+	}
+	/*
+	================
+	scan
+
+	The mesh view, texture alpha and block table are per group, so they are
+	read once per group, not once per instance.
+	================
+	*/
+	function scan( ray: PickRay, limit: number, query: PickScan ) {
 		let nearest = limit;
-		for ( const group of pickGroups ) {
-			if ( terrainOnly && !group.material.terrain && !group.material.water ) continue;
+		for ( const group of pickCandidates() ) {
+			if ( query.terrainOnly && !group.material.terrain && !group.material.water ) continue;
 			if (
 				group.material.sky || group.material.lightmap || blendAdds( group.material ) ||
-				excludeWater && group.material.water
+				query.excludeWater && group.material.water
 			) continue;
 			const cache = selections.get( group ), draw = draws.get( group );
 			if ( !draw ) continue;
@@ -1109,13 +1274,18 @@ export function createWorldRenderer(
 				indices = cache && group.ranges ? cache.indices.subarray( 0, cache.indexCount ?? 0 ) : source.indices;
 			const instances = cache?.instances ?? source.instances!,
 				count = cache?.instances ? cache.instanceCount ?? 0 : instances.length / 16;
+			if ( !count ) continue;
 			let bounds = pickBounds.get( source.positions );
 			if ( !bounds && !source.bones ) {
 				bounds = geometryPickBounds( source.positions );
 				pickBounds.set( source.positions, bounds );
 			}
+			let mesh: Geometry | undefined, alpha: PickAlpha | undefined;
+			const blocks = pickBlocks.get( group ), ranges = group.ranges ? cache?.chosen : undefined;
+			const skinned = source.bones && query.skinned ?
+				query.skinned.get( group ) ?? query.skinned.set( group, [] ).get( group )! :
+				undefined;
 			for ( let i = 0; i < count; i++ ) {
-				const matrix = instances.subarray( i * 16, i * 16 + 16 );
 				if ( group.instanceRadius !== undefined && pickFrustum ) {
 					const inFrustum = bounds ?
 						visibleFrustumBox( pickFrustum, bounds, instances, i * 16 ) :
@@ -1128,20 +1298,23 @@ export function createWorldRenderer(
 						);
 					if ( !inFrustum ) continue;
 				}
+				const matrix = instances.subarray( i * 16, i * 16 + 16 );
 				if ( bounds && !rayIntersectsBounds( ray, bounds, matrix, nearest ) ) continue;
-				const paths = texturePaths( group ),
-					path = paths.length ? paths[Math.floor( pickSeconds * 10 ) % paths.length] : undefined,
-					image = path ? images.get( path )?.source : undefined;
-				const alpha = image ? pickMask( image ) : undefined;
-				const mesh = { ...source, indices, material: group.material },
-					surface = {
-						alpha,
-						opacity: cache?.opacity?.[i] ?? 1,
-						blocks: pickBlocks.get( group ),
-						ranges: group.ranges ? cache?.chosen : undefined
-					};
-				if ( occlusionOnly ) {
-					if ( occludesGeometry( ray, mesh, matrix, nearest, source.bones, surface ) ) return 0;
+				if ( !mesh ) {
+					const paths = texturePaths( group ),
+						path = paths.length ? paths[Math.floor( pickSeconds * 10 ) % paths.length] : undefined,
+						image = path ? images.get( path )?.source : undefined;
+					alpha = image ? pickMask( image ) : undefined;
+					mesh = { ...source, indices, material: group.material };
+				}
+				const surface = { alpha, opacity: cache?.opacity?.[i] ?? 1, blocks, ranges };
+				if ( query.occlusionOnly ) {
+					const posed = skinned ? skinned[i] ??= createSkinnedPickVertices( source ) : undefined,
+						occlusion = { palette: source.bones, surface, skinned: posed };
+					if ( query.nearestOccluder ) {
+						const depth = nearestOccluder( ray, mesh, matrix, nearest, occlusion );
+						if ( depth !== null ) nearest = depth;
+					} else if ( occludesGeometry( ray, mesh, matrix, nearest, occlusion ) ) return 0;
 					continue;
 				}
 				const depth = pickGeometry( ray, mesh, matrix, source.bones, surface );
@@ -1149,6 +1322,14 @@ export function createWorldRenderer(
 			}
 		}
 		return nearest < limit ? nearest : null;
+	}
+	/*
+	================
+	pick
+	================
+	*/
+	function pick( ray: PickRay, limit: number, excludeWater = false, terrainOnly = false, occlusionOnly = false ) {
+		return scan( ray, limit, { excludeWater, terrainOnly, occlusionOnly } );
 	}
 	return {
 		/*
@@ -1332,7 +1513,7 @@ export function createWorldRenderer(
 		*/
 		pickInterface( ray: PickRay ) {
 			for ( const id of [ 2, 3 ] ) {
-				for ( const group of pickGroups ) {
+				for ( const group of pickCandidates() ) {
 					if ( !group.id.startsWith( "interface:" + id + ":" ) ) continue;
 					const matrix = group.geometry.instances;
 					if ( matrix && pickGeometry( ray, group.geometry, matrix ) !== null ) return id === 2 ? 0 : 1;
@@ -1347,7 +1528,7 @@ export function createWorldRenderer(
 		*/
 		interfaceCenters() {
 			return [ 2, 3 ].map( id => {
-				const groups = pickGroups.filter( group => group.id.startsWith( "interface:" + id + ":" ) );
+				const groups = pickCandidates().filter( group => group.id.startsWith( "interface:" + id + ":" ) );
 				if ( !groups.length ) return null;
 				const low = [ Infinity, Infinity, Infinity ], high = [ -Infinity, -Infinity, -Infinity ];
 				for ( const group of groups ) {
@@ -1372,6 +1553,31 @@ export function createWorldRenderer(
 		*/
 		occludes( ray: PickRay, limit: number ) {
 			return pick( ray, limit, false, false, true ) !== null;
+		},
+		/*
+		================
+		occlusionScope
+
+		An occlusion test for the queries of one pick: the hover pick's nine
+		rays against each candidate's hit depth. Water never occludes (the
+		hover rule). A skinned prop is skinned at most once in the scope, not
+		once per query; the scope must not outlive the frame's poses, so the
+		caller drops it when its pick returns.
+
+		Every candidate on a ray asks about the same ray, so the scope scans
+		each ray once for its nearest occluder (createOcclusionMemo).
+		================
+		*/
+		occlusionScope() {
+			const skinned = new Map<WorldGroup, SkinnedPickVertices[]>(),
+				query: PickScan = {
+					excludeWater: true,
+					terrainOnly: false,
+					occlusionOnly: true,
+					skinned,
+					nearestOccluder: true
+				};
+			return createOcclusionMemo( ( ray, limit ) => scan( ray, limit, query ) );
 		},
 		/*
 		================
@@ -2043,7 +2249,6 @@ export function createWorldRenderer(
 			const viewChanged = reflectWater || lastReflection !== reflectWater || !lastView ||
 				!matrix.every( ( v, i ) => v === lastView![i] ) || !lastEye ||
 				localCamera.eye.some( ( v, i ) => v !== lastEye![i] );
-			if ( viewChanged ) terrainViewStamp++;
 			lastReflection = reflectWater;
 			lastEye = localCamera.eye;
 			const weatherImages = new Map<string, ImageDraw>();
@@ -2071,6 +2276,7 @@ export function createWorldRenderer(
 				// Every resident object would receive this frame stamp without changing
 				// selection or opacity. Materialize those stamps only on the next walk.
 				retainedFadeFrame = fadeFrame;
+				walkedGroups = 0;
 				animate( geometry, seconds );
 				probe?.worldMark?.( "world-finalize" );
 				return {
@@ -2086,6 +2292,7 @@ export function createWorldRenderer(
 					flares,
 					matrix,
 					draws: selected,
+					persistent: staticShown ? staticBlock : undefined,
 					transparentStart,
 					environment,
 					sky,
@@ -2102,6 +2309,24 @@ export function createWorldRenderer(
 			const sampleDetails = probe?.sampleDetails?.() ?? false;
 			const frustum = prepareViewFrustum( matrix ), visible: WorldGroup[] = [];
 			pickFrustum = frustum;
+			// Both GPU culls (index-cull.ts, object-cull.ts) test this view; each
+			// ignores it while it holds nothing.
+			geometry.cullView( frustum, reflectionFrustum ?? null );
+			if ( reflectionFrustum ) {
+				// The mirror follows the view exactly: choose per view, as natively.
+				if ( viewChanged || terrainChoiceKey !== "view" ) terrainChoiceStamp++;
+				terrainChoiceKey = "view";
+				terrainPlanes = frustum;
+				terrainSlack = 0;
+			} else {
+				const envelope = terrainEnvelope.envelope( localCamera, aspect ), key = "envelope:" + envelope.stamp;
+				if ( key !== terrainChoiceKey ) {
+					terrainChoiceStamp++;
+					terrainChoiceKey = key;
+					terrainPlanes = prepareViewFrustum( envelope.matrix );
+					terrainSlack = envelope.slack;
+				}
+			}
 			triangles = 0;
 			const eyeCellX = Math.floor( localCamera.eye[0] / 320 ), eyeCellZ = Math.floor( localCamera.eye[2] / 320 );
 			// The fade range of scenery objects follows the background distance.
@@ -2119,6 +2344,22 @@ export function createWorldRenderer(
 			const renderModeHides = ( group: WorldGroup ) =>
 				group.material.sky ? !renderModes.sky : group.ranges ? !renderModes.ground : !renderModes.mapObjects;
 			const walkGroups = walk.groups, stamp = ++walkStamp;
+			markedCount = 0;
+			if ( !staticAdopted ) {
+				for ( let i = 0; i < staticGroups.length; i++ ) {
+					const group = staticGroups[i]!;
+					adoptObjectCull(
+						geometry,
+						staticDraws[i],
+						group.center[0],
+						group.center[1],
+						group.center[2],
+						group.radius
+					);
+				}
+				staticAdopted = true;
+			}
+			walkedGroups = walkGroups.length;
 			for ( let walked = 0; walked < walkGroups.length; walked++ ) {
 				const group = walkGroups[walked]!, kind = walk.kind[walked]!;
 				if ( current?.dungeonVisibility && group.dungeonBlock !== undefined ) {
@@ -2129,14 +2370,14 @@ export function createWorldRenderer(
 				}
 				if ( kind === WALK_SKY ) {
 					visible.push( group );
-					visibleMarks[walk.order[walked]!] = 1;
+					visibleMarks[marked[markedCount++] = walk.order[walked]!] = 1;
 					walk.seen[walked] = stamp;
 					continue;
 				}
 				if ( !viewChanged && !walk.faded[walked] ) {
 					if ( walk.seen[walked] === stamp - 1 ) {
 						visible.push( group );
-						visibleMarks[walk.order[walked]!] = 1;
+						visibleMarks[marked[markedCount++] = walk.order[walked]!] = 1;
 						walk.seen[walked] = stamp;
 						triangles += walk.triangles[walked]!;
 					}
@@ -2148,12 +2389,12 @@ export function createWorldRenderer(
 				if (
 					kind === WALK_TERRAIN && walk.cell[walked * 2] === eyeCellX &&
 					walk.cell[walked * 2 + 1] === eyeCellZ &&
-					walk.terrainView[walked] === terrainViewStamp
+					walk.terrainView[walked] === terrainChoiceStamp
 				) {
 					const indices = walk.count[walked]!;
 					if ( indices > 0 ) {
 						visible.push( group );
-						visibleMarks[walk.order[walked]!] = 1;
+						visibleMarks[marked[markedCount++] = walk.order[walked]!] = 1;
 						triangles += indices / 3;
 						walk.seen[walked] = stamp;
 						walk.triangles[walked] = indices / 3;
@@ -2174,18 +2415,27 @@ export function createWorldRenderer(
 					// every range at the LOD its distance from the eye cell selects, then
 					// the frustum culls the ranges whose sphere falls outside it - the
 					// main frustum or the water mirror's - as the native client does
-					// each frame (A2D1B0). The two halves change at different rates:
+					// each frame (A2D1B0). Port-only: without a mirror the frustum is
+					// the cull envelope's (cull-envelope.ts), so a turning camera
+					// re-chooses only when it leaves the envelope; the superset it
+					// draws is clipped by the rasterizer. The two halves change at different rates:
 					// the LOD band moves only when the eye crosses a cell or the
 					// detail inputs change, and the frustum pass fills a reused
 					// scratch list, so a view that culls the same set as the last
 					// one neither copies nor uploads indices again - the same draw
 					// lists as re-choosing every frame, without the per-frame work.
+					// A terrain layer member is culled on the GPU against the live
+					// view (index-cull.ts, port-only): its candidates are the whole
+					// LOD band, so only the eye cell re-chooses it.
+					const layered = layers.member( group );
 					const cellChanged = cache.cellX !== eyeCellX || cache.cellZ !== eyeCellZ ||
-						cache.viewStamp !== terrainViewStamp;
+						!layered && cache.viewStamp !== terrainChoiceStamp;
 					if ( cache.chosen && !cellChanged ) {
+						// A layer member's choice outlives the view: the table's fast path takes it next.
+						walk.terrainView[walked] = terrainChoiceStamp;
 						if ( cache.indexCount ) {
 							visible.push( group );
-							visibleMarks[walk.order[walked]!] = 1;
+							visibleMarks[marked[markedCount++] = walk.order[walked]!] = 1;
 							triangles += cache.indexCount / 3;
 							walk.seen[walked] = stamp;
 							walk.triangles[walked] = cache.indexCount / 3;
@@ -2222,9 +2472,10 @@ export function createWorldRenderer(
 						cache.lodKey = lodKey;
 					}
 					let chosen: readonly TerrainRange[];
-					if ( current?.terrainDetail === "full" ) {
+					if ( current?.terrainDetail === "full" || layered ) {
 						// The "full" detail's set is view-independent: every range
-						// at LOD 0 stays, so there is no frustum pass to run.
+						// at LOD 0 stays, so there is no frustum pass to run. A layer
+						// member's frustum pass is the GPU's.
 						chosen = cache.lodRanges;
 					} else {
 						const scratch = cache.scratch ?? (cache.scratch = []);
@@ -2232,11 +2483,11 @@ export function createWorldRenderer(
 						for ( const range of cache.lodRanges ) {
 							if (
 								visibleFrustumSphere(
-									frustum,
+									terrainPlanes!,
 									range.center[0],
 									range.center[1],
 									range.center[2],
-									range.radius
+									range.radius + terrainSlack
 								) ||
 								!!reflectionFrustum &&
 									visibleFrustumSphere(
@@ -2253,7 +2504,7 @@ export function createWorldRenderer(
 					}
 					cache.cellX = eyeCellX;
 					cache.cellZ = eyeCellZ;
-					cache.viewStamp = terrainViewStamp;
+					cache.viewStamp = terrainChoiceStamp;
 					if ( sampleDetails ) probe?.detailEnd?.( "terrain-candidates" );
 					if ( sampleDetails ) probe?.detailBegin?.( "terrain-indices" );
 					// The draw holds the same ranges in the same order as the last
@@ -2336,10 +2587,10 @@ export function createWorldRenderer(
 					walk.count[walked] = count;
 					walk.cell[walked * 2] = eyeCellX;
 					walk.cell[walked * 2 + 1] = eyeCellZ;
-					walk.terrainView[walked] = terrainViewStamp;
+					walk.terrainView[walked] = terrainChoiceStamp;
 					if ( sampleDetails ) probe?.detailBegin?.( "terrain-index-upload" );
 					if ( indicesDirty ) {
-						if ( layers.member( group ) ) layers.select( group, cache.indices, count );
+						if ( layered ) layers.select( group, chosen );
 						else geometry.updateIndices( draws.get( group )!, cache.indices.subarray( 0, count ) );
 						if ( group.material.terrain ) {
 							shadowSurfaces.replace( group, groupOrder.get( group )!, held, chosen );
@@ -2369,7 +2620,7 @@ export function createWorldRenderer(
 					if ( sampleDetails ) probe?.detailEnd?.( "terrain-position-upload" );
 					if ( count ) {
 						visible.push( group );
-						visibleMarks[walk.order[walked]!] = 1;
+						visibleMarks[marked[markedCount++] = walk.order[walked]!] = 1;
 						triangles += count / 3;
 						walk.seen[walked] = stamp;
 						walk.triangles[walked] = triangles - trianglesBefore;
@@ -2488,13 +2739,22 @@ export function createWorldRenderer(
 					const count = walk.count[walked]!;
 					if (
 						count &&
-						(visibleFrustumSphere(
-							frustum,
-							sphere[at]!,
-							sphere[at + 1]!,
-							sphere[at + 2]!,
-							sphere[at + 3]!
-						) ||
+						(walkGpuCull[walked] === 1 &&
+								adoptObjectCull(
+									geometry,
+									orderDraws[walk.order[walked]!],
+									sphere[at]!,
+									sphere[at + 1]!,
+									sphere[at + 2]!,
+									sphere[at + 3]!
+								) ||
+							visibleFrustumSphere(
+								frustum,
+								sphere[at]!,
+								sphere[at + 1]!,
+								sphere[at + 2]!,
+								sphere[at + 3]!
+							) ||
 							!!reflectionFrustum &&
 								visibleFrustumSphere(
 									reflectionFrustum,
@@ -2505,7 +2765,7 @@ export function createWorldRenderer(
 								))
 					) {
 						visible.push( group );
-						visibleMarks[walk.order[walked]!] = 1;
+						visibleMarks[marked[markedCount++] = walk.order[walked]!] = 1;
 						triangles += walk.instanceTriangles[walked]! * count;
 						walk.seen[walked] = stamp;
 						walk.triangles[walked] = triangles - trianglesBefore;
@@ -2513,7 +2773,22 @@ export function createWorldRenderer(
 					continue;
 				}
 				if (
-					(visibleFrustumSphere( frustum, group.center[0], group.center[1], group.center[2], group.radius ) ||
+					(walkGpuCull[walked] === 1 &&
+							adoptObjectCull(
+								geometry,
+								orderDraws[walk.order[walked]!],
+								group.center[0],
+								group.center[1],
+								group.center[2],
+								group.radius
+							) ||
+						visibleFrustumSphere(
+							frustum,
+							group.center[0],
+							group.center[1],
+							group.center[2],
+							group.radius
+						) ||
 						!!reflectionFrustum &&
 							visibleFrustumSphere(
 								reflectionFrustum,
@@ -2524,7 +2799,7 @@ export function createWorldRenderer(
 							))
 				) {
 					visible.push( group );
-					visibleMarks[walk.order[walked]!] = 1;
+					visibleMarks[marked[markedCount++] = walk.order[walked]!] = 1;
 					triangles += group.geometry.indices.length / 3 * (group.geometry.instances!.length / 16);
 					walk.seen[walked] = stamp;
 					walk.triangles[walked] = triangles - trianglesBefore;
@@ -2555,8 +2830,12 @@ export function createWorldRenderer(
 			let visibleCount = 0;
 			terrainEnd = -1;
 			transparentStart = -1;
-			for ( let index = 0; index < visibleMarks.length; index++ ) {
-				if ( !visibleMarks[index] ) continue;
+			// Draw order of the marked groups alone: the static block takes no
+			// part, so ordering costs what the walk found, not the scene size.
+			const order = marked.subarray( 0, markedCount ).sort();
+			markedCount = 0;
+			for ( let m = 0; m < order.length; m++ ) {
+				const index = order[m]!;
 				visibleMarks[index] = 0;
 				const phase = orderPhase[index]!;
 				if ( terrainEnd < 0 && phase >= 3 ) terrainEnd = visibleCount;
@@ -2588,8 +2867,18 @@ export function createWorldRenderer(
 			// member. Members are terrain, so only the opaque phases shift.
 			const nextDraws: GeometryDraw[] = [], pass = ++submitPass;
 			let shifted = 0;
+			staticShown = renderModes.mapObjects && staticSegments.length > 0;
+			const at: number[] = [];
+			let segment = 0;
 			for ( let i = 0; i < visibleCount; i++ ) {
 				const index = orderVisible[i]!, layer = orderLayers[index];
+				// Static runs ordered before this group go in first. Terrain
+				// orders before every object, and the transparent groups after
+				// them, so their own depth order never meets a run.
+				while ( staticShown && segment < staticOrders.length && staticOrders[segment]! < index ) {
+					at.push( nextDraws.length );
+					segment++;
+				}
 				const draw = layer ? layers.drawInPass( layer, pass ) : orderDraws[index]!;
 				// A group a negated graphic option hides leaves the frame
 				// here, at submission, like a draw that never resolved:
@@ -2602,6 +2891,19 @@ export function createWorldRenderer(
 			}
 			terrainEnd -= shifted;
 			transparentStart -= shifted;
+			while ( staticShown && segment < staticOrders.length ) {
+				at.push( nextDraws.length );
+				segment++;
+			}
+			// The static runs are submitted apart from draws (persistent): only
+			// the walked part and the runs' places are compared here.
+			if (
+				staticBlock?.revision !== staticRevision || at.length !== staticAt.length ||
+				at.some( ( value, k ) => value !== staticAt[k] )
+			) {
+				staticAt = at;
+				staticBlock = staticShown ? { blocks: staticSegments, at, revision: staticRevision } : undefined;
+			}
 			if (
 				nextDraws.length !== selected.length || nextDraws.some( ( draw, index ) => draw !== selected[index] )
 			) {
@@ -2624,6 +2926,7 @@ export function createWorldRenderer(
 				flares,
 				matrix,
 				draws: selected,
+				persistent: staticShown ? staticBlock : undefined,
 				transparentStart,
 				environment,
 				sky,
@@ -2668,6 +2971,7 @@ export function createWorldRenderer(
 					selections.clear();
 					walk.cell.fill( NaN );
 					lastEye = null;
+					terrainChoiceKey = "";
 					break;
 				default:
 					return;
@@ -2690,6 +2994,8 @@ export function createWorldRenderer(
 			orderGroups( [] );
 			objectOrder.clear();
 			lastEye = null;
+			terrainEnvelope.invalidate();
+			terrainChoiceKey = "";
 			pickGroups = [];
 			resetAnimations( undefined, true );
 			draws.clear();
@@ -2724,9 +3030,12 @@ export function createWorldRenderer(
 				pendingGroups: Math.max( pendingGroupCount, collisionPreparation ? 1 : 0 ),
 				residentGroups: draws.size,
 				visibleGroups: selected.length,
+				staticGroups: staticGroups.length,
+				walkedGroups,
 				triangles,
 				pendingTextures: missingTextures.size + selectionPaths().filter( path => !images.has( path ) ).length,
-				bundleRebuilds: rebuilds
+				bundleRebuilds: rebuilds,
+				weather: weather.stats()
 			};
 		},
 		/*
@@ -2752,6 +3061,8 @@ export function createWorldRenderer(
 			orderGroups( [] );
 			objectOrder.clear();
 			lastEye = null;
+			terrainEnvelope.invalidate();
+			terrainChoiceKey = "";
 			pickGroups = [];
 			collisionScene = null;
 			collisionParts = [];

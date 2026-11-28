@@ -13,7 +13,7 @@ import "../helpers/native-source-loader.mjs";
 import assert from "node:assert/strict";
 import test from "node:test";
 import { createContext, runInContext } from "node:vm";
-import { instrument, measure } from "../../tools/perf/core/client.mjs";
+import { COMBAT_FRAME_SHARE, instrument, measure, verifyCombatWorkload } from "../../tools/perf/core/client.mjs";
 
 /*
 ================
@@ -37,7 +37,7 @@ function fixture() {
 		frame
 		================
 		*/
-		frame( atMs, cpuMs, elapsedMs = cpuMs, created = 0 ) {
+		frame( atMs, cpuMs, elapsedMs = cpuMs, created = 0, combat = { effects: 0, particles: 0 } ) {
 			clock = atMs;
 			probe.begin();
 			probe.worldBegin();
@@ -47,6 +47,8 @@ function fixture() {
 			probe.movement( { atMs, revision: 7, workerAtMs: atMs - 5, workerDebtMs: 0 } );
 			probe.characterCount( "cpu-ms", cpuMs );
 			probe.characterCount( "pose-created", created );
+			probe.characterCount( "effect-actors", combat.effects );
+			probe.characterCount( "particles", combat.particles );
 			clock = atMs + elapsedMs;
 			probe.end();
 		}
@@ -163,4 +165,34 @@ test("opening maxima retain sub-threshold callbacks and pose bursts through the 
 	assert.equal( result.opening.maxPoseAtMs, 104 );
 	assert.ok( result.opening.endAtMs < 10104 );
 	assert.ok( f.target.__benchRows.every( row => row[0] !== 25 ), "opening evidence survives tail rollover" );
+});
+
+test("a combat window records when its effects were drawn and fails without them", async () => {
+	const f = fixture(), combat = { effects: 3, particles: 40 };
+	// Effects for the first second of a three-second window only.
+	const result = await measure( f.page, "combat", 1, async () => {
+		for ( let index = 0; index < 1002; index++ ) {
+			f.frame( index * 3, 1, 1, 0, index * 3 < 1006 ? combat : { effects: 0, particles: 0 } );
+		}
+	} );
+	const { workload } = result;
+	assert.equal( workload.frames, 1000 );
+	assert.equal( workload.startPageMs, 6, "the window opens on the first counted frame" );
+	assert.equal( workload.startWallMs, 12345 + 6 );
+	assert.deepEqual( workload.timeline.map( s => s.effectFrames ), [ 334, 0, 0 ] );
+	assert.deepEqual(
+		workload.timeline.map( s => s.frames ),
+		[ 334, 333, 333, 0 ].slice( 0, workload.timeline.length )
+	);
+	assert.equal( workload.particleFrames, 334 );
+	assert.throws(
+		() => verifyCombatWorkload( workload, "crowd/drag" ),
+		/combat workload missing: effect actors in 334/
+	);
+	const full = await measure( f.page, "combat-full", 1, async () => {
+		for ( let index = 0; index < 1002; index++ ) f.frame( 4000 + index * 3, 1, 1, 0, combat );
+	} );
+	verifyCombatWorkload( full.workload, "crowd/drag" );
+	const short = { ...full.workload, particleFrames: Math.ceil( 1000 * COMBAT_FRAME_SHARE ) - 1 };
+	assert.throws( () => verifyCombatWorkload( short, "crowd/drag" ), /particles in 899 of 1000/ );
 });

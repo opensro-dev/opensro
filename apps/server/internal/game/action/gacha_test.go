@@ -18,6 +18,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"slices"
 	"strconv"
 	"testing"
 
@@ -630,25 +631,70 @@ func TestGachaExchangeNonEquipmentSkipsSpecialPropertyRolls(t *testing.T) {
 
 /*
 ================
-TestGachaExchangeTakesTheLowestSlotVoucherFirst
+TestGachaExchangeRedeemsEveryVoucherInOneTalk
+
+The native exchange walks the whole bag from slot 13: a win in slot 13 and a
+loss in slot 20 are both paid by one request, slot 13 first, and no result
+card is left.
 ================
 */
-func TestGachaExchangeTakesTheLowestSlotVoucherFirst(t *testing.T) {
+func TestGachaExchangeRedeemsEveryVoucherInOneTalk(t *testing.T) {
 	rt, c, p := operatorFixture(t, 0)
 	extra := c.MissionInventory[0]
 	extra.Slot = 20
 	extra.MagicOptions = []uint64{11460, 1}
 	extra.RefObjID, extra.Codename = rt.GachaCatalog.LoseCard.RefObjID, rt.GachaCatalog.LoseCard.Codename
 	c.MissionInventory = append(c.MissionInventory, extra)
+	frames, reason := rt.HandleGachaExchange(testDivision, c, p)
+	if reason != "" {
+		t.Fatal(reason)
+	}
+	paid := map[uint32]bool{}
+	for _, row := range c.MissionInventory {
+		if rt.GachaCatalog.IsResultCard(row.RefObjID) {
+			t.Fatalf("voucher survived the exchange: %+v", row)
+		}
+		paid[row.RefObjID] = true
+	}
+	if !paid[11459] || !paid[11460] {
+		t.Fatalf("both rewards should be paid: %+v", c.MissionInventory)
+	}
+	var removed []uint8
+	for _, frame := range frames {
+		if frame.Opcode == gacha.OpItemStateDelta && len(frame.Payload) == 4 && frame.Payload[1] == 8 {
+			removed = append(removed, frame.Payload[0])
+		}
+	}
+	if !slices.Equal(removed, []uint8{13, 20}) {
+		t.Fatalf("voucher updates %v, want slot 13 then slot 20", removed)
+	}
+}
+
+/*
+================
+TestGachaExchangePassesByAVoucherItCannotPay
+
+A card whose pair is no enabled prize row stays in the bag, and the
+exchange still pays the next voucher.
+================
+*/
+func TestGachaExchangePassesByAVoucherItCannotPay(t *testing.T) {
+	rt, c, p := operatorFixture(t, 0)
+	extra := c.MissionInventory[0]
+	extra.Slot = 20
+	c.MissionInventory[0].MagicOptions = []uint64{999, 1}
+	c.MissionInventory = append(c.MissionInventory, extra)
 	if _, reason := rt.HandleGachaExchange(testDivision, c, p); reason != "" {
 		t.Fatal(reason)
 	}
+	kept, paid := false, false
 	for _, row := range c.MissionInventory {
-		if row.RefObjID == 11459 {
-			return
-		}
+		kept = kept || row.Slot == 13 && rt.GachaCatalog.IsResultCard(row.RefObjID)
+		paid = paid || row.RefObjID == 11459
 	}
-	t.Fatalf("slot 13's win reward was not granted first: %+v", c.MissionInventory)
+	if !kept || !paid {
+		t.Fatalf("kept=%v paid=%v: %+v", kept, paid, c.MissionInventory)
+	}
 }
 
 /*

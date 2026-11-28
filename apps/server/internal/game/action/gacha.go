@@ -6,7 +6,8 @@ gacha.go - Magic Pop machine interaction, ticket rolls, and Gori prize exchange
 Owns 0x7338 machine opening, 0x7053 ticket roll to win/loss vouchers, and
 0x71BE voucher redemption through Gori (NPC_CH_GACHA_OPERATOR), including the
 native equipment property roll (+1..+5 OptLevel, 5-bit white variance
-+ durability, and blue magic options).
++ durability, and blue magic options) and, on the v1.696 tables, the row's
+[BIIV] property override (item/gacha/spec.go).
 
 ===========================================================================
 */
@@ -18,14 +19,18 @@ import (
 	"fmt"
 	"math/big"
 	"os"
+	"slices"
 	"strings"
 
 	log "github.com/sirupsen/logrus"
+	"opensro.online/server/internal/game/combat"
 	"opensro.online/server/internal/game/enterworld"
+	"opensro.online/server/internal/game/item/alchemy"
 	"opensro.online/server/internal/game/item/gacha"
 	"opensro.online/server/internal/game/item/inventory"
 	"opensro.online/server/internal/game/item/loot"
 	"opensro.online/server/internal/game/item/wire"
+	"opensro.online/server/internal/game/progression"
 	"opensro.online/server/internal/game/world/simulation"
 	"opensro.online/server/internal/transport"
 )
@@ -44,6 +49,24 @@ GachaPoolV2FromEnv
 */
 func GachaPoolV2FromEnv() bool {
 	switch strings.ToLower(strings.TrimSpace(os.Getenv(EnvGachaPoolV2))) {
+	case "off", "0", "false", "no":
+		return false
+	}
+	return true
+}
+
+// EnvMagicPopV1696 selects the v1.696 Magic POP tables (owner,
+// 2026-11-27: the later client's Magic POP is the default). Unset is on;
+// "off" keeps the v1.150 machine, with pool v2 under its own flag.
+const EnvMagicPopV1696 = "SRO_MAGIC_POP_V1696"
+
+/*
+================
+MagicPopV1696FromEnv
+================
+*/
+func MagicPopV1696FromEnv() bool {
+	switch strings.ToLower(strings.TrimSpace(os.Getenv(EnvMagicPopV1696))) {
 	case "off", "0", "false", "no":
 		return false
 	}
@@ -132,6 +155,29 @@ incomplete data.
 ================
 */
 func (rt *Runtime) ConfigureGacha(textdataDir string) error {
+	levelCap, err := progression.LevelCapFromEnv()
+	if err != nil {
+		return err
+	}
+	rt.GachaLevelCap = levelCap
+	if MagicPopV1696FromEnv() {
+		if gacha.HasV1696Tables(textdataDir) {
+			catalog, err := gacha.LoadCatalogV1696(textdataDir, rt.deps.ItemReferences())
+			if err != nil {
+				return err
+			}
+			if err := rt.validateGachaSpecs(catalog); err != nil {
+				return err
+			}
+			// The v1.696 table retires pool v2, whatever its flag says.
+			rt.GachaPoolV2 = false
+			rt.GachaCatalog = catalog
+			log.Infof("gacha: v1.696 Magic POP tables active (%s), %d prizes; pool v2 retired",
+				EnvMagicPopV1696, len(catalog.Prizes()))
+			return nil
+		}
+		log.Warnf("gacha: %s is on but %s is absent; serving the v1.150 machine", EnvMagicPopV1696, gacha.PrizeTableV1696)
+	}
 	catalog, err := gacha.LoadCatalog(textdataDir, rt.deps.ItemReferences())
 	if err != nil {
 		return err
@@ -145,6 +191,108 @@ func (rt *Runtime) ConfigureGacha(textdataDir string) error {
 	}
 	rt.GachaCatalog = catalog
 	return nil
+}
+
+/*
+================
+validateGachaSpecs
+
+The v1.188 row loader's M check: the option exists at the token's degree
+and its value lies in the option's range (see
+research/findings/magic-pop-biiv-server-v1188.md). It needs the
+magic option table, so it runs once the alchemy catalogue is in; a
+runtime without one (unit fixtures) defers the check to the exchange,
+which refuses an unresolved option.
+================
+*/
+func (rt *Runtime) validateGachaSpecs(catalog *gacha.Catalog) error {
+	if rt.Alchemy == nil {
+		return nil
+	}
+	for _, prize := range catalog.Prizes() {
+		for _, token := range prize.Spec.MagicOptions() {
+			if _, err := rt.gachaSpecOption(token); err != nil {
+				return fmt.Errorf("gacha: entry %d: %w", prize.EntryID, err)
+			}
+		}
+	}
+	return nil
+}
+
+/*
+================
+gachaSpecOption
+
+One M token as an item magic option word: the option row's id in the low
+half, the value in the high half (the same store the exchange writes for
+a rolled option).
+================
+*/
+func (rt *Runtime) gachaSpecOption(token gacha.SpecToken) (uint64, error) {
+	if rt.Alchemy == nil {
+		return 0, fmt.Errorf("magic option table is unavailable for %s", token.Name)
+	}
+	option, ok := rt.Alchemy.OptionByTag(token.Tag, int(token.Level))
+	if !ok {
+		return 0, fmt.Errorf("magic option %s has no degree %d row", token.Name, token.Level)
+	}
+	low, high, ok := alchemy.MagicValueBounds(option)
+	if !ok || token.Value < int64(low) || token.Value > int64(high) {
+		return 0, fmt.Errorf("magic option %s value %d is outside %d..%d", token.Name, token.Value, low, high)
+	}
+	return uint64(token.Value)<<32 | uint64(option.ID), nil
+}
+
+/*
+================
+GachaPoolReference
+
+The published v1.696 pool (enterworld.GachaPoolReference); nil on the
+v1.150 machine. Each M token's option line carries the magicoption row id
+the exchange writes (gachaSpecOption), so the browser's tooltip reads the
+same id the server pays.
+================
+*/
+func (rt *Runtime) GachaPoolReference() *enterworld.GachaPoolReference {
+	return rt.GachaCatalog.PublicPool(rt.GachaLevelCap, rt.gachaOptionID)
+}
+
+/*
+================
+gachaOptionID
+
+The magicoption row id of one M token: the row its tag and degree resolve
+to (alchemy's OptionByTag, the resolver the reference server uses), which
+is the id the exchange stores in the option word's low half. A runtime
+with no magic option table resolves none.
+================
+*/
+func (rt *Runtime) gachaOptionID(token gacha.SpecToken) (uint16, bool) {
+	if rt == nil || rt.Alchemy == nil {
+		return 0, false
+	}
+	option, ok := rt.Alchemy.OptionByTag(token.Tag, int(token.Level))
+	if !ok {
+		return 0, false
+	}
+	return option.ID, true
+}
+
+/*
+================
+GachaRuleState
+
+What ConfigureGacha settled, for the public rules page: v1696 is the table
+generation actually loaded (false when the flag is on but the tables are
+absent and the v1.150 machine is served), and poolV2 is the port-only pool
+actually in force.
+================
+*/
+func (rt *Runtime) GachaRuleState() (v1696, poolV2 bool) {
+	if rt == nil {
+		return false, false
+	}
+	return rt.GachaCatalog != nil && rt.GachaCatalog.V1696, rt.GachaPoolV2
 }
 
 /*
@@ -332,6 +480,15 @@ func (rt *Runtime) HandleGachaRoll(
 			npc.RefObjID,
 		)
 	}
+	// INFERENCE: the v1.696 client lists a row only while the level cap
+	// reaches its column 16 (the cap byte gate in CIFGhaCha); the server
+	// refuses the same rows, so a forged request cannot pick one.
+	if int64(prize.MinLevelCap) > rt.GachaLevelCap {
+		return gachaRefusal(gacha.OpResult, gachaRefusalNoEntry), fmt.Sprintf(
+			"entry %d needs level cap %d, the server's is %d",
+			request.SelectedEntryID, prize.MinLevelCap, rt.GachaLevelCap,
+		)
+	}
 
 	failure := "ticket row changed before commit"
 	var frames []wire.Frame
@@ -442,17 +599,20 @@ func (rt *Runtime) HandleGachaRoll(
 ================
 prepareGachaRewardItem
 
-Natively the voucher mutates to the prize item and the special equipment
-property roll runs with a zeroed override spec
-(all 26 v1.150 gachaitemset.txt rows carry param1..4 == 0). Non-equipment
-returns immediately without drawing from DropRoll; equipment (TID 3.1.*.*)
-rolls a low-biased +1..+5 enhancement level (minimum of two 1..5 draws),
-5-bit white-stat variance + tier-0 durability, and blue magic
-options (100% entry for Rarity == 2 Seal of Star, 31/101 for
-normal gear).
+Natively the voucher mutates to the prize item and the server's special
+equipment property roll runs with the row's override spec
+(research/findings/magic-pop-biiv-server-v1188.md). v1.150 rows
+carry none (all 26 rows have param1..4 == 0), so their equipment rolls a
+low-biased +1..+5 enhancement level (minimum of two 1..5 draws), 5-bit
+white-stat variance + tier-0 durability, and blue magic options (100%
+entry for Rarity == 2 Seal of Star, 31/101 for normal gear). Each token of
+a v1.696 [BIIV] spec replaces its part without drawing: O the plus level,
+V the variance word (durability from its first field), D the durability
+with no variance, M the blue options. Non-equipment returns immediately
+without drawing from DropRoll.
 ================
 */
-func (rt *Runtime) prepareGachaRewardItem(reward *enterworld.ItemRef, quantity uint64) (inventory.Item, error) {
+func (rt *Runtime) prepareGachaRewardItem(reward *enterworld.ItemRef, quantity uint64, spec gacha.Spec) (inventory.Item, error) {
 	if wire.IsGoldHeap(reward.TypeFlags()) {
 		return inventory.Item{}, fmt.Errorf("ground-only item %s cannot enter an inventory", reward.Codename)
 	}
@@ -462,8 +622,12 @@ func (rt *Runtime) prepareGachaRewardItem(reward *enterworld.ItemRef, quantity u
 		TypeFlags: reward.TypeFlags(),
 		Quantity:  uint16(quantity),
 	}
-	if reward.TypeIDs[0] == 3 && reward.TypeIDs[1] == 1 {
-		plus := uint8(5)
+	if reward.TypeIDs[0] != 3 || reward.TypeIDs[1] != 1 {
+		return item, nil
+	}
+	plus, ok := spec.Plus()
+	if !ok {
+		plus = 5
 		for i := 0; i < 2; i++ {
 			value, ok := rt.rollUniqueCount(1, 5)
 			if !ok {
@@ -471,20 +635,105 @@ func (rt *Runtime) prepareGachaRewardItem(reward *enterworld.ItemRef, quantity u
 			}
 			plus = min(plus, uint8(value))
 		}
-		variance, durability, ok := rt.rollDroppedEquipmentVariance(reward)
-		if !ok {
-			return inventory.Item{}, fmt.Errorf("gacha equipment variance roll failed for %s", reward.Codename)
-		}
-		magic, _, err := loot.EquipmentMagic(reward.Codename, rt.DropRoll)
-		if err != nil {
-			return inventory.Item{}, fmt.Errorf("gacha equipment magic roll failed for %s: %w", reward.Codename, err)
-		}
-		item.Plus = plus
-		item.VarianceBits = variance
-		item.Durability = durability
-		item.MagicOptions = magic
 	}
+	variance, durability, err := rt.gachaRewardVariance(reward, spec)
+	if err != nil {
+		return inventory.Item{}, err
+	}
+	magic, err := rt.gachaRewardMagic(reward, spec)
+	if err != nil {
+		return inventory.Item{}, err
+	}
+	item.Plus = plus
+	item.VarianceBits = variance
+	item.Durability = durability
+	item.MagicOptions = magic
 	return item, nil
+}
+
+/*
+================
+gachaRewardVariance
+
+The reference server's per-class branches (weapons and armour): V sets the
+variance word and derives durability from its first 5-bit field; D
+alone sets the durability, clamped to the row's range, and leaves the
+variance zero; otherwise the native roll. A row whose Dur_U is 0 (an
+avatar attach, flags 3.1.13.4, has none) keeps 0: DurabilityFromVariance's
+floor of one would invent a durability the row does not have.
+================
+*/
+func (rt *Runtime) gachaRewardVariance(reward *enterworld.ItemRef, spec gacha.Spec) (uint64, uint32, error) {
+	variance, durability, err := rt.gachaRewardVarianceRoll(reward, spec)
+	if err != nil {
+		return 0, 0, err
+	}
+	if reward.MaxDurability == 0 {
+		durability = 0
+	}
+	return variance, durability, nil
+}
+
+/*
+================
+gachaRewardVarianceRoll
+
+The spec overrides and the native roll of gachaRewardVariance, before the
+zero-durability row rule.
+================
+*/
+func (rt *Runtime) gachaRewardVarianceRoll(reward *enterworld.ItemRef, spec gacha.Spec) (uint64, uint32, error) {
+	if bits, ok := spec.Variance(); ok {
+		return bits, combat.DurabilityFromVariance(reward, uint8(bits&gachaVarianceFieldMask)), nil
+	}
+	if value, ok := spec.Durability(); ok {
+		low := int64(combat.DurabilityFromVariance(reward, 0))
+		high := int64(combat.DurabilityFromVariance(reward, gachaVarianceFieldMask))
+		return 0, uint32(min(max(value, low), high)), nil
+	}
+	variance, durability, ok := rt.rollDroppedEquipmentVariance(reward)
+	if !ok {
+		return 0, 0, fmt.Errorf("gacha equipment variance roll failed for %s", reward.Codename)
+	}
+	return variance, durability, nil
+}
+
+// gachaVarianceFieldMask is one 5-bit white-stat variance field.
+const gachaVarianceFieldMask = 0x1f
+
+/*
+================
+gachaRewardMagic
+
+With M tokens the reference server skips its 31/101 entry gate and writes
+exactly the listed options (flag 2). Without them the native random roll
+runs from
+the client property table; an imported row that table does not know has
+no option pool, so it gets none (INFERENCE: the native pool is the
+magicoptionassign join the property table was built from, and no later
+prize without M tokens is equipment the port can join).
+================
+*/
+func (rt *Runtime) gachaRewardMagic(reward *enterworld.ItemRef, spec gacha.Spec) ([]uint64, error) {
+	if tokens := spec.MagicOptions(); len(tokens) > 0 {
+		options := make([]uint64, 0, len(tokens))
+		for _, token := range tokens {
+			option, err := rt.gachaSpecOption(token)
+			if err != nil {
+				return nil, fmt.Errorf("gacha spec for %s: %w", reward.Codename, err)
+			}
+			options = append(options, option)
+		}
+		return options, nil
+	}
+	if !loot.HasEquipmentProperties(reward.Codename) {
+		return nil, nil
+	}
+	magic, _, err := loot.EquipmentMagic(reward.Codename, rt.DropRoll)
+	if err != nil {
+		return nil, fmt.Errorf("gacha equipment magic roll failed for %s: %w", reward.Codename, err)
+	}
+	return magic, nil
 }
 
 /*
@@ -493,18 +742,13 @@ HandleGachaExchange
 
 HandleGachaExchange answers 0x71BE [operatorGid] from the client's talk row 5DB67B
 sends once 642270 found a voucher in the bag. Per the reference server's exchange,
-the lowest-slot win or loss voucher is consumed and its recorded pair,
-reference id then quantity, becomes bag items with the native roll giving +1..+5
-OptLevel, 5-bit white variance + durability, and blue magic options on
-equipment rewards. The voucher leaves by a 0x3645 quantity of zero rather
-than a row delete, because that is the update client 7654B0 turns into
-UIIT_MSG_GACHA_EXCHANGE.
-
-The removal is pinned to the slot whose pair was read, never to the codename:
-a same-codename card without a pair in a lower slot would otherwise be eaten
-while the paid voucher stayed to be redeemed again. A stacked row or a pair
-that is not an enabled prize row is refused, so the exchange can only hand out
-what a roll could have written.
+every win or loss voucher in the bag is redeemed in one request, walking the
+bag in slot order (redeemGachaVoucher pays each). A card the exchange cannot
+pay (a stacked row, a pair that is not an enabled prize row, so the exchange
+can only hand out what a roll could have written) is passed by; a reward that
+cannot be granted (a full bag) stops the walk, keeps the vouchers already
+redeemed and answers 5. Evidence: ../research/findings/magic-pop-biiv-server-v1188.md
+("Gori's exchange takes every result card in one talk").
 ================
 */
 func (rt *Runtime) HandleGachaExchange(
@@ -539,75 +783,125 @@ func (rt *Runtime) HandleGachaExchange(
 
 	failure := "no exchangeable voucher"
 	var frames []wire.Frame
+	stopped := false
 	committed := rt.deps.Update(character, "gacha-exchange", func() bool {
 		if character.DeletePending || rt.deps.ItemReferences() == nil {
 			return false
 		}
-		voucher := -1
-		for index, row := range character.MissionInventory {
-			if row.Slot < int64(inventory.EquipmentSlotEnd) || !inventory.IsBagSlot(uint8(row.Slot), inventory.BagEnd(character)) ||
-				!rt.GachaCatalog.IsResultCard(row.RefObjID) || len(row.MagicOptions) != 2 {
+		for _, slot := range rt.gachaVoucherSlots(character) {
+			redeemed, skip, err := rt.redeemGachaVoucher(character, slot)
+			if err != nil && skip {
+				// Not an exchangeable card (stacked, an invalid pair, an
+				// unresolved reward): the native loop passes the slot by.
+				failure = err.Error()
 				continue
 			}
-			if voucher < 0 || row.Slot < character.MissionInventory[voucher].Slot {
-				voucher = index
+			if err != nil {
+				// The reward could not be granted (a full bag): the native
+				// loop stops here and answers 5, keeping what it paid.
+				failure = err.Error()
+				stopped = true
+				break
 			}
+			frames = append(frames, redeemed...)
 		}
-		if voucher < 0 {
-			return false
-		}
-		row := character.MissionInventory[voucher]
-		if row.StackCount != 1 {
-			failure = fmt.Sprintf("voucher row at slot %d is stacked (%d)", row.Slot, row.StackCount)
-			return false
-		}
-		rewardRef, quantity := uint32(row.MagicOptions[0]), row.MagicOptions[1]
-		if quantity < 1 || quantity > 0xFFFF || uint64(rewardRef) != row.MagicOptions[0] ||
-			!rt.GachaCatalog.IsPrizePair(rewardRef, quantity) {
-			failure = "voucher carries an invalid reward pair"
-			return false
-		}
-		reward, found := rt.deps.ItemReferences().ItemRefByID(rewardRef)
-		if !found || reward == nil {
-			failure = fmt.Sprintf("voucher reward %d is unresolved", rewardRef)
-			return false
-		}
-		slot := uint8(row.Slot)
-		before := invItemsFromBag(character)
-		inv := inventory.New(before, inventory.BagEnd(character))
-		if _, fault := inv.DropQuantity(slot, 1); fault != nil {
-			failure = fmt.Sprintf("voucher at slot %d: %v", slot, fault)
-			return false
-		}
-		rewardItem, err := rt.prepareGachaRewardItem(reward, quantity)
-		if err != nil {
-			failure = err.Error()
-			return false
-		}
-		rows, planned, err := rt.planInventoryItemsGrant(
-			character,
-			before,
-			inv,
-			[]inventory.Item{rewardItem},
-			map[uint8]bool{slot: true},
-		)
-		if err != nil {
-			failure = err.Error()
-			return false
-		}
-		character.MissionInventory = rows
-		// The native client wants the voucher's quantity update, not a row delete,
-		// and first: the freed slot is the first free one, so the reward usually
-		// lands in it, and client 7654B0 must still find the voucher there.
-		quantityFrame := wire.Frame{
-			Opcode:  gacha.OpItemStateDelta,
-			Payload: wire.NewWriter(4).U8(slot).U8(8).U16(0).Payload(),
-		}
-		frames = append([]wire.Frame{quantityFrame}, planned...)
-		return true
+		return len(frames) > 0
 	})
 	if !committed {
 		return gachaRefusal(gacha.OpExchangeResult, gachaRefusalFailed), failure
 	}
+	if stopped {
+		return append(frames, gachaRefusal(gacha.OpExchangeResult, gachaRefusalFailed)...), failure
+	}
 	return frames, ""
+}
+
+/*
+================
+gachaVoucherSlots
+
+The bag slots holding a win or loss voucher with its recorded pair, in
+slot order: the native exchange walks the bag from slot 13 upward.
+================
+*/
+func (rt *Runtime) gachaVoucherSlots(character *enterworld.Character) []uint8 {
+	var slots []uint8
+	for _, row := range character.MissionInventory {
+		if row.Slot < int64(inventory.EquipmentSlotEnd) || !inventory.IsBagSlot(uint8(row.Slot), inventory.BagEnd(character)) ||
+			!rt.GachaCatalog.IsResultCard(row.RefObjID) || len(row.MagicOptions) != 2 {
+			continue
+		}
+		slots = append(slots, uint8(row.Slot))
+	}
+	slices.Sort(slots)
+	return slots
+}
+
+/*
+================
+redeemGachaVoucher
+
+Exchanges the voucher in one bag slot for its recorded pair, reference id
+then quantity, with the native roll giving +1..+5 OptLevel, 5-bit white
+variance + durability, and blue magic options on equipment rewards. The
+character's bag changes only on success. skip reports a card the exchange
+passes by (stacked, an invalid pair, an unresolved reward) as opposed to a
+grant that failed.
+
+The voucher leaves by a 0x3645 quantity of zero rather than a row delete,
+because that is the update client 7654B0 turns into UIIT_MSG_GACHA_EXCHANGE,
+and it goes first: the freed slot is the first free one, so the reward
+usually lands in it, and the client must still find the voucher there. The
+removal is pinned to the slot whose pair was read, never to the codename.
+================
+*/
+func (rt *Runtime) redeemGachaVoucher(character *enterworld.Character, slot uint8) (frames []wire.Frame, skip bool, err error) {
+	index := -1
+	for i, row := range character.MissionInventory {
+		if row.Slot == int64(slot) {
+			index = i
+			break
+		}
+	}
+	if index < 0 {
+		return nil, true, fmt.Errorf("voucher at slot %d is gone", slot)
+	}
+	row := character.MissionInventory[index]
+	if row.StackCount != 1 {
+		return nil, true, fmt.Errorf("voucher row at slot %d is stacked (%d)", row.Slot, row.StackCount)
+	}
+	rewardRef, quantity := uint32(row.MagicOptions[0]), row.MagicOptions[1]
+	if quantity < 1 || quantity > 0xFFFF || uint64(rewardRef) != row.MagicOptions[0] ||
+		!rt.GachaCatalog.IsPrizePair(rewardRef, quantity) {
+		return nil, true, fmt.Errorf("voucher at slot %d carries an invalid reward pair", slot)
+	}
+	reward, found := rt.deps.ItemReferences().ItemRefByID(rewardRef)
+	if !found || reward == nil {
+		return nil, true, fmt.Errorf("voucher reward %d is unresolved", rewardRef)
+	}
+	before := invItemsFromBag(character)
+	inv := inventory.New(before, inventory.BagEnd(character))
+	if _, fault := inv.DropQuantity(slot, 1); fault != nil {
+		return nil, true, fmt.Errorf("voucher at slot %d: %v", slot, fault)
+	}
+	rewardItem, err := rt.prepareGachaRewardItem(reward, quantity, rt.GachaCatalog.SpecForPair(rewardRef, quantity))
+	if err != nil {
+		return nil, false, err
+	}
+	rows, planned, err := rt.planInventoryItemsGrant(
+		character,
+		before,
+		inv,
+		[]inventory.Item{rewardItem},
+		map[uint8]bool{slot: true},
+	)
+	if err != nil {
+		return nil, false, err
+	}
+	character.MissionInventory = rows
+	quantityFrame := wire.Frame{
+		Opcode:  gacha.OpItemStateDelta,
+		Payload: wire.NewWriter(4).U8(slot).U8(8).U16(0).Payload(),
+	}
+	return append([]wire.Frame{quantityFrame}, planned...), false, nil
 }
