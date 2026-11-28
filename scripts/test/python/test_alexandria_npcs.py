@@ -90,15 +90,37 @@ class ColumnTests(unittest.TestCase):
 # ================
 # ResistTests
 #
-# The six element resists a converted row takes: the native level curve,
-# none for a structure. The census pins the curve to the native tree
-# when one is built (#4802).
+# The six element resists a converted row takes: the v1.188 server's own
+# when the snapshot carries the codename (#4803), otherwise the native
+# level curve, none for a structure. The census pins the curve to the
+# native tree when one is built (#4802).
 # ================
 class ResistTests(unittest.TestCase):
-	def converted(self, level, tid=("1", "2", "1")):
-		row = vsro_character(1, "MOB_X", tid)
+	def converted(self, level, tid=("1", "2", "1"), code="MOB_X"):
+		row = vsro_character(1, code, tid)
 		row[npcs.LEVEL_COLUMN] = str(level)
 		return npcs.convert_character(row)[npcs.RESISTANCE_AT:npcs.RESISTANCE_AT + npcs.RESISTANCE_COUNT]
+
+	def test_a_carried_unique_keeps_the_servers_six(self):
+		# Roc is level 100 (curve 90 in all six); the server holds it at
+		# 100/100 and 91 on the other four. The Tomb general's (level 85,
+		# curve 88) Zombie resist differs from its Burn, so the columns
+		# travel in order.
+		self.assertEqual(self.converted(100, code="MOB_RM_ROC"), ["100", "100", "91", "91", "91", "91"])
+		self.assertEqual(self.converted(85, code="MOB_TQ_TOMBGENERAL"), ["100", "100", "88", "88", "88", "100"])
+
+	def test_a_carried_row_can_sit_below_the_curve(self):
+		# Level 24 is 48 on the curve; the server gives the mask none.
+		self.assertEqual(self.converted(24, code="MOB_WC_DEVILMASK"), ["0"] * npcs.RESISTANCE_COUNT)
+
+	def test_the_snapshot_carries_only_rows_off_the_curve_and_no_native_row(self):
+		carried = npcs.carried_resists()
+		self.assertTrue(carried)
+		self.assertTrue(all(len(values) == npcs.RESISTANCE_COUNT for values in carried.values()))
+		if (CENSUS_ROOT / "characterdata.txt").is_file():
+			native = {row[npcs.CODENAME_COLUMN] for row in later_tables.Archive.tree(CENSUS_ROOT).rows("characterdata.txt")
+				if len(row) > npcs.CODENAME_COLUMN}
+			self.assertFalse(native & set(carried), sorted(native & set(carried))[:5])
 
 	def test_the_curve_doubles_the_level_then_steps(self):
 		self.assertEqual([npcs.level_resist(level) for level in (0, 1, 2, 20, 39, 40, 41, 42, 50, 94, 95, 136, 137, 140, 150)],
@@ -116,7 +138,7 @@ class ResistTests(unittest.TestCase):
 		rows = later_tables.Archive.tree(CENSUS_ROOT).rows("characterdata.txt")
 		misses = [row[npcs.CODENAME_COLUMN] for row in rows
 			if len(row) == npcs.NATIVE_CHARACTER_COLUMNS and row[npcs.LEVEL_COLUMN].isdigit()
-			and row[npcs.RESISTANCE_AT:npcs.RESISTANCE_AT + npcs.RESISTANCE_COUNT] != [str(npcs.element_resist(row))] * npcs.RESISTANCE_COUNT]
+			and row[npcs.RESISTANCE_AT:npcs.RESISTANCE_AT + npcs.RESISTANCE_COUNT] != [str(npcs.curve_element_resist(row))] * npcs.RESISTANCE_COUNT]
 		# v1.150's own exceptions: 27 unique rows (and their clones) resist
 		# above their level; nothing else misses.
 		self.assertLessEqual(len(misses), CENSUS_UNIQUE_ROWS, misses[:5])
