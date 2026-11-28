@@ -23,6 +23,8 @@ import { mkdir, writeFile } from "node:fs/promises";
 // Debug console weather (gameplay.ts debug-weather, event-environment.ts
 // debugWeather): mode 3 is snow and holds until mode 1; 255 is the most.
 export const SNOW_MODE = 3, SNOW_AMOUNT = 255;
+// Rain (weather mode 2) at the same full amount, for --rain.
+export const RAIN_MODE = 2;
 // A drawn scene's luma spread (standard deviation, 0..255) is tens; a page
 // whose canvas never presented (a blank white or black frame: a browser in
 // a session with no display, a lost device) is under this.
@@ -40,22 +42,22 @@ const CAMERA_MOVED_RAD = Math.PI / 180, PEER_MOVED = 0.5;
 ================
 holdSnow
 
-Sets the client's weather to held snow and waits until the client says
+Sets the client's weather to held snow (or mode, rain for --rain) and waits until the client says
 so. The command is GM only: an observer the server does not name GM
 (SRO_GM_CHARACTERS) never reaches snow, and the bench stops here rather
 than measure a clear sky.
 ================
 */
-export async function holdSnow( page ) {
+export async function holdSnow( page, mode = SNOW_MODE ) {
 	await page.evaluate( ( [mode, amount] ) =>
 		globalThis.__benchRuntime.session( {
 			kind: "gameplay",
 			command: { kind: "debug-weather", mode, amount }
-		} ), [ SNOW_MODE, SNOW_AMOUNT ] );
+		} ), [ mode, SNOW_AMOUNT ] );
 	const until = Date.now() + SNOW_WAIT_MS;
 	for ( ;; ) {
 		const weather = await page.evaluate( () => globalThis.__benchRuntime.gameplay()?.weather ?? null );
-		if ( weather?.mode === SNOW_MODE && weather.amount === SNOW_AMOUNT ) return weather;
+		if ( weather?.mode === mode && weather.amount === SNOW_AMOUNT ) return weather;
 		if ( Date.now() > until ) {
 			throw Error(
 				`snow did not hold (weather ${JSON.stringify( weather )}): the observer must be a GM ` +

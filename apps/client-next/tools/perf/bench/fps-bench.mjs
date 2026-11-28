@@ -57,6 +57,7 @@ main thread's frame and world-preparation time per frame. Options add:
   --snow    holds the client's weather at full snow for the whole run
             (core/scene-evidence.mjs holdSnow; the observer must be a GM,
             SRO_GM_CHARACTERS on the scratch stack).
+  --rain    holds full rain instead (weather mode 2), the same way.
   --frames N  after each timed window, a verify window of N frames (one
             every --frame-ms, default 500) with the scenario's input still
             running: OUT/<location>-<scenario>-NN.png beside a record of
@@ -125,7 +126,7 @@ import { keepGoing, drag, walk, approach, fight, cross, loadCombat, combat, stri
 import { CROWD_HOST_URL, DEFAULT_ACTIVITY_SEED, obtainCrowd } from "../core/crowd.mjs";
 import { BUSY_IMBUE_SKILL, parseActivity } from "../core/crowd-activity.mjs";
 import { gpuTimeRow, gpuTimingCursor, gpuTimingSince, summarizeGpuTiming } from "../core/gpu-time.mjs";
-import { assertDrawn, captureFrames, holdSnow, judgeFrames } from "../core/scene-evidence.mjs";
+import { assertDrawn, captureFrames, holdSnow, judgeFrames, RAIN_MODE, SNOW_MODE } from "../core/scene-evidence.mjs";
 import { cleanupCombat, combatResidue } from "../core/combat-cleanup.mjs";
 import { processCosts } from "../core/trace.mjs";
 
@@ -208,7 +209,7 @@ const USAGE = "fps-bench.mjs [--seconds N] [--at a,b] [--only a,b] [--counts] [-
 	"[--trace] [--screenshot] [--gpu-process] [--json FILE] [--paced] [--cpu-rate N] [--frame-limit 0|60|120|240] [--shadow-detail 0|1|2] " +
 	"[--combat codename:count:CHAMP|GIANT|NORMAL] [--vulnerable] [--crowd N] [--crowd-fixture FILE.json] " +
 	"[--crowd-host URL] [--act walk=SHARE,chat=SHARE,roam=SHARE,busy=SHARE] [--seed N] [--provisioning URL] " +
-	"[--token FILE] [--snow] [--frames N] [--frame-ms MS] [--memory] [--gpu-time] [--expect-commit SHA]";
+	"[--token FILE] [--snow] [--rain] [--frames N] [--frame-ms MS] [--memory] [--gpu-time] [--expect-commit SHA]";
 // --gpu-process trace categories, the fewest that serve processCosts:
 // toplevel gives every thread's top-level tasks as complete events with
 // their thread time (tdur); blink.user_timing carries the window marks.
@@ -699,7 +700,7 @@ async function session( options, location, results ) {
 			} );
 			await crowdInView( client.page, crowd.peers );
 		}
-		if ( options.snow ) await holdSnow( client.page );
+		if ( options.snow || options.rain ) await holdSnow( client.page, options.rain ? RAIN_MODE : SNOW_MODE );
 		if ( options.hide.length ) {
 			// An ablation: the native graphic options' switches turned off
 			// (GRAPHIC_OPTION_*), so --gpu-time weighs what they draw.
@@ -945,6 +946,7 @@ const options = parseOptions( process.argv.slice( 2 ), {
 	trace: false,
 	screenshot: false,
 	snow: false,
+	rain: false,
 	frames: 0,
 	frameMs: 500,
 	memory: false,
