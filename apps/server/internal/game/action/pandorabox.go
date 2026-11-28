@@ -56,8 +56,9 @@ below 30 are pandoraLowKinds. A level-30 opener's first waves read keys
 21..29; below key 21 the native lookup pads with key 21. The waves'
 tactics are chosen with their grade 7, unlike the scroll's grade 0.
 
-Like the scroll, the box reaches players only through So-Ok's Christmas
-Gift, so it is served while that event's mode is selected.
+Like the scroll, the box reaches players through So-Ok's Christmas Gift
+and the v1.696 Magic POP's lose set, so it is served while that event's
+mode is selected or the loaded v1.696 catalog pays it.
 
 ===========================================================================
 */
@@ -236,8 +237,8 @@ without spending it; the native box opens anywhere outside a town.
 */
 func (rt *Runtime) usePandoraBox(use persistentSummonUse, result *OpResult) bool {
 	c := use.character
-	if !rt.SoOkChristmas.Selected() {
-		result.DiagnosticRefusal = "item-use: Pandora's Box is served only in So-Ok's Christmas Gift's mode"
+	if !rt.summonEventItemServed(PandoraBoxItem) {
+		result.DiagnosticRefusal = "item-use: Pandora's Box is served only in So-Ok's Christmas Gift's mode or by the v1.696 Magic POP"
 		return false
 	}
 	if rt.Monsters == nil || !enterworld.CharacterAlive(c) || c.Level == nil {
