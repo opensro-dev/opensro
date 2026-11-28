@@ -388,7 +388,10 @@ export async function createCrowd(
 		characters.push( character );
 		await journal();
 		const session = await login( id, password );
-		await fetchProbeSessionJson( session, "/character/create", {
+		// A refused create answers 200 with nativeResult 0 (the native
+		// result byte): stop here with its code, not at the reset's
+		// UNKNOWN_CHARACTER.
+		const created = await fetchProbeSessionJson( session, "/character/create", {
 			method: "POST",
 			headers: { "content-type": "application/json" },
 			body: JSON.stringify( {
@@ -401,6 +404,9 @@ export async function createCrowd(
 				...busyCreation( activity )
 			} )
 		} );
+		if ( created?.nativeResult !== 1 ) {
+			throw Error( `crowd peer ${character} was not created: ${JSON.stringify( created )}` );
+		}
 		// A scenario names each peer's loadout; a busy crowd without one is
 		// taught the imbue its script casts.
 		const loadout = loadoutFor ? loadoutFor( index ) : activity.busy > 0 ? BUSY_LOADOUT : null;

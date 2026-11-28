@@ -829,6 +829,15 @@ async function session( options, location, results ) {
 			results.push( result );
 			if ( options.json ) await writeFile( options.json, JSON.stringify( results, null, 2 ) );
 			console.log( row( result ) );
+			if ( options.snow || options.rain ) {
+				// The held mode and the weather owner's drop counters after
+				// the window: an A/B's two sides must hold the same weather.
+				const held = await client.page.evaluate( () => ({
+					mode: globalThis.__benchRuntime.gameplay()?.weather?.mode ?? null,
+					drops: globalThis.__benchRuntime.worldStats?.()?.weather ?? null
+				}) );
+				console.log( `  verify weather ${name}: ${JSON.stringify( held )}` );
+			}
 		}
 	} finally {
 		// Rejected windows keep their profiles too. Cleanup is outside every
