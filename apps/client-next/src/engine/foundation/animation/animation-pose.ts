@@ -35,6 +35,21 @@ const RADIAL_WORDS = [ 4, 5, 6, 8, 9, 10 ] as const;
 export const MAX_MISSING_CLIPS = 8;
 /*
 ================
+PoseDeferral
+
+When evaluate builds the CPU skeleton of the inputs it takes: false, at
+once; true, at once unless the GPU can sample them (gpuSample), then when
+a consumer asks; "consumer", only when a consumer asks (palette, socket),
+each building the nodes it reads. An effect whose particles and ribbons
+are drawn from its particle graph has no consumer, and its skeleton, a
+node an element, was the largest pose cost of a crowd's glows and buffs
+(#4692).
+================
+*/
+export type PoseDeferral = boolean | "consumer";
+
+/*
+================
 CharacterPoseInputs
 
 Everything a pose's skeleton and palettes are a function of: its resolved
@@ -693,9 +708,19 @@ quaternion scratch is charged and allocated only when playback needs it.
 		/*
         ================
         evaluate
+
+        Take the pose's inputs; true when they changed. defer says when the
+        CPU skeleton is built from them (PoseDeferral): the inputs alone cost
+        a few comparisons a layer, the skeleton every node.
         ================
         */
-		evaluate( name: string, seconds: number, loop = true, layers?: readonly CharacterLayer[], defer = false ) {
+		evaluate(
+			name: string,
+			seconds: number,
+			loop = true,
+			layers?: readonly CharacterLayer[],
+			defer: PoseDeferral = false
+		) {
 			// Several independent producers may each retain outgoing 200 ms fades.
 			// Their combined population is not bounded by eight. The mixer uses
 			// skeleton-sized scratch and must preserve every live sparse track.
@@ -741,7 +766,7 @@ quaternion scratch is charged and allocated only when playback needs it.
 			// Validate the entire request before publishing its identity. A bad
 			// later layer must not poison the retained pose or its revision.
 			if ( !changed ) {
-				if ( !defer ) materialize();
+				if ( defer === false ) materialize();
 				return false;
 			}
 			pendingLayers.length = count;
@@ -753,7 +778,7 @@ quaternion scratch is charged and allocated only when playback needs it.
 			poseVersion++;
 			cpuPending = true;
 			begun = false;
-			if ( !defer || !gpuSample() ) materialize();
+			if ( defer === false || defer === true && !gpuSample() ) materialize();
 			return true;
 		},
 		gpuSample,

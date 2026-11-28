@@ -32,10 +32,11 @@ const { sameRow } = await import( "../helpers/renderer-row.mjs" );
 // production rule must skip: its crowd stands still most of the run.
 const SEED = 1;
 const SKIPPED_SHARE = .5;
-// The share of renderer copies that must copy only clocks: fading copies
-// and actors whose opacity is set after publication are not frozen, and
-// are copied in full on every frame.
-const CLOCK_COPY_SHARE = .6;
+// The share of renderer copies that must copy only clocks: a fading
+// actor's opacity changes every frame; a rebuilt actor keeps its unchanged
+// value objects (actor-advance.ts carried) and every published actor is
+// frozen (presentation-finalize.ts): 91% of copies here.
+const CLOCK_COPY_SHARE = .88;
 /*
 ================
 freezeDeep
@@ -84,9 +85,12 @@ async function replay( session, rules ) {
 	};
 	const harness = await createPresentationHarness( ROOT, session, {
 		due: { appearance: counted( "appearance" ), motion: counted( "motion" ), record: counted( "record" ) },
-		actors: actors => {
+		actors: ( actors, portraits, clocks = new Map() ) => {
 			for ( const actor of actors ) freezeDeep( actor );
-			if ( !sameRow( reused.update( actors ), full.update( actors ) ) && rowsDiffer < 0 ) rowsDiffer = frame;
+			for ( const clock of clocks.values() ) freezeDeep( clock );
+			if ( !sameRow( reused.update( actors, clocks ), full.update( actors, clocks ) ) && rowsDiffer < 0 ) {
+				rowsDiffer = frame;
+			}
 		}
 	} );
 	const frames = [];

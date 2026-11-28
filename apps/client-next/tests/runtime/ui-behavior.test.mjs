@@ -2964,6 +2964,20 @@ test("CTRL shop click buys MaxStack and refuses a rare quick sell", () => {
 		f.ui.event( { kind: "activate", id: "slot:13", ctrl: true } );
 		draw();
 		assert.deepEqual( sent.pop(), { kind: "shop-sell", slot: 13, quantity: 1 } );
+		// 5B27B6: a worn item is refused with the store's line, never quoted.
+		game.inventory = [ ...game.inventory, {
+			slot: 4,
+			refObjId: 902,
+			name: "Worn Staff",
+			quantity: 1,
+			typeFlags: 0x0c
+		} ];
+		draw();
+		f.ui.event( { kind: "activate", id: "slot:4", ctrl: true } );
+		draw();
+		assert.equal( sent.length, 1 );
+		assert.equal( sent[0].kind, "local-notice" );
+		assert.equal( sent[0].notice.key, "UIIT_MSG_STRGERR_CANT_SELL_EQUIPED_ITEM" );
 	} finally {
 		f.dispose();
 	}

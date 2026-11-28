@@ -8,6 +8,7 @@ survive frame publication, and retirement can borrow their current actors.
 
 ===========================================================================
 */
+import { actorClock, republished, type FrameClocks } from "@/engine/foundation/animation/actor-clock";
 import type { CharacterActor } from "@/engine/contracts/character";
 import type { EntityState, WorldEvent } from "@/engine/contracts/world";
 import type { GameplayState } from "@/engine/contracts/gameplay";
@@ -109,6 +110,7 @@ interface AuxiliaryFrame {
 	readonly entities: readonly EntityState[];
 	readonly seconds: number;
 	readonly next: Map<number, CharacterActor>;
+	readonly clocks: FrameClocks;
 	readonly gameplay: GameplayState | null;
 	readonly localMover: ( gid: number ) => boolean;
 	// The owner's cast and its playing action layers: the wing stands only
@@ -448,8 +450,17 @@ export function createAuxiliaryPresentation( allocateActor: () => number ) {
 		================
 		*/
 		step( frame: AuxiliaryFrame, bindings: AuxiliaryBindings ) {
-			const { entities, seconds, next, gameplay, localMover, castByActor, actionLayersByActor, particleHolders } =
-				frame;
+			const {
+				entities,
+				seconds,
+				next,
+				clocks,
+				gameplay,
+				localMover,
+				castByActor,
+				actionLayersByActor,
+				particleHolders
+			} = frame;
 			const { resourceFor, dress, resources, ridesByRider, riderModes, committedAuxiliary } = bindings;
 			const hairOwners = new Set<number>();
 			for ( const entity of entities ) {
@@ -497,15 +508,15 @@ export function createAuxiliaryPresentation( allocateActor: () => number ) {
 					gid = allocateActor();
 					linkedRides.set( entity.gid, gid );
 				}
-				const mode = riderModes.get( resource!.codename ) ?? 0;
+				const mode = riderModes.get( resource!.codename ) ?? 0, clock = actorClock( owner, clocks );
 				const motion = ( clip: string ) => ride.clips.includes( clip ) ? clip : "stand";
 				next.set( gid, {
 					gid,
 					model: ride.glb,
 					pose: owner.pose,
 					clip: motion( owner.clip ),
-					layers: owner.layers?.map( layer => ({ ...layer, clip: motion( layer.clip ) }) ),
-					time: owner.time,
+					layers: clock.layers?.map( layer => ({ ...layer, clip: motion( layer.clip ) }) ),
+					time: clock.time,
 					loop: owner.loop,
 					scale: 1,
 					opacity: owner.opacity,
@@ -517,7 +528,9 @@ export function createAuxiliaryPresentation( allocateActor: () => number ) {
 						{ attachment: { gid: entity.gid, bone: "", root: true, offset: [ 0, 0, 0 ] as const } } :
 						{})
 				} );
-				if ( mode === RIDER_ON_SADDLE ) next.set( entity.gid, { ...owner, mountedOn: gid } );
+				if ( mode === RIDER_ON_SADDLE ) {
+					next.set( entity.gid, republished( owner, { mountedOn: gid }, clocks ) );
+				}
 			}
 			for ( const gid of linkedRides.keys() ) if ( !rideOwners.has( gid ) ) linkedRides.delete( gid );
 			// 8E9DD0 / 8EA7A0: auxiliary resource is the item's second animated

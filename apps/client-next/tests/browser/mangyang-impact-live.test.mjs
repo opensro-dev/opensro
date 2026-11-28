@@ -61,7 +61,7 @@ test( "Mangyang impacts reach renderer and retain authoritative critical flags",
 			const response = await route.fetch(), source = await response.text();
 			assert.ok( source.includes( "export function createRenderer(" ) );
 			const body = source.replace( "export function createRenderer(", "function createObservedRenderer(" ) +
-				`\nexport function createRenderer(...args){const owner=createObservedRenderer(...args);globalThis.__hitRenderer=owner;return {...owner,setCharacterActors(actors){globalThis.__hitActors=actors;owner.setCharacterActors(actors)}};}`;
+				`\nexport function createRenderer(...args){const owner=createObservedRenderer(...args);globalThis.__hitRenderer=owner;return {...owner,setCharacterActors(rows,portraits,clocks){globalThis.__hitActors=rows.map(a=>({...a,...clocks?.get(a)}));owner.setCharacterActors(rows,portraits,clocks)}};}`;
 			await route.fulfill( { response, body, contentType: "application/javascript" } );
 		} );
 		console.log( "[hit] authenticated scratch boot" );

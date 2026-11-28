@@ -86,6 +86,7 @@ function fixture() {
 			entities: [ who ],
 			seconds: 1,
 			next: new Map( [ [ owner.gid, owner ] ] ),
+			clocks: new Map(),
 			gameplay: null,
 			localMover: () => false,
 			castByActor: new Map(),

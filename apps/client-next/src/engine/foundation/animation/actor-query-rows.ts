@@ -14,7 +14,8 @@ full sweep was the quadratic behind combat's presentation-events stage.
 ===========================================================================
 */
 
-import type { CharacterActor } from "@/engine/contracts/character";
+import type { ActorClocks, CharacterActor } from "@/engine/contracts/character";
+import { clocked } from "./actor-clock";
 
 /*
 ================
@@ -28,7 +29,8 @@ cut by seen, matching the resolvers' own visited/chain guards.
 */
 export function actorQueryRows(
 	displayed: ReadonlyMap<number, CharacterActor>,
-	roots: readonly (CharacterActor | undefined)[]
+	roots: readonly (CharacterActor | undefined)[],
+	clocks?: ActorClocks
 ): CharacterActor[] {
 	const rows: CharacterActor[] = [];
 	const queued: CharacterActor[] = [];
@@ -38,7 +40,7 @@ export function actorQueryRows(
 		const actor = queued.pop()!;
 		if ( seen.has( actor.gid ) ) continue;
 		seen.add( actor.gid );
-		rows.push( actor );
+		rows.push( clocked( actor, clocks ) );
 		if ( actor.mountedOn !== undefined ) {
 			const mount = displayed.get( actor.mountedOn );
 			if ( mount ) queued.push( mount );

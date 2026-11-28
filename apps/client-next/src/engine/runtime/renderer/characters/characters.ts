@@ -92,7 +92,7 @@ import {
 	prepareViewFrustum,
 	visibleFrustumSphere
 } from "@/engine/foundation/rendering/world-math";
-import type { CharacterActor, CharacterModel, CharacterNode } from "@/engine/contracts/character";
+import type { ActorClocks, CharacterActor, CharacterModel, CharacterNode } from "@/engine/contracts/character";
 import type { DungeonBlockLight } from "@/engine/contracts/scene";
 import { dungeonPointLight } from "@/engine/foundation/rendering/dungeon-lights";
 import type { GeometryCommands, GeometryDraw, ImageCommands, ImageDraw } from "../internal/gpu-contract";
@@ -280,7 +280,10 @@ export function createPoseOrder() {
 ================
 RibbonBuffers
 
-One ribbon primitive's vertex streams, sized for its batch's capacity.
+One ribbon primitive's vertex streams, sized for its batch's capacity, and
+the layout of the indices its draw holds: the points of each strip, in
+order (strips[0..stripCount)). Strips are packed end to end, so the indices
+are a function of that list alone; stripCount -1 is a draw never indexed.
 ================
 */
 interface RibbonBuffers {
@@ -290,6 +293,8 @@ interface RibbonBuffers {
 	readonly colors: Float32Array;
 	readonly uvs: Float32Array;
 	readonly indices: Uint32Array;
+	readonly strips: Int32Array;
+	stripCount: number;
 }
 const MAX_ATTACHMENT_DEPTH = 8;
 // An equipment socket's name (equipment-sockets.ts) and an effect actor's
@@ -573,6 +578,9 @@ export function createCharacters( random?: import("@/engine/contracts/presentati
 	let framePoses:
 		| Map<string, Map<number, { actor: CharacterActor; pose: ReturnType<typeof createCharacterPose>; }[]>>
 		| null = null;
+	// The pose each actor of the frame being prepared already resolved to.
+	// A body is asked once to draw and once more by every effect it holds.
+	let framePosed: Map<CharacterActor, ReturnType<typeof createCharacterPose>> | null = null;
 	let poseRequests = 0,
 		poseEvaluations = 0,
 		poseSharingHits = 0,
@@ -791,11 +799,30 @@ export function createCharacters( random?: import("@/engine/contracts/presentati
 	================
 	poseFor
 
-	Reuse one actor pose evaluation across geometry, attachment and socket consumers.
+	Reuse one actor pose evaluation across geometry, attachment and socket
+	consumers. Within a prepared frame an actor is resolved once
+	(resolvePose): a holder was resolved again for every effect on it, its
+	sharing lookup, level-of-detail gate and input comparison each time.
 	================
 	*/
 	function poseFor( actor: CharacterActor ) {
 		poseRequests++;
+		const posed = framePosed?.get( actor );
+		if ( posed ) return posed;
+		const pose = resolvePose( actor );
+		if ( pose ) framePosed?.set( actor, pose );
+		return pose;
+	}
+	/*
+	================
+	resolvePose
+
+	The actor's pose for its inputs: a pose another actor of the frame
+	evaluated from the same inputs, or its own, sampled when its level of
+	detail and the frame's work budget allow.
+	================
+	*/
+	function resolvePose( actor: CharacterActor ) {
 		const resource = models.get( actor.model ), model = resource?.model;
 		if ( !model ) return null;
 		const share = framePoses && !resource!.plan.emission &&
@@ -866,7 +893,9 @@ export function createCharacters( random?: import("@/engine/contracts/presentati
 				actor.time,
 				actor.loop,
 				actor.layers,
-				deferPoses && resource!.plan.sharedPalette
+				// An emitter's skeleton waits for a consumer: graph-drawn
+				// particles and ribbons never read it (PoseDeferral).
+				resource!.plan.emission ? "consumer" : deferPoses && resource!.plan.sharedPalette
 			)
 		) poseEvaluations++;
 		// A clip the model lacks played the rest pose (animation-pose.ts):
@@ -1896,6 +1925,8 @@ the next full prepare pass, so this may run between frames.
 	The bytes of the shared meshes in meshes that the frame plan has not
 	charged yet (charged, by positions array); with mark, they become
 	charged. The device keeps one GPU copy of each, whatever batches draw it.
+	A plan lists each of its meshes once (character-render-plan.ts), so only
+	another batch can have charged one.
 	================
 	*/
 	function meshCharge(
@@ -1904,15 +1935,12 @@ the next full prepare pass, so this may run between frames.
 		mark: boolean
 	): number {
 		let bytes = 0;
-		const counted: (readonly unknown[])[] = [];
 		for ( const mesh of meshes ) {
 			const list = charged.get( mesh.positions );
-			if (
-				list?.some( arrays => sameMesh( arrays, mesh.arrays ) ) ||
-				counted.some( arrays => sameMesh( arrays, mesh.arrays ) )
-			) continue;
+			let known = false;
+			for ( let i = 0; list && i < list.length && !known; i++ ) known = sameMesh( list[i]!, mesh.arrays );
+			if ( known ) continue;
 			bytes += mesh.bytes;
-			counted.push( mesh.arrays );
 			if ( !mark ) continue;
 			if ( list ) list.push( mesh.arrays );
 			else charged.set( mesh.positions, [ mesh.arrays ] );
@@ -2588,12 +2616,15 @@ the next full prepare pass, so this may run between frames.
 				positions: new Float32Array( capacity * 3 ),
 				colors: new Float32Array( capacity * 4 ),
 				uvs: new Float32Array( capacity * 2 ),
-				indices: new Uint32Array( capacity * 3 )
+				indices: new Uint32Array( capacity * 3 ),
+				// A strip is two vertices a point, and has a point at least.
+				strips: new Int32Array( capacity / 2 ),
+				stripCount: -1
 			};
 			batch.ribbons[p] = ribbon;
 		}
-		const { positions, colors, uvs, indices } = ribbon;
-		let vertex = 0, index = 0;
+		const { positions, colors, uvs, indices, strips } = ribbon;
+		let vertex = 0, index = 0, strip = 0, relaid = false;
 		for ( const actor of rows ) {
 			collectRibbonGroups( frame, group, p, actor );
 			for ( const points of ribbonGroups ) {
@@ -2601,10 +2632,21 @@ the next full prepare pass, so this may run between frames.
 				else ribbonPolyline( points, ribbonDrawn );
 				if ( !ribbonDrawn.count ) continue;
 				ribbonStrip( ribbonDrawn, view!, ribbon, vertex, index, ribbonWork );
+				if ( strips[strip] !== ribbonDrawn.count ) {
+					strips[strip] = ribbonDrawn.count;
+					relaid = true;
+				}
+				strip++;
 				vertex += ribbonDrawn.count * 2;
 				index += (ribbonDrawn.count - 1) * 6;
 			}
 		}
+		// The strips move every frame; their indices change only when an
+		// element is born or expires (a tick), so most frames upload none.
+		// Uploading them every frame was 42 queue writes a frame at 120
+		// effects (#4692).
+		if ( strip !== ribbon.stripCount ) relaid = true;
+		ribbon.stripCount = strip;
 		// The stream is reused: clear what the last frame wrote past this one.
 		// Only vertices either frame wrote can differ from the uploaded stream.
 		const touched = Math.max( vertex, ribbon.used );
@@ -2637,7 +2679,7 @@ the next full prepare pass, so this may run between frames.
 			geometry.updatePositions( draw, positions, colors, uvs, touched ? ribbonRange : [] );
 			if ( preview ) geometry.updateTransform( draw, view! );
 		}
-		geometry.updateIndices( draw, indices.subarray( 0, index ) );
+		if ( relaid ) geometry.updateIndices( draw, indices.subarray( 0, index ) );
 		probe?.characterCount( "ribbon-vertices", vertex );
 		return draw;
 	}
@@ -3872,12 +3914,16 @@ the next full prepare pass, so this may run between frames.
 		Publish the frame actor lists used by poses, picking and rendering.
 		================
 		*/
-		actors( value: readonly CharacterActor[], portraitActors: readonly CharacterActor[] = [] ) {
+		actors(
+			value: readonly CharacterActor[],
+			portraitActors: readonly CharacterActor[] = [],
+			clocks?: ActorClocks
+		) {
 			const portraitRevision = portraitSnapshots.modelRevision();
-			portraits = portraitSnapshots.update( portraitActors );
+			portraits = portraitSnapshots.update( portraitActors, clocks );
 			if ( portraitSnapshots.modelRevision() !== portraitRevision ) residencyDirty = true;
 			const revision = snapshots.modelRevision();
-			actors = snapshots.update( value );
+			actors = snapshots.update( value, clocks );
 			requestedAssemblies.clear();
 			for ( const gid of particleSnapshots.keys() ) {
 				if ( !snapshots.index.has( gid ) ) particleSnapshots.delete( gid );
@@ -3987,6 +4033,7 @@ the next full prepare pass, so this may run between frames.
 				frameGroups =
 					0;
 			framePoses = new Map();
+			framePosed = new Map();
 			const { frameActors, cycles } = sampleFrameActors();
 			if ( residencyDirty ) retireResidency( geometry, images, frameActors );
 			if ( hasMaterialClocks ) {
@@ -4060,7 +4107,7 @@ the next full prepare pass, so this may run between frames.
 			probe?.characterMark( "character-upload" );
 			probe?.characterCount( "pose-evaluations", poseEvaluations );
 			frameGroups = grouped.size;
-			framePoses = null;
+			framePoses = framePosed = null;
 			return frame.output;
 		},
 		/*
@@ -4092,7 +4139,7 @@ the next full prepare pass, so this may run between frames.
 			}
 			disposed = true;
 			rowStreams.rowScratch = rowStreams.lightScratch = rowStreams.glowScratch = undefined;
-			framePoses = null;
+			framePoses = framePosed = null;
 			residentBytes = 0;
 			ownedModels = 0;
 			for ( const batch of batches.values() ) {

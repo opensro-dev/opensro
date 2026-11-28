@@ -3,7 +3,6 @@
 apps/client-next/src/engine/contracts/damage-text.ts
 apps/client-next/src/engine/contracts/effective-hp.ts
 apps/client-next/src/engine/contracts/footprint.ts
-apps/client-next/src/engine/contracts/navigation.ts
 apps/client-next/src/engine/contracts/presentation-random.ts
 apps/client-next/src/engine/foundation/animation/action-time.ts
 apps/client-next/src/engine/foundation/animation/avatar-override.ts
@@ -16,7 +15,6 @@ apps/client-next/src/engine/foundation/animation/effect-script.ts
 apps/client-next/src/engine/foundation/animation/fortress-appearance.ts
 apps/client-next/src/engine/foundation/animation/ground-visual.ts
 apps/client-next/src/engine/foundation/animation/hawk.ts
-apps/client-next/src/engine/foundation/animation/hit-light.ts
 apps/client-next/src/engine/foundation/animation/impact-source.ts
 apps/client-next/src/engine/foundation/animation/item-effect-clock.ts
 apps/client-next/src/engine/foundation/animation/locomotion-blend.ts
@@ -135,15 +133,12 @@ apps/client-next/tests/browser/character-capacity.test.mjs
 apps/client-next/tests/browser/character-create.test.mjs
 apps/client-next/tests/browser/character-shadows.test.mjs
 apps/client-next/tests/browser/character-texture-live.test.mjs
-apps/client-next/tests/browser/cosmetics.test.mjs
 apps/client-next/tests/browser/creation-body-shape.test.mjs
 apps/client-next/tests/browser/crests-war-buffs.test.mjs
 apps/client-next/tests/browser/damage-occlusion.test.mjs
-apps/client-next/tests/browser/death-movement-live.test.mjs
 apps/client-next/tests/browser/deferred-particles.test.mjs
 apps/client-next/tests/browser/dev-updates.test.mjs
 apps/client-next/tests/browser/drop-ambient-particles.test.mjs
-apps/client-next/tests/browser/drop-lifecycle-live.test.mjs
 apps/client-next/tests/browser/dungeon-water.test.mjs
 apps/client-next/tests/browser/effect-material.test.mjs
 apps/client-next/tests/browser/effect-plates.test.mjs
@@ -177,9 +172,7 @@ apps/client-next/tests/browser/minimap-live.test.mjs
 apps/client-next/tests/browser/mission-chrome.test.mjs
 apps/client-next/tests/browser/mission-entry.test.mjs
 apps/client-next/tests/browser/mission-input.test.mjs
-apps/client-next/tests/browser/mob-death-motion-live.test.mjs
 apps/client-next/tests/browser/monster-wander-spread-live.test.mjs
-apps/client-next/tests/browser/movement-snap-live.test.mjs
 apps/client-next/tests/browser/music-autoplay.test.mjs
 apps/client-next/tests/browser/native-filtered-alpha.test.mjs
 apps/client-next/tests/browser/native-flares.test.mjs
@@ -206,8 +199,6 @@ apps/client-next/tests/browser/runtime-errors.test.mjs
 apps/client-next/tests/browser/samarkand-shop-live.test.mjs
 apps/client-next/tests/browser/scenery-material.test.mjs
 apps/client-next/tests/browser/session-refresh.test.mjs
-apps/client-next/tests/browser/skill-activation-live.test.mjs
-apps/client-next/tests/browser/skill-combat-live.test.mjs
 apps/client-next/tests/browser/skill-progression-live.test.mjs
 apps/client-next/tests/browser/skills.test.mjs
 apps/client-next/tests/browser/speed-compare-live.test.mjs

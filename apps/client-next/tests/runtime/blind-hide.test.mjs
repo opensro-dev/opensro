@@ -18,6 +18,9 @@ const { publishCharacters } = await import(
 	"../../src/engine/runtime/characters/presentation-finalize.ts"
 );
 
+// The clock table the last fixture frame handed the renderer.
+let handedClocks;
+
 /*
 ================
 actor
@@ -46,8 +49,8 @@ buff (9003), a free-standing effect with no holder (9004), another
 player's companion (7) and the effect riding on it (9005).
 ================
 */
-function fixture( { blindHeld, vHidesCompanions = false } ) {
-	const next = new Map();
+function fixture( { blindHeld, vHidesCompanions = false, clock = /** @type {object | undefined} */ (undefined) } ) {
+	const next = new Map(), clocks = new Map();
 	for (
 		const entry of [
 			actor( 42, { blindable: true } ),
@@ -60,6 +63,8 @@ function fixture( { blindHeld, vHidesCompanions = false } ) {
 			actor( 9005, { effectEntity: true, attachment: { gid: 7, joint: null, offset: [ 0, 0, 0 ] } } )
 		]
 	) next.set( entry.gid, entry );
+	// Every actor republished with the same entry, when the test gives one.
+	if ( clock ) { for ( const entry of next.values() ) clocks.set( entry, clock ); }
 	const presented = [];
 	const bindings = {
 		renderer: {
@@ -68,8 +73,9 @@ function fixture( { blindHeld, vHidesCompanions = false } ) {
 			setCharacterActors
 			================
 			*/
-			setCharacterActors( actors ) {
+			setCharacterActors( actors, _portraits, handed ) {
 				presented.push( ...actors );
+				handedClocks = handed;
 			},
 			setCharacterAssembly() {},
 			vHidesCompanions: () => vHidesCompanions
@@ -105,8 +111,21 @@ function fixture( { blindHeld, vHidesCompanions = false } ) {
 			}
 		}
 	};
-	const frame = { local: undefined, gameplay: null, next, seconds: 0, blindHeld, modelParticles: 0 };
-	publishCharacters( frame, { displayed: next }, { catalog: new Map(), dress: {}, manifest: 0 }, bindings );
+	const frame = {
+		local: undefined,
+		gameplay: null,
+		next,
+		clocks,
+		seconds: 0,
+		blindHeld,
+		modelParticles: 0
+	};
+	publishCharacters(
+		frame,
+		{ displayed: next, displayedClocks: new Map() },
+		{ catalog: new Map(), dress: {}, manifest: 0 },
+		bindings
+	);
 	return new Map( presented.map( entry => [ entry.gid, entry ] ) );
 }
 
@@ -148,4 +167,11 @@ test("the companion row hides a companion and its effects only when armed", () =
 	const disarmed = fixture( { blindHeld: true } );
 	assert.equal( hidden( disarmed, 7 ), false, "unarmed, the companion stays visible" );
 	assert.equal( hidden( disarmed, 9005 ), false, "unarmed, its effect stays visible" );
+});
+
+test("a hidden body's copy keeps the clocks its actor was republished with", () => {
+	const clock = { time: 3 };
+	const presented = fixture( { blindHeld: true, clock } );
+	assert.equal( hidden( presented, 42 ), true );
+	assert.equal( handedClocks.get( presented.get( 42 ) ), clock, "the renderer reads the copy's clocks" );
 });

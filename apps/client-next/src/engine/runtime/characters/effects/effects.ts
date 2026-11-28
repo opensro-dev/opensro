@@ -1385,7 +1385,7 @@ export function createCharacterEffects(
 						heading: pose.angle
 					} );
 				}
-				hitLights.step( now, new Set( byGid.keys() ) );
+				hitLights.step( now, byGid );
 				const wantedPersistent = new Set<string>(),
 					presentation = new Map( presented.map( actor => [ actor.gid, actor ] ) );
 				/*

@@ -145,3 +145,40 @@ test("particle wrappers reject endpoint/LOD/daylight keys, retain inactive insta
 	);
 	assert.equal( actors.length, 0 );
 });
+
+test("a republished holder dispatches its particle keys from its clock entry", () => {
+	let serial = -1;
+	const owner = createAnimationEmission( () => serial-- ), sets = modelAnimationParticles( [ raw ] );
+	// The kept actor carries no animation frame of its own: only the entry does.
+	const body = Object.freeze( {
+		gid: 1,
+		modifierId: 9,
+		model: "body",
+		pose: { regionId: 257, x: 0, y: 0, z: 0, yaw: 0 },
+		clip: "stand",
+		time: 0,
+		loop: true,
+		scale: 1
+	} );
+	const frame = ( from, to ) => ({
+		selected: selector,
+		revision: 0,
+		restarted: [],
+		dispatch: [ { selector, ranges: [ [ from, to ] ] } ]
+	});
+	const matrix = () => ({ regionId: 257, matrix: Float32Array.of( 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1 ) });
+	const step = ( time, modelAnimation ) =>
+		owner.step(
+			[ { actor: body, sets } ],
+			time,
+			() => true,
+			20,
+			true,
+			matrix,
+			() => 0,
+			() => 1,
+			new Map( [ [ body, { time, modelAnimation } ] ] )
+		);
+	assert.equal( step( 0, frame( 0, 100 ) ).length, 0 );
+	assert.equal( step( .2, frame( 100, 101 ) ).length, 1, "the entry's dispatch fired the key" );
+});

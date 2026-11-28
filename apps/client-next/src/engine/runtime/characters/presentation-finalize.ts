@@ -13,11 +13,12 @@ import type { EntityState } from "@/engine/contracts/world";
 import type { GameplayState } from "@/engine/contracts/gameplay";
 import type { Renderer, FrameWork } from "@/engine/contracts/runtime";
 import { actorQueryRows } from "@/engine/foundation/animation/actor-query-rows";
+import { republished, type FrameClocks } from "@/engine/foundation/animation/actor-clock";
 import { dressedAvatars } from "@/engine/foundation/gameplay/avatar-socket";
 import { visualChangeAvatars } from "@/engine/foundation/animation/visual-changes";
 import type { DressCatalog, WornItem } from "@/engine/foundation/animation/equipment-appearance";
 import type { SkillLookup } from "@/engine/foundation/ui/buff-viewer";
-import type { Resource, PresentationOutput, PresentationDisappear } from "./internal/presentation-contract";
+import type { FadeFrame, Resource, PresentationOutput, PresentationDisappear } from "./internal/presentation-contract";
 import { advanceCharacterFade } from "@/engine/foundation/animation/character-fade";
 import {
 	concealmentState,
@@ -113,6 +114,7 @@ VisibilityFrame
 interface VisibilityFrame {
 	readonly entities: readonly EntityState[];
 	readonly next: Map<number, CharacterActor>;
+	readonly clocks: FrameClocks;
 	readonly local: EntityState | undefined;
 	readonly gameplay: GameplayState | null;
 	readonly seconds: number;
@@ -129,7 +131,7 @@ Keep body status, party concealment and camera fade in their original order.
 ================
 */
 export function applyCharacterVisibility( frame: VisibilityFrame, output: CameraOutput ) {
-	const { entities, next, local, gameplay, seconds, cameraPitch, concealmentSkills, entityLod } = frame;
+	const { entities, next, clocks, local, gameplay, seconds, cameraPitch, concealmentSkills, entityLod } = frame;
 	// 85EC00 sets body state 4's alpha 0x50 on the model and its mount,
 	// but 85D890 runs on every update of every character except the
 	// local player (CICUser/CICCos_OnUpdate) and restores 0xFF unless
@@ -137,7 +139,9 @@ export function applyCharacterVisibility( frame: VisibilityFrame, output: Camera
 	// local player's own model, and 6/7 follow concealment.ts.
 	for ( const entity of entities ) {
 		const actor = next.get( entity.gid );
-		if ( actor?.opacity !== undefined ) next.set( entity.gid, { ...actor, opacity: undefined } );
+		if ( actor?.opacity !== undefined ) {
+			next.set( entity.gid, republished( actor, { opacity: undefined }, clocks ) );
+		}
 	}
 	// 866B90 (CICPlayer_OnUpdate): when camera fade is not transitioning,
 	// body 4 (0x866BD1..0x866BF5) or an active hide effect on body 6/7 via
@@ -152,7 +156,7 @@ export function applyCharacterVisibility( frame: VisibilityFrame, output: Camera
 		localTranslucent = localBody === 4 || localConcealed;
 	if ( local && localTranslucent ) {
 		const actor = next.get( local.gid );
-		if ( actor ) next.set( local.gid, { ...actor, opacity: seenAlpha() } );
+		if ( actor ) next.set( local.gid, republished( actor, { opacity: seenAlpha() }, clocks ) );
 	}
 	if (
 		entities.some( e => e.gid !== local?.gid && (e.appearanceState?.[2] === 6 || e.appearanceState?.[2] === 7) )
@@ -178,7 +182,9 @@ export function applyCharacterVisibility( frame: VisibilityFrame, output: Camera
 			);
 			const alpha = concealmentAlpha( state, party.has( entity.name ) );
 			const actor = next.get( entity.gid );
-			if ( actor && alpha !== undefined ) next.set( entity.gid, { ...actor, opacity: alpha } );
+			if ( actor && alpha !== undefined ) {
+				next.set( entity.gid, republished( actor, { opacity: alpha }, clocks ) );
+			}
 		}
 	}
 	if ( local ) {
@@ -197,7 +203,7 @@ export function applyCharacterVisibility( frame: VisibilityFrame, output: Camera
 		// after it finishes, the body-4 or 85CBD0 concealment branch restores alpha 0x50.
 		const actor = next.get( local.gid );
 		if ( actor && (transition || !localTranslucent) ) {
-			next.set( local.gid, { ...actor, opacity: alpha } );
+			next.set( local.gid, republished( actor, { opacity: alpha }, clocks ) );
 		}
 	} else output.cameraFade = null;
 }
@@ -271,6 +277,7 @@ EmissionFrame
 interface EmissionFrame {
 	readonly entities: readonly EntityState[];
 	readonly next: Map<number, CharacterActor>;
+	readonly clocks: FrameClocks;
 	readonly seconds: number;
 	readonly hideSilkCos: boolean;
 	readonly particleHolders: { actor: CharacterActor; particles: readonly ModelParticle[]; }[];
@@ -290,11 +297,7 @@ interface EmissionBindings {
 	readonly animationEmission: ReturnType<typeof createAnimationEmission>;
 	readonly scenery: ReturnType<typeof createSceneryEmission>;
 	readonly entityLod: { fraction( gid: number ): number; };
-	readonly applySpawnFades: (
-		entities: readonly EntityState[],
-		next: Map<number, CharacterActor>,
-		seconds: number
-	) => void;
+	readonly applySpawnFades: ( entities: readonly EntityState[], frame: FadeFrame ) => void;
 }
 
 /*
@@ -314,15 +317,15 @@ MODEL_PARTICLE_ACTORS; publishCharacters leaves them out of it too).
 ================
 */
 export function presentEmission( frame: EmissionFrame, bindings: EmissionBindings ): number {
-	const { entities, next, seconds, hideSilkCos, particleHolders, animationHolders, frameWork } = frame;
+	const { entities, next, clocks, seconds, hideSilkCos, particleHolders, animationHolders, frameWork } = frame;
 	const { resources, renderer, modelEmission, animationEmission, scenery, entityLod, applySpawnFades } = bindings;
 	for ( const entity of entities ) {
 		if ( hiddenSilkCos( entity, hideSilkCos ) ) {
 			const actor = next.get( entity.gid );
-			if ( actor ) next.set( entity.gid, { ...actor, opacity: 0 } );
+			if ( actor ) next.set( entity.gid, republished( actor, { opacity: 0 }, clocks ) );
 		}
 	}
-	applySpawnFades( entities, next, seconds );
+	applySpawnFades( entities, { next, clocks, seconds } );
 	for ( const holder of particleHolders ) holder.actor = next.get( holder.actor.gid )!;
 	let modelParticles = 0;
 	for (
@@ -331,7 +334,8 @@ export function presentEmission( frame: EmissionFrame, bindings: EmissionBinding
 			seconds,
 			resources.ready,
 			RENDERED_ACTORS - next.size,
-			gid => frameWork?.level() && next.get( gid )?.animationLod?.optional ? 1 : entityLod.fraction( gid )
+			gid => frameWork?.level() && next.get( gid )?.animationLod?.optional ? 1 : entityLod.fraction( gid ),
+			clocks
 		)
 	) {
 		next.set( actor.gid, actor );
@@ -354,11 +358,12 @@ export function presentEmission( frame: EmissionFrame, bindings: EmissionBinding
 				// chain; spreading the whole actor table into the query (plus
 				// the holder, per emission, per frame) rebuilt the resolver's
 				// gid index over every actor for one row it reads.
-				const matrix = renderer.characterMatrix( actorQueryRows( next, [ actor ] ), gid );
+				const matrix = renderer.characterMatrix( actorQueryRows( next, [ actor ], clocks ), gid );
 				return matrix ? { matrix, regionId: actor.pose.regionId } : null;
 			},
 			gid => renderer.characterParticleTime?.( gid ),
-			path => resources.duration( path, "effect" )
+			path => resources.duration( path, "effect" ),
+			clocks
 		)
 	) next.set( actor.gid, actor );
 	for (
@@ -381,6 +386,7 @@ interface PortraitFrame {
 	readonly local: EntityState | undefined;
 	readonly gameplay: GameplayState | null;
 	readonly next: Map<number, CharacterActor>;
+	readonly clocks: FrameClocks;
 	readonly seconds: number;
 	readonly blindHeld: boolean;
 	// The model particles presentEmission published into next: outside
@@ -467,7 +473,7 @@ Portraits share admission but do not enter the world actor map.
 */
 export function publishCharacters(
 	frame: PortraitFrame,
-	output: Pick<PresentationOutput, "displayed">,
+	output: Pick<PresentationOutput, "displayed" | "displayedClocks">,
 	published: PortraitCatalog,
 	bindings: PortraitBindings
 ) {
@@ -552,6 +558,7 @@ export function publishCharacters(
 		} );
 	}
 	output.displayed = next;
+	output.displayedClocks = frame.clocks;
 	// One pass builds both the published actors and the wanted models, in the
 	// same order the spread-and-map version produced, without temporaries.
 	const presentedActors: CharacterActor[] = [], wanted: string[] = [];
@@ -586,13 +593,22 @@ export function publishCharacters(
 			}
 		}
 	}
+	// The publication contract (actor-snapshots.ts clocksOnly): what reaches
+	// the renderer is frozen, and nothing it references changes after it is
+	// published but its clocks. Every producer replaces a changed value
+	// rather than writing into it, so a stage effect, a fading copy or a
+	// booth whose other fields hold is copied for its clocks alone; one left
+	// unfrozen was validated and copied in full every frame. A steady
+	// character is its kept actor again, its clocks in the frame's table.
+	const { clocks } = frame;
 	for ( const actor of next.values() ) {
-		presentedActors.push(
-			hiddenGids.has( actor.gid ) ? { ...actor, opacity: 0, pickable: false } : actor
-		);
+		const shown = hiddenGids.has( actor.gid ) ?
+			republished( actor, { opacity: 0, pickable: false }, clocks ) :
+			actor;
+		presentedActors.push( Object.isFrozen( shown ) ? shown : Object.freeze( shown ) );
 		wanted.push( actor.model );
 	}
 	for ( const actor of portraits ) wanted.push( actor.model );
-	renderer.setCharacterActors( presentedActors, portraits );
+	renderer.setCharacterActors( presentedActors, portraits, clocks );
 	resources.retainWanted( wanted );
 }

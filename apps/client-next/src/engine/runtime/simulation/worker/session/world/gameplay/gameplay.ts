@@ -93,6 +93,8 @@ import { constantNativeNotice, resolveNativeNotice } from "@/engine/foundation/g
 import {
 	STALL_ALCHEMY_CATEGORY,
 	STALL_ALCHEMY_CODE,
+	STALL_VISIT_ALCHEMY_CODE,
+	TRADE_ALCHEMY_CODE,
 	STALL_JOB_SUIT_CODE,
 	STALL_NOTICE_CATEGORY,
 	type StallCommand
@@ -4341,6 +4343,13 @@ state here before a command can claim a native wire conversation.
 				if ( command.id === ACTION_EXCHANGE ) {
 					const target = readEntity( targeting.state().target ?? 0 );
 					if ( !localGid || !target || target.kind !== "player" || target.gid === localGid ) return null;
+					// 6FE914: the request is refused before it is built while
+					// the alchemy box shows.
+					if ( inventory.alchemyVisible() ) {
+						const notice = constantNativeNotice( STALL_ALCHEMY_CATEGORY, TRADE_ALCHEMY_CODE );
+						if ( notice ) api.notice( notice );
+						return null;
+					}
 					return inventory.exchangeCommand( { kind: "exchange-request", gid: target.gid } );
 				}
 				if ( command.id === ACTION_FORTRESS_RETURN ) {
@@ -4863,6 +4872,13 @@ state here before a command can claim a native wire conversation.
 				// visited in reach or after the walk (693AD0 type 2).
 				if ( keepsStall( entity ) && entity.gid !== localGid ) {
 					const frame = selectEntity( entity, now );
+					// 698C2E: with the alchemy box showing, the click stops
+					// after the select: {0x12, 0x17}, no walk and no visit.
+					if ( inventory.alchemyVisible() ) {
+						const notice = constantNativeNotice( STALL_ALCHEMY_CATEGORY, STALL_VISIT_ALCHEMY_CODE );
+						if ( notice ) api.notice( notice );
+						return frame;
+					}
 					const destination = pose ? interactionApproach( pose, entity ) : null;
 					if ( destination ) {
 						movement.request( destination, now, local?.mountedOn || undefined );
