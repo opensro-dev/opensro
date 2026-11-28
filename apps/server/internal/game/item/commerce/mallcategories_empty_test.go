@@ -6,7 +6,7 @@ mallcategories_empty_test.go - the layout writes no tab without goods
 Port-only, not native (#4846). The category layout's goods are gated
 (Imported, Nasrun), so a layout tab can end with nothing to sell. The
 v1.150 mall draws one tab button per tab row and never counts the goods
-(CIFItemMallShop_CreateTabs 0x6c76f0), so an empty tab would show as an
+(v1.150 client CIFItemMallShop_CreateTabs 0x6c76f0), so an empty tab would show as an
 empty page. dropEmptyLayoutTabs takes such tabs back, and a layout shop
 whose tabs all went goes with them. These tests drive it on small
 tables, where no shipped data fills the HOT shop.

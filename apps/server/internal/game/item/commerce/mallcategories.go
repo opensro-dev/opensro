@@ -472,10 +472,11 @@ added whose tabs all went with them (#4846). Its goods are gated
 Gears holds only the Devil's Spirit goods, so SRO_NASRUN off left it an
 empty tab, and a build without the later-client import empties the HOT
 shop the same way. The client would draw it all the same: the v1.150
-mall makes one tab button per tab row (CIFItemMallShop_CreateTabs
-0x6c76f0, counted from CMallShop_GetTabList 0x817630) and never counts
-the goods, so the shipped data, which has no empty tab, is the only
-thing that kept the native mall from showing one. The layout is ours,
+mall makes one tab button per tab row and never counts the goods
+(client CIFItemMallShop_CreateTabs 0x6c76f0, its count read by
+client ItemMallShopData_GetTabList 0x817630), so the shipped data,
+which has no empty tab, is the only thing that kept the native mall
+from showing one. The layout is ours,
 so it writes no empty tab. Shipped tabs and shops are never touched,
 and every shipped address keeps its number, since only appended rows
 can go.
