@@ -5,9 +5,10 @@ tombbox.go - opening a Ch'in Tomb treasure box, and the keys tomb monsters drop
 
 Port-only switch, native content (SRO_TOMB_TREASURE_BOXES, #4810; the
 tables and rolls are game/tombbox). A box offers one row, "Open the box".
-The v1.188 server's open handler checks, in order: two free bag slots
-(else the bag-full line), the box's key (else the no-key line). It then
-rolls one of nine outcomes, applies it and spends the key. The change
+The v1.188 server's talk choice checks, in order: the box's key (else
+the no-key line), then at least one free bag slot (else the bag-full
+line), and calls the open, which rolls one of nine outcomes, applies it
+and spends the key. The change
 commits as one step inside the character's door: the key leaves with the
 treasure, or nothing moves at all.
 
@@ -129,12 +130,12 @@ cannot take the treasure) answers the bag-full line and keeps the key.
 ================
 */
 func (rt *Runtime) openTombBoxInDoor(division string, c *enterworld.Character, box tombbox.Box, open *tombBoxOpen) bool {
-	if freeBagSlots(c) < tombbox.MinFreeSlots {
-		open.answer = tombbox.TalkBagFull
-		return false
-	}
 	if bagTokens(c, box.Key) == 0 {
 		open.answer = tombbox.TalkNoKey
+		return false
+	}
+	if freeBagSlots(c) < tombbox.MinFreeSlots {
+		open.answer = tombbox.TalkBagFull
 		return false
 	}
 	if rt.DropRoll == nil {

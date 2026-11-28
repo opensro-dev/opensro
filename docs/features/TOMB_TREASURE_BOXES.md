@@ -16,12 +16,12 @@ deleted at one publisher's request, so the switch is off by default (owner, 2026
 
 ## The open (`action/tombbox.go`)
 
-Talking to a box offers one row, "Open the box". A click checks, in the v1.188 server's order:
+Talking to a box offers one row, "Open the box". A click checks, in the order of the v1.188 server's talk choice:
 
-1. at least two free bag slots, else `_05` ("inventory is full");
-2. the box's own key in the bag, else `_04` ("no key").
+1. the box's own key in the bag, else `_04` ("no key");
+2. at least one free bag slot, else `_05` ("inventory is full").
 
-It then rolls `rand()/32767*100` and takes the first of nine outcomes whose running sum of weights is not below the
+The talk choice then calls the box's open, which rolls `rand()/32767*100` and takes the first of nine outcomes whose running sum of weights is not below the
 roll. The outcome and the spent key commit together in the character's door. A treasure that does not fit keeps the
 key and answers `_05`.
 
@@ -57,7 +57,7 @@ owner.
 
 | Claim | Evidence | Status |
 | --- | --- | --- |
-| Open order: two free slots, then the key; the key is spent after the outcome | v1.188 server box open handlers (vtable +0x10 of each box event) | checked (BN) |
+| Talk order: the key, then at least one free slot (the open's own "more than one slot" test only guards a second key check); the key is spent after the outcome | v1.188 server box event talk choice (the shared single-exchange handler: item count, then free-slot count, then the open) and the box open handlers | checked (BN, 2026-11-28) |
 | Nine weights, per-box parameters as tabled | the four box init functions | checked (BN) |
 | Damage clamps to current HP - 1 | the shared resource-consume helper | checked (BN) |
 | Key drop: MOB_TQ_ prefix flag, chance x 8 for a party monster, million-step roll | the box events' monster-death handler; the tomb prefix registration | checked (BN, 2026-11-28) |

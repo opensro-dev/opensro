@@ -108,35 +108,62 @@ func TestTombBoxSwitchOffIsNative(t *testing.T) {
 
 /*
 ================
+tombBoxBag
+
+A bag holding the Courage key (when key is set) in its first slot and
+filler in every other slot but the last free ones.
+================
+*/
+func tombBoxBag(c *enterworld.Character, key bool, free int) {
+	c.MissionInventory = nil
+	first := int64(inventory.EquipmentSlotEnd)
+	end := int64(inventory.BagEnd(c)) - int64(free)
+	for slot := first; slot < end; slot++ {
+		if key && slot == first {
+			c.MissionInventory = append(c.MissionInventory, tombKeyRow(slot))
+			continue
+		}
+		c.MissionInventory = append(c.MissionInventory, halloweenBoxRow(slot, 1))
+	}
+}
+
+/*
+================
 TestTombBoxRefusesInNativeOrder
 
-The room is checked before the key: a full bag answers the bag-full line
-even with the key held, an empty-handed opener the no-key line; neither
-moves anything.
+The talk choice checks the key before the room: no key answers the
+no-key line even on a full bag; with the key, no free slot answers the
+bag-full line and spends nothing, and exactly one free slot opens.
 ================
 */
 func TestTombBoxRefusesInNativeOrder(t *testing.T) {
 	c := testCharacter()
-	c.MissionInventory = nil
 	rt := tombBoxRuntime(c, true)
 	if options := rt.tombBoxTalkOptions(tombBoxCourage); len(options) != 1 || options[0].TitleSymbol != tombbox.TalkOption {
 		t.Fatal("the box offers no open row", options)
 	}
+
+	tombBoxBag(c, false, 0)
 	if !bytes.Equal(lastDialogue(t, openCourage(t, rt, c, 0)), wire.EncodeNpcDialogAnswer(tombbox.TalkNoKey)) {
-		t.Fatal("no key: wrong line")
+		t.Fatal("no key on a full bag: want the no-key line")
 	}
-	c.MissionInventory = []enterworld.InventoryRow{tombKeyRow(int64(inventory.EquipmentSlotEnd))}
-	for slot := int64(inventory.EquipmentSlotEnd) + 1; slot < int64(inventory.BagEnd(c))-1; slot++ {
-		c.MissionInventory = append(c.MissionInventory, halloweenBoxRow(slot, 1))
-	}
-	if freeBagSlots(c) != 1 {
-		t.Fatalf("fixture leaves %d free slots, want 1", freeBagSlots(c))
+
+	tombBoxBag(c, true, 0)
+	if freeBagSlots(c) != 0 {
+		t.Fatalf("fixture leaves %d free slots, want 0", freeBagSlots(c))
 	}
 	if !bytes.Equal(lastDialogue(t, openCourage(t, rt, c, 0)), wire.EncodeNpcDialogAnswer(tombbox.TalkBagFull)) {
-		t.Fatal("full bag: wrong line")
+		t.Fatal("key, no free slot: want the bag-full line")
 	}
 	if bagCount(c, tombbox.Boxes[0].Key) != 1 {
 		t.Fatal("a refusal spent the key")
+	}
+
+	tombBoxBag(c, true, 1)
+	before := goldOf(c)
+	openCourage(t, rt, c, 16383) // r 50.0: the gold outcome
+	if bagCount(c, tombbox.Boxes[0].Key) != 0 || goldOf(c) != before+uint64(tombbox.Boxes[0].Gold) {
+		t.Fatal("key and one free slot: the box did not open", goldOf(c), c.MissionInventory)
 	}
 }
 
