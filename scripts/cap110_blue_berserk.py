@@ -220,10 +220,7 @@ SHOP_KEY = {"refshopgoods.txt": 3, "refpackageitem.txt": 3, "refscrapofpackageit
 def remove_owned(text_root, prior):
 	(text_root / OUTPUT_SHARD).unlink(missing_ok=True)
 	(text_root / LEVEL_TABLE).unlink(missing_ok=True)
-	manifest = text_root / "itemdata.txt"
-	if manifest.exists():
-		lines = [row[0] for row in tables.table_rows(manifest.read_bytes()) if row and row[0].lower() != OUTPUT_SHARD]
-		write_atomically(manifest, b"\xff\xfe" + ("\r\n".join(lines) + "\r\n").encode("utf-16-le"))
+	monsters.unlist_shard(text_root, "itemdata.txt", OUTPUT_SHARD)
 	for name in SHOP_TABLES:
 		path = text_root / name
 		if path.exists():

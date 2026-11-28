@@ -870,6 +870,48 @@ test("a dungeon flag opens its floor menu, and a floor asks, then sends choice 7
 	}
 });
 
+test("Escape over a floor menu that is not drawn goes on to the map (#4846)", () => {
+	const run = ( hideFlag ) => {
+		const sent = [], f = withCaveGroup( open( sent ) );
+		try {
+			openMapScene( f );
+			f.ui.event( { kind: "activate", id: "reverse-map-point:1" } );
+			let scene = f.ui.step( f.state, 3100 );
+			if ( hideFlag ) {
+				// The flag leaves the page (its point republished without it):
+				// the menu is still open but nothing of it is on screen.
+				f.state.gameplay = /** @type {any} */ ({
+					...f.state.gameplay,
+					reverseMapPoints: f.state.gameplay.reverseMapPoints.filter( row => row.id !== 1 )
+				});
+				scene = f.ui.step( f.state, 3200 ) ?? scene;
+				assert.ok(
+					!defined( scene ).controls.some( c => c.id.startsWith( "reverse-map-floor:" ) ),
+					"not drawn"
+				);
+			}
+			assert.ok( defined( scene ).controls.some( c => c.id === "map-pan" ), "the map is open" );
+			if ( !hideFlag ) {
+				// The menu is its own window: its entries are hit-tested above
+				// every map control, the tools strip and drawer among them.
+				const ids = defined( scene ).controls.map( c => c.id );
+				const firstEntry = ids.findIndex( id => id.startsWith( "reverse-map-floor:" ) );
+				const lastMap = ids.findLastIndex( id => id.startsWith( "map-" ) );
+				assert.ok( firstEntry > lastMap, "entries " + firstEntry + " above map controls " + lastMap );
+			}
+			f.ui.event( { kind: "key", code: "Escape" } );
+			const after = defined( f.ui.step( f.state, 3300 ) ?? scene );
+			return after.controls.some( c => c.id === "map-pan" );
+		} finally {
+			f.dispose();
+		}
+	};
+	// A drawn menu takes the key and the map stays; an undrawn one closes
+	// quietly and the key goes on to the map.
+	assert.equal( run( false ), true, "Escape hid the drawn menu, keeping the map" );
+	assert.equal( run( true ), false, "Escape went on and closed the map" );
+});
+
 test("the floor menu closes on Escape and on a press elsewhere, keeping the map", () => {
 	const sent = [], f = withCaveGroup( open( sent ) );
 	try {

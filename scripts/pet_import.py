@@ -395,10 +395,7 @@ def stage_pet_skills(client_skills, text_root, skill_shard, char_rows, previous_
 
 def _drop_skill_shard(text_root, skill_shard):
 	text_root = Path(text_root)
-	manifest = text_root / "skilldata.txt"
-	if manifest.exists():
-		kept = [row for row in tables.table_rows(manifest.read_bytes()) if not row or row[0].lower() != skill_shard.lower()]
-		write_atomically(manifest, cap110_monsters.encode_rows(kept))
+	cap110_monsters.unlist_shard(text_root, "skilldata.txt", skill_shard)
 	(text_root / skill_shard).unlink(missing_ok=True)
 
 
@@ -422,18 +419,11 @@ def _encode(rows):
 # A source's off path: its shards leave the manifests and the tree, and
 # its marker goes, leaving every other source's rows untouched.
 # ================
-def _drop_manifest_line(output, manifest_name, shard):
-	manifest = Path(output) / TEXT_ROOT / manifest_name
-	if manifest.exists():
-		kept = [row for row in tables.table_rows(manifest.read_bytes()) if not row or row[0].lower() != shard]
-		write_atomically(manifest, _encode(kept))
-
-
 def remove_import(output, source):
 	text_root = Path(output) / TEXT_ROOT
 	mall.strip_mall(Path(output), set(read_marker(output, source).get("mall", {}).get("packages", [])))
 	for manifest_name, shard in (("characterdata.txt", source["char_shard"]), ("itemdata.txt", source["item_shard"])):
-		_drop_manifest_line(output, manifest_name, shard)
+		cap110_monsters.unlist_shard(text_root, manifest_name, shard)
 		(text_root / shard).unlink(missing_ok=True)
 	_drop_skill_shard(text_root, source["skill_shard"])
 	_remove_icons(output, read_marker(output, source))
@@ -690,14 +680,14 @@ def _write_pass(output, source, char_rows, item_rows, report):
 	else:
 		# No shard file, so no manifest line either: a listed but
 		# missing shard fails the table assembly that reads it.
-		_drop_manifest_line(output, "characterdata.txt", source["char_shard"])
+		cap110_monsters.unlist_shard(text_root, "characterdata.txt", source["char_shard"])
 		(text_root / source["char_shard"]).unlink(missing_ok=True)
 		_drop_skill_shard(text_root, source["skill_shard"])
 	if item_rows:
 		write_atomically(safe_target(text_root, source["item_shard"]), _encode(sorted(item_rows, key=lambda row: int(row[items.IDENTITY]))))
 		_manifest_with(output, "itemdata.txt", source["item_shard"])
 	else:
-		_drop_manifest_line(output, "itemdata.txt", source["item_shard"])
+		cap110_monsters.unlist_shard(text_root, "itemdata.txt", source["item_shard"])
 		(text_root / source["item_shard"]).unlink(missing_ok=True)
 	report["enabled"] = True
 	report["source"] = source["name"]
