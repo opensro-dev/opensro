@@ -34,8 +34,9 @@ const SEED = 1;
 const SKIPPED_SHARE = .5;
 // The share of renderer copies that must copy only clocks: fading copies
 // and actors whose opacity is set after publication are not frozen, and
-// are copied in full on every frame.
-const CLOCK_COPY_SHARE = .6;
+// are copied in full on every frame; a rebuilt actor keeps its unchanged
+// value objects (actor-advance.ts carried), 84% of copies here.
+const CLOCK_COPY_SHARE = .8;
 /*
 ================
 freezeDeep

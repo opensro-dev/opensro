@@ -325,6 +325,10 @@ export interface CharacterPresentationState {
 	// The actor the last steady decision published and the inputs of its
 	// fields (KeptRecord); undefined after any frame that was not steady.
 	record?: KeptRecord;
+	// The actor this state last published, whichever path built it: a
+	// rebuilt actor carries its value objects forward while their values
+	// hold (actor-advance.ts carried).
+	published?: CharacterActor;
 }
 
 /*

@@ -49,8 +49,10 @@ const RULES = [ "appearance", "motion", "record" ];
 const SKIPPED_SHARE = .5;
 // The detail fraction past which a model particle hides (model-emission.ts).
 const PARTICLE_HIDDEN_FRACTION = Math.fround( .9 );
-// The share of renderer copies that must copy only clocks.
-const CLOCK_COPY_SHARE = .5;
+// The share of renderer copies that must copy only clocks: the crowd
+// stands still for most of the scene, and a rebuilt actor keeps its
+// unchanged value objects (actor-advance.ts carried), 91% of copies here.
+const CLOCK_COPY_SHARE = .85;
 
 /*
 ================

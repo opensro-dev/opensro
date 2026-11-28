@@ -21,6 +21,7 @@ import { cosScale, monsterScale } from "@/engine/foundation/rendering/monster-sc
 import { characterHeadingYaw } from "@/engine/foundation/math/angles";
 import type { EntityState } from "@/engine/contracts/world";
 import type { CharacterActor } from "@/engine/contracts/character";
+import { carriedLod, carriedPose, carriedTint } from "./actor-values";
 import type {
 	ActorAppearance,
 	ActorFrame,
@@ -271,6 +272,7 @@ export function createActorAdvance( owner: ActorOwner ) {
 				state.modifierResource = resource;
 				state.modifierLayers = layers;
 				state.lastDrawnPose = { ...renderPose };
+				const last = state.published;
 				next.set(
 					entity.gid,
 					Object.freeze( {
@@ -282,7 +284,7 @@ export function createActorAdvance( owner: ActorOwner ) {
 								resource.modifierSelectors ?? []
 							) :
 							undefined,
-						animationLod: {
+						animationLod: carriedLod( last?.animationLod, {
 							fraction: entityLod.fraction( entity.gid ),
 							crowded: entityLod.crowded(),
 							// Dispatch and gameplay run above even when a distant skeleton
@@ -291,13 +293,13 @@ export function createActorAdvance( owner: ActorOwner ) {
 								entity.gid !== gameplay?.target && entity.gid !== gameplay?.targetPending &&
 								entityLod.distance( entity.gid ) > PROTECTED_ANIMATION_DISTANCE &&
 								!gameplay?.casts.some( cast => cast.target === entity.gid )
-						},
+						} ),
 						blindable: blindableCharacter( entity, gameplay?.localGid ),
 						blindableCompanion: blindableCompanion( entity, gameplay?.localGid ),
 						groundItem: !!entity.groundItem,
 						dungeonBlock: entity.dungeonBlock,
 						previewClip: resource.clipFacts.names.has( armedIdle ) ? armedIdle : "stand",
-						materialTint: appearance.materialTint,
+						materialTint: carriedTint( last?.materialTint, appearance.materialTint ),
 						pointLight: appearance.pointLight,
 						...(appearance.boneRotation ? { boneRotation: appearance.boneRotation } : {}),
 						modifierId: state.modifierId,
@@ -320,13 +322,13 @@ export function createActorAdvance( owner: ActorOwner ) {
 						mountedOn: seat,
 						gid: entity.gid,
 						model,
-						pose: {
+						pose: carriedPose( last?.pose, {
 							regionId: renderPose.regionId,
 							x: renderPose.x,
 							y: renderPose.y,
 							z: renderPose.z,
 							yaw: characterHeadingYaw( renderPose.angle )
-						},
+						} ),
 						clip,
 						// A single WAIT/SHOT layer can differ from the base clip. Only
 						// collapse a full-weight timed layer that the base fields reproduce.
@@ -352,6 +354,7 @@ export function createActorAdvance( owner: ActorOwner ) {
 				if ( sampleActorDetails ) probe?.detailEnd( "actor-record" );
 				record = stamp && { actor: next.get( entity.gid )!, stamp: { ...stamp } };
 			}
+			state.published = next.get( entity.gid );
 			// The record's tail, the same after either record above: foot
 			// contacts over the dispatched ranges, the emission holders, the
 			// committed default wear and equipment particles.
