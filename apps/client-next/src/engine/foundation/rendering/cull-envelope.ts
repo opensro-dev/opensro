@@ -15,8 +15,12 @@ envelope kept. A camera drag then re-culls once every few degrees instead
 of every frame.
 
 Why it holds: a rotation by at most m moves every view ray by at most m,
-so each side plane of the frustum turns by at most m; widening each
-half-angle by m contains it. A point inside the live frustum lies within
+so every live ray lies within angle m of the envelope's frustum. A side
+plane turned outward by a about the other screen axis moves a ray on that
+face at elevation e by only asin(cos e * sin a), least at the face's far
+corner, so each side turns by asin(sin m / cos e_corner): every ray within
+m of the frustum then lies inside each side, hence inside the envelope (a
+plain widening by m misses the corners of a rolled turn). A point inside the live frustum lies within
 |eye - envelope eye| of a point inside the same frustum placed at the
 envelope eye, so a sphere grown by the slack covers the drift. Depth: a
 point of the live frustum lies at most far * |corner ray| from its eye,
@@ -83,16 +87,20 @@ function rotationBetween( a: ReturnType<typeof cameraBasis>, b: ReturnType<typeo
 ================
 widenedProjection
 
-The envelope's view-projection from the live camera: each half-angle
-grown by the margin, the far plane past every rotated corner.
+The envelope's view-projection from the live camera: each side turned
+out until it is the margin away from the frustum's corner ray (see the
+header), the far plane past every rotated corner.
 ================
 */
 function widenedProjection( camera: WorldCamera, aspect: number, margin: number, slack: number ) {
 	const { tanX, tanY } = projectionTangents( camera, aspect );
-	const halfX = Math.min( MAX_HALF_ANGLE, Math.atan( tanX ) + margin ),
-		halfY = Math.min( MAX_HALF_ANGLE, Math.atan( tanY ) + margin );
-	const wideX = Math.tan( halfX ), wideY = Math.tan( halfY );
 	const corner = Math.sqrt( 1 + tanX * tanX + tanY * tanY );
+	// cos of the corner ray's elevation within the side (x) and top (y) faces.
+	const cosSide = Math.sqrt( 1 + tanX * tanX ) / corner, cosTop = Math.sqrt( 1 + tanY * tanY ) / corner;
+	const turn = ( cosElevation: number ) => Math.asin( Math.min( 1, Math.sin( margin ) / cosElevation ) );
+	const halfX = Math.min( MAX_HALF_ANGLE, Math.atan( tanX ) + turn( cosSide ) ),
+		halfY = Math.min( MAX_HALF_ANGLE, Math.atan( tanY ) + turn( cosTop ) );
+	const wideX = Math.tan( halfX ), wideY = Math.tan( halfY );
 	return viewProjection( {
 		...camera,
 		fov: 2 * halfY,

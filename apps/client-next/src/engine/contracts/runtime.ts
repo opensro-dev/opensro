@@ -43,9 +43,9 @@ export interface CharacterStatistics {
 		readonly sharedPaletteSamples: number;
 		readonly clothSamples: number;
 		readonly gpuPaletteSamples: number;
-		/** Models whose poses stay on the CPU, with how many actors and the first primitive that keeps them there. */
 		/** Poses the GPU sampler refused, by its reason (layers, weight, body volume, bone rotation, ...). */
 		readonly cpuSampleReasons: Readonly<Record<string, number>>;
+		/** Models whose poses stay on the CPU, with how many actors and the first primitive that keeps them there. */
 		readonly cpuModels: readonly { readonly model: string; readonly actors: number; readonly reason: string; }[];
 	};
 	/**

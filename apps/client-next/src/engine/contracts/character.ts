@@ -42,13 +42,6 @@ export interface CharacterChannel {
 }
 /*
 ================
-CharacterClip
-
-A named set of channels sharing the authored clip duration.
-================
-*/
-/*
-================
 CharacterGpuSample
 
 One pose as the GPU skeleton pass samples it (CharacterPose.gpuSample): a
@@ -67,6 +60,13 @@ export interface CharacterGpuSample {
 	readonly share: number;
 }
 
+/*
+================
+CharacterClip
+
+A named set of channels sharing the authored clip duration.
+================
+*/
 export interface CharacterClip {
 	readonly name: string;
 	readonly duration: number;
