@@ -33,7 +33,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 import alexandria_npcs as npcs  # noqa: E402
-import import_vsro_alexandria as stage1  # noqa: E402
+import later_tables  # noqa: E402
 
 OUTPUT = npcs.CARRIED_RESISTS
 FORMAT = npcs.CARRIED_RESISTS_FORMAT
@@ -43,6 +43,8 @@ COMMON_TABLE = "_RefObjCommon.tsv"
 # holds them (alexandria_npcs.RESISTANCE_AT).
 RESIST_FIELDS = ("ResistFrozen", "ResistFrostbite", "ResistBurn", "ResistEShock", "ResistPoison", "ResistZombie")
 CHARACTER_TYPE = "1"
+# The index table later_tables reads through to every characterdata shard.
+CHARACTER_INDEX = "characterdata.txt"
 # The export's widest field (a description) passes csv's default limit.
 FIELD_LIMIT = 1 << 30
 
@@ -66,12 +68,8 @@ def read_export(path):
 # native values and are never converted.
 # ================
 def native_codenames(media):
-	codes = set()
-	for path in sorted(media.glob("characterdata_*.txt")):
-		for row in stage1.table_rows(path.read_bytes()):
-			if len(row) > npcs.CODENAME_COLUMN:
-				codes.add(row[npcs.CODENAME_COLUMN])
-	return codes
+	rows = later_tables.Archive.tree(media).rows(CHARACTER_INDEX)
+	return {row[npcs.CODENAME_COLUMN] for row in rows if len(row) > npcs.CODENAME_COLUMN}
 
 
 # ================
