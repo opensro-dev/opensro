@@ -12,39 +12,24 @@ mtime together.
 */
 import assert from "node:assert/strict";
 import fs from "node:fs";
-import os from "node:os";
 import path from "node:path";
 import test from "node:test";
 
 import { shardSwitchPosture } from "../../build/shared/shardSwitch.mjs";
+import { fixtureServerRoot, registryOf } from "../helpers/shardSwitchFixture.mjs";
 
 const ENV = "SRO_POSTURE_TEST";
 
 /*
 ================
-fixtureServerRoot
+postureServerRoot
 
-A server root with a profile and a registry row for ENV, set as
-SRO_SERVER_SOURCE_ROOT for the test.
+A server root with the given profile and a registry row for ENV.
 ================
 */
-function fixtureServerRoot( t, profile, registryDefault ) {
-	const root = fs.mkdtempSync( path.join( os.tmpdir(), "sro-posture-" ) );
-	fs.mkdirSync( path.join( root, "config" ) );
-	fs.mkdirSync( path.join( root, "internal", "config", "shardsettings" ), { recursive: true } );
-	fs.writeFileSync( path.join( root, "config", "shard-settings.json" ), JSON.stringify( profile ) );
-	fs.writeFileSync(
-		path.join( root, "internal", "config", "shardsettings", "shardsettings.go" ),
-		`var Settings = []Setting{\n\t{Env: "${ENV}", NomadVar: "posture_test", Default: "${registryDefault}"},\n}\n`
-	);
-	const previous = process.env.SRO_SERVER_SOURCE_ROOT;
-	process.env.SRO_SERVER_SOURCE_ROOT = root;
-	t.after( () => {
-		if ( previous === undefined ) delete process.env.SRO_SERVER_SOURCE_ROOT;
-		else process.env.SRO_SERVER_SOURCE_ROOT = previous;
-		fs.rmSync( root, { recursive: true, force: true } );
-	} );
-	return root;
+function postureServerRoot( t, profile, registryDefault ) {
+	const row = { env: ENV, nomadVar: "posture_test", defaultValue: registryDefault };
+	return fixtureServerRoot( t, { profile, registry: registryOf( [ row ] ) } );
 }
 
 /*
@@ -63,7 +48,7 @@ function rewriteLater( file, text ) {
 }
 
 test("a same-size profile rewrite changes the posture", t => {
-	const root = fixtureServerRoot( t, { [ENV]: "on" }, "off" );
+	const root = postureServerRoot( t, { [ENV]: "on" }, "off" );
 	assert.equal( shardSwitchPosture( ENV ), "on" );
 	assert.equal( shardSwitchPosture( ENV ), "on" );
 	const profile = path.join( root, "config", "shard-settings.json" );
@@ -74,7 +59,7 @@ test("a same-size profile rewrite changes the posture", t => {
 });
 
 test("a registry rewrite changes the posture when the profile is silent", t => {
-	const root = fixtureServerRoot( t, {}, "on" );
+	const root = postureServerRoot( t, {}, "on" );
 	assert.equal( shardSwitchPosture( ENV ), "on" );
 	const registry = path.join( root, "internal", "config", "shardsettings", "shardsettings.go" );
 	rewriteLater( registry, fs.readFileSync( registry, "utf8" ).replace( 'Default: "on"', 'Default: "no"' ) );

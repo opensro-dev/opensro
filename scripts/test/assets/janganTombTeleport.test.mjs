@@ -15,24 +15,9 @@ import { test } from "node:test";
 import { janganTombTeleportEnabled, loadJanganTombTeleportLinkRows } from "../../build/shared/janganTombTeleport.mjs";
 import { computeResourceBuildFingerprint } from "../../build/shared/resourceBuildFingerprint.mjs";
 import { STUB_FINGERPRINT_KEYS } from "../helpers/fingerprintKeys.mjs";
+import { switchServerRoot, withEnv } from "../helpers/shardSwitchFixture.mjs";
 
-/*
-================
-withEnv
-
-Set the switches for one test and restore the caller's values after.
-================
-*/
-function withEnv( t, values ) {
-	for ( const [name, value] of Object.entries( values ) ) {
-		const saved = process.env[name];
-		t.after( () => {
-			if ( saved === undefined ) delete process.env[name];
-			else process.env[name] = saved;
-		} );
-		process.env[name] = value;
-	}
-}
+const JANGAN_ROW = { env: "SRO_JANGAN_TOMB_TELEPORT", nomadVar: "jangan_tomb_teleport", defaultValue: "off" };
 
 test("janganTombTeleportEnabled mirrors the server words and needs the tomb", ( t ) => {
 	withEnv( t, { SRO_QINSHI_TOMB: "on", SRO_JANGAN_TOMB_TELEPORT: "off" } );
@@ -49,9 +34,19 @@ test("janganTombTeleportEnabled mirrors the server words and needs the tomb", ( 
 	assert.equal( janganTombTeleportEnabled(), false, "the tomb closed keeps the gate native" );
 });
 
-test("an unset switch takes the registry default, off", ( t ) => {
+// The posture comes from a server root of the test's own: the checkout's
+// profile turned the switch on (f55561ce7), which failed a test that read
+// it (#4547).
+test("an unset switch takes the release profile's value, else the registry default", ( t ) => {
 	withEnv( t, { SRO_QINSHI_TOMB: "on", SRO_JANGAN_TOMB_TELEPORT: "" } );
-	assert.equal( janganTombTeleportEnabled(), false );
+	switchServerRoot( t, JANGAN_ROW, undefined );
+	assert.equal( janganTombTeleportEnabled(), false, "no profile entry: the registry default, off" );
+});
+
+test("an unset switch follows a profile that turns it on", ( t ) => {
+	withEnv( t, { SRO_QINSHI_TOMB: "on", SRO_JANGAN_TOMB_TELEPORT: "" } );
+	switchServerRoot( t, JANGAN_ROW, "on" );
+	assert.equal( janganTombTeleportEnabled(), true, "the profile turns it on" );
 });
 
 test("flipping the switch changes the resource build fingerprint", async ( t ) => {
