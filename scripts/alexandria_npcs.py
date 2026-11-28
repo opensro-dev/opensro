@@ -34,6 +34,7 @@ tables already have is left alone.
 ===========================================================================
 """
 from collections import Counter
+import json
 import re
 
 import import_vsro_alexandria as stage1
@@ -82,7 +83,12 @@ RESISTANCE_COUNT = 6
 # v1.188 server database holds (#4802). Up to LINEAR_RESIST_END it is
 # twice the level, from level 2; above it the native steps, each value
 # held from its level up. The later clients ship no resist column, so a
-# converted row takes the curve. Structures hold none.
+# converted row takes the curve, unless the v1.188 server gives it its
+# own values (carried_resists, #4803). Structures hold none.
+# The snapshot sits beside this module, so the variant's code stamp
+# (codeStamp.mjs DATA_LITERAL) counts its bytes and a refresh rebuilds.
+CARRIED_RESISTS = Path(__file__).with_name("later_element_resists.json")
+CARRIED_RESISTS_FORMAT = "sro-element-resists-v1"
 LINEAR_RESIST_FROM = 2
 LINEAR_RESIST_END = 40
 RESIST_STEPS = ((40, 78), (42, 79), (44, 80), (47, 81), (50, 82), (53, 83), (57, 84), (61, 85), (66, 86),
@@ -242,12 +248,11 @@ def is_npc(row):
 
 
 # ================
-# level_resist / element_resist
+# level_resist / curve_element_resist
 #
-# The native element resist of a level, and of one later row: the
-# level's, or none for a structure (fortress gates and towers, typeid-3
-# 5). A unique's own higher resists are server data the client row does
-# not mark; it takes its level's as a floor (#4802).
+# The native element resist of a level, and of one later row by the
+# curve: the level's, or none for a structure (fortress gates and
+# towers, typeid-3 5).
 # ================
 def level_resist(level):
 	if level < LINEAR_RESIST_FROM:
@@ -257,10 +262,45 @@ def level_resist(level):
 	return [value for start, value in RESIST_STEPS if start <= level][-1]
 
 
-def element_resist(row):
+def curve_element_resist(row):
 	if row[TID_COLUMNS[2]] == STRUCTURE_TYPE or not row[LEVEL_COLUMN].isdigit():
 		return 0
 	return level_resist(int(row[LEVEL_COLUMN]))
+
+
+# ================
+# carried_resists
+#
+# The v1.188 server's own six resists for the 193 later-only rows the
+# curve misses (#4803): temple and event bosses, Roc, the Tomb general,
+# trade transports. Nothing in the client row marks them, and their
+# values fall in 19 shapes, some below the curve, so no rule stands in
+# for them. import_element_resist_evidence.py writes the snapshot; it is
+# read once.
+# ================
+_carried = {}
+
+
+def carried_resists():
+	if "rows" not in _carried:
+		snapshot = json.loads(CARRIED_RESISTS.read_text(encoding="utf-8"))
+		if snapshot.get("format") != CARRIED_RESISTS_FORMAT:
+			raise ValueError(f"{CARRIED_RESISTS.name} is not {CARRIED_RESISTS_FORMAT}")
+		_carried["rows"] = snapshot["rows"]
+	return _carried["rows"]
+
+
+# ================
+# element_resist
+#
+# The six resists one later row converts with: the v1.188 server's when
+# the snapshot carries its codename, otherwise the curve's in all six.
+# ================
+def element_resist(row):
+	carried = carried_resists().get(row[CODENAME_COLUMN])
+	if carried is not None:
+		return list(carried)
+	return [curve_element_resist(row)] * RESISTANCE_COUNT
 
 
 # ================
@@ -271,7 +311,7 @@ def convert_character(row):
 	if len(row) != VSRO_CHARACTER_COLUMNS:
 		raise ValueError(f"characterdata row {row[ID_COLUMN]} has {len(row)} columns")
 	converted = (
-		row[:RESISTANCE_AT] + [str(element_resist(row))] * RESISTANCE_COUNT + row[RESISTANCE_AT:SKILL_PAIRS_AT]
+		row[:RESISTANCE_AT] + [str(value) for value in element_resist(row)] + row[RESISTANCE_AT:SKILL_PAIRS_AT]
 		+ ["0", "0.0"] * SKILL_PAIR_COUNT + row[SKILL_PAIRS_AT:]
 	)
 	# The VSRO name column holds a Korean placeholder; v1.150 writes "xxx".
