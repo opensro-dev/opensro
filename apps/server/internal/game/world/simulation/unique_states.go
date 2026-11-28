@@ -27,21 +27,41 @@ import (
 ================
 uniqueTimeline
 
-One unique reference's last spawn and death in a division.
+One unique reference's living copies in a division, keyed by gid, and its
+last spawn. A reference can stand more than once at a time: the Ch'in Tomb's
+Sarin generals have their own Floor 3 nests, and the Floor 6 South stage
+raises the same four references again (v1.188 CGameWorld_Chins_Floor6_SetupSpawners
+0x5EF9B0). A per-reference counter with one spawn time showed a killed
+copy's neighbour as "up since" the dead copy's spawn; each copy is its own
+row here, and a death or despawn removes exactly the copy it names.
 ================
 */
 type uniqueTimeline struct {
-	live        int
+	copies      map[uint32]UniqueCopy
 	spawnedAtMs int64
 	regionID    uint16
 }
 
 /*
 ================
+UniqueCopy
+
+One living copy of a unique: where it stands and when it spawned.
+================
+*/
+type UniqueCopy struct {
+	RegionID    uint16
+	SpawnedAtMs int64
+}
+
+/*
+================
 UniqueState
 
-What the public tracker knows about one unique reference. SpawnedAtMs is
-zero until the first spawn since the server started.
+What the public tracker knows about one unique reference. Copies lists the
+living copies, oldest first; RegionID and SpawnedAtMs are the oldest living
+copy's, or the last spawn's while none lives. SpawnedAtMs is zero until the
+first spawn since the server started.
 ================
 */
 type UniqueState struct {
@@ -51,6 +71,7 @@ type UniqueState struct {
 	RegionID    uint16
 	Alive       bool
 	SpawnedAtMs int64
+	Copies      []UniqueCopy
 }
 
 /*
@@ -58,16 +79,16 @@ type UniqueState struct {
 markUniqueSpawn
 ================
 */
-func (state *divisionMonsterState) markUniqueSpawn(ref uint32, regionID uint16, nowMs int64) {
+func (state *divisionMonsterState) markUniqueSpawn(ref, gid uint32, regionID uint16, nowMs int64) {
 	if state.uniqueTimes == nil {
 		state.uniqueTimes = map[uint32]*uniqueTimeline{}
 	}
 	line := state.uniqueTimes[ref]
 	if line == nil {
-		line = &uniqueTimeline{}
+		line = &uniqueTimeline{copies: map[uint32]UniqueCopy{}}
 		state.uniqueTimes[ref] = line
 	}
-	line.live++
+	line.copies[gid] = UniqueCopy{RegionID: regionID, SpawnedAtMs: nowMs}
 	line.spawnedAtMs = nowMs
 	line.regionID = regionID
 }
@@ -75,16 +96,42 @@ func (state *divisionMonsterState) markUniqueSpawn(ref uint32, regionID uint16, 
 /*
 ================
 markUniqueDeath
+
+Forgets the copy gid names. A gid the timeline never marked (a quest
+unique spawned without its announcement) leaves every other copy alone.
 ================
 */
-func (state *divisionMonsterState) markUniqueDeath(ref uint32) {
-	line := state.uniqueTimes[ref]
-	if line == nil {
-		return
+func (state *divisionMonsterState) markUniqueDeath(ref, gid uint32) {
+	if line := state.uniqueTimes[ref]; line != nil {
+		delete(line.copies, gid)
 	}
-	if line.live > 0 {
-		line.live--
+}
+
+/*
+================
+livingCopies
+
+The timeline's living copies, oldest first (gid breaks ties so the order
+is stable).
+================
+*/
+func (line *uniqueTimeline) livingCopies() []UniqueCopy {
+	gids := make([]uint32, 0, len(line.copies))
+	for gid := range line.copies {
+		gids = append(gids, gid)
 	}
+	sort.Slice(gids, func(i, j int) bool {
+		a, b := line.copies[gids[i]], line.copies[gids[j]]
+		if a.SpawnedAtMs != b.SpawnedAtMs {
+			return a.SpawnedAtMs < b.SpawnedAtMs
+		}
+		return gids[i] < gids[j]
+	})
+	out := make([]UniqueCopy, len(gids))
+	for i, gid := range gids {
+		out[i] = line.copies[gid]
+	}
+	return out
 }
 
 /*
@@ -93,7 +140,8 @@ UniqueStates
 
 Every unique the division's nests can spawn, ordered by reference id, with
 its live state. One reference may own several nests (a hive of alternative
-locations): it is alive while any of them holds it.
+locations), and a trigger stage can raise it beside its nest: it is alive
+while any copy lives.
 ================
 */
 func (s *MonsterState) UniqueStates(division string) []UniqueState {
@@ -118,10 +166,15 @@ func (s *MonsterState) UniqueStates(division string) []UniqueState {
 			if entry == nil {
 				continue
 			}
-			entry.Alive = line.live > 0
+			entry.Copies = line.livingCopies()
+			entry.Alive = len(entry.Copies) > 0
 			entry.SpawnedAtMs = line.spawnedAtMs
 			if line.regionID != 0 {
 				entry.RegionID = line.regionID
+			}
+			if entry.Alive {
+				entry.SpawnedAtMs = entry.Copies[0].SpawnedAtMs
+				entry.RegionID = entry.Copies[0].RegionID
 			}
 		}
 	}
