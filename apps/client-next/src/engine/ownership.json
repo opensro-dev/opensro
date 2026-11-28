@@ -290,6 +290,7 @@
     "src/engine/runtime/renderer/device/animation-shader.ts": "src/engine/runtime/renderer/device/device.ts",
     "src/engine/runtime/renderer/device/particle-query.ts": "src/engine/runtime/renderer/device/device.ts",
     "src/engine/runtime/renderer/device/particles.ts": "src/engine/runtime/renderer/device/device.ts",
+    "src/engine/runtime/renderer/device/particle-materials.ts": "src/engine/runtime/renderer/device/device.ts",
     "src/engine/runtime/renderer/device/particle-shader.ts": "src/engine/runtime/renderer/device/device.ts",
     "src/engine/runtime/renderer/device/retirement.ts": "src/engine/runtime/renderer/device/device.ts",
     "src/engine/runtime/renderer/device/device-draw.ts": "src/engine/runtime/renderer/device/device.ts",
