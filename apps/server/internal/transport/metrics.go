@@ -67,6 +67,11 @@ type hubMetrics struct {
 	byeReplaced           atomic.Uint64
 	byeOther              atomic.Uint64
 
+	// writeStalls counts the writes writeErrors includes that died on
+	// the stall deadline, split by the failed batch's size class
+	// (writeStallClassNames, #4731).
+	writeStalls [writeStallClasses]atomic.Uint64
+
 	handshakes durationStats
 	ticks      tickStats
 	timing     timingStats // timing.go
@@ -156,10 +161,15 @@ type Metrics struct {
 	// DatagramsSendFailed counts, over the live connections, the
 	// datagram sends a peer refused after its frame was accepted
 	// (the drain in conn_wt.go): loss the drop counter cannot see.
-	DatagramsSendFailed   uint64 `json:"datagrams_send_failed"`
-	WriteErrors           uint64 `json:"write_errors"`
-	EnterWorldAuthRefused uint64 `json:"enter_world_auth_refused"`
-	UnhandledOpcodeFrames uint64 `json:"unhandled_opcode_frames"`
+	DatagramsSendFailed uint64 `json:"datagrams_send_failed"`
+	WriteErrors         uint64 `json:"write_errors"`
+	// WriteStallsBySize counts the writes that died on the stall
+	// deadline, split by the byte size of the batch that failed
+	// (Hub.noteWriteStall, #4731); write_errors counts those too,
+	// among every failed write.
+	WriteStallsBySize     map[string]uint64 `json:"write_stalls_by_size"`
+	EnterWorldAuthRefused uint64            `json:"enter_world_auth_refused"`
+	UnhandledOpcodeFrames uint64            `json:"unhandled_opcode_frames"`
 	// EmptyFramesRefused counts outbound opcode-0 frames the queue refused
 	// (emptyframe.go); any non-zero value is a producer bug to fix.
 	EmptyFramesRefused         uint64 `json:"empty_frames_refused"`
@@ -460,6 +470,7 @@ func (h *Hub) Metrics() Metrics {
 		DatagramsDropped:           h.metrics.datagramsDropped.Load(),
 		DatagramsSendFailed:        datagramSendFailures,
 		WriteErrors:                h.metrics.writeErrors.Load(),
+		WriteStallsBySize:          h.writeStallsSnapshot(),
 		EnterWorldAuthRefused:      h.metrics.enterWorldAuthRefused.Load(),
 		UnhandledOpcodeFrames:      h.metrics.unhandledFrames.Load(),
 		EmptyFramesRefused:         h.metrics.emptyFramesRefused.Load(),
@@ -556,6 +567,57 @@ func (h *Hub) recordFrameOut(frame Frame) {
 	default:
 		h.metrics.byeOther.Add(1)
 	}
+}
+
+// writeStallClasses is the number of size classes noteWriteStall
+// splits a stalled write into; writeStallClassNames names them in
+// order. A write batch is capped at writeBatchMaxBytes, so a batch
+// over it is by construction one single oversized record.
+const writeStallClasses = 3
+
+var writeStallClassNames = [writeStallClasses]string{"up_to_4k", "up_to_64k", "over_64k"}
+
+// writeStallSmallBytes bounds the smallest stall size class: a tick's
+// batch of small frames sits far under it, the records #4731 asks
+// about (the catalogue, EnterWorld) far over the batch cap.
+const writeStallSmallBytes = 4 << 10
+
+/*
+================
+noteWriteStall
+
+Counts one write that died on the stall deadline - 10 s without the
+peer accepting a byte - under the size class of the batch it was
+carrying (#4731). write_errors counts every failed write; whether
+the big single records stall weak links more than ordinary batches
+could not be read anywhere until the stall kept its size.
+================
+*/
+func (h *Hub) noteWriteStall(bytes int) {
+	class := writeStallClasses - 1
+	switch {
+	case bytes <= writeStallSmallBytes:
+		class = 0
+	case bytes <= writeBatchMaxBytes:
+		class = 1
+	}
+	h.metrics.writeStalls[class].Add(1)
+}
+
+/*
+================
+writeStallsSnapshot
+
+The write_stalls_by_size block: every class named, zero counts
+included, so two scrapes diff into the by-size count directly.
+================
+*/
+func (h *Hub) writeStallsSnapshot() map[string]uint64 {
+	out := make(map[string]uint64, writeStallClasses)
+	for i, name := range writeStallClassNames {
+		out[name] = h.metrics.writeStalls[i].Load()
+	}
+	return out
 }
 
 // countAttach records one completed handshake by transport kind.

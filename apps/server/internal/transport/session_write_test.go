@@ -17,6 +17,8 @@ package transport
 import (
 	"bytes"
 	"errors"
+	"fmt"
+	"os"
 	"testing"
 	"time"
 
@@ -37,6 +39,9 @@ type batchConn struct {
 	*fakeConn
 	writes   [][]Frame
 	failNext bool
+	// failErr is the error failNext reports; nil keeps the plain
+	// delivery-then-failure error below.
+	failErr error
 }
 
 /*
@@ -64,6 +69,9 @@ func (c *batchConn) WriteFrames(frames []Frame) error {
 	c.writes = append(c.writes, append([]Frame(nil), frames...))
 	if c.failNext {
 		c.failNext = false
+		if c.failErr != nil {
+			return c.failErr
+		}
 		return errors.New("write deadline exceeded after delivery")
 	}
 	return nil
@@ -277,6 +285,68 @@ func TestDrainReleasesTheTickHold(t *testing.T) {
 	case <-time.After(3 * time.Second):
 		t.Fatal("drained session did not close")
 	}
+}
+
+/*
+================
+TestWriteStallsCountByTheFailedBatchSize
+
+#4731: a write that dies on the stall deadline counts in Metrics
+under the size class of the batch it was carrying, so whether the
+big single records (the catalogue, EnterWorld) stall more than
+ordinary batches can be read off the server; until now the stall
+kept no size anywhere. The class follows the error's identity -
+os.ErrDeadlineExceeded, which both lanes surface - never its text:
+batchConn's plain failure says "deadline" too and counts only as a
+write error.
+================
+*/
+func TestWriteStallsCountByTheFailedBatchSize(t *testing.T) {
+	stall := fmt.Errorf("stream write: %w", os.ErrDeadlineExceeded)
+	failWith := func(conn *batchConn, err error) {
+		conn.mu.Lock()
+		conn.failNext = true
+		conn.failErr = err
+		conn.mu.Unlock()
+	}
+	assertStalls := func(hub *Hub, upTo4k, upTo64k, over64k, writeErrors uint64) {
+		t.Helper()
+		m := hub.Metrics()
+		got := []uint64{m.WriteStallsBySize["up_to_4k"], m.WriteStallsBySize["up_to_64k"], m.WriteStallsBySize["over_64k"]}
+		want := []uint64{upTo4k, upTo64k, over64k}
+		for i, name := range writeStallClassNames {
+			if got[i] != want[i] {
+				t.Fatalf("write_stalls_by_size[%q] = %d, want %d (all: %v)", name, got[i], want[i], m.WriteStallsBySize)
+			}
+		}
+		if m.WriteErrors != writeErrors {
+			t.Fatalf("write_errors = %d, want %d", m.WriteErrors, writeErrors)
+		}
+	}
+
+	smallHub, smallSess, smallConn := batchSession(t)
+	failWith(smallConn, stall)
+	if err := smallSess.Send(ringTestOp, []byte{1}); err != nil {
+		t.Fatal(err)
+	}
+	detached(t, smallSess)
+	assertStalls(smallHub, 1, 0, 0, 1)
+
+	bigHub, bigSess, bigConn := batchSession(t)
+	failWith(bigConn, stall)
+	if err := bigSess.Send(ringTestOp, make([]byte, 100<<10)); err != nil {
+		t.Fatal(err)
+	}
+	detached(t, bigSess)
+	assertStalls(bigHub, 0, 0, 1, 1)
+
+	plainHub, plainSess, plainConn := batchSession(t)
+	failWith(plainConn, nil)
+	if err := plainSess.Send(ringTestOp, []byte{1}); err != nil {
+		t.Fatal(err)
+	}
+	detached(t, plainSess)
+	assertStalls(plainHub, 0, 0, 0, 1)
 }
 
 /*

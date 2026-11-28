@@ -34,6 +34,9 @@ session the tick has not pushed to, are written at once as before.
 package transport
 
 import (
+	"errors"
+	"os"
+
 	log "github.com/sirupsen/logrus"
 )
 
@@ -333,8 +336,15 @@ func (s *Session) flushWriteBatch(b *writeBatch) bool {
 	writes, err := writeFrameBatch(conn, frames)
 	s.hub.metrics.writesOut.Add(uint64(writes))
 	if err != nil {
+		failedBytes := b.bytes
 		b.reset()
 		s.hub.metrics.writeErrors.Add(1)
+		// A stall is the write deadline expiring; both lanes surface
+		// it as os.ErrDeadlineExceeded (conn.go's stall bound), never
+		// mind what the error's text says (#4731).
+		if errors.Is(err, os.ErrDeadlineExceeded) {
+			s.hub.noteWriteStall(failedBytes)
+		}
 		s.detachGen(gen, err)
 		return false
 	}
