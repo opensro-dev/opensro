@@ -2826,7 +2826,8 @@ export function createWorldRenderer(
 				visibleGroups: selected.length,
 				triangles,
 				pendingTextures: missingTextures.size + selectionPaths().filter( path => !images.has( path ) ).length,
-				bundleRebuilds: rebuilds
+				bundleRebuilds: rebuilds,
+				weather: weather.stats()
 			};
 		},
 		/*

@@ -541,6 +541,8 @@ export interface RuntimeControl extends Disposable {
 	characterActors(): readonly import("./character").CharacterActor[];
 	/** Copied counters and retained-pose eligibility; does not advance animation. */
 	characterStats(): CharacterStatistics;
+	/** The world's counters, the weather's among them. */
+	worldStats(): import("./scene").WorldRenderStats;
 	// The native graphic options' draw switches (GRAPHIC_OPTION_*), for a bench
 	// that weighs what each category costs the GPU.
 	setRenderMode( mode: number, enabled: boolean ): void;
