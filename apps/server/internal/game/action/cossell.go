@@ -3,7 +3,7 @@
 
 cossell.go - selling a standing transport back at the stable keeper
 
-At a stable keeper, 0x70C7 [u32 npc][u8 kind] kind 3 sells the player's
+At a stable keeper, 0x71DC [u32 npc][u8 kind] kind 3 sells the player's
 active vehicle back for its characterdata SellPrice (column 31), held
 to 1..10,000,000 and paid as gold; the vehicle record is let go with
 its row, like the Clean command's release but paying instead of
@@ -18,7 +18,7 @@ dropping cargo. The reference server's order:
   - the player rides it: 0x4409, UIIT_MSG_COSERR_CANT_SELL_RIDING_COS.
 
 The v1.150 client reads the answer as [1][kind] or [2][code] in
-notification category 12, so the word errors travel as their low byte
+notification category 12 (7782E0), so the word errors travel as their low byte
 (cosCancelResult's grammar). Codes 3 and 5 name no category-12 text
 and stay silent there.
 
@@ -40,8 +40,13 @@ import (
 )
 
 const (
-	opCosSellRequest  uint16 = 0x70c7
-	opCosSellResponse uint16 = 0xb0c7
+	// The v1.150 client's numbers: CIFCOSStatus_OnDialogConfirm (6A9E30)
+	// sends 0x71DC (6FF980) and CPSMission_OnCosSellResult0xB1DC (7782E0)
+	// reads the answer. The v1.188 server takes the same body on 0x70C7
+	// (CGObjPC_HandleCOSNpcRequest70C7 511F40); its number never reaches
+	// this client, so the lane listened on a request nothing sends.
+	opCosSellRequest  uint16 = 0x71dc
+	opCosSellResponse uint16 = 0xb1dc
 
 	// cosSellKind is the only kind the stable keeper's sale answers.
 	cosSellKind uint8 = 3
