@@ -250,7 +250,11 @@ test("pose eligibility diagnostics are copied, deduplicate sharing and never eva
 			linearSamples: 1,
 			sharedPaletteSamples: 0,
 			clothSamples: 0,
-			gpuPaletteSamples: 0
+			gpuPaletteSamples: 0,
+			// The body-volume actor is the pose the GPU sampler refuses, and
+			// the unskinned model keeps both unique poses off the GPU palette.
+			cpuSampleReasons: { "body volume": 1 },
+			cpuModels: [ { model: "m", actors: 2, reason: "unskinned primitive" } ]
 		} );
 		snapshot.poseEligibility.gpuSamples = 999;
 		assert.equal( f.owner.stats( true ).poseEligibility.gpuSamples, 1 );
@@ -286,7 +290,9 @@ test("GPU palette census distinguishes model eligibility from device availabilit
 			linearSamples: 2,
 			sharedPaletteSamples: 1,
 			clothSamples: 0,
-			gpuPaletteSamples: 1
+			gpuPaletteSamples: 1,
+			cpuSampleReasons: {},
+			cpuModels: [ { model: "m", actors: 1, reason: "unskinned primitive" } ]
 		} );
 	} finally {
 		f.owner.dispose( f.gpu, null );

@@ -413,7 +413,31 @@ function row( result ) {
 		result.p50.toFixed( 2 )
 	} p99 ${result.p99.toFixed( 2 )} max ${result.max.toFixed( 1 )} ms  main ${result.main.toFixed( 2 )} world ${
 		result.world.toFixed( 2 )
-	} ms/f${allocated}${counts ? "  | " + counts : ""}${gpuRow( result.gpuProcess )}${gpuTimeRow( result.gpuTime )}`;
+	} ms/f${allocated}${counts ? "  | " + counts : ""}${gpuRow( result.gpuProcess )}${gpuTimeRow( result.gpuTime )}${
+		poseRow( result.poseEligibility )
+	}`;
+}
+
+/*
+================
+poseRow
+
+The poses the GPU path did not take, by model and reason (--counts).
+================
+*/
+function poseRow( eligibility ) {
+	if ( !eligibility ) return "";
+	const reasons = Object.entries( eligibility.cpuSampleReasons ?? {} )
+		.map( ( [reason, n] ) => `${reason} ${n}` )
+		.join( ", " );
+	const sampled = `\n${"".padEnd( 13 )} poses ${eligibility.unique}: gpu ${eligibility.gpuSamples}, cpu ${
+		reasons || "none"
+	}`;
+	if ( !eligibility.cpuModels?.length ) return sampled;
+	const models = eligibility.cpuModels.slice( 0, 6 )
+		.map( row => `${row.model.split( "/" ).pop()} x${row.actors} (${row.reason})` )
+		.join( ", " );
+	return `${sampled}\n${"".padEnd( 13 )} cpu-only models: ${models}`;
 }
 
 /*
@@ -714,6 +738,13 @@ async function session( options, location, results ) {
 			if ( result.frames < 2 ) {
 				throw Error(
 					`${location.name}/${name}: no frame samples; benchmark the dev server or a bench bundle (pnpm build:bench)`
+				);
+			}
+			if ( options.counts ) {
+				// Which poses ran on the CPU as the window ended, and why: the
+				// skeleton work the GPU path did not take (characters.ts stats).
+				result.poseEligibility = await client.page.evaluate( () =>
+					globalThis.__benchRuntime.characterStats().poseEligibility ?? null
 				);
 			}
 			result.frameLimit = options.frameLimit;

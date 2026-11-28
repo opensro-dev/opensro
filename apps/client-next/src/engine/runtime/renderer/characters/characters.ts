@@ -101,6 +101,24 @@ import { isEffectProgramModel } from "@/engine/foundation/assets/effect-programs
 
 /*
 ================
+cpuPoseReason
+
+The first primitive that keeps a model off the GPU palette path
+(characterSharedPalette), named for the diagnostics.
+================
+*/
+function cpuPoseReason( model: CharacterModel ): string {
+	for ( const primitive of model.primitives ) {
+		if ( primitive.emission ) return "emitter";
+		if ( primitive.ribbon ) return "ribbon";
+		if ( primitive.billboard ) return "billboard";
+		if ( !primitive.geometry.joints || !primitive.geometry.weights ) return "unskinned primitive";
+	}
+	return "unknown";
+}
+
+/*
+================
 samePoseInputs
 
 Whether two actors request the same evaluated pose: the inputs
@@ -3607,11 +3625,26 @@ the next full prepare pass, so this may run between frames.
 					sharedPaletteSamples = 0,
 					clothSamples = 0,
 					gpuPaletteSamples = 0;
+				// Why a pose stays on the CPU: its model's first primitive the
+				// GPU palette path cannot take (characterSharedPalette).
+				const cpuModels = new Map<string, { actors: number; reason: string; }>();
+				// Why the GPU sampler refused each pose it did not take (gpuRefusal).
+				const cpuSampleReasons: Record<string, number> = {};
 				for ( const state of poses.values() ) {
 					if ( unique.has( state.pose ) ) continue;
 					unique.add( state.pose );
+					const resource = models.get( state.model );
+					if ( resource && !resource.plan.sharedPalette ) {
+						const row = cpuModels.get( state.model );
+						if ( row ) row.actors++;
+						else cpuModels.set( state.model, { actors: 1, reason: cpuPoseReason( resource.model ) } );
+					}
 					const sample = state.pose.gpuSample();
-					if ( !sample ) continue;
+					if ( !sample ) {
+						const reason = state.pose.gpuRefusal() ?? "unknown";
+						cpuSampleReasons[reason] = (cpuSampleReasons[reason] ?? 0) + 1;
+						continue;
+					}
 					gpuSamples++;
 					if ( sample.clip.channels.every( channel => channel.interpolation === "LINEAR" ) ) linearSamples++;
 					const plan = models.get( state.model )?.plan;
@@ -3632,7 +3665,11 @@ the next full prepare pass, so this may run between frames.
 					linearSamples,
 					sharedPaletteSamples,
 					clothSamples,
-					gpuPaletteSamples
+					gpuPaletteSamples,
+					cpuSampleReasons,
+					cpuModels: [ ...cpuModels ]
+						.map( ( [model, row] ) => ({ model, ...row }) )
+						.sort( ( a, b ) => b.actors - a.actors )
 				};
 			}
 			let liveOwnedCpuEvaluations = 0;

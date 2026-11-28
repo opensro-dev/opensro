@@ -204,16 +204,31 @@ without changing skeleton storage, the selected layers or their revision.
 	const sampleRequest = { clip: model.clips[0]!, time: 0 };
 	/*
 ================
+gpuRefusal
+
+Why the GPU sampler cannot take this pose (null when it can): it samples
+one clip at full weight on the default body with no rotated bone.
+================
+	*/
+	function gpuRefusal(): string | null {
+		const layer = resolved[0];
+		if ( resolved.length !== 1 ) return "layers";
+		if ( !layer?.clip ) return "no clip";
+		if ( layer.weight !== 1 ) return "weight";
+		if ( volume !== DEFAULT_BODY_VOLUME ) return "body volume";
+		if ( rotatedNode >= 0 ) return "bone rotation";
+		if ( !gpuClips.has( layer.clip ) ) return "clip not on gpu";
+		return null;
+	}
+	/*
+================
 gpuSample
 ================
 	*/
 	function gpuSample(): { readonly clip: CharacterClip; readonly time: number; } | null {
-		const layer = resolved[0];
-		if (
-			volume !== DEFAULT_BODY_VOLUME || resolved.length !== 1 || !layer?.clip || layer.weight !== 1 ||
-			!gpuClips.has( layer.clip ) || rotatedNode >= 0
-		) return null;
-		sampleRequest.clip = layer.clip;
+		if ( gpuRefusal() ) return null;
+		const layer = resolved[0]!;
+		sampleRequest.clip = layer.clip!;
 		sampleRequest.time = layer.time;
 		return sampleRequest;
 	}
@@ -782,6 +797,7 @@ quaternion scratch is charged and allocated only when playback needs it.
 			return true;
 		},
 		gpuSample,
+		gpuRefusal,
 		cpuEvaluations: () => cpuEvaluations,
 		/*
         ================
