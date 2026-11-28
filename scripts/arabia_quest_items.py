@@ -180,14 +180,11 @@ def add_quest_items(read, root, native, output):
 		later_name_rows = []
 		for name in ("textdata_equip&skill.txt", "textdata_object.txt", "textdata_new.txt"):
 			try:
-				rows = tables.table_rows(read(name))
+				read(name)
 			except SystemExit:
 				continue
-			if rows and all(len(row) == 1 and row[0].strip().lower().endswith(".txt") for row in rows):
-				for shard_name in [row[0].strip() for row in rows]:
-					later_name_rows.extend(tables.table_rows(read(shard_name)))
-			else:
-				later_name_rows.extend(rows)
+			# A listed shard the archive lacks still refuses.
+			later_name_rows.extend(tables.later_table_rows(read, name))
 		if not later_name_rows:
 			raise SystemExit("the later client has no item name text to import the quest items under")
 		later_texts = [map_tables.later_text_row(row) for row in later_name_rows]

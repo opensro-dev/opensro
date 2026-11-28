@@ -39,7 +39,6 @@ from pathlib import Path
 
 import alexandria_npcs as characters
 import cap110_blue_berserk as blue
-import cap110_monsters as monsters
 import cap110_quest_monsters as quest_monsters
 import import_vsro_alexandria as tables
 from prepare_client_resources import safe_target, write_atomically
@@ -163,10 +162,10 @@ def add_quest_tables(vsro_root, native, output):
 		# ================
 		def read(name):
 			return tables.table_text(media, index, name.lower())
-		later = {name: tables.table_rows(read(name)) for name in KEYS}
+		later = {name: tables.later_table_rows(read, name) for name in KEYS}
 		variant = {name: tables.table_rows(safe_target(text_root, name).read_bytes()) for name in KEYS}
 		new_rows = quest_rows(later, variant)
-		later_texts = [tables.table_rows(read(name)) for name in TEXT_SOURCES]
+		later_texts = [tables.later_table_rows(read, name) for name in TEXT_SOURCES]
 		symbols = text_symbols(later_texts)
 		by_key = {row[blue.KEY_COLUMN]: row for rows in later_texts for row in rows if len(row) > blue.ENGLISH_COLUMN + 1}
 		text_path = safe_target(text_root, TEXT_FILE)

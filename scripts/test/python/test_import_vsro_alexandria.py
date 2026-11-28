@@ -15,7 +15,6 @@ import script_paths  # noqa: F401  (puts scripts/ and its build folders on sys.p
 import hashlib
 import os
 import struct
-import sys
 import tempfile
 import unittest
 from pathlib import Path
@@ -41,6 +40,80 @@ def terrain(texture_ids):
 			struct.pack_into("<H", data, at, texture_ids[count % len(texture_ids)] | 0x8400)
 			count += 1
 	return bytes(data)
+
+
+# ================
+# ShardTests
+#
+# The one owner of later shard indexes: what it follows, what it reads
+# as itself, and what it refuses.
+# ================
+class ShardTests(unittest.TestCase):
+	FILES = {
+		"textdata_object.txt": utf16_table([["TextData_Object_100.txt"], ["TextData_Object_200.txt"]]),
+		# A row the archive wraps over two lines, at the end of a shard.
+		"textdata_object_100.txt": utf16_table([["1", "SN_A", "Kor"], [" tail", "x"]]),
+		"textdata_object_200.txt": utf16_table([["1", "SN_B", "Kor"]]),
+		"flat.txt": utf16_table([["1", "SN_F", "Kor"]]),
+	}
+
+	# ================
+	# read
+	# ================
+	def read(self, name):
+		return self.FILES[name]
+
+	# ================
+	# test_the_parser_runs_per_shard
+	#
+	# translation_rows joins a wrapped row; run per file, the join never
+	# swallows the next shard's first row.
+	# ================
+	def test_the_parser_runs_per_shard(self):
+		import alexandria_npcs as characters
+		rows = alex.later_table_rows(self.read, "textdata_object.txt", characters.translation_rows)
+		self.assertEqual([row[1] for row in rows], ["SN_A", "SN_B"])
+		self.assertEqual(rows[0][-1], "x")
+
+	# ================
+	# test_several_tables_read_each_file_once
+	#
+	# VSRO's textdataname.txt indexes textdata_object.txt among others;
+	# read beside it, the object rows still come once, in first order.
+	# ================
+	def test_several_tables_read_each_file_once(self):
+		files = dict(self.FILES)
+		files["textdataname.txt"] = utf16_table([["TextData_Equip&Skill.txt"], ["TextData_Object_200.txt"]])
+		files["textdata_equip&skill.txt"] = utf16_table([["1", "SN_E", "Kor"]])
+		rows = alex.later_tables_rows(files.__getitem__, ("textdata_object.txt", "textdataname.txt"))
+		self.assertEqual([row[1] for row in rows if row[0] == "1"], ["SN_A", "SN_B", "SN_E"])
+
+	# ================
+	# test_text_and_rows_follow_the_same_files
+	# ================
+	def test_text_and_rows_follow_the_same_files(self):
+		text = alex.later_table_text(self.read, "textdata_object.txt")
+		self.assertIn("SN_A", text)
+		self.assertIn("SN_B", text)
+		self.assertNotIn("TextData_Object_100", text)
+		self.assertIn("SN_F", alex.later_table_text(self.read, "flat.txt"))
+
+	# ================
+	# test_a_v1696_reader_refuses_a_flat_table
+	# ================
+	def test_a_v1696_reader_refuses_a_flat_table(self):
+		self.assertEqual(len(alex.later_table_rows(self.read, "flat.txt")), 1)
+		with self.assertRaisesRegex(ValueError, "not a v1.696 shard index"):
+			alex.later_table_rows(self.read, "flat.txt", indexed_only=True)
+
+	# ================
+	# test_an_index_naming_a_path_or_a_repeat_refuses
+	# ================
+	def test_an_index_naming_a_path_or_a_repeat_refuses(self):
+		for entries in ([["../itemdata_5000.txt"]], [["sub/itemdata_5000.txt"]], [["ItemData_5000.txt"], ["itemdata_5000.txt"]]):
+			files = {"itemdata.txt": utf16_table(entries)}
+			with self.subTest(entries=entries), self.assertRaisesRegex(ValueError, "invalid shard index entries"):
+				alex.later_table_rows(files.__getitem__, "itemdata.txt")
 
 
 class FlagTests(unittest.TestCase):

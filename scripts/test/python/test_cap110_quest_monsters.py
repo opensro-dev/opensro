@@ -84,7 +84,7 @@ class QuestMonstersTest(unittest.TestCase):
 		native = "\r\n".join([header + "\tskillaniset2", "0\tplaceholder\tMSKILL_X_ATTACK01\t0", "1\tother\tMSKILL_Y_ATTACK01\t0", ""])
 		owned = "1\tadded\tMSKILL_X_ATTACK01\t0"
 		with_owned = native.replace("1\tother", owned + "\r\n1\tother", 1)
-		got = quest_monsters.remove_records(with_owned, {"MSKILL_X_ATTACK01"})
+		got = effects.remove_presentation(with_owned, {"MSKILL_X_ATTACK01"})
 		self.assertIn("0\tplaceholder\tMSKILL_X_ATTACK01", got)
 		self.assertIn("MSKILL_Y_ATTACK01", got)
 		self.assertNotIn("added", got)

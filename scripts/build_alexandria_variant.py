@@ -61,6 +61,7 @@ import alexandria_map_tables  # noqa: E402
 import alexandria_npcs  # noqa: E402
 import area_music  # noqa: E402
 import import_vsro_alexandria as stage1  # noqa: E402
+import later_presentation  # noqa: E402
 import pharaoh_temple as temple  # noqa: E402
 import published_ids  # noqa: E402
 import variant_base  # noqa: E402
@@ -269,6 +270,14 @@ def build_variant(vsro_root, native, variant, imported_root=None, force=False, e
 		"environment", variant_files.copy_vsro_file,
 		(vsro_root, "Map", "environment.ifo", out / "Map_extracted" / "environment.ifo")
 	)
+	# The effect programs, stage objects, sounds and sound rules every
+	# imported skill and kind names (#4730): after every step that writes
+	# skilleffect.txt, from the v1.696 client first and VSRO second.
+	runner.register(
+		"presentation", later_presentation.add_presentation,
+		(native, out, ((later, source_pins(V1696_SOURCE) if later else None), (vsro_root, None))),
+		roots=(later,) if later else ()
+	)
 
 	runner.load({
 		"native": str(Path(native).resolve()),
@@ -329,6 +338,7 @@ def build_variant(vsro_root, native, variant, imported_root=None, force=False, e
 	got["world-layers"] = take("world-layers")
 	got["music"] = take("music")
 	got["environment"] = take("environment")
+	got["presentation"] = take("presentation")
 
 	base = got["base"]
 	manifest = {
@@ -368,6 +378,10 @@ def build_variant(vsro_root, native, variant, imported_root=None, force=False, e
 		"linked": base["linked"],
 		"note": ENVIRONMENT_NOTE
 	}
+	# Absent while nothing was imported, so an off manifest stays byte-for-byte.
+	presentation = got["presentation"]
+	if presentation.get("rows") or presentation.get("soundRules") or presentation.get("files"):
+		manifest["presentation"] = presentation
 	pharaoh_temple = got["temple"]
 	if pharaoh_temple["enabled"]:
 		# Absent while off, so an off manifest is what it was before the temple.

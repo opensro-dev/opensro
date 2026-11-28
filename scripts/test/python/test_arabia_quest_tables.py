@@ -110,9 +110,9 @@ class ArabiaQuestTablesTest(unittest.TestCase):
 				{"questdata.txt": [], "questcontentsdata.txt": [], "gameguidedata.txt": []})
 
 	# ================
-	# test_sharded_rows_fans_out_an_index_and_keeps_a_table
+	# test_later_table_rows_fans_out_an_index_and_keeps_a_table
 	# ================
-	def test_sharded_rows_fans_out_an_index_and_keeps_a_table(self):
+	def test_later_table_rows_fans_out_an_index_and_keeps_a_table(self):
 		files = {"questdata.txt": table("QuestData_250.txt", "QuestData_500.txt"),
 			"questdata_250.txt": table("1\t1448\tQNO_AR_001"), "questdata_500.txt": table("1\t1449\tQNO_AR_002"),
 			"plain.txt": table("1\t2\t3", "4\t5\t6")}
@@ -120,9 +120,9 @@ class ArabiaQuestTablesTest(unittest.TestCase):
 		def read(name):
 			return files[name.lower()]
 
-		got = quest_tables.sharded_rows(read, "questdata.txt")
+		got = quest_tables.tables.later_table_rows(read, "questdata.txt")
 		self.assertEqual([row[2] for row in got], ["QNO_AR_001", "QNO_AR_002"])
-		self.assertEqual(quest_tables.sharded_rows(read, "plain.txt"), [["1", "2", "3"], ["4", "5", "6"]])
+		self.assertEqual(quest_tables.tables.later_table_rows(read, "plain.txt"), [["1", "2", "3"], ["4", "5", "6"]])
 
 	# ================
 	# test_the_text_symbols_are_the_quests_keys

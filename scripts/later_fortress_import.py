@@ -165,7 +165,7 @@ def map_page_rows(spec, read):
 	if spec.map_page is None:
 		return [], []
 	page = str(spec.map_page)
-	pages = [row[:MAPINFO_COLUMNS] for row in tables.table_rows(read("worldmap_mapinfo.txt"))
+	pages = [row[:MAPINFO_COLUMNS] for row in tables.later_table_rows(read, "worldmap_mapinfo.txt")
 		if len(row) >= MAPINFO_COLUMNS and row[0] == page]
 	if len(pages) != 1:
 		raise ValueError(f"{spec.source_label} worldmap_mapinfo names {len(pages)} rows "
@@ -271,10 +271,12 @@ def staff_standings(spec, later_npcpos, later_id_by_code, native_id_by_code):
 # ================
 # vsro_object_texts
 #
-# The v1.188 client's name rows. Its textdata_object.txt and
-# textdataname.txt are the tables themselves (v1.696 splits them into
-# shards behind a manifest); English sits in column 8. The rows come out
-# in later_object_texts' shape, so native_text_row reads either source.
+# The v1.188 client's name rows. Its textdata_object.txt is a whole
+# table, and its textdataname.txt is an index over textdata_equip&skill,
+# textdata_object and textdata_new (the client's full name table), so the
+# owner reads each file once: object names once, item and skill names
+# too. English sits in column 8. The rows come out in
+# later_object_texts' shape, so native_text_row reads either source.
 # ================
 VSRO_ENGLISH_COLUMN = 8
 VSRO_NAME_TABLES = ("textdata_object.txt", "textdataname.txt")
@@ -282,11 +284,10 @@ VSRO_NAME_TABLES = ("textdata_object.txt", "textdataname.txt")
 
 def vsro_object_texts(read):
 	rows = []
-	for table in VSRO_NAME_TABLES:
-		for row in characters.translation_rows(read(table)):
-			if len(row) <= VSRO_ENGLISH_COLUMN or not row[1]:
-				continue
-			rows.append([row[0], row[1], row[2], "", "", "", "", "", row[VSRO_ENGLISH_COLUMN], ""])
+	for row in tables.later_tables_rows(read, VSRO_NAME_TABLES, characters.translation_rows):
+		if len(row) <= VSRO_ENGLISH_COLUMN or not row[1]:
+			continue
+		rows.append([row[0], row[1], row[2], "", "", "", "", "", row[VSRO_ENGLISH_COLUMN], ""])
 	return rows
 
 
@@ -427,8 +428,7 @@ def add_fortress(spec, native, output, source=None, closure=sky.copy_resource_cl
 		def read(name):
 			return tables.table_text(media, media_index, name.lower())
 
-		later = {row[2]: row for shard in tables.table_rows(read("characterdata.txt"))
-			for row in tables.table_rows(read(shard[0].lower())) if len(row) > 2}
+		later = tables.later_characters(read)
 		codename_by_id = {row[1]: row[2] for row in later.values()}
 		regions = fortress_regions(spec, tables.table_rows(read("regioncode.txt")))
 		zones = fortress_zones(spec, tables.table_rows(read("eventzonedata.txt")))

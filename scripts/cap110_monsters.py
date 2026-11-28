@@ -437,8 +437,8 @@ def client_field_population(placements, refs):
 def client_outdoor_regions(vsro_root):
 	with open(Path(vsro_root) / "Media.pk2", "rb") as handle, mmap.mmap(handle.fileno(), 0, access=mmap.ACCESS_READ) as media:
 		index = tables.archive_index(media)
-		later = {row[2]: row for shard in tables.table_rows(tables.table_text(media, index, "characterdata.txt"))
-			for row in tables.table_rows(tables.table_text(media, index, shard[0]))}
+		later = {row[2]: row for row in tables.later_table_rows(lambda name: tables.table_text(media, index, name),
+			"characterdata.txt")}
 		placements = npcpos_placements(tables.table_text(media, index, "npcpos.txt"), later)
 	admitted = select_references(later, {code: [FIELD_FAMILY] for code in client_claimed_codes(placements)})
 	return {(region & 255, region >> 8) for code, region, x, y, z in placements
@@ -560,63 +560,6 @@ def drop_symboled_rows(rows, symbols):
 
 
 # ================
-# drop_characterinfo_rows
-#
-# A skill-effect text minus its owned characterinfo rows. Section state
-# is tracked so a codename outside the characterinfo section survives.
-# ================
-def drop_characterinfo_rows(effect_text, owned):
-	section, lines = None, []
-	for line in effect_text.splitlines():
-		header = effects.section_name(line)
-		if header is not None:
-			section = header
-		if section == "characterinfo" and line.split("\t")[0] in owned:
-			continue
-		lines.append(line)
-	return "\r\n".join(lines) + "\r\n"
-
-
-# ================
-# characterinfo_codenames
-#
-# The codenames a skill-effect text's characterinfo section describes.
-# ================
-def characterinfo_codenames(effect_text):
-	section, codes = None, set()
-	for line in effect_text.splitlines():
-		header = effects.section_name(line)
-		if header is not None:
-			section = header
-		elif section == "characterinfo" and line:
-			codes.add(line.split("\t")[0])
-	return codes
-
-
-# ================
-# later_characterinfo_rows
-#
-# The later client's characterinfo rows, cut to the native record. Its rows
-# are 16 wide (MOB_SD_MONT: sound, height 3.5, ..., then a 0, a note and two
-# empty columns) where the native ones are 13; the first SKILL_EFFECT_KEPT
-# columns are the same record, so a width test of exactly 13 admitted no row
-# and every species fell back to the default height, its name board at the
-# waist.
-# ================
-def later_characterinfo_rows(effect_text):
-	section, rows = None, []
-	for line in effect_text.splitlines():
-		header = effects.section_name(line)
-		if header is not None:
-			section = header
-			continue
-		columns = line.split("	")
-		if section == "characterinfo" and len(columns) >= characters.SKILL_EFFECT_COLUMNS:
-			rows.append(columns[:characters.SKILL_EFFECT_KEPT])
-	return rows
-
-
-# ================
 # add_monsters
 # ================
 def add_monsters(vsro_root, native, output, source_root=None):
@@ -636,9 +579,7 @@ def add_monsters(vsro_root, native, output, source_root=None):
 			raise ValueError(f"{family['Flag']} requires {FLAG}")
 	if not field:
 		if prior:
-			effect_path = text_root / "skilleffect.txt"
-			effect_text = effects.remove_animation_bases(tables.decode_table(effect_path.read_bytes()), set(prior.get("animationBases", [])))
-			write_atomically(effect_path, b"\xff\xfe" + drop_characterinfo_rows(effect_text, set(prior.get("characterInfo", []))).encode("utf-16-le"))
+			effects.reap_later_effects(text_root, prior)
 			text_path = text_root / "textdataname.txt"
 			write_atomically(text_path, encode_rows(drop_symboled_rows(characters.translation_rows(text_path.read_bytes()), set(prior.get("nameSymbols", [])))))
 		for name in (CHARACTER_SHARD, SKILL_SHARD, *(family["File"] for family in FAMILIES), "cap110-equipment.txt"):
@@ -675,7 +616,7 @@ def add_monsters(vsro_root, native, output, source_root=None):
 		# ================
 		def read(name):
 			return tables.table_text(media, index, name.lower())
-		later = {row[2]: row for shard in tables.table_rows(read("characterdata.txt")) for row in tables.table_rows(read(shard[0]))}
+		later = tables.later_characters(read)
 		claims = {}
 		claimed = {}
 		if source_root is not None:
@@ -750,7 +691,7 @@ def add_monsters(vsro_root, native, output, source_root=None):
 		base_text = (text_root / "textdataname.txt").read_bytes()
 		known = {r[1] for r in characters.translation_rows(base_text) if len(r) > 1}
 		wanted = {r[5] for r in refs.values()} - known
-		texts = [[r[0], r[1], r[2], "", "", r[5], r[4], r[7], r[8], r[9], ""] for r in characters.translation_rows(read("textdata_object.txt")) if len(r) >= 10 and r[1] in wanted]
+		texts = [[r[0], r[1], r[2], "", "", r[5], r[4], r[7], r[8], r[9], ""] for r in tables.later_table_rows(read, "textdata_object.txt", characters.translation_rows) if len(r) >= 10 and r[1] in wanted]
 		if wanted - {r[1] for r in texts}:
 			raise ValueError("missing field monster names")
 		# Name rows a family that is off this build owned leave with it: the
@@ -760,38 +701,21 @@ def add_monsters(vsro_root, native, output, source_root=None):
 		if stale_names:
 			base_text = encode_rows(drop_symboled_rows(characters.translation_rows(base_text), stale_names))
 		write_atomically(text_root / "textdataname.txt", characters.append_rows(base_text, texts))
-		effect_path = text_root / "skilleffect.txt"
-		effect_text = tables.decode_table(effect_path.read_bytes())
-		later_effects = tables.decode_table(read("skilleffect.txt"))
-		selected = effects.select_later_rows(later_effects, {r[3] for r in added} - effects.native_bases(effect_text))
-		unknown = effects.missing_animation_states([line for rows in selected.values() for _, line in rows], effect_text)
-		if unknown:
-			raise ValueError("monster animation states absent natively: " + str(sorted(unknown)))
-		effect_text, _ = effects.merge_skill_effect_text(effect_text, selected)
-		known_info = {r[0] for r in tables.table_rows(effect_text.encode("utf-16")) if r}
-		effect_prefixes = tuple(prefix for family in enabled for prefix in family["Prefixes"])
-		info = [r for r in later_characterinfo_rows(later_effects) if r[0].startswith(effect_prefixes) and r[0] not in known_info]
 		# Same rule for the characterinfo rows: a species no longer
 		# referenced loses its row, one still referenced keeps it.
-		owned_info = characterinfo_codenames(effect_text) & set(refs)
-		stale_info = set(prior.get("characterInfo", [])) - owned_info
-		if stale_info:
-			effect_text = drop_characterinfo_rows(effect_text, stale_info)
-		write_atomically(effect_path, characters.skill_effect_section(effect_text.encode("utf-16"), info))
+		effect_prefixes = tuple(prefix for family in enabled for prefix in family["Prefixes"])
+		presentation = effects.stage_later_effects(effects.LaterEffects(text_root, effects.later_skill_effect_text(read),
+			{r[3] for r in added}, lambda code: code.startswith(effect_prefixes), refs, prior))
 		from cap110_monster_loot import stage_field_equipment
 		loot_count = stage_field_equipment(text_root, source_root)
 		summary = {"enabled": True, "characters": {c: int(r[1]) for c, r in refs.items()}, "skills": {r[3]: int(r[1]) for r in added}, "nests": len(population["Rows"]), "regions": sorted({r["RegionID"] for r in population["Rows"]}),
-		"animationBases": sorted(set(prior.get("animationBases", [])) | {base for rows in selected.values() for base, _ in rows}),
-		# Owned rows are this build's set, not a union with the prior
-		# marker's: a family switched off must shrink both lists so the
-		# next off-path knows exactly what to reap. The rows this build
-		# itself writes (info) enrol in the same build - on a first
-		# enabled build the pre-existing text is the native copy, so
-		# owned_info alone would record none of them and a later off
-		# build could never reap them. animationBases stays a union -
-		# it is the reap list for shared effect vocabulary, which only
-		# the full-off path removes.
-		"characterInfo": sorted(owned_info | {r[0] for r in info}),
+		# The stage pass's own fields, whole (stage_later_effects): its
+		# characterInfo is this build's owned set, so a family switched
+		# off shrinks it; animationBases and effectBases stay unions, the
+		# reap lists only the full-off path (reap_later_effects) removes.
+		# Picking fields here by hand once dropped effectBases, and the
+		# off path left every inserted stage behind (#4730).
+		**presentation,
 			# Owned names follow characters.owned_name_symbols
 			# (#3767): the old union with the base table claimed rows
 			# this build never added, and the off reap drops them.

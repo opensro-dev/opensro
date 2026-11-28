@@ -387,7 +387,7 @@ def add_monsters(v1696_root, native, output, source_root=None):
 		def has(name):
 			return tables.TEXTDATA + name.lower() in index
 
-		later = later_world_import.later_characters(read)
+		later = tables.later_characters(read)
 		refs = {}
 		by_level = {}
 		for code in sorted(later):
@@ -438,7 +438,7 @@ def add_monsters(v1696_root, native, output, source_root=None):
 			"npcRows": len(export.get("npcNests") or []),
 			"transMaskRows": len(export.get("transMask") or []),
 			"transforms": len(transforms["Rows"]),
-			"animationBases": staged["animationBases"], "characterInfo": staged["characterInfo"], "nameSymbols": staged["nameSymbols"],
+			"animationBases": staged["animationBases"], "effectBases": staged["effectBases"], "characterInfo": staged["characterInfo"], "nameSymbols": staged["nameSymbols"],
 			"sourcePopulationSha256": POPULATION_SOURCE_SHA256,
 			"populationFileSha256": sro_pk2.digest((source_root / POPULATION_NAME).read_bytes())}
 		write_atomically(marker, (json.dumps(summary, indent=2) + "\n").encode())

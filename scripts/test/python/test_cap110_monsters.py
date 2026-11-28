@@ -398,11 +398,11 @@ class Cap110MonstersTest(unittest.TestCase):
 			[["1", "UIO_OBJ_MOB_SD_FIELD"], ["3"]])
 		text = ("#section\tskill\r\nMOB_SD_FIELD\ta\r\n#section\tcharacterinfo\r\n"
 			"MOB_SD_FIELD\tb\r\nMOB_TQ_SOLDIER\tc\r\n#section\tother\r\nMOB_TQ_SOLDIER\td\r\n")
-		scrubbed = monsters.drop_characterinfo_rows(text, {"MOB_TQ_SOLDIER"})
+		scrubbed = monsters.effects.drop_characterinfo_rows(text, {"MOB_TQ_SOLDIER"})
 		self.assertIn("MOB_SD_FIELD\tb", scrubbed)
 		self.assertNotIn("MOB_TQ_SOLDIER\tc", scrubbed)
 		self.assertIn("MOB_TQ_SOLDIER\td", scrubbed)
-		self.assertEqual(monsters.characterinfo_codenames(scrubbed), {"MOB_SD_FIELD"})
+		self.assertEqual(monsters.effects.characterinfo_codenames(scrubbed), {"MOB_SD_FIELD"})
 
 	# ================
 	# family_trees
@@ -489,6 +489,9 @@ class Cap110MonstersTest(unittest.TestCase):
 				self.assertEqual(first["characterInfo"], ["MOB_SD_FIELD", "MOB_TQ_SOLDIER"])
 				enrolled = json.loads(marker.read_text(encoding="utf-8"))
 				self.assertEqual(enrolled["characterInfo"], ["MOB_SD_FIELD", "MOB_TQ_SOLDIER"])
+				# The reap lists of every presentation row the build adds,
+				# stages included, or the off path leaves them behind.
+				self.assertEqual((enrolled["animationBases"], enrolled["effectBases"]), ([], []))
 				self.assertIn("UIO_OBJ_MOB_TQ_SOLDIER", enrolled["nameSymbols"])
 				self.assertTrue((text_root / monsters.QINSHI_FILE).exists())
 				with mock.patch.dict(os.environ, {**env, "SRO_CAP110_QINSHI": ""}):
@@ -496,7 +499,7 @@ class Cap110MonstersTest(unittest.TestCase):
 			self.assertEqual(second["characterInfo"], ["MOB_SD_FIELD"])
 			self.assertNotIn("UIO_OBJ_MOB_TQ_SOLDIER", second["nameSymbols"])
 			effect_text = (text_root / "skilleffect.txt").read_bytes().decode("utf-16")
-			self.assertEqual(monsters.characterinfo_codenames(effect_text), {"MOB_NATIVE", "MOB_SD_FIELD"})
+			self.assertEqual(monsters.effects.characterinfo_codenames(effect_text), {"MOB_NATIVE", "MOB_SD_FIELD"})
 			names = (text_root / "textdataname.txt").read_bytes().decode("utf-16")
 			self.assertIn("UIO_OBJ_MOB_SD_FIELD", names)
 			self.assertNotIn("UIO_OBJ_MOB_TQ_SOLDIER", names)

@@ -278,7 +278,7 @@ def add_monsters(v1696_root, native, output):
 		regions = hunting_regions(tables.table_rows(read("regioncode.txt")))
 		if not regions:
 			raise ValueError(f"the v1.696 client has no {REGION_CODE} regions")
-		later = later_world_import.later_characters(read)
+		later = tables.later_characters(read)
 		placements = hunting_placements(read("npcpos.txt"), later, set(regions))
 		codes = sorted({code for code, region, x, y, z in placements})
 		# 49 of the 71 placed kinds already stand in the tree (native
@@ -312,7 +312,7 @@ def add_monsters(v1696_root, native, output):
 			"characters": staged["characters"], "skills": staged["skills"],
 			"families": {"field": {"nests": len(population["Rows"]),
 				"regions": sorted({r["RegionID"] for r in population["Rows"]})}},
-			"animationBases": staged["animationBases"], "characterInfo": staged["characterInfo"], "nameSymbols": staged["nameSymbols"],
+			"animationBases": staged["animationBases"], "effectBases": staged["effectBases"], "characterInfo": staged["characterInfo"], "nameSymbols": staged["nameSymbols"],
 			"sourceRegions": regions}
 		write_atomically(marker, (json.dumps(summary, indent=2) + "\n").encode())
 		return summary

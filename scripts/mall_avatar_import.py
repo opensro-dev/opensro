@@ -607,20 +607,14 @@ def later_text_rows(media, index, name):
 # ================
 # later_table_rows
 #
-# The rows of one later-client table, [] when the client lacks it. v1.696
-# shards its big tables: the named file then lists only `<stem>_<n>.txt`
-# names, and the rows are those files' rows in the listed order.
+# The rows of one later-client table in a Media archive, [] when the
+# client lacks it; a shard index is followed by its owner,
+# import_vsro_alexandria.later_table_rows.
 # ================
 def later_table_rows(media, index, name):
 	if tables.TEXTDATA + name not in index:
 		return []
-	rows = tables.table_rows(tables.table_text(media, index, name))
-	stem = sro_pk2.fold_ascii(name)[:-len(".txt")]
-	shard = re.compile(re.escape(stem) + r"_\d+\.txt", re.IGNORECASE)
-	listed = [row[0].strip() for row in rows if row and row[0].strip()]
-	if not listed or not all(len(row) == 1 and shard.fullmatch(row[0].strip()) for row in rows if row and row[0].strip()):
-		return rows
-	return [row for part in listed for row in tables.table_rows(tables.table_text(media, index, sro_pk2.fold_ascii(part)))]
+	return tables.later_table_rows(lambda part: tables.table_text(media, index, part), name)
 
 
 # The VSRO text layout: service, key, then 13 language cells; 8 is the

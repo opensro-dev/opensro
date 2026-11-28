@@ -102,23 +102,10 @@ def needed_skills(refs):
 
 
 # ================
-# remove_records
-#
-# The text minus the enabled animation records of the given bases. The native
-# table keeps disabled placeholder rows (service 0) under the same names; the
-# shared remove_animation_bases would take those too, so only the enabled rows
-# this tool inserted leave, and the native text returns byte for byte.
-# ================
-def remove_records(text, bases):
-	owned = {line for _section, base, line in effects.animset_rows(text) if base in bases}
-	return "\r\n".join(line for line in text.splitlines() if line not in owned) + "\r\n"
-
-
-# ================
 # remove_owned
 #
 # What a previous on build left: both shards, the skill manifest line and the
-# animation records this tool added (the marker lists their bases).
+# presentation rows this tool added (the marker lists their bases).
 # ================
 def remove_owned(text_root, prior):
 	for name in (CHARACTER_SHARD, SKILL_SHARD):
@@ -127,10 +114,8 @@ def remove_owned(text_root, prior):
 	if manifest.exists():
 		kept = [row for row in tables.table_rows(manifest.read_bytes()) if row[0].lower() != SKILL_SHARD]
 		write_atomically(manifest, monsters.encode_rows(kept))
-	bases = set(prior.get("animationBases", []))
-	effect_path = text_root / "skilleffect.txt"
-	if bases and effect_path.exists():
-		write_atomically(effect_path, b"\xff\xfe" + remove_records(tables.decode_table(effect_path.read_bytes()), bases).encode("utf-16-le"))
+	if prior and (text_root / effects.SKILL_EFFECT_TABLE).exists():
+		effects.reap_later_effects(text_root, prior)
 
 
 # ================
@@ -155,7 +140,7 @@ def add_quest_monsters(vsro_root, native, output):
 		# ================
 		def read(name):
 			return tables.table_text(media, index, name.lower())
-		later = {row[2]: row for shard in tables.table_rows(read("characterdata.txt")) for row in tables.table_rows(read(shard[0]))}
+		later = tables.later_characters(read)
 		characters_native = [row for path in text_root.glob("characterdata_*.txt") if path.name != CHARACTER_SHARD
 			for row in tables.table_rows(path.read_bytes())]
 		refs = select_monsters(later, {row[2] for row in characters_native})
@@ -172,8 +157,8 @@ def add_quest_monsters(vsro_root, native, output):
 		# load_client_skills
 		# ================
 		def load_client_skills():
-			return {int(row[1]): row for shard in tables.table_rows(read("skilldata.txt"))
-				for row in tables.table_rows(read(shard[0])) if len(row) > 3 and row[1].isdigit()}
+			return {int(row[1]): row for row in tables.later_table_rows(read, "skilldata.txt")
+				if len(row) > 3 and row[1].isdigit()}
 		client = load_client_skills()
 		source = monsters.add_native_client_skills([row for row in client.values() if len(row) == SKILL_COLUMNS],
 			needed, native_skills, lambda: client)
@@ -185,27 +170,20 @@ def add_quest_monsters(vsro_root, native, output):
 		missing = {row[NAME_SYMBOL_COLUMN] for row in refs.values()} - known_names
 		if missing:
 			raise ValueError("missing quest monster names: " + ", ".join(sorted(missing)))
-		effect_path = text_root / "skilleffect.txt"
-		effect_text = tables.decode_table(effect_path.read_bytes())
-		selected = effects.select_later_rows(tables.decode_table(read("skilleffect.txt")),
-			{row[3] for row in added} - effects.native_bases(effect_text))
-		unknown = effects.missing_animation_states([line for rows in selected.values() for _, line in rows], effect_text)
-		if unknown:
-			raise ValueError("quest monster animation states absent natively: " + str(sorted(unknown)))
-		effect_text, merged_records = effects.merge_skill_effect_text(effect_text, selected)
+		# A union with the previous build: a rebuild finds its own rows already
+		# in the text, selects none, and must still remember them for the off
+		# path (stage_later_effects keeps the marker's bases).
+		presentation = effects.stage_later_effects(effects.LaterEffects(text_root, effects.later_skill_effect_text(read),
+			{row[3] for row in added}, lambda code: code in refs, refs, prior))
 		write_atomically(text_root / CHARACTER_SHARD, monsters.encode_rows(sorted(refs.values(), key=lambda row: int(row[1]))))
 		write_atomically(text_root / SKILL_SHARD, monsters.encode_rows(added))
 		manifest = [row for row in tables.table_rows((text_root / "skilldata.txt").read_bytes()) if row[0].lower() != SKILL_SHARD]
 		write_atomically(text_root / "skilldata.txt", monsters.encode_rows(manifest + [[SKILL_SHARD]]))
-		write_atomically(effect_path, b"\xff\xfe" + effect_text.encode("utf-16-le"))
 		summary = {"enabled": True, "format": FORMAT, "portOnly": True,
 			"characters": {code: int(row[1]) for code, row in sorted(refs.items())},
 			"alreadyNative": sorted(set(MONSTERS) - set(refs)),
 			"skills": {row[3]: int(row[1]) for row in added},
-			# A union with the previous build: a rebuild finds its own records already
-			# in the text, selects none, and must still remember them for the off path.
-			"animationBases": sorted(set(prior.get("animationBases", [])) | {base for rows in selected.values() for base, _ in rows}),
-			"animationRecords": merged_records,
+			**presentation,
 			"characterShardSha256": sro_pk2.digest((text_root / CHARACTER_SHARD).read_bytes()),
 			"skillShardSha256": sro_pk2.digest((text_root / SKILL_SHARD).read_bytes()),
 			"laterArchiveHash": tables.sha256_of(media)}
