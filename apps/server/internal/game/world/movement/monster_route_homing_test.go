@@ -135,9 +135,12 @@ func TestHomingSearchTableStaysBounded(t *testing.T) {
 	goal := monster.Pose{RegionID: 25000, X: 1350, Z: 900}
 	for i := 0; i < maxHomingSearches+3; i++ {
 		from := monster.Pose{RegionID: 25000, X: 1100, Z: 900 + float64(i)}
-		h.plan(homingKey{from, goal}, func() *routeSearch {
+		route := h.plan(homingKey{from, goal}, func() *routeSearch {
 			return newRouteSearch(from, goal, wallStep(math.Inf(1)), 1<<20)
 		}, 16)
+		if i >= maxHomingSearches && route.Probes() != 0 {
+			t.Fatalf("mover %d had no slot but spent %d probes", i, route.Probes())
+		}
 	}
 	if len(h.open) > maxHomingSearches {
 		t.Fatalf("%d open searches, over the bound %d", len(h.open), maxHomingSearches)
@@ -151,6 +154,52 @@ func TestHomingSearchTableStaysBounded(t *testing.T) {
 	h.mu.Unlock()
 	if _, ok := h.open[idle]; ok {
 		t.Fatal("an idle search outlived the idle bound")
+	}
+}
+
+// More movers home at once than there are slots, each retrying once a
+// tick: every search must settle, each opened once, and no tick may
+// spend more than maxHomingSearches slices (#4736 review: evicting
+// searches in progress livelocked 5 movers on 4 slots).
+func TestHomingSearchMoreMoversThanSlotsAllSettle(t *testing.T) {
+	const movers, slice, budget = 8, 64, 3000
+	var h homingSearches
+	goal := monster.Pose{RegionID: 25000, X: 1350, Z: 900}
+	opened := make([]int, movers)
+	settled := make([]bool, movers)
+	left := movers
+	for tick := 0; left > 0; tick++ {
+		if tick > 10000 {
+			t.Fatalf("%d of %d searches never settled", left, movers)
+		}
+		spent := 0
+		for m := 0; m < movers; m++ {
+			if settled[m] {
+				continue
+			}
+			from := monster.Pose{RegionID: 25000, X: 1100, Z: 900 + float64(m)}
+			route := h.plan(homingKey{from, goal}, func() *routeSearch {
+				opened[m]++
+				return newRouteSearch(from, goal, wallStep(math.Inf(1)), budget)
+			}, slice)
+			if route.Status() == monster.NavigationSearchPending {
+				spent += route.Probes()
+				continue
+			}
+			if route.Status() != monster.NavigationSearchExhausted {
+				t.Fatalf("mover %d settled %v, want exhausted", m, route.Status())
+			}
+			settled[m] = true
+			left--
+		}
+		if spent > maxHomingSearches*(slice+8) {
+			t.Fatalf("tick %d spent %d homing probes, over %d slices", tick, spent, maxHomingSearches)
+		}
+	}
+	for m, n := range opened {
+		if n != 1 {
+			t.Fatalf("mover %d's search was opened %d times, want once", m, n)
+		}
 	}
 }
 

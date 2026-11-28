@@ -16,6 +16,14 @@ moved or re-aimed starts a new one. Searches nobody advances are
 dropped (homingSearchIdleCalls), and at most maxHomingSearches stay
 open, because an exhausted one holds every node it expanded.
 
+A full table never evicts a search in progress: a mover with no slot
+waits (pending, no probes) until one settles or goes idle. Evicting
+instead livelocks once more movers home than there are slots (each new
+search throws out an older one, so none ever settles). Each open
+search is advanced once per tick by its own mover (busy, and the
+mover's one-tick retry), so one tick spends at most maxHomingSearches
+slices on homing.
+
 ===========================================================================
 */
 package movement
@@ -32,9 +40,10 @@ const (
 	// 982 ms, 2026-11-27), so the gorge crossing (117046 probes) settles
 	// in 29 calls and an unreachable home in 64.
 	monsterGlobalRouteSliceProbes = 4096
-	// maxHomingSearches bounds the open searches: an exhausted search
-	// holds up to the whole budget's nodes until it settles.
-	maxHomingSearches = 4
+	// maxHomingSearches bounds the open searches, and with them one
+	// tick's homing work (two slices, about 30 ms) and memory: an
+	// exhausted search holds up to the whole budget's nodes.
+	maxHomingSearches = 2
 	// homingSearchIdleCalls drops a search no call has advanced in this
 	// many homing calls: its mover died, moved or found another way.
 	homingSearchIdleCalls = 512
@@ -70,8 +79,9 @@ type homingSearches struct {
 homingSearches.plan
 
 Advances the search for key by one slice, opening it with start when
-none is open. Returns the settled route, or a pending route carrying
-the probes this call spent.
+none is open and a slot is free. Returns the settled route, or a
+pending route carrying the probes this call spent (none while the
+mover waits for a slot).
 ================
 */
 func (h *homingSearches) plan(key homingKey, start func() *routeSearch, slice int) *monster.NavigationRoute {
@@ -82,12 +92,11 @@ func (h *homingSearches) plan(key homingKey, start func() *routeSearch, slice in
 	}
 	h.dropIdleLocked()
 	entry := h.open[key]
-	if entry == nil {
-		h.makeRoomLocked()
+	if entry == nil && len(h.open) < maxHomingSearches {
 		entry = &homingEntry{}
 		h.open[key] = entry
 	}
-	if entry.busy {
+	if entry == nil || entry.busy {
 		h.mu.Unlock()
 		return monster.UnresolvedNavigationRoute(routeNormalize(key.goal), monster.NavigationSearchPending)
 	}
@@ -122,33 +131,5 @@ func (h *homingSearches) dropIdleLocked() {
 		if !entry.busy && h.calls-entry.lastCall > homingSearchIdleCalls {
 			delete(h.open, key)
 		}
-	}
-}
-
-/*
-================
-homingSearches.makeRoomLocked
-
-Drops the least recently advanced idle search when the table is full.
-With every open search mid-slice the table grows by one instead; the
-next call's idle sweep brings it back.
-================
-*/
-func (h *homingSearches) makeRoomLocked() {
-	if len(h.open) < maxHomingSearches {
-		return
-	}
-	var oldest homingKey
-	found := false
-	for key, entry := range h.open {
-		if entry.busy {
-			continue
-		}
-		if !found || entry.lastCall < h.open[oldest].lastCall {
-			oldest, found = key, true
-		}
-	}
-	if found {
-		delete(h.open, oldest)
 	}
 }
