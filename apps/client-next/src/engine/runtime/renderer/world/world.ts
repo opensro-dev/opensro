@@ -2204,7 +2204,7 @@ export function createWorldRenderer(
 			// the sky / terrain / the-rest split compileWalkTable walks
 			// by. The walk itself is never gated (see setRenderMode).
 			const renderModeHides = ( group: WorldGroup ) =>
-				group.material.sky ? !renderModes.sky : group.ranges ? !renderModes.ground : !renderModes.mapObjects;
+				(!!group.material.terrain && !!group.material.blend) || (group.material.sky ? !renderModes.sky : group.ranges ? !renderModes.ground : !renderModes.mapObjects);
 			const walkGroups = walk.groups, stamp = ++walkStamp;
 			for ( let walked = 0; walked < walkGroups.length; walked++ ) {
 				const group = walkGroups[walked]!, kind = walk.kind[walked]!;
