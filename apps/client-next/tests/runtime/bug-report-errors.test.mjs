@@ -673,12 +673,21 @@ test("a stackless error names its source: our script by path, another by class",
 	const { page, filed } = incidentPage( t );
 	throwStackless( page, ORIGIN + "/src/stall.ts" );
 	page.advance( 1000 );
-	throwStackless( page, "chrome-extension://abcdef/inject.js" );
-	page.advance( 1000 );
-	throwStackless( page, "" );
-	assert.equal( filed.length, 1, "repeats of one message file once" );
+	throwStackless( page, ORIGIN + "/src/stall.ts" );
+	assert.equal( filed.length, 1, "a repeat from one source files once" );
 	assert.deepEqual( filed[0].frames, [ "    at /src/stall.ts:7:3" ] );
 	assert.equal( filed[0].foreign, false );
+});
+
+test("a foreign stackless error filed first never swallows one of ours", t => {
+	const { page, filed } = incidentPage( t );
+	throwStackless( page, "chrome-extension://abcdef/inject.js" );
+	page.advance( 1000 );
+	throwStackless( page, ORIGIN + "/src/stall.ts" );
+	assert.equal( filed.length, 2, "each source files its own failure" );
+	assert.equal( filed[0].foreign, true );
+	assert.deepEqual( filed[1].frames, [ "    at /src/stall.ts:7:3" ] );
+	assert.equal( filed[1].foreign, false );
 });
 
 test("a stackless error thrown by an extension files as foreign", t => {

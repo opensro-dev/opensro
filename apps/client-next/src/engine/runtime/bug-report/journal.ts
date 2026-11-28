@@ -178,6 +178,23 @@ function errorEventFields(
 
 /*
 ================
+errorSignature
+
+What makes two uncaught failures the same one: the message and the
+stack's first frame. A stackless failure has no stack frame, so its
+filed source frame stands in (sourceFields): without it every stackless
+"Maximum call stack size exceeded" of a session shares one signature,
+and an extension's that filed first would swallow a later one of ours
+(#4752 review). A true repeat from one source still counts up.
+================
+*/
+function errorSignature( fields: ReturnType<typeof errorEventFields> ): string {
+	const where = fields.stack ? fields.stack.split( "\n" )[1] : (fields.frames ?? fields.foreign)?.[0];
+	return fields.message + "\n" + (where ?? "");
+}
+
+/*
+================
 recorded
 
 An error's journal fields without the incident-only foreign classes: the
@@ -543,7 +560,7 @@ export function createJournal( canvas: HTMLCanvasElement, options: JournalOption
 	*/
 	function recordError( error: unknown, fallback: string, source?: ErrorSource ) {
 		const fields = errorEventFields( error, fallback, scriptPaths(), source ),
-			signature = fields.message + "\n" + (fields.stack?.split( "\n" )[1] ?? ""),
+			signature = errorSignature( fields ),
 			atMs = performance.now(),
 			kept = keptErrors.get( signature );
 		if ( kept ) {
