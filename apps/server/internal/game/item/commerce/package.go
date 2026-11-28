@@ -179,7 +179,9 @@ bundle of several items, whose title needs no count.
 ================
 */
 func packageCount(contents []Content) uint16 {
-	if len(contents) != 1 || !inventory.IsEtcStackableTypeFlags(contents[0].Ref.TypeFlags()) || contents[0].Data <= 1 {
+	// packageContent already refuses an expendable's Data above a u16;
+	// the bound is restated here so the narrowing below stands on its own.
+	if len(contents) != 1 || !inventory.IsEtcStackableTypeFlags(contents[0].Ref.TypeFlags()) || contents[0].Data <= 1 || contents[0].Data > math.MaxUint16 {
 		return 0
 	}
 	return uint16(contents[0].Data)

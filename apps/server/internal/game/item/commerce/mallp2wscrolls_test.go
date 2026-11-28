@@ -83,6 +83,7 @@ func TestPackageCountNamesThePack(t *testing.T) {
 	}{
 		{"pack", []Content{{Ref: scroll, Stack: 50, Data: 11}}, 11},
 		{"single", []Content{{Ref: scroll, Stack: 50, Data: 1}}, 0},
+		{"past a u16", []Content{{Ref: scroll, Stack: 50, Data: 70000}}, 0},
 		{"buy by stack", []Content{{Ref: scroll, Stack: 50}}, 0},
 		{"equipment", []Content{{Ref: sword, Stack: 1, Data: 40}}, 0},
 		{"bundle", []Content{{Ref: scroll, Stack: 50, Data: 11}, {Ref: scroll, Stack: 50, Data: 11}}, 0},
