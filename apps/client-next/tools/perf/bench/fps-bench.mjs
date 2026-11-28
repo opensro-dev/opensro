@@ -91,8 +91,8 @@ main thread's frame and world-preparation time per frame. Options add:
   --cpu-rate N  apply Chrome CPU throttling after warm-up (for example 4).
   --frame-limit N  use the player's presentation limit; default 0 preserves
                   the uncapped throughput benchmark.
-  --expect-commit SHA  fail the run unless the served bundle's license
-            banner names this commit (core/build-identity.mjs): an A/B side
+  --expect-commit SHA  fail the run unless the served bundle's stamped
+            revision is this commit (core/build-identity.mjs): an A/B side
             served by a stale preview is refused, not measured.
 
 Read the captures with tools/perf/analyze (profile.mjs, trace.mjs).
