@@ -398,10 +398,28 @@ present
 			tooltip,
 			nativeFields: tooltip?.fields,
 			magicReferences: itemMagicDefinitions( item.magic, magicRefs, tooltip?.fields.itemClass ),
-			...(linked ? { linkedStorage: linked } : {})
+			...(linked ? { linkedStorage: linked } : {}),
+			...gachaPrizeOf( item )
 		};
 		presentations.set( item, result );
 		return result;
+	}
+	/*
+	================
+	gachaPrizeOf
+
+	v1.696 B89F6A..B8A1C5: a 3.3.14 card with at least two params gets the
+	"Can be changed to [name][quantity]" line from key 0 (the prize's
+	RefObjID) and key 1 (its quantity). The v1.150 client has no such line,
+	so it is resolved only while the v1.696 pool is published.
+	================
+	*/
+	function gachaPrizeOf( item: InventoryItem ): { gachaPrize?: InventoryItem["gachaPrize"]; } {
+		if ( !gacha.pool() || !isGachaVoucher( item.typeFlags ) || item.magic.length < 2 ) return {};
+		const reward = Number( BigInt( item.magic[0]! ) & 0xffffffffn );
+		return {
+			gachaPrize: { name: names.get( reward ) ?? "", quantity: Number( BigInt( item.magic[1]! ) & 0xffffffffn ) }
+		};
 	}
 	/*
 	================
