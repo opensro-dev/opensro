@@ -395,6 +395,7 @@ def remove_owned(spec, native, output, prior):
 			write_atomically(npcpos_path, monsters.encode_rows(
 				[row for row in tables.table_rows(npcpos_path.read_bytes()) if tuple(row[:5]) not in standings]))
 	(text_root / spec.character_shard).unlink(missing_ok=True)
+	monsters.unlist_shard(text_root, "characterdata.txt", spec.character_shard)
 	(output / NAVMESH / spec.portonly_ifo).unlink(missing_ok=True)
 	for relative in prior.get("files", []):
 		restore_or_unlink(native, output, relative)
@@ -480,8 +481,10 @@ def add_fortress(spec, native, output, source=None, closure=sky.copy_resource_cl
 		if refs:
 			write_atomically(text_root / spec.character_shard,
 				monsters.encode_rows(sorted(refs.values(), key=lambda row: int(row[1]))))
+			monsters.list_shard(text_root, "characterdata.txt", spec.character_shard)
 		else:
 			(text_root / spec.character_shard).unlink(missing_ok=True)
+			monsters.unlist_shard(text_root, "characterdata.txt", spec.character_shard)
 
 		# The event zones and the fortress row join their tables by
 		# identity; rows already present (a reused variant root) stand.

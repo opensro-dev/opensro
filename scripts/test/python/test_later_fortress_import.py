@@ -172,6 +172,7 @@ class EngineTest(unittest.TestCase):
 			(text_root / "siegefortress.txt").write_bytes(monsters.encode_rows(
 				[["1", "1", "FORTRESS_JANGAN"], ["1", "3", "FORTRESS_HOTAN"]]))
 			(text_root / hotan.CHARACTER_SHARD).write_bytes(b"rows")
+			(text_root / "characterdata.txt").write_bytes(monsters.encode_rows([["characterdata_5000.txt"], [hotan.CHARACTER_SHARD]]))
 			navmesh = output / "Data_extracted" / "navmesh"
 			navmesh.mkdir(parents=True)
 			(navmesh / hotan.PORTONLY_IFO).write_bytes(b"JMXVOBJI1000\n0\n")
@@ -181,6 +182,8 @@ class EngineTest(unittest.TestCase):
 			self.assertEqual([row[2] for row in tables.table_rows((text_root / "siegefortress.txt").read_bytes())],
 				["FORTRESS_JANGAN"])
 			self.assertFalse((text_root / hotan.CHARACTER_SHARD).exists())
+			# The index line goes with the shard: a listed but missing shard stops every read.
+			self.assertEqual(tables.table_rows((text_root / "characterdata.txt").read_bytes()), [["characterdata_5000.txt"]])
 			self.assertFalse((navmesh / hotan.PORTONLY_IFO).exists())
 
 
