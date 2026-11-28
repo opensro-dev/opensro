@@ -19,6 +19,7 @@ import {
 	type MusicRequest
 } from "@/engine/foundation/audio/music";
 import type { AssetOwner } from "@/engine/contracts/assets";
+import { musicElementError } from "@/engine/foundation/audio/music-error";
 const NATIVE_MINIMUM_AMPLITUDE = audioAmplitude( 1, false );
 // One compressed stream for title and mission BGM. No decoded long-track cache.
 /*
@@ -253,7 +254,9 @@ step
 						url = URL.createObjectURL( new Blob( [ result.buffer ], { type: "audio/mpeg" } ) );
 						el.src = url;
 						el.onerror = () => {
-							if ( !disposed && element === el ) error = "Music could not be decoded: " + current?.path;
+							// The browser's MediaError names the reason (#4581): a dead
+							// output is not a broken track.
+							if ( !disposed && element === el ) error = musicElementError( el.error, current?.path );
 						};
 					} catch ( reason ) {
 						error = String( reason );
