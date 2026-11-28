@@ -770,8 +770,8 @@ test("an open dungeon flag's menu hangs its floors below the icon, 155 x 22 each
 
 test("a floor menu past the map's edge is seen whole and answers only where it is seen", async () => {
 	const { reverseMapButtons } = await import( "../../src/engine/runtime/ui/hud/reverse-map-buttons.ts" );
-	const ui = /** @type {(rect: number[]) => import("../../src/engine/contracts/ui").UiRect} */ (
-		rect => /** @type {import("../../src/engine/contracts/ui").UiRect} */ (rect)
+	const ui = /** @type {(rect: [number, number, number, number]) => import("../../src/engine/contracts/ui").UiRect} */ (
+		rect => rect
 	);
 	// The flag sits near the map pane's bottom edge (the pane ends at y 260),
 	// with a second point half outside its right edge (it ends at x 400).
