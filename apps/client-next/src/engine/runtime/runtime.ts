@@ -18,6 +18,7 @@ import { createPresentationRandom } from "./random/random";
 import { worldCursor } from "@/engine/foundation/ui/world-cursor";
 import { experimentalGameplay, experimentalVideo } from "@/engine/foundation/ui/experimental-options";
 import { blindableCharacter, blindableCompanion } from "@/engine/foundation/ui/name-visibility";
+import { createHoverCadence } from "@/engine/foundation/gameplay/hover-cadence";
 import { sampleWorldClock } from "@/engine/foundation/gameplay/world-clock";
 import { createWorldDoubleClick } from "@/engine/foundation/gameplay/world-double-click";
 import type { UniqueNotifySettings } from "@/engine/foundation/gameplay/unique-status";
@@ -889,6 +890,7 @@ export function startRuntime(
 			}
 		}
 		let worldPointer: readonly [number, number] | null = null, hoveredEntity: number | null = null;
+		const hoverCadence = createHoverCadence();
 		let readySent = false;
 		// The display stopped asking for frames while the document stays visible.
 		let starved = false;
@@ -1565,15 +1567,20 @@ export function startRuntime(
 				markStage( "render-preparation-submit" );
 				renderer.setTeleportGates( worldPresented ? presentation.entities() : [] );
 				const hoverLocal = presentation.gameplay()?.localGid,
-					hoverGid = visible && diagnostics.hoverPicking !== false && worldPointer &&
-							frontendState.phase === "world" &&
-							hoverLocal &&
-							!ui.blocks(
-								worldPointer[0] * platform.readUiViewport().width,
-								worldPointer[1] * platform.readUiViewport().height
-							) ?
-						renderer.pickEntity( worldPointer[0], worldPointer[1], hoverLocal, input.blindHeld() ) :
-						null;
+					hoverAllowed = visible && diagnostics.hoverPicking !== false && worldPointer &&
+						frontendState.phase === "world" &&
+						hoverLocal &&
+						!ui.blocks(
+							worldPointer[0] * platform.readUiViewport().width,
+							worldPointer[1] * platform.readUiViewport().height
+						);
+				if ( !hoverAllowed ) hoverCadence.reset();
+				// hover-cadence.ts: picked at the native 60 Hz, not every frame.
+				const hoverGid = !hoverAllowed ?
+					null :
+					hoverCadence.due( now ) ?
+					renderer.pickEntity( worldPointer![0], worldPointer![1], hoverLocal!, input.blindHeld() ) :
+					hoveredEntity;
 				hoveredEntity = hoverGid;
 				platform.presentWorldCursor(
 					ui.cursor() ?? worldCursor(

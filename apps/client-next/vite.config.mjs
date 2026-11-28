@@ -68,6 +68,9 @@ export default defineConfig( ( { mode } ) => {
 		build: bench ?
 			{
 				outDir: "temp/artifacts/dist-bench",
+				// The release build's source maps, so a profile of the bench bundle
+				// names client source (tools/perf/analyze/profile.mjs --maps).
+				sourcemap: true,
 				// The page entry is index.html, so bootstrap.ts is only a module it
 				// imports and its exports are tree-shaken. Naming it an entry too
 				// keeps its signature; the page still loads it exactly once.
