@@ -12,6 +12,7 @@ modules the client ships, not a per-test bundle.
 */
 import "../helpers/native-source-loader.mjs";
 import { WEATHER_COMMANDS } from "../helpers/weather-commands.mjs";
+import { OBJECT_CULL_COMMANDS } from "../helpers/cull-commands.mjs";
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { defined } from "../helpers/defined.mjs";
@@ -86,7 +87,8 @@ test("stationary retained selection still publishes Cerberus palette entry and e
 		release() {},
 		updateIndices() {},
 		updatePositions() {},
-		...WEATHER_COMMANDS
+		...WEATHER_COMMANDS,
+		...OBJECT_CULL_COMMANDS
 	};
 	const images = {
 		upload() {
@@ -160,7 +162,8 @@ test("dungeon water executes through scene admission and block selection, with p
 		},
 		updateIndices() {},
 		updatePositions() {},
-		...WEATHER_COMMANDS
+		...WEATHER_COMMANDS,
+		...OBJECT_CULL_COMMANDS
 	};
 	const images = {
 		upload( first, frames ) {

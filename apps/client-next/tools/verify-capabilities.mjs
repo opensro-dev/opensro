@@ -93,6 +93,7 @@ const particles = runtime + "renderer/device/particles.ts";
 const indexCull = runtime + "renderer/device/index-cull.ts";
 // The resident GPU weather drops (#4692).
 const weatherParticles = runtime + "renderer/device/weather-particles.ts";
+const objectCull = runtime + "renderer/device/object-cull.ts";
 // The particle pass's resident material frame tables (#4692).
 const particleMaterials = runtime + "renderer/device/particle-materials.ts";
 const geometryUploads = runtime + "renderer/device/geometry-uploads.ts";
@@ -375,6 +376,18 @@ for (
 		"clearBuffer"
 	]
 ) rules[name] ??= [], rules[name].push( weatherParticles );
+// The world object cull (object-cull.ts): its arguments, records and view,
+// tested by geometry preparation on the frame encoder.
+for (
+	const name of [
+		"createShaderModule",
+		"createComputePipelineAsync",
+		"createBuffer",
+		"createBindGroup",
+		"writeBuffer",
+		"beginComputePass"
+	]
+) rules[name] ??= [], rules[name].push( objectCull );
 // Its material tables: a store's buffer, written when a table first appears.
 for ( const name of [ "createBuffer", "writeBuffer" ] ) rules[name].push( particleMaterials );
 // Geometry preparation encodes device-owned skinning and shadow prepasses on

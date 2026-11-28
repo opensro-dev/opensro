@@ -137,7 +137,7 @@ Normalised planes of a prepareViewFrustum array (a, b, c, d, length each)
 into view from float first.
 ================
 */
-function writePlanes( view: Float32Array, first: number, planes: Float64Array ) {
+export function writePlanes( view: Float32Array, first: number, planes: Float64Array ) {
 	for ( let plane = 0; plane < PLANES; plane++ ) {
 		const at = plane * 5, length = planes[at + 4]! || 1;
 		for ( let k = 0; k < 4; k++ ) view[first + plane * 4 + k] = planes[at + k]! / length;

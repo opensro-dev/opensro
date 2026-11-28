@@ -15,8 +15,12 @@ import type {
 	ImageDraw,
 	GeometryDraw,
 	UiDraw,
-	FlareDraw
+	FlareDraw,
+	PersistentWorld
 } from "@/engine/runtime/renderer/internal/gpu-contract";
+// Draws a static block bundle records (recordPersistent).
+const PERSISTENT_RUN = 64;
+
 import { BLOOM_BLEND_BYTE } from "@/engine/foundation/rendering/blend-state";
 import { issueIndexedDraw } from "@/engine/runtime/renderer/device/indexed-draw";
 /*
@@ -103,6 +107,68 @@ export function createFrame( commands: FrameCommands ): FrameOwner {
 	}
 	/*
 	================
+	encodeRun
+
+	One bundle drawing run in order, each state set only when it changes.
+	================
+	*/
+	function encodeRun( run: readonly GeometryDraw[] ): GPURenderBundle {
+		const encoder = commands.createBundleEncoder( true, true );
+		let pipeline: GPURenderPipeline | undefined, binding: GPUBindGroup | undefined;
+		let vertices: GPUBuffer | undefined, indices: GPUBuffer | undefined;
+		for ( const draw of run ) {
+			if ( pipeline !== draw.pipeline ) {
+				encoder.setPipeline( draw.pipeline );
+				pipeline = draw.pipeline;
+			}
+			if ( binding !== draw.binding ) {
+				encoder.setBindGroup( 0, draw.binding );
+				binding = draw.binding;
+			}
+			if ( vertices !== draw.vertices ) {
+				encoder.setVertexBuffer( 0, draw.vertices );
+				vertices = draw.vertices;
+			}
+			if ( indices !== draw.indices ) {
+				encoder.setIndexBuffer( draw.indices, "uint32" );
+				indices = draw.indices;
+			}
+			issueIndexedDraw( encoder, draw );
+		}
+		return encoder.finish();
+	}
+	// Bundles recorded so far: the walked lists' runs and the static runs.
+	let geometryRecords = 0, persistentRecords = 0;
+	// Each static run's bundles (PersistentWorld), kept while the runs'
+	// revision and the watched draws' state revision hold.
+	const persistentBundles = new WeakMap<
+		readonly GeometryDraw[],
+		{ revision: number; drawRevision: number; bundles: GPURenderBundle[]; }
+	>();
+	/*
+	================
+	recordPersistent
+
+	Appends one static run's bundles, re-recorded only when the runs or a
+	watched draw's binding, pipeline or arguments buffer changed: the counts
+	are the GPU's (object-cull.ts), so no per-draw comparison is needed.
+	================
+	*/
+	function recordPersistent( bundles: GPURenderBundle[], block: readonly GeometryDraw[], world: PersistentWorld ) {
+		let cached = persistentBundles.get( block );
+		if ( !cached || cached.revision !== world.revision || cached.drawRevision !== world.drawRevision ) {
+			const recorded: GPURenderBundle[] = [];
+			for ( let start = 0; start < block.length; start += PERSISTENT_RUN ) {
+				recorded.push( encodeRun( block.slice( start, start + PERSISTENT_RUN ) ) );
+				persistentRecords++;
+			}
+			cached = { revision: world.revision, drawRevision: world.drawRevision, bundles: recorded };
+			persistentBundles.set( block, cached );
+		}
+		for ( const bundle of cached.bundles ) bundles.push( bundle );
+	}
+	/*
+	================
 	recordGeometry
 
 	Appends to bundles the retained bundles that replay first and draws in
@@ -129,36 +195,15 @@ export function createFrame( commands: FrameCommands ): FrameOwner {
 			let cached = geometryBundles.get( head );
 			if ( !cached || !bundleCurrent( cached, start, end ) ) {
 				const run = live.slice( start, end ), counts: number[] = [];
-				const encoder = commands.createBundleEncoder( true, true );
-				let pipeline: GPURenderPipeline | undefined, binding: GPUBindGroup | undefined;
-				let vertices: GPUBuffer | undefined, indices: GPUBuffer | undefined;
-				for ( const draw of run ) {
-					counts.push( draw.indexCount, draw.instanceCount );
-					if ( pipeline !== draw.pipeline ) {
-						encoder.setPipeline( draw.pipeline );
-						pipeline = draw.pipeline;
-					}
-					if ( binding !== draw.binding ) {
-						encoder.setBindGroup( 0, draw.binding );
-						binding = draw.binding;
-					}
-					if ( vertices !== draw.vertices ) {
-						encoder.setVertexBuffer( 0, draw.vertices );
-						vertices = draw.vertices;
-					}
-					if ( indices !== draw.indices ) {
-						encoder.setIndexBuffer( draw.indices, "uint32" );
-						indices = draw.indices;
-					}
-					issueIndexedDraw( encoder, draw );
-				}
+				for ( const draw of run ) counts.push( draw.indexCount, draw.instanceCount );
 				cached = {
 					draws: run,
 					counts,
 					bindings: run.map( draw => draw.binding ),
 					indirects: run.map( draw => draw.indirect ),
-					bundle: encoder.finish()
+					bundle: encodeRun( run )
 				};
+				geometryRecords++;
 				geometryBundles.set( head, cached );
 			}
 			bundles.push( cached.bundle );
@@ -167,6 +212,7 @@ export function createFrame( commands: FrameCommands ): FrameOwner {
 		}
 	}
 	return {
+		stats: () => ({ geometryRecords, persistentRecords }),
 		/*
 		================
 		draw
@@ -190,7 +236,8 @@ export function createFrame( commands: FrameCommands ): FrameOwner {
 			bloom,
 			reflection,
 			experimental,
-			presentation
+			presentation,
+			persistent
 		) {
 			const sceneScale = experimental?.sceneScale;
 			const msaa = experimental?.msaa;
@@ -266,7 +313,18 @@ export function createFrame( commands: FrameCommands ): FrameOwner {
 			// A new set, not a cleared one: both anchor sets live for many
 			// frames, and a long-lived set's next table is old-generation garbage.
 			nextAnchors = new Set();
-			recordGeometry( bundles, world, geometry );
+			if ( persistent ) {
+				// Each static run between the walked draws ordered around it.
+				let next = 0, first = geometry;
+				for ( let k = 0; k < persistent.blocks.length; k++ ) {
+					const at = persistent.at[k]!;
+					recordGeometry( bundles, world.slice( next, at ), first );
+					first = undefined;
+					recordPersistent( bundles, persistent.blocks[k]!, persistent );
+					next = at;
+				}
+				recordGeometry( bundles, world.slice( next ), first );
+			} else recordGeometry( bundles, world, geometry );
 			const previousAnchors = anchors;
 			anchors = nextAnchors;
 			nextAnchors = previousAnchors;

@@ -15,6 +15,7 @@ pinned by world-renderer.test.mjs.
 ===========================================================================
 */
 import "../helpers/native-source-loader.mjs";
+import { OBJECT_CULL_COMMANDS } from "../helpers/cull-commands.mjs";
 import { pathToFileURL as sourceFileUrl } from "node:url";
 import { test } from "node:test";
 import assert from "node:assert/strict";
@@ -62,7 +63,7 @@ test("weather emits only in an outdoor scene", () => {
 
 test("a cave scene without authored visibility still takes its ambient colour", () => {
 	const identity = () => new Float32Array( [ 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1 ] );
-	const geometry = { upload: () => ({}), release() {}, updateInstances: draw => draw },
+	const geometry = { ...OBJECT_CULL_COMMANDS, upload: () => ({}), release() {}, updateInstances: draw => draw },
 		textures = { upload: () => ({}), release() {} };
 	const frameAt = originRegion => {
 		const world = createWorldRenderer( undefined, undefined, createPresentationRandom( 1 ) );

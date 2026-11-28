@@ -41,7 +41,7 @@ import { createSurface } from "./surface/surface";
 import { createFrame } from "./frame/frame";
 import { createStaleDrawGuard } from "./frame/stale-draws";
 import type { Renderer } from "@/engine/contracts/runtime";
-import type { SurfaceOwner, FrameOwner, ImageDraw, GeometryDraw } from "./internal/gpu-contract";
+import type { SurfaceOwner, FrameOwner, ImageDraw, GeometryDraw, WorldPersistent } from "./internal/gpu-contract";
 import { hypot3 } from "@/engine/foundation/math/hypot";
 import type { UiTexture } from "@/engine/contracts/texture";
 import { regionRelativeXZ, worldAudioPosition } from "@/engine/foundation/world/world-space";
@@ -53,6 +53,28 @@ const ENVIRONMENT_AMBIENT = 12;
 const ENVIRONMENT_SUN_DIRECTION = 84;
 const INVENTORY_DOLL_WIDTH = 176;
 const INVENTORY_DOLL_HEIGHT = 318;
+
+/*
+================
+withStaticRuns
+
+The world's draws with the static object runs back at their places
+(WorldPersistent.at), in native draw order: for a pass that draws its own
+list (the water mirror), not for the frame, which records the runs apart.
+================
+*/
+function withStaticRuns( draws: readonly GeometryDraw[], persistent: WorldPersistent | undefined ): GeometryDraw[] {
+	if ( !persistent ) return [ ...draws ];
+	const merged: GeometryDraw[] = [];
+	let next = 0;
+	for ( let k = 0; k < persistent.blocks.length; k++ ) {
+		const at = persistent.at[k]!;
+		for ( ; next < at; next++ ) merged.push( draws[next]! );
+		for ( const draw of persistent.blocks[k]! ) merged.push( draw );
+	}
+	for ( ; next < draws.length; next++ ) merged.push( draws[next]! );
+	return merged;
+}
 
 /*
 ================
@@ -143,6 +165,8 @@ export function createRenderer(
 	let preview: import("@/engine/contracts/scene").WorldCamera | null = null;
 	let gates: readonly import("@/engine/contracts/world").EntityState[] = [];
 	let disposed = false, failure: string | null = null, failureStack: string | null = null;
+	// The static block revision whose draws were last checked live.
+	let checkedPersistent = -1;
 	// A memory refusal the frame met (a readback the GPU could not stage,
 	// a target it could not allocate) is the device's to cure: hand it
 	// down so the paced replacement runs instead of ending here (#2866).
@@ -523,7 +547,7 @@ export function createRenderer(
 		setWorldCameraCollision: enabled => world.setCameraCollision( enabled ),
 		setWorldTexture: ( path, image, alpha ) => world.texture( path, image, alpha ),
 		neededWorldTextures: () => world.neededTextures(),
-		worldStats: () => world.stats(),
+		worldStats: () => ({ ...world.stats(), bundleRecords: frame?.stats?.() }),
 		/*
 		================
 		setGeometryInstances
@@ -961,11 +985,22 @@ export function createRenderer(
 						[ scene.environment[84]!, scene.environment[85]!, scene.environment[86]! ] :
 						[ 0.70710678, 0.70710678, 0 ];
 				sunShadow.prepare( shadowOn, scene.camera.eye, shadowLight );
-				const opaqueWorld = [
+				// The static object runs (world.ts) are recorded apart among the
+				// opaque objects (PersistentWorld): their draws are checked once a
+				// revision, never listed or compared per frame.
+				const persistent = scene.persistent,
+					ground = [
 						...terrainDraws,
 						...staleDraws.live( "ground-decals", scene.groundDecalDraws ?? [] ),
 						...staleDraws.live( "sun-markers", scene.sunMarkerDraws ?? [] ),
-						...liveShadows,
+						...liveShadows
+					];
+				if ( persistent && persistent.revision !== checkedPersistent ) {
+					for ( const block of persistent.blocks ) staleDraws.live( "world-static", block );
+					checkedPersistent = persistent.revision;
+				}
+				const opaqueWorld = [
+						...ground,
 						...opaqueDraws,
 						...(preview ? [] : liveCharacters.filter( draw => !draw.blended ))
 					],
@@ -1005,12 +1040,17 @@ export function createRenderer(
 					frameId,
 					deferredPass,
 					device.bloom( sceneWidth, sceneHeight, !preview && video.records[video.active][11] === 1 ),
-					device.geometry()!.waterReflection( {
-						matrix: scene.reflectionMatrix,
-						height: scene.waterHeight ?? 0,
-						above: scene.camera.eye[1] >= (scene.waterHeight ?? 0),
-						seconds: timeSeconds
-					}, [ ...scene.draws, ...(preview ? [] : liveCharacters) ] ),
+					device.geometry()!.waterReflection(
+						{
+							matrix: scene.reflectionMatrix,
+							height: scene.waterHeight ?? 0,
+							above: scene.camera.eye[1] >= (scene.waterHeight ?? 0),
+							seconds: timeSeconds
+						},
+						scene.reflectionMatrix ?
+							[ ...withStaticRuns( scene.draws, persistent ), ...(preview ? [] : liveCharacters) ] :
+							[]
+					),
 					{
 						hdr: device.hdr( sceneWidth, sceneHeight, experimental.hdrToneMap ),
 						msaa: device.msaa( sceneWidth, sceneHeight, experimental.msaa ),
@@ -1033,7 +1073,11 @@ export function createRenderer(
 							undefined,
 						sunShadow,
 						casters: shadowOn ?
-							[ ...opaqueDraws, ...(preview ? [] : liveCharacters.filter( draw => !draw.blended )) ] :
+							[
+								...(persistent?.blocks.flat() ?? []),
+								...opaqueDraws,
+								...(preview ? [] : liveCharacters.filter( draw => !draw.blended ))
+							] :
 							[],
 						// Ambient occlusion (experimental, port-only; #2094):
 						// prepared against the scene and camera like the
@@ -1053,7 +1097,17 @@ export function createRenderer(
 							brightnessGamma( video.brightness )
 						)
 					},
-					targetSurface
+					targetSurface,
+					persistent ?
+						{
+							blocks: persistent.blocks,
+							// The runs sit among the opaque objects, which begin at
+							// draws index terrainEnd and world index ground.length.
+							at: persistent.at.map( index => ground.length + index - (scene.terrainEnd ?? 0) ),
+							revision: persistent.revision,
+							drawRevision: device.geometry()!.drawRevision()
+						} :
+						undefined
 				);
 				probe?.renderMark( "submit" );
 				if ( pending ) {

@@ -392,18 +392,6 @@ export function createTerrainLayers() {
 		},
 		/*
 		================
-		view
-
-		The frame's frustum and the water mirror's, which the cull pass tests
-		every layer's ranges against (index-cull.ts). Without a layer there is
-		nothing to cull.
-		================
-		*/
-		view( geometry: GeometryCommands, main: Float64Array, mirror: Float64Array | null ) {
-			if ( layers.size ) geometry.cullView( main, mirror );
-		},
-		/*
-		================
 		flush
 
 		Sends the range table of every layer whose candidates changed: each

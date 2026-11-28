@@ -10,6 +10,7 @@ modules the client ships, not a per-test bundle.
 ===========================================================================
 */
 import "../helpers/native-source-loader.mjs";
+import { OBJECT_CULL_COMMANDS } from "../helpers/cull-commands.mjs";
 import { pathToFileURL as sourceFileUrl } from "node:url";
 import { test } from "node:test";
 import assert from "node:assert/strict";
@@ -40,7 +41,7 @@ test("flare projection handles horizon, behind-camera and viewport gates without
 });
 test("flare resources participate in atomic scene admission, recovery and retirement", () => {
 	const world = createWorldRenderer(), closed = [], released = [];
-	const geometry = { upload: () => ({}), release() {} },
+	const geometry = { ...OBJECT_CULL_COMMANDS, upload: () => ({}), release() {} },
 		textures = { upload: () => ({}), release: draw => released.push( draw ) };
 	const paths = Array.from( { length: 8 }, ( _, i ) => "/assets/flare/" + i ),
 		scene = {

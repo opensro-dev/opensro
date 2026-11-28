@@ -11,6 +11,7 @@ modules the client ships, not a per-test bundle.
 */
 import "../helpers/native-source-loader.mjs";
 import { WEATHER_COMMANDS } from "../helpers/weather-commands.mjs";
+import { OBJECT_CULL_COMMANDS, submittedDraws, visibleDraws } from "../helpers/cull-commands.mjs";
 import { pathToFileURL as sourceFileUrl } from "node:url";
 import { test } from "node:test";
 import assert from "node:assert/strict";
@@ -33,6 +34,7 @@ const identity = () => new Float32Array( [ 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0
 test("retail object visibility advances offscreen and with a stationary camera, and survives GPU loss", () => {
 	const world = createWorldRenderer( undefined, undefined, createPresentationRandom( 1 ) ), uploads = [];
 	const geometry = {
+		...OBJECT_CULL_COMMANDS,
 		upload: () => ({}),
 		release() {},
 		/*
@@ -59,10 +61,10 @@ test("retail object visibility advances offscreen and with a stationary camera, 
 	} ];
 	world.scene( value );
 	world.camera( { eye: [ 0, 0, 0 ], target: [ 0, 0, -1 ], near: 1, far: 1000, fov: Math.PI / 3 } );
-	assert.equal( world.prepare( geometry, textures, 1, 0 ).draws.length, 0 );
-	assert.equal( world.prepare( geometry, textures, 1, .25 ).draws.length, 0 );
+	assert.equal( visibleDraws( world.prepare( geometry, textures, 1, 0 ) ).length, 0 );
+	assert.equal( visibleDraws( world.prepare( geometry, textures, 1, .25 ) ).length, 0 );
 	world.invalidate();
-	assert.equal( world.prepare( geometry, textures, 1, .5 ).draws.length, 0 );
+	assert.equal( visibleDraws( world.prepare( geometry, textures, 1, .5 ) ).length, 0 );
 	// Turning cannot reset an already visible object; fade state is independent of frustum.
 	world.camera( { eye: [ 0, 0, 0 ], target: [ 0, 0, 1 ], near: 1, far: 1000, fov: Math.PI / 3 } );
 	world.prepare( geometry, textures, 1, .75 );
@@ -71,17 +73,18 @@ test("retail object visibility advances offscreen and with a stationary camera, 
 	world.prepare( geometry, textures, 1, 1 );
 	world.prepare( geometry, textures, 1, 1.25 );
 	assert.ok( uploads.at( -1 ).opacity[0] > 0 && uploads.at( -1 ).opacity[0] < 1 );
-	assert.equal( world.prepare( geometry, textures, 1, 1.5 ).draws.length, 0 );
+	assert.equal( visibleDraws( world.prepare( geometry, textures, 1, 1.5 ) ).length, 0 );
 	world.scene( null );
 	world.prepare( geometry, textures, 1, 2 );
 	world.scene( value );
-	assert.equal( world.prepare( geometry, textures, 1, 3 ).draws.length, 0 );
+	assert.equal( visibleDraws( world.prepare( geometry, textures, 1, 3 ) ).length, 0 );
 	world.dispose( geometry, textures );
 });
 
 test("texture motion accumulates within a scene, restarts on rebuild, and survives device loss", () => {
 	const world = createWorldRenderer(), transforms = [];
 	const geometry = {
+		...OBJECT_CULL_COMMANDS,
 		upload: () => ({ instanceCount: 1 }),
 		release() {},
 		updateInstances: draw => draw,
@@ -176,6 +179,7 @@ test("world admission shares elapsed CPU budget and keeps the resident scene unt
 		level: () => 0
 	};
 	const geometry = {
+		...OBJECT_CULL_COMMANDS,
 		upload() {
 			uploads++;
 			// Deterministically model an expensive admission unit without sleeping.
@@ -211,7 +215,7 @@ test("resident alpha is prepared before hover and retained across device recreat
 		reads++;
 		return { width: 1, height: 1, pixels: new Uint8Array( [ 255 ] ) };
 	} );
-	const geometry = { upload: () => ({}), release() {}, updateInstances: draw => draw },
+	const geometry = { ...OBJECT_CULL_COMMANDS, upload: () => ({}), release() {}, updateInstances: draw => draw },
 		textures = { upload: () => ({}), release() {} };
 	world.scene( scene( "alpha", "/alpha.png" ) );
 	world.texture( "/alpha.png", { width: 1, height: 1, close() {} } );
@@ -236,7 +240,7 @@ test("a native block texture's transparent texels do not pick", () => {
 		format: "bc1-rgba-unorm",
 		levels: [ blocks ]
 	});
-	const geometry = { upload: () => ({}), release() {}, updateInstances: draw => draw },
+	const geometry = { ...OBJECT_CULL_COMMANDS, upload: () => ({}), release() {}, updateInstances: draw => draw },
 		textures = { upload: () => ({}), release() {} },
 		ray = { start: [ .25, .25, 1 ], delta: [ 0, 0, -2 ] };
 	const depthThrough = texture => {
@@ -282,7 +286,7 @@ function astcVariant( alpha ) {
 }
 
 test("an ASTC variant is admitted and picks by its source's mask, without a CPU decoder", () => {
-	const geometry = { upload: () => ({}), release() {}, updateInstances: draw => draw },
+	const geometry = { ...OBJECT_CULL_COMMANDS, upload: () => ({}), release() {}, updateInstances: draw => draw },
 		textures = { upload: () => ({}), release() {} },
 		ray = { start: [ .25, .25, 1 ], delta: [ 0, 0, -2 ] };
 	const depthThrough = texture => {
@@ -304,7 +308,7 @@ test("an ASTC variant is admitted and picks by its source's mask, without a CPU 
 
 test("animated instances use the pose envelope rather than an unskinned vertex box", () => {
 	const world = createWorldRenderer(),
-		geometry = { upload: () => ({}), release() {}, updateInstances: draw => draw },
+		geometry = { ...OBJECT_CULL_COMMANDS, upload: () => ({}), release() {}, updateInstances: draw => draw },
 		textures = { upload: () => ({}), release() {} };
 	const value = scene( "skin" ), group = value.groups[0];
 	group.instanceRadius = 600;
@@ -325,7 +329,7 @@ test("animated instances use the pose envelope rather than an unskinned vertex b
 	world.scene( value );
 	world.camera( { eye: [ 0, 0, 0 ], target: [ 0, 0, -1 ], near: 1, far: 1000, fov: Math.PI / 3 } );
 	assert.equal(
-		world.prepare( geometry, textures, 1, 0 ).draws.length,
+		visibleDraws( world.prepare( geometry, textures, 1, 0 ) ).length,
 		1,
 		"posed geometry enters view although the rest vertices are behind the camera"
 	);
@@ -335,6 +339,7 @@ test("animated instances use the pose envelope rather than an unskinned vertex b
 test("settled fade reuse preserves native frame freshness when the camera leaves its range", () => {
 	const world = createWorldRenderer(), uploads = [];
 	const geometry = {
+			...OBJECT_CULL_COMMANDS,
 			upload: () => ({}),
 			release() {},
 			/*
@@ -379,6 +384,7 @@ test("retained world selection matches forced full walks through fades, cell gap
 		const world = createWorldRenderer();
 		let serial = 0;
 		const geometry = {
+				...OBJECT_CULL_COMMANDS,
 				upload: () => ({ id: serial++, matrices: [], alpha: [] }),
 				release() {},
 				/*
@@ -427,7 +433,7 @@ test("retained world selection matches forced full walks through fades, cell gap
 		const a = fast.world.prepare( fast.geometry, fast.textures, 1, frame / 240 ),
 			b = reference.world.prepare( reference.geometry, reference.textures, 1, frame / 240 );
 		assert.deepEqual( a.matrix, b.matrix );
-		assert.deepEqual( a.draws, b.draws, `frame ${frame}` );
+		assert.deepEqual( visibleDraws( a ), visibleDraws( b ), `frame ${frame}` );
 		assert.equal( fast.world.stats().triangles, reference.world.stats().triangles );
 	}
 	for ( const f of [ fast, reference ] ) f.world.dispose( f.geometry, f.textures );
@@ -435,7 +441,7 @@ test("retained world selection matches forced full walks through fades, cell gap
 
 test("native residency follows target-cell changes even when the view matrix is identical", () => {
 	const world = createWorldRenderer(),
-		geometry = { upload: () => ({}), release() {}, updateInstances: draw => draw },
+		geometry = { ...OBJECT_CULL_COMMANDS, upload: () => ({}), release() {}, updateInstances: draw => draw },
 		textures = { upload: () => ({}), release() {} };
 	const value = scene( "association" );
 	const group = value.groups[0];
@@ -450,11 +456,11 @@ test("native residency follows target-cell changes even when the view matrix is 
 	};
 	const visible = prepare( 450, 0 ), absent = prepare( 9600, .1 );
 	assert.deepEqual( absent.matrix, visible.matrix );
-	assert.equal( visible.draws.length, 1 );
-	assert.equal( absent.draws.length, 0 );
-	assert.equal( prepare( 450, .2 ).draws.length, 1 );
+	assert.equal( visibleDraws( visible ).length, 1 );
+	assert.equal( visibleDraws( absent ).length, 0 );
+	assert.equal( visibleDraws( prepare( 450, .2 ) ).length, 1 );
 	world.invalidate();
-	assert.equal( prepare( 450, .3 ).draws.length, 1 );
+	assert.equal( visibleDraws( prepare( 450, .3 ) ).length, 1 );
 	world.dispose( geometry, textures );
 });
 
@@ -464,7 +470,8 @@ test("pending indexes match full readiness scans through asset arrival, replacem
 			const world = createWorldRenderer(), images = new Set();
 			/** @type {any} */ let pending = null;
 			let current = null, prune = false, serial = 0;
-			const geometry = { upload: () => ({}), release() {} }, textures = { upload: () => ({}), release() {} };
+			const geometry = { ...OBJECT_CULL_COMMANDS, upload: () => ({}), release() {} },
+				textures = { upload: () => ({}), release() {} };
 			const needed = () =>
 				new Set( (pending?.groups ?? []).flatMap( g => g.paths ).filter( p => !images.has( p ) ) );
 			const check = () => {
@@ -546,7 +553,8 @@ test("pending indexes match full readiness scans through asset arrival, replacem
 test("live stars flicker on reuse frames and retain their sequence across streaming and GPU loss", () => {
 	const world = createWorldRenderer( undefined, undefined, createPresentationRandom( 1 ) ),
 		control = createWorldRenderer( undefined, undefined, createPresentationRandom( 1 ) );
-	const geometry = { upload: () => ({}), release() {} }, textures = { upload: () => ({}), release() {} };
+	const geometry = { ...OBJECT_CULL_COMMANDS, upload: () => ({}), release() {} },
+		textures = { upload: () => ({}), release() {} };
 	const value = scene( "stars" );
 	value.groups[0].material.sky = 2;
 	value.environment = { startTimeOfDay: 0, ratePerSecond: 0, tracks: { starAlpha: [ { t: 0, value: 1 } ] } };
@@ -575,7 +583,7 @@ test("live stars flicker on reuse frames and retain their sequence across stream
 });
 test("live star admission cannot replace the startup RNG with a published asset seed", () => {
 	const world = createWorldRenderer( undefined, undefined, createPresentationRandom( 1 ) ),
-		geometry = { upload: () => ({}), release() {} },
+		geometry = { ...OBJECT_CULL_COMMANDS, upload: () => ({}), release() {} },
 		textures = { upload: () => ({}), release() {} };
 	const value = scene( "continued" );
 	value.groups[0].material.sky = 2;
@@ -608,6 +616,7 @@ fixture
 function fixture() {
 	const released = new Set(), uploads = [];
 	const geometry = {
+		...OBJECT_CULL_COMMANDS,
 		/*
 		================
 		upload
@@ -645,11 +654,11 @@ function fixture() {
 test("clearing a visible scene never returns released draws", () => {
 	const f = fixture();
 	f.world.scene( scene( "A" ) );
-	assert.equal( f.prepare().draws.length, 1 );
+	assert.equal( visibleDraws( f.prepare() ).length, 1 );
 	f.world.scene( null );
-	assert.deepEqual( f.prepare().draws, [] );
+	assert.deepEqual( visibleDraws( f.prepare() ), [] );
 	assert.equal( f.released.size, 1 );
-	assert.deepEqual( f.prepare().draws, [] );
+	assert.deepEqual( visibleDraws( f.prepare() ), [] );
 });
 test("prepared origin follows the committed scene independently of its display ID", () => {
 	const f = fixture(), first = scene( "arbitrary display name" );
@@ -673,6 +682,7 @@ test("aborting a partially uploaded replacement releases only its resources", ()
 		released = [],
 		closed = [];
 	const geometry = {
+		...OBJECT_CULL_COMMANDS,
 		/*
 		================
 		upload
@@ -721,7 +731,7 @@ test("aborting a partially uploaded replacement releases only its resources", ()
 			closed.push( "a" );
 		}
 	} );
-	const current = world.prepare( geometry, textures, 1 ).draws[0];
+	const current = visibleDraws( world.prepare( geometry, textures, 1 ) )[0];
 	const next = scene( "B", "b" );
 	next.groups.push( {
 		...next.groups[0],
@@ -744,13 +754,13 @@ test("aborting a partially uploaded replacement releases only its resources", ()
 	world.prepare( geometry, textures, 1 );
 	assert.equal( world.stats().residentGroups, 2 );
 	world.cancelPending();
-	assert.equal( world.prepare( geometry, textures, 1 ).draws[0], current );
+	assert.equal( visibleDraws( world.prepare( geometry, textures, 1 ) )[0], current );
 	assert.deepEqual( closed, [ "b" ] );
 	assert.ok( !released.includes( current ) );
 	assert.equal( released.length, 2 );
 	assert.equal( world.stats().residentGroups, 1 );
 	world.invalidate();
-	assert.equal( world.prepare( geometry, textures, 1 ).draws.length, 1 );
+	assert.equal( visibleDraws( world.prepare( geometry, textures, 1 ) ).length, 1 );
 	assert.equal( world.stats().sceneId, "A" );
 	world.dispose( geometry, textures );
 	assert.deepEqual( closed, [ "b", "a" ] );
@@ -760,6 +770,7 @@ test("GPU image identity includes ordered animation frames and survives loss", (
 		uploads = [],
 		released = [];
 	const geometry = {
+		...OBJECT_CULL_COMMANDS,
 		/*
 		================
 		upload
@@ -795,7 +806,7 @@ test("GPU image identity includes ordered animation frames and survives loss", (
 		const value = scene( "A", "a" );
 		value.groups[0].material.frames = frames;
 		world.scene( value );
-		return world.prepare( geometry, images, 1 ).draws[0].image;
+		return visibleDraws( world.prepare( geometry, images, 1 ) )[0].image;
 	};
 	const animated = show( [ "a", "b", "c" ] );
 	assert.deepEqual( animated.frames, [ "a", "b", "c" ] );
@@ -819,9 +830,9 @@ test("GPU image identity includes ordered animation frames and survives loss", (
 test("replacement with the same logical ID uses new GPU handles", () => {
 	const f = fixture();
 	f.world.scene( scene( "A" ) );
-	const old = f.prepare().draws[0];
+	const old = visibleDraws( f.prepare() )[0];
 	f.world.scene( scene( "A" ) );
-	const next = f.prepare().draws[0];
+	const next = visibleDraws( f.prepare() )[0];
 	assert.notEqual( next, old );
 	assert.ok( f.released.has( old ) );
 	assert.ok( !f.released.has( next ) );
@@ -830,7 +841,7 @@ test("device loss before the first upload preserves the requested scene", () => 
 	const f = fixture();
 	f.world.scene( scene( "first" ) );
 	f.world.invalidate();
-	assert.equal( f.prepare().draws.length, 1 );
+	assert.equal( visibleDraws( f.prepare() ).length, 1 );
 });
 test("device loss preserves a pending replacement instead of restoring old content", () => {
 	const f = fixture();
@@ -840,7 +851,7 @@ test("device loss preserves a pending replacement instead of restoring old conte
 	replacement.groups[0].geometry.positions[0] = 42;
 	f.world.scene( replacement );
 	f.world.invalidate();
-	assert.equal( f.prepare().draws[0].data.positions[0], 42 );
+	assert.equal( visibleDraws( f.prepare() )[0].data.positions[0], 42 );
 });
 test("device loss does not undo a pending scene clear", () => {
 	const f = fixture();
@@ -848,7 +859,7 @@ test("device loss does not undo a pending scene clear", () => {
 	f.prepare();
 	f.world.scene( null );
 	f.world.invalidate();
-	assert.deepEqual( f.prepare().draws, [] );
+	assert.deepEqual( visibleDraws( f.prepare() ), [] );
 });
 test("A to B to A requests evicted textures again and retains shared textures", () => {
 	const f = fixture();
@@ -901,7 +912,7 @@ test("A to B to A requests evicted textures again and retains shared textures", 
 			closed++;
 		}
 	} );
-	assert.equal( f.prepare().draws.length, 1 );
+	assert.equal( visibleDraws( f.prepare() ).length, 1 );
 	assert.equal( closed, 2 );
 });
 test("admission copies caller metadata and validates optional geometry before mutation", () => {
@@ -909,11 +920,11 @@ test("admission copies caller metadata and validates optional geometry before mu
 	f.world.scene( source );
 	source.groups[0].material.color[0] = 0;
 	source.groups[0].center[0] = Infinity;
-	assert.equal( f.prepare().draws[0].data.material.color[0], 1 );
+	assert.equal( visibleDraws( f.prepare() )[0].data.material.color[0], 1 );
 	const invalid = scene( "B" );
 	invalid.groups[0].geometry.maskUVs = new Float32Array( 1 );
 	assert.throws( () => f.world.scene( invalid ), /attributes/ );
-	assert.equal( f.prepare().draws.length, 1 );
+	assert.equal( visibleDraws( f.prepare() ).length, 1 );
 });
 test("admission past the residency budget sheds the displaced scene and keeps loading", async () => {
 	const { worldSceneBytes } = await import(
@@ -923,6 +934,7 @@ test("admission past the residency budget sheds the displaced scene and keeps lo
 	assert.ok( worldSceneBytes( a ) < limit && worldSceneBytes( b ) < limit, "each scene fits independently" );
 	const world = createWorldRenderer( limit ),
 		geometry = {
+			...OBJECT_CULL_COMMANDS,
 			/*
 			================
 			upload
@@ -940,7 +952,7 @@ test("admission past the residency budget sheds the displaced scene and keeps lo
 	// The budget is a target, not a limit: the over-budget scene is admitted
 	// and the displaced one is shed, where admission used to fail the load.
 	world.scene( b );
-	assert.equal( world.prepare( geometry, images, 1 ).draws.length, 1 );
+	assert.equal( visibleDraws( world.prepare( geometry, images, 1 ) ).length, 1 );
 	assert.equal( world.stats().sceneId, "B" );
 	world.dispose( geometry, images );
 });
@@ -952,6 +964,7 @@ test("streaming scenes and a texture past the residency budget evicts and keeps 
 	const limit = worldSceneBytes( scene( "A" ) );
 	const world = createWorldRenderer( limit ), uploads = [], releases = [];
 	const geometry = {
+		...OBJECT_CULL_COMMANDS,
 		/*
 		================
 		upload
@@ -1016,6 +1029,7 @@ test("LOD selection keeps GPU resources and restores stitched edge heights", asy
 	let uploads = 0, indexWrites = 0, positionWrites = 0, lastIndexCount = 0;
 	let fullBytes = 0, sparseBytes = 0;
 	const geometry = {
+		...OBJECT_CULL_COMMANDS,
 		/*
 		================
 		upload
@@ -1064,7 +1078,7 @@ test("LOD selection keeps GPU resources and restores stitched edge heights", asy
 	};
 	const prepare = x => {
 		world.camera( { eye: [ x, 500, 10 ], target: [ 160, 0, 160 ], fov: Math.PI / 3, near: 1, far: 5000 } );
-		return world.prepare( geometry, images, 1 ).draws[0];
+		return visibleDraws( world.prepare( geometry, images, 1 ) )[0];
 	};
 	const draw = prepare( -1280 ), positions = draw.data.positions;
 	const edge = [];
@@ -1079,7 +1093,7 @@ test("LOD selection keeps GPU resources and restores stitched edge heights", asy
 	// the crossing submits nothing and stitches nothing; turning back
 	// stitches the edge at once and changes nothing else.
 	world.camera( { eye: [ -960, 500, 10 ], target: [ -2000, 500, 10 ], fov: Math.PI / 3, near: 1, far: 5000 } );
-	assert.equal( world.prepare( geometry, images, 1 ).draws.length, 0 );
+	assert.equal( visibleDraws( world.prepare( geometry, images, 1 ) ).length, 0 );
 	assert.ok( edge.every( i => positions[i] === 0 ) );
 	assert.equal( prepare( -960 ), draw );
 	assert.ok( edge.every( i => positions[i] === 10 ) );
@@ -1097,7 +1111,7 @@ test("LOD selection keeps GPU resources and restores stitched edge heights", asy
 	}
 	for ( const [x, height] of [ [ -960, 10 ], [ -1280, 0 ], [ -960, 10 ] ] ) {
 		world.camera( { eye: [ x, 500, 10 ], target: [ x - 2000, 500, 10 ], fov: Math.PI / 3, near: 1, far: 5000 } );
-		assert.equal( world.prepare( geometry, images, 1 ).draws.length, 0 );
+		assert.equal( visibleDraws( world.prepare( geometry, images, 1 ) ).length, 0 );
 		assert.equal( prepare( x ), draw );
 		assert.ok( edge.every( i => positions[i] === height ) );
 	}
@@ -1121,12 +1135,12 @@ test("object material traversal is owned by the admitted scene, independently of
 	}) );
 	f.world.scene( value );
 	value.groups[0].materialOrder.index = 99;
-	assert.equal( f.prepare().draws[0], f.uploads[0] );
-	assert.equal( f.prepare().draws[1], f.uploads[1] );
+	assert.equal( visibleDraws( f.prepare() )[0], f.uploads[0] );
+	assert.equal( visibleDraws( f.prepare() )[1], f.uploads[1] );
 	const invalid = scene( "invalid" );
 	invalid.groups[0].materialOrder = { set: "house.bmt", index: NaN };
 	assert.throws( () => f.world.scene( invalid ), /material order/ );
-	assert.equal( f.prepare().draws[0], f.uploads[0] );
+	assert.equal( visibleDraws( f.prepare() )[0], f.uploads[0] );
 });
 
 test("title terrain stays detailed through movement and GPU loss; gameplay restores distance LOD", async () => {
@@ -1148,6 +1162,7 @@ test("title terrain stays detailed through movement and GPU loss; gameplay resto
 	const world = createWorldRenderer( undefined, undefined, createPresentationRandom( 1 ) );
 	let count = 0;
 	const geometry = {
+		...OBJECT_CULL_COMMANDS,
 		/*
 		================
 		upload
@@ -1166,7 +1181,8 @@ test("title terrain stays detailed through movement and GPU loss; gameplay resto
 			count = indices.length;
 		},
 		updatePositions() {},
-		...WEATHER_COMMANDS
+		...WEATHER_COMMANDS,
+		...OBJECT_CULL_COMMANDS
 	};
 	const images = {
 		/*
@@ -1181,7 +1197,7 @@ test("title terrain stays detailed through movement and GPU loss; gameplay resto
 	};
 	const prepare = x => {
 		world.camera( { eye: [ x, 500, 10 ], target: [ 160, 0, 160 ], fov: Math.PI / 3, near: 1, far: 5000 } );
-		return world.prepare( geometry, images, 1 ).draws[0];
+		return visibleDraws( world.prepare( geometry, images, 1 ) )[0];
 	};
 	world.scene( title );
 	title.terrainDetail = "distance";
@@ -1209,7 +1225,14 @@ test("title terrain stays detailed through movement and GPU loss; gameplay resto
 
 test("weather emission consumes shared RNG before star trials on the real world owner path", () => {
 	const random = createPresentationRandom( 5, 1, 128 ), world = createWorldRenderer( undefined, undefined, random );
-	const geometry = { upload: () => ({}), release() {}, updatePositions() {}, ...WEATHER_COMMANDS },
+	const geometry = {
+			...OBJECT_CULL_COMMANDS,
+			upload: () => ({}),
+			release() {},
+			updatePositions() {},
+			...WEATHER_COMMANDS,
+			...OBJECT_CULL_COMMANDS
+		},
 		textures = { upload: () => ({}), release() {} };
 	const value = scene( "ordered-stars" );
 	value.groups[0].material.sky = 2;
@@ -1236,6 +1259,7 @@ test("decal texture bindings are rebuilt after terrain retirement and reused whi
 		released = new Set(),
 		images = [],
 		geometry = {
+			...OBJECT_CULL_COMMANDS,
 			/*
 			================
 			upload
@@ -1248,6 +1272,7 @@ test("decal texture bindings are rebuilt after terrain retirement and reused whi
 			},
 			updatePositions() {},
 			...WEATHER_COMMANDS,
+			...OBJECT_CULL_COMMANDS,
 			/*
 			================
 			updateIndices
@@ -1315,6 +1340,7 @@ test("toe decals reuse geometry, fade at twenty seconds and survive device recre
 	const world = createWorldRenderer(),
 		released = new Set(),
 		geometry = {
+			...OBJECT_CULL_COMMANDS,
 			/*
 			================
 			upload
@@ -1325,6 +1351,7 @@ test("toe decals reuse geometry, fade at twenty seconds and survive device recre
 			},
 			updatePositions() {},
 			...WEATHER_COMMANDS,
+			...OBJECT_CULL_COMMANDS,
 			/*
 			================
 			updateIndices
@@ -1417,6 +1444,7 @@ test("Sun drop rings (port-only #1640) draw gold under admitted drops and releas
 	const world = createWorldRenderer(),
 		released = new Set(),
 		geometry = {
+			...OBJECT_CULL_COMMANDS,
 			/*
 			================
 			upload
@@ -1427,6 +1455,7 @@ test("Sun drop rings (port-only #1640) draw gold under admitted drops and releas
 			},
 			updatePositions() {},
 			...WEATHER_COMMANDS,
+			...OBJECT_CULL_COMMANDS,
 			/*
 			================
 			updateIndices
@@ -1494,7 +1523,15 @@ test("Sun drop rings (port-only #1640) draw gold under admitted drops and releas
 
 test("selection texture demand follows scene admission, cancellation, replacement and GPU recovery", () => {
 	const world = createWorldRenderer(),
-		geometry = { upload: () => ({}), release() {}, updateIndices() {}, updatePositions() {}, ...WEATHER_COMMANDS },
+		geometry = {
+			...OBJECT_CULL_COMMANDS,
+			upload: () => ({}),
+			release() {},
+			updateIndices() {},
+			updatePositions() {},
+			...WEATHER_COMMANDS,
+			...OBJECT_CULL_COMMANDS
+		},
 		textures = { upload: () => ({}), release() {} };
 	const terrain = scene( "demand" );
 	terrain.groups[0].material.terrain = true;
@@ -1545,6 +1582,7 @@ test("selection texture demand follows scene admission, cancellation, replacemen
 test("sixteen material pieces share one fade tick; an outdoor scene switch keeps the placement fade", () => {
 	const world = createWorldRenderer(), textures = { upload: () => ({}), release() {} };
 	const geometry = {
+		...OBJECT_CULL_COMMANDS,
 		upload: () => ({}),
 		release() {},
 		/*
@@ -1571,8 +1609,8 @@ test("sixteen material pieces share one fade tick; an outdoor scene switch keeps
 			frame = world.prepare( geometry, textures, 1, time );
 			if ( !world.stats().pendingGroups ) break;
 		}
-		assert.equal( frame.draws.length, 16 );
-		for ( const draw of frame.draws ) {
+		assert.equal( visibleDraws( frame ).length, 16 );
+		for ( const draw of visibleDraws( frame ) ) {
 			assert.ok( Math.abs( draw.alpha - alpha ) < 1e-6, `time ${time}: ${draw.alpha} != ${alpha}` );
 		}
 	};
@@ -1607,7 +1645,7 @@ test("sixteen material pieces share one fade tick; an outdoor scene switch keeps
 
 test("dungeon scenery follows its room: a hidden room's emitters neither play nor take slots", () => {
 	const world = createWorldRenderer(),
-		geometry = { upload: () => ({}), release() {}, updateInstances: draw => draw },
+		geometry = { ...OBJECT_CULL_COMMANDS, upload: () => ({}), release() {}, updateInstances: draw => draw },
 		textures = { upload: () => ({}), release() {} };
 	const value = scene( "dungeon-emitters" );
 	const emitter = ( id, dungeonBlock ) => ({
@@ -1644,7 +1682,7 @@ test("dungeon scenery follows its room: a hidden room's emitters neither play no
 
 test("scenery follows resident placement admission while retaining offscreen and stationary clocks", () => {
 	const world = createWorldRenderer(),
-		geometry = { upload: () => ({}), release() {}, updateInstances: draw => draw },
+		geometry = { ...OBJECT_CULL_COMMANDS, upload: () => ({}), release() {}, updateInstances: draw => draw },
 		textures = { upload: () => ({}), release() {} };
 	const value = scene( "emitter" ), group = value.groups[0];
 	group.instanceRadius = 2;
@@ -1684,24 +1722,24 @@ test("scenery follows resident placement admission while retaining offscreen and
 
 test("background distance changes the live culling frustum and restores distant draws without moving the camera", () => {
 	const world = createWorldRenderer(),
-		geometry = { upload: () => ({}), release() {}, updateInstances: draw => draw },
+		geometry = { ...OBJECT_CULL_COMMANDS, upload: () => ({}), release() {}, updateInstances: draw => draw },
 		textures = { upload: () => ({}), release() {} };
 	const value = scene( "distance" );
 	value.groups[0].geometry.instances[14] = 3000;
 	value.groups[0].instanceRadius = 1;
 	world.scene( value );
 	world.camera( { eye: [ 0, 0, 0 ], target: [ 0, 0, 1 ], near: 1, far: 3500, fov: Math.PI / 3 } );
-	assert.equal( world.prepare( geometry, textures, 1, 0, 100, 100, 1500 ).draws.length, 0 );
-	assert.equal( world.prepare( geometry, textures, 1, 1, 100, 100, 3500 ).draws.length, 1 );
-	assert.equal( world.prepare( geometry, textures, 1, 2, 100, 100, 1500 ).draws.length, 0 );
+	assert.equal( visibleDraws( world.prepare( geometry, textures, 1, 0, 100, 100, 1500 ) ).length, 0 );
+	assert.equal( visibleDraws( world.prepare( geometry, textures, 1, 1, 100, 100, 3500 ) ).length, 1 );
+	assert.equal( visibleDraws( world.prepare( geometry, textures, 1, 2, 100, 100, 1500 ) ).length, 0 );
 	world.invalidate();
-	assert.equal( world.prepare( geometry, textures, 1, 3, 100, 100, 5500 ).draws.length, 1 );
+	assert.equal( visibleDraws( world.prepare( geometry, textures, 1, 3, 100, 100, 5500 ) ).length, 1 );
 	world.dispose( geometry, textures );
 });
 
 test("frontend residency uses the background draw distance as the camera far plane", () => {
 	const world = createWorldRenderer(),
-		geometry = { upload: () => ({}), release() {}, updateInstances: draw => draw },
+		geometry = { ...OBJECT_CULL_COMMANDS, upload: () => ({}), release() {}, updateInstances: draw => draw },
 		textures = { upload: () => ({}), release() {} };
 	const value = scene( "frontend-distance" );
 	value.residency = "frontend";
@@ -1710,4 +1748,43 @@ test("frontend residency uses the background draw distance as the camera far pla
 	assert.equal( world.prepare( geometry, textures, 1, 0, 100, 100, 1500 ).camera.far, 1500 );
 	assert.equal( world.prepare( geometry, textures, 1, 1, 100, 100, 5500 ).camera.far, 5500 );
 	world.dispose( geometry, textures );
+});
+
+test("static object runs keep their native draw order and leave the walk", () => {
+	// A, C plain (static), B instanced (walked), D plain again: the runs [A]
+	// and [C, D] must land around B exactly where the native order has them,
+	// and a camera turn must neither walk them nor rebuild their places.
+	const world = createWorldRenderer( undefined, undefined, createPresentationRandom( 1 ) );
+	const geometry = {
+		...OBJECT_CULL_COMMANDS,
+		upload: data => ({ data }),
+		release() {},
+		updateInstances: draw => draw
+	};
+	const images = { upload: source => ({ source }), release() {} };
+	const f = { world, prepare: () => world.prepare( geometry, images, 1 ) }, value = scene( "runs" );
+	value.groups = [ "a", "b", "c", "d" ].map( ( id, index ) => ({
+		...value.groups[0],
+		id,
+		materialOrder: { set: "house.bmt", index },
+		// Each group's first vertex x names it in the uploads.
+		geometry: { ...value.groups[0].geometry, positions: Float32Array.of( index, 0, 0, 1, 0, 0, 0, 1, 0 ) },
+		...(id === "b" ? { instanceRadius: 2 } : {})
+	}) );
+	f.world.scene( value );
+	f.world.camera( { eye: [ 960, 0, 2000 ], target: [ 960, 0, 960 ], near: 1, far: 5000, fov: Math.PI / 3 } );
+	const first = f.prepare();
+	const ids = draws => draws.map( draw => "abcd"[draw.data.positions[0]] );
+	assert.deepEqual( ids( submittedDraws( first ) ), [ "a", "b", "c", "d" ] );
+	assert.deepEqual( ids( first.draws ), [ "b" ] );
+	assert.deepEqual( first.persistent.blocks.map( ids ), [ [ "a" ], [ "c", "d" ] ] );
+	let stats = f.world.stats();
+	assert.equal( stats.staticGroups, 3 );
+	assert.equal( stats.walkedGroups, 1, "only the instanced group is walked" );
+	f.world.camera( { eye: [ 2000, 0, 960 ], target: [ 960, 0, 960 ], near: 1, far: 5000, fov: Math.PI / 3 } );
+	const turned = f.prepare();
+	stats = f.world.stats();
+	assert.equal( stats.walkedGroups, 1 );
+	assert.equal( turned.persistent, first.persistent, "the runs' places hold across a turn" );
+	assert.equal( turned.draws, first.draws, "the walked list holds across a turn" );
 });

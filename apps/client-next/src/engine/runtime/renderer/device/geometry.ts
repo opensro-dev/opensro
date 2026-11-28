@@ -38,6 +38,7 @@ import { CLOTH_NO_SLOT, CLOTH_STREAM_WORDS, validClothStreamSlots } from "@/engi
 import { createWaterReflection } from "./water-reflection";
 import { createIndexCull } from "./index-cull";
 import { createWeatherParticles } from "./weather-particles";
+import { createObjectCull } from "./object-cull";
 import { packTextureStage } from "@/engine/foundation/rendering/texture-stage";
 import type { GpuWork } from "@/engine/foundation/rendering/gpu-work";
 import { packMultiTexture } from "@/engine/foundation/rendering/multi-texture";
@@ -173,6 +174,8 @@ export function createGeometryResources(
 	const indexCull = createIndexCull( created, retire );
 	// The resident rain and snow drops weather draws read (weather-particles.ts).
 	const weatherParticles = createWeatherParticles( created, retire );
+	// GPU-culled world object draws (object-cull.ts).
+	const objectCull = createObjectCull( created, retire );
 	// 8BA130 fixes water MIN/MAG to linear independently of the video filter.
 	const waterSampler = worldSampler;
 	const reflectedBindings = new WeakMap<GeometryDraw, { source: GPUBindGroup; draw: GeometryDraw; }>();
@@ -929,7 +932,20 @@ export function createGeometryResources(
 		},
 		cullView( main: Float64Array, mirror: Float64Array | null ) {
 			indexCull.view( main, mirror );
+			objectCull.view( main, mirror );
 		},
+		/*
+		================
+		cullObject
+
+		Makes an opaque world object draw GPU-culled against sphere (centre xyz,
+		radius; object-cull.ts): it stays in the frame's list while resident.
+		================
+		*/
+		cullObject( draw: GeometryDraw, sphere: readonly number[] ) {
+			objectCull.adopt( liveDeviceDraw( draw ), sphere );
+		},
+		drawRevision: () => DeviceDraw.revision,
 		/*
 		================
 		weatherSpawn / weatherCorners / weatherStep
@@ -971,6 +987,7 @@ export function createGeometryResources(
 				);
 			}
 			DeviceDraw.select( meta.selection, indices.length, 1 );
+			objectCull.refresh( meta.selection );
 		},
 		/*
 		================
@@ -1152,6 +1169,7 @@ export function createGeometryResources(
 					writeStream( meta.instances.buffer, meta.instances.offset, packed, meta.cpuUploads );
 				}
 				DeviceDraw.select( meta.selection, draw.count, count );
+				objectCull.refresh( meta.selection );
 				return draw;
 			}
 			gpu.pushErrorScope( "validation" );
@@ -1196,6 +1214,7 @@ export function createGeometryResources(
 					}
 				}
 				DeviceDraw.select( meta.selection, draw.count, count );
+				objectCull.refresh( meta.selection );
 				return draw;
 			} finally {
 				gpu.popErrorScope().then( error => {
@@ -1706,6 +1725,7 @@ export function createGeometryResources(
 			sunShadows?.forget( draw );
 			if ( draw instanceof DeviceDraw ) {
 				indexCull.forget( draw );
+				objectCull.forget( draw );
 				weatherParticles.detach( draw );
 			}
 			for ( const buffer of geometryBuffers.get( draw ) ?? [] ) {
@@ -1781,7 +1801,13 @@ export function createGeometryResources(
 			}
 		},
 		commands,
-		ready: Promise.all( [ animation?.ready, particles?.ready, indexCull.ready, weatherParticles.ready ] ),
+		ready: Promise.all( [
+			animation?.ready,
+			particles?.ready,
+			indexCull.ready,
+			weatherParticles.ready,
+			objectCull.ready
+		] ),
 		/*
 		================
 		prepare
@@ -1790,6 +1816,7 @@ export function createGeometryResources(
 		prepare( encoder: GPUCommandEncoder, timing?: import("../internal/gpu-contract").GpuTimingFrame ) {
 			indexCull.encode( encoder, timing );
 			weatherParticles.encode( encoder, timing );
+			objectCull.encode( encoder, timing );
 			animation?.encode( encoder, timing );
 			particles?.encode( encoder, timing );
 			shadows?.encode( encoder, timing );
@@ -1933,6 +1960,7 @@ export function createGeometryResources(
 			indexSlabs.dispose();
 			indexCull.dispose();
 			weatherParticles.dispose();
+			objectCull.dispose();
 			for ( const buffer of ownedInstances ) buffer.destroy();
 			ownedInstances.clear();
 			geometryBuffers.clear();

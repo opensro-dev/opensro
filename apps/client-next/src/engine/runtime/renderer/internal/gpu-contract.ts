@@ -281,6 +281,8 @@ FrameOwner
 ================
 */
 export interface FrameOwner {
+	// Bundles recorded so far (frame.ts): walked runs and static block.
+	stats?(): { readonly geometryRecords: number; readonly persistentRecords: number; };
 	draw(
 		view: GPUTextureView,
 		image?: ImageDraw,
@@ -311,8 +313,38 @@ export interface FrameOwner {
 		bloom?: BloomDraw,
 		reflection?: { encode( encoder: GPUCommandEncoder ): void; },
 		experimental?: ExperimentalFrame,
-		presentation?: SurfaceOwner
+		presentation?: SurfaceOwner,
+		persistent?: PersistentWorld
 	): void | Promise<void>;
+}
+
+/*
+================
+PersistentWorld
+
+Port-only, not native (#4692): the static object runs (world.ts
+staticObjectGroup), the same GPU-culled draws every frame. Run k draws
+before the world list's draw at[k], its native place in the draw order.
+The recordings are kept while revision (the runs) and drawRevision
+(DeviceDraw.revision: bindings, pipelines, arguments buffers) hold, so a
+frame touches none of their draws.
+================
+*/
+export interface PersistentWorld extends WorldPersistent {
+	readonly drawRevision: number;
+}
+
+/*
+================
+WorldPersistent
+
+The world's side of PersistentWorld, whose at indexes the world's draws.
+================
+*/
+export interface WorldPersistent {
+	readonly blocks: readonly (readonly GeometryDraw[])[];
+	readonly at: readonly number[];
+	readonly revision: number;
 }
 
 /*
@@ -492,6 +524,10 @@ export interface GeometryCommands {
 	cullSource( draw: GeometryDraw, at: number, indices: Uint32Array ): void;
 	cullRanges( draw: GeometryDraw, table: Uint32Array, count: number ): void;
 	cullView( main: Float64Array, mirror: Float64Array | null ): void;
+	// An opaque world object draw the GPU culls against sphere (object-cull.ts).
+	cullObject( draw: GeometryDraw, sphere: readonly number[] ): void;
+	// DeviceDraw.revision (PersistentWorld.drawRevision).
+	drawRevision(): number;
 	// ranges are vertex start/count pairs within positions. Without a slot the
 	// positions cover the whole draw; with one (0 included) they are a terrain
 	// layer member's vertices at that vertex offset of the draw.
@@ -586,6 +622,8 @@ export interface PreparedWorld {
 	readonly originRegion: number;
 	readonly matrix: Float32Array;
 	readonly draws: readonly GeometryDraw[];
+	// Port-only (#4692): the static object runs (WorldPersistent), not among draws.
+	readonly persistent?: WorldPersistent;
 	readonly environment: Float32Array;
 	readonly sky: boolean;
 }
