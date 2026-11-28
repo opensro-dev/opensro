@@ -49,7 +49,7 @@ buff (9003), a free-standing effect with no holder (9004), another
 player's companion (7) and the effect riding on it (9005).
 ================
 */
-function fixture( { blindHeld, vHidesCompanions = false, clock = undefined } ) {
+function fixture( { blindHeld, vHidesCompanions = false, clock = /** @type {object | undefined} */ (undefined) } ) {
 	const next = new Map(), clocks = new Map();
 	for (
 		const entry of [

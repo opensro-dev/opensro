@@ -13,7 +13,7 @@ const { carriedLod, carriedPose, carriedTint } = await import(
 );
 
 test("a pose is carried while every coordinate and the yaw hold, and replaced when any moves", () => {
-	const last = { regionId: 25000, x: 1, y: 2, z: 3, yaw: .5 };
+	const last = /** @type {any} */ ({ regionId: 25000, x: 1, y: 2, z: 3, yaw: .5 });
 	assert.equal( carriedPose( last, { ...last } ), last );
 	assert.equal( carriedPose( undefined, last ), last );
 	for ( const key of [ "regionId", "x", "y", "z", "yaw" ] ) {
@@ -33,10 +33,10 @@ test("a detail level is carried while its three terms hold", () => {
 });
 
 test("a tint is carried while its colour holds, replaced when it changes, and dropped when it ends", () => {
-	const last = [ 1, .72, .32 ];
-	assert.equal( carriedTint( last, [ 1, .72, .32 ] ), last );
+	const last = /** @type {any} */ ([ 1, .72, .32 ]);
+	assert.equal( carriedTint( last, /** @type {any} */ ([ 1, .72, .32 ]) ), last );
 	for ( let i = 0; i < 3; i++ ) {
-		const next = [ ...last ];
+		const next = /** @type {any} */ ([ ...last ]);
 		next[i] = 0;
 		assert.equal( carriedTint( last, next ), next, `channel ${i}` );
 	}

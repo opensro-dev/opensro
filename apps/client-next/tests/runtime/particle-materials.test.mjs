@@ -69,7 +69,7 @@ async function fixture( limits = {} ) {
 	const queue = {
 		...gpu.device.queue,
 		writeBuffer( buffer, offset, data, dataOffset, size ) {
-			gpu.device.queue.writeBuffer( buffer, offset, data, dataOffset, size );
+			/** @type {any} */ (gpu.device.queue).writeBuffer( buffer, offset, data, dataOffset, size );
 			const bytes = data.slice( dataOffset, dataOffset + size );
 			writes.push( {
 				label: buffer.label,

@@ -814,6 +814,20 @@ export interface ActorFrame {
 
 /*
 ================
+FadeFrame
+
+What a spawn fade reads and writes on one frame: the actors it fades, their
+clock table (a faded copy keeps its actor's entry) and the frame time.
+================
+*/
+export interface FadeFrame {
+	readonly next: Map<number, CharacterActor>;
+	readonly clocks: FrameClocks;
+	readonly seconds: number;
+}
+
+/*
+================
 ActorPass
 
 What one presentation pass shares across its actors: the holders the frame

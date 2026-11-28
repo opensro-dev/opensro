@@ -15,9 +15,9 @@ other owners have already chosen each actor's opacity.
 
 ===========================================================================
 */
-import { republished, type FrameClocks } from "@/engine/foundation/animation/actor-clock";
+import { republished } from "@/engine/foundation/animation/actor-clock";
+import type { FadeFrame } from "./internal/presentation-contract";
 import { spawnFadeAlpha, spawnFadeKind } from "@/engine/foundation/animation/spawn-fade";
-import type { CharacterActor } from "@/engine/contracts/character";
 import type { EntityState } from "@/engine/contracts/world";
 
 /*
@@ -26,17 +26,6 @@ fadeActor
 
 Advances one armed ramp, keyed by its spawned entity, onto one drawn actor:
 the clock starts on the actor's first drawable frame and retires at 1.
-================
-*/
-export interface FadeFrame {
-	readonly next: Map<number, CharacterActor>;
-	readonly clocks: FrameClocks;
-	readonly seconds: number;
-}
-
-/*
-================
-fadeActor
 ================
 */
 function fadeActor( ramps: Map<number, number | null>, key: number, gid: number, frame: FadeFrame ) {

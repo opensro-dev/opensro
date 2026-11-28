@@ -16,8 +16,19 @@ const { createAuxiliaryPresentation } = await import(
 	"../../src/engine/runtime/characters/presentation-auxiliary.ts"
 );
 
+/*
+================
+frozen
+
+A frozen fixture actor with only the fields a test reads.
+================
+*/
+function frozen( fields ) {
+	return /** @type {any} */ (Object.freeze( fields ));
+}
+
 test("an actor's entry wins over its own clocks, and an actor with none carries its own", () => {
-	const actor = Object.freeze( { gid: 1, time: 1, layers: [], modelAnimation: undefined } );
+	const actor = frozen( { gid: 1, time: 1, layers: [], modelAnimation: undefined } );
 	const entry = { time: 2, layers: undefined, modelAnimation: undefined };
 	assert.equal( actorClock( actor, new Map( [ [ actor, entry ] ] ) ), entry );
 	assert.equal( actorClock( actor, new Map() ), actor );
@@ -25,14 +36,14 @@ test("an actor's entry wins over its own clocks, and an actor with none carries 
 });
 
 test("a copy keeps its actor's entry, frozen, with its changes; an actor with none gives none", () => {
-	const actor = Object.freeze( { gid: 1, time: 1, opacity: undefined } ), entry = { time: 4 };
+	const actor = frozen( { gid: 1, time: 1, opacity: undefined } ), entry = { time: 4 };
 	const clocks = new Map( [ [ actor, entry ] ] );
 	const copy = republished( actor, { opacity: .5 }, clocks );
 	assert.notEqual( copy, actor );
 	assert.ok( Object.isFrozen( copy ) );
 	assert.equal( copy.opacity, .5 );
 	assert.equal( clocks.get( copy ), entry );
-	const bare = Object.freeze( { gid: 2, time: 1 } );
+	const bare = frozen( { gid: 2, time: 1 } );
 	assert.equal( clocks.has( republished( bare, { opacity: 0 }, clocks ) ), false );
 	const later = new Map();
 	carryClock( actor, clocks, later );
@@ -44,8 +55,8 @@ test("a copy keeps its actor's entry, frozen, with its changes; an actor with no
 });
 
 test("a query resolves the rows it walks, the mount included, and none other", () => {
-	const mount = Object.freeze( { gid: 2, time: 1 } ), rider = Object.freeze( { gid: 1, time: 1, mountedOn: 2 } );
-	const other = Object.freeze( { gid: 3, time: 1 } );
+	const mount = frozen( { gid: 2, time: 1 } ), rider = frozen( { gid: 1, time: 1, mountedOn: 2 } );
+	const other = frozen( { gid: 3, time: 1 } );
 	const displayed = new Map( [ [ 1, rider ], [ 2, mount ], [ 3, other ] ] );
 	const clocks = new Map( [ [ rider, { time: 5 } ], [ mount, { time: 6 } ], [ other, { time: 7 } ] ] );
 	const rows = actorQueryRows( displayed, [ rider ], clocks );
@@ -56,7 +67,7 @@ test("a query resolves the rows it walks, the mount included, and none other", (
 test("a saddle ride takes its rider's clocks from the entry, and the rider's copy keeps the entry", () => {
 	const auxiliary = createAuxiliaryPresentation( () => -9 );
 	const entity = { gid: 2, kind: "monster", appearanceState: [ 1, 0, 0 ], moving: true };
-	const owner = Object.freeze( {
+	const owner = frozen( {
 		gid: 2,
 		model: "/assets/rider.glb",
 		pose: { regionId: 257, x: 0, y: 0, z: 0, yaw: 0 },

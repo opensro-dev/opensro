@@ -14,12 +14,11 @@ import type { GameplayState } from "@/engine/contracts/gameplay";
 import type { Renderer, FrameWork } from "@/engine/contracts/runtime";
 import { actorQueryRows } from "@/engine/foundation/animation/actor-query-rows";
 import { republished, type FrameClocks } from "@/engine/foundation/animation/actor-clock";
-import type { FadeFrame } from "./spawn-fades";
 import { dressedAvatars } from "@/engine/foundation/gameplay/avatar-socket";
 import { visualChangeAvatars } from "@/engine/foundation/animation/visual-changes";
 import type { DressCatalog, WornItem } from "@/engine/foundation/animation/equipment-appearance";
 import type { SkillLookup } from "@/engine/foundation/ui/buff-viewer";
-import type { Resource, PresentationOutput, PresentationDisappear } from "./internal/presentation-contract";
+import type { FadeFrame, Resource, PresentationOutput, PresentationDisappear } from "./internal/presentation-contract";
 import { advanceCharacterFade } from "@/engine/foundation/animation/character-fade";
 import {
 	concealmentState,
