@@ -277,6 +277,7 @@ import {
 } from "@/engine/foundation/gameplay/abnormal-snapshot";
 import {
 	debugWeather,
+	releaseDebugWeather,
 	entryEnvironment,
 	environmentPacket,
 	eventMusicMode,
@@ -5273,6 +5274,8 @@ Packet handling must not depend on which HUD panel is currently open.
 					const reply = gmReply( frame.payload );
 					if ( reply ) {
 						gmReplies = [ ...gmReplies.slice( -99 ), { ...reply, sequence: ++gmSequence } ];
+						// An accepted /WEATHER replaces a console hold (event-environment.ts).
+						if ( reply.weatherSet ) environment = releaseDebugWeather( environment );
 						dirty = true;
 					}
 					return true;

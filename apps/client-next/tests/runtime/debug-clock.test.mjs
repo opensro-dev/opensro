@@ -34,7 +34,7 @@ const {
 	debugClockStep,
 	DEBUG_CLOCK_STEP_MINUTES
 } = await load( "foundation/gameplay/debug-clock.ts" );
-const { debugWeather, entryEnvironment, environmentPacket } = await load(
+const { debugWeather, entryEnvironment, environmentPacket, releaseDebugWeather } = await load(
 	"foundation/gameplay/event-environment.ts"
 );
 
@@ -166,6 +166,21 @@ test("console rain and snow hold off server weather until /clear", () => {
 	state = environmentPacket( state, 0x3bde, Uint8Array.of( 3, 7 ) ).state;
 	assert.deepEqual( state.server, { mode: 3, amount: 7 }, "packets did not land again after /clear" );
 	assert.deepEqual( state.effective, { mode: 3, amount: 7 } );
+});
+
+// Port-only: a GM's /WEATHER the server accepts drops the hold (the worker
+// calls the release on its OK reply), so the server weather it asked for is
+// drawn.
+test("a GM /WEATHER releases a console hold; the next 3BDE lands", () => {
+	let state = entryEnvironment( {} ).state;
+	state = environmentPacket( state, 0x3bde, Uint8Array.of( 2, 90 ) ).state;
+	state = debugWeather( state, 2, 200 );
+	state = releaseDebugWeather( state );
+	assert.equal( state.debug, null );
+	assert.deepEqual( state.effective, { mode: 2, amount: 90 }, "the release did not return to the server slot" );
+	state = environmentPacket( state, 0x3bde, Uint8Array.of( 3, 40 ) ).state;
+	assert.deepEqual( state.effective, { mode: 3, amount: 40 }, "a 3BDE after the release was still discarded" );
+	assert.equal( releaseDebugWeather( state ), state, "a release without a hold changed the state" );
 });
 
 test("/power tunes the live amount and never sets the hold", () => {

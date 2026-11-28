@@ -67,6 +67,7 @@ var unlistedSettings = map[string]string{
 	caravanai.EnvHireFee:                  "the hire fee the AI caravans rule quotes, not a rule of its own",
 	action.EnvGMItemForge:                 "a GM command, not a rule players meet",
 	action.EnvGMWeather:                   "a GM command, not a rule players meet",
+	action.EnvCitySnow:                    "the towns' sky, seen in game, not a rule",
 	gmcommand.EnvGMModeration:             "GM moderation commands, not a rule players meet",
 	monster.EnvTrainingDummy:              "GM-only training targets",
 	simulation.EnvBetaUniqueRespawn:       "unique monster spawn timing is not published",
