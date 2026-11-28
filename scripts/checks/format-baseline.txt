@@ -119,7 +119,6 @@ apps/client-next/src/engine/runtime/ui/hud/region-banner.ts
 apps/client-next/src/engine/runtime/ui/hud/skill-training.ts
 apps/client-next/tests/architecture/frame-barriers.test.mjs
 apps/client-next/tests/architecture/ownership-fixtures.test.mjs
-apps/client-next/tests/architecture/panel-navigation.test.mjs
 apps/client-next/tests/browser/absorption-orbs.test.mjs
 apps/client-next/tests/browser/attached-effect-wire.test.mjs
 apps/client-next/tests/browser/audio-loop.test.mjs

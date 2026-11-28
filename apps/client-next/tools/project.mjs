@@ -26,14 +26,44 @@ const parsed = new Map();
 /*
 ================
 parse
+
+One source file's tree, reused while its text is unchanged.
 ================
 */
-function parse( key, text ) {
+export function parse( key, text ) {
 	const cached = parsed.get( key );
 	if ( cached && cached.text === text ) return cached.file;
 	const file = ts.createSourceFile( key, text, ts.ScriptTarget.Latest, true );
 	parsed.set( key, { text, file } );
 	return file;
+}
+
+/*
+================
+sourceTexts
+
+Every .ts/.tsx/.mts/.cts file under base/dir as [base-relative path,
+text]. project() parses all of src; a test that audits one directory
+reads only that directory and parses only what it needs.
+================
+*/
+export function sourceTexts( dir, base = root ) {
+	const texts = [];
+	function walk( full ) {
+		for ( const e of fs.readdirSync( full, { withFileTypes: true } ) ) {
+			const child = path.join( full, e.name );
+			if ( e.isDirectory() ) {
+				walk( child );
+			} else if ( /\.(?:ts|tsx|mts|cts)$/.test( e.name ) ) {
+				texts.push( [
+					path.relative( base, child ).replaceAll( "\\", "/" ),
+					fs.readFileSync( child, "utf8" )
+				] );
+			}
+		}
+	}
+	walk( path.join( base, dir ) );
+	return texts;
 }
 
 /*
@@ -46,18 +76,7 @@ base-relative path, and loads src/engine/ownership.json.
 */
 export function project( base = root ) {
 	const files = new Map();
-	function walk( dir ) {
-		for ( const e of fs.readdirSync( dir, { withFileTypes: true } ) ) {
-			const full = path.join( dir, e.name );
-			if ( e.isDirectory() ) {
-				walk( full );
-			} else if ( /\.(?:ts|tsx|mts|cts)$/.test( e.name ) ) {
-				const key = path.relative( base, full ).replaceAll( "\\", "/" );
-				files.set( key, parse( key, fs.readFileSync( full, "utf8" ) ) );
-			}
-		}
-	}
-	walk( path.join( base, "src" ) );
+	for ( const [key, text] of sourceTexts( "src", base ) ) files.set( key, parse( key, text ) );
 	return {
 		base,
 		files,
