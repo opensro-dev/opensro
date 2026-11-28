@@ -56,6 +56,26 @@ const INVENTORY_DOLL_HEIGHT = 318;
 
 /*
 ================
+liveRunPlaces
+
+The static runs' places (WorldPersistent.at, indices into the scene's
+draws) in the guarded world list, which lacks the stale draws the guard
+dropped: each place moves back by the dropped draws before it, so a run
+keeps its native place among the walked draws.
+================
+*/
+function liveRunPlaces( at: readonly number[], draws: readonly GeometryDraw[], live: readonly GeometryDraw[] ) {
+	if ( live.length === draws.length ) return at;
+	const kept = new Set( live );
+	return at.map( place => {
+		let dropped = 0;
+		for ( let i = 0; i < place; i++ ) if ( !kept.has( draws[i]! ) ) dropped++;
+		return place - dropped;
+	} );
+}
+
+/*
+================
 withStaticRuns
 
 The world's draws with the static object runs back at their places
@@ -166,7 +186,6 @@ export function createRenderer(
 	let gates: readonly import("@/engine/contracts/world").EntityState[] = [];
 	let disposed = false, failure: string | null = null, failureStack: string | null = null;
 	// The static block revision whose draws were last checked live.
-	let checkedPersistent = -1;
 	// A memory refusal the frame met (a readback the GPU could not stage,
 	// a target it could not allocate) is the device's to cure: hand it
 	// down so the paced replacement runs instead of ending here (#2866).
@@ -995,10 +1014,16 @@ export function createRenderer(
 						...staleDraws.live( "sun-markers", scene.sunMarkerDraws ?? [] ),
 						...liveShadows
 					];
-				if ( persistent && persistent.revision !== checkedPersistent ) {
-					for ( const block of persistent.blocks ) staleDraws.live( "world-static", block );
-					checkedPersistent = persistent.revision;
-				}
+				const drawRevision = device.geometry()!.drawRevision();
+				// Every list the frame draws passes the guard (stale-draws.ts): the
+				// runs it returns are the ones the frame, the sun cascade and the
+				// mirror draw.
+				const liveWorld = [ ...terrainDraws, ...opaqueDraws, ...transparentDraws ];
+				const livePersistent: WorldPersistent | undefined = persistent && {
+					...persistent,
+					blocks: staleDraws.runs( "world-static", persistent.blocks, drawRevision ),
+					at: liveRunPlaces( persistent.at, scene.draws, liveWorld )
+				};
 				const opaqueWorld = [
 						...ground,
 						...opaqueDraws,
@@ -1048,7 +1073,7 @@ export function createRenderer(
 							seconds: timeSeconds
 						},
 						scene.reflectionMatrix ?
-							[ ...withStaticRuns( scene.draws, persistent ), ...(preview ? [] : liveCharacters) ] :
+							[ ...withStaticRuns( liveWorld, livePersistent ), ...(preview ? [] : liveCharacters) ] :
 							[]
 					),
 					{
@@ -1074,7 +1099,7 @@ export function createRenderer(
 						sunShadow,
 						casters: shadowOn ?
 							[
-								...(persistent?.blocks.flat() ?? []),
+								...(livePersistent?.blocks.flat() ?? []),
 								...opaqueDraws,
 								...(preview ? [] : liveCharacters.filter( draw => !draw.blended ))
 							] :
@@ -1098,14 +1123,15 @@ export function createRenderer(
 						)
 					},
 					targetSurface,
-					persistent ?
+					livePersistent ?
 						{
-							blocks: persistent.blocks,
+							blocks: livePersistent.blocks,
 							// The runs sit among the opaque objects, which begin at
-							// draws index terrainEnd and world index ground.length.
-							at: persistent.at.map( index => ground.length + index - (scene.terrainEnd ?? 0) ),
-							revision: persistent.revision,
-							drawRevision: device.geometry()!.drawRevision()
+							// guarded index terrainDraws.length and world index
+							// ground.length.
+							at: livePersistent.at.map( index => ground.length + index - terrainDraws.length ),
+							revision: livePersistent.revision,
+							drawRevision
 						} :
 						undefined
 				);

@@ -49,6 +49,10 @@ export function createStaleDrawGuard(
 	report: ( stale: StaleDrawReport ) => void
 ) {
 	const reported = new Set<string>();
+	// The last runs passed (runs()): the blocks, the draw revision they were
+	// checked at, and what the check kept.
+	let runsFrom: readonly (readonly GeometryDraw[])[] | null = null, runsRevision = NaN;
+	let runsKept: readonly (readonly GeometryDraw[])[] = [];
 	return {
 		/*
 		================
@@ -80,6 +84,25 @@ export function createStaleDrawGuard(
 				}
 			}
 			return kept ?? draws;
+		},
+		/*
+		================
+		runs
+
+		Retained blocks (the static object runs) through the same rule, checked
+		again only when the blocks or the geometry's draw revision change: a
+		release of a watched draw moves the revision, so a block never keeps a
+		released draw past the frame that would submit it, and a quiet frame
+		pays no per-draw lookup. Whoever draws the blocks draws these.
+		================
+		*/
+		runs( list: string, blocks: readonly (readonly GeometryDraw[])[], drawRevision: number ) {
+			if ( blocks !== runsFrom || drawRevision !== runsRevision ) {
+				runsKept = blocks.map( block => this.live( list, block ) );
+				runsFrom = blocks;
+				runsRevision = drawRevision;
+			}
+			return runsKept;
 		},
 		/*
 		================

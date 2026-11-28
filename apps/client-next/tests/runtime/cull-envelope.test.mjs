@@ -15,7 +15,7 @@ import assert from "node:assert/strict";
 const { createCullEnvelope, CULL_MARGIN_RAD, CULL_EYE_SLACK } = await import(
 	"../../src/engine/foundation/rendering/cull-envelope.ts"
 );
-const { prepareViewFrustum, visibleFrustumSphere, viewProjection } = await import(
+const { prepareViewFrustum, visibleFrustumSphere, viewProjection, projectionTangents, cameraBasis } = await import(
 	"../../src/engine/foundation/rendering/world-math.ts"
 );
 
@@ -84,4 +84,56 @@ test("the envelope holds through a small turn and is rebuilt past its margin or 
 	);
 	envelopes.invalidate();
 	assert.notEqual( envelopes.envelope( orbit( 0, .4 ), ASPECT ).stamp, first.stamp );
+});
+
+/*
+================
+turned
+
+The camera turned by angle about a unit axis (Rodrigues), its up turned
+too, so the turn may roll the view: a drag's yaw and pitch never swing a
+corner ray toward a side plane's normal, a free turn does.
+================
+*/
+function turned( camera, axis, angle ) {
+	const c = Math.cos( angle ), s = Math.sin( angle );
+	const turn = v => {
+		const d = axis[0] * v[0] + axis[1] * v[1] + axis[2] * v[2];
+		const x = [ axis[1] * v[2] - axis[2] * v[1], axis[2] * v[0] - axis[0] * v[2], axis[0] * v[1] - axis[1] * v[0] ];
+		return v.map( ( value, i ) => value * c + x[i] * s + axis[i] * d * (1 - c) );
+	};
+	const forward = turn( camera.target.map( ( v, i ) => v - camera.eye[i] ) );
+	return /** @type {any} */ ({
+		...camera,
+		target: camera.eye.map( ( v, i ) => v + forward[i] ),
+		up: turn( camera.up ?? [ 0, 1, 0 ] )
+	});
+}
+
+test("a turn within the margin about any axis keeps the far corners of the view inside the envelope", () => {
+	const envelopes = createCullEnvelope(), next = random( 11 );
+	const start = { ...orbit( .3, .4 ), fov: 1.2 }, envelope = envelopes.envelope( start, ASPECT );
+	const wide = prepareViewFrustum( envelope.matrix );
+	let checked = 0;
+	for ( let view = 0; view < 60; view++ ) {
+		const z = next() * 2 - 1, phi = next() * 2 * Math.PI, r = Math.sqrt( 1 - z * z );
+		const live = turned( start, [ r * Math.cos( phi ), r * Math.sin( phi ), z ], CULL_MARGIN_RAD * .99 );
+		assert.equal( envelopes.envelope( live, ASPECT ), envelope, `view ${view} left the envelope` );
+		const { tanX, tanY } = projectionTangents( live, ASPECT ), basis = cameraBasis( live );
+		for ( const [sx, sy] of [ [ 1, 1 ], [ 1, -1 ], [ -1, 1 ], [ -1, -1 ] ] ) {
+			for ( const depth of [ 500, 1500, 3000, 3400 ] ) {
+				// A point just inside the live corner ray at this depth.
+				const x = sx * tanX * .999 * depth, y = sy * tanY * .999 * depth;
+				const p = [ 0, 1, 2 ].map( i =>
+					live.eye[i] + basis.right[i] * x + basis.up[i] * y + basis.forward[i] * depth
+				);
+				checked++;
+				assert.ok(
+					visibleFrustumSphere( wide, p[0], p[1], p[2], 1 + envelope.slack ),
+					`view ${view}: the corner (${sx}, ${sy}) at depth ${depth} is outside the envelope`
+				);
+			}
+		}
+	}
+	assert.equal( checked, 60 * 16 );
 });

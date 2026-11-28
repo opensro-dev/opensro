@@ -141,17 +141,24 @@ export function createObjectCull( device: GPUDevice, retire: Retire ) {
 	================
 	writeSlot
 
-	A slot's arguments from its draw's counts (the instance count stays
-	the GPU's until the next pass) and its record's instance count.
+	A slot's arguments from its draw's counts and its record's instance
+	count. The argument instance count (word 1) is the cull pass's: only a
+	new slot writes it (0, nothing drawn until the pass decides); a refresh
+	writes around it, so a draw recorded before the next pass keeps the
+	count the last pass chose.
 	================
 	*/
-	function writeSlot( slot: number, draw: DeviceDraw ) {
+	function writeSlot( slot: number, draw: DeviceDraw, adopted: boolean ) {
 		const at = slot * ARG_WORDS;
 		argWords[at] = draw.indexCount;
 		argWords[at + 2] = draw.firstIndex;
 		argWords[at + 3] = draw.baseVertex;
 		argWords[at + 4] = 0;
-		device.queue.writeBuffer( args!, at * 4, argWords.buffer, at * 4, ARG_BYTES );
+		if ( adopted ) device.queue.writeBuffer( args!, at * 4, argWords.buffer, at * 4, ARG_BYTES );
+		else {
+			device.queue.writeBuffer( args!, at * 4, argWords.buffer, at * 4, 4 );
+			device.queue.writeBuffer( args!, (at + 2) * 4, argWords.buffer, (at + 2) * 4, ARG_BYTES - 8 );
+		}
 		const record = slot * RECORD_WORDS;
 		recordWords[record + 4] = draw.instanceCount;
 		recordWords[record + 5] = 1;
@@ -183,7 +190,7 @@ export function createObjectCull( device: GPUDevice, retire: Retire ) {
 			recordFloats.set( sphere, slot * RECORD_WORDS );
 			argWords[slot * ARG_WORDS + 1] = 0;
 			DeviceDraw.drawIndirect( draw, args!, slot * ARG_BYTES );
-			writeSlot( slot, draw );
+			writeSlot( slot, draw, true );
 		},
 		/*
 		================
@@ -195,7 +202,7 @@ export function createObjectCull( device: GPUDevice, retire: Retire ) {
 		*/
 		refresh( draw: DeviceDraw ) {
 			const slot = slots.get( draw );
-			if ( slot !== undefined ) writeSlot( slot, draw );
+			if ( slot !== undefined ) writeSlot( slot, draw, false );
 		},
 		culled( draw: DeviceDraw ) {
 			return slots.has( draw );
