@@ -170,6 +170,11 @@ const (
 	// EncodeModerationReply's, so the GM reads what was set or why not.
 	SubWeather uint8 = 0xFC
 
+	// SubNameplate is the port's /NAMEPLATE ON|OFF (nameplate.go; not
+	// native, owner 2026-11-28): subcmd, u8 on (1) or off (0). The reply
+	// is EncodeModerationReply's.
+	SubNameplate uint8 = 0xFD
+
 	// NoticeTextMaxBytes bounds the /NOTICE frame: the banner's
 	// MaxChatNoticeUnits UTF-16 units at four UTF-8 bytes each at most.
 	// The unit limit itself is the handler's, so the GM reads why.
@@ -246,6 +251,8 @@ type Request struct {
 	WeatherKind    uint8
 	WeatherAmount  uint8
 	WeatherMinutes uint16
+	// NameplateOn is /NAMEPLATE's switch.
+	NameplateOn bool
 	// SpeedPercent is /SETSPEED's percent of the effective speed.
 	SpeedPercent uint16
 	// Forge is /FORGE's command text (the rejoined typed tail).
@@ -363,6 +370,14 @@ func DecodeGmCommand(payload []byte) (Request, error) {
 		}
 		request.WeatherKind, request.WeatherAmount = payload[1], payload[2]
 		request.WeatherMinutes = binary.LittleEndian.Uint16(payload[3:])
+		return request, nil
+	}
+	if subcmd == SubNameplate {
+		// subcmd, u8 on (1) or off (0), nothing after it.
+		if len(payload) != 2 || payload[1] > 1 {
+			return Request{}, fmt.Errorf("gmcommand: NAMEPLATE requires two bytes, on 1 or off 0")
+		}
+		request.NameplateOn = payload[1] == 1
 		return request, nil
 	}
 	if subcmd == SubNotice {

@@ -129,6 +129,7 @@ func (game *gameplayPlane) wireStaff(sources staffSources) {
 	game.items.StaffRoster = func(division string) []staff.RosterEntry {
 		return sources.book.Roster(division, sources.allowlisted(division))
 	}
+	game.items.StaffSetNameplate = sources.book.SetNameplate
 	previous := game.deps.EntryEventFrames
 	game.deps.EntryEventFrames = func(division string, character *enterworld.Character) []enterworld.Packet {
 		var packets []enterworld.Packet

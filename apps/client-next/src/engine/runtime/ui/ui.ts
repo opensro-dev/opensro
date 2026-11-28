@@ -154,6 +154,7 @@ import { flagWarTimerDigitTexture, flagWarTimerReading } from "@/engine/foundati
 import { returnScrollBar } from "@/engine/foundation/ui/return-scroll";
 import { portShopTabCopy } from "@/engine/foundation/ui/port-shop-copy";
 import { nameColorRgba } from "@/engine/foundation/gameplay/name-color";
+import { isStaffNameplate, staffNameplateAura, staffNameplateSparks } from "@/engine/foundation/ui/staff-nameplate";
 import { containsPoint, topmostControlAt } from "@/engine/foundation/ui/hit-test";
 import { minimapZoomTarget, advanceMinimapZoom } from "@/engine/foundation/ui/minimap-zoom";
 import { minimapTiles } from "@/engine/foundation/ui/minimap-tiles";
@@ -25291,10 +25292,24 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 					const row = titledNameRow( name ? leadWidth : 0, width ),
 						left = row.nameLeft,
 						top = -(height >> 1);
+					// Port-only, not native (owner 2026-11-28): a staff member's
+					// board wears the animated layers (staff-nameplate.ts).
+					const staffFx = !!name && !!height && experimental.state().saved.staffNameplateFx &&
+						isStaffNameplate(
+							{
+								kind: entity.kind,
+								name: entity.name ||
+									(entity.gid === game?.localGid ? next.session?.character : undefined),
+								boardName: entity.boardName
+							},
+							game?.staffRoster
+						);
+					const board: UiQuad["rect"] = [ row.left - 1, top - 1, row.total + 2, height + 2 ];
+					if ( staffFx ) quads.push( staffNameplateAura( board, full, entity.gid ) );
 					if ( name && height ) {
 						quads.push( {
 							characterAnchor: entity.gid,
-							rect: [ row.left - 1, top - 1, row.total + 2, height + 2 ],
+							rect: board,
 							clip: full,
 							uv: [ 0, 0, 1, 1 ],
 							texture: "",
@@ -25379,6 +25394,7 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 							fontStyle: selected ? 2 : 0
 						} ).map( q => ({ ...q, characterAnchor: entity.gid }) )
 					);
+					if ( staffFx ) quads.push( ...staffNameplateSparks( board, full, entity.gid ) );
 					// Only a companion's owner plate reads its owner; a scan of
 					// every row per player board was the HUD's largest cost.
 					const ownerEntity = entity.kind === "cos" ?

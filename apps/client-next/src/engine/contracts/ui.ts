@@ -20,6 +20,9 @@ UiRect
 ================
 */
 export type UiRect = readonly [number, number, number, number];
+// The staff nameplate's layers (staff-nameplate.ts): the halo behind the
+// board and the sparks over it.
+export type UiQuadFx = "staff-aura" | "staff-spark";
 // Shared text-layout sidecar; consumed before scene publication, never by GPU code.
 /*
 ================
@@ -110,6 +113,10 @@ export interface UiQuad {
 	// ga_effect_*, alcm_effect_prepare and alcm_effect_success carry no alpha: black is "nothing",
 	// so the quad adds light.
 	readonly additive?: boolean;
+	// Port-only, not native (owner 2026-11-28): one layer of the animated
+	// staff nameplate (staff-nameplate.ts), animated by the device from its
+	// own clock, so the retained interface never rebuilds for it.
+	readonly fx?: UiQuadFx;
 	readonly characterAnchor?: number;
 	readonly mask?: { readonly texture: string; readonly rect: UiRect; };
 	readonly layer?: "background";

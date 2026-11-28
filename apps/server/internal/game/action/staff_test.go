@@ -21,8 +21,9 @@ import (
 TestOperatorSetStaffAppliesLiveAndTellsEveryone
 
 A grant flips the record's bit and capabilities through its door, sends
-the character its 0x3FCC state and every player the 0x3FCD roster; a
-revoke clears both and sends the emptied roster, so no relog is needed.
+the character its 0x3FCC state and every player the 0x3FCD roster with
+its 0x3FD3 nameplate switches; a revoke clears both and sends the emptied
+roster, so no relog is needed.
 ================
 */
 func TestOperatorSetStaffAppliesLiveAndTellsEveryone(t *testing.T) {
@@ -61,7 +62,8 @@ func TestOperatorSetStaffAppliesLiveAndTellsEveryone(t *testing.T) {
 		t.Fatalf("own frames after grant = %+v", own)
 	}
 	wantRoster := wire.NewWriter(0).U16(1).Str(c.Name).Str("[GM]").U32(0xFFFFD87A).U32(0xFFFFAEC3).Payload()
-	if len(everyone) != 1 || everyone[0].Opcode != OpStaffRoster || !bytes.Equal(everyone[0].Payload, wantRoster) {
+	if len(everyone) != 2 || everyone[0].Opcode != OpStaffRoster || !bytes.Equal(everyone[0].Payload, wantRoster) ||
+		everyone[1].Opcode != OpStaffNameplates || !bytes.Equal(everyone[1].Payload, []byte{0, 0}) {
 		t.Fatalf("roster frames after grant = %+v", everyone)
 	}
 	if frames := rt.StaffEntryFrames(testDivision, c); len(frames) != 2 || frames[0].Opcode != OpStaffRoster || frames[1].Opcode != OpStaffState {
@@ -78,7 +80,7 @@ func TestOperatorSetStaffAppliesLiveAndTellsEveryone(t *testing.T) {
 	if len(own) != 2 || !bytes.Equal(own[1].Payload, []byte{0, 0, 0, 0, 0}) {
 		t.Fatalf("own frames after revoke = %+v", own)
 	}
-	if len(everyone) != 2 || !bytes.Equal(everyone[1].Payload, []byte{0, 0}) {
+	if len(everyone) != 4 || everyone[2].Opcode != OpStaffRoster || !bytes.Equal(everyone[2].Payload, []byte{0, 0}) {
 		t.Fatalf("roster after the last revoke = %+v", everyone)
 	}
 	// A shard without staff owes an entering player nothing.
@@ -87,5 +89,62 @@ func TestOperatorSetStaffAppliesLiveAndTellsEveryone(t *testing.T) {
 	}
 	if err := rt.OperatorSetStaff(testDivision, "NoSuchName", true, staff.All); err == nil {
 		t.Fatal("a missing character was granted")
+	}
+}
+
+/*
+================
+TestGMNameplateSwitchTellsEveryone
+
+/NAMEPLATE OFF from a GM keeps the switch through the book's hook and
+sends every player the roster with the 0x3FD3 frame naming the GM; an
+entering player gets the frame too while anyone is off, and nothing once
+everyone is back on. A player who is not staff is refused before the hook.
+================
+*/
+func TestGMNameplateSwitchTellsEveryone(t *testing.T) {
+	c := testCharacter()
+	rt, _ := newTestRuntime(c, testItems())
+	off := false
+	rt.StaffRoster = func(string) []staff.RosterEntry {
+		return []staff.RosterEntry{{Character: c.Name, Tag: "[GM]", NameplateOff: off}}
+	}
+	saved := 0
+	rt.StaffSetNameplate = func(_, name string, on bool) (bool, error) {
+		if name != c.Name {
+			t.Fatalf("switched %q, want %q", name, c.Name)
+		}
+		saved++
+		changed := off == on
+		off = !on
+		return changed, nil
+	}
+	var everyone []wire.Frame
+	rt.PushShardPeerFrames = func(_, _ string, frames []wire.Frame) { everyone = append(everyone, frames...) }
+
+	if rt.SetGMNameplate(testDivision, c.Name, false) || saved != 0 {
+		t.Fatal("a player who is not staff switched a nameplate")
+	}
+	c.GMPrivilege = true
+	if !rt.SetGMNameplate(testDivision, c.Name, false) || saved != 1 {
+		t.Fatal("the GM's /NAMEPLATE OFF was refused")
+	}
+	wantOff := wire.NewWriter(0).U16(1).Str(c.Name).Payload()
+	if len(everyone) != 2 || everyone[1].Opcode != OpStaffNameplates || !bytes.Equal(everyone[1].Payload, wantOff) {
+		t.Fatalf("frames after OFF = %+v", everyone)
+	}
+	entry := rt.StaffEntryFrames(testDivision, c)
+	if len(entry) != 3 || entry[1].Opcode != OpStaffNameplates || !bytes.Equal(entry[1].Payload, wantOff) {
+		t.Fatalf("entry frames while off = %+v", entry)
+	}
+	// Off again changes nothing and tells nobody.
+	if !rt.SetGMNameplate(testDivision, c.Name, false) || len(everyone) != 2 {
+		t.Fatalf("a repeated OFF pushed %+v", everyone)
+	}
+	if !rt.SetGMNameplate(testDivision, c.Name, true) || len(everyone) != 4 || !bytes.Equal(everyone[3].Payload, []byte{0, 0}) {
+		t.Fatalf("frames after ON = %+v", everyone)
+	}
+	if entry := rt.StaffEntryFrames(testDivision, c); len(entry) != 2 || entry[1].Opcode != OpStaffState {
+		t.Fatalf("entry frames with every glow on = %+v", entry)
 	}
 }

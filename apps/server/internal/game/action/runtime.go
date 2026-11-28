@@ -1056,6 +1056,9 @@ type Runtime struct {
 	// book plus the host allowlist; staff.go, port-only). Nil sends no
 	// roster, the native behaviour.
 	StaffRoster func(divisionID string) []staff.RosterEntry
+	// StaffSetNameplate keeps a staff member's /NAMEPLATE switch (the
+	// staff book's SetNameplate; port-only). Nil refuses the command.
+	StaffSetNameplate func(divisionID, character string, on bool) (bool, error)
 	// PushGuildFrames delivers one member's guild frames: its 0x3B29 deltas
 	// only to a session holding guildID's block, every other frame as
 	// PushCharacterFrames would (guild/baseline.go). Nil falls back to
