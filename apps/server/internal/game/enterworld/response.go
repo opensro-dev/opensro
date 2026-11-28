@@ -356,7 +356,10 @@ type BootstrapResult struct {
 	// StorageGoldDepositLimit is the effective warehouse deposit cap the
 	// dialog clamps to, beside RaisedGoldCaps (action/goldcaps.go); zero
 	// omits it and the client keeps the native cap.
-	StorageGoldDepositLimit uint32
+	StorageGoldDepositLimit uint64
+	// WideTradeGold lets the exchange window's gold pass the u32 range
+	// in the wide gold move (port-only, not native; false is native).
+	WideTradeGold bool
 	// UiTuning is the shard's client tuning (port-only, uituning.go); nil
 	// while every value is its default, so the blob stays as before.
 	UiTuning *UiTuning
@@ -432,7 +435,8 @@ type bootstrapSuccessView struct {
 	InventorySort           bool                     `json:"inventorySort,omitempty"`
 	Alexandria              bool                     `json:"alexandria,omitempty"`
 	RaisedGoldCaps          bool                     `json:"raisedGoldCaps,omitempty"`
-	StorageGoldDepositLimit uint32                   `json:"storageGoldDepositLimit,omitempty"`
+	StorageGoldDepositLimit uint64                   `json:"storageGoldDepositLimit,omitempty"`
+	WideTradeGold           bool                     `json:"wideTradeGold,omitempty"`
 	UiTuning                *UiTuning                `json:"uiTuning,omitempty"`
 }
 
@@ -533,7 +537,8 @@ type bootstrapBlobSuccessView struct {
 	InventorySort           bool                     `json:"inventorySort,omitempty"`
 	Alexandria              bool                     `json:"alexandria,omitempty"`
 	RaisedGoldCaps          bool                     `json:"raisedGoldCaps,omitempty"`
-	StorageGoldDepositLimit uint32                   `json:"storageGoldDepositLimit,omitempty"`
+	StorageGoldDepositLimit uint64                   `json:"storageGoldDepositLimit,omitempty"`
+	WideTradeGold           bool                     `json:"wideTradeGold,omitempty"`
 	UiTuning                *UiTuning                `json:"uiTuning,omitempty"`
 }
 
@@ -591,7 +596,8 @@ type bootstrapReferenceBlobSuccessView struct {
 	InventorySort           bool                     `json:"inventorySort,omitempty"`
 	Alexandria              bool                     `json:"alexandria,omitempty"`
 	RaisedGoldCaps          bool                     `json:"raisedGoldCaps,omitempty"`
-	StorageGoldDepositLimit uint32                   `json:"storageGoldDepositLimit,omitempty"`
+	StorageGoldDepositLimit uint64                   `json:"storageGoldDepositLimit,omitempty"`
+	WideTradeGold           bool                     `json:"wideTradeGold,omitempty"`
 	UiTuning                *UiTuning                `json:"uiTuning,omitempty"`
 }
 
@@ -678,6 +684,7 @@ func (r *BootstrapResult) blobView() any {
 		Alexandria:                r.Alexandria,
 		RaisedGoldCaps:            r.RaisedGoldCaps,
 		StorageGoldDepositLimit:   r.StorageGoldDepositLimit,
+		WideTradeGold:             r.WideTradeGold,
 		UiTuning:                  r.UiTuning,
 	}
 	// A re-entry that stated the constants digest keeps its tables:
@@ -753,6 +760,7 @@ func (r *BootstrapResult) referenceBlobView() any {
 		Alexandria:                r.Alexandria,
 		RaisedGoldCaps:            r.RaisedGoldCaps,
 		StorageGoldDepositLimit:   r.StorageGoldDepositLimit,
+		WideTradeGold:             r.WideTradeGold,
 		UiTuning:                  r.UiTuning,
 	}
 	// A re-entry that stated the constants digest keeps its tables:
@@ -842,6 +850,7 @@ func (r *BootstrapResult) MarshalJSON() ([]byte, error) {
 		Alexandria:                r.Alexandria,
 		RaisedGoldCaps:            r.RaisedGoldCaps,
 		StorageGoldDepositLimit:   r.StorageGoldDepositLimit,
+		WideTradeGold:             r.WideTradeGold,
 		UiTuning:                  r.UiTuning,
 	})
 }

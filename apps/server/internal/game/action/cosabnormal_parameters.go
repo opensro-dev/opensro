@@ -176,9 +176,10 @@ cosCombatStats
 
 Use the common non-player combat projection, including all defense/evasion
 and incoming-damage status modifiers. Catalog validation precedes admission.
-The pet's active hostile words (cosdebuff.go) subtract last, over whichever
-projection the companion band built, as the monster's stat owner subtracts
-them from its own projection.
+The pet's active words (coswords.go) land last, over whichever
+projection the companion band built: the hostile words subtract, as the
+monster's stat owner subtracts them from its own projection, and the
+friendly words raise and absorb (applyCosBuffWords).
 ================
 */
 func cosCombatStats(ref *enterworld.CharacterRef, pet *enterworld.CharacterCOS, block *abnormal.Block, words []monster.SelfEffect) (combat.Stats, error) {
@@ -196,6 +197,7 @@ func cosCombatStats(ref *enterworld.CharacterRef, pet *enterworld.CharacterCOS, 
 	if err != nil || ref.TidWord>>11 != 3 {
 		if err == nil {
 			applyCosDebuffWords(&stats, words)
+			applyCosBuffWords(&stats, words)
 		}
 		return stats, err
 	}
@@ -216,5 +218,6 @@ func cosCombatStats(ref *enterworld.CharacterRef, pet *enterworld.CharacterCOS, 
 		*entry.value = float64(value)
 	}
 	applyCosDebuffWords(&stats, words)
+	applyCosBuffWords(&stats, words)
 	return stats, nil
 }

@@ -23,7 +23,7 @@ trader would.
 This file owns the COS target stage: a plain hit, a life-steal or charge
 strike, an area with the COS as primary and a periodic install all land
 on the COS's body, and a hostile debuff row installs its word on the
-companion (hostiledebuff.go's debuffCOS, cosdebuff.go). A taunt stays
+companion (hostiledebuff.go's debuffCOS, coswords.go). A taunt stays
 refused (monster-hostility only).
 
 ===========================================================================
@@ -174,7 +174,7 @@ func (rt *Runtime) planPlayerCOSHitAt(st offensiveStage, target combatTarget, ca
 		return cosHit{}, false
 	}
 	block := rt.newCosAbnormalOwnerForPet(division, owner, pet, now)
-	defender, err := cosCombatStats(ref, pet, block.block, rt.cosDebuffWords(division, owner.Name, pet.GID, now))
+	defender, err := cosCombatStats(ref, pet, block.block, rt.cosWordsHeld(division, owner.Name, pet.GID, now))
 	if err != nil {
 		return cosHit{}, false
 	}

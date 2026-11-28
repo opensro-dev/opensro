@@ -26,7 +26,8 @@ import {
 	caveMapImage,
 	caveMapPage,
 	caveMapView,
-	cavePageLocal
+	cavePageLocal,
+	cavePlayerSigns
 } from "@/engine/foundation/ui/cave-map";
 import { panelCloseId } from "@/engine/foundation/ui/panels";
 import { minimapSameFloor } from "@/engine/foundation/ui/minimap-floor";
@@ -776,15 +777,20 @@ export function createWorldMapHud( options: MapHudOptions ) {
 					// the player is on (issue #3239).
 					local: caveLocal,
 					mark: caveMark && caveMark.regionId === cavePage.regionId ? caveMark : null,
-					roster: caveLocal ?
-						roster
-							.filter( row => row.regionId === cavePage.regionId )
-							.map( row => ({
-								x: row.x,
-								z: row.z,
-								path: ROOT + "interface/worldmap/wmap_sign_" + row.kind + ".png"
-							}) ) :
-						undefined,
+					// The beta roster's players first, so party signs
+					// stay on top, as on the world page.
+					roster: [
+						...cavePlayerSigns( cavePage, game?.betaPlayers ?? [], game?.localGid ),
+						...(caveLocal ?
+							roster
+								.filter( row => row.regionId === cavePage.regionId )
+								.map( row => ({
+									x: row.x,
+									z: row.z,
+									path: ROOT + "interface/worldmap/wmap_sign_" + row.kind + ".png"
+								}) ) :
+							[])
+					],
 					ground: guideCaveGround
 				} ) :
 				null;

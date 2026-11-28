@@ -45,6 +45,7 @@ import mall_avatar_import as avatars
 import nasrun_import as nasrun
 import published_ids
 import sro_pk2
+import later_tables
 from prepare_client_resources import safe_target, write_atomically
 from sro_paths import trees_overlap
 
@@ -175,17 +176,11 @@ def add_styria_items(native, output, v1696_root=None):
 		# ================
 		# read_later
 		# ================
-		def read_later(name):
-			return tables.table_text(media, index, name)
+		read_later = later_tables.Archive.media(media, index)
 
 		rows = select_rows(shared.read_item_tables(read_later))
 		codes = [row[items.CODENAME] for row in rows]
-		for path in sorted(text_root.glob("itemdata*.txt")):
-			if sro_pk2.fold_ascii(path.name) in (ITEM_SHARD, "itemdata.txt"):
-				continue
-			for row in tables.table_rows(path.read_bytes()):
-				if len(row) > items.CODENAME and row[items.SERVICE] == "1" and row[items.CODENAME] in codes:
-					raise ValueError(f"Styria reward row {row[items.CODENAME]} already stands in the item tables")
+		shared.refuse_standing_items(text_root, ITEM_SHARD, codes, "Styria reward row")
 		# Identities stand above every object row of the tree, items and
 		# characters alike (#3994).
 		occupied = published_ids.occupied_objects(text_root, (ITEM_SHARD,))
@@ -196,7 +191,7 @@ def add_styria_items(native, output, v1696_root=None):
 			converted[items.IDENTITY] = str(allocated[row[items.CODENAME]])
 			converted[items.PLACEHOLDER_NAME] = items.UNUSED
 			staged.append(converted)
-		later_texts = [row for name in LATER_TEXT_TABLES for row in avatars.later_text_rows(media, index, name)]
+		later_texts = [row for name in LATER_TEXT_TABLES for row in avatars.later_text_rows(read_later, name)]
 		name_path = safe_target(text_root, NAME_TABLE)
 		base_names = name_path.read_bytes() if name_path.exists() else (native / TEXT_ROOT / NAME_TABLE).read_bytes()
 		merged_names, absent_descriptions = items.merge_texts(base_names, later_texts, staged)

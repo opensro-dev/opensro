@@ -397,6 +397,8 @@ export type GameplayCommand =
 	| { readonly kind: "cos-follow"; readonly gid: number; }
 	| { readonly kind: "cos-cancel"; readonly gid: number; }
 	| { readonly kind: "cos-clean"; readonly gid: number; }
+	// The stable keeper's sale box OK (6A9E30): 0x71DC [u32 npc][u8 3].
+	| { readonly kind: "cos-sell"; readonly npc: number; }
 	| { readonly kind: "cos-pet-attack"; readonly gid: number; readonly pet: number; readonly alt?: boolean; }
 	| { readonly kind: "cos-ride"; readonly gid: number; readonly mounted: boolean; }
 	| { readonly kind: "shop-buyback"; readonly id: number; }
@@ -1030,6 +1032,9 @@ export interface GameplayState extends MoverPublication {
 	readonly alexandria?: boolean;
 	// Port-only SRO_RAISED_GOLD_CAPS: the stall and warehouse deposit caps are raised.
 	readonly raisedGoldCaps?: boolean;
+	// Port-only SRO_WIDE_TRADE_GOLD (#4264): the trade window's gold may pass
+	// 4,294,967,295; absent keeps the native u32 bound.
+	readonly wideTradeGold?: boolean;
 	// Port-only SRO_RAISED_GOLD_CAPS: the shard's chosen warehouse deposit
 	// cap, published at world entry; absent keeps the native deposit cap.
 	readonly storageGoldDepositLimit?: number;

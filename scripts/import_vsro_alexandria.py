@@ -138,103 +138,57 @@ def decode_table(raw):
 	return raw.decode("cp949", errors="replace")
 
 
+# A textdata record ends at CRLF (or a lone CR): the asset build's reader
+# (textDataIo.mjs readLocalizedTextDataRowsSync) and the writers
+# (cap110_blue_berserk.fill_text) split the same way. A bare LF or a
+# U+2028 inside a record is cell text, and the clients ship plenty: the
+# v1.150 textdataname.txt 2470 in-cell LFs, its textquest.txt 19808, the
+# v1.696 textquest families about 43000, VSRO's Tausert name a U+2028.
+# Across the 2466 v1.696, 155 VSRO and 98 v1.150 textdata files no record
+# starts after one (#4608). str.splitlines() cut every one of them and
+# also splits on U+2028, \x85 and the other separators: a later quest's
+# English lost its tail, and a translation_rows rewrite of the v1.150 name
+# table grew it from 11428 records to 12420. A file with no CR at all
+# (only test fixtures, by that census) keeps LF as its record end.
+RECORD_END = re.compile(r"\r\n?")
+
+
+def end_last_record(text):
+	"""
+	text with its last record ended, by table_rows' rule, so rows appended
+	after it start a record of their own: CRLF is added unless the text is
+	empty or already ends at CRLF or a lone CR (or, with no CR anywhere,
+	at LF). A bare LF in a CRLF table is cell text, not an end (#4608).
+	"""
+	if not text or text.endswith("\r"):
+		return text
+	if text.endswith("\r\n") or (text.endswith("\n") and "\r" not in text):
+		return text
+	return text + "\r\n"
+
+
+def records(text):
+	"""
+	The records of decoded textdata text, by the rule above: split at CRLF
+	or a lone CR, or at LF in a text with no CR at all. The empty piece
+	after a final record end is dropped, as str.splitlines() drops it, so a
+	reader that rewrites a table with CRLF joins writes the records it read.
+	Every textdata reader splits through here, never with splitlines().
+	"""
+	parts = RECORD_END.split(text) if "\r" in text else text.split("\n")
+	if parts and parts[-1] == "":
+		parts.pop()
+	return parts
+
+
 def table_rows(raw):
-	"""Tab-split rows of a textdata file, comment and blank lines dropped."""
+	"""Tab-split records of a textdata file, comment and blank records dropped."""
 	rows = []
-	for line in decode_table(raw).splitlines():
-		if not line.strip() or line.startswith("//"):
+	for record in records(decode_table(raw)):
+		if not record.strip() or record.startswith("//"):
 			continue
-		rows.append(line.split("\t"))
+		rows.append(record.split("\t"))
 	return rows
-
-
-# ================
-# later_table_shards
-#
-# The shard names a later table's file lists, or [] when the file is the
-# table itself. The later clients split their big tables (characterdata,
-# skilldata, questdata, Skillaniset, Skilleffectset, characterinfo,
-# textdata_object ...) into shards the old name indexes: every non-blank
-# row is then one cell naming a .txt file. VSRO keeps some of the same
-# names as whole tables, so the shape, not the name, decides.
-# ================
-def later_table_shards(rows):
-	listed = [row[0].strip() for row in rows if row and row[0].strip()]
-	if not listed or not all(len(row) == 1 and row[0].strip().lower().endswith(".txt") for row in rows if row and row[0].strip()):
-		return []
-	# A shard is a file beside its index, named once: a path or a
-	# repeat would read outside the folder or count rows twice.
-	folded = [sro_pk2.fold_ascii(shard) for shard in listed]
-	if any("/" in shard or "\\" in shard or shard.startswith(".") for shard in folded) or len(set(folded)) != len(folded):
-		raise ValueError(f"invalid shard index entries: {listed}")
-	return listed
-
-
-# ================
-# later_shard_files
-#
-# The files a later table's rows come from: its shards (names folded to
-# lower case, as the archive index keys them) when the file is an index,
-# else the file itself. The one walk the row and text readers share.
-# ================
-def later_shard_files(read, name):
-	shards = later_table_shards(table_rows(read(name)))
-	return [sro_pk2.fold_ascii(shard) for shard in shards] or [name]
-
-
-# ================
-# later_table_rows
-#
-# A later table's rows through its shard index, or its own rows when the
-# file is the table. read(name) returns a textdata file's bytes. parse
-# reads one file's bytes into rows (table_rows; a text table passes
-# alexandria_npcs.translation_rows, which joins a row the archive wraps
-# over lines), and runs per file so a join never crosses two shards.
-# indexed_only refuses a flat file: a reader of v1.696's layout (an id
-# cell after the service cell) must not misread VSRO's.
-# ================
-def later_table_rows(read, name, parse=table_rows, indexed_only=False):
-	files = later_shard_files(read, name)
-	if indexed_only and files == [name]:
-		raise ValueError(f"{name} is not a v1.696 shard index")
-	return [row for part in files for row in parse(read(part))]
-
-
-# ================
-# later_tables_rows
-#
-# Several later tables read as one, each file once. An index may list a
-# table another name also stands for: VSRO's textdataname.txt indexes
-# textdata_equip&skill, textdata_object and textdata_new, so reading it
-# beside textdata_object would count every object row twice. Files keep
-# the order they are first named in; parse runs per file as above.
-# ================
-def later_tables_rows(read, names, parse=table_rows):
-	files = list(dict.fromkeys(sro_pk2.fold_ascii(part) for name in names for part in later_shard_files(read, name)))
-	return [row for part in files for row in parse(read(part))]
-
-
-# ================
-# later_table_text
-#
-# A later table as one decoded text, its shards in index order.
-# ================
-def later_table_text(read, name):
-	return "".join(decode_table(read(part)) for part in later_shard_files(read, name))
-
-
-CHARACTER_CODE_COLUMN = 2
-
-
-# ================
-# later_characters
-#
-# A later client's characterdata rows by codename (its third cell),
-# through the characterdata.txt shard index.
-# ================
-def later_characters(read):
-	return {row[CHARACTER_CODE_COLUMN]: row for row in later_table_rows(read, "characterdata.txt")
-		if len(row) > CHARACTER_CODE_COLUMN}
 
 
 #============================================================================
@@ -628,20 +582,6 @@ def field_seed_regions(vsro_root):
 	return client_outdoor_regions(vsro_root)
 
 
-# ================
-# table_text
-#
-# One textdata table's bytes. archive_index keys are lower-case, and a
-# manifest names its shards in mixed case (CharacterData_5000.txt), so
-# the name is lowered here, once, for every caller.
-# ================
-def table_text(media, index, name):
-	entry = index.get(TEXTDATA + name.lower())
-	if entry is None:
-		raise SystemExit(f"Media.pk2 has no {TEXTDATA}{name}")
-	return sro_pk2.payload(media, entry)
-
-
 def table_json(raw, keep, key_column):
 	"""The rows of a table whose key column passes keep, as JSON-ready lists."""
 	return [row for row in table_rows(raw) if len(row) > key_column and keep(row[key_column].strip())]
@@ -745,14 +685,16 @@ def import_alexandria(vsro_root, extracted, native_mapinfo=None):
 		media_index = pinned_index(media_data, pins["Media"], cache)
 		data_index = pinned_index(data_data, pins["Data"], cache)
 
-		city = city_regions(table_text(media_data, media_index, "regioncode.txt"))
+		import later_tables
+		media_tables = later_tables.Archive.media(media_data, media_index, media_path.name)
+		city = city_regions(media_tables.file("regioncode.txt"))
 		if not city:
 			raise SystemExit(f"regioncode.txt has no {CITY_REGION_CODE} region; is this a VSRO client with Alexandria?")
 		# Port-only, not native: field regions are seeds for complete source
 		# terrain components, not an exhaustive list of regions worth importing.
 		# Empty connecting terrain and mountain sectors have no monster nests.
 		fields = field_seed_regions(vsro_root)
-		crossings = gate_seed_regions(table_text(media_data, media_index, "teleportdata.txt"))
+		crossings = gate_seed_regions(media_tables.file("teleportdata.txt"))
 		# Port-only, not native: the Blue Berserk trial arenas are two isolated regions
 		# only the later client has; the quest switch seeds them like the fields.
 		from cap110_quest_arenas import arena_seeds
@@ -852,19 +794,21 @@ def catalog_report(extracted, catalog_raw, tile_ids):
 
 def write_tables(output, media, index, regions):
 	"""The city's rows of the region, zone-name and gate tables, as JSON."""
+	import later_tables
 	region_ids = {(y << 8) | x for x, y in regions}
+	source = later_tables.Archive.media(media, index)
 	tables = {
 		"regioncode.txt": table_json(
-			table_text(media, index, "regioncode.txt"), lambda value: value == CITY_REGION_CODE, 2
+			source.file("regioncode.txt"), lambda value: value == CITY_REGION_CODE, 2
 		),
 		"textzonename.txt": table_json(
-			table_text(media, index, "textzonename.txt"),
+			source.file("textzonename.txt"),
 			lambda value: value.startswith(CITY_NAME_PREFIX),
 			1
 		),
 		"teleportdata.txt": [
 			row
-			for row in table_rows(table_text(media, index, "teleportdata.txt"))
+			for row in table_rows(source.file("teleportdata.txt"))
 			if len(row) > 5 and (row[2].startswith(CITY_GATE_PREFIX) or row[2] in CITY_GATE_EXTRA)
 			and row[5].strip().lstrip("-").isdigit() and int(row[5]) in region_ids
 		]

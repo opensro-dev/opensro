@@ -38,6 +38,7 @@ import tempfile
 from pathlib import Path
 
 import import_vsro_alexandria as stage1
+import later_tables
 import prepare_client_resources as prepare
 import sro_pk2
 from prepare_client_resources import write_atomically
@@ -319,9 +320,7 @@ def append_cp949(native_raw, rows):
 	"""The native CP949 table with rows appended (unchanged when there are none)."""
 	if not rows:
 		return native_raw
-	text = native_raw.decode("cp949")
-	if not text.endswith("\n"):
-		text += "\r\n"
+	text = stage1.end_last_record(native_raw.decode("cp949"))
 	return (text + "\r\n".join(rows) + "\r\n").encode("cp949")
 
 
@@ -369,7 +368,8 @@ def add_music(vsro_root, native, out, later_root=None):
 	textdata = Path("Media_extracted") / stage1.TEXTDATA
 	names = ("regioninfo.txt", "effectenvsnd.txt")
 	tables = {name: (native / textdata / name).read_bytes() for name in names}
-	vsro = {name: variant.read_vsro_file(vsro_root, "Media", stage1.TEXTDATA + name) for name in names}
+	with later_tables.Archive.open(vsro_root) as source:
+		vsro = {name: source.file(name) for name in names}
 	dungeons = dungeon_ids((out / "Data_extracted" / "dungeon" / "dungeoninfo.txt").read_bytes())
 	regions = variant_regions(out, dungeons)
 	native_regions = variant_regions(native, ())
@@ -436,7 +436,8 @@ def add_later_music(later_root, merged, regions):
 	from mall_avatar_import import V1696_SOURCE, source_pins
 	stage1.require_vsro_pin(later_root, ("Data", "Media"), source_pins(V1696_SOURCE))
 	later_regions = table_lines(variant.read_vsro_file(later_root, "Data", "regioninfo.txt"))
-	later_sounds = table_lines(variant.read_vsro_file(later_root, "Media", stage1.TEXTDATA + "effectenvsnd.txt"))
+	with later_tables.Archive.open(later_root) as source:
+		later_sounds = table_lines(source.file("effectenvsnd.txt"))
 	region_rows, sound_rows, names = later_music_rows(
 		table_lines(merged["regioninfo.txt"]), later_regions, later_sounds, regions, EFFECTENVSND_COLUMNS
 	)

@@ -73,10 +73,10 @@ from pathlib import Path
 import import_vsro_alexandria as tables
 import mall_avatar_import as avatars
 import mall_tables as mall
-import sro_pk2
 from prepare_client_resources import safe_target, write_atomically
 from sro_paths import trees_overlap
 import alexandria_npcs as text_tables
+import later_tables
 
 MARKER = ".opensro-later-mall.json"
 FORMAT = "opensro-later-mall-v1"
@@ -113,35 +113,23 @@ MALL_CURRENCIES = ("2", "4", "16")
 # ================
 # tree_reader
 #
-# One textdata table of the built tree: the output's copy when a step
-# before wrote one, else the native extraction's.
+# The built tree's textdata as a later_tables.Archive (its overlay of
+# the output on the native extraction).
 # ================
 def tree_reader(native, output):
-	base = native / TEXT_ROOT
-	native_paths = {sro_pk2.fold_ascii(path.name): path for path in base.iterdir() if path.is_file()} if base.is_dir() else {}
-
-	def read(name):
-		written = output / TEXT_ROOT / name
-		if written.is_file():
-			return written.read_bytes()
-		path = native_paths.get(sro_pk2.fold_ascii(name))
-		return path.read_bytes() if path else None
-
-	return read
+	return later_tables.Archive.overlay(native / TEXT_ROOT, output / TEXT_ROOT)
 
 
 # ================
 # sharded_rows
 #
 # The rows of one sharded table of the tree (itemdata, characterdata),
-# through the shard owner, import_vsro_alexandria.later_table_rows. A
-# tree without the table yields none; a listed shard the tree lacks is an
-# error, never a silent loss of its rows.
+# read through the tree's later_tables.Archive (tree_reader). A tree without the
+# table yields none; a listed shard the tree lacks is an error, never a
+# silent loss of its rows.
 # ================
 def sharded_rows(read, index_name):
-	if read(index_name) is None:
-		return
-	yield from tables.later_table_rows(read, index_name)
+	return read.rows(index_name, optional=True)
 
 
 # ================
@@ -271,14 +259,14 @@ def goods_rows(later, tree, rent_rows=None, item_by_id=None):
 	rent_rows = rent_rows or {}
 	item_by_id = item_by_id or {}
 	package_row = {row[PACKAGE_CODE]: row for row in later["refpackageitem.txt"]
-		if row and row[0] == mall.SERVICE_ON and len(row) >= 9}
+		if row and row[0] == later_tables.SERVICE_ON and len(row) >= 9}
 	scraps = collections.defaultdict(list)
 	for row in later["refscrapofpackageitem.txt"]:
-		if row and row[0] == mall.SERVICE_ON and len(row) >= 20:
+		if row and row[0] == later_tables.SERVICE_ON and len(row) >= 20:
 			scraps[row[SCRAP_PACKAGE]].append(row)
 	prices = collections.defaultdict(list)
 	for row in later["refpricepolicyofitem.txt"]:
-		if row and row[0] == mall.SERVICE_ON and len(row) > mall.MALL_PRICE_AMOUNT and row[3] in MALL_CURRENCIES:
+		if row and row[0] == later_tables.SERVICE_ON and len(row) > mall.MALL_PRICE_AMOUNT and row[3] in MALL_CURRENCIES:
 			prices[row[2]].append(row)
 	current = tree.mall_rows
 	packaged = {row[PACKAGE_CODE] for row in current["refpackageitem.txt"] if len(row) > PACKAGE_CODE}
@@ -303,7 +291,7 @@ def goods_rows(later, tree, rent_rows=None, item_by_id=None):
 	for row in current["refshopgoods.txt"]:
 		if len(row) > GOODS_SLOT and row[GOODS_SLOT].isdigit():
 			next_slot[row[GOODS_TAB]] = max(next_slot[row[GOODS_TAB]], int(row[GOODS_SLOT]) + 1)
-	sold = sorted((row for row in later["refshopgoods.txt"] if row and row[0] == mall.SERVICE_ON and len(row) > GOODS_SLOT
+	sold = sorted((row for row in later["refshopgoods.txt"] if row and row[0] == later_tables.SERVICE_ON and len(row) > GOODS_SLOT
 		and row[GOODS_TAB].startswith(("MALL_", "PRE_MALL_")) and (row[GOODS_PACKAGE] not in have or row[GOODS_PACKAGE] in joinable)),
 		key=lambda row: (row[GOODS_TAB], int(row[GOODS_SLOT]) if row[GOODS_SLOT].isdigit() else 0))
 	rows = {name: [] for name, _ in mall.MALL_TABLES}
@@ -401,7 +389,7 @@ def strip_joined(output, joined):
 		path = safe_target(output / TEXT_ROOT, name)
 		if not path.exists():
 			continue
-		lines = tables.decode_table(path.read_bytes()).splitlines()
+		lines = tables.records(tables.decode_table(path.read_bytes()))
 		kept = [line for line in lines if not joined_row(name, line.split("\t"), joined)]
 		if len(kept) != len(lines):
 			write_atomically(path, b"\xff\xfe" + ("\r\n".join(kept) + "\r\n").encode("utf-16-le"))
@@ -429,7 +417,7 @@ def joined_row(name, cells, joined):
 # shop). Refused when the later client has no such tab either.
 # ================
 def carried_tab_row(current, later, tab):
-	authored = [row for row in later if len(row) > SHOP_TAB_CODE and row[0] == mall.SERVICE_ON and row[SHOP_TAB_CODE] == tab]
+	authored = [row for row in later if len(row) > SHOP_TAB_CODE and row[0] == later_tables.SERVICE_ON and row[SHOP_TAB_CODE] == tab]
 	if not authored:
 		raise ValueError(f"the later client has no {tab} tab to carry over")
 	row = list(authored[0])
@@ -450,12 +438,12 @@ def carried_tab_row(current, later, tab):
 # the wrong width, #4328): key at column 2, English at column 9. The
 # shard owner names the files; the walk stops once every symbol is found.
 # ================
-def later_label_texts(media, index, symbols):
+def later_label_texts(source, symbols):
 	found = {}
 	if not symbols:
 		return found
-	for shard in tables.later_shard_files(lambda name: tables.table_text(media, index, name), TEXT_TABLE):
-		for row in tables.table_rows(tables.table_text(media, index, shard)):
+	for shard in source.files(TEXT_TABLE):
+		for row in tables.table_rows(source.file(shard)):
 			if len(row) > 9 and row[2] in symbols and row[2] not in found:
 				found[row[2]] = row[9]
 		if len(found) == len(symbols):
@@ -480,8 +468,8 @@ def tab_label_row(symbol, text):
 # The TreeView of the built tree.
 # ================
 def read_tree(read):
-	mall_rows = {name: tables.table_rows(read(name) or b"") for name, _ in mall.MALL_TABLES}
-	tabs = {row[SHOP_TAB_CODE] for row in tables.table_rows(read(SHOP_TAB_TABLE) or b"") if len(row) > SHOP_TAB_CODE}
+	mall_rows = {name: tables.table_rows(read.file(name, missing=b"")) for name, _ in mall.MALL_TABLES}
+	tabs = {row[SHOP_TAB_CODE] for row in tables.table_rows(read.file(SHOP_TAB_TABLE, missing=b"")) if len(row) > SHOP_TAB_CODE}
 	return TreeView(sharded_ids(read, "itemdata.txt", ITEM_CODE, ITEM_ID), sharded_codes(read, "characterdata.txt", CHARACTER_CODE),
 		mall_rows, tabs)
 
@@ -499,7 +487,7 @@ def strip_rent(output, terms):
 	path = safe_target(output / TEXT_ROOT, RENT_TABLE)
 	if not path.exists():
 		return
-	lines = tables.decode_table(path.read_bytes()).splitlines()
+	lines = tables.records(tables.decode_table(path.read_bytes()))
 	kept = [line for line in lines if not (len(line.split("\t")) > RENT_CODE and line.split("\t")[RENT_CODE] in terms)]
 	if len(kept) == len(lines):
 		return
@@ -534,46 +522,46 @@ def add_goods(later_root, native, output):
 	read = tree_reader(native, output)
 	with ExitStack() as stack:
 		archives, identities = avatars.open_archives(stack, later_root, avatars.V1696_SOURCE)
-		media, index = archives["Media"]
-		later = {name: avatars.later_table_rows(media, index, name) for name, _ in mall.MALL_TABLES}
-		rent_rows = {row[RENT_CODE]: row for row in avatars.later_table_rows(media, index, RENT_TABLE)
-			if row and row[0] == mall.SERVICE_ON and len(row) > RENT_CODE}
-		item_by_id = {row[1]: row[2] for row in avatars.later_table_rows(media, index, "itemdata.txt") if len(row) > 2}
-		later_tabs = avatars.later_table_rows(media, index, SHOP_TAB_TABLE)
-		label_texts = later_label_texts(media, index,
+		source = later_tables.Archive.media(*archives["Media"])
+		later = {name: source.rows(name, optional=True) for name, _ in mall.MALL_TABLES}
+		rent_rows = {row[RENT_CODE]: row for row in source.rows(RENT_TABLE, optional=True)
+			if row and row[0] == later_tables.SERVICE_ON and len(row) > RENT_CODE}
+		item_by_id = {row[1]: row[2] for row in source.rows("itemdata.txt", optional=True, width=3) if len(row) > 2}
+		later_tabs = source.rows(SHOP_TAB_TABLE, optional=True)
+		label_texts = later_label_texts(source,
 			{row[TAB_LABEL] for row in later_tabs if len(row) > TAB_LABEL and row[SHOP_TAB_CODE] in NASRUN_TABS})
 	tree = read_tree(read)
 	# The Spirit's tabs may be carried when the later client has them
 	# and the tree does not; a tab is written only if a good lands in
 	# it (goods_rows reports those in the summary's tabs).
 	tree.carry_tabs = {code for code in NASRUN_TABS if code not in tree.shop_tabs
-		and any(len(row) > SHOP_TAB_CODE and row[0] == mall.SERVICE_ON and row[SHOP_TAB_CODE] == code for row in later_tabs)}
+		and any(len(row) > SHOP_TAB_CODE and row[0] == later_tables.SERVICE_ON and row[SHOP_TAB_CODE] == code for row in later_tabs)}
 	rows, summary = goods_rows(later, tree, rent_rows, item_by_id)
 	if summary.get("unstage"):
 		mall.strip_mall(output, set(summary["unstage"]))
 	for name, _ in mall.MALL_TABLES:
-		raw = read(name)
-		if raw is None:
+		if not read.has(name):
 			raise ValueError(f"the tree has no {name} to list the later goods in")
+		raw = read.file(name)
 		write_atomically(safe_target(output / TEXT_ROOT, name), text_tables.append_rows(raw, rows[name]))
 	if rows[RENT_TABLE]:
 		write_atomically(safe_target(output / TEXT_ROOT, RENT_TABLE),
-			text_tables.append_rows(read(RENT_TABLE) or b"", rows[RENT_TABLE]))
+			text_tables.append_rows(read.file(RENT_TABLE, missing=b""), rows[RENT_TABLE]))
 	summary["tabLabels"] = []
 	if summary.get("tabs"):
-		current = tables.table_rows(read(SHOP_TAB_TABLE) or b"")
+		current = tables.table_rows(read.file(SHOP_TAB_TABLE, missing=b""))
 		carried = []
 		for code in summary["tabs"]:
 			row = carried_tab_row(current, later_tabs, code)
 			carried.append(row)
 			current.append(row)
 		write_atomically(safe_target(output / TEXT_ROOT, SHOP_TAB_TABLE),
-			text_tables.append_rows(read(SHOP_TAB_TABLE), carried))
+			text_tables.append_rows(read.file(SHOP_TAB_TABLE, missing=b""), carried))
 		labels = [tab_label_row(row[TAB_LABEL], label_texts[row[TAB_LABEL]]) for row in carried
 			if len(row) > TAB_LABEL and row[TAB_LABEL] in label_texts]
 		if labels:
 			write_atomically(safe_target(output / TEXT_ROOT, TEXT_TABLE),
-				text_tables.append_rows(read(TEXT_TABLE), labels))
+				text_tables.append_rows(read.file(TEXT_TABLE), labels))
 			summary["tabLabels"] = [row[1] for row in labels]
 	summary.update({"enabled": True, "format": FORMAT, "laterArchiveHashes": identities})
 	write_atomically(marker, (json.dumps(summary, indent=2) + "\n").encode("utf-8"))

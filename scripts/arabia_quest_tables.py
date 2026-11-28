@@ -47,6 +47,7 @@ import alexandria_map_tables as map_tables
 import alexandria_npcs as characters
 import cap110_blue_berserk as blue
 import import_vsro_alexandria as tables
+import later_tables
 from prepare_client_resources import safe_target, write_atomically
 from sro_paths import MAIN_CHECKOUT_ROOT
 
@@ -241,8 +242,8 @@ def head_help_rows(read, guide):
 		for column in (GUIDE_CONTENT_COLUMN, GUIDE_TITLE_COLUMN)}
 	if not keys:
 		return []
-	rows = (map_tables.later_text_row(row) for row in tables.later_table_rows(read, HELP_TABLE))
-	return [row for row in rows if len(row) > blue.ENGLISH_COLUMN and row[blue.KEY_COLUMN] in keys]
+	rows = (map_tables.later_text_row(row) for row in read.rows(HELP_TABLE))
+	return [row for row in rows if len(row) > characters.TEXT_ENGLISH_COLUMN and row[characters.TEXT_KEY_COLUMN] in keys]
 
 
 # ================
@@ -275,7 +276,7 @@ def guide_rows(rows, quests, texts):
 # defects are fixed, not copied).
 # ================
 def composed_guide_bodies(guide, later_texts):
-	by_key = {row[blue.KEY_COLUMN]: row for rows in later_texts for row in rows if len(row) > blue.KEY_COLUMN}
+	by_key = {row[characters.TEXT_KEY_COLUMN]: row for rows in later_texts for row in rows if len(row) > characters.TEXT_KEY_COLUMN}
 	out = []
 	for row in guide:
 		if len(row) <= GUIDE_QUEST_COLUMN or row[GUIDE_DEPTH_COLUMN] != "1" or row[GUIDE_CONTENT_COLUMN] in by_key:
@@ -288,7 +289,7 @@ def composed_guide_bodies(guide, later_texts):
 		if not tasks or form is None:
 			continue
 		body = list(form)
-		body[blue.KEY_COLUMN] = row[GUIDE_CONTENT_COLUMN]
+		body[characters.TEXT_KEY_COLUMN] = row[GUIDE_CONTENT_COLUMN]
 		for column in range(blue.KOREAN_COLUMN, len(body)):
 			if not form[column]:
 				continue
@@ -336,13 +337,14 @@ def check_guide_text(guide, texts, variant_text):
 # English cell lands where the projection reads it. Any other short
 # row keeps today's path, untouched.
 #
-# Only that slip, never more: SN_PAYCON_QNO_AR_071 is broken over
-# three physical lines by raw newlines in its English text, so its
-# first line is 10 columns ending mid-sentence ("Long time no see").
-# Padded to 17 it shipped that cut text with its <font> and <sml2>
-# left open, and every window that lays out quest guide text threw
-# "Unbalanced guide markup" (r204n's client check, 88 tests). A row
-# that far off is a fragment, not a row a cell short.
+# Only that slip, never more: a row far short of 17 is a fragment, not
+# a row a cell short. SN_PAYCON_QNO_AR_071 once reached here as one:
+# its English cells hold LFs, and a line split cut its first piece at
+# 10 columns mid-sentence. Padded to 17 it shipped with its <font> and
+# <sml2> left open, and every window that lays out quest guide text
+# threw "Unbalanced guide markup" (r204n). The reader now ends a record
+# only at CRLF (import_vsro_alexandria.table_rows), so 071 arrives whole
+# (#4608); the guard stays for a fragment of any other cause.
 # ================
 LATER_TEXT_COLUMNS = 17
 MAX_COLUMN_SLIP = 2
@@ -366,7 +368,7 @@ def project_later_row(row):
 # from the later 17-column layout into the layout fill_text reads.
 # ================
 def later_text_rows(read):
-	return [[project_later_row(row) for row in tables.later_table_rows(read, family + ".txt")]
+	return [[project_later_row(row) for row in read.rows(family + ".txt")]
 		for family in TEXT_FAMILIES]
 
 
@@ -379,8 +381,8 @@ def later_text_rows(read):
 def text_symbols(later_texts):
 	found = []
 	for rows in later_texts:
-		found += [row[blue.KEY_COLUMN] for row in rows if len(row) > blue.ENGLISH_COLUMN + 1
-			and QUEST_CODE.search(row[blue.KEY_COLUMN])]
+		found += [row[characters.TEXT_KEY_COLUMN] for row in rows if len(row) > characters.TEXT_ENGLISH_COLUMN + 1
+			and QUEST_CODE.search(row[characters.TEXT_KEY_COLUMN])]
 	return tuple(dict.fromkeys(found))
 
 
@@ -397,10 +399,10 @@ def text_symbols(later_texts):
 def complete_english(rows):
 	out, missing = [], []
 	for row in rows:
-		if len(row) <= blue.ENGLISH_COLUMN or not characters.is_placeholder_text(row[blue.ENGLISH_COLUMN]):
+		if len(row) <= characters.TEXT_ENGLISH_COLUMN or not characters.is_placeholder_text(row[characters.TEXT_ENGLISH_COLUMN]):
 			out.append(row)
 			continue
-		key = row[blue.KEY_COLUMN]
+		key = row[characters.TEXT_KEY_COLUMN]
 		authored = QUEST_ENGLISH.get(key)
 		if authored is None:
 			if QUEST_CODE.search(key):
@@ -411,7 +413,7 @@ def complete_english(rows):
 		if source.strip() != row[blue.KOREAN_COLUMN].strip():
 			raise ValueError(f"stale Arabia quest English for {key}: the v1.696 Korean changed")
 		row = list(row)
-		row[blue.ENGLISH_COLUMN] = line
+		row[characters.TEXT_ENGLISH_COLUMN] = line
 		out.append(row)
 	if missing:
 		raise ValueError("the v1.696 client ships no English for: " + ", ".join(sorted(set(missing)))
@@ -478,22 +480,22 @@ def add_quest_tables(read, archive_sha, output):
 	if marker.exists():
 		remove_owned(text_root, prior)
 		marker.unlink()
-	quests = tables.later_table_rows(read, QUEST_TABLE)
+	quests = read.rows(QUEST_TABLE)
 	later_texts = [complete_english(rows) for rows in later_text_rows(read)]
-	known = {row[blue.KEY_COLUMN] for rows in later_texts for row in rows if len(row) > blue.KEY_COLUMN}
+	known = {row[characters.TEXT_KEY_COLUMN] for rows in later_texts for row in rows if len(row) > characters.TEXT_KEY_COLUMN}
 	later = {QUEST_TABLE: quests, CONTENTS_TABLE: tables.table_rows(read(CONTENTS_TABLE)),
-		GUIDE_TABLE: guide_rows(tables.later_table_rows(read, GUIDE_TABLE), quests, known)}
+		GUIDE_TABLE: guide_rows(read.rows(GUIDE_TABLE), quests, known)}
 	variant = {name: tables.table_rows(safe_target(text_root, name).read_bytes()) for name in KEYS}
 	new_rows = quest_rows(later, variant)
 	later_texts.append(composed_guide_bodies(new_rows[GUIDE_TABLE], later_texts))
 	heads = head_help_rows(read, new_rows[GUIDE_TABLE])
 	later_texts.append(heads)
 	symbols = text_symbols(later_texts)
-	symbols += tuple(row[blue.KEY_COLUMN] for row in heads if row[blue.KEY_COLUMN] not in symbols)
-	by_key = {row[blue.KEY_COLUMN]: row for rows in later_texts for row in rows if len(row) > blue.ENGLISH_COLUMN + 1}
+	symbols += tuple(row[characters.TEXT_KEY_COLUMN] for row in heads if row[characters.TEXT_KEY_COLUMN] not in symbols)
+	by_key = {row[characters.TEXT_KEY_COLUMN]: row for rows in later_texts for row in rows if len(row) > characters.TEXT_ENGLISH_COLUMN + 1}
 	text_path = safe_target(text_root, TEXT_FILE)
-	variant_text = {row[blue.KEY_COLUMN] for row in tables.table_rows(text_path.read_bytes()) if len(row) > blue.KEY_COLUMN}
-	check_guide_text(new_rows[GUIDE_TABLE], {k: row[blue.ENGLISH_COLUMN] for k, row in by_key.items()}, variant_text)
+	variant_text = {row[characters.TEXT_KEY_COLUMN] for row in tables.table_rows(text_path.read_bytes()) if len(row) > characters.TEXT_KEY_COLUMN}
+	check_guide_text(new_rows[GUIDE_TABLE], {k: row[characters.TEXT_ENGLISH_COLUMN] for k, row in by_key.items()}, variant_text)
 	raw, appended, replaced = blue.fill_text(text_path.read_bytes(), by_key, symbols)
 	ended = {}
 	for name, rows in new_rows.items():
@@ -530,8 +532,7 @@ def main():
 	with open(root / "Media.pk2", "rb") as handle, mmap.mmap(handle.fileno(), 0, access=mmap.ACCESS_READ) as media:
 		index = tables.archive_index(media)
 
-		def read(name):
-			return tables.table_text(media, index, name.lower())
+		read = later_tables.Archive.media(media, index)
 
 		summary = add_quest_tables(read, tables.sha256_of(media), output)
 	print(json.dumps({key: value for key, value in summary.items() if key not in ("rows", "text", "quests", "ended")}, indent=2))

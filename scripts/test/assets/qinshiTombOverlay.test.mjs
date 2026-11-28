@@ -26,6 +26,7 @@ import {
 	computeResourceBuildFingerprint
 } from "../../build/shared/resourceBuildFingerprint.mjs";
 import { STUB_FINGERPRINT_KEYS } from "../helpers/fingerprintKeys.mjs";
+import { fixtureServerRoot } from "../helpers/shardSwitchFixture.mjs";
 import { serverSourceRoot } from "../../build/world/paths.mjs";
 import {
 	loadQinShiTombCharacterRows,
@@ -36,9 +37,6 @@ import {
 	qinshiTombBranchFallback
 } from "../../build/shared/qinshiTomb.mjs";
 
-// The server source root this process started with (fixtureServerRoot
-// points it elsewhere for one test).
-const ORIGINAL_SERVER_ROOT = process.env.SRO_SERVER_SOURCE_ROOT;
 // The checkout's own shard settings registry, read before any fixture
 // points SRO_SERVER_SOURCE_ROOT elsewhere: every fixture registry is a
 // copy of it, so each bake switch keeps its real row and default (#3779).
@@ -48,6 +46,26 @@ const REAL_REGISTRY = fs.readFileSync(
 );
 // The tomb's registry row, whose Default a fixture sets to the value under test.
 const TOMB_DEFAULT = /(\{\s*Env:\s*"SRO_QINSHI_TOMB"[^}]*?Default:\s*")[^"]*(")/;
+
+/*
+================
+tombServerRoot
+
+A server root whose profile holds the tomb's value (undefined leaves the
+key out) and whose registry is the checkout's own with only the tomb's
+Default set to the value under test. The fingerprint reads every bake
+switch's posture (buildKnobLines), so every other switch keeps its real
+row, and a new bake switch needs no fixture change (#3779).
+================
+*/
+function tombServerRoot( t, profileValue, registryDefault ) {
+	assert.match( REAL_REGISTRY, TOMB_DEFAULT, "the registry has a SRO_QINSHI_TOMB row with a Default" );
+	const profile = profileValue === undefined ? {} : { SRO_QINSHI_TOMB: profileValue };
+	return fixtureServerRoot( t, {
+		profile,
+		registry: REAL_REGISTRY.replace( TOMB_DEFAULT, `$1${registryDefault}$2` )
+	} );
+}
 
 /*
 ================
@@ -93,41 +111,6 @@ test("qinshiTombEnabled mirrors the server flag words", ( t ) => {
 	}
 });
 
-/*
-================
-fixtureServerRoot
-
-A server source tree holding only what the posture reads: the release
-profile (profileValue undefined leaves the key out) and a registry row
-with the given default. Pointed at through SRO_SERVER_SOURCE_ROOT for one
-test.
-================
-*/
-function fixtureServerRoot( t, profileValue, registryDefault ) {
-	const root = fs.mkdtempSync( path.join( os.tmpdir(), "sro-tomb-posture-" ) );
-	// Restore the value the process started with, whatever order several
-	// fixtures' hooks run in.
-	t.after( () => {
-		if ( ORIGINAL_SERVER_ROOT === undefined ) delete process.env.SRO_SERVER_SOURCE_ROOT;
-		else process.env.SRO_SERVER_SOURCE_ROOT = ORIGINAL_SERVER_ROOT;
-		fs.rmSync( root, { recursive: true, force: true } );
-	} );
-	fs.mkdirSync( path.join( root, "config" ), { recursive: true } );
-	fs.mkdirSync( path.join( root, "internal", "config", "shardsettings" ), { recursive: true } );
-	const profile = profileValue === undefined ? {} : { SRO_QINSHI_TOMB: profileValue };
-	fs.writeFileSync( path.join( root, "config", "shard-settings.json" ), JSON.stringify( profile ) );
-	// The fingerprint reads every bake switch's posture (buildKnobLines),
-	// so the fixture registry is the checkout's own with only the tomb's
-	// Default set to the value under test: every other switch keeps its
-	// real row, and a new bake switch needs no fixture change (#3779).
-	assert.match( REAL_REGISTRY, TOMB_DEFAULT, "the registry has a SRO_QINSHI_TOMB row with a Default" );
-	fs.writeFileSync(
-		path.join( root, "internal", "config", "shardsettings", "shardsettings.go" ),
-		REAL_REGISTRY.replace( TOMB_DEFAULT, `$1${registryDefault}$2` )
-	);
-	process.env.SRO_SERVER_SOURCE_ROOT = root;
-}
-
 test("an unset tomb flag takes the shard's deployed posture (#2024)", ( t ) => {
 	// The checkout's own posture: the shard spawns the tomb by default, so
 	// a default build must bake it - the split that shipped invisible
@@ -138,12 +121,12 @@ test("an unset tomb flag takes the shard's deployed posture (#2024)", ( t ) => {
 	}
 	// The registry default decides when the profile is silent...
 	withTombFlag( t, undefined );
-	fixtureServerRoot( t, undefined, "off" );
+	tombServerRoot( t, undefined, "off" );
 	assert.equal( qinshiTombEnabled(), false );
 	// ...the deployed profile overrides it...
-	fixtureServerRoot( t, "on", "off" );
+	tombServerRoot( t, "on", "off" );
 	assert.equal( qinshiTombEnabled(), true );
-	fixtureServerRoot( t, "off", "on" );
+	tombServerRoot( t, "off", "on" );
 	assert.equal( qinshiTombEnabled(), false );
 	// ...and an explicit build env still wins over both.
 	process.env.SRO_QINSHI_TOMB = "on";
@@ -152,7 +135,7 @@ test("an unset tomb flag takes the shard's deployed posture (#2024)", ( t ) => {
 
 test("a registry the bake cannot read stops the build", ( t ) => {
 	withTombFlag( t, undefined );
-	fixtureServerRoot( t, undefined, "on" );
+	tombServerRoot( t, undefined, "on" );
 	fs.writeFileSync(
 		path.join( process.env.SRO_SERVER_SOURCE_ROOT, "internal", "config", "shardsettings", "shardsettings.go" ),
 		"var Settings = []Setting{}\n"
@@ -203,7 +186,7 @@ test("a profile or registry flip with the env unset changes the fingerprint and 
 	// Hashing the raw env alone would skip the bake here and ship the
 	// other posture's assets (#2024 in reverse).
 	withTombFlag( t, undefined );
-	fixtureServerRoot( t, "off", "on" );
+	tombServerRoot( t, "off", "on" );
 	const root = process.env.SRO_SERVER_SOURCE_ROOT;
 	const profilePath = path.join( root, "config", "shard-settings.json" );
 	const registryPath = path.join( root, "internal", "config", "shardsettings", "shardsettings.go" );
@@ -247,7 +230,7 @@ test("every bake switch reads its posture from the fixture's copy of the registr
 		} );
 		delete process.env[env];
 	}
-	fixtureServerRoot( t, "off", "on" );
+	tombServerRoot( t, "off", "on" );
 	const fingerprint = await computeResourceBuildFingerprint( STUB_FINGERPRINT_KEYS );
 	assert.equal( typeof fingerprint.hash, "string" );
 	const knobs = buildKnobLines();

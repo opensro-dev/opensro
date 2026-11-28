@@ -41,6 +41,7 @@ import mall_avatar_import as avatars
 import nasrun_import as nasrun
 import published_ids
 import sro_pk2
+import later_tables
 from prepare_client_resources import safe_target, write_atomically
 from sro_paths import trees_overlap
 
@@ -206,12 +207,7 @@ def add_magic_cubes(native, output, v1696_root=None):
 	root = later_world_import.client_root(v1696_root, ROOT_ENV)
 	jupiter.require_v1696_pin(root, tuple(shared.FOLDERS))
 	codes = cube_codenames()
-	for path in sorted(text_root.glob("itemdata*.txt")):
-		if sro_pk2.fold_ascii(path.name) in (ITEM_SHARD, "itemdata.txt"):
-			continue
-		for row in tables.table_rows(path.read_bytes()):
-			if len(row) > items.CODENAME and row[items.SERVICE] == "1" and row[items.CODENAME] in codes:
-				raise ValueError(f"Magic Cube {row[items.CODENAME]} already stands in the item tables")
+	shared.refuse_standing_items(text_root, ITEM_SHARD, codes, "Magic Cube")
 	with ExitStack() as stack:
 		archives, identities = avatars.open_archives(stack, root, avatars.V1696_SOURCE)
 		media, index = archives["Media"]
@@ -219,8 +215,7 @@ def add_magic_cubes(native, output, v1696_root=None):
 		# ================
 		# read_later
 		# ================
-		def read_later(name):
-			return tables.table_text(media, index, name)
+		read_later = later_tables.Archive.media(media, index)
 
 		later_rows = [row for row in shared.read_item_tables(read_later)
 			if len(row) == items.ITEM_COLUMNS and row[items.SERVICE] == "1"]
@@ -236,7 +231,7 @@ def add_magic_cubes(native, output, v1696_root=None):
 			# has 10/20/30 and the bare name, not _50).
 			row[items.ICON] = resolve_cube_icon(row[items.ICON], index)
 			rows.append(row)
-		later_texts = [row for name in nasrun.LATER_TEXT_TABLES for row in avatars.later_text_rows(media, index, name)]
+		later_texts = [row for name in nasrun.LATER_TEXT_TABLES for row in avatars.later_text_rows(read_later, name)]
 		base_names = name_path.read_bytes() if name_path.exists() else (native / TEXT_ROOT / NAME_TABLE).read_bytes()
 		merged_names, absent_descriptions = items.merge_texts(base_names, later_texts, rows)
 		known = {row[1] for row in tables.table_rows(base_names) if len(row) > 1}

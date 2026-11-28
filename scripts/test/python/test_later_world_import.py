@@ -14,6 +14,7 @@ their public add functions, pinned below.
 ===========================================================================
 """
 import script_paths  # noqa: F401  (puts scripts/ and its build folders on sys.path, #3410)
+import later_fixtures  # noqa: E402
 import dataclasses
 import json
 import os
@@ -69,7 +70,7 @@ class LaterWorldReapTest(unittest.TestCase):
 		(text_root / "skilleffect.txt").write_bytes(utf16([
 			["#section", "characterinfo"], ["MOB_NATIVE"] + ["0"] * 12, ["#section", "skillaniset"]]))
 		(text_root / "textdataname.txt").write_bytes(utf16([["1", "UIO_OBJ_MOB_NATIVE", "Native"]]))
-		(text_root / "skilldata.txt").write_bytes(utf16([["skilldata_5000.txt"]]))
+		(text_root / "skilldata.txt").write_bytes(later_fixtures.index("skilldata_5000.txt"))
 		(text_root / jupiter.CHARACTER_SHARD).write_bytes(utf16([]))
 		for relative in ("Map_extracted/85/129.m", "Data_extracted/navmesh/nv_55f1.nvm",
 				"Media_extracted/minimap/129x85.ddj", "Map_extracted/keep.txt"):
@@ -198,7 +199,7 @@ class LaterWorldReapTest(unittest.TestCase):
 		(text_root / "skilleffect.txt").write_bytes(utf16([
 			["#section", "characterinfo"], ["MOB_NATIVE"] + ["0"] * 12, ["#section", "skillaniset"]]))
 		(text_root / "textdataname.txt").write_bytes(utf16([["1", "UIO_OBJ_MOB_NATIVE", "Native"]]))
-		(text_root / "skilldata.txt").write_bytes(utf16([["skilldata_5000.txt"]]))
+		(text_root / "skilldata.txt").write_bytes(later_fixtures.index("skilldata_5000.txt"))
 		sector_relative = f"Map_extracted/{sector[1]}/{sector[0]}.m"
 		for relative in (sector_relative, "Map_extracted/keep.txt"):
 			target = out / relative
@@ -312,7 +313,7 @@ class MergeWorldParticleTest(unittest.TestCase):
 
 	def test_a_merged_model_carries_its_effect_program_into_the_record(self):
 		import skytemple_import
-		textdata = "server_dep/silkroad/textdata/"
+		textdata = later.tables.TEXTDATA
 		# One native row each: the merges number new rows past the highest.
 		catalog = b'JMXV2DTI1001\r\n1\r\n00000 0x00000000 "ok" "native.ddj"\r\n'
 		with tempfile.TemporaryDirectory() as temp:
@@ -613,7 +614,7 @@ class MapWorldTest(unittest.TestCase):
 		with tempfile.TemporaryDirectory() as temp:
 			media, handle = mock.MagicMock(), mock.MagicMock()
 			with mock.patch.dict(os.environ, {self.SPEC.flag: "on"}), 				mock.patch.object(later, "require_pin", side_effect=lambda *a: order.append("pin")) as pin, 				mock.patch.object(later.tables, "open_archive",
-					side_effect=lambda *a: order.append("open") or (None, handle, media)), 				mock.patch.object(later.tables, "archive_index", return_value={}), 				mock.patch.object(later.tables, "table_text", return_value="text"), 				mock.patch.object(later.tables, "table_rows", side_effect=lambda text: [["row", text]]), 				mock.patch.object(later, "merge_world", return_value={"enabled": True}) as merge:
+					side_effect=lambda *a: order.append("open") or (None, handle, media)), 				mock.patch.object(later.tables, "archive_index", return_value={}), 				mock.patch.object(later.later_tables.Archive, "media", return_value=later.later_tables.Archive.of({"teleportdata.txt": utf16([["row", "text"]])})), 				mock.patch.object(later, "merge_world", return_value={"enabled": True}) as merge:
 				seen = []
 
 				def rule(rows_of):
@@ -645,6 +646,7 @@ class LaterWorldStagedRefsTest(unittest.TestCase):
 	def test_a_placing_spec_leaves_a_standing_kind_on_its_row(self):
 		with tempfile.TemporaryDirectory() as temp:
 			text_root = Path(temp)
+			(text_root / "characterdata.txt").write_bytes(later_fixtures.index("characterdata_120000.txt"))
 			(text_root / "characterdata_120000.txt").write_bytes(utf16([
 				["1", "38210", "MOB_SD_OSIRIS_3"] + ["0"] * 10,
 				["1", "38211", "MOB_SD_OTHER"] + ["0"] * 10]))

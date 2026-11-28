@@ -520,3 +520,30 @@ test("world music status names silence, a queued track and a request in flight a
 	assert.equal( f.music.status(), "starting", "an element that has not begun playing" );
 	f.music.dispose();
 });
+
+test("a music element error files what the browser reported, not always a decode failure (#4581)", t => {
+	const sink = fixture( t );
+	sink.load();
+	const media = sink.elements[0];
+	media.error = { code: 3, message: "NS_ERROR_DOM_MEDIA_MEDIASINK_ERR (0x806e000b)" };
+	media.onerror();
+	assert.equal(
+		sink.music.error(),
+		"Music could not play: the audio output is unavailable: /assets/audio/music/maintheme_cut.mp3 (NS_ERROR_DOM_MEDIA_MEDIASINK_ERR (0x806e000b))"
+	);
+	assert.equal( sink.music.status(), "failed" );
+	sink.music.dispose();
+});
+
+test("a real decode failure on a music element is still filed as one", t => {
+	const f = fixture( t );
+	f.load();
+	const media = f.elements[0];
+	media.error = { code: 3, message: "PIPELINE_ERROR_DECODE: audio decode failed" };
+	media.onerror();
+	assert.equal(
+		f.music.error(),
+		"Music could not be decoded: /assets/audio/music/maintheme_cut.mp3 (PIPELINE_ERROR_DECODE: audio decode failed)"
+	);
+	f.music.dispose();
+});

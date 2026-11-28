@@ -136,6 +136,10 @@ type Config struct {
 	// a login raises to; zero is auth.AccountBcryptCost. A store that reports
 	// its own cost must agree. Tests pass bcrypt.MinCost.
 	BcryptCost int
+	// LoginSourceKey keys the address and network hashes every login
+	// event carries (login_source.go, #4815); nil records no source.
+	// Port-only, not native: set only while SRO_CONNECTION_JOURNAL is on.
+	LoginSourceKey []byte
 }
 
 /*
@@ -159,6 +163,7 @@ type Server struct {
 	bcryptCost              int
 	passwordSlots           chan struct{}
 	loginAttempts           *loginLimiter
+	loginSourceKey          []byte
 	// incidentReports paces /client/incident per account; degradedReports
 	// paces its non-fatal "degraded" reports apart, so they never use up the
 	// allowance a session-ending failure needs.
@@ -269,6 +274,7 @@ func New(config Config) (*Server, error) {
 		bcryptCost:              bcryptCost,
 		passwordSlots:           make(chan struct{}, 16),
 		loginAttempts:           newLoginLimiter(now),
+		loginSourceKey:          config.LoginSourceKey,
 		incidentReports:         newLoginLimiter(now),
 		degradedReports:         newLoginLimiter(now),
 		anonymousIncidents:      newLoginLimiter(now),

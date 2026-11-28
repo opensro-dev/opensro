@@ -37,6 +37,7 @@ from pathlib import Path
 
 import cap110_skill_effects as effects
 import import_vsro_alexandria as tables
+import later_tables
 import sro_pk2
 from prepare_client_resources import safe_target, write_atomically
 
@@ -152,8 +153,8 @@ def later_source(root, pins):
 	opened = {name: tables.open_archive(root, name) for name in names}
 	try:
 		media = opened[SOUND_ARCHIVE][2]
-		media_index = tables.archive_index(media)
-		sound = tables.table_text(media, media_index, SOUND_TABLE) if tables.TEXTDATA + SOUND_TABLE in media_index else b""
+		source = later_tables.Archive.media(media, tables.archive_index(media))
+		sound = source.file(SOUND_TABLE) if source.has(SOUND_TABLE) else b""
 		yield {"archives": {name: (opened[name][2], tables.archive_index(opened[name][2])) for name in ARCHIVES},
 			"sound": sound.decode(SOUND_ENCODING, errors="strict")}
 	finally:

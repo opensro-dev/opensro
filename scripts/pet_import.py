@@ -22,7 +22,10 @@ and guild systems, not pets, and never candidates. Fellow kinds
 (COS_F_) ride the attack-pet lane (#3328, inference recorded there):
 the persistent summoner admits them by their rows' own band and they
 fight with their native per-level rows, like every summonable kind
-without a petdesign entry. A kind of any other prefix is deferred
+without a petdesign entry. v1.696's Fellow pets (COS_PET2_) arrive as
+one level-1 row per kind; pet_fellows gives each its 140 growth rows
+and a growth scroll first, so they are attack kinds here (#4788). A
+kind of any other prefix is deferred
 and reported, never half imported: its rows wait for a lane.
 
 A chosen kind brings its characterdata rows, the summon scrolls whose
@@ -44,6 +47,13 @@ every known identity, remembered in the marker so a rebuild never moves
 a pet. Each source owns one character shard, one item shard and one
 marker, so a source's off path removes only its own rows.
 
+Two passes close what no source fills (owner 2026-11-28: every pet is in
+the game). The VSRO pass also lists the native kinds whose scroll no
+package sells (native_scrolls), on their lane's tab. A fourth source,
+INFERRED_SOURCE, runs pet_inference.py's rows for the COS models every
+client ships without a row (gorilla, frilled lizard, the fourth dragon
+horse tier) through the same selection, after every real source.
+
 ===========================================================================
 """
 import argparse
@@ -64,10 +74,14 @@ import published_ids
 import later_world_import
 import mall_avatar_import as mall_authoring
 import mall_tables as mall
+import pet_fellows
+import pet_inference
+import pet_rows
 import skilldata_enc as skill_tables
 from pin_file import read_pin_field
 from prepare_client_resources import safe_target, write_atomically
 import sro_pk2
+import later_tables
 from sro_paths import EXTRACTED_ROOT, REPO_ROOT
 
 FLAG = "SRO_PETS"
@@ -86,15 +100,8 @@ TEXT_ROOT = shared.TEXT_ROOT
 ICON_ROOT = Path("Media_extracted") / "icon"
 
 # Character row columns (the layout scripts/cap110_monsters.py reads):
-CHAR_ID = 1
-CHAR_CODE = 2
-CHAR_NAME_KEY = 5
-CHAR_MODEL = 52
-CHAR_LEVEL = 57
 # Item row column 119 is the associated character codename (the server's
 # itemrefs.go reads the same column): a summon scroll names its pet there.
-ITEM_ASSOCIATED_CHAR = 119
-SERVICE_ON = "1"
 
 # One shard triple and one marker per source, in import order: a kind is
 # imported once, from the earliest source that holds it. Skill shards sit
@@ -103,12 +110,21 @@ SERVICE_ON = "1"
 VSRO_SOURCE = {"name": "vsro", "char_shard": "characterdata_130000.txt", "item_shard": "itemdata_130000.txt",
 	"skill_shard": "skilldata_131000.txt", "report": ".opensro-pets.json", "pins": None}
 V1696_SOURCE = {"name": "v1696", "char_shard": "characterdata_140000.txt", "item_shard": "itemdata_140000.txt",
-	"skill_shard": "skilldata_140000.txt", "report": ".opensro-pets-v1696.json", "pins": V1696_PIN_FILE}
+	"skill_shard": "skilldata_140000.txt", "report": ".opensro-pets-v1696.json", "pins": V1696_PIN_FILE,
+	"fellows": True}
 ARCHIVE_SOURCE = {"name": "archive", "char_shard": "characterdata_150000.txt", "item_shard": "itemdata_150000.txt",
 	"skill_shard": "skilldata_150000.txt", "report": ".opensro-pets-archive.json", "pins": AVATARS_PIN_FILE}
-SOURCES = (VSRO_SOURCE, V1696_SOURCE, ARCHIVE_SOURCE)
+# The kinds no source has a row for (pet_inference.py), inferred from the
+# VSRO client's template rows and run as the last source, so a kind any
+# real source carries always wins.
+INFERRED_SOURCE = {"name": "inferred", "char_shard": "characterdata_340000.txt", "item_shard": "itemdata_340000.txt",
+	"skill_shard": "skilldata_340000.txt", "report": ".opensro-pets-inferred.json", "pins": None, "infer": True}
+SOURCES = (VSRO_SOURCE, V1696_SOURCE, ARCHIVE_SOURCE, INFERRED_SOURCE)
 
 EXCLUDED_PREFIXES = ("COS_GUARD_", "COS_GUILD_")
+# A developer's test row (v1.696 COS_T_BEHEMOTH_TEST: no scroll, a copy
+# of the Behemoth) is no kind at all (mall_avatar_import's _TEST rule).
+EXCLUDED_SUFFIXES = ("_TEST",)
 # The Item Mall tab each lane's summon scrolls list on: v1.150's own pet
 # tabs (refshoptab). Fellows fight like attack pets and share their tab.
 # Owner 2026-11-27: every new pet sells, native or not.
@@ -117,17 +133,11 @@ MALL_TAB = {
 	"transport": "MALL_PET_D_CART", "vehicle": "MALL_PET_C_VEHICLE",
 }
 # Event copies are rewards, not goods: their scrolls never list.
-EVENT_SCROLL_PREFIX = "ITEM_EVENT_"
-LEVEL_SUFFIX = re.compile(r"_\d+$")
 # Kinds the server's COS lanes already run (the summoning, pickup, growth,
 # transport, riding and fellow lanes); anything else defers until its
 # lane exists. Fellows need no petdesign entry: they run their native
 # rows, and the report's design-entry need stays attack-only.
 LANE_KINDS = ("pickup", "attack", "transport", "vehicle", "fellow")
-# RefObjChar default-skill columns in the v1.150 layout (convert_character
-# lands the later client's ten actions here; the server reads the same).
-CHAR_DEFAULT_SKILL1 = 89
-CHAR_DEFAULT_SKILL_N = 98
 
 
 # ================
@@ -151,20 +161,16 @@ def enabled(env=os.environ):
 
 
 # ================
-# family_of / kind_of
+# kind_of
 #
-# A kind is its codename family: COS_P_WOLF_001 and COS_P_WOLF_140 are
-# one wolf. The kind follows the prefix and the family's shape.
+# The lane a kind (pet_rows.family_of) runs on, from its prefix and the
+# family's shape.
 # ================
-def family_of(codename):
-	return LEVEL_SUFFIX.sub("", codename)
-
-
 def kind_of(family, rows):
-	if family.startswith(EXCLUDED_PREFIXES):
+	if family.startswith(EXCLUDED_PREFIXES) or family.endswith(EXCLUDED_SUFFIXES):
 		return "excluded"
 	if family.startswith("COS_P_"):
-		levels = {row[CHAR_LEVEL] for row in rows if len(row) > CHAR_LEVEL}
+		levels = {row[characters.LEVEL_COLUMN] for row in rows if len(row) > characters.LEVEL_COLUMN}
 		return "attack" if len(levels) > 1 else "pickup"
 	if family.startswith("COS_T_"):
 		return "transport"
@@ -172,6 +178,11 @@ def kind_of(family, rows):
 		return "vehicle"
 	if family.startswith("COS_F_"):
 		return "fellow"
+	# A v1.696 Fellow runs on the growth lane once pet_fellows gave it
+	# its level rows; a single row (an evolution summon) waits.
+	if pet_rows.is_fellow(family):
+		levels = {row[characters.LEVEL_COLUMN] for row in rows if len(row) > characters.LEVEL_COLUMN}
+		return "attack" if len(levels) > 1 else "unknown"
 	# Anything else waits for its lane (the banner's rule): a prefix
 	# this map does not name is deferred, never fellow by default.
 	return "unknown"
@@ -205,8 +216,8 @@ def previous_targets(prior):
 # ================
 def select_pets(native_chars, native_items, earlier_codes, later_chars, later_items, previous=None, missing=lambda family, rows: [], reserved_ids=(),
 		pinned=None):
-	native_codes = {row[CHAR_CODE] for row in native_chars if len(row) > CHAR_CODE}
-	taken_ids = {int(row[CHAR_ID]) for row in native_chars if len(row) > CHAR_ID and row[CHAR_ID].isdigit()}
+	native_codes = {row[characters.CODENAME_COLUMN] for row in native_chars if len(row) > characters.CODENAME_COLUMN}
+	taken_ids = {int(row[characters.ID_COLUMN]) for row in native_chars if len(row) > characters.ID_COLUMN and row[characters.ID_COLUMN].isdigit()}
 	taken_ids |= {int(row[items.IDENTITY]) for row in native_items if len(row) > items.IDENTITY and row[items.IDENTITY].isdigit()}
 	# Identities other importers already placed in the staging tree are
 	# taken too: character and item rows share one built identity space,
@@ -215,26 +226,26 @@ def select_pets(native_chars, native_items, earlier_codes, later_chars, later_it
 	previous = previous or {}
 	families = collections.defaultdict(list)
 	for row in later_chars:
-		if len(row) > CHAR_CODE and row[CHAR_CODE].startswith("COS_"):
-			families[family_of(row[CHAR_CODE])].append(row)
+		if len(row) > characters.CODENAME_COLUMN and row[characters.CODENAME_COLUMN].startswith("COS_"):
+			families[pet_rows.family_of(row[characters.CODENAME_COLUMN])].append(row)
 	scrolls = collections.defaultdict(list)
 	for row in later_items:
-		if len(row) > ITEM_ASSOCIATED_CHAR and row[items.SERVICE] == SERVICE_ON and row[ITEM_ASSOCIATED_CHAR].strip():
-			scrolls[row[ITEM_ASSOCIATED_CHAR].strip()].append(row)
+		if len(row) > items.SUMMONED_CHARACTER and row[items.SERVICE] == later_tables.SERVICE_ON and row[items.SUMMONED_CHARACTER].strip():
+			scrolls[row[items.SUMMONED_CHARACTER].strip()].append(row)
 	chosen, existing, deferred, skipped = [], [], [], []
 	for family in sorted(families):
-		rows = sorted(families[family], key=lambda row: int(row[CHAR_ID]) if row[CHAR_ID].isdigit() else 0)
+		rows = sorted(families[family], key=lambda row: int(row[characters.ID_COLUMN]) if row[characters.ID_COLUMN].isdigit() else 0)
 		kind = kind_of(family, rows)
 		if kind == "excluded":
 			continue
-		fresh_rows = [row for row in rows if row[CHAR_CODE] not in native_codes and row[CHAR_CODE] not in earlier_codes]
+		fresh_rows = [row for row in rows if row[characters.CODENAME_COLUMN] not in native_codes and row[characters.CODENAME_COLUMN] not in earlier_codes]
 		if not fresh_rows:
 			existing.append(family)
 			continue
 		if kind not in LANE_KINDS:
 			deferred.append({"family": family, "kind": kind, "reason": "no server lane yet"})
 			continue
-		codes = {row[CHAR_CODE] for row in rows}
+		codes = {row[characters.CODENAME_COLUMN] for row in rows}
 		linked = [row for code, linked_rows in scrolls.items() if code == family or code in codes for row in linked_rows]
 		absent = list(missing(family, fresh_rows))
 		if not linked:
@@ -249,7 +260,7 @@ def select_pets(native_chars, native_items, earlier_codes, later_chars, later_it
 	# identity. Character and item rows share one identity space in the
 	# built data.
 	if pinned:
-		staged = [row[CHAR_CODE] for _, _, rows, _ in chosen for row in rows]
+		staged = [row[characters.CODENAME_COLUMN] for _, _, rows, _ in chosen for row in rows]
 		staged += [row[items.CODENAME] for _, _, _, linked in chosen for row in linked]
 		held, previous = published_ids.overlay(pinned, staged, taken_ids, previous)
 		taken_ids |= held
@@ -270,17 +281,17 @@ def select_pets(native_chars, native_items, earlier_codes, later_chars, later_it
 
 	char_rows, id_map, report_kinds = [], {}, []
 	for family, kind, rows, linked in chosen:
-		levels = sorted({int(row[CHAR_LEVEL]) for row in rows if len(row) > CHAR_LEVEL and row[CHAR_LEVEL].isdigit()})
+		levels = sorted({int(row[characters.LEVEL_COLUMN]) for row in rows if len(row) > characters.LEVEL_COLUMN and row[characters.LEVEL_COLUMN].isdigit()})
 		for row in rows:
-			claim(row[CHAR_CODE], int(row[CHAR_ID]))
+			claim(row[characters.CODENAME_COLUMN], int(row[characters.ID_COLUMN]))
 			# The later clients' characterdata is 104 columns (VSRO and v1.696
 			# alike) and v1.150's is 120; the server and client read the v1.150
 			# layout, so a row joins in it. Copied as-is, a pet row had no column
 			# 109 and the NPC manifest wrote its material kind as null, which the
 			# client refuses ("Invalid monster material kind").
 			converted = characters.convert_character(row)
-			id_map[row[CHAR_CODE]] = {"source": int(row[CHAR_ID]), "target": targets[row[CHAR_CODE]]}
-			converted[CHAR_ID] = str(targets[row[CHAR_CODE]])
+			id_map[row[characters.CODENAME_COLUMN]] = {"source": int(row[characters.ID_COLUMN]), "target": targets[row[characters.CODENAME_COLUMN]]}
+			converted[characters.ID_COLUMN] = str(targets[row[characters.CODENAME_COLUMN]])
 			char_rows.append(converted)
 		needs = ["petdesign entry"]
 		if kind == "attack":
@@ -310,11 +321,10 @@ def select_pets(native_chars, native_items, earlier_codes, later_chars, later_it
 # source mmaps its client archive, the pinned archive's Media comes
 # from avatar_archive. Both return (character rows, item rows, object
 # text table) with shards resolved by their owner,
-# import_vsro_alexandria.later_table_rows.
+# later_tables.Archive.
 # ================
 def later_tables_from_media(media, index, object_text_required=True):
-	def read(name):
-		return tables.table_text(media, index, name.lower())
+	read = later_tables.Archive.media(media, index)
 
 	# A client Media always carries the object text, so a pk2 read stops
 	# without it; the pinned archive may carry pet rows without it, and a
@@ -323,12 +333,12 @@ def later_tables_from_media(media, index, object_text_required=True):
 	# later_object_text, which follows it (and reads a flat VSRO table as
 	# itself). Read raw, every v1.696 pet's name went missing and the
 	# asset build refused the release (21 item titles, 2026-11-15).
-	if object_text_required or tables.TEXTDATA + "textdata_object.txt" in index:
+	if object_text_required or read.has("textdata_object.txt"):
 		object_text = b"\xff\xfe" + later_world_import.later_object_text(read).encode("utf-16-le")
 	else:
 		object_text = b""
-	return (tables.later_table_rows(read, "characterdata.txt"),
-		tables.later_table_rows(read, "itemdata.txt"),
+	return (read.rows("characterdata.txt"),
+		read.rows("itemdata.txt"),
 		object_text)
 
 
@@ -342,15 +352,9 @@ def native_tables(native, exclude_shards=()):
 	# output share a tree, so a rebuild still sees its kinds as fresh
 	# and can restage their skills (later_world_import's tree_characters
 	# rule).
-	excluded = {name.lower() for name in exclude_shards}
-	text_root = Path(native) / TEXT_ROOT
-	chars = [row for path in sorted(text_root.glob("characterdata_*.txt"))
-		if path.name.lower() not in excluded
-		for row in tables.table_rows(path.read_bytes())]
-	item_rows = [row for path in sorted(text_root.glob("itemdata_*.txt"))
-		if path.name.lower() not in excluded
-		for row in tables.table_rows(path.read_bytes())]
-	return chars, item_rows
+	tree = later_tables.Archive.tree(Path(native) / TEXT_ROOT)
+	return (tree.rows("characterdata.txt", excluding=exclude_shards),
+		tree.rows("itemdata.txt", excluding=exclude_shards))
 
 
 # ================
@@ -361,27 +365,26 @@ def native_tables(native, exclude_shards=()):
 # onto skill_shard the way later_world_import.stage_kinds does, and
 # remap the character columns through the identity map. An empty need
 # drops the shard so a rebuild that stages no fighters leaves no
-# orphan skill file. Returns (char_rows, skill code->id map).
+# orphan skill file. client_skills are the later client's skilldata
+# rows (skilldata_enc.client_skill_rows), read once by the caller.
+# Returns (char_rows, skill code->id map).
 # ================
-def stage_pet_skills(read, has, text_root, skill_shard, char_rows, previous_skills=None):
+def stage_pet_skills(client_skills, text_root, skill_shard, char_rows, previous_skills=None):
 	text_root = Path(text_root)
 	needed = {
-		int(value) for row in char_rows for value in row[CHAR_DEFAULT_SKILL1:CHAR_DEFAULT_SKILL_N + 1]
-		if len(row) > CHAR_DEFAULT_SKILL_N and value.isdigit() and int(value)
+		int(value) for row in char_rows for value in row[characters.NATIVE_DEFAULT_SKILL_AT:characters.NATIVE_DEFAULT_SKILL_END]
+		if len(row) >= characters.NATIVE_DEFAULT_SKILL_END and value.isdigit() and int(value)
 	}
 	if not needed:
 		_drop_skill_shard(text_root, skill_shard)
 		return char_rows, {}
-	native_skills = [
-		row for path in text_root.glob("skilldata_*.txt") if path.name.lower() != skill_shard.lower()
-		for row in tables.table_rows(path.read_bytes()) if len(row) == 118
-	]
-	client_skills = [row for row in skill_tables.client_skill_rows(read, has) if len(row) > 3 and row[1].isdigit()]
+	native_skills = cap110_monsters.tree_skills(text_root, skill_shard)
+	client_skills = [row for row in client_skills if len(row) > 3 and row[1].isdigit()]
 	added, skill_map = cap110_monsters.merge_skills(native_skills, client_skills, needed, previous_skills or {})
 	for row in char_rows:
-		row[CHAR_DEFAULT_SKILL1:CHAR_DEFAULT_SKILL_N + 1] = [
+		row[characters.NATIVE_DEFAULT_SKILL_AT:characters.NATIVE_DEFAULT_SKILL_END] = [
 			str(skill_map[int(value)]) if value.isdigit() and int(value) else "0"
-			for value in row[CHAR_DEFAULT_SKILL1:CHAR_DEFAULT_SKILL_N + 1]
+			for value in row[characters.NATIVE_DEFAULT_SKILL_AT:characters.NATIVE_DEFAULT_SKILL_END]
 		]
 	write_atomically(text_root / skill_shard, cap110_monsters.encode_rows(added))
 	manifest = tables.table_rows((text_root / "skilldata.txt").read_bytes()) if (text_root / "skilldata.txt").exists() else []
@@ -522,7 +525,7 @@ def _merge_name_text(output, char_rows, item_rows, later_text, report):
 	name_path = safe_target(Path(output) / TEXT_ROOT, "textdataname.txt")
 	base = name_path.read_bytes() if name_path.exists() else b""
 	known = {row[1] for row in characters.translation_rows(base) if len(row) > 1}
-	wanted = ({row[CHAR_NAME_KEY] for row in char_rows if len(row) > CHAR_NAME_KEY}
+	wanted = ({row[characters.NAME_KEY_COLUMN] for row in char_rows if len(row) > characters.NAME_KEY_COLUMN}
 		| {row[items.NAME_KEY] for row in item_rows if len(row) > items.NAME_KEY}) - known
 	# later_text_row brings a v1.696 17-column row (text id after the
 	# service cell) to the VSRO layout this merge reads, as stage_kinds
@@ -561,7 +564,7 @@ def tab_price(current, tab):
 # (its marker's mall packages). A scroll some package already sells, an
 # event copy, a full tab or a tab without a price is reported unlisted.
 # ================
-def _list_in_mall(output, native, item_rows, report, prior, source):
+def _list_in_mall(output, native, item_rows, report, prior, source, native_goods=()):
 	output = Path(output)
 	mall.strip_mall(output, set(prior.get("mall", {}).get("packages", [])))
 	files = {name: safe_target(output / TEXT_ROOT, name) for name, _ in mall.MALL_TABLES}
@@ -585,7 +588,19 @@ def _list_in_mall(output, native, item_rows, report, prior, source):
 		stale |= set(read_marker(output, later).get("mall", {}).get("packages", []))
 	current = mall.without_packages(current, stale)
 	kind_of_scroll = {code: added["kind"] for added in report.get("added", []) for code in added.get("scrolls", [])}
+	kind_of_scroll.update({row[items.CODENAME]: kind for row, kind, _ in native_goods})
 	sold = {row[3] for row in current["refscrapofpackageitem.txt"] if len(row) > 3}
+	# A native kind some scroll of it already sells (the flute's silk copy,
+	# the rabbit's gold one) needs no second listing; only kinds nobody can
+	# get list.
+	sold_families = {family for row, _, family in native_goods if row[items.CODENAME] in sold}
+	item_rows = list(item_rows)
+	unlisted = []
+	for row, _, family in native_goods:
+		if family in sold_families and row[items.CODENAME] not in sold:
+			unlisted.append({"code": row[items.CODENAME], "reason": "kind already sold"})
+		else:
+			item_rows.append(row)
 	slots = collections.defaultdict(lambda: -1)
 	for row in current["refshopgoods.txt"]:
 		if len(row) > 4 and row[4].lstrip("-").isdigit():
@@ -594,12 +609,12 @@ def _list_in_mall(output, native, item_rows, report, prior, source):
 	ids = mall_authoring.AuthoredIds(
 		{name: [] for name, _ in mall.MALL_TABLES}, current,
 		{int(row[2]) for row in current["refpackageitem.txt"] if len(row) > 2 and row[2].isdigit()})
-	packages, unlisted = [], []
+	packages = []
 	for row in sorted(item_rows, key=lambda row: row[items.CODENAME]):
 		code = row[items.CODENAME]
 		tab = MALL_TAB.get(kind_of_scroll.get(code, ""))
 		price = tab_price(current, tab) if tab else None
-		if code.startswith(EVENT_SCROLL_PREFIX):
+		if code.startswith(pet_rows.EVENT_SCROLL_PREFIX):
 			unlisted.append({"code": code, "reason": "event copy"})
 		elif code in sold:
 			unlisted.append({"code": code, "reason": "already sold"})
@@ -618,10 +633,59 @@ def _list_in_mall(output, native, item_rows, report, prior, source):
 	report["mall"] = {"packages": packages, "listed": len(packages), "unlisted": unlisted}
 
 
+# ================
+# native_scrolls
+#
+# The v1.150 summon scrolls of every native kind on a COS lane, as
+# (scroll row, kind, family) triples for _list_in_mall. Nine native kinds (Rudolph,
+# Unicorn, Wild Boar, Glider, Jinn, Raccoon Dog, Behemoth, Donkey, Lizard)
+# have a scroll no shop or mall package sells, so no player could get one
+# (owner 2026-11-28: every pet is in the game); _list_in_mall skips the
+# ones some package already sells, the other scrolls of a kind one of them
+# sells, and the event copies.
+# ================
+def native_scrolls(native_chars, native_items):
+	families = collections.defaultdict(list)
+	for row in native_chars:
+		if len(row) > characters.LEVEL_COLUMN and row[characters.CODENAME_COLUMN].startswith("COS_"):
+			families[pet_rows.family_of(row[characters.CODENAME_COLUMN])].append(row)
+	kind_of_code = {}
+	for family, rows in families.items():
+		kind = kind_of(family, rows)
+		if kind in LANE_KINDS:
+			kind_of_code[family] = (kind, family)
+			kind_of_code.update({row[characters.CODENAME_COLUMN]: (kind, family) for row in rows})
+	return [
+		(row,) + kind_of_code[row[items.SUMMONED_CHARACTER].strip()] for row in native_items
+		if len(row) > items.SUMMONED_CHARACTER and row[items.SERVICE] == later_tables.SERVICE_ON
+		and row[items.SUMMONED_CHARACTER].strip() in kind_of_code
+	]
+
+
+# ================
+# inferred_tables
+#
+# The inferred source's tables: pet_inference's rows for the COS models
+# no source has a row for, built on this client's template rows, with
+# their object text encoded as a later object table. An inferred icon
+# neither the native tree nor this client's Media holds takes the
+# template's.
+# ================
+def inferred_tables(later_chars, later_items, later_text, native, media_index):
+	icon_root = Path(native) / ICON_ROOT
+
+	def has_icon(name):
+		return (icon_root / name).is_file() or ("icon/" + name) in media_index
+
+	texts = {row[1]: row for row in characters.translation_rows(later_text) if len(row) > 1}
+	chars, scrolls, text_rows = pet_inference.infer_kinds(later_chars, later_items, texts, has_icon)
+	return chars, scrolls, _encode(text_rows)
+
+
 def _write_pass(output, source, char_rows, item_rows, report):
 	text_root = Path(output) / TEXT_ROOT
 	if char_rows:
-		write_atomically(safe_target(text_root, source["char_shard"]), _encode(sorted(char_rows, key=lambda row: int(row[CHAR_ID]))))
+		write_atomically(safe_target(text_root, source["char_shard"]), _encode(sorted(char_rows, key=lambda row: int(row[characters.ID_COLUMN]))))
 		_manifest_with(output, "characterdata.txt", source["char_shard"])
 	else:
 		# No shard file, so no manifest line either: a listed but
@@ -673,16 +737,22 @@ def add_pets(root, native, output, source=VSRO_SOURCE, earlier_codes=(), env=os.
 			open(Path(root) / "Data.pk2", "rb") as handle, mmap.mmap(handle.fileno(), 0, access=mmap.ACCESS_READ) as data:
 		media_index = tables.archive_index(media)
 		data_index = tables.archive_index(data)
+		if source.get("infer"):
+			later_chars, later_items, later_text = inferred_tables(later_chars, later_items, later_text, native, media_index)
 
 		def missing(family, rows):
 			for row in rows:
-				model = row[CHAR_MODEL].replace("\\", "/").lower() if len(row) > CHAR_MODEL else ""
+				model = row[characters.MODEL_COLUMN].replace("\\", "/").lower() if len(row) > characters.MODEL_COLUMN else ""
 				if not model or (model.rsplit("/", 1)[-1] not in native_models and f"res/{model}" not in data_index):
 					return ["model"]
 			return []
 
-		def read(name):
-			return tables.table_text(media, media_index, name.lower())
+		read = later_tables.Archive.media(media, media_index)
+		# The v1.696 Fellows become level rows before selection, so they
+		# are chosen, identified and staged like every growth pet.
+		client_skills = skill_tables.client_skill_rows(read) if source.get("fellows") else None
+		if client_skills is not None:
+			later_chars, later_items, _ = pet_fellows.fellow_tables(later_chars, later_items, client_skills)
 
 		prior = read_marker(output, source)
 		char_rows, item_rows, report = select_pets(
@@ -690,15 +760,17 @@ def add_pets(root, native, output, source=VSRO_SOURCE, earlier_codes=(), env=os.
 			previous=previous_targets(prior), missing=missing,
 			reserved_ids=published_ids.occupied_objects(Path(output) / TEXT_ROOT, (source["char_shard"], source["item_shard"])), pinned=published_ids.published(published_ids.OBJECTS))
 		if char_rows:
+			if client_skills is None:
+				client_skills = skill_tables.client_skill_rows(read)
 			char_rows, skills = stage_pet_skills(
-				read, lambda name: tables.TEXTDATA + name.lower() in media_index,
-				Path(output) / TEXT_ROOT, source["skill_shard"], char_rows, prior.get("skills", {}))
+				client_skills, Path(output) / TEXT_ROOT, source["skill_shard"], char_rows, prior.get("skills", {}))
 			report["skills"] = skills
 	if char_rows:
 		_merge_name_text(output, char_rows, item_rows, later_text, report)
 	report["_prior"] = prior
 	_copy_icons(root, native, output, char_rows + item_rows, report)
-	_list_in_mall(output, native, item_rows, report, prior, source)
+	native_goods = native_scrolls(native_chars, native_items) if source is VSRO_SOURCE else ()
+	_list_in_mall(output, native, item_rows, report, prior, source, native_goods)
 	return _write_pass(output, source, char_rows, item_rows, report)
 
 
@@ -722,8 +794,8 @@ def add_archive_pets(native, output, earlier_codes=(), env=os.environ):
 	archives, _identities = avatar_archive.open_archive(zip_path, AVATARS_PIN_FILE)
 	media, media_index = archives["Media"]
 	data, data_index = archives["Data"]
-	if (tables.TEXTDATA + "characterdata.txt" not in media_index
-			or tables.TEXTDATA + "itemdata.txt" not in media_index):
+	read = later_tables.Archive.media(media, media_index)
+	if not read.has("characterdata.txt") or not read.has("itemdata.txt"):
 		remove_import(output, ARCHIVE_SOURCE)
 		return _disabled(ARCHIVE_SOURCE, "archive carries no pet tables")
 	own_shards = (ARCHIVE_SOURCE["char_shard"], ARCHIVE_SOURCE["item_shard"], ARCHIVE_SOURCE["skill_shard"])
@@ -732,14 +804,11 @@ def add_archive_pets(native, output, earlier_codes=(), env=os.environ):
 
 	def missing(family, rows):
 		for row in rows:
-			model = row[CHAR_MODEL].replace("\\", "/").lower() if len(row) > CHAR_MODEL else ""
+			model = row[characters.MODEL_COLUMN].replace("\\", "/").lower() if len(row) > characters.MODEL_COLUMN else ""
 			native_hit = bool(model) and (Path(native) / "Data_extracted" / "res" / model).exists()
 			if not model or (not native_hit and f"res/{model}" not in data_index):
 				return ["model"]
 		return []
-
-	def read(name):
-		return tables.table_text(media, media_index, name.lower())
 
 	prior = read_marker(output, ARCHIVE_SOURCE)
 	char_rows, item_rows, report = select_pets(
@@ -750,10 +819,10 @@ def add_archive_pets(native, output, earlier_codes=(), env=os.environ):
 		# An archive that ships no skilldata cannot feed fighters; merge
 		# refuses a missing dependency. Pickup/vehicle kinds name no
 		# DefaultSkillIDs and stage an empty skill map.
-		if any(tables.TEXTDATA + name in media_index for name in ("skilldata.txt", "skilldataenc.txt")):
+		if any(read.has(name) for name in ("skilldata.txt", "skilldataenc.txt")):
 			char_rows, skills = stage_pet_skills(
-				read, lambda name: tables.TEXTDATA + name.lower() in media_index,
-				Path(output) / TEXT_ROOT, ARCHIVE_SOURCE["skill_shard"], char_rows, prior.get("skills", {}))
+				skill_tables.client_skill_rows(read), Path(output) / TEXT_ROOT, ARCHIVE_SOURCE["skill_shard"], char_rows,
+				prior.get("skills", {}))
 			report["skills"] = skills
 		_merge_name_text(output, char_rows, item_rows, later_text, report)
 		# The archive's resources join the staging tree at their pk2
@@ -769,7 +838,7 @@ def add_archive_pets(native, output, earlier_codes=(), env=os.environ):
 # ================
 # v1696_root / add_all_sources
 #
-# The three passes in order over the variant staging tree, each seeing
+# The four passes in order over the variant staging tree, each seeing
 # the row codenames the earlier ones imported.
 # ================
 def v1696_root(env=os.environ):
@@ -783,7 +852,9 @@ def add_all_sources(vsro_root, native, output, env=os.environ):
 	v1696 = add_pets(v1696_root(env), native, output, V1696_SOURCE, earlier_codes=codes, env=env)
 	codes |= set(read_marker(output, V1696_SOURCE).get("idMap", {}))
 	archive = add_archive_pets(native, output, earlier_codes=codes, env=env)
-	return {"pets": vsro, "petsV1696": v1696, "petsArchive": archive}
+	codes |= set(read_marker(output, ARCHIVE_SOURCE).get("idMap", {}))
+	inferred = add_pets(vsro_root, native, output, INFERRED_SOURCE, earlier_codes=codes, env=env)
+	return {"pets": vsro, "petsV1696": v1696, "petsArchive": archive, "petsInferred": inferred}
 
 
 # ================

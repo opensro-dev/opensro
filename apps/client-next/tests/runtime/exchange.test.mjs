@@ -160,6 +160,31 @@ test("refusals and failures carry their category-1 codes", () => {
 	assert.deepEqual( [ ...gold.payload ], [ 0x0d, ...u32( 1000 ) ] );
 });
 
+test("trade gold past the u32 range travels wide only on a SRO_WIDE_TRADE_GOLD shard (#4264)", () => {
+	const open = { ...exchange.emptyExchange(), open: true, partner: 9 };
+	const u64 = ( /** @type {number} */ v ) => {
+		const bytes = new Uint8Array( 8 );
+		new DataView( bytes.buffer ).setBigUint64( 0, BigInt( v ), true );
+		return [ ...bytes ];
+	};
+	// Off (the native default): the bound fits, and anything past it is refused.
+	const bound = exchange.exchangeRequest( open, { kind: "exchange-gold", amount: 0xffffffff } );
+	assert.deepEqual( [ ...bound.payload ], [ 0x0d, ...u32( 0xffffffff ) ] );
+	assert.throws( () => exchange.exchangeRequest( open, { kind: "exchange-gold", amount: 5000000000 } ) );
+	// On: a wide amount is nine bytes, a narrow one stays five.
+	const wide = exchange.exchangeRequest( open, { kind: "exchange-gold", amount: 5000000000 }, true );
+	assert.deepEqual( [ ...wide.payload ], [ 0x0d, ...u64( 5000000000 ) ] );
+	const narrow = exchange.exchangeRequest( open, { kind: "exchange-gold", amount: 1000 }, true );
+	assert.deepEqual( [ ...narrow.payload ], [ 0x0d, ...u32( 1000 ) ] );
+	// The partner's 0x30BB and our own 0x0D echo read either width.
+	const theirs = defined( exchange.exchangeFrame( open, frame( 0x30bb, [ 2, ...u64( 5000000000 ) ] ), refs ) );
+	assert.equal( theirs.state.theirGold, 5000000000 );
+	const ours = defined( exchange.exchangeFrame( open, frame( 0xb06d, [ 1, 0x0d, ...u64( 5000000000 ) ] ), refs ) );
+	assert.equal( ours.state.ownGold, 5000000000 );
+	assert.equal( exchange.exchangeFrame( open, frame( 0x30bb, [ 2, 1, 2, 3 ] ), refs ), null );
+	assert.throws( () => exchange.exchangeFrame( open, frame( 0xb06d, [ 1, 0x0d, 1, 2, 3 ] ), refs ) );
+});
+
 test("the exchange window's opening is reported once, to open the inventory tab (69FBB0)", async () => {
 	const { createExchangeHud } = await import( "../../src/engine/runtime/ui/hud/exchange-hud.ts" );
 	const hud = createExchangeHud();

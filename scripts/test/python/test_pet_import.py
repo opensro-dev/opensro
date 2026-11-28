@@ -12,6 +12,7 @@ refusal and removal, all without a real client tree.
 ===========================================================================
 """
 import script_paths  # noqa: F401  (puts scripts/ and its build folders on sys.path, #3410)
+import later_tables  # noqa: E402
 import hashlib
 import json
 import os
@@ -25,6 +26,7 @@ import alexandria_npcs as characters  # noqa: E402
 import avatar_archive  # noqa: E402
 import cap110_items as items  # noqa: E402
 import pet_import as importer  # noqa: E402
+import pet_rows  # noqa: E402
 
 # A later client's characterdata width (VSRO and v1.696 alike).
 CHAR_COLUMNS = characters.VSRO_CHARACTER_COLUMNS
@@ -38,11 +40,11 @@ MATERIAL_KIND_COLUMN = 109
 # ================
 def char_row(code, identity, level="1", model="cos\\newpet.bsr"):
 	row = ["0"] * CHAR_COLUMNS
-	row[importer.CHAR_ID] = str(identity)
-	row[importer.CHAR_CODE] = code
-	row[importer.CHAR_NAME_KEY] = "SN_" + code
-	row[importer.CHAR_MODEL] = model
-	row[importer.CHAR_LEVEL] = level
+	row[characters.ID_COLUMN] = str(identity)
+	row[characters.CODENAME_COLUMN] = code
+	row[characters.NAME_KEY_COLUMN] = "SN_" + code
+	row[characters.MODEL_COLUMN] = model
+	row[characters.LEVEL_COLUMN] = level
 	return row
 
 
@@ -52,7 +54,7 @@ def scroll(code, identity, assoc):
 	row[items.IDENTITY] = str(identity)
 	row[items.CODENAME] = code
 	row[items.NAME_KEY] = "SN_" + code
-	row[importer.ITEM_ASSOCIATED_CHAR] = assoc
+	row[items.SUMMONED_CHARACTER] = assoc
 	return row
 
 
@@ -87,6 +89,13 @@ class KindTests(unittest.TestCase):
 		self.assertEqual(importer.kind_of("COS_GUARD_CH", [char_row("COS_GUARD_CH", 1)]), "excluded")
 
 
+	# ================
+	# test_test_rows_are_no_kind
+	# ================
+	def test_test_rows_are_no_kind(self):
+		self.assertEqual(importer.kind_of("COS_T_BEHEMOTH_TEST", [char_row("COS_T_BEHEMOTH_TEST", 1)]), "excluded")
+
+
 class SelectionTests(unittest.TestCase):
 	def select(self, later_chars, later_items, native=None, earlier=(), previous=None, missing=lambda family, rows: []):
 		native_chars, native_items = native or native_wolf()
@@ -96,7 +105,7 @@ class SelectionTests(unittest.TestCase):
 	def test_new_pickup_kind_is_chosen_with_its_scroll(self):
 		chars, item_rows, report = self.select(
 			[char_row("COS_P_DOG", 9001)], [scroll("ITEM_PET_DOG", 9002, "COS_P_DOG")])
-		self.assertEqual([row[importer.CHAR_CODE] for row in chars], ["COS_P_DOG"])
+		self.assertEqual([row[characters.CODENAME_COLUMN] for row in chars], ["COS_P_DOG"])
 		self.assertEqual([row[items.CODENAME] for row in item_rows], ["ITEM_PET_DOG"])
 		kind = report["added"][0]
 		self.assertEqual((kind["kind"], kind["levels"], kind["scrolls"]), ("pickup", [1], ["ITEM_PET_DOG"]))
@@ -125,7 +134,7 @@ class SelectionTests(unittest.TestCase):
 		chars, _, _ = self.select([later], [scroll("ITEM_PET_FOX", 9003, "COS_P_FOX")])
 		self.assertEqual(len(chars[0]), characters.NATIVE_CHARACTER_COLUMNS)
 		self.assertEqual(chars[0][MATERIAL_KIND_COLUMN], "3")
-		self.assertEqual((chars[0][importer.CHAR_CODE], chars[0][importer.CHAR_MODEL]), ("COS_P_FOX_001", "cos\\newpet.bsr"))
+		self.assertEqual((chars[0][characters.CODENAME_COLUMN], chars[0][characters.MODEL_COLUMN]), ("COS_P_FOX_001", "cos\\newpet.bsr"))
 
 	def test_fellow_kind_rides_the_attack_lane(self):
 		# Fellows are admitted like attack kinds (#3328): rows and scroll
@@ -167,7 +176,7 @@ class SelectionTests(unittest.TestCase):
 		chars, _, report = self.select(
 			[char_row("COS_P_WOLF_001", 6106), char_row("COS_P_WOLF_040", 9001, "40")],
 			[scroll("ITEM_PET_WOLF2", 9002, "COS_P_WOLF")])
-		self.assertEqual([row[importer.CHAR_CODE] for row in chars], ["COS_P_WOLF_040"])
+		self.assertEqual([row[characters.CODENAME_COLUMN] for row in chars], ["COS_P_WOLF_040"])
 		self.assertEqual(report["added"][0]["levels"], [40])
 
 	def test_earlier_source_wins_the_kind(self):
@@ -183,21 +192,21 @@ class SelectionTests(unittest.TestCase):
 		# tables never held them.
 		chars, item_rows, _ = self.select(
 			[char_row("COS_P_DOG", 9001)], [scroll("ITEM_PET_DOG", 9002, "COS_P_DOG")])
-		plain = (chars[0][importer.CHAR_ID], item_rows[0][items.IDENTITY])
+		plain = (chars[0][characters.ID_COLUMN], item_rows[0][items.IDENTITY])
 		chars, item_rows, _ = importer.select_pets(
 			*native_wolf(), set(), [char_row("COS_P_DOG", 9001)], [scroll("ITEM_PET_DOG", 9002, "COS_P_DOG")],
 			reserved_ids={9001, 9002})
-		self.assertNotEqual((chars[0][importer.CHAR_ID], item_rows[0][items.IDENTITY]), plain)
-		self.assertNotIn(int(chars[0][importer.CHAR_ID]), (9001, 9002))
+		self.assertNotEqual((chars[0][characters.ID_COLUMN], item_rows[0][items.IDENTITY]), plain)
+		self.assertNotIn(int(chars[0][characters.ID_COLUMN]), (9001, 9002))
 		self.assertNotIn(int(item_rows[0][items.IDENTITY]), (9001, 9002))
 
 	def test_taken_identity_gets_a_fresh_one_and_previous_is_retained(self):
 		native = ([char_row("COS_P_WOLF_001", 9001)], [])
 		chars, _, _ = self.select([char_row("COS_P_DOG", 9001)], [scroll("ITEM_PET_DOG", 9002, "COS_P_DOG")], native=native)
-		self.assertGreater(int(chars[0][importer.CHAR_ID]), 9001)
+		self.assertGreater(int(chars[0][characters.ID_COLUMN]), 9001)
 		chars, _, _ = self.select([char_row("COS_P_DOG", 9001)], [scroll("ITEM_PET_DOG", 9002, "COS_P_DOG")],
 			native=native, previous={"COS_P_DOG": 4242})
-		self.assertEqual(chars[0][importer.CHAR_ID], "4242")
+		self.assertEqual(chars[0][characters.ID_COLUMN], "4242")
 
 
 class ArchiveTests(unittest.TestCase):
@@ -326,6 +335,44 @@ class ArchiveTests(unittest.TestCase):
 			self.assertEqual(len(rows("refshopgoods.txt")), 3)
 
 	# ================
+	# test_a_native_scroll_nobody_sells_lists_on_its_tab
+	#
+	# Owner 2026-11-28: every pet is in the game. A native pickup kind
+	# whose scroll no package sells lists on the pickup tab at its price;
+	# one some package already sells, and an event copy, do not; a
+	# rebuild lists it once.
+	# ================
+	def test_a_native_scroll_nobody_sells_lists_on_its_tab(self):
+		with tempfile.TemporaryDirectory() as folder:
+			base = Path(folder)
+			native, output = base / "native", base / "out"
+			chars = [char_row("COS_P_GGLIDER", 23229), char_row("COS_P_SOLD", 23230)]
+			# ITEM_PACKAGE_A sells (the mall fixture's PACKAGE_A), so its
+			# kind's second scroll needs no listing of its own.
+			scrolls = [scroll("ITEM_COS_P_GGLIDER_SCROLL", 23300, "COS_P_GGLIDER"),
+				scroll("ITEM_EVENT_COS_P_GGLIDER_SCROLL", 23301, "COS_P_GGLIDER"),
+				scroll("ITEM_PACKAGE_A", 23302, "COS_P_SOLD"), scroll("ITEM_COS_P_SOLD_SILK", 23303, "COS_P_SOLD")]
+			self._tree(native, chars, scrolls)
+			self._mall(native)
+			output.mkdir()
+			goods = importer.native_scrolls(chars, scrolls)
+			self.assertEqual([(row[items.CODENAME], kind, family) for row, kind, family in goods], [
+				("ITEM_COS_P_GGLIDER_SCROLL", "pickup", "COS_P_GGLIDER"), ("ITEM_EVENT_COS_P_GGLIDER_SCROLL", "pickup", "COS_P_GGLIDER"),
+				("ITEM_PACKAGE_A", "pickup", "COS_P_SOLD"), ("ITEM_COS_P_SOLD_SILK", "pickup", "COS_P_SOLD")])
+			for _ in range(2):
+				report = {"_prior": {}}
+				prior = importer.read_marker(output, importer.VSRO_SOURCE)
+				importer._list_in_mall(output, native, [], report, prior, importer.VSRO_SOURCE, goods)
+				importer._write_pass(output, importer.VSRO_SOURCE, [], [], report)
+			self.assertEqual(report["mall"]["packages"], ["PACKAGE_ITEM_COS_P_GGLIDER_SCROLL"])
+			self.assertEqual(sorted((entry["code"], entry["reason"]) for entry in report["mall"]["unlisted"]), [
+				("ITEM_COS_P_SOLD_SILK", "kind already sold"), ("ITEM_EVENT_COS_P_GGLIDER_SCROLL", "event copy"),
+				("ITEM_PACKAGE_A", "already sold")])
+			listed = [row for row in importer.tables.table_rows((output / importer.TEXT_ROOT / "refshopgoods.txt").read_bytes())
+				if row[3] == "PACKAGE_ITEM_COS_P_GGLIDER_SCROLL"]
+			self.assertEqual([row[2] for row in listed], ["MALL_PET_B_SILK"])
+
+	# ================
 	# test_two_sources_rebuilt_on_a_kept_tree_keep_their_slots
 	#
 	# Each source strips only its own earlier listings; a later source's
@@ -416,7 +463,7 @@ class ArchiveTests(unittest.TestCase):
 		def pick(pinned):
 			chars, scrolls, _ = importer.select_pets([], [], set(), [char_row("COS_P_DOG", 50147)],
 				[scroll("ITEM_PET_DOG", 50148, "COS_P_DOG")], pinned=pinned)
-			return int(chars[0][importer.CHAR_ID]), int(scrolls[0][items.IDENTITY])
+			return int(chars[0][characters.ID_COLUMN]), int(scrolls[0][items.IDENTITY])
 		self.assertEqual(pick({}), (50147, 50148))
 		dog, _ = pick({"MOB_SD_ACHNISH": 50147})
 		self.assertNotEqual(dog, 50147)
@@ -496,24 +543,16 @@ class SkillStagingTests(unittest.TestCase):
 				self._skill_row(100, "PSKILL_NATIVE")]))
 			# Native layout: DefaultSkillIDs start at column 89.
 			char = ["0"] * characters.NATIVE_CHARACTER_COLUMNS
-			char[importer.CHAR_ID] = "1"
-			char[importer.CHAR_CODE] = "COS_P_FOX_001"
-			char[importer.CHAR_DEFAULT_SKILL1] = "5001"
+			char[characters.ID_COLUMN] = "1"
+			char[characters.CODENAME_COLUMN] = "COS_P_FOX_001"
+			char[characters.NATIVE_DEFAULT_SKILL_AT] = "5001"
 			client = {5001: self._skill_row(5001, "PSKILL_P_FOX_01_ATTACK01")}
 
-			def read(name):
-				if name == "skilldata.txt":
-					return importer._encode([["skilldata_9000.txt"]])
-				if name == "skilldata_9000.txt":
-					return importer._encode([client[5001]])
-				raise KeyError(name)
-
 			chars, skills = importer.stage_pet_skills(
-				read, lambda name: name in ("skilldata.txt", "skilldata_9000.txt"),
-				text_root, "skilldata_140000.txt", [char])
+				[client[5001]], text_root, "skilldata_140000.txt", [char])
 			self.assertEqual(set(skills), {"PSKILL_P_FOX_01_ATTACK01"})
 			assigned = skills["PSKILL_P_FOX_01_ATTACK01"]
-			self.assertEqual(chars[0][importer.CHAR_DEFAULT_SKILL1], str(assigned))
+			self.assertEqual(chars[0][characters.NATIVE_DEFAULT_SKILL_AT], str(assigned))
 			shard = importer.tables.table_rows((text_root / "skilldata_140000.txt").read_bytes())
 			self.assertEqual([(row[1], row[3]) for row in shard], [(str(assigned), "PSKILL_P_FOX_01_ATTACK01")])
 			manifest = [row[0] for row in importer.tables.table_rows((text_root / "skilldata.txt").read_bytes()) if row]
@@ -529,8 +568,8 @@ class SkillStagingTests(unittest.TestCase):
 				self._skill_row(5001, "PSKILL_STALE")]))
 			char = ["0"] * characters.NATIVE_CHARACTER_COLUMNS
 			chars, skills = importer.stage_pet_skills(
-				lambda name: b"", lambda name: False, text_root, "skilldata_140000.txt", [char])
-			self.assertEqual((skills, chars[0][importer.CHAR_DEFAULT_SKILL1]), ({}, "0"))
+				[], text_root, "skilldata_140000.txt", [char])
+			self.assertEqual((skills, chars[0][characters.NATIVE_DEFAULT_SKILL_AT]), ({}, "0"))
 			self.assertFalse((text_root / "skilldata_140000.txt").exists())
 			manifest = [row[0] for row in importer.tables.table_rows((text_root / "skilldata.txt").read_bytes()) if row]
 			self.assertNotIn("skilldata_140000.txt", manifest)

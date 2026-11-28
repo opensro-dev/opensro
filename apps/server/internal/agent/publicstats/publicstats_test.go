@@ -172,7 +172,7 @@ func TestUniquesKeepTheRespawnSecret(t *testing.T) {
 	if code := get(t, s, "/public/v1/uniques", &raw); code != http.StatusOK || len(raw.Uniques) != 2 {
 		t.Fatalf("uniques %d %+v", code, raw)
 	}
-	want := []string{"alive", "lastKill", "level", "name", "refObjId", "regionId", "spawnedAt"}
+	want := []string{"alive", "copies", "lastKill", "level", "name", "refObjId", "regionId", "spawnedAt"}
 	for _, row := range raw.Uniques {
 		keys := make([]string, 0, len(row))
 		for key := range row {

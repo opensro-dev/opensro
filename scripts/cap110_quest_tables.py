@@ -41,6 +41,7 @@ import alexandria_npcs as characters
 import cap110_blue_berserk as blue
 import cap110_quest_monsters as quest_monsters
 import import_vsro_alexandria as tables
+import later_tables
 from prepare_client_resources import safe_target, write_atomically
 
 MARKER = ".opensro-cap110-quest-tables.json"
@@ -103,8 +104,8 @@ def quest_rows(later, variant):
 def text_symbols(later_texts):
 	found = []
 	for rows in later_texts:
-		found += [row[blue.KEY_COLUMN] for row in rows if len(row) > blue.ENGLISH_COLUMN + 1
-			and (QUEST_CODE.search(row[blue.KEY_COLUMN]) or row[blue.KEY_COLUMN] in EXTRA_SYMBOLS)]
+		found += [row[characters.TEXT_KEY_COLUMN] for row in rows if len(row) > characters.TEXT_ENGLISH_COLUMN + 1
+			and (QUEST_CODE.search(row[characters.TEXT_KEY_COLUMN]) or row[characters.TEXT_KEY_COLUMN] in EXTRA_SYMBOLS)]
 	return tuple(dict.fromkeys(found))
 
 
@@ -160,14 +161,13 @@ def add_quest_tables(vsro_root, native, output):
 		# ================
 		# read
 		# ================
-		def read(name):
-			return tables.table_text(media, index, name.lower())
-		later = {name: tables.later_table_rows(read, name) for name in KEYS}
+		read = later_tables.Archive.media(media, index)
+		later = {name: read.rows(name) for name in KEYS}
 		variant = {name: tables.table_rows(safe_target(text_root, name).read_bytes()) for name in KEYS}
 		new_rows = quest_rows(later, variant)
-		later_texts = [tables.later_table_rows(read, name) for name in TEXT_SOURCES]
+		later_texts = [read.rows(name) for name in TEXT_SOURCES]
 		symbols = text_symbols(later_texts)
-		by_key = {row[blue.KEY_COLUMN]: row for rows in later_texts for row in rows if len(row) > blue.ENGLISH_COLUMN + 1}
+		by_key = {row[characters.TEXT_KEY_COLUMN]: row for rows in later_texts for row in rows if len(row) > characters.TEXT_ENGLISH_COLUMN + 1}
 		text_path = safe_target(text_root, TEXT_FILE)
 		raw, appended, replaced = blue.fill_text(text_path.read_bytes(), by_key, symbols)
 		ended = {}

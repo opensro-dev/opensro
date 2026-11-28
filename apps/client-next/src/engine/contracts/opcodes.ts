@@ -118,6 +118,8 @@ export const COS_RIDE_REQUEST_OPCODE = 0x74b5;
 export const TC_KICK_REQUEST_OPCODE = 0x74d4;
 export const QUICK_SLOT_BINDING_OPCODE = 0x7541;
 export const COS_CANCEL_REQUEST_OPCODE = 0x756c;
+// The stable keeper buys the active transport back (6FF980 / 7782E0).
+export const COS_SELL_REQUEST_OPCODE = 0x71dc;
 export const ITEM_USE_REQUEST_OPCODE = 0x75bd;
 export const COS_TERMINATE_REQUEST_OPCODE = 0x7618;
 export const WHISPER_BLOCK_REQUEST_OPCODE = 0x766f;
@@ -172,6 +174,7 @@ export const DISSOLVE_RESULT_OPCODE = 0xb549;
 export const ALLOC_INT_RESPONSE_OPCODE = 0xb552;
 export const MENTOR_REGISTER_ACK_OPCODE = 0xb55d;
 export const COS_CANCEL_RESPONSE_OPCODE = 0xb56c;
+export const COS_SELL_RESPONSE_OPCODE = 0xb1dc;
 export const MENTOR_JOIN_ACK_OPCODE = 0xb592;
 export const GM_COMMAND_ACK_OPCODE = 0xb5b6;
 export const ITEM_USE_RESPONSE_OPCODE = 0xb5bd;

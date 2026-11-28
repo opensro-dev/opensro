@@ -685,12 +685,13 @@ blob names the number; zero omits it and the client keeps the native cap.
 */
 func TestBootstrapJSONPublishesStorageGoldDepositLimit(t *testing.T) {
 	for _, tc := range []struct {
-		limit uint32
+		limit uint64
 		want  string
 	}{
 		{0, ""},
 		{100_000_000, `"storageGoldDepositLimit":100000000`},
 		{4_294_967_295, `"storageGoldDepositLimit":4294967295`},
+		{10_000_000_000, `"storageGoldDepositLimit":10000000000`},
 	} {
 		blob, err := json.Marshal(&BootstrapResult{
 			NativeResult: nativeResultSuccess, Character: &Character{Name: "keeper", AccountID: "a"},

@@ -877,7 +877,7 @@
 				},
 				"step": {
 					"reads": 54,
-					"writes": 49
+					"writes": 50
 				},
 				"step#anon36": {
 					"reads": 4,
@@ -1378,7 +1378,7 @@
 					"writes": 1
 				},
 				"cos": {
-					"reads": 2,
+					"reads": 3,
 					"writes": 0
 				},
 				"event": {
@@ -1955,7 +1955,7 @@
 				},
 				"step": {
 					"reads": 98,
-					"writes": 62
+					"writes": 63
 				},
 				"step#anon143": {
 					"reads": 1,
@@ -1965,15 +1965,15 @@
 					"reads": 1,
 					"writes": 0
 				},
-				"step#anon338": {
+				"step#anon341": {
 					"reads": 1,
 					"writes": 0
 				},
-				"step#anon343": {
+				"step#anon346": {
 					"reads": 1,
 					"writes": 0
 				},
-				"step#anon355": {
+				"step#anon358": {
 					"reads": 1,
 					"writes": 0
 				},
@@ -1981,19 +1981,19 @@
 					"reads": 3,
 					"writes": 0
 				},
-				"step#anon397": {
-					"reads": 1,
-					"writes": 0
-				},
 				"step#anon400": {
 					"reads": 1,
 					"writes": 0
 				},
-				"step#anon401": {
+				"step#anon403": {
 					"reads": 1,
 					"writes": 0
 				},
-				"step#anon442": {
+				"step#anon404": {
+					"reads": 1,
+					"writes": 0
+				},
+				"step#anon445": {
 					"reads": 1,
 					"writes": 0
 				},
@@ -2441,7 +2441,7 @@
 				},
 				"cos": {
 					"reads": 0,
-					"writes": 6
+					"writes": 9
 				},
 				"count": {
 					"reads": 0,
@@ -3177,7 +3177,7 @@
 					"reads": 6,
 					"writes": 4
 				},
-				"event#anon97": {
+				"event#anon99": {
 					"reads": 1,
 					"writes": 0
 				},
@@ -3622,7 +3622,7 @@
 					"writes": 2
 				},
 				"gold": {
-					"reads": 2,
+					"reads": 3,
 					"writes": 1
 				},
 				"inventory": {
@@ -4161,7 +4161,7 @@
 					"reads": 19,
 					"writes": 2
 				},
-				"step#anon427": {
+				"step#anon430": {
 					"reads": 1,
 					"writes": 0
 				},
@@ -5042,7 +5042,7 @@
 					"writes": 0
 				},
 				"panel:Shop": {
-					"reads": 17,
+					"reads": 18,
 					"writes": 0
 				},
 				"panel:Skills": {
@@ -5610,7 +5610,7 @@
 					"writes": 0
 				},
 				"step": {
-					"reads": 113,
+					"reads": 114,
 					"writes": 2
 				},
 				"step#anon143": {
@@ -7650,7 +7650,7 @@
 					"writes": 0
 				},
 				"cos": {
-					"reads": 11,
+					"reads": 13,
 					"writes": 0
 				},
 				"cosCommandContext": {
@@ -7666,7 +7666,7 @@
 					"writes": 0
 				},
 				"drop": {
-					"reads": 16,
+					"reads": 17,
 					"writes": 0
 				},
 				"event": {
@@ -7738,7 +7738,7 @@
 					"writes": 0
 				},
 				"gold": {
-					"reads": 3,
+					"reads": 4,
 					"writes": 0
 				},
 				"ground": {
@@ -7874,7 +7874,7 @@
 					"writes": 0
 				},
 				"panel:Shop": {
-					"reads": 12,
+					"reads": 13,
 					"writes": 0
 				},
 				"panel:Storage": {
@@ -12163,6 +12163,18 @@
 			"fn": "event",
 			"kind": "exact",
 			"ordinal": 1,
+			"pattern": "cos-sale-cancel"
+		},
+		{
+			"fn": "event",
+			"kind": "exact",
+			"ordinal": 1,
+			"pattern": "cos-sale-trade"
+		},
+		{
+			"fn": "event",
+			"kind": "exact",
+			"ordinal": 1,
 			"pattern": "disconnect-confirm"
 		},
 		{
@@ -12978,6 +12990,12 @@
 		{
 			"fn": "event",
 			"kind": "prefix",
+			"ordinal": 2,
+			"pattern": "cos-status:"
+		},
+		{
+			"fn": "event",
+			"kind": "prefix",
 			"ordinal": 1,
 			"pattern": "gacha-bag:"
 		},
@@ -13309,7 +13327,7 @@
 	"source": "src/engine/runtime/ui/ui.ts",
 	"summary": {
 		"fields": 309,
-		"routes": 864,
+		"routes": 867,
 		"sharedFields": 252
 	}
 }

@@ -55,8 +55,9 @@ import import_vsro_alexandria as tables
 from pin_file import read_pin_field
 import published_ids
 import sro_pk2
+import later_tables
 from mall_tables import (  # noqa: F401  (re-exported: the tests and callers read them here)
-	MALL_PRICE_AMOUNT, MALL_SLOTS, MALL_TABLES, NATIVE_SOURCE, PACKAGE_FLAG_COLUMN, SERVICE_ON, SILK_CURRENCY,
+	MALL_PRICE_AMOUNT, MALL_SLOTS, MALL_TABLES, NATIVE_SOURCE, PACKAGE_FLAG_COLUMN, SILK_CURRENCY,
 	LaterPackage, copy_later_package, in_packages, strip_mall, without_packages,
 )
 from prepare_client_resources import safe_target, write_atomically
@@ -96,15 +97,6 @@ EXCLUDED_WORDS = ("_TEST",)
 AVATAR_TYPES = ["3", "1", "13"]
 FRESH_ID_BASE = 50000
 HAT_SUFFIX = "_HAT"
-# Rows whose model the v1.150 item-model builder refuses: their material has an
-# animated or material-scoped environment map (characterMaterialState.mjs
-# "needs runtime ownership"), and one such model aborts the whole asset
-# build. Found by screening every imported avatar model's environment
-# modifiers; revisit if that builder learns the modifier.
-RENDER_UNSUPPORTED = {
-	"ITEM_MALL_AVATAR_M_EARTHSPIRIT_HAT": "environment-mapped material",
-	"ITEM_MALL_AVATAR_W_EARTHSPIRIT_HAT": "environment-mapped material",
-}
 # Attachments take the later clients' own attachment tab (owner 2026-11-12,
 # replacing the 2026-10-13 hat-tab rule once the hats and attachments
 # together passed a tab's 256 slots). v1.150 ships the tab's label
@@ -169,7 +161,7 @@ def enabled(env=os.environ, flag=FLAG):
 def candidate(row, any_prefix=False):
 	code = row[items.CODENAME]
 	return (
-		row[items.SERVICE] == SERVICE_ON and row[items.TYPE_FIRST:items.TYPE_THIRD + 1] == AVATAR_TYPES
+		row[items.SERVICE] == later_tables.SERVICE_ON and row[items.TYPE_FIRST:items.TYPE_THIRD + 1] == AVATAR_TYPES
 		and (any_prefix or code.startswith(CODE_PREFIX)) and not any(word in code for word in EXCLUDED_WORDS)
 	)
 
@@ -207,8 +199,6 @@ def select_avatars(native_rows, later_rows, reserved_ids=(), previous=None, miss
 			existing.append(code)
 			continue
 		absent = missing(row)
-		if code in RENDER_UNSUPPORTED:
-			absent = absent + [RENDER_UNSUPPORTED[code]]
 		if texts is not None and row[items.NAME_KEY] not in texts:
 			absent = absent + ["name text"]
 		if absent:
@@ -280,12 +270,12 @@ def avatar_kind(code):
 # unlisted and are reported.
 # ================
 def mall_rows(later, avatars, current, native_package_ids, list_all=False):
-	scrap_of = {row[3]: row[2] for row in later["refscrapofpackageitem.txt"] if row[0] == SERVICE_ON and len(row) >= 20}
-	package_row = {row[3]: row for row in later["refpackageitem.txt"] if row[0] == SERVICE_ON and len(row) >= 9}
-	sale = {row[3]: (row[2], int(row[4])) for row in later["refshopgoods.txt"] if row[0] == SERVICE_ON and len(row) >= 5}
+	scrap_of = {row[3]: row[2] for row in later["refscrapofpackageitem.txt"] if row[0] == later_tables.SERVICE_ON and len(row) >= 20}
+	package_row = {row[3]: row for row in later["refpackageitem.txt"] if row[0] == later_tables.SERVICE_ON and len(row) >= 9}
+	sale = {row[3]: (row[2], int(row[4])) for row in later["refshopgoods.txt"] if row[0] == later_tables.SERVICE_ON and len(row) >= 5}
 	prices = collections.defaultdict(list)
 	for row in later["refpricepolicyofitem.txt"]:
-		if row[0] == SERVICE_ON and len(row) > MALL_PRICE_AMOUNT:
+		if row[0] == later_tables.SERVICE_ON and len(row) > MALL_PRICE_AMOUNT:
 			prices[row[2]].append(row)
 	# Slots follow the present goods. The caller has already dropped a
 	# later source's stale goods (without_packages): counting them walked
@@ -342,7 +332,7 @@ def mall_rows(later, avatars, current, native_package_ids, list_all=False):
 def attach_tab_row(current, later):
 	if any(len(row) > SHOP_TAB_CODE and row[SHOP_TAB_CODE] == ATTACH_TAB for row in current):
 		return None
-	authored = [row for row in later if len(row) > SHOP_TAB_CODE and row[0] == SERVICE_ON and row[SHOP_TAB_CODE] == ATTACH_TAB]
+	authored = [row for row in later if len(row) > SHOP_TAB_CODE and row[0] == later_tables.SERVICE_ON and row[SHOP_TAB_CODE] == ATTACH_TAB]
 	if not authored:
 		raise ValueError(f"the later client has no {ATTACH_TAB} tab to carry over")
 	row = list(authored[0])
@@ -366,7 +356,7 @@ def strip_tabs(output, codes):
 	path = safe_target(output / TEXT_ROOT, SHOP_TAB_TABLE)
 	if not path.exists():
 		return
-	lines = tables.decode_table(path.read_bytes()).splitlines()
+	lines = tables.records(tables.decode_table(path.read_bytes()))
 	kept = [line for line in lines if not (len(line.split("\t")) > SHOP_TAB_CODE and line.split("\t")[SHOP_TAB_CODE] in codes)]
 	if len(kept) != len(lines):
 		write_atomically(path, b"\xff\xfe" + ("\r\n".join(kept) + "\r\n").encode("utf-16-le"))
@@ -600,28 +590,14 @@ def resource_check(archives, native_paths):
 # itemdata.txt indexes its shards. A table the client does not ship
 # contributes no rows (v1.696 has no textdata_new.txt).
 # ================
-def later_text_rows(media, index, name):
-	return [vsro_text_row(row) for row in later_table_rows(media, index, name)]
-
-
-# ================
-# later_table_rows
-#
-# The rows of one later-client table in a Media archive, [] when the
-# client lacks it; a shard index is followed by its owner,
-# import_vsro_alexandria.later_table_rows.
-# ================
-def later_table_rows(media, index, name):
-	if tables.TEXTDATA + name not in index:
-		return []
-	return tables.later_table_rows(lambda part: tables.table_text(media, index, part), name)
+def later_text_rows(source, name):
+	return [vsro_text_row(row) for row in source.rows(name, optional=True)]
 
 
 # The VSRO text layout: service, key, then 13 language cells; 8 is the
 # English one the port reads, and the VSRO client repeats English in 6,
 # 10, 12, 13 and 14 where it has no translation.
 VSRO_TEXT_COLUMNS = 15
-TEXT_ENGLISH = 8
 V1696_TEXT_COLUMNS = 17
 V1696_ABSENT = "0"
 
@@ -641,7 +617,7 @@ def vsro_text_row(row):
 	if len(row) != V1696_TEXT_COLUMNS or not row[1].strip().isdigit():
 		return row
 	cells = [row[0]] + row[2:2 + VSRO_TEXT_COLUMNS - 1]
-	english = cells[TEXT_ENGLISH]
+	english = cells[text_tables.TEXT_ENGLISH_COLUMN]
 	for column in range(3, VSRO_TEXT_COLUMNS):
 		if cells[column] == V1696_ABSENT:
 			cells[column] = "" if column == 3 else english
@@ -680,8 +656,7 @@ def add_avatars(vsro_root, native, output, source=VSRO_SOURCE):
 		# ================
 		# read_later
 		# ================
-		def read_later(name):
-			return tables.table_text(media, index, name)
+		read_later = later_tables.Archive.media(media, index)
 		base = native / TEXT_ROOT
 		base_paths = {sro_pk2.fold_ascii(path.name): path for path in base.iterdir() if path.is_file()}
 		# ================
@@ -689,11 +664,10 @@ def add_avatars(vsro_root, native, output, source=VSRO_SOURCE):
 		# ================
 		def read_native(name):
 			return base_paths[name].read_bytes()
-		native_rows = shared.read_item_tables(read_native)
+		native_rows = shared.read_item_tables(later_tables.Archive.tree(base))
 		later_rows = shared.read_item_tables(read_later)
 		reserved = {
-			int(row[1]) for path in (output / TEXT_ROOT).glob("characterdata_*.txt")
-			for row in tables.table_rows(path.read_bytes()) if len(row) > 1
+			int(row[1]) for name, row in published_ids.object_rows(output / TEXT_ROOT) if name.startswith("characterdata_")
 		}
 		# The cap-110 shard's identities sit above every later row and below
 		# FRESH_ID_BASE; they are reserved anyway so a clash cannot happen.
@@ -719,7 +693,7 @@ def add_avatars(vsro_root, native, output, source=VSRO_SOURCE):
 		}
 		later_texts = [
 			row for name in ("textdata_equip&skill.txt", "textdata_object.txt", "textdata_new.txt")
-			for row in later_text_rows(media, index, name)
+			for row in later_text_rows(read_later, name)
 		]
 		text_path = safe_target(output / TEXT_ROOT, "textdataname.txt")
 		base_text = text_path.read_bytes() if text_path.exists() else read_native("textdataname.txt")
@@ -733,7 +707,7 @@ def add_avatars(vsro_root, native, output, source=VSRO_SOURCE):
 		assets = shared.copy_asset_closure(avatars, native, output, archives)
 		# An earlier source's avatars take this client's auras too; native ones never do.
 		effects, refused_effects, effect_assets = avatar_effects.import_effects(
-			later_table_rows(media, index, avatar_effects.EFFECT_TABLE), imported_before + avatars,
+			read_later.rows(avatar_effects.EFFECT_TABLE, optional=True), imported_before + avatars,
 			native, output, archives, native_paths["Particles"],
 		)
 		assets += effect_assets
@@ -761,12 +735,12 @@ def add_avatars(vsro_root, native, output, source=VSRO_SOURCE):
 			ui_path = safe_target(output / TEXT_ROOT, "textuisystem.txt")
 			raw_ui = ui_path.read_bytes() if ui_path.exists() else read_native("textuisystem.txt")
 			write_atomically(ui_path, text_tables.append_rows(raw_ui, board_label_rows(boards)))
-		elif all(sro_pk2.fold_ascii(name) in base_paths and tables.TEXTDATA + name in index for name, _ in MALL_TABLES):
+		elif all(sro_pk2.fold_ascii(name) in base_paths and read_later.has(name) for name, _ in MALL_TABLES):
 			current = {
 				name: tables.table_rows(mall_files[name].read_bytes() if mall_files[name].exists() else read_native(name))
 				for name, _ in MALL_TABLES
 			}
-			later_mall = {name: later_table_rows(media, index, name) for name, _ in MALL_TABLES}
+			later_mall = {name: read_later.rows(name) for name, _ in MALL_TABLES}
 			# Goods a later source listed in a previous build are stale:
 			# that source strips and re-lists them after this pass. They
 			# leave the tables this pass reads, so neither the slots nor the
@@ -787,7 +761,7 @@ def add_avatars(vsro_root, native, output, source=VSRO_SOURCE):
 			if any(row[2] == ATTACH_TAB for row in mall["refshopgoods.txt"]):
 				tab_path = safe_target(output / TEXT_ROOT, SHOP_TAB_TABLE)
 				raw = tab_path.read_bytes() if tab_path.exists() else read_native(SHOP_TAB_TABLE)
-				row = attach_tab_row(tables.table_rows(raw), later_table_rows(media, index, SHOP_TAB_TABLE))
+				row = attach_tab_row(tables.table_rows(raw), read_later.rows(SHOP_TAB_TABLE, optional=True))
 				if row is not None:
 					write_atomically(tab_path, text_tables.append_rows(raw, [row]))
 					mall_summary["tabs"] = [ATTACH_TAB]

@@ -10,6 +10,7 @@ or a jewel that would reinforce a v1.150 item class, refuses.
 ===========================================================================
 """
 import script_paths  # noqa: F401  (puts scripts/ and its build folders on sys.path, #3410)
+import later_fixtures  # noqa: E402
 import json
 import os
 import tempfile
@@ -32,8 +33,8 @@ NATIVE_ID = 5000
 # ================
 # utf16
 # ================
-def utf16(rows, newline="\r\n"):
-	return b"\xff\xfe" + "".join("\t".join(row) + newline for row in rows).encode("utf-16-le")
+def utf16(rows):
+	return b"\xff\xfe" + "".join("\t".join(row) + "\r\n" for row in rows).encode("utf-16-le")
 
 
 # ================
@@ -97,7 +98,8 @@ class NasrunImportTest(unittest.TestCase):
 	# A scratch world: a fake VSRO Media.pk2 whose itemdata carries the
 	# fifteen rows plus an event copy (a decoy), the matching name texts,
 	# and an output tree with one native item and a name table whose
-	# rows mix CRLF and LF endings as the shipped one does.
+	# last record holds an LF inside a cell, as 2470 of the shipped
+	# table's do: records end at CRLF (#4608).
 	# ================
 	def fixture(self, base, drop=None, mutate=None):
 		vsro, native, output = base / "vsro", base / "native", base / "output"
@@ -116,17 +118,15 @@ class NasrunImportTest(unittest.TestCase):
 			texts += [text_row(row[items.NAME_KEY]), text_row(row[items.DESCRIPTION_KEY])]
 		decoy = item_row("ITEM_EVENT_AVATAR_M_NASRUN", 24413, nasrun.WEARABLE_TYPE)
 		media = {
-			"itemdata.txt": utf16([["itemdata_25000.txt"]]),
-			"itemdata_25000.txt": utf16(rows + [decoy]),
+			**later_fixtures.sharded("itemdata.txt", {"itemdata_25000.txt": rows + [decoy]}),
 			"textdata_object.txt": utf16(texts),
 		}
 		self.media = archive_bytes(media)
 		native_row = ["0"] * items.ITEM_COLUMNS
 		native_row[0], native_row[1], native_row[2] = "1", str(NATIVE_ID), "ITEM_NATIVE_THING"
-		(text_root / "itemdata.txt").write_bytes(utf16([["itemdata_5000.txt"]]))
-		(text_root / "itemdata_5000.txt").write_bytes(utf16([native_row]))
-		names = utf16([["1", "SN_NATIVE_A", "", "", "", "", "", "", "Native A"]]) + utf16(
-			[["1", "SN_NATIVE_B", "", "", "", "", "", "", "Native B"]], newline="\n")[2:]
+		later_fixtures.write_sharded(text_root, "itemdata.txt", {"itemdata_5000.txt": [native_row]})
+		names = utf16([["1", "SN_NATIVE_A", "", "", "", "", "", "", "Native A"],
+			["1", "SN_NATIVE_B", "", "", "", "", "", "", "Native\nB"]])
 		(text_root / nasrun.NAME_TABLE).write_bytes(names)
 		return vsro, native, output, text_root
 
@@ -312,14 +312,15 @@ class NasrunSkillImportTest(unittest.TestCase):
 			texts |= {row[nasrun.SKILL_NAME_KEY], row[nasrun.SKILL_DESCRIPTION_KEY]}
 		decoy = skill_row("SKILL_EVENT_NASRUN_ECCENTRICDEMON_01", 31141)
 		self.media = archive_bytes({
-			"skilldata.txt": utf16([["skilldata_35000.txt"]]),
-			"skilldata_35000.txt": utf16([decoy] + rows),
+			**later_fixtures.sharded("skilldata.txt", {"skilldata_35000.txt": [decoy] + rows}),
 			"textdata_equip&skill.txt": utf16([text_row(key) for key in sorted(texts)]),
 		})
 		native_skill = ["0"] * nasrun.SKILL_COLUMNS
 		native_skill[0], native_skill[1], native_skill[3] = "1", str(self.NATIVE_SKILL), "SKILL_NATIVE_THING"
 		(native / nasrun.TEXT_ROOT / "skilldata_5000.txt").write_bytes(utf16([native_skill]))
-		(text_root / "skilldata.txt").write_bytes(utf16([["skilldata_5000.txt"], ["skilldata_110000.txt"]]))
+		(text_root / "skilldata.txt").write_bytes(later_fixtures.index("skilldata_5000.txt", "skilldata_110000.txt"))
+		# The earlier layer's shard the index lists.
+		(text_root / "skilldata_110000.txt").write_bytes(utf16([]))
 		(text_root / nasrun.NAME_TABLE).write_bytes(utf16([["1", "SN_NATIVE_A", "", "", "", "", "", "", "Native A"]]))
 		return vsro, native, output, text_root
 
@@ -364,7 +365,7 @@ class NasrunSkillImportTest(unittest.TestCase):
 			self.assertEqual(staged["SKILL_MALL_NASRUN_ECCENTRICDEMON_01"][nasrun.SKILL_BASIC_LEVEL], "1")
 			self.assertNotIn("	" + str(self.LATER_SKILL) + "	", shard)
 			manifest = [line for line in (text_root / "skilldata.txt").read_bytes().decode("utf-16").splitlines() if line]
-			self.assertEqual(manifest, ["skilldata_5000.txt", "skilldata_110000.txt", nasrun.SKILL_SHARD])
+			self.assertEqual(manifest, [later_fixtures.archive_case("skilldata_5000.txt"), later_fixtures.archive_case("skilldata_110000.txt"), nasrun.SKILL_SHARD])
 			names = (text_root / nasrun.NAME_TABLE).read_bytes().decode("utf-16")
 			self.assertIn("SN_SKILL_MALL_NASRUN_MOBDEFENCEIGNORE	", names)
 			# The skills' icons, and the worn Spirit's active edge (#4384).

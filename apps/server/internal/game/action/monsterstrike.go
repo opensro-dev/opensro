@@ -215,7 +215,7 @@ func (rt *Runtime) monsterStrikeCOS(in monsterStrikeInput, owner *enterworld.Cha
 		skill.Knockback.Present = false
 	}
 	ownerBlock := rt.newCosAbnormalOwnerForPet(divisionID, owner, pet, nowMs)
-	defender, err := cosCombatStats(ref, pet, ownerBlock.block, rt.cosDebuffWords(divisionID, owner.Name, pet.GID, nowMs))
+	defender, err := cosCombatStats(ref, pet, ownerBlock.block, rt.cosWordsHeld(divisionID, owner.Name, pet.GID, nowMs))
 	if err != nil {
 		return out
 	}

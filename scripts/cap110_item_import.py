@@ -26,6 +26,7 @@ import cap110_items as items
 import import_vsro_alexandria as tables
 import published_ids
 import sro_pk2
+import later_tables
 from prepare_client_resources import safe_target, write_atomically
 from sro_paths import EXTRACTED_ROOT, REPO_ROOT, trees_overlap
 
@@ -51,15 +52,14 @@ def enabled(env=os.environ):
 # read_item_tables
 #
 # Every client's item rows, through the shard owner
-# (import_vsro_alexandria.later_table_rows, which refuses a path or a
-# repeated entry). The item index also names only itemdata_<n>.txt
+# (later_tables.Archive, which refuses a path or a repeated entry). The item index also names only itemdata_<n>.txt
 # shards: the band the importers mint their own shards in.
 # ================
 ITEM_SHARD = re.compile(r"itemdata_\d+\.txt", re.IGNORECASE)
 
 
 def read_item_tables(read):
-	names = tables.later_shard_files(read, "itemdata.txt")
+	names = read.files("itemdata.txt")
 	if not all(ITEM_SHARD.fullmatch(name) for name in names):
 		raise ValueError(f"invalid item manifest: {names}")
 	return [row for name in names for row in tables.table_rows(read(name))]
@@ -115,6 +115,21 @@ def tolerant_dependencies(requests):
 
 
 # ================
+# refuse_standing_items
+#
+# Refuses an import whose items already stand in the tree at text_root
+# (its itemdata index, own's shard left out): one codename is one row,
+# and another step owning the code means two importers claim it. what
+# names the import's goods in the message.
+# ================
+def refuse_standing_items(text_root, own, codes, what):
+	codes = set(codes)
+	for row in later_tables.Archive.tree(text_root).rows("itemdata.txt", excluding=(own,)):
+		if len(row) > items.CODENAME and row[items.SERVICE] == "1" and row[items.CODENAME] in codes:
+			raise ValueError(f"{what} {row[items.CODENAME]} already stands in the item tables")
+
+
+# ================
 # copy_asset_closure
 #
 # Parser subprocesses receive data through stdin with no shell. Unknown
@@ -144,58 +159,211 @@ def copy_asset_closure(equipment, native, output, archives, worn=True):
 
 
 # ================
-# copy_resource_closure
+# The closure walk
 #
-# Copies each (archive, path) in pending and everything it references,
-# native files first, then the later archives. Shared by the equipment
-# import and the world layer import (world_layer_import.py). posture is
-# the importer's declared audit posture for a later model
-# (cap110_asset_dependencies.mjs): None refuses sound tracks and
-# non-equipment particle sets, as equipment does; {"sounds": "data",
-# "particles": "all"} walks both (the pets, whose models keep their
-# authored sounds and ambient particles, like the Sky Temple monsters).
+# One walk copies a set of seed resources and everything they reference
+# from the later archives into an output tree, for every importer: the
+# equipment and world layers here, the Sky Temple family through
+# skytemple_import.copy_resource_closure (#4757: two copies of this loop
+# had drifted apart, each holding rules the other lacked). A policy
+# (closure_policy) names what differs between importers; the rules
+# below are the union both walks had, so no importer loses one:
+#
+# - a bare particle name (no folder) resolves to the one Particles path
+#   that ends with it;
+# - a sound authored from the client's sound root (sound/prim/snd/...)
+#   resolves to the archive's own path without that root;
+# - a dependency with no archive is a Data path, and one naming an
+#   archive the walk was not given stops it.
+#============================================================================
+
+# existing: what the walk does with a file the trees already hold.
+# REWRITE copies native files too (the equipment overlay stands alone);
+# KEEP parses a native or already-written file but never rewrites it.
+CLOSURE_REWRITE = "rewrite"
+CLOSURE_KEEP = "keep"
+# gaps: what a file the archives name but do not hold does. RAISE stops
+# the walk. MEDIA records a missing sound or effect program and stops on
+# anything else: a missing cue is a demand-load miss at runtime, as in
+# the retail client (some Jupiter-era sound paths name a layout the
+# archive no longer uses, and native monsters name an appear effect,
+# monster/system_appear.efp, that neither client ships), while a missing
+# mesh, material, texture, skeleton or animation is a broken model. ALL
+# also records every other miss and every file the audit cannot parse
+# (later-client content ships with such holes; inventing bytes is not an
+# option).
+CLOSURE_GAPS_RAISE = "raise"
+CLOSURE_GAPS_MEDIA = "media"
+CLOSURE_GAPS_ALL = "all"
+SOUND_EXTENSIONS = (".wav", ".mp3", ".ogg")
+EFFECT_EXTENSIONS = (".efp",)
+SOUND_ROOT = "sound/"
+# The audit posture that walks a later model's authored sounds and every
+# particle set (cap110_asset_dependencies.mjs); None is the equipment
+# posture, which refuses both.
+WALK_EVERYTHING = {"sounds": "data", "particles": "all"}
+
+
 # ================
-def copy_resource_closure(pending, native, output, archives, posture=None):
-	native_paths = {name: {
-		normalized_path(path.relative_to(native / folder).as_posix()): path
-		for path in (native / folder).rglob("*") if path.is_file()
-	} for name, folder in FOLDERS.items()}
-	pending, seen, records = set(pending), set(), []
+# closure_policy
+#
+# One importer's walk. posture is the audit posture sent with every
+# parsed file (None: the equipment posture).
+# ================
+def closure_policy(posture=None, existing=CLOSURE_REWRITE, gaps=CLOSURE_GAPS_RAISE):
+	return {"posture": posture, "existing": existing, "gaps": gaps}
+
+
+# ================
+# native_tree / native_file / native_names
+#
+# The native extraction, looked up by normalized (ASCII-folded) path. A
+# path is probed directly; only on a case-sensitive file system does a
+# miss consult the folder's folded index, built once per walk. On the
+# owner's NTFS trees a direct probe is already case-blind, so a walk
+# never pays for indexing the 35,000 native Data files (3 s each walk).
+# native_names lists a folder's paths, for bare particle names.
+# ================
+def native_tree(root):
+	return {"root": Path(root), "indexes": {}, "blind": {}}
+
+
+def native_names(tree, folder):
+	if folder not in tree["indexes"]:
+		base = tree["root"] / folder
+		tree["indexes"][folder] = {
+			normalized_path(path.relative_to(base).as_posix()): path for path in base.rglob("*") if path.is_file()
+		}
+	return tree["indexes"][folder]
+
+
+def native_file(tree, folder, name):
+	base = tree["root"] / folder
+	path = base / name
+	if path.is_file():
+		return path
+	if folder not in tree["blind"]:
+		tree["blind"][folder] = base.is_dir() and (base.parent / base.name.swapcase()).is_dir()
+	if tree["blind"][folder] or not base.is_dir():
+		return None
+	return native_names(tree, folder).get(name)
+
+
+# ================
+# resolve_name
+#
+# A pending path to the name the trees or the archive hold it under: a
+# bare particle name to its one full path, a sound-root path to the
+# archive's. Returns (name, None) or (name, error) for a bare name with
+# no single match, which the RAISE policy reports and the others treat
+# as a miss.
+# ================
+def resolve_name(archive_name, name, tree, output, index, policy):
+	if archive_name == "Particles" and "/" not in name and native_file(tree, FOLDERS[archive_name], name) is None \
+			and name not in index:
+		matches = {path for path in native_names(tree, FOLDERS[archive_name]).keys() | index.keys() if path.endswith("/" + name)}
+		if len(matches) != 1:
+			return name, f"ambiguous or missing particle resource: {name}"
+		return matches.pop(), None
+	if name.startswith(SOUND_ROOT):
+		folder = FOLDERS[archive_name]
+		for candidate in (name, name[len(SOUND_ROOT):]):
+			kept = policy["existing"] == CLOSURE_KEEP and (output / folder / candidate).is_file()
+			if native_file(tree, folder, candidate) is not None or kept or candidate in index:
+				return candidate, None
+	return name, None
+
+
+# ================
+# walk_closure
+#
+# Copies each seed (an (archive, path) pair, or a Data path) and its
+# whole reference closure into output, native files first, then the
+# later archives (archives maps a name to (mmap, index)). Returns
+# "records" (every file walked: archive, path, source native / output /
+# later, sha256, in walk order), "files" (the paths written, relative to
+# output) and the misses the policy recorded.
+# ================
+def walk_closure(seeds, native, output, archives, policy):
+	native, output = Path(native), Path(output)
+	tree = native_tree(native)
+	pending = {seed if isinstance(seed, tuple) else ("Data", seed) for seed in seeds}
+	seen, records, written = set(), [], []
+	missing = {"missingSounds": [], "missingEffects": [], "missingFiles": [], "unparsedFiles": []}
 	while pending:
 		batch, requests = sorted(pending), []
 		pending = set()
 		for archive_name, source in batch:
-			name = normalized_path(source)
+			if archive_name not in archives:
+				raise ValueError(f"resource closure left the later archives: {archive_name}:{source}")
 			data, index = archives[archive_name]
-			if archive_name == "Particles" and "/" not in name and name not in native_paths[archive_name] and name not in index:
-				matches = {path for path in native_paths[archive_name].keys() | index.keys() if path.endswith("/" + name)}
-				if len(matches) != 1:
-					raise ValueError(f"ambiguous or missing particle resource: {name}")
-				name = matches.pop()
-			key = (archive_name, name)
-			if key in seen:
+			folder = FOLDERS[archive_name]
+			name, unresolved = resolve_name(archive_name, normalized_path(source), tree, output, index, policy)
+			if (archive_name, name) in seen:
 				continue
-			seen.add(key)
-			local = native_paths[archive_name].get(name)
+			seen.add((archive_name, name))
+			local = native_file(tree, folder, name)
+			existing = output / folder / name
 			entry = index.get(name)
 			if local is not None:
 				raw, origin = local.read_bytes(), "native"
+			elif policy["existing"] == CLOSURE_KEEP and existing.is_file():
+				raw, origin = existing.read_bytes(), "output"
 			elif entry is not None:
 				raw, origin = sro_pk2.payload(data, entry), "later"
+			elif policy["gaps"] == CLOSURE_GAPS_RAISE:
+				raise ValueError(unresolved or f"missing {archive_name} resource: {name}")
+			elif name.endswith(SOUND_EXTENSIONS):
+				missing["missingSounds"].append(name)
+				continue
+			elif name.endswith(EFFECT_EXTENSIONS):
+				missing["missingEffects"].append(name)
+				continue
+			elif policy["gaps"] == CLOSURE_GAPS_ALL:
+				missing["missingFiles"].append(f"{archive_name}:{name}")
+				continue
 			else:
 				raise ValueError(f"missing {archive_name} resource: {name}")
-			write_atomically(safe_target(output / FOLDERS[archive_name], name), raw)
+			if origin == "later" or policy["existing"] == CLOSURE_REWRITE:
+				write_atomically(safe_target(output / folder, name), raw)
+				written.append(folder + "/" + name)
 			records.append({"archive": archive_name, "path": name, "source": origin, "sha256": sro_pk2.digest(raw)})
 			if name.endswith(PARSED_EXTENSIONS):
 				requests.append({"path": name, "bytes": base64.b64encode(raw).decode("ascii"), "native": origin == "native",
-					**(posture or {})})
-		if requests:
-			for names in resource_dependencies(requests):
-				pending.update(
-					(name["archive"], normalized_path(name["path"])) if isinstance(name, dict)
-					else ("Data", normalized_path(name)) for name in names
-				)
-	return records
+					**(policy["posture"] or {})})
+		if not requests:
+			continue
+		if policy["gaps"] != CLOSURE_GAPS_ALL:
+			dependencies = resource_dependencies(requests)
+		else:
+			dependencies = []
+			for request, result in zip(requests, tolerant_dependencies(requests)):
+				if isinstance(result, ValueError):
+					missing["unparsedFiles"].append(request["path"])
+					result = []
+				dependencies.append(result)
+		for names in dependencies:
+			for dep in names:
+				if isinstance(dep, dict):
+					pending.add((dep.get("archive") or "Data", normalized_path(dep["path"])))
+				else:
+					pending.add(("Data", normalized_path(dep)))
+	return {"records": records, "files": written, **{key: sorted(value) for key, value in missing.items()}}
+
+
+# ================
+# copy_resource_closure
+#
+# The equipment and world layer walk (world_layer_import.py): every file
+# rewritten into the standalone overlay, any miss fatal. posture is the
+# importer's declared audit posture for a later model: None refuses
+# sound tracks and non-equipment particle sets, as equipment does;
+# WALK_EVERYTHING walks both (the pets, whose models keep their authored
+# sounds and ambient particles, like the Sky Temple monsters). Returns
+# the walk's records.
+# ================
+def copy_resource_closure(pending, native, output, archives, posture=None):
+	return walk_closure(pending, native, output, archives, closure_policy(posture))["records"]
 
 
 # ================
@@ -247,8 +415,7 @@ def add_items(vsro_root, native, output):
 		# ================
 		# read_later
 		# ================
-		def read_later(name):
-			return tables.table_text(media, index, name)
+		read_later = later_tables.Archive.media(media, index)
 		base = native / TEXT_ROOT
 		base_paths = {sro_pk2.fold_ascii(path.name): path for path in base.iterdir() if path.is_file()}
 		native_hashes = {}
@@ -259,7 +426,7 @@ def add_items(vsro_root, native, output):
 			raw = base_paths[name].read_bytes()
 			native_hashes[name] = sro_pk2.digest(raw)
 			return raw
-		native_rows = read_item_tables(read_native)
+		native_rows = read_item_tables(later_tables.Archive(read_native, base_paths.__contains__, str(base)))
 		later_rows = read_item_tables(read_later)
 		# A piece this build adds for the first time (the Roc's armour, when
 		# SRO_ROC turns on over a kept variant) numbers above every importer
@@ -274,25 +441,25 @@ def add_items(vsro_root, native, output):
 			roc=roc_import.flag_enabled(), pinned=published_ids.published(published_ids.OBJECTS))
 		summary["fullSetModelsDropped"] = items.plain_worn_models(equipment)
 		set_groups, set_magic, catalogue = items.set_catalogue(
-			tables.later_table_rows(read_later, items.SET_GROUP_TABLE),
-			tables.later_table_rows(read_later, items.MAGIC_GROUP_TABLE),
-			tables.later_table_rows(read_later, items.MAGIC_OPTION_TABLE),
+			read_later.rows(items.SET_GROUP_TABLE),
+			read_later.rows(items.MAGIC_GROUP_TABLE),
+			read_later.rows(items.MAGIC_OPTION_TABLE),
 			equipment,
 		)
 		text_path = safe_target(output / TEXT_ROOT, "textdataname.txt")
 		base_text = text_path.read_bytes() if text_path.exists() else read_native("textdataname.txt")
 		later_texts = [
 			row for name in ("textdata_equip&skill.txt", "textdata_object.txt", "textdata_new.txt")
-			for row in tables.later_table_rows(read_later, name)
+			for row in read_later.rows(name)
 		]
 		set_names = {row[items.SET_GROUP_NAME] for row in set_groups if len(row) > items.SET_GROUP_NAME}
 		merged_text, missing_descriptions = items.merge_texts(base_text, later_texts, equipment, set_names)
 		# The set tooltip's option labels (setgroups' options 389 and 390) live in the interface table.
 		ui_path = safe_target(output / TEXT_ROOT, "textuisystem.txt")
 		ui_base = ui_path.read_bytes() if ui_path.exists() else read_native("textuisystem.txt")
-		ui_text, ui_added = items.merge_ui_texts(ui_base, tables.later_table_rows(read_later, "textuisystem.txt"), items.SET_UI_SYMBOLS)
+		ui_text, ui_added = items.merge_ui_texts(ui_base, read_later.rows("textuisystem.txt"), items.SET_UI_SYMBOLS)
 		shops = items.shop_dependencies({
-			name: tables.later_table_rows(read_later, name)
+			name: read_later.rows(name)
 			for name in ("refscrapofpackageitem.txt", "refshopgoods.txt", "refpricepolicyofitem.txt", "shopitemdata.txt")
 		}, equipment, {row[items.CODENAME] for row in native_rows}, {
 			identity["source"]: code for code, identity in summary["idMap"].items()

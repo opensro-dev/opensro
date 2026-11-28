@@ -72,8 +72,9 @@ func TestResolveGameRoot(t *testing.T) {
 ================
 TestGameDataVerdict
 
-Absent data skips, or fails under SRO_REQUIRE_GAME_DATA=1. A resolver
-error fails either way, including the worktree guard's real refusal.
+Absent or stale data skips, or fails under SRO_REQUIRE_GAME_DATA=1, and a
+stale skip names why. A resolver error fails either way, including the
+worktree guard's real refusal.
 ================
 */
 func TestGameDataVerdict(t *testing.T) {
@@ -92,25 +93,33 @@ func TestGameDataVerdict(t *testing.T) {
 		t.Fatal("the worktree guard accepted a worktree holding its own .generated")
 	}
 	missing := []string{filepath.Join(workspace, "extracted")}
+	stale := "built from 481128124; scripts/build/server/buildServerGameDataBundle.mjs changed since"
 	cases := []struct {
 		name    string
 		missing []string
+		stale   string
 		err     error
 		require bool
 		want    int
 	}{
-		{"present", nil, nil, false, gameDataReady},
-		{"absent", missing, nil, false, gameDataSkip},
-		{"absent, required", missing, nil, true, gameDataFail},
-		{"worktree guard", nil, guard, false, gameDataFail},
-		{"worktree guard with absent data", missing, guard, false, gameDataFail},
-		{"unreadable link", nil, errors.New("unreadable worktree link"), false, gameDataFail},
+		{"present", nil, "", nil, false, gameDataReady},
+		{"absent", missing, "", nil, false, gameDataSkip},
+		{"absent, required", missing, "", nil, true, gameDataFail},
+		{"stale", nil, stale, nil, false, gameDataSkip},
+		{"stale, required", nil, stale, nil, true, gameDataFail},
+		{"worktree guard", nil, "", guard, false, gameDataFail},
+		{"worktree guard with stale data", nil, stale, guard, false, gameDataFail},
+		{"worktree guard with absent data", missing, "", guard, false, gameDataFail},
+		{"unreadable link", nil, "", errors.New("unreadable worktree link"), false, gameDataFail},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
-			got, reason := gameDataVerdict(c.missing, c.err, c.require)
+			got, reason := gameDataVerdict(c.missing, c.stale, c.err, c.require)
 			if got != c.want {
 				t.Fatalf("verdict %d, want %d (%s)", got, c.want, reason)
+			}
+			if c.err == nil && c.stale != "" && !strings.Contains(reason, c.stale) {
+				t.Fatalf("reason %q does not name why the data is stale", reason)
 			}
 			if c.err != nil && !strings.Contains(reason, c.err.Error()) {
 				t.Fatalf("reason %q does not name the resolver error", reason)
@@ -149,7 +158,7 @@ func TestMissingPathsInspection(t *testing.T) {
 		if !errors.Is(err, cause) || !strings.Contains(err.Error(), present) {
 			t.Fatalf("inspection error = %v; want cause and path", err)
 		}
-		if verdict, _ := gameDataVerdict(missing, err, false); verdict != gameDataFail {
+		if verdict, _ := gameDataVerdict(missing, "", err, false); verdict != gameDataFail {
 			t.Fatalf("inspection failure became verdict %d", verdict)
 		}
 	}

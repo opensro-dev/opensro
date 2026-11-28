@@ -16,7 +16,9 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 const { createLoader, transientAssetFault } = await import( "../../src/engine/runtime/assets/worker/loader.ts" );
-const { NO_PROGRESS_MS, settle, fixture, packedAsset, stallingBody } = await import( "../helpers/asset-download.mjs" );
+const { NO_PROGRESS_MS, settle, settleUntil, fixture, packedAsset, stallingBody } = await import(
+	"../helpers/asset-download.mjs"
+);
 
 for ( const status of [ null, 408, 429, 500, 502, 503, 504 ] ) {
 	test(`asset transport recovers after ${status ?? "network rejection"}`, async t => {
@@ -228,6 +230,7 @@ for ( const dispose of [ false, true ] ) {
 		for ( const id of [ 1, 2 ] ) {
 			loader.receive( { kind: "load", id, url: `https://example.test${asset.path}`, limit: asset.bytes.length } );
 		}
+		await settleUntil( () => attempts === 1, "the first member attempt" );
 		await settle();
 		assert.equal( attempts, 1 );
 		if ( dispose ) loader.dispose();
@@ -278,6 +281,7 @@ test("invalid range is a transient transport failure even when response cleanup 
 	} );
 	t.after( () => loader.dispose() );
 	loader.receive( { kind: "load", id: 1, url: `https://example.test${asset.path}`, limit: asset.bytes.length } );
+	await settleUntil( () => attempts === 1, "the first member attempt" );
 	await settle();
 	t.mock.timers.tick( 250 );
 	await settle();
@@ -574,6 +578,7 @@ test(
 		for ( const id of [ 1, 2 ] ) {
 			loader.receive( { kind: "load", id, url: `https://example.test${asset.path}`, limit: asset.bytes.length } );
 		}
+		await settleUntil( () => transports.length > 0, "the shared member request" );
 		await settle();
 		assert.equal( transports.length, 1, "both subscribers share one member request" );
 		loader.receive( { kind: "cancel", id: 1 } );
@@ -726,6 +731,7 @@ test("a middlebox answering a ranged read with 200 is a transient transport fail
 	} );
 	t.after( () => loader.dispose() );
 	loader.receive( { kind: "load", id: 1, url: `https://example.test${asset.path}`, limit: asset.bytes.length } );
+	await settleUntil( () => attempts === 1, "the first member attempt" );
 	await settle();
 	t.mock.timers.tick( 250 );
 	await settle();

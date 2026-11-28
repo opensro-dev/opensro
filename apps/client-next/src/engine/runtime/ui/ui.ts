@@ -17,6 +17,8 @@ const ACTION_EXCHANGE = 1006;
 // CIFJobAlias_OpenSubmitConfirm (646470): changing an alias costs the
 // character's level (player +0x820) times this much gold.
 const JOB_ALIAS_MODIFY_GOLD_PER_LEVEL = 50000;
+// The native trade table holds a u32 of gold (0x706D move 0x0D).
+const NATIVE_TRADE_GOLD_MAX = 0xffffffffn;
 // GDR_COS_INFO_NAME_BTN in ifcosinfo.txt: the pet's Name button.
 const COS_INFO_NAME_BUTTON = 26;
 // The Friends list (iffriend.txt id 30, 328 x 256): eleven 23-pixel
@@ -655,6 +657,7 @@ import {
 	COS_STATUS_OUTLINE_MARGIN,
 	HUD_TOOLS_HEIGHT
 } from "@/engine/foundation/ui/cos-command";
+import { cosSaleVerdict } from "@/engine/foundation/ui/cos-sale";
 import { questObjectivePresentation } from "@/engine/foundation/ui/quest-presentation";
 import { questTrackerPlacement, questTrackerSize } from "@/engine/foundation/ui/quest-list";
 import { uniqueBannerQuads } from "@/engine/foundation/ui/unique-banner";
@@ -6638,7 +6641,8 @@ export function createUi( ports: UiPorts ) {
 			} else if (
 				!view.gameplay.inventoryPending && view.gameplay.exchange?.open &&
 				!view.gameplay.exchange.ownLocked && Number.isSafeInteger( amount ) &&
-				amount > 0 && amount <= 0xffffffff && balance !== undefined && BigInt( amount ) <= BigInt( balance )
+				amount > 0 && (amount <= 0xffffffff || view.gameplay.wideTradeGold === true) &&
+				balance !== undefined && BigInt( amount ) <= BigInt( balance )
 			) {
 				sendGameplay( { kind: "exchange-gold", amount } );
 				goldDialog = false;
@@ -6647,7 +6651,7 @@ export function createUi( ports: UiPorts ) {
 			}
 		} else if ( id === "drop-gold" && view.gameplay && (goldDialog === "deposit" || goldDialog === "withdraw") ) {
 			// 59A430 caps warehouse deposits at min(carriedGold, 100_000_000);
-			// SRO_RAISED_GOLD_CAPS raises the deposit cap, to 1,000,000,000
+			// SRO_RAISED_GOLD_CAPS raises the deposit cap, to 10,000,000,000
 			// or the shard's published value.
 			// 59C510 closes the modal without sending when amount <= 0, as the
 			// exchange branch above does: an unsendable amount used to leave
@@ -8116,6 +8120,27 @@ export function createUi( ports: UiPorts ) {
 				}
 				if ( event.kind !== "hover" ) return;
 			}
+			if ( cosHud.saleAsk() !== null ) {
+				if (
+					event.kind === "key" && event.code === "Escape" ||
+					event.kind === "activate" && event.id === "cos-sale-cancel"
+				) {
+					cosHud.takeSale();
+					dirty = true;
+					return;
+				}
+				if (
+					event.kind === "key" && event.code === "Enter" && !composing ||
+					event.kind === "activate" && event.id === "cos-sale-trade"
+				) {
+					// 6A9F30 result 1 -> 6A9E30: the sale request names the store NPC.
+					const ask = cosHud.takeSale();
+					dirty = true;
+					if ( ask && view?.session?.phase === "world" ) sendGameplay( { kind: "cos-sell", npc: ask.npc } );
+					return;
+				}
+				if ( event.kind !== "hover" ) return;
+			}
 			if ( cosHud.cleanConfirm() !== null ) {
 				if (
 					event.kind === "key" && event.code === "Escape" ||
@@ -9074,6 +9099,28 @@ export function createUi( ports: UiPorts ) {
 			}
 			if ( event.kind === "drag-end" && view?.gameplay ) {
 				const target = topmostControlAt( controls, event.x, event.y );
+				// 5B6CA0 message 0x27: the active COS's portrait released over
+				// the open store. Elsewhere the release does nothing.
+				if ( event.id.startsWith( "cos-status:" ) ) {
+					const game = view.gameplay, shop = game.shop;
+					if ( panel === "Shop" && shop && game.target === shop.npc && target?.id.startsWith( "shop-" ) ) {
+						const active = game.activeCos,
+							record = active ? (game.cosRecords ?? []).find( r => r.gid === active.gid ) : undefined;
+						const verdict = cosSaleVerdict( {
+							capabilities: game.targetCapabilities ?? 0,
+							riding: !!view.entities.find( e => e.gid === game.localGid )?.mountedOn,
+							record,
+							reference: record ? hud.data()?.cosReferences.get( record.refObjId ) : undefined
+						} );
+						if ( verdict.kind === "confirm" ) cosHud.askSale( { ...verdict, npc: shop.npc } );
+						else {
+							const notice = constantNativeNotice( verdict.category, verdict.code );
+							if ( notice ) sendGameplay( { kind: "local-notice", notice } );
+						}
+					}
+					dirty = true;
+					return;
+				}
 				// Port-only (#3907): releasing a bound potion or Weapon /
 				// Shield away from its cell clears it (CIFSlot drag-out).
 				// Dropping a potion back on the same cell keeps it; on
@@ -10490,7 +10537,8 @@ export function createUi( ports: UiPorts ) {
 					// room's gold; the drop, exchange and deposit spend the bag's
 					// (BR-261010-1655-2B68: an empty bag zeroed every withdrawal),
 					// and 59A430 caps a warehouse deposit at 100,000,000
-					// (0x5f5e100). SRO_RAISED_GOLD_CAPS raises that cap.
+					// (0x5f5e100). SRO_RAISED_GOLD_CAPS raises that cap. The trade
+					// table holds a u32 unless SRO_WIDE_TRADE_GOLD is on (#4264).
 					const raw = event.value.replace( /[^0-9]/g, "" ).slice( 0, 20 ),
 						carried = BigInt( view?.gameplay?.progression?.gold ?? 0 ),
 						depositCap = storageGoldDepositLimit( view?.gameplay?.storageGoldDepositLimit ),
@@ -10498,6 +10546,9 @@ export function createUi( ports: UiPorts ) {
 							BigInt( view?.gameplay?.storage?.gold ?? 0 ) :
 							goldDialog === "deposit" && carried > depositCap ?
 							depositCap :
+							goldDialog === "exchange" && view?.gameplay?.wideTradeGold !== true &&
+								carried > NATIVE_TRADE_GOLD_MAX ?
+							NATIVE_TRADE_GOLD_MAX :
 							carried;
 					goldAmount = raw ? String( BigInt( raw ) > limit ? limit : BigInt( raw ) ) : "";
 					confirmDrop = "";
@@ -12249,7 +12300,10 @@ export function createUi( ports: UiPorts ) {
 						helpText: name,
 						rect: r,
 						kind: "button",
-						rightActivate: true
+						rightActivate: true,
+						// CIFCOSStatus's slot carries message 0x27 to the window it
+						// is released over; only a store reads it (5B6CA0).
+						draggable: true
 					} );
 				} );
 				const context = cosCommandContext(), record = context.record;
@@ -26591,6 +26645,72 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 				);
 				authoredLabeledButton( cancel, mx, my, "shop-cancel", hudCopy( "UIIT_CTL_CANCEL" ), locked );
 				endWindow( [ admission[0], 0, 0, admission[3] ], "modal:" + panel );
+			}
+			const saleAsk = worldVisible && hud.data() ? cosHud.saleAsk() : null;
+			if ( saleAsk && game ) {
+				// CIFCOSStatus_OpenUseItemQuantityDialog (6A9F50): store mode 9,
+				// quantity mode 2 (a fixed count), centred on the screen, with the
+				// row's name, its price dword and its icon.
+				const admission = beginWindow(),
+					layout = messageBox( w, h, 327, 175, null ),
+					[mx, my] = layout.frame,
+					page = merchantDialogPage( hud.data()!.windows.ifmessagebox!, true ),
+					reference = hud.data()!.cosReferences.get( saleAsk.refObjId ),
+					name = view?.entities.find( e => e.gid === saleAsk.gid )?.name ??
+						game.cosRecords?.find( r => r.gid === saleAsk.gid )?.name ?? "";
+				controls = drawFrame.controls = [];
+				blocks = drawFrame.blocks = [ full ];
+				paths.push( ...partyProposalAssets() );
+				quads.push(
+					...normalTile( layout.background, MESSAGE_TILE, resources.size( MESSAGE_TILE ), full ),
+					...frameRing(
+						layout.frame,
+						MESSAGE_FRAME,
+						PARTS.map( p => resources.size( MESSAGE_FRAME + p + ".png" ) ),
+						full
+					),
+					...text.quads( hudCopy( "UIIT_STT_CONFIRM_BOX" ), layout.title, full, white, {
+						hAlign: 1,
+						vAlign: 0
+					} )
+				);
+				nativePage( page, mx, my, [ 78, 79, 80, 81, 82, 83, 84, 85, 86, 87 ] );
+				authoredText( page.GDR_MBS_CONFIRM_EDIT_ITEM_NAME!, mx, my, name );
+				authoredText(
+					page.GDR_MBS_CONFIRM_EDIT_PRICE!,
+					mx,
+					my,
+					moneyPresentation( String( saleAsk.price ) ).text
+				);
+				authoredText( page.GDR_MBS_CONFIRM_EDIT_COUNT!, mx, my, "1" );
+				for (
+					const key of [
+						"GDR_MBS_CONFIRM_STA_PRICE",
+						"GDR_MBS_CONFIRM_STA_GOLD",
+						"GDR_MBS_CONFIRM_STA_COUNT"
+					]
+				) {
+					const node = page[key]!;
+					authoredText( node, mx, my, hudCopy( node.text ) );
+				}
+				const icon = iconPath( reference?.icon );
+				if ( icon ) authoredImage( { ...page.GDR_MBS_CONFIRM_BUY_ITEM_ICON!, texture: icon }, mx, my );
+				authoredLabeledButton(
+					page.GDR_MBS_CONFIRM_BTN_SELL!,
+					mx,
+					my,
+					"cos-sale-trade",
+					hudCopy( "UIIT_STT_SELL" ),
+					!!game.inventoryPending
+				);
+				authoredLabeledButton(
+					page.GDR_MBS_CONFIRM_BTN_CANCEL!,
+					mx,
+					my,
+					"cos-sale-cancel",
+					hudCopy( "UIIT_CTL_CANCEL" )
+				);
+				endWindow( [ admission[0], 0, 0, admission[3] ], "modal:cos-sale" );
 			}
 			if (
 				worldVisible && guildDialog && hud.data() && game &&

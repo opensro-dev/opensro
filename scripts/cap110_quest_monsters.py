@@ -43,6 +43,7 @@ import cap110_skill_effects as effects
 import cap110_rewards as rewards
 import import_vsro_alexandria as tables
 import sro_pk2
+import later_tables
 from prepare_client_resources import write_atomically
 
 FLAG = "SRO_CAP110_QUESTS"
@@ -51,10 +52,7 @@ CHARACTER_SHARD = "characterdata_310000.txt"
 SKILL_SHARD = "skilldata_310000.txt"
 TEXT_ROOT = Path("Media_extracted") / tables.TEXTDATA
 FORMAT = "opensro-cap110-quest-monsters-v1"
-SKILL_COLUMNS = 118
-FIRST_DEFAULT_SKILL = 89
-END_DEFAULT_SKILL = 99
-NAME_SYMBOL_COLUMN = 5
+SKILL_COLUMNS = monsters.SKILL_COLUMNS
 MONSTERS = (
 	"MOB_QT_CH_CHARGHOST_01", "MOB_QT_CH_CHARGHOST_02", "MOB_QT_CH_SOLDIER_01_1", "MOB_QT_CH_SOLDIER_01_2",
 	"MOB_QT_CH_SOLDIER_02_1", "MOB_QT_CH_SOLDIER_02_2", "MOB_QT_CH_TOMBSTONE_01",
@@ -98,7 +96,7 @@ def select_monsters(later, native_codes, codes=MONSTERS):
 # The skill identities the converted monster rows name.
 # ================
 def needed_skills(refs):
-	return {int(skill) for row in refs.values() for skill in row[FIRST_DEFAULT_SKILL:END_DEFAULT_SKILL] if int(skill)}
+	return {int(skill) for row in refs.values() for skill in row[characters.NATIVE_DEFAULT_SKILL_AT:characters.NATIVE_DEFAULT_SKILL_END] if int(skill)}
 
 
 # ================
@@ -138,36 +136,33 @@ def add_quest_monsters(vsro_root, native, output):
 		# ================
 		# read
 		# ================
-		def read(name):
-			return tables.table_text(media, index, name.lower())
-		later = tables.later_characters(read)
-		characters_native = [row for path in text_root.glob("characterdata_*.txt") if path.name != CHARACTER_SHARD
-			for row in tables.table_rows(path.read_bytes())]
+		read = later_tables.Archive.media(media, index)
+		later = later_tables.characters(read)
+		characters_native = monsters.tree_characters(text_root, CHARACTER_SHARD)
 		refs = select_monsters(later, {row[2] for row in characters_native})
 		# Items, characters and teleport buildings share one reference space.
 		occupied = rewards.occupied_identities(text_root, [], CHARACTER_SHARD)
 		allocated = monsters.allocate_identities(occupied, sorted(refs), prior.get("characters", {}))
 		for code, row in sorted(refs.items()):
 			row[1] = str(allocated[code])
-		native_skills = [row for path in text_root.glob("skilldata_*.txt") if path.name != SKILL_SHARD
-			for row in tables.table_rows(path.read_bytes()) if len(row) == SKILL_COLUMNS]
+		native_skills = monsters.tree_skills(text_root, SKILL_SHARD)
 		needed = needed_skills(refs)
 
 		# ================
 		# load_client_skills
 		# ================
 		def load_client_skills():
-			return {int(row[1]): row for row in tables.later_table_rows(read, "skilldata.txt")
+			return {int(row[1]): row for row in read.rows("skilldata.txt")
 				if len(row) > 3 and row[1].isdigit()}
 		client = load_client_skills()
 		source = monsters.add_native_client_skills([row for row in client.values() if len(row) == SKILL_COLUMNS],
 			needed, native_skills, lambda: client)
 		added, skill_map = monsters.merge_skills(native_skills, source, needed, prior.get("skills", {}))
 		for row in refs.values():
-			row[FIRST_DEFAULT_SKILL:END_DEFAULT_SKILL] = [str(skill_map[int(skill)]) if int(skill) else "0"
-				for skill in row[FIRST_DEFAULT_SKILL:END_DEFAULT_SKILL]]
+			row[characters.NATIVE_DEFAULT_SKILL_AT:characters.NATIVE_DEFAULT_SKILL_END] = [str(skill_map[int(skill)]) if int(skill) else "0"
+				for skill in row[characters.NATIVE_DEFAULT_SKILL_AT:characters.NATIVE_DEFAULT_SKILL_END]]
 		known_names = {row[1] for row in characters.translation_rows((text_root / "textdataname.txt").read_bytes()) if len(row) > 1}
-		missing = {row[NAME_SYMBOL_COLUMN] for row in refs.values()} - known_names
+		missing = {row[characters.NAME_KEY_COLUMN] for row in refs.values()} - known_names
 		if missing:
 			raise ValueError("missing quest monster names: " + ", ".join(sorted(missing)))
 		# A union with the previous build: a rebuild finds its own rows already

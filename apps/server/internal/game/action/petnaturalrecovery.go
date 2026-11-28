@@ -140,11 +140,23 @@ func (rt *Runtime) advancePetNaturalRecoverySession(key petOwnerKey, petState *p
 		}
 		maxHP := int64(uint32(cosParameter(ref, pet, block, abnormalMaxHPParam)))
 		maxMP := int64(uint32(cosParameter(ref, pet, block, abnormalMaxMPParam)))
+		// A friendly irgc word (the headquarters' aura on a holder-side
+		// companion, coswords.go) raises the pulse: its rate adds that
+		// percent of the maximum, the percent-sum channel the character
+		// keeper sums the same rates on.
+		hpRate, mpRate := rt.cosBuffRecoveryRates(key.division, c.Name, key.gid, nowMs)
+		hpAmount, mpAmount := petNaturalRecoveryAmount(maxHP), petNaturalRecoveryAmount(maxMP)
+		if hpRate != 0 {
+			hpAmount += int64(float32(maxHP) * float32(hpRate) / 100)
+		}
+		if mpRate != 0 {
+			mpAmount += int64(float32(maxMP) * float32(mpRate) / 100)
+		}
 		beforeHP, beforeMP := int64(pet.CurrentHP), int64(pet.CurrentMP)
 		pet.CurrentHP = uint32(combat.RecoverVital(beforeHP, maxHP,
-			petNaturalRecoveryAmount(maxHP), cosParameter(ref, pet, block, combat.HPRecoveryReductionParameter)))
+			hpAmount, cosParameter(ref, pet, block, combat.HPRecoveryReductionParameter)))
 		pet.CurrentMP = uint32(combat.RecoverVital(beforeMP, maxMP,
-			petNaturalRecoveryAmount(maxMP), cosParameter(ref, pet, block, combat.MPRecoveryReductionParameter)))
+			mpAmount, cosParameter(ref, pet, block, combat.MPRecoveryReductionParameter)))
 		if int64(pet.CurrentHP) == beforeHP && int64(pet.CurrentMP) == beforeMP {
 			return false
 		}

@@ -31,9 +31,11 @@ import struct
 import tempfile
 from pathlib import Path
 
+import later_tables
+import alexandria_npcs as characters
 import sro_pk2
 from convert_images import save_image_payload
-from import_vsro_alexandria import decode_table, verify_vsro_archive
+from import_vsro_alexandria import decode_table, records, verify_vsro_archive
 from import_vsro_tomb_minimap import ddj_payload
 from sro_paths import PUBLIC_ROOT
 
@@ -88,9 +90,8 @@ CHROME_PICTURES = (
 	"interface/mall/mall_choicelist_icon.ddj",
 )
 
-TEXT_TABLE = "server_dep/silkroad/textdata/textuisystem.txt"
+TEXT_TABLE = "textuisystem.txt"
 # Native 791F50 selects English column 8 (textResources.mjs buildTextCatalog).
-ENGLISH_COLUMN = 8
 
 # Caption keys the window draws that no layout control names: the title,
 # the rail's categories and the card popup
@@ -230,13 +231,13 @@ def layout_strings(text, keys):
 	"""
 	wanted = set(keys)
 	strings = {}
-	for line in text.splitlines():
+	for line in records(text):
 		columns = line.split("\t")
-		if len(columns) <= ENGLISH_COLUMN or columns[0].strip() != "1":
+		if len(columns) <= characters.TEXT_ENGLISH_COLUMN or columns[0].strip() != "1":
 			continue
 		key = columns[1].strip()
 		if key in wanted:
-			strings[key] = columns[ENGLISH_COLUMN].strip().replace("\\n", "\n")
+			strings[key] = columns[characters.TEXT_ENGLISH_COLUMN].strip().replace("\\n", "\n")
 	return strings
 
 
@@ -304,12 +305,12 @@ def main():
 		key: [publish_control(name, properties, sizes) for name, properties in controls.items()]
 		for key, controls in raw_sections.items()
 	}
-	text_entry = entries.get(TEXT_TABLE)
-	if text_entry is None:
+	source = later_tables.Archive.media(data, later_tables.archive_index(data))
+	if not source.has(TEXT_TABLE):
 		raise SystemExit(f"the later client has no {TEXT_TABLE}")
 	keys = [control["text"] for rows in sections.values() for control in rows if control["text"]]
 	keys += VIEW_KEYS
-	strings = layout_strings(decode_table(sro_pk2.payload(data, text_entry)), keys)
+	strings = layout_strings(source.text(TEXT_TABLE), keys)
 	catalog = PUBLIC_ROOT / "assets" / "data" / CATALOG_NAME
 	catalog.parent.mkdir(parents=True, exist_ok=True)
 	catalog.write_text(

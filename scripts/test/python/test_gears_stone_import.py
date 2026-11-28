@@ -11,6 +11,7 @@ refuses.
 ===========================================================================
 """
 import script_paths  # noqa: F401  (puts scripts/ and its build folders on sys.path, #3410)
+import later_fixtures  # noqa: E402
 import hashlib
 import json
 import os
@@ -116,16 +117,14 @@ class GearsStoneImportTest(unittest.TestCase):
 		decoy = stone_row("ITEM_ETC_ARCHEMY_MAGICSTONE_STR_05", 40000, 5, "MATTR_STR")
 		names = [text_row("SN_" + row[2], "Stone " + row[2][len(gears.PREFIX):]) for row in rows if row[2] != unnamed]
 		media = {
-			"itemdata.txt": utf16([["itemdata_6000.txt"]]),
-			"itemdata_6000.txt": utf16(rows + [decoy]),
+			**later_fixtures.sharded("itemdata.txt", {"itemdata_6000.txt": rows + [decoy]}),
 			"textdata_equip&skill.txt": utf16(names),
 		}
 		media_bytes = archive_bytes(media)
 		(v1696 / "Media.pk2").write_bytes(media_bytes)
 		native_row = ["0"] * gears.ITEM_COLUMNS
 		native_row[0], native_row[1], native_row[2] = "1", "5000", "ITEM_NATIVE_THING"
-		(text_root / "itemdata.txt").write_bytes(utf16([["itemdata_5000.txt"]]))
-		(text_root / "itemdata_5000.txt").write_bytes(utf16([native_row]))
+		later_fixtures.write_sharded(text_root, "itemdata.txt", {"itemdata_5000.txt": [native_row]})
 		(native / gears.TEXT_ROOT).mkdir(parents=True)
 		(native / gears.TEXT_ROOT / gears.NAME_TABLE).write_bytes(utf16([text_row("SN_ITEM_NATIVE_THING", "Native thing")]))
 		pins = {"Media": hashlib.sha256(media_bytes).hexdigest()}
@@ -180,7 +179,7 @@ class GearsStoneImportTest(unittest.TestCase):
 			self.assertFalse((output / gears.MARKER).exists())
 			manifest = (text_root / "itemdata.txt").read_bytes().decode("utf-16")
 			self.assertNotIn(gears.ITEM_SHARD, manifest)
-			self.assertIn("itemdata_5000.txt", manifest)
+			self.assertIn(later_fixtures.archive_case("itemdata_5000.txt"), manifest)
 			names = (text_root / gears.NAME_TABLE).read_bytes().decode("utf-16")
 			self.assertNotIn("LEVEL_MAGICSTONE", names)
 			self.assertIn("SN_ITEM_NATIVE_THING", names)

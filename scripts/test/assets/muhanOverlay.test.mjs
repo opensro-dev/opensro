@@ -15,16 +15,23 @@ default), so a default build bakes what the default shard spawns.
 */
 import assert from "node:assert/strict";
 import fs from "node:fs";
-import os from "node:os";
 import path from "node:path";
 import { test } from "node:test";
 import { buildKnobLines, computeResourceBuildFingerprint } from "../../build/shared/resourceBuildFingerprint.mjs";
 import { STUB_FINGERPRINT_KEYS } from "../helpers/fingerprintKeys.mjs";
+import { switchServerRoot } from "../helpers/shardSwitchFixture.mjs";
 import { loadMuhanTeleportDataRows, loadMuhanTeleportLinkRows, muhanEnabled } from "../../build/shared/muhan.mjs";
 
-// The server source root this process started with (fixtureServerRoot
-// points it elsewhere for one test).
-const ORIGINAL_SERVER_ROOT = process.env.SRO_SERVER_SOURCE_ROOT;
+/*
+================
+muhanRow
+
+SRO_MUHAN's registry row with the Default under test.
+================
+*/
+function muhanRow( defaultValue ) {
+	return { env: "SRO_MUHAN", nomadVar: "muhan", defaultValue, catalogue: true };
+}
 
 /*
 ================
@@ -41,36 +48,6 @@ function withMuhanFlag( t, value ) {
 	} );
 	if ( value === undefined ) delete process.env.SRO_MUHAN;
 	else process.env.SRO_MUHAN = value;
-}
-
-/*
-================
-fixtureServerRoot
-
-A server source tree holding only what the posture reads: the release
-profile (profileValue undefined leaves the key out) and a registry row
-with the given default. Pointed at through SRO_SERVER_SOURCE_ROOT for
-one test.
-================
-*/
-function fixtureServerRoot( t, profileValue, registryDefault ) {
-	const root = fs.mkdtempSync( path.join( os.tmpdir(), "sro-muhan-posture-" ) );
-	// Restore the value the process started with, whatever order several
-	// fixtures' hooks run in.
-	t.after( () => {
-		if ( ORIGINAL_SERVER_ROOT === undefined ) delete process.env.SRO_SERVER_SOURCE_ROOT;
-		else process.env.SRO_SERVER_SOURCE_ROOT = ORIGINAL_SERVER_ROOT;
-		fs.rmSync( root, { recursive: true, force: true } );
-	} );
-	fs.mkdirSync( path.join( root, "config" ), { recursive: true } );
-	fs.mkdirSync( path.join( root, "internal", "config", "shardsettings" ), { recursive: true } );
-	const profile = profileValue === undefined ? {} : { SRO_MUHAN: profileValue };
-	fs.writeFileSync( path.join( root, "config", "shard-settings.json" ), JSON.stringify( profile ) );
-	fs.writeFileSync(
-		path.join( root, "internal", "config", "shardsettings", "shardsettings.go" ),
-		`var Settings = []Setting{\n\t{Env: "SRO_MUHAN", NomadVar: "muhan", Default: "${registryDefault}", Catalogue: true},\n}\n`
-	);
-	process.env.SRO_SERVER_SOURCE_ROOT = root;
 }
 
 test("muhanEnabled mirrors the server flag words", ( t ) => {
@@ -101,12 +78,12 @@ test("an unset muhan flag takes the shard's deployed posture", ( t ) => {
 	}
 	// The registry default decides when the profile is silent...
 	withMuhanFlag( t, undefined );
-	fixtureServerRoot( t, undefined, "on" );
+	switchServerRoot( t, muhanRow( "on" ), undefined );
 	assert.equal( muhanEnabled(), true );
 	// ...the deployed profile overrides it...
-	fixtureServerRoot( t, "on", "off" );
+	switchServerRoot( t, muhanRow( "off" ), "on" );
 	assert.equal( muhanEnabled(), true );
-	fixtureServerRoot( t, "off", "on" );
+	switchServerRoot( t, muhanRow( "on" ), "off" );
 	assert.equal( muhanEnabled(), false );
 	// ...and an explicit build env still wins over both.
 	process.env.SRO_MUHAN = "on";
@@ -115,7 +92,7 @@ test("an unset muhan flag takes the shard's deployed posture", ( t ) => {
 
 test("a registry the bake cannot read stops the build", ( t ) => {
 	withMuhanFlag( t, undefined );
-	fixtureServerRoot( t, undefined, "on" );
+	switchServerRoot( t, muhanRow( "on" ), undefined );
 	fs.writeFileSync(
 		path.join( process.env.SRO_SERVER_SOURCE_ROOT, "internal", "config", "shardsettings", "shardsettings.go" ),
 		"var Settings = []Setting{}\n"

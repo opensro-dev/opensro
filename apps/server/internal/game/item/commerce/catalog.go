@@ -15,6 +15,7 @@ import (
 	"opensro.online/server/internal/game/enterworld"
 	"os"
 	"path/filepath"
+	"sort"
 	"strconv"
 )
 
@@ -76,7 +77,35 @@ const (
 	// authors no price row with 64, so Load never admits one: only the
 	// token goods carry it.
 	PaymentNasrunToken uint8 = 64
+	// The Item Mall's devices (mallcatalog.go): silk, gift silk and the
+	// silk-point eligibility row.
+	PaymentSilk      uint8 = 2
+	PaymentGiftSilk  uint8 = 4
+	PaymentSilkPoint uint8 = 16
 )
+
+/*
+================
+mallDevice / npcShopDevice
+
+Which catalogue owns a refpricepolicyofitem PaymentDevice. A package
+the Silk Mall and a gold shop both list (a degree 10 stone that joined
+the mall on its own package, #4658) carries both shops' rows; each
+catalogue reads its own and leaves the other's alone. v1.150's own data
+never shares a package (NPC goods are priced {1}, {1,32} or {1,8}; the
+mall's {2,4,16}), and the client keeps every device a package names in
+one price list (the v1.188 server's package price list), so the split is
+the inferred native rule: a shop window shows and charges its own
+devices. A device neither owns stays refused by both.
+================
+*/
+func mallDevice(device uint64) bool {
+	return device == uint64(PaymentSilk) || device == uint64(PaymentGiftSilk) || device == uint64(PaymentSilkPoint)
+}
+
+func npcShopDevice(device uint64) bool {
+	return device == uint64(PaymentGold) || device == uint64(PaymentGuildPoint) || device == uint64(PaymentHonor)
+}
 
 /*
 ================
@@ -90,6 +119,12 @@ type Catalog struct {
 	Magic           enterworld.MagicOptionSource
 	// tabIDs maps an authored tab name to its id (AddExtraGoods).
 	tabIDs map[string]int32
+	// Unpriced lists, sorted and once each, the packages a shop tab sells
+	// that carry no gold, guild point or honor price row. The goods are
+	// left out of the tabs; the native load check names each one too
+	// (the v1.188 server's package price check, "(%s) register gold
+	// price."), so a data defect is reported instead of a silent gap.
+	Unpriced []string
 }
 
 /*
@@ -156,37 +191,7 @@ func Load(dir string, refs enterworld.ItemRefSource) (*Catalog, error) {
 			}
 		}
 	}
-	goldPrices, guildPointPrices, honorPrices := map[string]uint64{}, map[string]uint64{}, map[string]uint64{}
-	for _, r := range tables["refpricepolicyofitem"] {
-		if len(r) < 5 || r[0] != "1" {
-			continue
-		}
-		n, e := strconv.ParseUint(r[4], 10, 32)
-		currency, ce := strconv.ParseUint(r[3], 10, 8)
-		if e != nil || ce != nil || n == 0 {
-			blocked[r[2]] = true
-			continue
-		}
-		switch uint8(currency) {
-		case PaymentGold:
-			if goldPrices[r[2]] != 0 {
-				blocked[r[2]] = true
-			}
-			goldPrices[r[2]] = n
-		case PaymentGuildPoint:
-			if guildPointPrices[r[2]] != 0 {
-				blocked[r[2]] = true
-			}
-			guildPointPrices[r[2]] = n
-		case PaymentHonor:
-			if honorPrices[r[2]] != 0 {
-				blocked[r[2]] = true
-			}
-			honorPrices[r[2]] = n
-		default:
-			blocked[r[2]] = true
-		}
-	}
+	prices := npcShopPrices(tables["refpricepolicyofitem"], blocked)
 	scraps := map[string][][]string{}
 	for _, r := range tables["refscrapofpackageitem"] {
 		if len(r) < 20 || r[0] != "1" {
@@ -194,6 +199,9 @@ func Load(dir string, refs enterworld.ItemRefSource) (*Catalog, error) {
 		}
 		scraps[r[2]] = append(scraps[r[2]], r)
 	}
+	c.Unpriced = listedWithoutPrice(tables["refshopgoods"], func(code string) bool {
+		return blocked[code] || prices.mall[code] || prices.gold[code] != 0 || prices.guildPoint[code] != 0 || prices.honor[code] != 0
+	})
 	seen := map[string]bool{}
 	for _, r := range tables["refshopgoods"] {
 		if len(r) < 5 || r[0] != "1" {
@@ -213,7 +221,7 @@ func Load(dir string, refs enterworld.ItemRefSource) (*Catalog, error) {
 		}
 		seen[key] = true
 		rows := scraps[r[3]]
-		goldPrice, guildPointPrice, honorPrice := goldPrices[r[3]], guildPointPrices[r[3]], honorPrices[r[3]]
+		goldPrice, guildPointPrice, honorPrice := prices.gold[r[3]], prices.guildPoint[r[3]], prices.honor[r[3]]
 		if blocked[r[3]] || len(rows) == 0 || (goldPrice == 0 && guildPointPrice == 0 && honorPrice == 0) || refs == nil {
 			continue
 		}
@@ -256,4 +264,84 @@ func Load(dir string, refs enterworld.ItemRefSource) (*Catalog, error) {
 		return nil, err
 	}
 	return c, nil
+}
+
+/*
+================
+npcPrices / npcShopPrices
+
+The NPC shop prices of live refpricepolicyofitem rows, by package: one
+gold, guild point and honor amount each. A Silk Mall row is the mall's
+(mallDevice): skipped, its package noted in mall; any other row this shop cannot charge (an
+unknown device, a zero or unparsable amount, a repeated device) marks
+its package in blocked, so the package is never sold at a partial price.
+================
+*/
+type npcPrices struct {
+	gold, guildPoint, honor map[string]uint64
+	mall                    map[string]bool
+}
+
+func npcShopPrices(rows [][]string, blocked map[string]bool) npcPrices {
+	p := npcPrices{gold: map[string]uint64{}, guildPoint: map[string]uint64{}, honor: map[string]uint64{}, mall: map[string]bool{}}
+	for _, r := range rows {
+		if len(r) < 5 || r[0] != "1" {
+			continue
+		}
+		currency, ce := strconv.ParseUint(r[3], 10, 8)
+		if ce == nil && mallDevice(currency) {
+			p.mall[r[2]] = true
+			continue
+		}
+		n, e := strconv.ParseUint(r[4], 10, 32)
+		if e != nil || ce != nil || n == 0 {
+			blocked[r[2]] = true
+			continue
+		}
+		switch uint8(currency) {
+		case PaymentGold:
+			if p.gold[r[2]] != 0 {
+				blocked[r[2]] = true
+			}
+			p.gold[r[2]] = n
+		case PaymentGuildPoint:
+			if p.guildPoint[r[2]] != 0 {
+				blocked[r[2]] = true
+			}
+			p.guildPoint[r[2]] = n
+		case PaymentHonor:
+			if p.honor[r[2]] != 0 {
+				blocked[r[2]] = true
+			}
+			p.honor[r[2]] = n
+		default:
+			blocked[r[2]] = true
+		}
+	}
+	return p
+}
+
+/*
+================
+listedWithoutPrice
+
+The packages live refshopgoods rows list that settled does not cover
+(settled: priced in a currency the shop takes, or held back by a sell
+condition), sorted and once each: the native load check's report set
+(the v1.188 server's package price check).
+================
+*/
+func listedWithoutPrice(goods [][]string, settled func(code string) bool) []string {
+	missing := map[string]bool{}
+	for _, r := range goods {
+		if len(r) >= 5 && r[0] == "1" && !settled(r[3]) {
+			missing[r[3]] = true
+		}
+	}
+	codes := make([]string, 0, len(missing))
+	for code := range missing {
+		codes = append(codes, code)
+	}
+	sort.Strings(codes)
+	return codes
 }

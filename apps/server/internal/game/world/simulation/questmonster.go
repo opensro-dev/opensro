@@ -300,7 +300,7 @@ func (s *MonsterState) SpawnQuestMonsterGID(request QuestMonsterSpawn) (uint32, 
 	armQuestLifetimeLocked(state, actor.Gid, request.NowMs+request.LifetimeMs, request.LifetimeMs > 0)
 	if request.AnnounceUnique && actor.IsUnique() {
 		state.uniqueNotices = append(state.uniqueNotices, uniqueNotice(uniqueNoticeAppear, ref.RefObjID, ""))
-		state.markUniqueSpawn(ref.RefObjID, spawn.RegionID, request.NowMs)
+		state.markUniqueSpawn(ref.RefObjID, actor.Gid, spawn.RegionID, request.NowMs)
 	}
 	return actor.Gid, true
 }

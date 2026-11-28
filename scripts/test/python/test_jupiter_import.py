@@ -8,6 +8,8 @@ marker enrolled.
 ===========================================================================
 """
 import script_paths  # noqa: F401  (puts scripts/ and its build folders on sys.path, #3410)
+import later_fixtures  # noqa: E402
+import later_tables  # noqa: E402
 import hashlib
 import json
 import os
@@ -119,9 +121,8 @@ class JupiterImportTest(unittest.TestCase):
 		source.mkdir()
 		native_char = ["0"] * 104
 		native_char[1], native_char[2] = "100", "MOB_NATIVE"
-		(text_root / "characterdata_5000.txt").write_bytes(utf16([native_char]))
-		(text_root / "skilldata.txt").write_bytes(utf16([["skilldata_5000.txt"]]))
-		(text_root / "skilldata_5000.txt").write_bytes(utf16([]))
+		later_fixtures.write_sharded(text_root, "characterdata.txt", {"characterdata_5000.txt": [native_char]})
+		later_fixtures.write_sharded(text_root, "skilldata.txt", {"skilldata_5000.txt": []})
 		(text_root / "textdataname.txt").write_bytes(utf16([["1", "UIO_OBJ_MOB_NATIVE", "Native"]]))
 		(text_root / "skilleffect.txt").write_bytes(utf16([
 			["#section", "characterinfo"], ["MOB_NATIVE"] + ["0"] * 12, ["#section", "skillaniset"]]))
@@ -130,10 +131,8 @@ class JupiterImportTest(unittest.TestCase):
 		temple = later_row("MOB_JUPITER_TEMPLEKIND", "UIO_OBJ_MOB_JUPITER_TEMPLEKIND", 118, grade=3)
 		extra = list(extra_rows)
 		media = {
-			"characterdata.txt": utf16([["characterdata_6000.txt"]]),
-			"characterdata_6000.txt": utf16([field, temple] + extra),
-			"skilldata.txt": utf16([["skilldata_6000.txt"]]),
-			"skilldata_6000.txt": utf16([skill_row(7001, "MSKILL_JUPITER_TEST")]),
+			**later_fixtures.sharded("characterdata.txt", {"characterdata_6000.txt": [field, temple] + extra}),
+			**later_fixtures.sharded("skilldata.txt", {"skilldata_6000.txt": [skill_row(7001, "MSKILL_JUPITER_TEST")]}),
 			"textdata_object.txt": utf16([
 				["1", "UIO_OBJ_MOB_JUPITER_FIELDKIND", "x", "x", "Field kind", "f", "x", "a", "b", "c"],
 				["2", "UIO_OBJ_MOB_JUPITER_TEMPLEKIND", "x", "x", "Temple kind", "t", "x", "a", "b", "c"]]
@@ -231,11 +230,11 @@ class JupiterImportTest(unittest.TestCase):
 			"textdata_object_1000.txt": utf16([["1", "SN_ONE"]]),
 			"textdata_object_2000.txt": utf16([["2", "SN_TWO"]]),
 		}
-		text = jupiter.later_object_text(lambda name: files[name.lower()])
+		text = jupiter.later_object_text(later_tables.Archive.of(files))
 		self.assertIn("SN_ONE", text)
 		self.assertIn("SN_TWO", text)
 		flat = {"textdata_object.txt": utf16([["1", "SN_FLAT", "x"], ["2", "SN_FLAT2", "y"]])}
-		self.assertIn("SN_FLAT2", jupiter.later_object_text(lambda name: flat[name.lower()]))
+		self.assertIn("SN_FLAT2", jupiter.later_object_text(later_tables.Archive.of(flat)))
 
 	# ================
 	# test_later_text_row_maps_the_17_column_layout

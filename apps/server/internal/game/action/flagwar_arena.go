@@ -138,6 +138,12 @@ type flagWarCharacterIDs interface {
 	CharacterRefObjIDByCodename(codename string) (uint32, bool)
 }
 
+// flagWarCharacterNames is the same index's English names: the arena
+// objects are static NPC rows the monster template leaves out.
+type flagWarCharacterNames interface {
+	CharacterNameByCodename(codename string) (string, bool)
+}
+
 /*
 ================
 flagWarReference
@@ -228,11 +234,19 @@ func (rt *Runtime) flagWarObjectDef(o *flagWarArenaObject) simulation.NpcDef {
 flagWarRefName
 
 The display name for an arena codename from the authored reference
-data. Names are cosmetic on the wire row; the codename stands in when
-no reference row exists.
+data, looked up the way flagWarReference finds the id: the poles, flag,
+key and doors are static NPC rows, so the raw characterdata index (their
+NameStrID in textdataname.txt, "Flagpole (Red)", "Key", "Gate") answers
+first and the monster template stays as the fallback (#4711). The
+codename stands in only when neither holds a name.
 ================
 */
 func (rt *Runtime) flagWarRefName(codename, fallback string) string {
+	if refs, ok := rt.deps.ItemReferences().(flagWarCharacterNames); ok {
+		if name, found := refs.CharacterNameByCodename(codename); found {
+			return name
+		}
+	}
 	if rt.Monsters == nil {
 		return fallback
 	}

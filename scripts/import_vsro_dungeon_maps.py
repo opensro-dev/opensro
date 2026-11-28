@@ -30,9 +30,11 @@ from pathlib import Path
 
 from PIL import Image
 
+import later_tables
+import alexandria_npcs as characters
 import sro_pk2
 from convert_images import save_image_payload
-from import_vsro_alexandria import verify_vsro_archive
+from import_vsro_alexandria import records, verify_vsro_archive
 from import_vsro_tomb_minimap import ddj_payload, entry_name
 from sro_paths import PUBLIC_ROOT
 
@@ -41,19 +43,17 @@ CATALOG_VERSION = 2
 CATALOG_NAME = "later-dungeon-map.json"
 ARCHIVE_ROOT = "interface/worldmap/dungeon/"
 PUBLIC_IMAGE_ROOT = "/assets/images/Media_extracted/interface/worldmap/dungeon/"
-TEXT_ROOT = "server_dep/silkroad/textdata/"
-MAP_TABLE = TEXT_ROOT + "worldmap_mapinfo.txt"
-SIGN_TABLE = TEXT_ROOT + "worldmap_localinfo.txt"
-ZONE_TEXT = TEXT_ROOT + "textzonename.txt"
-OBJECT_TEXT = TEXT_ROOT + "textdata_object.txt"
-UI_TEXT = TEXT_ROOT + "textuisystem.txt"
+MAP_TABLE = "worldmap_mapinfo.txt"
+SIGN_TABLE = "worldmap_localinfo.txt"
+ZONE_TEXT = "textzonename.txt"
+OBJECT_TEXT = "textdata_object.txt"
+UI_TEXT = "textuisystem.txt"
 # The page foot's note: the later client's world map level filter.
 MONSTER_LEVEL_NOTE = "UIIT_STT_WORLDMAP_LEVEL_MONSTER_LIST"
 DUNGEON_SECTION = "#section\tDungeonmap"
 # Donwhang Stone Cave and the six Ch'in Tomb floors: the rows this port has.
 FIRST_MAP_ID = 2001
 LAST_MAP_ID = 2010
-ENGLISH_COLUMN = 8
 KOREAN_COLUMN = 2
 LABEL_ROW = "1"
 SIGN_ROW = "2"
@@ -65,13 +65,13 @@ LABEL_FONT_COLUMN = 14
 
 
 def table_text(raw):
-	"""A text table's lines; the client ships UTF-16 and CP949 ones."""
+	"""A text table's records; the client ships UTF-16 and CP949 ones."""
 	if raw[:2] == b"\xff\xfe":
-		return raw.decode("utf-16").splitlines()
+		return records(raw.decode("utf-16"))
 	try:
-		return raw.decode("utf-8").splitlines()
+		return records(raw.decode("utf-8"))
 	except UnicodeDecodeError:
-		return raw.decode("cp949", "replace").splitlines()
+		return records(raw.decode("cp949", "replace"))
 
 
 def map_rows(lines):
@@ -113,7 +113,7 @@ def english_text(lines):
 	for line in lines:
 		cells = line.split("\t")
 		if len(cells) > KOREAN_COLUMN and not line.startswith("//"):
-			english = cells[ENGLISH_COLUMN].strip() if len(cells) > ENGLISH_COLUMN else ""
+			english = cells[characters.TEXT_ENGLISH_COLUMN].strip() if len(cells) > characters.TEXT_ENGLISH_COLUMN else ""
 			names[cells[1].strip()] = english or cells[KOREAN_COLUMN].strip()
 	return names
 
@@ -221,13 +221,17 @@ def main():
 	def read(path):
 		return sro_pk2.payload(data, entries[path])
 
-	rows = map_rows(table_text(read(MAP_TABLE)))
-	zones = english_text(table_text(read(ZONE_TEXT)))
+	# The tables through their owner: a v1.696 archive, whose names are
+	# shard indexes, reads its shards instead of one-cell rows.
+	source = later_tables.Archive.media(data, later_tables.archive_index(data))
+	lines = lambda name: source.rows(name, parse=table_text)  # noqa: E731
+	rows = map_rows(lines(MAP_TABLE))
+	zones = english_text(lines(ZONE_TEXT))
 	add_captions(rows, zones)
-	note = required_text(english_text(table_text(read(UI_TEXT))), MONSTER_LEVEL_NOTE, UI_TEXT)
+	note = required_text(english_text(lines(UI_TEXT)), MONSTER_LEVEL_NOTE, UI_TEXT)
 	names = dict(zones)
-	names.update(english_text(table_text(read(OBJECT_TEXT))))
-	add_signs(rows, table_text(read(SIGN_TABLE)), names)
+	names.update(english_text(lines(OBJECT_TEXT)))
+	add_signs(rows, lines(SIGN_TABLE), names)
 
 	images = PUBLIC_ROOT / "assets" / "images" / "Media_extracted" / "interface" / "worldmap" / "dungeon"
 	images.mkdir(parents=True, exist_ok=True)

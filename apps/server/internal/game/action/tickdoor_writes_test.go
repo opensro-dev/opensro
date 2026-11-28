@@ -19,7 +19,6 @@ import (
 	"path/filepath"
 	"sync"
 	"testing"
-	"time"
 
 	"opensro.online/server/internal/domain"
 	"opensro.online/server/internal/game/enterworld"
@@ -137,11 +136,12 @@ func TestFieldRetireWritesTheLeaverInsideItsDoor(t *testing.T) {
 ================
 TestCombatTrapRetireWritesThePlanterInsideItsDoor
 
-Both retirements of a planter's trap buff change its record (the body
-status owner): the
-link-group cap when a replant replaces the older trap, and the object tick
-when the planter walks away. Each change must fall inside a door that
-covers the planter.
+The object tick that retires a planter's trap when the planter walks
+away changes its record (the body status owner), and the change must fall
+inside a door that covers the planter. A replant at the live cap no
+longer retires the older trap: it is refused (trapCountRefusal, #4637;
+skillcombattrap_test.go covers it), so the walk-away tick is the one
+retirement left to prove.
 ================
 */
 func TestCombatTrapRetireWritesThePlanterInsideItsDoor(t *testing.T) {
@@ -149,16 +149,11 @@ func TestCombatTrapRetireWritesThePlanterInsideItsDoor(t *testing.T) {
 	if !rt.Monsters.Defeat(testDivision, gid, clock.Now()) {
 		t.Fatal("could not clear the trigger monster")
 	}
-	plantCombatTrap(t, rt, clock, c, skill, clock.NowMs())
-	clock.Advance(time.Duration(skill.CoolTimeMs+1) * time.Millisecond)
-	rt.drainSkillFinalizes(clock.NowMs())
-	watch := watchDoors(t, rt, c)
-
 	release := plantCombatTrap(t, rt, clock, c, skill, clock.NowMs())
 	if buffs := rt.effects.Snapshot(testDivision, c.Name); len(buffs) != 1 {
-		t.Fatalf("%d buffs after the replant, want the replaced trap's retired", len(buffs))
+		t.Fatalf("%d buffs after the plant, want the trap's one", len(buffs))
 	}
-	watch.finish()
+	watch := watchDoors(t, rt, c)
 
 	key := simulation.WorldKey(testDivision, c.Name)
 	rt.Worlds.Update(key, func() simulation.WorldState { return simulation.SeedWorldState(c) }, func(w *simulation.WorldState) {

@@ -18,9 +18,10 @@ step moved here too, so its key is this module's code (#4251).
 import os
 
 import import_vsro_alexandria as stage1
+import later_tables
 from pathlib import Path
 
-from variant_files import TEXTDATA, log, log_omitted_links, read_vsro_file, replace_file
+from variant_files import TEXTDATA, log, log_omitted_links, replace_file
 import pharaoh_temple as temple
 import published_ids
 from alexandria_map_tables import append_rows, native_text_row
@@ -359,8 +360,9 @@ def add_gates(vsro_root, native, out):
 	names = ("teleportdata.txt", "teleportbuilding.txt", "teleportlink.txt")
 	tables = {name: (native / textdata / name).read_bytes() for name in names}
 	tables["text"] = (native / textdata / "textdataname.txt").read_bytes()
-	vsro = {name: read_vsro_file(vsro_root, "Media", TEXTDATA + name) for name in names}
-	vsro["text"] = read_vsro_file(vsro_root, "Media", TEXTDATA + "textdata_object.txt")
+	with later_tables.Archive.open(vsro_root) as source:
+		vsro = {name: source.file(name) for name in names}
+		vsro["text"] = source.file("textdata_object.txt")
 	from cap110_monsters import tomb_enabled
 	codes = GATE_CODES + TOMB_GATE_CODES if tomb_enabled() else GATE_CODES
 	buildings = ()

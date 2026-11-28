@@ -23,7 +23,12 @@ import argparse
 import hashlib
 import json
 import re
+import sys
 from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+
+from import_vsro_alexandria import records  # noqa: E402
 
 ROOT = Path(__file__).resolve().parents[2]
 DATA = ROOT / "scripts/data/quest"
@@ -33,15 +38,11 @@ SQL_FORMAT = "sro-quest-sql-rewards-v2"
 # The reward paragraph of a v1.150 popup opens with this heading.
 REWARD_HEADING = "보상"
 
-# A table record opens with its service flag (or a numeric id) and a tab.
-RECORD_START = re.compile(r"^\d+\t")
-
-
 # ================
 # read_table
 #
-# A popup body may hold line breaks, so a line that does not open a record
-# continues the one above it.
+# A popup body may hold line breaks: a record ends only at CRLF
+# (import_vsro_alexandria.records, #4608), so a body's own LF stays in it.
 # ================
 def read_table(path):
 	raw = path.read_bytes()
@@ -49,13 +50,7 @@ def read_table(path):
 		text = raw.decode("utf-16")
 	else:
 		text = raw.decode("cp949")
-	records = []
-	for line in text.splitlines():
-		if records and not RECORD_START.match(line):
-			records[-1] += "\n" + line
-		elif line.strip():
-			records.append(line)
-	return raw, [record.split("\t") for record in records]
+	return raw, [record.split("\t") for record in records(text) if record.strip()]
 
 
 # ================

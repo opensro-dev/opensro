@@ -11,6 +11,8 @@ source carries), and the item shard's stage/reap round trip.
 ===========================================================================
 """
 import script_paths  # noqa: F401  (puts scripts/ and its build folders on sys.path, #3410)
+import alexandria_npcs as characters  # noqa: E402
+import later_fixtures  # noqa: E402
 import json
 import tempfile
 import unittest
@@ -164,7 +166,7 @@ class RigidKindNamesTest(unittest.TestCase):
 			["1", "SN_MOB_EU_KERBEROS_L2", "태백급", "", "", "", "", "", "Shipped", "", ""],
 			["1", "SN_OTHER", "x", "", "", "", "", "", "", "", ""]]
 		rigid.later_world_import.fill_layer_english(texts, rigid.KIND_NAMES)
-		english = rigid.later_world_import.NAME_ENGLISH
+		english = characters.TEXT_ENGLISH_COLUMN
 		self.assertEqual(texts[0][english], rigid.KIND_NAMES["SN_MOB_AM_IVY_L2"])
 		self.assertEqual(texts[1][english], "Shipped", "a shipped translation stays")
 		self.assertEqual(texts[2][english], "", "a symbol the layer does not name is untouched")
@@ -193,8 +195,7 @@ class RigidItemStagingTest(unittest.TestCase):
 		native, out = base / "native", base / "out"
 		native_text = native / rigid.later_world_import.TEXT_ROOT
 		native_text.mkdir(parents=True)
-		(native_text / "itemdata.txt").write_bytes(utf16([["itemdata_5000.txt"]]))
-		(native_text / "itemdata_5000.txt").write_bytes(utf16([]))
+		later_fixtures.write_sharded(native_text, "itemdata.txt", {"itemdata_5000.txt": []})
 		model = native / "Data_extracted" / "res" / "item" / "etc" / "drop_scroll.bsr"
 		model.parent.mkdir(parents=True)
 		model.write_bytes(b"JMXVRES 0109" + bytes(256))
@@ -203,7 +204,7 @@ class RigidItemStagingTest(unittest.TestCase):
 		icon.write_bytes(b"JMXVDDJ 0101")
 		text_root = out / rigid.later_world_import.TEXT_ROOT
 		text_root.mkdir(parents=True)
-		(text_root / "itemdata.txt").write_bytes(utf16([["itemdata_5000.txt"]]))
+		(text_root / "itemdata.txt").write_bytes(later_fixtures.index("itemdata_5000.txt"))
 		(text_root / "textdataname.txt").write_bytes(utf16([["1", "SN_NATIVE", "x", "", "", "Native", "", "", "", "", ""]]))
 		return native, out, text_root
 
@@ -237,7 +238,7 @@ class RigidItemStagingTest(unittest.TestCase):
 			self.assertEqual(len(set(ids)), 8)
 			self.assertEqual({row[rigid.ITEM_CODE] for row in shard_rows}, set(rigid.SCROLLS))
 			manifest = [row[0] for row in rigid.tables.table_rows((text_root / "itemdata.txt").read_bytes()) if row]
-			self.assertEqual(manifest, ["itemdata_5000.txt", rigid.ITEM_SHARD])
+			self.assertEqual(manifest, [later_fixtures.archive_case("itemdata_5000.txt"), rigid.ITEM_SHARD])
 			names = (text_root / "textdataname.txt").read_bytes().decode("utf-16")
 			for symbol in summary["itemSymbols"]:
 				self.assertIn(symbol, names)
@@ -251,7 +252,7 @@ class RigidItemStagingTest(unittest.TestCase):
 			rigid.reap_items(out, again)
 			self.assertFalse((text_root / rigid.ITEM_SHARD).exists())
 			manifest = [row[0] for row in rigid.tables.table_rows((text_root / "itemdata.txt").read_bytes()) if row]
-			self.assertEqual(manifest, ["itemdata_5000.txt"])
+			self.assertEqual(manifest, [later_fixtures.archive_case("itemdata_5000.txt")])
 			names = (text_root / "textdataname.txt").read_bytes().decode("utf-16")
 			self.assertIn("SN_NATIVE", names)
 			for symbol in summary["itemSymbols"]:

@@ -25,6 +25,7 @@ two lists, and their trophies' drops join the rewards file's fixed rules.
 ===========================================================================
 """
 import script_paths  # noqa: F401  (puts scripts/ and its build folders on sys.path, #3410)
+import later_fixtures  # noqa: E402
 import hashlib
 import json
 import os
@@ -166,17 +167,15 @@ class RocImportTest(unittest.TestCase):
 			row = ["0"] * 104
 			row[1], row[2] = str(5871 + n), "MOB_QT_%02d_ROCKY_CLON2" % n
 			guardians.append(row)
-		(text_root / "characterdata_5000.txt").write_bytes(utf16([native_char] + guardians))
-		(text_root / "skilldata.txt").write_bytes(utf16([["skilldata_5000.txt"]]))
-		(text_root / "skilldata_5000.txt").write_bytes(utf16([]))
+		later_fixtures.write_sharded(text_root, "characterdata.txt", {"characterdata_5000.txt": [native_char] + guardians})
+		later_fixtures.write_sharded(text_root, "skilldata.txt", {"skilldata_5000.txt": []})
 		(text_root / "textdataname.txt").write_bytes(utf16([["1", NATIVE_TAHOMET_SYMBOL, "Tahomet"]]))
 		(text_root / "skilleffect.txt").write_bytes(utf16([
 			["#section", "characterinfo"], ["MOB_RM_TAHOMET"] + ["0"] * 12, ["#section", "skillaniset"]]))
 		(text_root / "teleportdata.txt").write_bytes(utf16([gate_row("1", "GATE_CH", "2094", "1")]))
 		(text_root / "teleportbuilding.txt").write_bytes(utf16([]))
 		(text_root / "teleportlink.txt").write_bytes(utf16([]))
-		(text_root / "itemdata.txt").write_bytes(utf16([["itemdata_5000.txt"]]))
-		(text_root / "itemdata_5000.txt").write_bytes(utf16([["1", "7", "ITEM_ETC_NATIVE"]]))
+		later_fixtures.write_sharded(text_root, "itemdata.txt", {"itemdata_5000.txt": [["1", "7", "ITEM_ETC_NATIVE"]]})
 		(text_root / roc.QUEST_TABLE).write_bytes(utf16([NATIVE_QUEST]))
 		(text_root / roc.CONTENTS_TABLE).write_bytes(utf16(NATIVE_CONTENTS))
 		rows = []
@@ -186,9 +185,8 @@ class RocImportTest(unittest.TestCase):
 		for code, row in (overrides or {}).items():
 			rows = [row if old[2] == code else old for old in rows]
 		media = {
-			"characterdata.txt": utf16([["characterdata_6000.txt"]]),
-			"characterdata_6000.txt": utf16(rows),
-			"skilldata.txt": utf16([["skilldata_6000.txt"]]),
+			**later_fixtures.sharded("characterdata.txt", {"characterdata_6000.txt": rows}),
+			"skilldata.txt": later_fixtures.index("skilldata_6000.txt"),
 			"skilldata_6000.txt": utf16([skill_row(ROC_SKILL, "MSKILL_RM_ROC_TEST"),
 				skill_row(ROC_ENRAGE_SKILL, "MSKILL_RM_ROC_ATTACK10")]),
 			"textdata_object.txt": utf16([[str(at), symbol_of(code), "x", "x", code, "f", "x", "a", "b", "c"]
@@ -198,8 +196,7 @@ class RocImportTest(unittest.TestCase):
 			"teleportbuilding.txt": utf16([building_row(MOUNTAIN_BUILDING, "STORE_RC_TAHOMET_GATE"),
 				building_row("24297", "STORE_ROC_FRONT_GATE")]),
 			"teleportlink.txt": utf16(SOURCE_LINKS),
-			"itemdata.txt": utf16([["itemdata_20000.txt"]]),
-			"itemdata_20000.txt": utf16([["1", SOURCE_KEY_ID, KEY_ITEM]]),
+			**later_fixtures.sharded("itemdata.txt", {"itemdata_20000.txt": [["1", SOURCE_KEY_ID, KEY_ITEM]]}),
 			"questdata.txt": utf16(SOURCE_QUESTS if quests is None else quests),
 			"questcontentsdata.txt": utf16(SOURCE_CONTENTS if contents is None else contents),
 			roc.UI_TABLE: utf16(SOURCE_UI if ui is None else ui),
@@ -286,7 +283,7 @@ class RocImportTest(unittest.TestCase):
 	def test_the_summit_link_names_the_variant_key_item(self):
 		with tempfile.TemporaryDirectory() as root:
 			vsro, native, output, text_root, pins = self.fixture(Path(root))
-			(text_root / "itemdata.txt").write_bytes(utf16([["itemdata_5000.txt"], ["itemdata_25000.txt"]]))
+			(text_root / "itemdata.txt").write_bytes(later_fixtures.index("itemdata_5000.txt", "itemdata_25000.txt"))
 			(text_root / "itemdata_25000.txt").write_bytes(utf16([["1", VARIANT_KEY_ID, KEY_ITEM]]))
 			summary = self.run_import(vsro, native, output, pins, "on")
 			summit = next(row for row in self.links(text_root) if row[1:3] == ["160", "162"])
@@ -374,7 +371,7 @@ class RocImportTest(unittest.TestCase):
 			vsro, native, output, text_root, pins = self.fixture(Path(root))
 			piece = ["0"] * 13
 			piece[0], piece[1], piece[2], piece[9:13] = "1", "8", "ITEM_CH_BLADE_11_A", ["3", "1", "6", "2"]
-			(text_root / "itemdata.txt").write_bytes(utf16([["itemdata_5000.txt"], ["itemdata_110000.txt"]]))
+			(text_root / "itemdata.txt").write_bytes(later_fixtures.index("itemdata_5000.txt", "itemdata_110000.txt"))
 			(text_root / "itemdata_110000.txt").write_bytes(utf16([piece]))
 			summary = self.run_import(vsro, native, output, pins, "on")
 			self.assertEqual(summary["rewards"]["random"], 8)
@@ -524,6 +521,7 @@ class RocImportTest(unittest.TestCase):
 			vsro, native, output, text_root, pins = self.fixture(Path(root))
 			row = ["0"] * 120
 			row[1], row[2] = "200", "MOB_RM_ROC"
+			(text_root / "characterdata.txt").write_bytes(later_fixtures.index("characterdata_5000.txt", "characterdata_7000.txt"))
 			(text_root / "characterdata_7000.txt").write_bytes(utf16([row]))
 			with self.assertRaisesRegex(ValueError, "already stands"):
 				self.run_import(vsro, native, output, pins, "on")

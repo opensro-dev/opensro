@@ -9,6 +9,7 @@ degree-12 link trimming, translation ownership and off/on/off rebuilds.
 ===========================================================================
 """
 import script_paths  # noqa: F401  (puts scripts/ and its build folders on sys.path, #3410)
+import later_fixtures  # noqa: E402
 import os
 from pathlib import Path
 import sys
@@ -509,7 +510,7 @@ class ImportTests(unittest.TestCase):
 			base.mkdir(parents=True)
 			target.mkdir(parents=True)
 			later.mkdir()
-			original_manifest = utf16([["itemdata_5000.txt"]])
+			original_manifest = later_fixtures.index("itemdata_5000.txt")
 			(base / "itemdata.txt").write_bytes(original_manifest)
 			(base / "itemdata_5000.txt").write_bytes(utf16([weapon()]))
 			(base / "textdataname.txt").write_bytes(utf16([]))
@@ -649,7 +650,7 @@ class ImportTests(unittest.TestCase):
 			base.mkdir(parents=True)
 			target.mkdir(parents=True)
 			later.mkdir()
-			manifest = utf16([["itemdata_5000.txt"]])
+			manifest = later_fixtures.index("itemdata_5000.txt")
 			(base / "itemdata.txt").write_bytes(manifest)
 			(base / "itemdata_5000.txt").write_bytes(utf16([weapon()]))
 			(base / "textdataname.txt").write_bytes(utf16([]))

@@ -34,20 +34,42 @@ tables already have is left alone.
 ===========================================================================
 """
 from collections import Counter
+import json
 import re
 
 import import_vsro_alexandria as stage1
+import later_tables
 from pathlib import Path
 
-from variant_files import TEXTDATA, read_vsro_file, replace_file
+from variant_files import TEXTDATA, replace_file
 
+# Characterdata columns. This module owns the layout: the columns
+# below are the same in the later clients' 104 and v1.150's 120 (they
+# sit before RESISTANCE_AT), and convert_character is the one map
+# between the two. later_tables reads the codename column for its own
+# shape checks, so it names it first.
 SERVICE_COLUMN = 0
 ID_COLUMN = 1
-CODENAME_COLUMN = 2
+CODENAME_COLUMN = later_tables.CHARACTER_CODE_COLUMN
 NAME_STRING_COLUMN = 3
+# A leveled kind's rows chain: each names its first and its next form
+# (COS_P_WOLF_050: COS_P_WOLF_001 and COS_P_WOLF_051).
+FIRST_FORM_COLUMN = 4
 NAME_KEY_COLUMN = 5
+NEXT_FORM_COLUMN = 6
 CHAR_BIT_COLUMN = 8
 TID_COLUMNS = (9, 10, 11)
+TID4_COLUMN = 12
+# The body: walk and run speeds, scale (percent) and collision radius.
+WALK_SPEED_COLUMN = 46
+RUN_SPEED_COLUMN = 47
+SCALE_COLUMN = 48
+BODY_RADIUS_COLUMN = 50
+BODY_COLUMNS = (WALK_SPEED_COLUMN, RUN_SPEED_COLUMN, SCALE_COLUMN, BODY_RADIUS_COLUMN)
+MODEL_COLUMN = 52
+ICON_COLUMN = 54
+LEVEL_COLUMN = 57
+MAX_HP_COLUMN = 59
 UNUSED_NAME = "xxx"
 
 VSRO_CHARACTER_COLUMNS = 104
@@ -55,14 +77,51 @@ NATIVE_CHARACTER_COLUMNS = 120
 # VSRO columns before the six resistances, and before the five skill pairs.
 RESISTANCE_AT = 61
 RESISTANCE_COUNT = 6
+# The six element resists (ResistFrozen .. ResistZombie, the server's
+# ElementResist) follow the character's level in every native table:
+# 12,734 of v1.150's 12,761 rows, and 1,451 of the 1,644 rows only the
+# v1.188 server database holds (#4802). Up to LINEAR_RESIST_END it is
+# twice the level, from level 2; above it the native steps, each value
+# held from its level up. The later clients ship no resist column, so a
+# converted row takes the curve, unless the v1.188 server gives it its
+# own values (carried_resists, #4803). Structures hold none.
+# The snapshot sits beside this module, so the variant's code stamp
+# (codeStamp.mjs DATA_LITERAL) counts its bytes and a refresh rebuilds.
+CARRIED_RESISTS = Path(__file__).with_name("later_element_resists.json")
+CARRIED_RESISTS_FORMAT = "sro-element-resists-v1"
+LINEAR_RESIST_FROM = 2
+LINEAR_RESIST_END = 40
+RESIST_STEPS = ((40, 78), (42, 79), (44, 80), (47, 81), (50, 82), (53, 83), (57, 84), (61, 85), (66, 86),
+	(72, 87), (78, 88), (86, 89), (95, 90), (106, 91), (120, 92), (137, 93))
+STRUCTURE_TYPE = "5"
 SKILL_PAIRS_AT = 93
 SKILL_PAIR_COUNT = 5
+# The ten DefaultSkillIDs: in the later layout from column 83, and in
+# v1.150's after the six resistances convert_character inserts before
+# them (83 + 6 = 89).
+DEFAULT_SKILL_COUNT = 10
+LATER_DEFAULT_SKILL_AT = 83
+LATER_DEFAULT_SKILL_END = LATER_DEFAULT_SKILL_AT + DEFAULT_SKILL_COUNT
+NATIVE_DEFAULT_SKILL_AT = LATER_DEFAULT_SKILL_AT + RESISTANCE_COUNT
+NATIVE_DEFAULT_SKILL_END = NATIVE_DEFAULT_SKILL_AT + DEFAULT_SKILL_COUNT
 # The native table that new rows join (its ids end below the city's).
 CHARACTER_TARGET = "characterdata_25000.txt"
 
 # CICNPC's class gate (GIDObject_SelectRuntimeClassAndSpawn), as the server's npcworlddata.go tests it.
 NPC_TID_MASK = 0x7FE
 NPC_TID_WORD = 0x0146
+
+# Object text (textdata_object, textdata_equip&skill, textzonename ...)
+# in the VSRO layout translation_rows returns: the key, then the language
+# cells from the Korean one, English the ninth cell. The later clients'
+# raw rows carry one more leading column, so their English is one on.
+TEXT_KEY_COLUMN = 1
+TEXT_FIRST_LANGUAGE_COLUMN = 2
+TEXT_ENGLISH_COLUMN = 8
+# translation_rows joins a wrapped line onto a row of fewer cells than
+# this whose key is a name symbol.
+WRAPPED_ROW_CELLS = 10
+NAME_SYMBOL_PREFIX = "SN_"
 
 SKILL_EFFECT_COLUMNS = 13
 SKILL_EFFECT_KEPT = 12
@@ -83,7 +142,6 @@ RESTORED_ARMOR_NPCS = {
 	"NPC_SD_T_AREA_ARMOR": (ARMOR_POSITION, ARMOR_MODEL),
 	"NPC_SD_M_AREA_ARMOR": (SHARON_POSITION, SHARON_MODEL),
 }
-MODEL_COLUMN = 52
 
 
 # ================
@@ -105,14 +163,19 @@ def is_placeholder_text(value):
 # ================
 # translation_rows
 #
-# The supplied object's German Tausert cell contains an unquoted newline.
-# Join only a short translation record and its non-record continuation;
-# preserve the following language cells rather than discarding the name.
+# A text table's records. table_rows ends a record only at CRLF, so a
+# cell keeps its own LF or U+2028 (VSRO's German Tausert cell) and a
+# rewrite gives back the bytes it read (#4608). A row the archive wraps
+# over two CRLF records (later_fixtures.wrap_last) is still joined back:
+# a short name row whose next record does not open with a service digit.
+# The pinned VSRO client's text tables hold none (census on #4785); the
+# join keeps a client that does from losing the row's language cells.
 # ================
 def translation_rows(raw):
 	rows = []
 	for row in stage1.table_rows(raw):
-		if rows and len(rows[-1]) < 10 and len(rows[-1]) > 1 and rows[-1][1].startswith("SN_") and not row[0].isdigit():
+		last = rows[-1] if rows else None
+		if last and TEXT_KEY_COLUMN < len(last) < WRAPPED_ROW_CELLS and last[TEXT_KEY_COLUMN].startswith(NAME_SYMBOL_PREFIX) and not row[0].isdigit():
 			rows[-1][-1] += " " + row[0].strip()
 			rows[-1].extend(row[1:])
 		else:
@@ -185,6 +248,62 @@ def is_npc(row):
 
 
 # ================
+# level_resist / curve_element_resist
+#
+# The native element resist of a level, and of one later row by the
+# curve: the level's, or none for a structure (fortress gates and
+# towers, typeid-3 5).
+# ================
+def level_resist(level):
+	if level < LINEAR_RESIST_FROM:
+		return 0
+	if level < LINEAR_RESIST_END:
+		return 2 * level
+	return [value for start, value in RESIST_STEPS if start <= level][-1]
+
+
+def curve_element_resist(row):
+	if row[TID_COLUMNS[2]] == STRUCTURE_TYPE or not row[LEVEL_COLUMN].isdigit():
+		return 0
+	return level_resist(int(row[LEVEL_COLUMN]))
+
+
+# ================
+# carried_resists
+#
+# The v1.188 server's own six resists for the 193 later-only rows the
+# curve misses (#4803): temple and event bosses, Roc, the Tomb general,
+# trade transports. Nothing in the client row marks them, and their
+# values fall in 19 shapes, some below the curve, so no rule stands in
+# for them. import_element_resist_evidence.py writes the snapshot; it is
+# read once.
+# ================
+_carried = {}
+
+
+def carried_resists():
+	if "rows" not in _carried:
+		snapshot = json.loads(CARRIED_RESISTS.read_text(encoding="utf-8"))
+		if snapshot.get("format") != CARRIED_RESISTS_FORMAT:
+			raise ValueError(f"{CARRIED_RESISTS.name} is not {CARRIED_RESISTS_FORMAT}")
+		_carried["rows"] = snapshot["rows"]
+	return _carried["rows"]
+
+
+# ================
+# element_resist
+#
+# The six resists one later row converts with: the v1.188 server's when
+# the snapshot carries its codename, otherwise the curve's in all six.
+# ================
+def element_resist(row):
+	carried = carried_resists().get(row[CODENAME_COLUMN])
+	if carried is not None:
+		return list(carried)
+	return [curve_element_resist(row)] * RESISTANCE_COUNT
+
+
+# ================
 # convert_character
 # ================
 def convert_character(row):
@@ -192,7 +311,7 @@ def convert_character(row):
 	if len(row) != VSRO_CHARACTER_COLUMNS:
 		raise ValueError(f"characterdata row {row[ID_COLUMN]} has {len(row)} columns")
 	converted = (
-		row[:RESISTANCE_AT] + ["0"] * RESISTANCE_COUNT + row[RESISTANCE_AT:SKILL_PAIRS_AT]
+		row[:RESISTANCE_AT] + [str(value) for value in element_resist(row)] + row[RESISTANCE_AT:SKILL_PAIRS_AT]
 		+ ["0", "0.0"] * SKILL_PAIR_COUNT + row[SKILL_PAIRS_AT:]
 	)
 	# The VSRO name column holds a Korean placeholder; v1.150 writes "xxx".
@@ -239,9 +358,7 @@ def append_rows(raw, rows):
 	"""The UTF-16 table with rows appended; the original bytes stay first."""
 	if not rows:
 		return raw
-	text = stage1.decode_table(raw)
-	if not text.endswith("\n"):
-		text += "\r\n"
+	text = stage1.end_last_record(stage1.decode_table(raw))
 	return b"\xff\xfe" + (text.lstrip("\ufeff") + table_text(rows)).encode("utf-16-le")
 
 
@@ -441,9 +558,6 @@ def merge_npc_tables(native, vsro, regions, native_text):
 #============================================================================
 
 
-# The VSRO characterdata files (characterdata.txt lists them).
-VSRO_CHARACTER_FILES = (5000, 10000, 15000, 20000, 25000, 30000, 35000, 40000, 45000)
-
 
 # ================
 # add_npcs
@@ -458,15 +572,12 @@ def add_npcs(vsro_root, native, out, regions):
 	names = ("npcpos.txt", "npcchat.txt", "refshopgroup.txt", "refmappingshopgroup.txt", "refshop.txt", "skilleffect.txt")
 	tables = {name: (native / textdata / name).read_bytes() for name in names}
 	tables[CHARACTER_TARGET] = (native / textdata / CHARACTER_TARGET).read_bytes()
-	tables["characters"] = [
-		path.read_bytes() for path in sorted((native / textdata).glob("characterdata_*.txt"))
-	]
-	vsro = {name: read_vsro_file(vsro_root, "Media", TEXTDATA + name) for name in tuple(n for n in names if n != "refshop.txt")}
-	vsro["textdata_object.txt"] = read_vsro_file(vsro_root, "Media", TEXTDATA + "textdata_object.txt")
-	vsro["characters"] = [
-		read_vsro_file(vsro_root, "Media", TEXTDATA + f"characterdata_{start}.txt")
-		for start in VSRO_CHARACTER_FILES
-	]
+	native_tree = later_tables.Archive.tree(native / textdata)
+	tables["characters"] = [native_tree.file(shard) for shard in native_tree.files("characterdata.txt")]
+	with later_tables.Archive.open(vsro_root) as source:
+		vsro = {name: source.file(name) for name in tuple(n for n in names if n != "refshop.txt") + ("textdata_object.txt",)}
+		# The characterdata index names the shards, as the client reads them.
+		vsro["characters"] = [source.file(shard) for shard in source.files("characterdata.txt")]
 	base_text = (out / textdata / "textdataname.txt").read_bytes()
 	merged, summary = merge_npc_tables(tables, vsro, regions, base_text)
 	for name, content in merged.items():

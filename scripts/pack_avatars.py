@@ -46,8 +46,10 @@ import cap110_items as items
 import import_vsro_alexandria as tables
 import mall_avatar_import as importer
 import pet_import as pets
+import pet_rows
 import skilldata_enc as skill_tables
 import sro_pk2
+import later_tables
 from sro_paths import EXTRACTED_ROOT, REPO_ROOT
 
 SHARD_NAME = importer.AVATARS_SOURCE["shard"]
@@ -65,7 +67,7 @@ PET_SKILL_SHARD = "skilldata_150001.txt"
 # tracks (Draco, the balloons) are walked as Data resources and its
 # ambient particle sets (the Circus Bear, the Ghost) as Particles, as the
 # Sky Temple monsters' are; without it the audit refuses the model.
-PET_POSTURE = {"sounds": "data", "particles": "all"}
+PET_POSTURE = shared.WALK_EVERYTHING
 
 
 # ================
@@ -180,9 +182,9 @@ def normalize_item_row(row):
 # name-text rule skips the avatar and reports it.
 # ================
 def export_text_row(row):
-	if len(row) <= importer.TEXT_ENGLISH + 1:
+	if len(row) <= text_tables.TEXT_ENGLISH_COLUMN + 1:
 		return None
-	english = row[importer.TEXT_ENGLISH + 1]
+	english = row[text_tables.TEXT_ENGLISH_COLUMN + 1]
 	if english in ("", "0"):
 		return None
 	return [row[0], row[1], row[2]] + ["0"] * 5 + [english] + ["0"] * (importer.VSRO_TEXT_COLUMNS - 9)
@@ -368,7 +370,7 @@ def table_bytes(rows):
 # A character row's model cell as a res/ path (the cells use backslashes).
 # ================
 def model_path(row):
-	return row[pets.CHAR_MODEL].replace("\\", "/").lower() if len(row) > pets.CHAR_MODEL else ""
+	return row[text_tables.MODEL_COLUMN].replace("\\", "/").lower() if len(row) > text_tables.MODEL_COLUMN else ""
 
 
 # ================
@@ -385,7 +387,7 @@ def pack_pets(archives, native, closure=None):
 	closure = closure or shared.copy_resource_closure
 	media, index = archives["Media"]
 	_data, data_index = archives["Data"]
-	if tables.TEXTDATA + "characterdata.txt" not in index:
+	if not later_tables.Archive.media(media, index).has("characterdata.txt"):
 		return [], [], [], {}, {"families": [], "excluded": []}
 	later_chars, later_items, _text = pets.later_tables_from_media(media, index, object_text_required=False)
 	native_chars, native_items = pets.native_tables(native)
@@ -401,7 +403,7 @@ def pack_pets(archives, native, closure=None):
 	char_rows, item_rows, entries, families, excluded = [], [], {}, [], list(selection["skipped"])
 	for added in selection["added"]:
 		family = added["family"]
-		rows = [row for row in later_chars if len(row) > pets.CHAR_CODE and pets.family_of(row[pets.CHAR_CODE]) == family]
+		rows = [row for row in later_chars if len(row) > text_tables.CODENAME_COLUMN and pet_rows.family_of(row[text_tables.CODENAME_COLUMN]) == family]
 		codes = set(added["scrolls"])
 		scrolls = [normalize_item_row(row) for row in later_items if row[items.CODENAME] in codes]
 		if any(row is None for row in scrolls):
@@ -425,17 +427,13 @@ def pack_pets(archives, native, closure=None):
 		item_rows += scrolls
 		families.append(family)
 	needed = {
-		value for row in char_rows for value in row[pets.CHAR_DEFAULT_SKILL1:pets.CHAR_DEFAULT_SKILL_N + 1]
+		value for row in char_rows for value in row[text_tables.NATIVE_DEFAULT_SKILL_AT:text_tables.NATIVE_DEFAULT_SKILL_END]
 		if value.isdigit() and int(value)
 	}
 	skill_rows = []
 	if needed:
-		def read(name):
-			return tables.table_text(media, index, name.lower())
-
-		def has(name):
-			return tables.TEXTDATA + name.lower() in index
-		skill_rows = [row for row in skill_tables.client_skill_rows(read, has) if len(row) > 3 and row[1] in needed]
+		read = later_tables.Archive.media(media, index)
+		skill_rows = [row for row in skill_tables.client_skill_rows(read) if len(row) > 3 and row[1] in needed]
 	return char_rows, item_rows, skill_rows, entries, {"families": families, "excluded": excluded}
 
 
@@ -452,13 +450,13 @@ def pack(export_root, native, output, screen=screen_models, completeness=closure
 	media, index = archives["Media"]
 	natives = native_files(native)
 	base = native / importer.TEXT_ROOT
-	base_paths = {sro_pk2.fold_ascii(path.name): path for path in base.iterdir() if path.is_file()}
-	native_rows = shared.read_item_tables(lambda name: base_paths[name].read_bytes())
+	native_rows = shared.read_item_tables(later_tables.Archive.tree(base))
 	native_codes = {row[items.CODENAME] for row in native_rows}
-	later_rows = shared.read_item_tables(lambda name: tables.table_text(media, index, name))
+	source = later_tables.Archive.media(media, index)
+	later_rows = shared.read_item_tables(source)
 	texts = {}
 	for name in TEXT_TABLES:
-		for row in importer.later_table_rows(media, index, name):
+		for row in source.rows(name, optional=True):
 			converted = export_text_row(row)
 			if converted is not None and converted[1] not in texts:
 				texts[converted[1]] = (name, converted)
@@ -508,7 +506,7 @@ def pack(export_root, native, output, screen=screen_models, completeness=closure
 			entries[f"{record['archive'].lower()}/{record['path']}"] = raw
 	entries.update(pet_entries)
 	wanted = {row[column] for row in final + pet_items for column in (items.NAME_KEY, items.DESCRIPTION_KEY)}
-	wanted |= {row[pets.CHAR_NAME_KEY] for row in pet_chars if len(row) > pets.CHAR_NAME_KEY}
+	wanted |= {row[text_tables.NAME_KEY_COLUMN] for row in pet_chars if len(row) > text_tables.NAME_KEY_COLUMN}
 	wanted -= {items.UNUSED, ""}
 	per_table = {name: [] for name in TEXT_TABLES}
 	for key in sorted(wanted):

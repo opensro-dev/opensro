@@ -49,6 +49,7 @@ import cap110_quest_items as quest_items
 import cap110_rewards as rewards
 import import_vsro_alexandria as tables
 import sro_pk2
+import later_tables
 from prepare_client_resources import safe_target, write_atomically
 
 MARKER = ".opensro-cap110-blue-berserk.json"
@@ -57,8 +58,6 @@ LEVEL_TABLE = "hwanleveldata.txt"
 TEXT_ROOT = Path("Media_extracted") / tables.TEXTDATA
 FORMAT = "opensro-cap110-blue-berserk-v1"
 VARIANT_VERSION = "11"
-ENGLISH_COLUMN = 8
-KEY_COLUMN = 1
 KOREAN_COLUMN = 2
 SCROLL_COUNT = 4
 # The nine items and the kind each must be (type 3/3/x/y).
@@ -126,8 +125,8 @@ def fill_text(raw, later_by_key, symbols):
 	present = {}
 	for at, line in enumerate(lines):
 		fields = line.split("\t")
-		if len(fields) > KEY_COLUMN and fields[KEY_COLUMN] in symbols:
-			present[fields[KEY_COLUMN]] = at
+		if len(fields) > characters.TEXT_KEY_COLUMN and fields[characters.TEXT_KEY_COLUMN] in symbols:
+			present[fields[characters.TEXT_KEY_COLUMN]] = at
 	appended, replaced, additions = [], {}, []
 	for key in symbols:
 		if key not in later_by_key:
@@ -138,7 +137,7 @@ def fill_text(raw, later_by_key, symbols):
 			additions.append("\t".join(new))
 			continue
 		fields = lines[present[key]].split("\t")
-		if len(fields) > ENGLISH_COLUMN and characters.is_placeholder_text(fields[ENGLISH_COLUMN]):
+		if len(fields) > characters.TEXT_ENGLISH_COLUMN and characters.is_placeholder_text(fields[characters.TEXT_ENGLISH_COLUMN]):
 			replaced[key] = lines[present[key]]
 			if len(fields) > KOREAN_COLUMN and fields[KOREAN_COLUMN].strip():
 				new[KOREAN_COLUMN] = fields[KOREAN_COLUMN]
@@ -160,7 +159,7 @@ def restore_text(raw, appended, replaced):
 	kept = []
 	for line in lines:
 		fields = line.split("\t")
-		key = fields[KEY_COLUMN] if len(fields) > KEY_COLUMN else None
+		key = fields[characters.TEXT_KEY_COLUMN] if len(fields) > characters.TEXT_KEY_COLUMN else None
 		if key in appended:
 			continue
 		kept.append(replaced.get(key, line))
@@ -268,12 +267,11 @@ def add_blue_berserk(vsro_root, native, output):
 		# ================
 		# read_later
 		# ================
-		def read_later(name):
-			return tables.table_text(media, index, name)
+		read_later = later_tables.Archive.media(media, index)
 		later_rows = item_import.read_item_tables(read_later)
 		later = items.index_items(later_rows)
 		base = native / TEXT_ROOT
-		native_items = items.index_items(item_import.read_item_tables(lambda name: (base / name).read_bytes()))
+		native_items = items.index_items(item_import.read_item_tables(later_tables.Archive.tree(base)))
 		selected = select_items(later, native_items)
 		converted = rewards.convert_rows(selected, rewards.occupied_identities(text_root, later_rows, OUTPUT_SHARD),
 			{code: entry["target"] for code, entry in prior.get("idMap", {}).items()})
@@ -287,10 +285,10 @@ def add_blue_berserk(vsro_root, native, output):
 		texts = {}
 		for name, source, symbols in TEXT_FILES:
 			path = safe_target(text_root, name)
-			by_key = {row[KEY_COLUMN]: row for row in tables.later_table_rows(read_later, source) if len(row) > ENGLISH_COLUMN + 1}
+			by_key = {row[characters.TEXT_KEY_COLUMN]: row for row in read_later.rows(source, width=characters.TEXT_ENGLISH_COLUMN + 2) if len(row) > characters.TEXT_ENGLISH_COLUMN + 1}
 			raw, appended, replaced = fill_text(path.read_bytes(), by_key, symbols)
 			texts[name] = {"appended": appended, "replaced": replaced, "raw": raw}
-		later_shop = {name: tables.later_table_rows(read_later, name) for name in SHOP_TABLES if name != "refshopgoods.txt"}
+		later_shop = {name: read_later.rows(name) for name in SHOP_TABLES if name != "refshopgoods.txt"}
 		later_shop["refshopgoods.txt"] = []
 		variant_shop = {name: tables.table_rows(safe_target(text_root, name).read_bytes()) for name in SHOP_TABLES}
 		new_shop = shop_rows(later_shop, variant_shop)

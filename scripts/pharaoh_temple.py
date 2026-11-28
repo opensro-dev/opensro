@@ -39,6 +39,7 @@ region ids and gate codes, kept in step by a test on each side.
 from pathlib import Path
 
 import import_vsro_alexandria as stage1
+import later_tables
 import variant_files
 
 FLAG = "SRO_PHARAOH_TEMPLE"
@@ -148,9 +149,7 @@ def merge_dungeon_info(native_raw):
 			raise ValueError(f"dungeoninfo.txt already has region id {dungeon_id}: {taken[dungeon_id]}")
 		if f'"{path}"'.lower() in taken.values():
 			raise ValueError(f"dungeoninfo.txt already names {path}")
-	if text and not text.endswith("\n"):
-		text += "\r\n"
-	return (text + "\r\n".join(rows) + "\r\n").encode("cp949")
+	return (stage1.end_last_record(text) + "\r\n".join(rows) + "\r\n").encode("cp949")
 
 
 # ================
@@ -178,9 +177,7 @@ def merge_event_zones(native_raw, vsro_raw):
 	for row in wanted:
 		if row[EVENT_ZONE_ID_COLUMN] in taken_ids or row[EVENT_ZONE_CODE_COLUMN] in taken_codes:
 			raise ValueError(f"eventzonedata.txt already has zone {row[EVENT_ZONE_ID_COLUMN]} {row[EVENT_ZONE_CODE_COLUMN]}")
-	text = stage1.decode_table(native_raw)
-	if not text.endswith("\n"):
-		text += "\r\n"
+	text = stage1.end_last_record(stage1.decode_table(native_raw))
 	added = "\r\n".join("\t".join(row) for row in wanted) + "\r\n"
 	return b"\xff\xfe" + (text.lstrip("﻿") + added).encode("utf-16-le")
 
@@ -205,9 +202,8 @@ def add_temple(vsro_root, native, out):
 	native_zones = (native / event_zones).read_bytes()
 	if enabled:
 		wanted_info = merge_dungeon_info(native_info)
-		wanted_zones = merge_event_zones(
-			native_zones, variant_files.read_vsro_file(vsro_root, "Media", variant_files.TEXTDATA + "eventzonedata.txt")
-		)
+		with later_tables.Archive.open(vsro_root) as source:
+			wanted_zones = merge_event_zones(native_zones, source.file("eventzonedata.txt"))
 	else:
 		wanted_info, wanted_zones = native_info, native_zones
 	for relative, content in ((dungeon_info, wanted_info), (event_zones, wanted_zones)):

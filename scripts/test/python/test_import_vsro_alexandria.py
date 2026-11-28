@@ -43,77 +43,84 @@ def terrain(texture_ids):
 
 
 # ================
-# ShardTests
+# RecordTests
 #
-# The one owner of later shard indexes: what it follows, what it reads
-# as itself, and what it refuses.
+# A textdata record ends at CRLF; a bare LF or a U+2028 inside it is cell
+# text, as the clients ship it (#4608).
 # ================
-class ShardTests(unittest.TestCase):
-	FILES = {
-		"textdata_object.txt": utf16_table([["TextData_Object_100.txt"], ["TextData_Object_200.txt"]]),
-		# A row the archive wraps over two lines, at the end of a shard.
-		"textdata_object_100.txt": utf16_table([["1", "SN_A", "Kor"], [" tail", "x"]]),
-		"textdata_object_200.txt": utf16_table([["1", "SN_B", "Kor"]]),
-		"flat.txt": utf16_table([["1", "SN_F", "Kor"]]),
-	}
-
+class RecordTests(unittest.TestCase):
 	# ================
-	# read
-	# ================
-	def read(self, name):
-		return self.FILES[name]
-
-	# ================
-	# test_the_parser_runs_per_shard
+	# test_an_in_cell_break_stays_in_its_cell
 	#
-	# translation_rows joins a wrapped row; run per file, the join never
-	# swallows the next shard's first row.
+	# The v1.696 SN_PAYCON_QNO_AR_071 shape: the English cell breaks over
+	# LFs, and the record ends at the CRLF after its last cell.
 	# ================
-	def test_the_parser_runs_per_shard(self):
-		import alexandria_npcs as characters
-		rows = alex.later_table_rows(self.read, "textdata_object.txt", characters.translation_rows)
-		self.assertEqual([row[1] for row in rows], ["SN_A", "SN_B"])
-		self.assertEqual(rows[0][-1], "x")
+	def test_an_in_cell_break_stays_in_its_cell(self):
+		text = "1\t4617\tSN_A\tKor\tLong time no see\nadventurer.\tlast\r\n1\t4618\tSN_B\tKor\tx\ty\r\n"
+		rows = alex.table_rows(b"\xff\xfe" + text.encode("utf-16-le"))
+		self.assertEqual([row[2] for row in rows], ["SN_A", "SN_B"])
+		self.assertEqual(rows[0][4], "Long time no see\nadventurer.")
+		self.assertEqual(rows[0][5], "last")
 
 	# ================
-	# test_several_tables_read_each_file_once
+	# test_other_line_separators_are_cell_text
 	#
-	# VSRO's textdataname.txt indexes textdata_object.txt among others;
-	# read beside it, the object rows still come once, in first order.
+	# str.splitlines() also splits at U+2028, \x85, \x0b, \x0c and
+	# \x1c-\x1e; a record holds them.
 	# ================
-	def test_several_tables_read_each_file_once(self):
-		files = dict(self.FILES)
-		files["textdataname.txt"] = utf16_table([["TextData_Equip&Skill.txt"], ["TextData_Object_200.txt"]])
-		files["textdata_equip&skill.txt"] = utf16_table([["1", "SN_E", "Kor"]])
-		rows = alex.later_tables_rows(files.__getitem__, ("textdata_object.txt", "textdataname.txt"))
-		self.assertEqual([row[1] for row in rows if row[0] == "1"], ["SN_A", "SN_B", "SN_E"])
+	def test_other_line_separators_are_cell_text(self):
+		for separator in ("\u2028", "\u2029", "\x85", "\x0b", "\x0c", "\x1c", "\x1d", "\x1e"):
+			text = f"1\tSN_A\tGerman{separator} Tausert\tEnglish\r\n"
+			rows = alex.table_rows(b"\xff\xfe" + text.encode("utf-16-le"))
+			self.assertEqual(rows, [["1", "SN_A", f"German{separator} Tausert", "English"]], ascii(separator))
 
 	# ================
-	# test_text_and_rows_follow_the_same_files
+	# test_comments_blanks_and_a_lone_cr
+	#
+	# A lone CR ends a record as CRLF does (the asset build's /\r\n?/);
+	# comment and blank records are dropped; a file with no CR at all
+	# keeps LF as its record end.
 	# ================
-	def test_text_and_rows_follow_the_same_files(self):
-		text = alex.later_table_text(self.read, "textdata_object.txt")
-		self.assertIn("SN_A", text)
-		self.assertIn("SN_B", text)
-		self.assertNotIn("TextData_Object_100", text)
-		self.assertIn("SN_F", alex.later_table_text(self.read, "flat.txt"))
+	def test_comments_blanks_and_a_lone_cr(self):
+		text = "// head\r\n\r\n1\tSN_A\rx\tSN_B\r\n   \r\n"
+		self.assertEqual(alex.table_rows(text.encode("cp949")), [["1", "SN_A"], ["x", "SN_B"]])
+		self.assertEqual(alex.table_rows(b"1\tSN_A\n2\tSN_B\n"), [["1", "SN_A"], ["2", "SN_B"]])
 
 	# ================
-	# test_a_v1696_reader_refuses_a_flat_table
+	# test_appended_rows_start_a_record_of_their_own
+	#
+	# end_last_record, the appenders' one rule: a CRLF table whose last
+	# record ends in an in-cell LF gets its CRLF, so a row appended after
+	# it is a record, not more of that cell.
 	# ================
-	def test_a_v1696_reader_refuses_a_flat_table(self):
-		self.assertEqual(len(alex.later_table_rows(self.read, "flat.txt")), 1)
-		with self.assertRaisesRegex(ValueError, "not a v1.696 shard index"):
-			alex.later_table_rows(self.read, "flat.txt", indexed_only=True)
+	def test_appended_rows_start_a_record_of_their_own(self):
+		cases = {
+			"": "",
+			"1\tA\r\n": "1\tA\r\n",
+			"1\tA\r": "1\tA\r",
+			"1\tA": "1\tA\r\n",
+			"1\tA\r\n1\tline\n": "1\tA\r\n1\tline\n\r\n",
+			"1\tA\n": "1\tA\n",
+		}
+		for text, want in cases.items():
+			self.assertEqual(alex.end_last_record(text), want, ascii(text))
+		table = alex.end_last_record("1\tA\r\n1\tB\tline\n") + "1\tC\r\n"
+		self.assertEqual([row[1] for row in alex.table_rows(table.encode("cp949"))], ["A", "B", "C"])
 
 	# ================
-	# test_an_index_naming_a_path_or_a_repeat_refuses
+	# test_records_keep_cell_breaks_and_rejoin_to_the_same_table
+	#
+	# records, the split every line-oriented reader shares: a cell's LF and
+	# U+2028 stay in their record, the empty piece after the last CRLF is
+	# dropped (as splitlines drops it), so a CRLF rejoin rewrites the table
+	# byte for byte.
 	# ================
-	def test_an_index_naming_a_path_or_a_repeat_refuses(self):
-		for entries in ([["../itemdata_5000.txt"]], [["sub/itemdata_5000.txt"]], [["ItemData_5000.txt"], ["itemdata_5000.txt"]]):
-			files = {"itemdata.txt": utf16_table(entries)}
-			with self.subTest(entries=entries), self.assertRaisesRegex(ValueError, "invalid shard index entries"):
-				alex.later_table_rows(files.__getitem__, "itemdata.txt")
+	def test_records_keep_cell_breaks_and_rejoin_to_the_same_table(self):
+		table = "1\tA\tone\ntwo\r\n1\tB\tsep x\r\n1\tC\r\n"
+		self.assertEqual(alex.records(table), ["1\tA\tone\ntwo", "1\tB\tsep x", "1\tC"])
+		self.assertEqual("\r\n".join(alex.records(table)) + "\r\n", table)
+		self.assertEqual(alex.records(""), [])
+		self.assertEqual(alex.records("1\tA\n2\tB"), ["1\tA", "2\tB"])
 
 
 class FlagTests(unittest.TestCase):

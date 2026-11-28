@@ -519,7 +519,7 @@ def later_skill_effect_text(read):
 	lines = []
 	for index, section in LATER_SECTIONS:
 		lines.append(f"{SECTION_HEADER}\t{section}")
-		for row in tables.later_table_rows(read, index):
+		for row in read.rows(index):
 			cells = later_native_row(row, section)
 			if cells is not None:
 				lines.append("\t".join(cells))

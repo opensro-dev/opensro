@@ -102,6 +102,7 @@ import import_vsro_alexandria as tables
 import later_world_import
 import published_ids
 import roc_rewards
+import later_tables
 from prepare_client_resources import write_atomically
 
 FLAG = "SRO_ROC"
@@ -145,7 +146,6 @@ UI_SYMBOLS = frozenset({"UIIT_MSG_QUEST_ROC_BERSERKER_AGAIN"})
 QUEST_NESTS = Path(__file__).resolve().parent / "data" / "roc" / "quest-nests.json"
 QUEST_NESTS_FORMAT = "opensro-roc-quest-nests-v1"
 
-LEVEL_COLUMN = 57
 GRADE_COLUMN = 15
 
 # The admitted kinds and the (grade, level) each must author in the
@@ -195,7 +195,7 @@ SPEC = later_world_import.WorldImport(
 # item_ids
 #
 # {item id as text: codename} of one client's item rows, read through
-# itemdata.txt's shard index by the owner (later_table_rows).
+# itemdata.txt's shard index by the owner (later_tables.Archive.rows).
 # ================
 def item_ids(rows):
 	return {row[1]: row[2] for row in rows if len(row) > 2}
@@ -225,12 +225,9 @@ def key_items(source_links, source_items, variant_items):
 # variant refuses by name instead of standing two objects on one id.
 # ================
 def taken_building_ids(text_root, building_ids):
-	used = {}
-	for pattern in ("characterdata_*.txt", "itemdata_*.txt", "teleportbuilding.txt"):
-		for path in text_root.glob(pattern):
-			for row in tables.table_rows(path.read_bytes()):
-				if len(row) > 2:
-					used[row[1]] = row[2]
+	# Every object file on disk, listed in an index or not: a reservation
+	# that reads too much only refuses more, never stacks two objects.
+	used = {row[1]: row[2] for _, row in published_ids.object_rows(text_root) if len(row) > 2}
 	return sorted(f"{identity} ({used[identity]})" for identity in building_ids if identity in used)
 
 
@@ -267,7 +264,7 @@ def without_previous_gates(current, building_codes):
 # ================
 def add_gates(read, text_root):
 	source = {name: read(name) for name in TELEPORT_TABLES}
-	source["text"] = b"\xff\xfe" + tables.later_table_text(read, "textdata_object.txt").encode("utf-16-le")
+	source["text"] = b"\xff\xfe" + read.text("textdata_object.txt").encode("utf-16-le")
 	data_rows = [row for row in tables.table_rows(source["teleportdata.txt"]) if len(row) > 3 and row[2] in GATE_CODES]
 	building_ids = {row[3] for row in data_rows if row[3] != "0"}
 	building_codes = {row[2] for row in tables.table_rows(source["teleportbuilding.txt"])
@@ -293,13 +290,13 @@ def add_gates(read, text_root):
 	# source_rows
 	# ================
 	def source_rows(name):
-		return tables.later_table_rows(read, name)
+		return read.rows(name)
 
 	# ================
 	# variant_rows
 	# ================
 	def variant_rows(name):
-		return tables.later_table_rows(lambda part: (text_root / part).read_bytes(), name)
+		return later_tables.Archive.tree(text_root).rows(name)
 
 	items = key_items(
 		source_rows("teleportlink.txt"),
@@ -343,8 +340,8 @@ def select_kinds(later):
 		row = later.get(code)
 		if row is None:
 			raise ValueError(f"the VSRO client has no Roc kind {code}")
-		if (int(row[GRADE_COLUMN]), int(row[LEVEL_COLUMN])) != (grade, level):
-			raise ValueError(f"Roc kind {code} authors grade {row[GRADE_COLUMN]} level {row[LEVEL_COLUMN]}, want {grade} {level}")
+		if (int(row[GRADE_COLUMN]), int(row[characters.LEVEL_COLUMN])) != (grade, level):
+			raise ValueError(f"Roc kind {code} authors grade {row[GRADE_COLUMN]} level {row[characters.LEVEL_COLUMN]}, want {grade} {level}")
 		refs[code] = characters.convert_character(row)
 	return refs
 
@@ -370,7 +367,7 @@ def without_quests(text_root, codes):
 # ================
 def add_quests(read, text_root, prior):
 	native = without_quests(text_root, set(prior.get("quests", [])))
-	source = {row[2]: row for row in tables.later_table_rows(read, QUEST_TABLE) if len(row) > 2}
+	source = {row[2]: row for row in read.rows(QUEST_TABLE, width=3) if len(row) > 2}
 	taken_ids = {row[1] for row in native if len(row) > 1}
 	taken_codes = {row[2] for row in native if len(row) > 2}
 	added = []
@@ -415,7 +412,7 @@ def without_ui_texts(text_root, symbols):
 def add_ui_texts(read, native, text_root, prior):
 	kept = without_ui_texts(text_root, set(prior.get("uiTexts", [])))
 	base = kept if kept is not None else (native / TEXT_ROOT / UI_TABLE).read_bytes()
-	merged, added = cap110_items.merge_ui_texts(base, tables.later_table_rows(read, UI_TABLE), UI_SYMBOLS)
+	merged, added = cap110_items.merge_ui_texts(base, read.rows(UI_TABLE), UI_SYMBOLS)
 	missing = UI_SYMBOLS - set(added) - {row[1] for row in tables.table_rows(base) if len(row) > 1}
 	if missing:
 		raise ValueError("the VSRO client has no " + UI_TABLE + " row for " + ", ".join(sorted(missing)))
@@ -529,23 +526,17 @@ def stage(vsro_root, native, output):
 		# ================
 		# read
 		# ================
-		def read(name):
-			return tables.table_text(media, index, name)
+		read = later_tables.Archive.media(media, index)
 
-		# ================
-		# has
-		# ================
-		def has(name):
-			return tables.TEXTDATA + name.lower() in index
 
 		# Gates first: the merge rewrites textdataname.txt, and the name
 		# step below appends onto what it leaves.
 		gates = add_gates(read, text_root)
 		native_codes = {row[2] for row in cap110.tree_characters(text_root, CHARACTER_SHARD) if len(row) > 2}
-		refs = select_kinds(tables.later_characters(read))
+		refs = select_kinds(later_tables.characters(read))
 		# The Roc's hour-mark enrage is cast by the summit's event, not
 		# named in any kind's skill columns (#4054).
-		staged = later_world_import.stage_kinds("Roc", read, has, refs, text_root, prior, CHARACTER_SHARD, SKILL_SHARD,
+		staged = later_world_import.stage_kinds("Roc", read, refs, text_root, prior, CHARACTER_SHARD, SKILL_SHARD,
 			lambda code: code in refs, extra_skills=ROC_EVENT_SKILLS)
 		quests = add_quests(read, text_root, prior)
 		contents = add_contents(read, text_root, prior)
