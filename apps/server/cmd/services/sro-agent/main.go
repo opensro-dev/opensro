@@ -121,6 +121,10 @@ func main() {
 	if err != nil {
 		log.Fatalf("agent: history reader: %v", err)
 	}
+	loginSourceKey, err := openLoginSourceKey(filepath.Dir(directoryPath))
+	if err != nil {
+		log.Fatalf("agent: login source key: %v", err)
+	}
 	server, err := agentserver.New(agentserver.Config{
 		History: journal, HistoryHandler: historyHandler,
 		Accounts:                accounts,
@@ -135,6 +139,7 @@ func main() {
 		AllowedOrigins:          splitCSV(os.Getenv(envOrigins)),
 		Readiness:               ready,
 		BugReports:              bugReports,
+		LoginSourceKey:          loginSourceKey,
 	})
 	if err != nil {
 		log.Fatalf("agent: construction: %v", err)
