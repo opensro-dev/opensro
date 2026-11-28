@@ -1,0 +1,148 @@
+{
+  "format": "sro-effect-closure-gaps-v1",
+  "method": "Every EFP of the three Particles.pk2 below parsed with scripts/build/effects/parseJmxVisualEffect.mjs; each mesh (.bms) and texture it names looked up in all three directories (sro_pk2.read_directory) by path, and by basename for a bare name. A file listed here is in none of them. shippedBy names any other archive of the three clients that holds it; the effect build reads Particles only.",
+  "archives": [
+    {
+      "client": "v1.150",
+      "archive": "Particles.pk2",
+      "sha256": "bd90c5b31d263f98eeaadd3c8ccbbb60b782dfae5c029c4d5bb1c00fc0fe5cf4",
+      "files": 2788
+    },
+    {
+      "client": "VSRO 1.188",
+      "archive": "Particles.pk2",
+      "sha256": "5644c43be25a6b45c809a6097766b8be7f5f3d1f7418cf99bca9a59a89fa9a7b",
+      "files": 3292
+    },
+    {
+      "client": "v1.696",
+      "archive": "Particles.pk2",
+      "sha256": "d482dde8a4fefc18e5546770ed0b6bd51ecc715b758ccc5827dda304851643d4",
+      "files": 4704
+    }
+  ],
+  "files": {
+    "meshes/nachal_size_test.bms": {
+      "shippedBy": [],
+      "namedBy": [
+        "v1.150 monster/skill_nachal_attack1_motion.efp",
+        "v1.696 monster/skill_nachal_attack1_motion.efp",
+        "VSRO 1.188 monster/skill_nachal_attack1_motion.efp"
+      ]
+    },
+    "meshes/season_circle.bms": {
+      "shippedBy": [],
+      "namedBy": [
+        "v1.696 map/oura_guard.efp",
+        "VSRO 1.188 map/oura_guard.efp"
+      ]
+    },
+    "textures/0_koo_lightning_01.ddj": {
+      "shippedBy": [],
+      "namedBy": [
+        "v1.696 map/guild/freezing_tower_attack1_shot1.efp"
+      ]
+    },
+    "textures/ak_in_chuk_sal.ddj": {
+      "shippedBy": [],
+      "namedBy": [
+        "v1.150 luster_automob_word2.efp",
+        "v1.150 monster/luster_automob_word2.efp",
+        "v1.696 luster_automob_word2.efp",
+        "v1.696 monster/luster_automob_word2.efp",
+        "VSRO 1.188 luster_automob_word2.efp",
+        "VSRO 1.188 monster/luster_automob_word2.efp"
+      ]
+    },
+    "textures/arrow_glow_y.ddj": {
+      "shippedBy": [],
+      "namedBy": [
+        "v1.696 cos/fortress_catapult_attack1_ready.efp",
+        "v1.696 cos/fortress_catapult_attack1_ready_01.efp",
+        "v1.696 cos/fortress_catapult_attack1_ready_02.efp"
+      ]
+    },
+    "textures/bas_smoke_inver_h.ddj": {
+      "shippedBy": [],
+      "namedBy": [
+        "v1.696 monster/eu/skill/skill_boneroc_ac10_berserk_shot.efp"
+      ]
+    },
+    "textures/beam_r.ddj": {
+      "shippedBy": [],
+      "namedBy": [
+        "v1.696 monster/arabia/skill_ar_cursefire_at6_shot.efp"
+      ]
+    },
+    "textures/crash_glow.ddj": {
+      "shippedBy": [],
+      "namedBy": [
+        "v1.696 monster/sd/skill_neith_ac3_hand_wait.efp",
+        "v1.696 monster/sd/skill_osiris_ac3_extract_motion.efp",
+        "v1.696 monster/sd/skill_osiris_extract_motion.efp",
+        "VSRO 1.188 monster/sd/skill_neith_ac3_hand_wait.efp",
+        "VSRO 1.188 monster/sd/skill_osiris_ac3_extract_motion.efp",
+        "VSRO 1.188 monster/sd/skill_osiris_extract_motion.efp"
+      ]
+    },
+    "textures/eu_harp_13.ddj": {
+      "shippedBy": [],
+      "namedBy": [
+        "v1.696 system/item_eu_harp_13_fs.efp",
+        "v1.696 system/item_eu_harp_13_s.efp"
+      ]
+    },
+    "textures/eu_harp_14_l.ddj": {
+      "shippedBy": [],
+      "namedBy": [
+        "v1.696 system/item_eu_harp_14_l.efp"
+      ]
+    },
+    "textures/eu_shield_13.ddj": {
+      "shippedBy": [],
+      "namedBy": [
+        "v1.696 system/item_eu_shield_13_t.efp"
+      ]
+    },
+    "textures/eu_sword_13.ddj": {
+      "shippedBy": [],
+      "namedBy": [
+        "v1.696 system/item_eu_sword_13.efp"
+      ]
+    },
+    "textures/explosion.ddj": {
+      "shippedBy": [],
+      "namedBy": [
+        "v1.696 monster/dm/dubhe_at02.efp"
+      ]
+    },
+    "textures/flower_test.ddj": {
+      "shippedBy": [],
+      "namedBy": [
+        "VSRO 1.188 monster/event/event_princess_ac3_shot.efp"
+      ]
+    },
+    "textures/jin-eurup-simbol1-r.ddj": {
+      "shippedBy": [],
+      "namedBy": [
+        "v1.150 monster/eu/skill/skill_recall_europe_under.efp"
+      ]
+    },
+    "textures/thunder4x4_02.ddj": {
+      "shippedBy": [],
+      "namedBy": [
+        "v1.696 monster/arabia/geenie_at01_02.efp"
+      ]
+    },
+    "textures/water_offset_01.ddj": {
+      "shippedBy": [
+        "v1.696 Data.pk2",
+        "VSRO 1.188 Data.pk2"
+      ],
+      "namedBy": [
+        "v1.696 monster/arabia/harrison_shield_attack10.efp",
+        "v1.696 monster/arabia/harrison_shield_attack9.efp"
+      ]
+    }
+  }
+}
