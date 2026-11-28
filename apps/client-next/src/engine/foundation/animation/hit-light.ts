@@ -58,7 +58,7 @@ export function createHitLights() {
 		the world (the frame's entity index, not a copy of its keys).
 		================
 		*/
-		step( now: number, alive: { has( gid: number ): boolean; } ) {
+		step( now: number, alive: ReadonlyMap<number, unknown> ) {
 			for ( const [gid, row] of rows ) {
 				if ( !alive.has( gid ) ) {
 					rows.delete( gid );

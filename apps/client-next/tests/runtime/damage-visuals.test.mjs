@@ -23,7 +23,7 @@ test("native hit light seeds diffuse then ticks twice-RGB diffuse and unattenuat
 	const owner = createHitLights(),
 		definition = { color: [ 1, .5, 0 ], duration: .3, range: 1000, attenuation: .2 },
 		pose = { regionId: 257, x: 1, y: 2, z: 3 },
-		alive = new Set( [ 1 ] );
+		alive = new Map( [ [ 1, {} ] ] );
 	owner.start( 1, definition, pose, 0 );
 	assert.deepEqual( defined( owner.get( 1 ) ).ambient, [ 0, 0, 0 ] );
 	assert.deepEqual( defined( owner.get( 1 ) ).diffuse, [ 1, .5, 0 ] );
