@@ -16,6 +16,7 @@ select lane race over it (this file earns its keep under -race).
 package action
 
 import (
+	"bytes"
 	"testing"
 	"time"
 
@@ -62,9 +63,33 @@ func TestFlagWarBracketCodenamesResolveInShippedData(t *testing.T) {
 	if match.keyMonsterGid[0] == 0 || match.keyMonsterGid[1] == 0 {
 		t.Fatalf("key carriers on the shipped template %v, want both sides fielded", match.keyMonsterGid)
 	}
+	// #4711: every arena object names itself in English on its create row,
+	// never by its codename.
+	wantNames := map[string]string{
+		"NPC_EVENT_FLAGWAR_FLAGPOLE_WHITE": "Flagpole",
+		"NPC_EVENT_FLAGWAR_FLAGPOLE_RED":   "Flagpole (Red)",
+		"NPC_EVENT_FLAGWAR_FLAGPOLE_BLUE":  "Flagpole (Blue)",
+		"NPC_EVENT_FLAGWAR_DOOR_RED":       "Gate",
+		"NPC_EVENT_FLAGWAR_DOOR_BLUE":      "Gate",
+	}
 	for _, object := range match.sortedObjects() {
 		if object.refObjID == 0 {
 			t.Fatalf("arena object %s resolved no reference in the shipped data", object.codename)
+		}
+		name := rig.rt.flagWarObjectDef(object).Name
+		if name == "" || name == object.codename {
+			t.Fatalf("arena object %s is named %q, want its English name", object.codename, name)
+		}
+		if want, pinned := wantNames[object.codename]; pinned && name != want {
+			t.Fatalf("arena object %s is named %q, want %q", object.codename, name, want)
+		}
+		if row := rig.rt.flagWarObjectRow(object); !bytes.HasSuffix(row, []byte(name)) {
+			t.Fatalf("arena object %s create row does not end with its name %q", object.codename, name)
+		}
+	}
+	for codename, want := range map[string]string{"NPC_EVENT_FLAGWAR_FLAG": "Flag", "NPC_EVENT_FLAGWAR_MASTERKEY": "Key"} {
+		if got := rig.rt.flagWarRefName(codename, codename); got != want {
+			t.Fatalf("%s is named %q, want %q", codename, got, want)
 		}
 	}
 }
