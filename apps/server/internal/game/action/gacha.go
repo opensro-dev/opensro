@@ -18,6 +18,7 @@ import (
 	"fmt"
 	"math/big"
 	"os"
+	"slices"
 	"strings"
 
 	log "github.com/sirupsen/logrus"
@@ -493,18 +494,13 @@ HandleGachaExchange
 
 HandleGachaExchange answers 0x71BE [operatorGid] from the client's talk row 5DB67B
 sends once 642270 found a voucher in the bag. Per the reference server's exchange,
-the lowest-slot win or loss voucher is consumed and its recorded pair,
-reference id then quantity, becomes bag items with the native roll giving +1..+5
-OptLevel, 5-bit white variance + durability, and blue magic options on
-equipment rewards. The voucher leaves by a 0x3645 quantity of zero rather
-than a row delete, because that is the update client 7654B0 turns into
-UIIT_MSG_GACHA_EXCHANGE.
-
-The removal is pinned to the slot whose pair was read, never to the codename:
-a same-codename card without a pair in a lower slot would otherwise be eaten
-while the paid voucher stayed to be redeemed again. A stacked row or a pair
-that is not an enabled prize row is refused, so the exchange can only hand out
-what a roll could have written.
+every win or loss voucher in the bag is redeemed in one request, walking the
+bag in slot order (redeemGachaVoucher pays each). A card the exchange cannot
+pay (a stacked row, a pair that is not an enabled prize row, so the exchange
+can only hand out what a roll could have written) is passed by; a reward that
+cannot be granted (a full bag) stops the walk, keeps the vouchers already
+redeemed and answers 5. Evidence: ../research/findings/magic-pop-biiv-server-v1188.md
+("Gori's exchange takes every result card in one talk").
 ================
 */
 func (rt *Runtime) HandleGachaExchange(
@@ -539,75 +535,125 @@ func (rt *Runtime) HandleGachaExchange(
 
 	failure := "no exchangeable voucher"
 	var frames []wire.Frame
+	stopped := false
 	committed := rt.deps.Update(character, "gacha-exchange", func() bool {
 		if character.DeletePending || rt.deps.ItemReferences() == nil {
 			return false
 		}
-		voucher := -1
-		for index, row := range character.MissionInventory {
-			if row.Slot < int64(inventory.EquipmentSlotEnd) || !inventory.IsBagSlot(uint8(row.Slot), inventory.BagEnd(character)) ||
-				!rt.GachaCatalog.IsResultCard(row.RefObjID) || len(row.MagicOptions) != 2 {
+		for _, slot := range rt.gachaVoucherSlots(character) {
+			redeemed, skip, err := rt.redeemGachaVoucher(character, slot)
+			if err != nil && skip {
+				// Not an exchangeable card (stacked, an invalid pair, an
+				// unresolved reward): the native loop passes the slot by.
+				failure = err.Error()
 				continue
 			}
-			if voucher < 0 || row.Slot < character.MissionInventory[voucher].Slot {
-				voucher = index
+			if err != nil {
+				// The reward could not be granted (a full bag): the native
+				// loop stops here and answers 5, keeping what it paid.
+				failure = err.Error()
+				stopped = true
+				break
 			}
+			frames = append(frames, redeemed...)
 		}
-		if voucher < 0 {
-			return false
-		}
-		row := character.MissionInventory[voucher]
-		if row.StackCount != 1 {
-			failure = fmt.Sprintf("voucher row at slot %d is stacked (%d)", row.Slot, row.StackCount)
-			return false
-		}
-		rewardRef, quantity := uint32(row.MagicOptions[0]), row.MagicOptions[1]
-		if quantity < 1 || quantity > 0xFFFF || uint64(rewardRef) != row.MagicOptions[0] ||
-			!rt.GachaCatalog.IsPrizePair(rewardRef, quantity) {
-			failure = "voucher carries an invalid reward pair"
-			return false
-		}
-		reward, found := rt.deps.ItemReferences().ItemRefByID(rewardRef)
-		if !found || reward == nil {
-			failure = fmt.Sprintf("voucher reward %d is unresolved", rewardRef)
-			return false
-		}
-		slot := uint8(row.Slot)
-		before := invItemsFromBag(character)
-		inv := inventory.New(before, inventory.BagEnd(character))
-		if _, fault := inv.DropQuantity(slot, 1); fault != nil {
-			failure = fmt.Sprintf("voucher at slot %d: %v", slot, fault)
-			return false
-		}
-		rewardItem, err := rt.prepareGachaRewardItem(reward, quantity)
-		if err != nil {
-			failure = err.Error()
-			return false
-		}
-		rows, planned, err := rt.planInventoryItemsGrant(
-			character,
-			before,
-			inv,
-			[]inventory.Item{rewardItem},
-			map[uint8]bool{slot: true},
-		)
-		if err != nil {
-			failure = err.Error()
-			return false
-		}
-		character.MissionInventory = rows
-		// The native client wants the voucher's quantity update, not a row delete,
-		// and first: the freed slot is the first free one, so the reward usually
-		// lands in it, and client 7654B0 must still find the voucher there.
-		quantityFrame := wire.Frame{
-			Opcode:  gacha.OpItemStateDelta,
-			Payload: wire.NewWriter(4).U8(slot).U8(8).U16(0).Payload(),
-		}
-		frames = append([]wire.Frame{quantityFrame}, planned...)
-		return true
+		return len(frames) > 0
 	})
 	if !committed {
 		return gachaRefusal(gacha.OpExchangeResult, gachaRefusalFailed), failure
 	}
+	if stopped {
+		return append(frames, gachaRefusal(gacha.OpExchangeResult, gachaRefusalFailed)...), failure
+	}
 	return frames, ""
+}
+
+/*
+================
+gachaVoucherSlots
+
+The bag slots holding a win or loss voucher with its recorded pair, in
+slot order: the native exchange walks the bag from slot 13 upward.
+================
+*/
+func (rt *Runtime) gachaVoucherSlots(character *enterworld.Character) []uint8 {
+	var slots []uint8
+	for _, row := range character.MissionInventory {
+		if row.Slot < int64(inventory.EquipmentSlotEnd) || !inventory.IsBagSlot(uint8(row.Slot), inventory.BagEnd(character)) ||
+			!rt.GachaCatalog.IsResultCard(row.RefObjID) || len(row.MagicOptions) != 2 {
+			continue
+		}
+		slots = append(slots, uint8(row.Slot))
+	}
+	slices.Sort(slots)
+	return slots
+}
+
+/*
+================
+redeemGachaVoucher
+
+Exchanges the voucher in one bag slot for its recorded pair, reference id
+then quantity, with the native roll giving +1..+5 OptLevel, 5-bit white
+variance + durability, and blue magic options on equipment rewards. The
+character's bag changes only on success. skip reports a card the exchange
+passes by (stacked, an invalid pair, an unresolved reward) as opposed to a
+grant that failed.
+
+The voucher leaves by a 0x3645 quantity of zero rather than a row delete,
+because that is the update client 7654B0 turns into UIIT_MSG_GACHA_EXCHANGE,
+and it goes first: the freed slot is the first free one, so the reward
+usually lands in it, and the client must still find the voucher there. The
+removal is pinned to the slot whose pair was read, never to the codename.
+================
+*/
+func (rt *Runtime) redeemGachaVoucher(character *enterworld.Character, slot uint8) (frames []wire.Frame, skip bool, err error) {
+	index := -1
+	for i, row := range character.MissionInventory {
+		if row.Slot == int64(slot) {
+			index = i
+			break
+		}
+	}
+	if index < 0 {
+		return nil, true, fmt.Errorf("voucher at slot %d is gone", slot)
+	}
+	row := character.MissionInventory[index]
+	if row.StackCount != 1 {
+		return nil, true, fmt.Errorf("voucher row at slot %d is stacked (%d)", row.Slot, row.StackCount)
+	}
+	rewardRef, quantity := uint32(row.MagicOptions[0]), row.MagicOptions[1]
+	if quantity < 1 || quantity > 0xFFFF || uint64(rewardRef) != row.MagicOptions[0] ||
+		!rt.GachaCatalog.IsPrizePair(rewardRef, quantity) {
+		return nil, true, fmt.Errorf("voucher at slot %d carries an invalid reward pair", slot)
+	}
+	reward, found := rt.deps.ItemReferences().ItemRefByID(rewardRef)
+	if !found || reward == nil {
+		return nil, true, fmt.Errorf("voucher reward %d is unresolved", rewardRef)
+	}
+	before := invItemsFromBag(character)
+	inv := inventory.New(before, inventory.BagEnd(character))
+	if _, fault := inv.DropQuantity(slot, 1); fault != nil {
+		return nil, true, fmt.Errorf("voucher at slot %d: %v", slot, fault)
+	}
+	rewardItem, err := rt.prepareGachaRewardItem(reward, quantity)
+	if err != nil {
+		return nil, false, err
+	}
+	rows, planned, err := rt.planInventoryItemsGrant(
+		character,
+		before,
+		inv,
+		[]inventory.Item{rewardItem},
+		map[uint8]bool{slot: true},
+	)
+	if err != nil {
+		return nil, false, err
+	}
+	character.MissionInventory = rows
+	quantityFrame := wire.Frame{
+		Opcode:  gacha.OpItemStateDelta,
+		Payload: wire.NewWriter(4).U8(slot).U8(8).U16(0).Payload(),
+	}
+	return append([]wire.Frame{quantityFrame}, planned...), false, nil
 }
