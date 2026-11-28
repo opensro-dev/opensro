@@ -375,10 +375,20 @@ func (s *MonsterState) tombChainSpawnerNest(spawner TombSpawnerDef) (monster.Nes
 			authored.SpawnPoint = point
 			return authored, nil
 		}
-		// The wave codenames carry refs only. A pinned point nest -
-		// the quest spawn shape - resolves their tactics to the
-		// retail wander contract instead of nothing, so a damaged
-		// wave mob retaliates like any other spawn.
+		// The v1.188 server's wave spawn selects the monster's own
+		// tactics by its ref. The tomb carries one normal tactics row
+		// per object, used by every nest of the codename, so a
+		// codename nested only on another floor (the South clones,
+		// most of the West crowd) takes that nest's AI fields at the
+		// stage point (#4817).
+		if authored, ok := s.tombChainNest(spawner.Codename); ok {
+			authored.SpawnPoint = point
+			return authored, nil
+		}
+		// A codename with no tomb nest at all: a pinned point nest -
+		// the quest spawn shape - resolves its tactics to the retail
+		// wander contract instead of nothing, so a damaged wave mob
+		// retaliates like any other spawn.
 		return monster.NestRow{SpawnPoint: point, PolicyPinned: true}, nil
 	}
 	nest, ok := s.tombChainNest(spawner.Codename)
