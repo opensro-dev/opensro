@@ -7,7 +7,10 @@ names never change.
 The Item Mall no longer lists these stones (owner decision 2026-11-28, issue #3257): the v1.696 client
 sells them in no shop, package or price table. Their rows stay imported under `SRO_MALL_CATEGORIES` so
 stones already bought stay valid and work in alchemy. No refund or inventory change is made. Premium's
-Gears tab stays available for the Devil's Spirit goods when `SRO_NASRUN` is on.
+Gears tab holds only the Devil's Spirit goods: it shows when `SRO_NASRUN` is on, and with it off the
+tab is not written at all, rather than standing empty (#4846). The v1.696 goods import
+(`scripts/later_mall_goods.py`) refuses any package holding a gears stone, so a later client that did
+list one still could not sell it for silk.
 
 ## Switch
 

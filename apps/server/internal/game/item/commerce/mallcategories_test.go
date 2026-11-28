@@ -20,6 +20,7 @@ import (
 
 	"opensro.online/server/internal/game/enterworld"
 	"opensro.online/server/internal/game/item/wire"
+	"opensro.online/server/internal/game/nasrun"
 	"opensro.online/server/internal/testsupport/gamedatatest"
 	"opensro.online/server/internal/testsupport/tier"
 )
@@ -39,6 +40,38 @@ func mallOffersOn(catalog *MallCatalog, shop uint8, tab uint8) []MallPackage {
 		}
 	}
 	return offers
+}
+
+/*
+================
+mallOffersIn
+
+The offers listed in the tab with this code, wherever the tab stands:
+a layout tab's index moves when an empty one before it is not written.
+================
+*/
+func mallOffersIn(catalog *MallCatalog, code string) []MallPackage {
+	tab := mallTabCoded(catalog, code)
+	if tab == nil {
+		return nil
+	}
+	return mallOffersOn(catalog, tab.Shop, tab.Tab)
+}
+
+/*
+================
+mallTabCoded
+
+The catalogue's tab with this code, or nil when the mall has none.
+================
+*/
+func mallTabCoded(catalog *MallCatalog, code string) *MallTab {
+	for index := range catalog.Tabs {
+		if catalog.Tabs[index].Code == code {
+			return &catalog.Tabs[index]
+		}
+	}
+	return nil
 }
 
 /*
@@ -79,8 +112,9 @@ func TestMallCategoriesFromEnv(t *testing.T) {
 ================
 TestMallCategoriesOn
 
-The layout against the shipped data with no extra goods: the HOT shop
-is shop 5, Premium and Alchemy gain their tabs, the Halloween packages
+The layout against the shipped data with no extra goods and SRO_NASRUN
+off: the HOT shop is shop 5, Premium gains Others (Gears has no good to
+sell, so it is not written, #4846), Alchemy gains Others, the Halloween packages
 stand in the HOT tabs with shipped data alone, the Destruction Rondo
 lists in Alchemy's Others tab at 5 silk, and every shipped address
 stands.
@@ -88,6 +122,7 @@ stands.
 */
 func TestMallCategoriesOn(t *testing.T) {
 	tier.Long(t, "the later mall's category layout loads over the shipped mall")
+	t.Setenv(nasrun.Env, "")
 	dir := gamedatatest.TextdataDir(t)
 	items := enterworld.NewTextdataItems(dir)
 	shipped, err := LoadMall(dir, nil, false, nil)
@@ -103,16 +138,21 @@ func TestMallCategoriesOn(t *testing.T) {
 	if len(catalog.Offers) != 93 {
 		t.Fatalf("layout mall: %d offers, want 93", len(catalog.Offers))
 	}
-	// 16 shipped tabs + 2 HOT + 2 Premium + 1 Alchemy.
-	if len(catalog.Tabs) != 21 {
-		t.Fatalf("layout mall: %d tabs, want 21", len(catalog.Tabs))
+	// 16 shipped tabs + 2 HOT + Premium's Others + 1 Alchemy: Gears
+	// would sell only the Devil's Spirit goods, which SRO_NASRUN off holds
+	// back, so it is not written.
+	if len(catalog.Tabs) != 20 {
+		t.Fatalf("layout mall: %d tabs, want 20", len(catalog.Tabs))
+	}
+	if gears := mallTabCoded(catalog, "MALL_PREMIUM_GEARS"); gears != nil {
+		t.Fatalf("an empty Gears tab is written: %+v", gears)
 	}
 	tabCount := map[uint8]int{}
 	for _, tab := range catalog.Tabs {
 		tabCount[tab.Shop]++
 	}
-	if tabCount[5] != 2 || tabCount[4] != 3 || tabCount[0] != 3 {
-		t.Fatalf("tab counts HOT/Premium/Alchemy = %d/%d/%d, want 2/3/3",
+	if tabCount[5] != 2 || tabCount[4] != 2 || tabCount[0] != 3 {
+		t.Fatalf("tab counts HOT/Premium/Alchemy = %d/%d/%d, want 2/2/3",
 			tabCount[5], tabCount[4], tabCount[0])
 	}
 	// The shipped addresses stand: the astral offer keeps shop 0,
@@ -167,9 +207,9 @@ func TestMallCategoriesOn(t *testing.T) {
 	if err != nil || quote.Cost.Silk != 5 {
 		t.Fatalf("Rondo quote = %+v, %v; want 5 silk", quote.Cost, err)
 	}
-	// The summon scrolls: Premium's Others tab (shop 4, tab 2), badged
-	// new at the authored prices, one item each once hydrated.
-	scrolls := mallOffersOn(catalog, 4, 2)
+	// The summon scrolls: Premium's Others tab, badged new at the
+	// authored prices, one item each once hydrated.
+	scrolls := mallOffersIn(catalog, "MALL_PREMIUM_OTHERS")
 	if len(scrolls) != 3 {
 		t.Fatalf("Premium Others tab: %d offers, want the 3 summon scrolls", len(scrolls))
 	}
