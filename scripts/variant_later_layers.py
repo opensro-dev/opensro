@@ -81,7 +81,7 @@ LATER_LAYERS = (
 	# layout that lists them.
 	("gearsStones", gears_stone_import.add_stones),
 	# The mall Magic Cubes (port-only, #3906): SRO_MAGIC_CUBE stages the
-	# sixteen v1.696 rows in their own shard (190002).
+	# sixteen v1.696 rows in their own shard (190003).
 	("magicCubes", magic_cube_import.add_magic_cubes),
 	# The Ch'in Tomb treasure boxes' guards (#4810): SRO_TOMB_TREASURE_BOXES
 	# (the server's own switch) stages the two kinds the open event
