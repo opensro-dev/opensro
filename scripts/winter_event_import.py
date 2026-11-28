@@ -200,15 +200,11 @@ def add_winter_monsters(native, out, env=os.environ):
 # later_text_table
 #
 # One later text table's rows, through its shard manifest when the
-# later client splits it (textdata_object.txt, textevent.txt).
+# later client splits it (textdata_object.txt, textevent.txt). The
+# shard owner joins wrapped rows per file, never across two shards.
 # ================
 def later_text_table(read, name):
-	shards = tables.later_table_shards(tables.table_rows(read(name)))
-	if shards:
-		raw = b"\xff\xfe" + "".join(tables.decode_table(read(shard)) for shard in shards).encode("utf-16-le")
-	else:
-		raw = read(name)
-	return [later_world_import.later_text_row(row) for row in joined_rows(raw)]
+	return [later_world_import.later_text_row(row) for row in tables.later_table_rows(read, name, joined_rows)]
 
 
 # ================

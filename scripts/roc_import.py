@@ -194,11 +194,11 @@ SPEC = later_world_import.WorldImport(
 # ================
 # item_ids
 #
-# {item id as text: codename} of one client's item tables (the manifest
-# itemdata.txt names the shards).
+# {item id as text: codename} of one client's item rows, read through
+# itemdata.txt's shard index by the owner (later_table_rows).
 # ================
-def item_ids(rows_of, manifest):
-	return {row[1]: row[2] for shard in manifest for row in rows_of(shard[0].lower()) if len(row) > 2}
+def item_ids(rows):
+	return {row[1]: row[2] for row in rows if len(row) > 2}
 
 
 # ================
@@ -293,18 +293,18 @@ def add_gates(read, text_root):
 	# source_rows
 	# ================
 	def source_rows(name):
-		return tables.table_rows(read(name))
+		return tables.later_table_rows(read, name)
 
 	# ================
 	# variant_rows
 	# ================
 	def variant_rows(name):
-		return tables.table_rows((text_root / name).read_bytes())
+		return tables.later_table_rows(lambda part: (text_root / part).read_bytes(), name)
 
 	items = key_items(
 		source_rows("teleportlink.txt"),
-		item_ids(source_rows, source_rows("itemdata.txt")),
-		item_ids(variant_rows, variant_rows("itemdata.txt")),
+		item_ids(source_rows("itemdata.txt")),
+		item_ids(variant_rows("itemdata.txt")),
 	)
 	merged, summary = variant_gates.merge_gate_tables(
 		current, source, codes=GATE_CODES, level_cap=variant_gates.gate_level_cap(), items=items)
@@ -370,7 +370,7 @@ def without_quests(text_root, codes):
 # ================
 def add_quests(read, text_root, prior):
 	native = without_quests(text_root, set(prior.get("quests", [])))
-	source = {row[2]: row for row in tables.table_rows(read(QUEST_TABLE)) if len(row) > 2}
+	source = {row[2]: row for row in tables.later_table_rows(read, QUEST_TABLE) if len(row) > 2}
 	taken_ids = {row[1] for row in native if len(row) > 1}
 	taken_codes = {row[2] for row in native if len(row) > 2}
 	added = []
@@ -415,7 +415,7 @@ def without_ui_texts(text_root, symbols):
 def add_ui_texts(read, native, text_root, prior):
 	kept = without_ui_texts(text_root, set(prior.get("uiTexts", [])))
 	base = kept if kept is not None else (native / TEXT_ROOT / UI_TABLE).read_bytes()
-	merged, added = cap110_items.merge_ui_texts(base, tables.table_rows(read(UI_TABLE)), UI_SYMBOLS)
+	merged, added = cap110_items.merge_ui_texts(base, tables.later_table_rows(read, UI_TABLE), UI_SYMBOLS)
 	missing = UI_SYMBOLS - set(added) - {row[1] for row in tables.table_rows(base) if len(row) > 1}
 	if missing:
 		raise ValueError("the VSRO client has no " + UI_TABLE + " row for " + ", ".join(sorted(missing)))

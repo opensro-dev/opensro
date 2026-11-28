@@ -686,8 +686,8 @@ def merge_world(spec, native, out, v1696_root, regions, build_monsters):
 		later_tables = {name: media_table(name) for name in ("regioncode.txt", "textzonename.txt")}
 		# v1.696 keeps its zone names in shards the index names; they
 		# ride along so the merge reads the rows, not the index.
-		for shard in tables.later_table_shards(tables.table_rows(later_tables["textzonename.txt"])):
-			later_tables[shard.lower()] = media_table(shard.lower())
+		for shard in tables.later_shard_files(media_table, "textzonename.txt"):
+			later_tables[shard] = media_table(shard)
 	finally:
 		media_data.close()
 		media_handle.close()

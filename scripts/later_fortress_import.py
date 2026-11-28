@@ -271,10 +271,12 @@ def staff_standings(spec, later_npcpos, later_id_by_code, native_id_by_code):
 # ================
 # vsro_object_texts
 #
-# The v1.188 client's name rows. Its textdata_object.txt and
-# textdataname.txt are the tables themselves (v1.696 splits them into
-# shards behind a manifest); English sits in column 8. The rows come out
-# in later_object_texts' shape, so native_text_row reads either source.
+# The v1.188 client's name rows. Its textdata_object.txt is a whole
+# table, and its textdataname.txt is an index over textdata_equip&skill,
+# textdata_object and textdata_new (the client's full name table), so the
+# owner reads each file once: object names once, item and skill names
+# too. English sits in column 8. The rows come out in
+# later_object_texts' shape, so native_text_row reads either source.
 # ================
 VSRO_ENGLISH_COLUMN = 8
 VSRO_NAME_TABLES = ("textdata_object.txt", "textdataname.txt")
@@ -282,11 +284,10 @@ VSRO_NAME_TABLES = ("textdata_object.txt", "textdataname.txt")
 
 def vsro_object_texts(read):
 	rows = []
-	for table in VSRO_NAME_TABLES:
-		for row in characters.translation_rows(read(table)):
-			if len(row) <= VSRO_ENGLISH_COLUMN or not row[1]:
-				continue
-			rows.append([row[0], row[1], row[2], "", "", "", "", "", row[VSRO_ENGLISH_COLUMN], ""])
+	for row in tables.later_tables_rows(read, VSRO_NAME_TABLES, characters.translation_rows):
+		if len(row) <= VSRO_ENGLISH_COLUMN or not row[1]:
+			continue
+		rows.append([row[0], row[1], row[2], "", "", "", "", "", row[VSRO_ENGLISH_COLUMN], ""])
 	return rows
 
 

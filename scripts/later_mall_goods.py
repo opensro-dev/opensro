@@ -447,15 +447,14 @@ def carried_tab_row(current, later, tab):
 #
 # The later client's own English for the given textuisystem symbols,
 # read raw from its shards (the converted row stream drops a row of
-# the wrong width, #4328): key at column 2, English at column 9.
+# the wrong width, #4328): key at column 2, English at column 9. The
+# shard owner names the files; the walk stops once every symbol is found.
 # ================
 def later_label_texts(media, index, symbols):
 	found = {}
 	if not symbols:
 		return found
-	shards = [row[0].strip() for row in tables.table_rows(tables.table_text(media, index, TEXT_TABLE))
-		if row and row[0].strip()]
-	for shard in shards:
+	for shard in tables.later_shard_files(lambda name: tables.table_text(media, index, name), TEXT_TABLE):
 		for row in tables.table_rows(tables.table_text(media, index, shard)):
 			if len(row) > 9 and row[2] in symbols and row[2] not in found:
 				found[row[2]] = row[9]

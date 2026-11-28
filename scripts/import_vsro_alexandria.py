@@ -201,6 +201,20 @@ def later_table_rows(read, name, parse=table_rows, indexed_only=False):
 
 
 # ================
+# later_tables_rows
+#
+# Several later tables read as one, each file once. An index may list a
+# table another name also stands for: VSRO's textdataname.txt indexes
+# textdata_equip&skill, textdata_object and textdata_new, so reading it
+# beside textdata_object would count every object row twice. Files keep
+# the order they are first named in; parse runs per file as above.
+# ================
+def later_tables_rows(read, names, parse=table_rows):
+	files = list(dict.fromkeys(sro_pk2.fold_ascii(part) for name in names for part in later_shard_files(read, name)))
+	return [row for part in files for row in parse(read(part))]
+
+
+# ================
 # later_table_text
 #
 # A later table as one decoded text, its shards in index order.

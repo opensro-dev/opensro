@@ -15,7 +15,6 @@ import script_paths  # noqa: F401  (puts scripts/ and its build folders on sys.p
 import hashlib
 import os
 import struct
-import sys
 import tempfile
 import unittest
 from pathlib import Path
@@ -75,6 +74,19 @@ class ShardTests(unittest.TestCase):
 		rows = alex.later_table_rows(self.read, "textdata_object.txt", characters.translation_rows)
 		self.assertEqual([row[1] for row in rows], ["SN_A", "SN_B"])
 		self.assertEqual(rows[0][-1], "x")
+
+	# ================
+	# test_several_tables_read_each_file_once
+	#
+	# VSRO's textdataname.txt indexes textdata_object.txt among others;
+	# read beside it, the object rows still come once, in first order.
+	# ================
+	def test_several_tables_read_each_file_once(self):
+		files = dict(self.FILES)
+		files["textdataname.txt"] = utf16_table([["TextData_Equip&Skill.txt"], ["TextData_Object_200.txt"]])
+		files["textdata_equip&skill.txt"] = utf16_table([["1", "SN_E", "Kor"]])
+		rows = alex.later_tables_rows(files.__getitem__, ("textdata_object.txt", "textdataname.txt"))
+		self.assertEqual([row[1] for row in rows if row[0] == "1"], ["SN_A", "SN_B", "SN_E"])
 
 	# ================
 	# test_text_and_rows_follow_the_same_files

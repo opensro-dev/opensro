@@ -50,7 +50,6 @@ import re
 import shutil
 from pathlib import Path
 
-import alexandria_npcs as text_tables
 import avatar_effects as avatar_fx
 import cap110_item_import as shared
 import cap110_items as items
@@ -640,8 +639,8 @@ def add_nasrun_skills(vsro_root, native, output):
 		# animate it over the Spirit's avatar socket (item-slot-effects.ts).
 		icons.add(("Media", SPIRIT_EDGE_SHEET))
 		# The lent skills' costume rows and the BSRs they name (#4407).
-		visual_text = read_later(VISUAL_CHANGE_TABLE) if tables.TEXTDATA + VISUAL_CHANGE_TABLE in index else b""
-		visual_rows = [row for row in tables.table_rows(visual_text)
+		visual_table = tables.later_table_rows(read_later, VISUAL_CHANGE_TABLE) if tables.TEXTDATA + VISUAL_CHANGE_TABLE in index else []
+		visual_rows = [row for row in visual_table
 			if len(row) > VC_BSR_F and row[VC_SERVICE].strip() == "1" and row[VC_SKILL].strip() in SKILL_CODES]
 		for row in visual_rows:
 			for column in (VC_BSR_M, VC_BSR_F):
