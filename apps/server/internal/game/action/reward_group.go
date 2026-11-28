@@ -464,7 +464,7 @@ func (rt *Runtime) settleMonsterInsideDoorCounted(division string, actor *enterw
 			a := roster.actors[g.representative]
 			// Port-only, not native (owner 2026-11-28; native defects are
 			// fixed): the v1.188 server pays a solo damage row with no
-			// presence test (its kill walk at 4C44A0 checks only that the
+			// presence test (its kill walk checks only that the
 			// attacker is a logged-in player, and the rows are cleared only
 			// when the monster is released), so a player who died and went
 			// back to town still earned the kill. A solo contributor other

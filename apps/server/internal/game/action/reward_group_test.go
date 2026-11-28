@@ -134,7 +134,7 @@ TestSoloKillSkipsAContributorWhoDiedOrLeft
 
 A player hit a monster, died and went back to town; another player killed
 it and the first still earned experience (the v1.188 server pays every solo
-damage row, 4C44A0). Port-only, owner 2026-11-28: a solo contributor must
+damage row). Port-only, owner 2026-11-28: a solo contributor must
 be alive and within share range of the kill, as a party member must.
 ================
 */
