@@ -107,7 +107,9 @@ export type EffectProgramFile = {
 		scale: number;
 		root: Node;
 	};
-	unavailable?: { archiveSha256: string; };
+	// archiveSha256: the retail archive proves the EFP absent. closureGaps
+	// (variant builds only): an added effect names files no source archive held.
+	unavailable?: { archiveSha256?: string; closureGaps?: string[]; };
 	meshes: string[];
 	textures: Record<string, string>;
 };
@@ -165,7 +167,8 @@ function matToQuat( m: readonly number[] ): number[] {
 parseEffectProgram
 
 One published effect file, validated before it is compiled: its layout,
-time base, archive evidence, and the paths it names.
+time base, archive evidence (or a variant's closure gaps), and the paths it
+names.
 ================
 */
 export function parseEffectProgram( bytes: Uint8Array ): EffectProgramFile {
@@ -179,7 +182,11 @@ export function parseEffectProgram( bytes: Uint8Array ): EffectProgramFile {
 		throw new Error( "Unsupported effect time base" );
 	}
 	if ( value.unavailable ) {
-		if ( value.effect || !/^[a-f0-9]{64}$/.test( value.unavailable.archiveSha256 ) ) {
+		const { archiveSha256, closureGaps } = value.unavailable;
+		const archiveProof = typeof archiveSha256 === "string" && /^[a-f0-9]{64}$/.test( archiveSha256 );
+		const gapProof = Array.isArray( closureGaps ) && closureGaps.length > 0 &&
+			closureGaps.every( name => typeof name === "string" && name.length > 0 && !name.includes( ".." ) );
+		if ( value.effect || archiveProof === gapProof ) {
 			throw Error( "Invalid native unavailable EFP evidence" );
 		}
 		return { unavailable: value.unavailable, meshes: [], textures: {} };

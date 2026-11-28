@@ -65,6 +65,31 @@ test("malformed or contradictory archive certificates and foreign layouts fail c
 	}
 });
 
+test("a variant's closure-gap effect draws nothing, and its gap list is validated", () => {
+	const decoder = createEffectDecoder();
+	const gapFile = () => ({
+		...effectProgramHeader(),
+		unavailable: { closureGaps: [ "textures/beam_r.ddj" ] }
+	});
+	assert.deepEqual(
+		decoder.model( decoder.program( bytes( gapFile() ) ), {}, "monster/arabia/skill_ar_cursefire_at6_shot.efp" ),
+		EMPTY
+	);
+	for (
+		const mutate of [
+			c => c.unavailable.closureGaps = [],
+			c => c.unavailable.closureGaps = [ "../escape.ddj" ],
+			c => c.unavailable.closureGaps = [ 7 ],
+			// One file cannot claim both proofs.
+			c => c.unavailable.archiveSha256 = evidence.sha256
+		]
+	) {
+		const c = gapFile();
+		mutate( c );
+		assert.throws( () => decoder.program( bytes( c ) ), /Invalid native unavailable/ );
+	}
+});
+
 test("native-empty effects become resident once instead of entering the failed-resource retry loop", () => {
 	const decoder = createEffectDecoder(),
 		data = bytes( absentFile() ),
