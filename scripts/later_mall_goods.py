@@ -526,7 +526,7 @@ def add_goods(later_root, native, output):
 		later = {name: source.rows(name, optional=True) for name, _ in mall.MALL_TABLES}
 		rent_rows = {row[RENT_CODE]: row for row in source.rows(RENT_TABLE, optional=True)
 			if row and row[0] == mall.SERVICE_ON and len(row) > RENT_CODE}
-		item_by_id = {row[1]: row[2] for row in source.rows("itemdata.txt", optional=True) if len(row) > 2}
+		item_by_id = {row[1]: row[2] for row in source.rows("itemdata.txt", optional=True, width=3) if len(row) > 2}
 		later_tabs = source.rows(SHOP_TAB_TABLE, optional=True)
 		label_texts = later_label_texts(source,
 			{row[TAB_LABEL] for row in later_tabs if len(row) > TAB_LABEL and row[SHOP_TAB_CODE] in NASRUN_TABS})
