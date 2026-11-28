@@ -153,6 +153,21 @@ export const DEGRADED_CODES_PER_SESSION = 16;
 export const INCIDENT_DUMP_BYTES = 512;
 // The Agent's bound on the message length.
 export const INCIDENT_MESSAGE_LENGTH = 500;
+// The incident codes of an uncaught failure: ours, or one whose stack ran
+// only code the page did not load (journal.ts UncaughtFailure.foreign).
+export const UNCAUGHT_ERROR_CODE = "uncaught_error";
+export const FOREIGN_UNCAUGHT_ERROR_CODE = "foreign_uncaught_error";
+
+/*
+================
+uncaughtIncidentCode
+
+The incident code an uncaught failure files under.
+================
+*/
+export function uncaughtIncidentCode( failure: { readonly foreign: boolean; } ): string {
+	return failure.foreign ? FOREIGN_UNCAUGHT_ERROR_CODE : UNCAUGHT_ERROR_CODE;
+}
 
 // A missing movement receipt invalidates prediction; the session must resume
 // through fresh server state without replaying the unacknowledged command.
