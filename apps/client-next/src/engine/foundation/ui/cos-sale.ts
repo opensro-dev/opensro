@@ -107,7 +107,9 @@ retires the actor); [2][code] is one category-12 notice. Anything else is
 a malformed frame.
 ================
 */
-export function cosSaleResult( payload: Uint8Array ): { readonly sold: true; } | { readonly sold: false; readonly code: number; } {
+export function cosSaleResult(
+	payload: Uint8Array
+): { readonly sold: true; } | { readonly sold: false; readonly code: number; } {
 	if ( payload.length !== 2 || (payload[0] !== 1 && payload[0] !== 2) ) throw Error( "Invalid COS sale result" );
 	return payload[0] === 1 ? { sold: true } : { sold: false, code: payload[1]! };
 }

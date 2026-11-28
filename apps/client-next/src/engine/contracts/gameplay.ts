@@ -397,6 +397,8 @@ export type GameplayCommand =
 	| { readonly kind: "cos-follow"; readonly gid: number; }
 	| { readonly kind: "cos-cancel"; readonly gid: number; }
 	| { readonly kind: "cos-clean"; readonly gid: number; }
+	// The stable keeper's sale box OK (6A9E30): 0x71DC [u32 npc][u8 3].
+	| { readonly kind: "cos-sell"; readonly npc: number; }
 	| { readonly kind: "cos-pet-attack"; readonly gid: number; readonly pet: number; readonly alt?: boolean; }
 	| { readonly kind: "cos-ride"; readonly gid: number; readonly mounted: boolean; }
 	| { readonly kind: "shop-buyback"; readonly id: number; }

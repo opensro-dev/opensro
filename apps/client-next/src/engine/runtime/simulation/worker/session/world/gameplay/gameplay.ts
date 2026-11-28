@@ -355,6 +355,7 @@ import {
 	cosShopTradeRefused,
 	cosSpecialtyMoveRefused
 } from "@/engine/foundation/ui/cos-command";
+import { cosSaleRequest, cosSaleResult } from "@/engine/foundation/ui/cos-sale";
 import { isPvpCapeItem } from "@/engine/foundation/gameplay/player-attack";
 import { isTradeGoods } from "@/engine/foundation/gameplay/specialty-deal";
 import { dissolveNeededSlots, isAlchemyEquipment } from "@/engine/foundation/ui/alchemy-selection";
@@ -503,6 +504,8 @@ import {
 	COS_RECORD_CREATE_OPCODE,
 	COS_RIDE_REQUEST_OPCODE,
 	COS_RIDE_STATE_OPCODE,
+	COS_SELL_REQUEST_OPCODE,
+	COS_SELL_RESPONSE_OPCODE,
 	COS_TERMINATE_REQUEST_OPCODE,
 	COS_TERMINATE_RESPONSE_OPCODE,
 	ENDED_EFFECT_INSTANCES_OPCODE,
@@ -4085,6 +4088,11 @@ state here before a command can claim a native wire conversation.
 				petAssists = new Map( petAssists ).set( record.gid, entity.gid );
 				return sendFrame( { opcode: COS_COMMAND_REQUEST_OPCODE, payload } );
 			}
+			if ( command.kind === "cos-sell" ) {
+				// 6A9E30 -> 6FF980: the interaction target's gid and kind 3. The
+				// UI ran 5B6CA0's refusals before it opened the box.
+				return sendFrame( { opcode: COS_SELL_REQUEST_OPCODE, payload: cosSaleRequest( command.npc ) } );
+			}
 			if ( command.kind === "cos-clean" ) {
 				// CICCos_ExecuteActionCommand (6A2350) case 5: a riding mount or a
 				// transport (class 0/1; quest band 6 also defaults to class 0) uses 0x7618
@@ -6032,6 +6040,17 @@ Packet handling must not depend on which HUD panel is currently open.
 					) throw Error( "Invalid COS cancellation result" );
 					if ( payload[0] === 2 ) {
 						const notice = constantNativeNotice( 12, payload[1]! );
+						if ( notice ) notices = [ ...notices.slice( -99 ), { ...notice, sequence: ++noticeSequence } ];
+					}
+					dirty = true;
+					return true;
+				}
+				if ( frame.opcode === COS_SELL_RESPONSE_OPCODE ) {
+					// 7782E0: a sale needs nothing here (the despawn and the gold
+					// update follow); a refusal is one category-12 notice.
+					const result = cosSaleResult( frame.payload );
+					if ( !result.sold ) {
+						const notice = constantNativeNotice( 12, result.code );
 						if ( notice ) notices = [ ...notices.slice( -99 ), { ...notice, sequence: ++noticeSequence } ];
 					}
 					dirty = true;
