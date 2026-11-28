@@ -397,3 +397,60 @@ func TestForceClampsDuration(t *testing.T) {
 		t.Fatalf("long spell lasts %d", s.eventDuration)
 	}
 }
+
+/*
+================
+TestSpellOnTheStandingWeatherIsAChange
+
+A spell on the weather already falling moves no weather word, but its
+start and its end still report a change: a seasonal sky gives way to the
+spell and comes back after it (action/seasonal_sky.go), so its players
+must be sent their sky at both flips, and only then.
+================
+*/
+func TestSpellOnTheStandingWeatherIsAChange(t *testing.T) {
+	row := rainy
+	row.ChangeWeather = 0
+	s := NewState(row, 0, draws(t))
+	home := s.Current()
+	s.Force(0, home, MinForceDurationMs)
+	if !s.GMSpell() || !s.Update(stepIntervalMs) {
+		t.Fatal("a spell on the standing weather reported no change at its start")
+	}
+	if s.Update(2 * stepIntervalMs) {
+		t.Fatal("a held spell on the standing weather changed again")
+	}
+	end := int64(MinForceDurationMs) + 2*stepIntervalMs
+	if !s.Update(end) || s.GMSpell() {
+		t.Fatalf("the spell's end reported no change (gm %v)", s.GMSpell())
+	}
+	if s.Current() != home {
+		t.Fatalf("the spell moved the weather: %+v", s.Current())
+	}
+	if s.Update(end + stepIntervalMs) {
+		t.Fatal("a still climate after its spell still changed")
+	}
+}
+
+/*
+================
+TestRollAfterASpellEndsIt
+
+A spell whose time runs out while it is still fading never reaches the
+end branch (cur != target); the next roll replaces it. The roll ends the
+spell too, so a seasonal sky comes back, and the flip is a change.
+================
+*/
+func TestRollAfterASpellEndsIt(t *testing.T) {
+	// The roll draws 99 (past rain and snow: a clear spell), then the clear
+	// amount and the duration.
+	s := NewState(rainy, 0, draws(t, 99, 0, 0))
+	s.Force(0, Weather{Rain, 255}, MinForceDurationMs)
+	s.Update(stepIntervalMs)
+	if !s.GMSpell() || s.Current() == s.target {
+		t.Fatalf("fixture: the spell should still be fading (gm %v, %+v)", s.GMSpell(), s.Current())
+	}
+	if !s.Update(s.nextRollAt+1) || s.GMSpell() {
+		t.Fatalf("the roll past the spell's end left it held (gm %v)", s.GMSpell())
+	}
+}

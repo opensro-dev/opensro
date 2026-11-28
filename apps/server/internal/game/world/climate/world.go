@@ -165,6 +165,25 @@ func (w *World) Current(index int) Weather { return w.states[index].Current() }
 
 /*
 ================
+World.GMSpells
+
+The climates a GM's spell holds, one bit per index (State.GMSpell). The
+caller holds the lock that serializes Force (action/weather.go), so the
+tick reads the bits it then delivers without racing a GM's command.
+================
+*/
+func (w *World) GMSpells() uint32 {
+	var spells uint32
+	for i := range w.states {
+		if w.states[i].GMSpell() {
+			spells |= 1 << i
+		}
+	}
+	return spells
+}
+
+/*
+================
 World.RegionWeather
 
 The current weather a region's players see; false for a region without
