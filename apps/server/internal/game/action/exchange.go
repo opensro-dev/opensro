@@ -249,18 +249,18 @@ func (rt *Runtime) applyExchangeMove(division string, c *enterworld.Character, r
 		}
 		frame = wire.EncodeExchangeTakeResult(request.SourceSlot)
 	case wire.MoveTypeExchangeGold:
-		if uint64(request.GoldAmount) > goldOf(snapshot) {
+		if request.GoldAmount > goldOf(snapshot) {
 			return failureResult(wire.ErrCodeNotEnoughGold)
 		}
-		if err := rt.Exchanges.SetGold(division, c.Name, uint64(request.GoldAmount)); err != nil {
+		if err := rt.Exchanges.SetGold(division, c.Name, request.GoldAmount); err != nil {
 			return failureResult(exchangeMoveCode(err))
 		}
 		_, partner, _ := rt.Exchanges.Snapshot(division, c.Name)
 		rt.PushCharacterFrames(division, partner.Name, []wire.Frame{{
 			Opcode:  wire.OpExchangePartnerGold,
-			Payload: wire.EncodeExchangePartnerGold30BB(request.GoldAmount),
+			Payload: wire.EncodeExchangePartnerGold30BB(uint32(request.GoldAmount)),
 		}})
-		return OpResult{Frames: []wire.Frame{{Opcode: wire.OpItemMoveResponse, Payload: wire.EncodeExchangeGoldResult(request.GoldAmount)}}}
+		return OpResult{Frames: []wire.Frame{{Opcode: wire.OpItemMoveResponse, Payload: wire.EncodeExchangeGoldResult(uint32(request.GoldAmount))}}}
 	default:
 		return failureResult(wire.ErrCodeInvalidRequest)
 	}

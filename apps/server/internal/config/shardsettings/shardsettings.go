@@ -552,7 +552,7 @@ var Settings = []Setting{
 	{Env: "SRO_TRADE_JOB_HUNTER_PERCENT_PER_TRADER", NomadVar: "trade_job_hunter_percent_per_trader", Default: "10"},
 	{Env: "SRO_TRADE_JOB_HUNTER_PERCENT_CAP", NomadVar: "trade_job_hunter_percent_cap", Default: "60"},
 	// Port-only, not native: a 10,000,000,000 stall price and a
-	// 1,000,000,000 warehouse gold deposit replace the native
+	// 10,000,000,000 warehouse gold deposit (owner, 2026-11-28) replace the native
 	// 1,000,000,000 and 100,000,000 caps. "off" is native; a bare
 	// number instead names the warehouse deposit cap alone.
 	{Env: "SRO_RAISED_GOLD_CAPS", NomadVar: "raised_gold_caps", Default: "off"},

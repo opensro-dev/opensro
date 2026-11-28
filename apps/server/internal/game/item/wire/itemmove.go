@@ -9,6 +9,7 @@ package wire
 
 import (
 	"fmt"
+	"math"
 	"opensro.online/server/internal/domain"
 )
 
@@ -450,8 +451,27 @@ type ItemMoveRequest struct {
 	SourceSlot   uint8
 	DestSlot     uint8
 	Quantity     uint16
-	GoldAmount   uint32
-	SubMoves     []SubMove
+	// GoldAmount is the gold a gold move names: a u32 on the native wire,
+	// or a u64 on a warehouse deposit above the u32 range (WideGoldDeposit).
+	GoldAmount uint64
+	SubMoves   []SubMove
+}
+
+/*
+================
+WideGoldDeposit
+
+Port-only, not native: a warehouse gold deposit (personal or guild) may
+carry its amount as a u64 instead of the native u32, so a shard whose
+SRO_RAISED_GOLD_CAPS deposit cap passes 4,294,967,295 can take it in one
+move. The form is told apart by length alone, as the raised stall price
+is (action/stall.go): the native client always sends four bytes, so a
+native request decodes as before, and the action still checks every
+amount against the shard's cap.
+================
+*/
+func WideGoldDeposit(movementType uint8) bool {
+	return movementType == MoveTypeStorageGoldDeposit || movementType == MoveTypeGuildStorageGoldDeposit
 }
 
 // ErrUnsupportedMovementType is returned for a movement type this wave has not
@@ -525,7 +545,11 @@ func (q ItemMoveRequest) Encode() ([]byte, error) {
 		MoveTypeGuildStorageGoldDeposit, MoveTypeGuildStorageGoldWithdraw:
 		// client ItemMoveRequest_Serialize @0x006984cb, amount
 		// pre-clamped at client 0x00697eb5
-		w.U32(ClampGold(uint64(q.GoldAmount)))
+		if WideGoldDeposit(q.MovementType) && q.GoldAmount > uint64(math.MaxUint32) {
+			w.U64(q.GoldAmount)
+			break
+		}
+		w.U32(ClampGold(q.GoldAmount))
 	case MoveTypeStorage, MoveTypeGuildStorage:
 		// ItemMoveRequest_Serialize case 1: [src][dst][u16 count][u32 npc].
 		w.U8(q.SourceSlot).U8(q.DestSlot).U16(q.Quantity).U32(q.NpcGID)
@@ -618,9 +642,11 @@ func DecodeItemMoveRequest(payload []byte) (ItemMoveRequest, error) {
 		}
 	case MoveTypeExchangeGold:
 		// Client ItemMoveRequest_Serialize case 0xD: the gold on the table.
-		if out.GoldAmount, err = r.U32(); err != nil {
+		var amount uint32
+		if amount, err = r.U32(); err != nil {
 			return out, err
 		}
+		out.GoldAmount = uint64(amount)
 	case MoveTypeCosInventory:
 		if out.CosGID, err = r.U32(); err != nil {
 			return out, err
@@ -666,9 +692,17 @@ func DecodeItemMoveRequest(payload []byte) (ItemMoveRequest, error) {
 		}
 	case MoveTypeGoldDrop, MoveTypeStorageGoldWithdraw, MoveTypeStorageGoldDeposit,
 		MoveTypeGuildStorageGoldDeposit, MoveTypeGuildStorageGoldWithdraw:
-		if out.GoldAmount, err = r.U32(); err != nil {
+		if WideGoldDeposit(movementType) && r.Remaining() == 8 {
+			if out.GoldAmount, err = r.U64(); err != nil {
+				return out, err
+			}
+			break
+		}
+		var amount uint32
+		if amount, err = r.U32(); err != nil {
 			return out, err
 		}
+		out.GoldAmount = uint64(amount)
 	case MoveTypeStorage, MoveTypeGuildStorage:
 		if out.SourceSlot, err = r.U8(); err != nil {
 			return out, err

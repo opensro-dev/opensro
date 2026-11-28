@@ -98,7 +98,7 @@ func TestGoldDropPastTheCeilingRefuses(t *testing.T) {
 
 	result = rt.HandleItemMove(testDivision, character, encodeMove(t, wire.ItemMoveRequest{
 		MovementType: wire.MoveTypeGoldDrop,
-		GoldAmount:   wire.MaxGold,
+		GoldAmount:   uint64(wire.MaxGold),
 	}))
 	if got := result.Frames[0].Payload; got[0] != 0x01 {
 		t.Fatalf("the ceiling drop answered % X, want success", got)
@@ -182,7 +182,7 @@ func TestGoldDropAmountRefusals(t *testing.T) {
 
 			result := rt.HandleItemMove(testDivision, character, encodeMove(t, wire.ItemMoveRequest{
 				MovementType: wire.MoveTypeGoldDrop,
-				GoldAmount:   testCase.amount,
+				GoldAmount:   uint64(testCase.amount),
 			}))
 
 			assertOpcodes(t, result.Frames, wire.OpItemMoveResponse)

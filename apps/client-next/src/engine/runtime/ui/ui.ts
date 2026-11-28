@@ -6647,7 +6647,7 @@ export function createUi( ports: UiPorts ) {
 			}
 		} else if ( id === "drop-gold" && view.gameplay && (goldDialog === "deposit" || goldDialog === "withdraw") ) {
 			// 59A430 caps warehouse deposits at min(carriedGold, 100_000_000);
-			// SRO_RAISED_GOLD_CAPS raises the deposit cap, to 1,000,000,000
+			// SRO_RAISED_GOLD_CAPS raises the deposit cap, to 10,000,000,000
 			// or the shard's published value.
 			// 59C510 closes the modal without sending when amount <= 0, as the
 			// exchange branch above does: an unsendable amount used to leave

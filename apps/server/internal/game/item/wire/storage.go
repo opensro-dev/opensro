@@ -33,6 +33,8 @@ to bag. Its gold and list ride 0x34A9 and 0x3363 in the personal layouts.
 */
 package wire
 
+import "math"
+
 const (
 	OpStorageListRequest uint16 = 0x72C3
 	OpStorageGold        uint16 = 0x3126
@@ -171,7 +173,13 @@ func EncodeStorageMoveSuccess(q ItemMoveRequest) []byte {
 	case MoveTypeStorageDeposit, MoveTypeStorageWithdraw, MoveTypeGuildStorageDeposit, MoveTypeGuildStorageWithdraw:
 		w.U8(q.SourceSlot).U8(q.DestSlot)
 	default:
-		w.U32(q.GoldAmount)
+		// A wide deposit (WideGoldDeposit) is echoed in its own width.
+		if WideGoldDeposit(q.MovementType) && q.GoldAmount > uint64(math.MaxUint32) {
+			w.U64(q.GoldAmount)
+			break
+		}
+		// The decoder read four bytes, so the amount fits exactly.
+		w.U32(uint32(q.GoldAmount))
 	}
 	return w.Payload()
 }
