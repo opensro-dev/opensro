@@ -10,7 +10,8 @@ output (ParticleBinding): one initial copy preserves the draw's untouched
 hidden fields, and nothing is copied back. Copying every stream's output
 into the draw's own buffers each frame was the GPU process's largest
 particle cost (#4692). Arenas and pass pages are partitioned by the actual
-device storage and dispatch limits.
+device storage and dispatch limits. Material frames are resident too
+(particle-materials.ts): a page carries only what changes with the frame.
 
 A slice is bound before the frame records its bundles, which is before
 encode: present allocates and grows the output and binds the stream, and
@@ -56,6 +57,12 @@ import { faceEffectMesh } from "@/engine/foundation/rendering/effect-billboard";
 import type { GpuWork } from "@/engine/foundation/rendering/gpu-work";
 import type { GeometryDraw, GpuTimingFrame, ParticlePresentation } from "../internal/gpu-contract";
 import { bindingOffsetAlignment, type BufferSlice } from "./buffer-slabs";
+import {
+	createParticleMaterials,
+	type MaterialStore,
+	type MaterialTable,
+	particleCapacity
+} from "./particle-materials";
 import { particleShader } from "./particle-shader";
 import { destroyNow, type Retire } from "./retirement";
 
@@ -66,7 +73,6 @@ const PALETTE_BYTES = 64;
 const INSTANCE_FLOATS = INSTANCE_BYTES / 4;
 const PALETTE_FLOATS = PALETTE_BYTES / 4;
 const TICKS_PER_SECOND = 20;
-const INITIAL_BYTES = 16384;
 const DEFAULT_STORAGE_BYTES = 128 * 1024 * 1024;
 const DEFAULT_WORKGROUP_LIMIT = 65535;
 const cpuWork = new Float64Array( ROTATION_WORK );
@@ -113,7 +119,9 @@ type Stream = {
 	readonly records: Float32Array;
 	readonly frame: Float32Array;
 	readonly words: Uint32Array;
-	readonly material: Float32Array;
+	// The stream's material frames in their resident store; none without
+	// frames, or under the CPU fallback, which reads frames itself.
+	readonly table: MaterialTable | undefined;
 	readonly instances: GPUBuffer;
 	readonly bones: GPUBuffer;
 	readonly outputStart: number;
@@ -136,18 +144,19 @@ type Stream = {
 ================
 Page
 
-One immutable input snapshot per encoded pass in a frame. Bindings follow
-output arena growth without changing already encoded commands.
+One immutable input snapshot per encoded pass in a frame: dirty records
+and frame parameters. Bindings follow output arena growth and the pass's
+material store without changing already encoded commands.
 ================
 */
 type Page = {
 	readonly records: Float32Array;
 	readonly frame: Float32Array;
 	readonly words: Uint32Array;
-	readonly material: Float32Array;
 	readonly buffers: readonly GPUBuffer[];
 	binding: GPUBindGroup;
 	output: Output;
+	materials: GPUBuffer;
 	readonly count: number;
 };
 
@@ -239,11 +248,9 @@ export function createParticlePresentation( device: GPUDevice, retire: Retire = 
 	================
 	*/
 	function capacity( bytes: number ): number {
-		if ( bytes > storageLimit ) throw Error( "Particle buffer exceeds device storage limit" );
-		let size = INITIAL_BYTES;
-		while ( size < bytes ) size *= 2;
-		return Math.min( size, storageLimit );
+		return particleCapacity( bytes, storageLimit );
 	}
+	const materials = createParticleMaterials( device, storageLimit, retire, work );
 
 	/*
 	================
@@ -391,10 +398,10 @@ export function createParticlePresentation( device: GPUDevice, retire: Retire = 
 	bindPage
 	================
 	*/
-	function bindPage( buffers: readonly GPUBuffer[], output: Output ): GPUBindGroup {
+	function bindPage( buffers: readonly GPUBuffer[], output: Output, tables: GPUBuffer ): GPUBindGroup {
 		return device.createBindGroup( {
 			layout: pipeline!.getBindGroupLayout( 0 ),
-			entries: [ output!.records, buffers[1]!, buffers[2]!, output!.instances, output!.bones ].map( (
+			entries: [ output!.records, buffers[1]!, tables, output!.instances, output!.bones ].map( (
 				buffer,
 				binding
 			) => ({ binding, resource: { buffer } }) )
@@ -409,26 +416,19 @@ export function createParticlePresentation( device: GPUDevice, retire: Retire = 
 	its previous buffers through the device's ordinary frame lifetime owner.
 	================
 	*/
-	function pageFor( count: number, frameFloats: number, materialFloats: number, output: Output ): Page {
+	function pageFor( count: number, frameFloats: number, output: Output, tables: GPUBuffer ): Page {
 		const index = pageIndex++, previous = pages[index];
-		if (
-			previous && previous.count >= count && previous.frame.length >= frameFloats &&
-			previous.material.length >= materialFloats
-		) {
-			if ( previous.output !== output ) {
-				previous.binding = bindPage( previous.buffers, output );
+		if ( previous && previous.count >= count && previous.frame.length >= frameFloats ) {
+			if ( previous.output !== output || previous.materials !== tables ) {
+				previous.binding = bindPage( previous.buffers, output, tables );
 				previous.output = output!;
+				previous.materials = tables;
 			}
 			return previous;
 		}
 		const records = new Float32Array( capacity( count * PARTICLE_RECORD * 4 ) / 4 );
 		const frame = new Float32Array( capacity( frameFloats * 4 ) / 4 );
-		const material = new Float32Array( capacity( materialFloats * 4 ) / 4 );
-		const sizes = [
-			records.byteLength,
-			frame.byteLength,
-			material.byteLength
-		];
+		const sizes = [ records.byteLength, frame.byteLength ];
 		const buffers: GPUBuffer[] = [];
 		try {
 			for ( const size of sizes ) {
@@ -438,16 +438,16 @@ export function createParticlePresentation( device: GPUDevice, retire: Retire = 
 					usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST | GPUBufferUsage.COPY_SRC
 				} ) );
 			}
-			const binding = bindPage( buffers, output );
+			const binding = bindPage( buffers, output, tables );
 			const countCapacity = records.length / PARTICLE_RECORD;
 			const page = {
 				records,
 				frame,
 				words: new Uint32Array( frame.buffer ),
-				material,
 				buffers,
 				binding,
 				output: output!,
+				materials: tables,
 				count: countCapacity
 			};
 			pages[index] = page;
@@ -470,6 +470,7 @@ export function createParticlePresentation( device: GPUDevice, retire: Retire = 
 		stream.arena.pending.delete( stream );
 		if ( !stream.arena.pending.size ) pending.delete( stream.arena );
 		reclaimOutput( stream.arena, stream.outputStart, stream.outputSlots );
+		if ( stream.table ) materials.release( stream.table );
 		streams.delete( draw );
 	}
 
@@ -477,26 +478,27 @@ export function createParticlePresentation( device: GPUDevice, retire: Retire = 
 	================
 	encodeBatch
 
-	One device-bounded dispatch over immutable input staging and resident output.
+	One device-bounded dispatch over immutable input staging, resident output
+	and the one material store its streams' tables live in.
 	================
 	*/
 	function encodeBatch(
 		encoder: GPUCommandEncoder,
 		timing: GpuTimingFrame | undefined,
 		selected: readonly Stream[],
-		target: Output
+		target: Output,
+		store: MaterialStore | undefined
 	) {
-		let count = 0, dirtyCount = 0, groups = 0, frameFloats = 0, materialFloats = 0;
+		let count = 0, dirtyCount = 0, groups = 0, frameFloats = 0;
 		for ( const stream of selected ) {
 			const size = stream.rows * stream.slots;
 			count += size;
 			dirtyCount += Math.max( 0, stream.dirtyEnd - stream.dirtyStart );
 			groups += Math.ceil( size / WORKGROUP );
 			frameFloats += stream.frame.length;
-			materialFloats += stream.material.length;
 		}
-		const page = pageFor( dirtyCount, frameFloats + groups * 4, materialFloats, target );
-		let dirtySlot = 0, group = 0, at = groups * 4, material = 0;
+		const page = pageFor( dirtyCount, frameFloats + groups * 4, target, materials.buffer( store ) );
+		let dirtySlot = 0, group = 0, at = groups * 4;
 		for ( const stream of selected ) {
 			const size = stream.rows * stream.slots;
 			if ( stream.dirtyStart < stream.dirtyEnd ) {
@@ -517,8 +519,8 @@ export function createParticlePresentation( device: GPUDevice, retire: Retire = 
 				stream.dirtyEnd = 0;
 			}
 			page.frame.set( stream.frame, at );
-			page.words[at + 9] = material / 4;
-			page.material.set( stream.material, material );
+			// Read here, not at presentation: a pack moves a table (beginFrame).
+			page.words[at + 9] = stream.table ? stream.table.start / 4 : 0;
 			for ( let offset = 0; offset < size; offset += WORKGROUP ) {
 				page.words[group++] = at / 4;
 				page.words[group++] = stream.outputStart;
@@ -543,7 +545,6 @@ export function createParticlePresentation( device: GPUDevice, retire: Retire = 
 				stream.initialized = true;
 			}
 			at += stream.frame.length;
-			material += stream.material.length;
 		}
 		if ( dirtySlot ) {
 			device.queue.writeBuffer( page.buffers[0]!, 0, page.records.buffer, 0, dirtySlot * PARTICLE_RECORD * 4 );
@@ -551,10 +552,6 @@ export function createParticlePresentation( device: GPUDevice, retire: Retire = 
 		}
 		device.queue.writeBuffer( page.buffers[1]!, 0, page.frame.buffer, 0, at * 4 );
 		work?.noteUpload( at * 4 );
-		if ( material ) {
-			device.queue.writeBuffer( page.buffers[2]!, 0, page.material.buffer, 0, material * 4 );
-			work?.noteUpload( material * 4 );
-		}
 		const pass = encoder.beginComputePass( {
 			label: "particle-presentation",
 			timestampWrites: timing?.pass( "particle-presentation" )
@@ -716,6 +713,7 @@ export function createParticlePresentation( device: GPUDevice, retire: Retire = 
 			}
 			oldOutputs.length = 0;
 			pageIndex = 0;
+			materials.beginFrame();
 		},
 		/*
 		================
@@ -762,13 +760,6 @@ export function createParticlePresentation( device: GPUDevice, retire: Retire = 
 					throw Error( "Particle presentation outside its draw" );
 				}
 				const frame = new Float32Array( PARAMS_FLOATS + particles.rows * PARTICLE_ACTOR );
-				const material = new Float32Array(
-					particles.frames ? particles.frames.colors.length + particles.frames.windows.length : 0
-				);
-				if ( particles.frames ) {
-					material.set( particles.frames.colors );
-					material.set( particles.frames.windows, particles.frames.colors.length );
-				}
 				stream = {
 					rows: particles.rows,
 					slots: particles.slots,
@@ -776,7 +767,7 @@ export function createParticlePresentation( device: GPUDevice, retire: Retire = 
 					records: new Float32Array( count * PARTICLE_RECORD ),
 					frame,
 					words: new Uint32Array( frame.buffer ),
-					material,
+					table: particles.frames && pipeline ? materials.acquire( particles.frames ) : undefined,
 					instances,
 					bones,
 					...allocateOutput( count ),
@@ -826,8 +817,9 @@ export function createParticlePresentation( device: GPUDevice, retire: Retire = 
 		================
 		encode
 
-		Partition independent streams by resident arena and per-pass limits.
-		No stream or update is dropped when a batch reaches a device limit.
+		Partition independent streams by resident arena, material store and
+		per-pass limits. No stream or update is dropped when a batch reaches
+		a device limit.
 		================
 		*/
 		encode( encoder: GPUCommandEncoder, timing?: GpuTimingFrame ) {
@@ -841,31 +833,31 @@ export function createParticlePresentation( device: GPUDevice, retire: Retire = 
 			}
 			for ( const arena of pending ) {
 				const target = flushGrowth( encoder, arena );
-				let groups = 0, frameBytes = 0, materialBytes = 0;
+				let groups = 0, frameBytes = 0, store: MaterialStore | undefined;
 				for ( const stream of arena.pending ) {
 					const nextGroups = Math.ceil( stream.rows * stream.slots / WORKGROUP );
 					const nextFrameBytes = stream.frame.byteLength + nextGroups * 16;
-					if (
-						nextGroups > groupLimit || nextFrameBytes > storageLimit ||
-						stream.material.byteLength > storageLimit
-					) {
+					if ( nextGroups > groupLimit || nextFrameBytes > storageLimit ) {
 						throw Error( "Particle stream exceeds device dispatch limit" );
 					}
+					// A pass binds one store: a stream of another starts the next pass.
+					const nextStore = stream.table?.store;
 					if (
 						batch.length &&
 						(groups + nextGroups > groupLimit || frameBytes + nextFrameBytes > storageLimit ||
-							materialBytes + stream.material.byteLength > storageLimit)
+							store !== undefined && nextStore !== undefined && nextStore !== store)
 					) {
-						encodeBatch( encoder, timing, batch, target );
+						encodeBatch( encoder, timing, batch, target, store );
 						batch.length = 0;
-						groups = frameBytes = materialBytes = 0;
+						groups = frameBytes = 0;
+						store = undefined;
 					}
 					batch.push( stream );
 					groups += nextGroups;
 					frameBytes += nextFrameBytes;
-					materialBytes += stream.material.byteLength;
+					store ??= nextStore;
 				}
-				if ( batch.length ) encodeBatch( encoder, timing, batch, target );
+				if ( batch.length ) encodeBatch( encoder, timing, batch, target, store );
 				batch.length = 0;
 				arena.pending = new Set();
 			}
@@ -876,7 +868,8 @@ export function createParticlePresentation( device: GPUDevice, retire: Retire = 
 			streams: streams.size,
 			dispatches,
 			slots,
-			arenaBytes: pages.reduce( ( sum, page ) => sum + page.frame.byteLength, 0 )
+			arenaBytes: pages.reduce( ( sum, page ) => sum + page.frame.byteLength, 0 ),
+			materials: materials.stats()
 		}),
 		/*
 		================
@@ -889,6 +882,7 @@ export function createParticlePresentation( device: GPUDevice, retire: Retire = 
 			streams.clear();
 			pending.clear();
 			for ( const page of pages ) for ( const buffer of page.buffers ) buffer.destroy();
+			materials.dispose();
 			for ( const arena of arenas ) {
 				arena.output?.instances.destroy();
 				arena.output?.bones.destroy();

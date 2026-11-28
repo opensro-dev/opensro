@@ -12,7 +12,8 @@ the same 'bsr' particle transform.
 ===========================================================================
 */
 import { ambientModelParticles, type ModelParticle } from "./model-particles";
-import type { CharacterActor } from "@/engine/contracts/character";
+import type { ActorClocks, CharacterActor } from "@/engine/contracts/character";
+import { actorClock } from "./actor-clock";
 import { effectProgramModel } from "@/engine/foundation/assets/effect-programs";
 
 /*
@@ -116,7 +117,8 @@ export function createModelEmission( allocate: () => number ) {
 			seconds: number,
 			ready: ( path: string ) => boolean,
 			capacity: number,
-			lod: ( gid: number ) => number = () => 0
+			lod: ( gid: number ) => number = () => 0,
+			clocks?: ActorClocks
 		): readonly CharacterActor[] {
 			const keep = new Set<number>(), out: CharacterActor[] = [];
 			for ( const { actor, particles } of holders ) {
@@ -149,7 +151,8 @@ export function createModelEmission( allocate: () => number ) {
 						model = row.programs[i]!;
 					if ( out.length >= capacity || !ready( model ) ) continue;
 					if ( row.started[i] === null || seconds < row.started[i]! ) row.started[i] = seconds;
-					const lodHidden = particle.source !== "equipment" && !!actor.modelAnimation?.selected?.override ||
+					const lodHidden = particle.source !== "equipment" &&
+							!!actorClock( actor, clocks ).modelAnimation?.selected?.override ||
 						lod( actor.gid ) > Math.fround( .9 );
 					let deferred = row.deferred[i];
 					if ( deferred?.lodHidden !== lodHidden ) {

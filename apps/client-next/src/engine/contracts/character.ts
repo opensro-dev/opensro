@@ -281,6 +281,18 @@ export interface CharacterActor {
 }
 /*
 ================
+ActorClock, ActorClocks
+
+The clocks of a published actor: what changes on a frame its other fields
+hold. A producer that republishes the same frozen actor hands its clocks in
+an ActorClocks entry beside it, keyed by that actor object; an actor with
+no entry carries its own (foundation/animation/actor-clock.ts actorClock).
+================
+*/
+export type ActorClock = Pick<CharacterActor, "time" | "layers" | "modelAnimation">;
+export type ActorClocks = ReadonlyMap<CharacterActor, ActorClock>;
+/*
+================
 CharacterAttachment
 
 Equipment assembly references and the slots or branches they replace.

@@ -53,7 +53,6 @@ const EXPERIMENTAL_DEFAULTS = {
 // recorded. A model or clip is recorded by what the presentation chose
 // (its id, clip names and durations), not by the bytes this harness served.
 const RENDERER_SINKS = {
-	setCharacterActors: ( actors, portraits = [] ) => [ actors, portraits ],
 	setCharacterAssembly: ( id, base, parts ) => [ id, base, parts ],
 	setCharacterModel: ( id, model, images ) => [
 		id,
@@ -350,6 +349,16 @@ export async function createPresentationHarness( root, session, options = {} ) {
 	);
 	const { worldAudioPosition } = await rootModule( root, src + "foundation/world/world-space.ts" );
 	const { viewProjection } = await rootModule( root, src + "foundation/rendering/world-math.ts" );
+	const { clocked } = await rootModule( root, src + "foundation/animation/actor-clock.ts" );
+	// A republished actor's clocks travel in the call's table: the record
+	// holds what the renderer is asked to draw, its clocks written in.
+	const sinks = {
+		...RENDERER_SINKS,
+		setCharacterActors: ( actors, portraits = [], clocks ) => [
+			actors.map( actor => clocked( actor, clocks ) ),
+			portraits
+		]
+	};
 	const settings = session.settings ?? {};
 	const experimental = { ...EXPERIMENTAL_DEFAULTS, ...settings.experimental };
 	const mathRandom = Math.random;
@@ -441,7 +450,7 @@ export async function createPresentationHarness( root, session, options = {} ) {
 					const value = target[key];
 					if ( typeof key !== "string" ) return value;
 					if ( value === undefined ) missing.add( key );
-					const sink = RENDERER_SINKS[key];
+					const sink = sinks[key];
 					if ( !sink || typeof value !== "function" ) return value;
 					return ( ...args ) => {
 						if ( key !== "retainCharacterModels" || retainedSet( args[0] ) ) record( key, sink( ...args ) );

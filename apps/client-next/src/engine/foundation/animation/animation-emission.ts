@@ -14,7 +14,8 @@ import { animationModelParticles, type ModelParticle } from "./model-particles";
 import { modelParticleAttachment } from "./model-emission";
 import { radians } from "@/engine/foundation/math/angles";
 import type { ModifierSelector } from "./model-animation";
-import type { CharacterActor } from "@/engine/contracts/character";
+import type { ActorClocks, CharacterActor } from "@/engine/contracts/character";
+import { actorClock } from "./actor-clock";
 import { effectProgramModel } from "@/engine/foundation/assets/effect-programs";
 export interface AnimationParticleSet extends ModifierSelector {
 	readonly particles: readonly ModelParticle[];
@@ -93,7 +94,8 @@ export function createAnimationEmission( allocate: () => number ) {
 			night: boolean,
 			snapshot: ( gid: number, actor?: CharacterActor ) => { matrix: Float32Array; regionId: number; } | null,
 			age: ( gid: number ) => number | undefined,
-			duration: ( path: string ) => number
+			duration: ( path: string ) => number,
+			clocks?: ActorClocks
 		): readonly CharacterActor[] {
 			const keep = new Set<number>(), out: CharacterActor[] = [];
 			/*
@@ -123,7 +125,7 @@ export function createAnimationEmission( allocate: () => number ) {
 				} );
 			}
 			for ( const { actor, sets } of holders ) {
-				const id = actor.modifierId ?? actor.gid;
+				const id = actor.modifierId ?? actor.gid, animation = actorClock( actor, clocks ).modelAnimation;
 				keep.add( id );
 				let owner = owners.get( id );
 				if ( !owner || owner.model !== actor.model || owner.sets !== sets ) {
@@ -138,7 +140,7 @@ export function createAnimationEmission( allocate: () => number ) {
 					};
 					owners.set( id, owner );
 				}
-				for ( const selector of actor.modelAnimation?.restarted ?? [] ) {
+				for ( const selector of animation?.restarted ?? [] ) {
 					for ( const set of sets ) {
 						if ( matches( selector, set ) ) {
 							for ( const particle of set.particles ) {
@@ -151,7 +153,7 @@ export function createAnimationEmission( allocate: () => number ) {
 						}
 					}
 				}
-				for ( const dispatch of actor.modelAnimation?.dispatch ?? [] ) {
+				for ( const dispatch of animation?.dispatch ?? [] ) {
 					for ( const [from, to] of dispatch.ranges ) {
 						for ( const { set, particle } of owner.keys ) {
 							if (
@@ -206,7 +208,7 @@ export function createAnimationEmission( allocate: () => number ) {
 							deferredParticle: {
 								offset: particle.deferred ?? 0,
 								nightOnly: particle.nightOnly,
-								lodHidden: !(set.flags & 32) || !matches( actor.modelAnimation?.selected, set ) ||
+								lodHidden: !(set.flags & 32) || !matches( animation?.selected, set ) ||
 									(actor.animationLod?.fraction ?? 0) > Math.fround( .9 )
 							}
 						} );

@@ -150,7 +150,7 @@ function presentHit( type ) {
 			sounds: { emit: () => true, impact() {}, flush() {} },
 			knockbacks: { land: ( gid, at ) => landed.push( [ gid, at ] ) }
 		}),
-		{ displayed: new Map() },
+		{ displayed: new Map(), displayedClocks: new Map() },
 		{
 			catalog: new Map(),
 			tradeBandits: new Map(),

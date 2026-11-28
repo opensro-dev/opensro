@@ -149,3 +149,17 @@ test("installed override animation hides ambient wrappers without restarting the
 	assert.equal( restored.gid, first.gid );
 	assert.equal( restored.deferredParticle.lodHidden, false );
 });
+
+test("a republished holder hides its wrappers by its clock entry's override", () => {
+	let next = -1;
+	const owner = createModelEmission( () => next-- ),
+		particles = [ { effectPath: "system/a.efp", root: true, bone: "", offset: [ 0, 0, 0 ] } ],
+		actor = Object.freeze( { gid: 1, model: "body", pose: { regionId: 257, x: 0, y: 0, z: 0, yaw: 0 }, scale: 1 } );
+	assert.equal( owner.step( [ { actor, particles } ], 0, () => true, 10 )[0].deferredParticle.lodHidden, false );
+	const clocks = new Map( [ [
+		actor,
+		{ time: 1, modelAnimation: { selected: { set: "default", state: 2, override: true } } }
+	] ] );
+	const hidden = owner.step( [ { actor, particles } ], 1, () => true, 10, () => 0, clocks )[0];
+	assert.equal( hidden.deferredParticle.lodHidden, true );
+});

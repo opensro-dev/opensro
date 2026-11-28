@@ -90,7 +90,7 @@ The fields this phase borrows from the shared presentation output owner.
 */
 type DockPreviewOutput = Pick<
 	PresentationOutput,
-	"previewReady" | "dockReady" | "displayed" | "failure" | "failureCause" | "cameraTarget"
+	"previewReady" | "dockReady" | "displayed" | "displayedClocks" | "failure" | "failureCause" | "cameraTarget"
 >;
 
 /*
@@ -371,6 +371,7 @@ export function createDockPreview( owners: DockPreviewOwners ) {
 					} );
 				}
 				output.displayed = new Map( actors.map( actor => [ actor.gid, actor ] ) );
+				output.displayedClocks = new Map();
 				actors.push(
 					...modelEmission.step( glowHolders, seconds, resources.ready, CHARACTER_ACTORS - actors.length )
 				);

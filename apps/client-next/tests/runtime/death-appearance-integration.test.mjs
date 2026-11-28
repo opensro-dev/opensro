@@ -187,6 +187,7 @@ test("actor-motion drops outgoing live-body locomotion and active installations 
 		health: undefined,
 		output: {
 			displayed,
+			displayedClocks: new Map(),
 			failure: null,
 			degradations: [],
 			degradedKeys: new Set(),
@@ -282,6 +283,7 @@ test("actor-motion drops outgoing live-body locomotion and active installations 
 			{
 				actionLayersByActor: new Map(),
 				active: new Set( [ entity.gid ] ),
+				clocks: new Map(),
 				animationDeltaMs: 16,
 				castByActor: new Map(),
 				drawnPoses: new Map(),
