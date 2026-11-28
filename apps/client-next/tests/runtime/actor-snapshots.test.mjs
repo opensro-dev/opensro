@@ -434,3 +434,40 @@ test("rows past the actor cap are never admitted, and a row the cap pushes out i
 	owner.update( gids( 100, 110 ) );
 	assert.deepEqual( keys(), range( 100, 110 ) );
 });
+
+test("a frozen actor republished with a clock entry takes the entry's clocks, as the full copy does", () => {
+	const reused = createActorSnapshots(), full = createActorSnapshots( false );
+	const shape = Object.freeze( {
+		...actor( 4, 1 ),
+		layers: [ { clip: "walk", time: 1, loop: true, weight: 1, lane: "timed" } ]
+	} );
+	for ( const owner of [ reused, full ] ) owner.update( [ shape ] );
+	const entries = new Map( [ [ shape, {
+		time: 2.5,
+		layers: [ { clip: "walk", time: 3, loop: true, weight: .5, lane: "timed" } ]
+	} ] ] );
+	const rows = reused.update( [ shape ], entries ), copied = full.update( [ shape ], entries );
+	assert.equal( rows[0].time, 2.5 );
+	assert.equal( rows[0].layers[0].time, 3 );
+	assert.equal( rows[0].layers[0].weight, .5 );
+	assert.deepEqual( json( rows ), json( copied ), "the full copy reads the same entry" );
+	assert.equal( reused.stats().clockCopies, 1, "the republished actor copied only its clocks" );
+	// An actor with no entry carries its own clocks.
+	assert.equal( reused.update( [ shape ] )[0].time, shape.time );
+});
+
+test("an invalid clock in an entry holds and reports as a published one does", () => {
+	const owner = createActorSnapshots(), shape = Object.freeze( actor( 7, 20 ) );
+	assert.equal( owner.update( [ shape ] )[0].time, 2 );
+	assert.equal( owner.update( [ shape ], new Map( [ [ shape, { time: NaN } ] ] ) )[0].time, 2 );
+	assert.match( owner.takeDegradations()[0].message, /gid=7 model=m2 clip=run time=NaN held=2/ );
+});
+
+test("an entry for an actor that is not the row's last source does not skip its comparison", () => {
+	const owner = createActorSnapshots(), shape = Object.freeze( actor( 5, 2 ) );
+	owner.update( [ shape ] );
+	const moved = Object.freeze( { ...shape, pose: { ...shape.pose, x: 40 } } );
+	const row = owner.update( [ moved ], new Map( [ [ moved, { time: 9 } ] ] ) )[0];
+	assert.equal( row.pose.x, 40, "a new actor object is compared and copied" );
+	assert.equal( row.time, 9 );
+});

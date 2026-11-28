@@ -92,7 +92,7 @@ import {
 	prepareViewFrustum,
 	visibleFrustumSphere
 } from "@/engine/foundation/rendering/world-math";
-import type { CharacterActor, CharacterModel, CharacterNode } from "@/engine/contracts/character";
+import type { ActorClocks, CharacterActor, CharacterModel, CharacterNode } from "@/engine/contracts/character";
 import type { DungeonBlockLight } from "@/engine/contracts/scene";
 import { dungeonPointLight } from "@/engine/foundation/rendering/dungeon-lights";
 import type { GeometryCommands, GeometryDraw, ImageCommands, ImageDraw } from "../internal/gpu-contract";
@@ -3914,12 +3914,16 @@ the next full prepare pass, so this may run between frames.
 		Publish the frame actor lists used by poses, picking and rendering.
 		================
 		*/
-		actors( value: readonly CharacterActor[], portraitActors: readonly CharacterActor[] = [] ) {
+		actors(
+			value: readonly CharacterActor[],
+			portraitActors: readonly CharacterActor[] = [],
+			clocks?: ActorClocks
+		) {
 			const portraitRevision = portraitSnapshots.modelRevision();
-			portraits = portraitSnapshots.update( portraitActors );
+			portraits = portraitSnapshots.update( portraitActors, clocks );
 			if ( portraitSnapshots.modelRevision() !== portraitRevision ) residencyDirty = true;
 			const revision = snapshots.modelRevision();
-			actors = snapshots.update( value );
+			actors = snapshots.update( value, clocks );
 			requestedAssemblies.clear();
 			for ( const gid of particleSnapshots.keys() ) {
 				if ( !snapshots.index.has( gid ) ) particleSnapshots.delete( gid );
