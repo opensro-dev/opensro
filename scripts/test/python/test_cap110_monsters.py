@@ -4,6 +4,7 @@ test_cap110_monsters.py - reference identity and optional equipment boundaries.
 ===========================================================================
 """
 import script_paths  # noqa: F401  (puts scripts/ and its build folders on sys.path, #3410)
+import later_tables
 import later_fixtures  # noqa: E402
 import copy
 import json
@@ -901,6 +902,10 @@ class Cap110MonstersTest(unittest.TestCase):
 			population = json.loads((text_root / monsters.POPULATION_FILE).read_text(encoding="utf-8"))
 			self.assertEqual([(r["Codename"], r["RegionID"], r["X"], r["Z"]) for r in population["Rows"]],
 				[("MOB_SD_FIELD", 19001, 10.5, 20.25), ("MOB_SD_FIELD", 19001, 11.5, 21.25)])
+			# Its shards are listed in the tree's index, the view every later
+			# layer's standing read follows (#4843).
+			self.assertIn(monsters.CHARACTER_SHARD, later_tables.Archive.tree(text_root).files("characterdata.txt"))
+			self.assertIn(monsters.SKILL_SHARD, later_tables.Archive.tree(text_root).files("skilldata.txt"))
 			shard = (text_root / monsters.CHARACTER_SHARD).read_bytes().decode("utf-16")
 			self.assertIn("MOB_SD_FIELD", shard)
 			self.assertNotIn("MOB_SD_LOW", shard)

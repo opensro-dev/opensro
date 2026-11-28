@@ -250,9 +250,8 @@ def reap_monsters(spec, output, prior):
 		write_atomically(text_path, cap110.encode_rows(cap110.drop_symboled_rows(characters.translation_rows(text_path.read_bytes()), set(prior.get("nameSymbols", [])))))
 	for name in (spec.character_shard, spec.skill_shard) + tuple(filename for _, filename in spec.population_files):
 		(text_root / name).unlink(missing_ok=True)
-	manifest = text_root / "skilldata.txt"
-	if manifest.exists():
-		write_atomically(manifest, cap110.encode_rows([r for r in tables.table_rows(manifest.read_bytes()) if r[0].lower() != spec.skill_shard]))
+	cap110.unlist_shard(text_root, "characterdata.txt", spec.character_shard)
+	cap110.unlist_shard(text_root, "skilldata.txt", spec.skill_shard)
 	(output / spec.marker).unlink(missing_ok=True)
 
 
@@ -406,9 +405,8 @@ def stage_kinds(label, read, refs, text_root, prior, character_shard, skill_shar
 	# rebuild should write the same bytes.
 	write_atomically(text_root / character_shard, cap110.encode_rows(sorted(refs.values(), key=lambda row: int(row[1]))))
 	write_atomically(text_root / skill_shard, cap110.encode_rows(added))
-	manifest = tables.table_rows((text_root / "skilldata.txt").read_bytes())
-	manifest = [r for r in manifest if r[0].lower() != skill_shard] + [[skill_shard]]
-	write_atomically(text_root / "skilldata.txt", cap110.encode_rows(manifest))
+	cap110.list_shard(text_root, "characterdata.txt", character_shard)
+	cap110.list_shard(text_root, "skilldata.txt", skill_shard)
 	base_text = (text_root / "textdataname.txt").read_bytes()
 	known = {r[1] for r in characters.translation_rows(base_text) if len(r) > 1}
 	wanted = {r[5] for r in refs.values()} - known
