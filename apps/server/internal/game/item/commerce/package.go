@@ -14,6 +14,7 @@ import (
 	"fmt"
 	"math"
 	"opensro.online/server/internal/game/enterworld"
+	"opensro.online/server/internal/game/item/inventory"
 	"opensro.online/server/internal/game/item/wire"
 	"strconv"
 )
@@ -169,6 +170,23 @@ func packageGender(contents []Content) string {
 
 /*
 ================
+packageCount
+
+How many of its one item a package delivers per purchase, by the grant's
+own rule (GrantPackage): a stackable expendable's scrap Data is the
+units one package hands over. 0 for a single, a non-stackable item or a
+bundle of several items, whose title needs no count.
+================
+*/
+func packageCount(contents []Content) uint16 {
+	if len(contents) != 1 || !inventory.IsEtcStackableTypeFlags(contents[0].Ref.TypeFlags()) || contents[0].Data <= 1 {
+		return 0
+	}
+	return uint16(contents[0].Data)
+}
+
+/*
+================
 Hydrate
 
 Finish the catalogue before publishing it. A missing item definition must not
@@ -184,6 +202,7 @@ func (catalog *MallCatalog) Hydrate(refs enterworld.ItemRefSource) error {
 		}
 		offer.Contents = contents
 		offer.Gender = packageGender(contents)
+		offer.Count = packageCount(contents)
 		offer.PurchaseLimit = 5
 		if len(contents) == 1 && wire.IsEtcBand(contents[0].Ref.TypeFlags()) && contents[0].Data == 0 {
 			offer.PurchaseLimit = contents[0].Stack

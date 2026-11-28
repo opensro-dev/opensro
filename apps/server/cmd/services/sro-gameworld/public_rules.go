@@ -213,6 +213,7 @@ func publicRules(items *action.Runtime) publicstats.RulesResponse {
 	storagePages, _ := storagePagesFromEnv()
 	mallGoods, _ := commerce.MallExtraGoodsFromEnv()
 	mallCategoriesOn, _ := commerce.MallCategoriesFromEnv()
+	mallP2WScrollsOff, _ := commerce.MallP2WScrollsOffFromEnv()
 	rideFactor, rideOn, _ := enterworld.MallRideSpeedFromEnv()
 	flagWar, _ := action.FlagWarSettingsFromEnv()
 	settings := tunables.Current()
@@ -529,6 +530,10 @@ func publicRules(items *action.Runtime) publicstats.RulesResponse {
 				Native: "The Item Mall's categories are the v1.150 shops: Expendables, Avatar, Pet, Premium and Alchemy.",
 				Now:    "A HOT shop joins them with Halloween exclusives and recommended goods, Premium and Alchemy gain tabs of their own, the Destruction Rondo is listed for silk, and Premium's Gears tab sells the later mall's leveled magic stones.",
 				Why:    "Owner ask (#3257): the later mall's shape; clients without the Experimental categories row keep the shipped mall."},
+			{Flag: commerce.EnvMallP2WScrollsOff, On: mallP2WScrollsOff,
+				Native: "The Item Mall sells damage increase and absorption scrolls, resurrection scrolls and the instant return scroll.",
+				Now:    "The Item Mall no longer sells them. Scrolls a player already owns still work; the EXP boosters and the reverse return scroll are still sold.",
+				Why:    "Owner decision (2026-11-28): silk must not buy a combat edge."},
 			{Flag: action.EnvNameChangeScroll, On: action.NameChangeScrollFromEnv(),
 				Native: "A character's name never changes.",
 				Now:    "The Item Mall sells a name-change scroll for 500 silk; the new name applies at the next login, renames cool down for 30 days, and the old name stays reserved for 90 days.",
