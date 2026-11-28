@@ -578,9 +578,8 @@ def add_arabia(native, output, source=None, nests=None, closure=arabia_resource_
 		write_atomically(text_root / CHARACTER_SHARD,
 			monsters.encode_rows(sorted(all_refs.values(), key=lambda row: int(row[1]))))
 		write_atomically(text_root / SKILL_SHARD, monsters.encode_rows(added))
-		manifest = tables.table_rows((text_root / "skilldata.txt").read_bytes())
-		manifest = [r for r in manifest if r[0].lower() != SKILL_SHARD] + [[SKILL_SHARD]]
-		write_atomically(text_root / "skilldata.txt", monsters.encode_rows(manifest))
+		monsters.list_shard(text_root, "characterdata.txt", CHARACTER_SHARD)
+		monsters.list_shard(text_root, "skilldata.txt", SKILL_SHARD)
 
 		# The NPC pass: standings and talk rows, on the Alexandria
 		# rules (a codename the native tables already have keeps its

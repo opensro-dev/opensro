@@ -266,6 +266,10 @@ class GodImportTest(unittest.TestCase):
 			self.assertEqual(population["Version"], 2)
 			self.assertEqual([row["WorldID"] for row in population["Rows"]], [63, 69, 77])
 			self.assertEqual(population["Rows"][2]["SpawnType"], 1)
+			# Its shards are listed in the tree's index, the view every later
+			# layer's standing read follows (#4843).
+			self.assertIn(god.CHARACTER_SHARD, later_tables.Archive.tree(text_root).files("characterdata.txt"))
+			self.assertIn(god.SKILL_SHARD, later_tables.Archive.tree(text_root).files("skilldata.txt"))
 			shard = (text_root / god.CHARACTER_SHARD).read_bytes().decode("utf-16")
 			for code in ("MOB_GOD_TOGUI_KIND", "MOB_GOD_FLAME_KIND", "MOB_GOD_GHOST_KIND"):
 				self.assertIn(code, shard)
@@ -299,6 +303,9 @@ class GodImportTest(unittest.TestCase):
 					god.add_monsters(v1696, native, output, source)
 				with mock.patch.dict(os.environ, OFF):
 					self.assertEqual(god.add_monsters(v1696, native, output, source), {"enabled": False})
+			# Switched off, the index lines go with the shards.
+			self.assertNotIn(god.CHARACTER_SHARD, later_tables.Archive.tree(text_root).files("characterdata.txt"))
+			self.assertNotIn(god.SKILL_SHARD, later_tables.Archive.tree(text_root).files("skilldata.txt"))
 			for name in (god.CHARACTER_SHARD, god.SKILL_SHARD, god.POPULATION_FILE):
 				self.assertFalse((text_root / name).exists())
 			self.assertFalse((output / god.MARKER).exists())

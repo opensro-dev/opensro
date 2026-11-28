@@ -654,6 +654,10 @@ class ArabiaImportTest(unittest.TestCase):
 			self.assertEqual(summary["sectors"],
 				sorted([region & 0xFF, (region >> 8) & 0xFF] for region, _f in REGIONS if region != 31734))
 
+			# Its shards are listed in the tree's index, the view every later
+			# layer's standing read follows (#4843).
+			self.assertIn(arabia.CHARACTER_SHARD, later_tables.Archive.tree(text).files("characterdata.txt"))
+			self.assertIn(arabia.SKILL_SHARD, later_tables.Archive.tree(text).files("skilldata.txt"))
 			shard = read_rows(text / arabia.CHARACTER_SHARD)
 			self.assertEqual([row[2] for row in shard],
 				["MOB_ARABIA_UNIQUE", "MOB_AR_TEST", "NPC_AR_TEST", "NPC_NATIVE_NAMED"])
@@ -756,6 +760,9 @@ class ArabiaImportTest(unittest.TestCase):
 			with mock.patch.dict(os.environ, {arabia.FLAG: "off"}):
 				off = arabia.add_arabia(native, output, source, nests, closure)
 			self.assertEqual(off, {"enabled": False})
+			# Switched off, the index lines go with the shards.
+			self.assertNotIn(arabia.CHARACTER_SHARD, later_tables.Archive.tree(text).files("characterdata.txt"))
+			self.assertNotIn(arabia.SKILL_SHARD, later_tables.Archive.tree(text).files("skilldata.txt"))
 			for name in (arabia.CHARACTER_SHARD, arabia.SKILL_SHARD, arabia.POPULATION_FILE):
 				self.assertFalse((text / name).exists(), name)
 			self.assertFalse((output / arabia.MARKER).exists())

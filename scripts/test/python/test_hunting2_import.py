@@ -9,6 +9,7 @@ exactly what the marker enrolled.
 ===========================================================================
 """
 import script_paths  # noqa: F401  (puts scripts/ and its build folders on sys.path, #3410)
+import later_tables
 import later_fixtures  # noqa: E402
 import hashlib
 import json
@@ -188,6 +189,10 @@ class Hunting2ImportTest(unittest.TestCase):
 			self.assertTrue(all(row["MaxCount"] == 1 and row["Radius"] == hunting2.cap110.CLIENT_NEST_RADIUS and
 				row["GenerateRadius"] == hunting2.cap110.CLIENT_NEST_GENERATE_RADIUS for row in population["Rows"]))
 			self.assertEqual(population["Rows"][0]["Controls"]["SightRange"], 100)
+			# Its shards are listed in the tree's index, the view every later
+			# layer's standing read follows (#4843).
+			self.assertIn(hunting2.CHARACTER_SHARD, later_tables.Archive.tree(text_root).files("characterdata.txt"))
+			self.assertIn(hunting2.SKILL_SHARD, later_tables.Archive.tree(text_root).files("skilldata.txt"))
 			shard = (text_root / hunting2.CHARACTER_SHARD).read_bytes().decode("utf-16")
 			self.assertIn("MOB_TQ_INSIDE", shard)
 			self.assertIn("MOB_SD_RESTAGED", shard)
@@ -208,6 +213,9 @@ class Hunting2ImportTest(unittest.TestCase):
 					hunting2.add_monsters(v1696, native, output)
 				with mock.patch.dict(os.environ, {"SRO_HUNTING2": ""}):
 					self.assertEqual(hunting2.add_monsters(v1696, native, output), {"enabled": False})
+			# Switched off, the index lines go with the shards.
+			self.assertNotIn(hunting2.CHARACTER_SHARD, later_tables.Archive.tree(text_root).files("characterdata.txt"))
+			self.assertNotIn(hunting2.SKILL_SHARD, later_tables.Archive.tree(text_root).files("skilldata.txt"))
 			for name in (hunting2.CHARACTER_SHARD, hunting2.SKILL_SHARD, hunting2.FIELD_FILE):
 				self.assertFalse((text_root / name).exists())
 			self.assertFalse((output / hunting2.MARKER).exists())
