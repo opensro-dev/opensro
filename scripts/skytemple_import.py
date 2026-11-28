@@ -51,7 +51,6 @@ from the native tables on every run.
 ===========================================================================
 """
 import argparse
-import base64
 import json
 import mmap
 import os
@@ -120,20 +119,6 @@ NVM_SIGNATURE_BYTES = 12
 NVM_OBJECT_BYTES = 32
 NVM_LINK_COUNT_OFFSET = 30
 NVM_LINK_EDGE_BYTES = 6
-
-PARSED_EXTENSIONS = (".bsr", ".bmt", ".efp", ".cpd")
-ARCHIVE_FOLDERS = {"Data": "Data_extracted", "Particles": "Particles_extracted"}
-# A modifier reference the later BSRs name but the supplied archives do
-# not hold is a demand-load miss at runtime, as it is in the retail
-# client: the full client keeps sounds in an archive this input subset
-# lacks, some Jupiter-era sound paths name a layout the archive no
-# longer uses, and native monsters themselves name an appear effect
-# (monster/system_appear.efp) that neither client ships. The cue or
-# effect stays silent and the miss is recorded, never fatal. The model
-# chain - meshes, materials, textures, skeletons, animations - stays
-# fatal: a missing one is a broken model, not a silent cue.
-SOUND_EXTENSIONS = (".wav", ".mp3", ".ogg")
-EFFECT_EXTENSIONS = (".efp",)
 
 
 # ================
@@ -485,93 +470,27 @@ def later_object_texts(read):
 # ================
 # copy_resource_closure
 #
-# Copy the closure of the seed resources (object and character models)
-# from the later archives into the variant's extracted trees, walking
-# the dependency audit the cap-110 item import uses. archives maps
-# "Data" / "Particles" to (mmap, index). The walk declares the audit's
-# explicit postures: monster sounds are Data files and walk with the
-# models, and every particle set's effects walk, not only the equipment
-# selector kind. A file the tree already holds (native or an earlier
-# import) is parsed but never rewritten; every file written is returned
-# as a path relative to the output root. With tolerate_gaps (the Arabia
-# import), a file the archives name but do not hold, and a file the
-# audit cannot parse, are recorded in the result instead of stopping
-# the walk: later-client content ships with such holes, and inventing
-# the missing bytes is not an option.
+# The Sky Temple family's walk over the later archives (archives maps
+# "Data" / "Particles" to (mmap, index)), through the one walk
+# (cap110_item_import.walk_closure): monster sounds and every particle
+# set walk with the models, a file the tree already holds (native or an
+# earlier import) is parsed but never rewritten, and a missing sound or
+# effect program is recorded. With tolerate_gaps (Arabia and the later
+# layers) every other miss and every unparsable file is recorded too.
+# A seed is a Data path, or an (archive, path) pair. Returns the written
+# files (relative to the output root) and the recorded misses.
 # ================
 def copy_resource_closure(seeds, archives, native, output, tolerate_gaps=False):
-	from cap110_item_import import normalized_path, resource_dependencies, tolerant_dependencies
-	# A seed is a Data path, or an (archive, path) pair for another of the
-	# walk's archives (a skill stage's effect program in Particles).
+	from cap110_item_import import (CLOSURE_GAPS_ALL, CLOSURE_GAPS_MEDIA, CLOSURE_KEEP, WALK_EVERYTHING,
+		closure_policy, normalized_path, walk_closure)
+	# Normalized before the walk sorts them, as this walk always did, so
+	# its files keep their order.
 	pending = {(seed[0], normalized_path(seed[1])) if isinstance(seed, tuple) else ("Data", normalized_path(seed))
 		for seed in seeds}
-	seen, written, missing_sounds, missing_effects = set(), [], [], []
-	missing_files, unparsed_files = [], []
-	while pending:
-		batch, requests = sorted(pending), []
-		pending = set()
-		for archive_name, name in batch:
-			if (archive_name, name) in seen:
-				continue
-			seen.add((archive_name, name))
-			folder = ARCHIVE_FOLDERS[archive_name]
-			data, index = archives[archive_name]
-			# Some BSRs author sounds from the client's sound root
-			# (sound\prim\snd\...); the archive stores the same file
-			# without that root, which is the name it is copied under.
-			candidates = [name]
-			if name.startswith("sound/"):
-				candidates.append(name[len("sound/"):])
-			name = next((candidate for candidate in candidates
-				if (Path(native) / folder / candidate).is_file()
-				or (Path(output) / folder / candidate).is_file() or candidate in index), name)
-			local = Path(native) / folder / name
-			existing = Path(output) / folder / name
-			entry = index.get(name)
-			if local.is_file():
-				raw, origin = local.read_bytes(), True
-			elif existing.is_file():
-				raw, origin = existing.read_bytes(), False
-			elif entry is not None:
-				raw, origin = sro_pk2.payload(data, entry), False
-				write_atomically(safe_target(Path(output) / folder, name), raw)
-				written.append(folder + "/" + name)
-			elif name.endswith(SOUND_EXTENSIONS):
-				missing_sounds.append(name)
-				continue
-			elif name.endswith(EFFECT_EXTENSIONS):
-				missing_effects.append(name)
-				continue
-			elif tolerate_gaps:
-				missing_files.append(f"{archive_name}:{name}")
-				continue
-			else:
-				raise ValueError(f"missing {archive_name} resource: {name}")
-			if name.endswith(PARSED_EXTENSIONS):
-				requests.append({"path": name, "bytes": base64.b64encode(raw).decode("ascii"),
-					"native": origin, "sounds": "data", "particles": "all"})
-		if requests:
-			if not tolerate_gaps:
-				dependencies = resource_dependencies(requests)
-			else:
-				dependencies = []
-				for request, result in zip(requests, tolerant_dependencies(requests)):
-					if isinstance(result, ValueError):
-						unparsed_files.append(request["path"])
-						result = []
-					dependencies.append(result)
-			for names in dependencies:
-				for dep in names:
-					if isinstance(dep, dict):
-						archive_name = dep.get("archive") or "Data"
-						if archive_name not in ARCHIVE_FOLDERS:
-							raise ValueError(f"resource closure left the later archives: {dep}")
-						pending.add((archive_name, normalized_path(dep["path"])))
-					else:
-						pending.add(("Data", normalized_path(dep)))
-	return {"files": written, "missingSounds": sorted(missing_sounds),
-		"missingEffects": sorted(missing_effects), "missingFiles": sorted(missing_files),
-		"unparsedFiles": sorted(unparsed_files)}
+	policy = closure_policy(WALK_EVERYTHING, CLOSURE_KEEP, CLOSURE_GAPS_ALL if tolerate_gaps else CLOSURE_GAPS_MEDIA)
+	result = walk_closure(pending, native, output, archives, policy)
+	del result["records"]
+	return result
 
 
 #============================================================================
