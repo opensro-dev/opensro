@@ -46,7 +46,7 @@ function catalogResolves( path, catalog ) {
 	// A variant build publishes an added effect with a closure gap as unavailable.
 	if ( catalog.effects[path] || catalog.closureGaps?.effects?.[path] ) return true;
 	const basename = path.split( "/" ).at( -1 ) ?? path;
-	return catalog.effects[basename] !== undefined &&
+	return (catalog.effects[basename] !== undefined || catalog.closureGaps?.effects?.[basename] !== undefined) &&
 		catalog.ambiguousEffectAliases?.[basename] === undefined;
 }
 

@@ -76,6 +76,8 @@ const skillEffectPath = path.join(
 	"skilleffect.txt"
 );
 const clientBinaryPath = path.join( gameRoot, "SRO_Client.exe" );
+// The effect meshes and textures no client archive ships (splitEffectClosureGaps).
+export const EFFECT_CLOSURE_GAP_EVIDENCE = "scripts/build/reference/effect-closure-gaps.json";
 const particleImageRoot = path.join( imageSourceRoot, "Particles_extracted" );
 const publicParticleImageRoot = path.join(
 	publicRoot,
@@ -576,22 +578,33 @@ published, so one run names every hole instead of the first. A native
 build keeps the full closure mandatory: any hole is fatal. An expanded
 (variant) build adds later-client effects, and those clients ship effects
 naming files no archive holds (v1.696 skill_ar_cursefire_at6_shot.efp names
-textures/beam_r.ddj; neither v1.150, VSRO 1.188 nor v1.696 has it). Such an
-effect, whose BMS or DDJ source is absent from the game root, is returned in
-gapEffects with its missing files; the client draws nothing for it, as it
-does for an archive-absent EFP. A DDJ that is present but has no converted
-PNG is a conversion failure and stays fatal in either build.
+textures/beam_r.ddj; neither v1.150, VSRO 1.188 nor v1.696 has it).
+
+Only a file on neverShipped (scripts/build/reference/effect-closure-gaps.json,
+each file checked against the three clients' pinned Particles.pk2) may be
+absent. An effect whose every missing file is on that list is returned in
+gapEffects; the client draws nothing for it, as it does for an
+archive-absent EFP. Any other missing file means the extraction is
+incomplete, since an archive ships it, and is fatal in either build. So
+is a DDJ present without its converted PNG, and an ambiguous mesh name.
 ================
 */
 export function splitEffectClosureGaps(
-	{ effectMeshes, effectTextures, hasMesh, hasTexture, hasTextureSource, expanded }
+	{ effectMeshes, effectTextures, hasMesh, hasTexture, hasTextureSource, neverShipped, expanded }
 ) {
 	const gapEffects = {};
 	const fatal = [];
 	for ( const key of [ ...effectMeshes.keys() ].sort( compareText ) ) {
 		const absent = [];
 		for ( const mesh of [ ...effectMeshes.get( key ) ].sort( compareText ) ) {
-			if ( !hasMesh( mesh ) ) absent.push( mesh );
+			let present;
+			try {
+				present = hasMesh( mesh );
+			} catch ( error ) {
+				fatal.push( `${key}: ${error.message}` );
+				continue;
+			}
+			if ( !present ) absent.push( mesh );
 		}
 		for ( const texture of [ ...(effectTextures.get( key ) ?? []) ].sort( compareText ) ) {
 			if ( hasTexture( texture ) ) continue;
@@ -602,10 +615,38 @@ export function splitEffectClosureGaps(
 			absent.push( texture.replace( /\.png$/, ".ddj" ) );
 		}
 		if ( absent.length === 0 ) continue;
-		if ( expanded ) gapEffects[key] = absent;
-		else fatal.push( `${key}: missing ${absent.join( ", " )}` );
+		const shipped = absent.filter( ( name ) => !neverShipped.has( name ) );
+		if ( expanded && shipped.length === 0 ) {
+			gapEffects[key] = absent;
+			continue;
+		}
+		for ( const name of expanded ? shipped : absent ) {
+			fatal.push(
+				neverShipped.has( name ) ?
+					`${key}: ${name} is missing (no archive ships it; only a variant build may publish its effect as unavailable)` :
+					`${key}: ${name} is missing from the extracted tree, and an archive ships it`
+			);
+		}
 	}
 	return { gapEffects, fatal };
+}
+
+/*
+================
+effectClosureRerunHint
+
+What a contributor reruns when the extracted tree lacks a file an archive
+ships: the native extraction, or the variant root (whose later effects
+come from the VSRO and v1.696 clients).
+================
+*/
+export function effectClosureRerunHint( expanded, root ) {
+	if ( !expanded ) {
+		return "Rerun `pnpm assets prepare` against the retail v1.150 client, then this build.";
+	}
+	return "Rebuild the variant root with both later clients set, then this build:\n" +
+		`  SRO_ALEXANDRIA=1 SRO_VSRO_ROOT=<VSRO 1.188 client> SRO_V1696_ROOT=<v1.696 client> ` +
+		`py -3 scripts/build_alexandria_variant.py --variant-root ${root}`;
 }
 
 /*
@@ -744,18 +785,29 @@ export async function buildEffectProgramsAsset() {
 	}
 
 	const ddjIndex = fileIndex( particlesRoot, ".ddj" );
+	// Committed with the checkout, like the archive evidence above.
+	const gapEvidence = JSON.parse(
+		fs.readFileSync( path.join( rebuildRoot, EFFECT_CLOSURE_GAP_EVIDENCE ), "utf8" )
+	);
+	if ( gapEvidence.format !== "sro-effect-closure-gaps-v1" ) {
+		throw Error( "Effect closure-gap evidence has an unknown format" );
+	}
 	const { gapEffects, fatal } = splitEffectClosureGaps( {
 		effectMeshes,
 		effectTextures,
 		hasMesh: ( name ) => resolveIndexedFile( bmsIndex, name, "BMS" ) !== null,
 		hasTexture: ( name ) => pngIndex.has( name ),
 		hasTextureSource: ( name ) => ddjIndex.has( name.replace( /\.png$/, ".ddj" ) ),
+		neverShipped: new Set( Object.keys( gapEvidence.files ) ),
 		expanded: EXPANDED_BUILD
 	} );
 	if ( fatal.length > 0 ) {
 		throw new Error(
-			"[effect-programs] runtime-reachable EFP mesh/texture closure is incomplete:\n" +
-				fatal.map( ( line ) => `  - ${line}` ).join( "\n" )
+			`[effect-programs] runtime-reachable EFP mesh/texture closure is incomplete in ${particlesRoot}:\n` +
+				fatal.map( ( line ) => `  - ${line}` ).join( "\n" ) + "\n" +
+				`Files no archive ships are listed in ${EFFECT_CLOSURE_GAP_EVIDENCE}; the rest come from the ` +
+				"game root's Particles.pk2 (VSRO 1.188 and v1.696 for a variant's added effects).\n" +
+				effectClosureRerunHint( EXPANDED_BUILD, gameRoot )
 		);
 	}
 	for ( const key of Object.keys( gapEffects ) ) {
@@ -769,8 +821,9 @@ export async function buildEffectProgramsAsset() {
 	for ( const own of effectTextures.values() ) for ( const texture of own ) textureNames.add( texture );
 	if ( Object.keys( gapEffects ).length > 0 ) {
 		console.warn(
-			`[effect-programs] ${Object.keys( gapEffects ).length} added effect(s) name files their ` +
-				"source archives never shipped; published as unavailable (closureGaps in the index)"
+			`[effect-programs] ${Object.keys( gapEffects ).length} added effect(s) name files no archive ` +
+				`ships (${EFFECT_CLOSURE_GAP_EVIDENCE}); published as unavailable: ` +
+				Object.keys( gapEffects ).join( ", " )
 		);
 	}
 
@@ -856,7 +909,9 @@ export async function buildEffectProgramsAsset() {
 		ambiguousEffectAliases,
 		missingEffects,
 		nativeUnavailable: { ...unavailable, effects: nativeUnavailableEffects },
-		closureGaps: { effects: gapEffects },
+		// Only a variant with gaps writes the field: a native index keeps its
+		// bytes, so its pack and the portrait fingerprint do not move.
+		...(Object.keys( gapEffects ).length > 0 ? { closureGaps: { effects: gapEffects } } : {}),
 		meshes: Object.keys( meshes ),
 		textures
 	} );

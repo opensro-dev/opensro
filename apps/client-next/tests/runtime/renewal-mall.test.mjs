@@ -230,12 +230,17 @@ test("the gender filter keeps the chosen sex and every ungendered good (#4480)",
 		read.offers.map( offer => offer.name ),
 		[ "Knight (M)", "Knight (F)", "Scroll", "Saint (M)", "Saint (F)" ]
 	);
+	// All keeps the pair rows: Knight, then the scroll alone, then Saint.
+	assert.deepEqual( read.grid, [ 0, 1, 2, -1, 3, 4 ] );
 	mall.setGender( "male" );
 	read = mall.read( catalogue );
 	assert.deepEqual( read.offers.map( offer => offer.name ), [ "Knight (M)", "Scroll", "Saint (M)" ] );
+	// One sex flows two to a row: no empty partner cell (owner, 2026-11-28).
+	assert.deepEqual( read.grid, [ 0, 1, 2 ] );
 	mall.setGender( "female" );
 	read = mall.read( catalogue );
 	assert.deepEqual( read.offers.map( offer => offer.name ), [ "Knight (F)", "Scroll", "Saint (F)" ] );
+	assert.deepEqual( read.grid, [ 0, 1, 2 ] );
 	// A word that is not a sex changes nothing.
 	mall.setGender( "bogus" );
 	assert.equal( mall.read( catalogue ).gender, "female" );
@@ -685,4 +690,11 @@ test("an empty main page says so, and the admission lists every picture and fram
 	assert.ok( pictures.includes( LATER + "mall/mall_back_wnd.png" ) );
 	assert.ok( pictures.includes( LATER + "mall/mall_item_tab_off.png" ) );
 	assert.ok( pictures.every( path => path.startsWith( LATER ) ) );
+});
+
+test("one sex chosen flows its offers two to a row, with no empty partner cells", () => {
+	// The Male filter listed every outfit alone on its row: one column.
+	const males = named( [ "Knight (M)", "Fairy (M)", "Pirate (M)", "Devil (M)", "Scarf" ] );
+	assert.deepEqual( renewalGoodsCells( males, {}, false ), [ 0, 1, 2, 3, 4 ] );
+	assert.deepEqual( renewalGoodsCells( males ), [ 0, -1, 1, -1, 2, -1, 3, -1, 4, -1 ], "All keeps the pair rows" );
 });

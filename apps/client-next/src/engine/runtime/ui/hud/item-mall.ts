@@ -597,7 +597,8 @@ export function createItemMall() {
 				offers.filter( offer => offer.gender === undefined || offer.gender === gender );
 			// The renewal grid pages by its cells (gendered pairs keep their
 			// rows, so a cell may stand empty); the classic window by offers.
-			const cells = renewal ? renewalGoodsCells( listed, names ) : null;
+			// One sex chosen lists no pairs, so its offers flow two to a row.
+			const cells = renewal ? renewalGoodsCells( listed, names, gender === "all" ) : null;
 			const total = cells ? cells.length : listed.length;
 			const currentPage = Math.min( page, Math.max( 0, Math.ceil( total / pageSize ) - 1 ) );
 			const pageCells = cells?.slice( currentPage * pageSize, (currentPage + 1) * pageSize );

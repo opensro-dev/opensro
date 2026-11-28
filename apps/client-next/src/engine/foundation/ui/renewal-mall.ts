@@ -494,12 +494,18 @@ An offer's name is its text key. The sex is the key's _M_ / _W_ segment
 (SN_ITEM_MALL_AVATAR_M_DEVIL_WING_DRESS); a key without one falls back to
 its English name's "(M)" / "(F)" ending, read through names, the client's
 text table.
+
+paired false (the gender filter on one sex, #4480) flows every offer two
+to a row in list order: no partner can be listed, so pairing would leave
+every right cell empty and show one column (owner, 2026-11-28).
 ================
 */
 export function renewalGoodsCells(
 	offers: readonly { readonly name: string; }[],
-	names: Readonly<Record<string, string>> = {}
+	names: Readonly<Record<string, string>> = {},
+	paired = true
 ): number[] {
+	if ( !paired ) return offers.map( ( _, index ) => index );
 	const keySex = /_(M|W)(?=_|$)/;
 	const nameSex = /\s*\((M|F)\)\s*$/;
 	/*
