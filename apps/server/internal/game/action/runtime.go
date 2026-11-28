@@ -390,16 +390,20 @@ type Runtime struct {
 	fortressRosterMu sync.Mutex
 	fortressRoster   fortressRosterClock
 
-	// GachaCatalog is the strict v1.150 gachaitemset/gachanpcmap authority.
-	// The composition root installs it before Register admits 0x7338/0x7053.
+	// GachaCatalog is the strict gachaitemset/gachanpcmap authority: the
+	// v1.150 tables, or the v1.696 ones under EnvMagicPopV1696. The
+	// composition root installs it before Register admits 0x7338/0x7053.
 	GachaCatalog *gacha.Catalog
 	// GachaPoolV2 says the catalog carries the port-only prize pool
 	// (EnvGachaPoolV2); rolls are logged so the pool's supply is visible.
-	GachaPoolV2  bool
-	Alchemy      *alchemy.Catalog
-	AlchemyRoll  alchemy.Roll
-	compoundMu   sync.Mutex
-	compoundJobs map[compoundKey]compoundJob
+	GachaPoolV2 bool
+	// GachaLevelCap is the server level cap the v1.696 rows' column 16 is
+	// gated by (gacha.go).
+	GachaLevelCap int64
+	Alchemy       *alchemy.Catalog
+	AlchemyRoll   alchemy.Roll
+	compoundMu    sync.Mutex
+	compoundJobs  map[compoundKey]compoundJob
 	// compoundKeys is the advance pass's key scratch
 	// (alchemybatch.go): refilled under compoundMu on every tick step
 	// and consumed in line by the same pass, so a steady tick grows

@@ -466,9 +466,15 @@ var Settings = []Setting{
 	{Env: "SRO_MOONLIT_THIEF_SUIT", NomadVar: "moonlit_thief_suit", Default: "on"},
 	// Owner, 2026-10-14: no transport summon during the Bandit Den countdown.
 	{Env: "SRO_DEN_NO_TRANSPORT_SUMMON", NomadVar: "den_no_transport_summon", Default: "on"},
+	// Owner, 2026-11-27: the v1.696 Magic POP is the default machine
+	// (its tables, select window and published pool); "off" is the
+	// v1.150 machine. Server and browser: the pool rides the public
+	// references, not the catalogue.
+	{Env: "SRO_MAGIC_POP_V1696", NomadVar: "magic_pop_v1696", Default: "on"},
 	// Owner, 2026-10-20: Magic Pop prize pool v2 (port-only). Server
 	// only: the catalogue publishes no Magic Pop pool, so nothing it
 	// publishes changes; a pool export is its own change (#2542).
+	// Applies only while SRO_MAGIC_POP_V1696 is off.
 	{Env: "SRO_GACHA_POOL_V2", NomadVar: "gacha_pool_v2", Default: "on"},
 	// Owner, 2026-10-14: a trader's goods drop on rider death and field logout.
 	{Env: "SRO_TRADER_CARGO_DROP", NomadVar: "trader_cargo_drop", Default: "on"},

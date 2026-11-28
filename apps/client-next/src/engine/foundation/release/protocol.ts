@@ -83,9 +83,14 @@ checks) reads the same numbers the client ships.
 // amount a protocol-24 tab sends reaches those frames, and an older
 // partner keeps showing the last narrow amount, never more than the table
 // holds, so 22 and 23 stay served.
-export const RELEASE_PROTOCOL = 24;
+// Protocol 25 publishes the v1.696 Magic POP pool and category tree
+// (gachaPool, reference file contract 4): the server rolls that table's
+// entry ids 1..12, which a 24 tab shows as its hard-coded v1.150 prizes
+// (gacha-catalog.ts), so it would pay a prize other than the one it
+// shows. 24, 23 and 22 are refused.
+export const RELEASE_PROTOCOL = 25;
 // The public reference file's contract (releaseprotocol.ReferencesContract).
-export const REFERENCES_CONTRACT = 3;
+export const REFERENCES_CONTRACT = 4;
 export const RELEASE_PROTOCOL_HEADER = "X-OpenSRO-Protocol";
 // 426 Upgrade Required: the server speaks another release protocol.
 export const RELEASE_OUTDATED_STATUS = 426;

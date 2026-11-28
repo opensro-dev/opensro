@@ -253,6 +253,55 @@ func (c *Catalog) Option(name string, degree int) (Magic, bool) {
 
 /*
 ================
+OptionByTag
+
+The magicoption row with this tag at this degree: how a later gacha
+spec's M token names its option (the reference server's resolver finds the
+tag's group, then picks the degree row; see
+research/findings/magic-pop-biiv-server-v1188.md).
+================
+*/
+func (c *Catalog) OptionByTag(tag uint32, degree int) (Magic, bool) {
+	if c == nil {
+		return Magic{}, false
+	}
+	for _, m := range c.Magic {
+		if m.Tag == tag && m.Degree == degree {
+			return m, true
+		}
+	}
+	return Magic{}, false
+}
+
+/*
+================
+MagicValueBounds
+
+The lowest and highest value RollMagicValue can draw for the option, the
+range the v1.188 row loader holds a fixed gacha value to (see
+research/findings/magic-pop-biiv-server-v1188.md).
+================
+*/
+func MagicValueBounds(m Magic) (uint32, uint32, bool) {
+	var low, high uint32
+	found := false
+	for _, p := range m.Params {
+		for _, v := range []uint32{p >> 16, p & 65535} {
+			if v == 0 {
+				continue
+			}
+			if !found || v < low {
+				low = v
+			}
+			high = max(high, v)
+			found = true
+		}
+	}
+	return low, high, found
+}
+
+/*
+================
 Catalog.MagicLimit
 
 The most magic options an item may carry: its reference's MaxMagic,

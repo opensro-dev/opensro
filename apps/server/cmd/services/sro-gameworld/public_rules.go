@@ -171,11 +171,13 @@ func equipSwitchOn(env string) bool {
 ================
 publicRules
 
-Built once at boot: the switches are read from the environment at startup,
-so the list cannot change while the GameWorld runs.
+Built once at boot from the runtime it describes: the switches are read
+from the environment at startup, and the Magic POP entries from the state
+ConfigureGacha settled (a flag whose tables were absent serves the v1.150
+machine, so the page must say so).
 ================
 */
-func publicRules() publicstats.RulesResponse {
+func publicRules(items *action.Runtime) publicstats.RulesResponse {
 	silkRate, _ := action.BetaSilkFromEnv()
 	silkActiveOnly, _ := action.BetaSilkActiveOnlyFromEnv()
 	earnedTradable, _ := action.EarnedSilkTradableFromEnv()
@@ -194,6 +196,10 @@ func publicRules() publicstats.RulesResponse {
 	}
 	betaMasteryEarly, _ := enterworld.BetaMasteryEarlyFromEnv()
 	levelCap, _ := progression.LevelCapFromEnv()
+	// The Magic POP page reports what the machine serves, not just the
+	// switch: the flag is on while its tables are absent, and the v1.150
+	// machine and pool v2 are what ConfigureGacha settled.
+	gachaV1696, gachaPoolV2 := items.GachaRuleState()
 	pharaohGear, _ := monster.PharaohGearRateFromEnv()
 	alexandriaOn, _ := alexandria.EnabledFromEnv()
 	shopGoods, _ := commerce.ExtraGoodsFromEnv()
@@ -718,9 +724,13 @@ func publicRules() publicstats.RulesResponse {
 				Native: "A transport can be summoned while the Bandit Den Return Scroll counts down.",
 				Now:    "No transport can be summoned during that countdown.",
 				Why:    "Thieves left stolen goods on the ground and loaded them just before arriving; the original rule returns with one setting."},
-			{Flag: action.EnvGachaPoolV2, On: action.GachaPoolV2FromEnv(),
-				Native: "Magic Pop's six weapon prizes are the plain Lv76 weapons, and the losing pool carries no Hwan scroll.",
-				Now:    "The six weapons pay their Star (Seal of Star) step at 30 in 10000 each, and a losing ticket can draw a Hwan scroll at 300 in 10000.",
+			{Flag: action.EnvMagicPopV1696, On: gachaV1696,
+				Native: "The Magic Pop machine offers twelve fixed prizes on one page: six degree 7-8 Seal of Star weapons and six consumables.",
+				Now:    "The machine is the later client's Magic POP: a select window picks a class, type and degree, and its prize table pages through event Seal gear and more.",
+				Why:    "The owner chose the later client's Magic POP as the default; the original machine returns with one setting."},
+			{Flag: action.EnvGachaPoolV2, On: gachaPoolV2,
+				Native: "Magic Pop's six weapon prizes are the degree 7-8 Seal of Star weapons, and the losing pool carries no Hwan scroll.",
+				Now:    "The six weapons pay their degree-9 Star (Seal of Star) step at 30 in 10000 each, and a losing ticket can draw a Hwan scroll at 300 in 10000. Applies only while the v1.696 Magic POP is off.",
 				Why:    "Owner-approved for the beta so a ticket can pay a Star weapon; the retail pool returns with one setting."},
 			{Flag: action.EnvTraderCargoDrop, On: action.TraderCargoDropFromEnv(),
 				Native: "A trader killed while riding a transport, or logging out with one, takes the goods with it; only the transport's own death drops them.",

@@ -454,7 +454,7 @@ test("HTTP admission refuses old immutable reference schema and accepts versione
 	}
 	await assert.rejects( load(), /rebuild the server/ );
 	data = JSON.stringify( {
-		referencesVersion: 3,
+		referencesVersion: 4,
 		skillLifecycleVersion: 1,
 		refSkillSnapshot: refs,
 		refItemSnapshot: [],

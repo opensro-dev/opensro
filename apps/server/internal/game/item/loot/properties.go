@@ -142,6 +142,19 @@ func compileProperties(c propertyCatalog) (propertyCatalog, error) {
 
 /*
 ================
+HasEquipmentProperties
+
+Whether the client property table knows the item. Rows the later-client
+imports add are not in it, so their native random roll has no option pool.
+================
+*/
+func HasEquipmentProperties(code string) bool {
+	_, exists := properties.Items[code]
+	return exists
+}
+
+/*
+================
 EquipmentMagic
 
 In the reference server, normal equipment enters at rand%%101 <= 30; rare
