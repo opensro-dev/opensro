@@ -4,6 +4,7 @@ test_arabia_import.py - the Arabia import's admission and build rules.
 ===========================================================================
 """
 import script_paths  # noqa: F401  (puts scripts/ and its build folders on sys.path, #3410)
+import later_fixtures  # noqa: E402
 import later_tables  # noqa: E402
 import json
 import os
@@ -466,6 +467,7 @@ def build_trees(base, hideout=False):
 	# (NPC_CH_GACHA_MACHINE's shape): it keeps this row and id 101.
 	native_npc = ["0"] * 120
 	native_npc[0], native_npc[1], native_npc[2] = "1", "101", "NPC_CH_NATIVE_SHOP"
+	write_table(output / text, "characterdata.txt", [["characterdata_5000.txt"]])
 	write_table(output / text, "characterdata_5000.txt", [native_char, native_npc])
 	write_table(output / text, "itemdata.txt", [["itemdata_5000.txt"]])
 	write_table(output / text, "itemdata_5000.txt", [quest_item("ITEM_NATIVE_TEST", 200)])
@@ -508,7 +510,7 @@ def build_trees(base, hideout=False):
 		return ["1", "11880", key, "Korean", "0", "0", "0", "0", "0", english, "0", "0", "0", english, english, english, english]
 
 	media_files = {
-		"characterdata.txt": utf16([["characterdata_5000.txt"]]),
+		"characterdata.txt": later_fixtures.index("characterdata_5000.txt"),
 		"characterdata_5000.txt": utf16([
 			character(50001, "MOB_AR_TEST", level=125),
 			character(50002, "MOB_ARABIA_UNIQUE", level=130),
@@ -517,14 +519,11 @@ def build_trees(base, hideout=False):
 			character(50005, "NPC_NATIVE_NAMED", level=1),
 			character(50006, "NPC_CH_NATIVE_SHOP", level=1),
 		]),
-		"skilldata.txt": utf16([["skilldata_5000.txt"]]),
-		"skilldata_5000.txt": utf16([skill(70, "SKILL_LATER")]),
-		"itemdata.txt": utf16([["itemdata_20000.txt"]]),
-		"itemdata_20000.txt": utf16([quest_item("ITEM_QNO_AR_001_01", 40329, "SN_ITEM_QNO_AR_001_01")]),
+		**later_fixtures.sharded("skilldata.txt", {"skilldata_5000.txt": [skill(70, "SKILL_LATER")]}),
+		**later_fixtures.sharded("itemdata.txt", {"itemdata_20000.txt": [quest_item("ITEM_QNO_AR_001_01", 40329, "SN_ITEM_QNO_AR_001_01")]}),
 		# The later name files are sharded: the base file names its
 		# shards, and textdata_new.txt does not exist later at all.
-		"textdata_equip&skill.txt": utf16([["textdata_equip&skill_100.txt"]]),
-		"textdata_equip&skill_100.txt": utf16([object_row("SN_ITEM_QNO_AR_001_01", "Weapon Chest")]),
+		**later_fixtures.sharded("textdata_equip&skill.txt", {"textdata_equip&skill_100.txt": [object_row("SN_ITEM_QNO_AR_001_01", "Weapon Chest")]}),
 		"npcpos.txt": utf16([["50003", "21325", "10", "1", "20"], ["50001", "19792", "1", "1", "1"],
 			["50004", "22106", "11", "1", "21"], ["50005", "21325", "12", "1", "22"],
 			["50006", "21325", "13", "1", "23"]]),
@@ -560,10 +559,8 @@ def build_trees(base, hideout=False):
 			"SN_PAY_QNO_AR_001", "xxx", "SN_PAYCON_QNO_AR_001", "SN_NN_QNO_AR_001", "SN_NC_QNO_AR_001"]]),
 		"questcontentsdata.txt": utf16([["QNO_AR_001", "name", "3", "xxx", "1", "SN_CON_QNO_AR_001_1"] + ["xxx"] * 13]),
 		"gameguidedata.txt": utf16([["1", "140015", "name", "1", "140000", "SN_PAYCON_QNO_AR_001", "SN_QNO_AR_001", "0"]]),
-		"textquest_queststring.txt": utf16([["TextQuest_QuestString_100.txt"]]),
-		"textquest_queststring_100.txt": utf16([object_row("SN_QNO_AR_001", "Quest Name")]),
-		"textquest_otherstring.txt": utf16([["TextQuest_OtherString_100.txt"]]),
-		"textquest_otherstring_100.txt": utf16([object_row("SN_PAYCON_QNO_AR_001", "Reward text")]),
+		**later_fixtures.sharded("textquest_queststring.txt", {"textquest_queststring_100.txt": [object_row("SN_QNO_AR_001", "Quest Name")]}),
+		**later_fixtures.sharded("textquest_otherstring.txt", {"textquest_otherstring_100.txt": [object_row("SN_PAYCON_QNO_AR_001", "Reward text")]}),
 		"skilleffect.txt": b"\xff\xfe" + (
 			"#section\tcharacterinfo\r\n" + "\t".join(["MOB_AR_TEST"] + ["0"] * 12) + "\r\n"
 			"#section\tskillaniset2\r\n1\tname\tSKILL_LATER\tANI_TEST\r\n"
@@ -902,8 +899,7 @@ class ArabiaImportTest(unittest.TestCase):
 		key = "SN_LAST_FIELD_PRIEST_BS"
 		korean, english = arabia.SPEECH_ENGLISH[key]
 		files = {
-			"textquest_speech&name.txt": utf16([["TextQuest_Speech&Name_100.txt"]]),
-			"textquest_speech&name_100.txt": utf16([["1", "502", key, korean]]),
+			**later_fixtures.sharded("textquest_speech&name.txt", {"textquest_speech&name_100.txt": [["1", "502", key, korean]]}),
 		}
 		rows = {row[1]: row for row in arabia.later_speech_texts(later_tables.Archive.of(files))}
 		self.assertEqual(rows[key][8], english)

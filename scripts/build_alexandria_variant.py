@@ -373,6 +373,7 @@ def build_variant(vsro_root, native, variant, imported_root=None, force=False, e
 		"pets": got["pets"]["pets"],
 		"petsV1696": got["pets"]["petsV1696"],
 		"petsArchive": got["pets"]["petsArchive"],
+		"petsInferred": got["pets"]["petsInferred"],
 		"skills": got["skills"],
 		"skillEffects": got["skill-effects"],
 		"linked": base["linked"],

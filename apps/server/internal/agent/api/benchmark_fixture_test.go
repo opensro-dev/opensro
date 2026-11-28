@@ -201,7 +201,7 @@ no-op; an out-of-range loadout is refused.
 func TestBenchmarkFixtureLoadoutTeachesSkillsAndDerivesVitals(t *testing.T) {
 	api, authority := newTestAPI(t)
 	api.benchmarkFixtureControl = true
-	api.skillGroup = testSkillGroups
+	api.skill = testSkills
 	api.levelCap = testLevelCap
 	handler := authenticatedHandler(t, api, testAccount)
 	postJSON(t, handler, "/character/create", createBody("FixtureHero"))
@@ -258,7 +258,7 @@ changed strength is not "already reset", and an out-of-range one is refused.
 func TestBenchmarkFixtureLoadoutSetsStrength(t *testing.T) {
 	api, authority := newTestAPI(t)
 	api.benchmarkFixtureControl = true
-	api.skillGroup = testSkillGroups
+	api.skill = testSkills
 	api.levelCap = testLevelCap
 	handler := authenticatedHandler(t, api, testAccount)
 	postJSON(t, handler, "/character/create", createBody("FixtureTank"))
@@ -309,9 +309,106 @@ The real groups of the skills these tests teach: Ghost Walk Phantom ranks
 share 261 and Shadow ranks share 768.
 ================
 */
-func testSkillGroups(id uint32) (uint32, bool) {
+func testSkills(id uint32) (BenchmarkSkill, bool) {
 	group, ok := map[uint32]uint32{1: 1, 2: 2, 40: 40, 70: 70, 114: 261, 1287: 261, 19636: 768, 19639: 768}[id]
-	return group, ok
+	if ok {
+		return BenchmarkSkill{Group: group, Rank: 1}, true
+	}
+	skill, ok := testRequirementSkills[id]
+	return skill, ok
+}
+
+// testRequirementSkills are skill rows with requirements: the cold spell's
+// first rank (104, SKILL_CH_COLD_GIGONGSUL_A_01: cold mastery 273 at 30),
+// its second rank, a skill whose prerequisite is that group at rank 2, and
+// one that needs a mastery no Chinese character has.
+var testRequirementSkills = map[uint32]BenchmarkSkill{
+	104:  {Group: 300, Rank: 1, Masteries: []domain.CharacterMastery{{ID: 273, Level: 30}}},
+	1201: {Group: 300, Rank: 2, Masteries: []domain.CharacterMastery{{ID: 273, Level: 32}}},
+	9000: {Group: 900, Rank: 1, Prerequisites: []BenchmarkSkillPrerequisite{{Group: 300, Rank: 2}}},
+	9100: {Group: 910, Rank: 1, Masteries: []domain.CharacterMastery{{ID: 513, Level: 1}}},
+}
+
+/*
+================
+TestBenchmarkFixtureLoadoutQualifiesForItsSkills
+
+A loadout skill is taught to a character that then qualifies for it: the
+cold spell raises cold mastery to 30 (never lowers a higher one), a mastery
+above the loadout's level or a prerequisite missing from the loadout is
+refused before anything changes, and a mastery outside the character's
+race is refused with the character untouched.
+================
+*/
+func TestBenchmarkFixtureLoadoutQualifiesForItsSkills(t *testing.T) {
+	api, authority := newTestAPI(t)
+	api.benchmarkFixtureControl = true
+	api.skill = testSkills
+	api.levelCap = testLevelCap
+	handler := authenticatedHandler(t, api, testAccount)
+	postJSON(t, handler, "/character/create", createBody("FixtureMage"))
+	character := authority.Characters().CharactersForDivision(testDivision)[0]
+	mastery := func(id uint32) int64 {
+		level := int64(-1)
+		authority.ReadCharacters(testDivision, func([]*domain.Character) {
+			if index := benchmarkFixtureMastery(character, id); index >= 0 {
+				level = character.Masteries[index].Level
+			}
+		})
+		return level
+	}
+	if mastery(273) < 0 {
+		t.Fatalf("created character has no cold mastery: %v", character.Masteries)
+	}
+	body := benchmarkFixtureRequest("FixtureMage")
+	body["loadout"] = map[string]any{"level": 40, "intellect": 500, "skills": []uint32{104}}
+	if recorder, response := postBenchmarkFixtureReset(t, handler, body); recorder.Code != http.StatusOK {
+		t.Fatalf("cold spell loadout = %d %#v", recorder.Code, response)
+	}
+	if got := mastery(273); got != 30 {
+		t.Fatalf("cold mastery = %d, want raised to the spell's 30", got)
+	}
+	if recorder, response := postBenchmarkFixtureReset(t, handler, body); response["outcome"] != "already-reset" {
+		t.Fatalf("repeat = %d %#v, want already-reset", recorder.Code, response)
+	}
+	authority.MutateCharacter(character, "reset cold", func() {
+		character.Masteries[benchmarkFixtureMastery(character, 273)].Level = 10
+	})
+	if recorder, response := postBenchmarkFixtureReset(t, handler, body); response["outcome"] != "reset" || mastery(273) != 30 {
+		t.Fatalf("a lowered mastery = %d %#v, cold %d; want reset back to 30", recorder.Code, response, mastery(273))
+	}
+	authority.MutateCharacter(character, "train cold", func() {
+		character.Masteries[benchmarkFixtureMastery(character, 273)].Level = 38
+	})
+	if recorder, _ := postBenchmarkFixtureReset(t, handler, body); recorder.Code != http.StatusOK || mastery(273) != 38 {
+		t.Fatalf("a higher mastery = %d after reset, want kept at 38", mastery(273))
+	}
+	for _, loadout := range []map[string]any{
+		{"level": 29, "intellect": 500, "skills": []uint32{104}},
+		{"level": 40, "intellect": 500, "skills": []uint32{9000}},
+		{"level": 40, "intellect": 500, "skills": []uint32{104, 9000}},
+	} {
+		body["loadout"] = loadout
+		if recorder, _ := postBenchmarkFixtureReset(t, handler, body); recorder.Code != http.StatusBadRequest {
+			t.Fatalf("loadout %v = %d, want 400", loadout, recorder.Code)
+		}
+	}
+	body["loadout"] = map[string]any{"level": 40, "intellect": 500, "skills": []uint32{1201, 9000}}
+	if recorder, response := postBenchmarkFixtureReset(t, handler, body); recorder.Code != http.StatusOK {
+		t.Fatalf("prerequisite in the same loadout = %d %#v", recorder.Code, response)
+	}
+	var skills []uint32
+	authority.ReadCharacters(testDivision, func([]*domain.Character) { skills = append(skills, character.Skills...) })
+	body["loadout"] = map[string]any{"level": 40, "intellect": 500, "skills": []uint32{9100}}
+	if recorder, response := postBenchmarkFixtureReset(t, handler, body); recorder.Code != http.StatusConflict ||
+		response["code"] != "MASTERY_UNAVAILABLE" {
+		t.Fatalf("foreign mastery = %d %#v, want 409 MASTERY_UNAVAILABLE", recorder.Code, response)
+	}
+	authority.ReadCharacters(testDivision, func([]*domain.Character) {
+		if len(character.Skills) != len(skills) {
+			t.Fatalf("a refused loadout changed skills: %v, was %v", character.Skills, skills)
+		}
+	})
 }
 
 /*
@@ -326,7 +423,7 @@ know, or any skill without a resolver, is refused before anything changes.
 func TestBenchmarkFixtureLoadoutReplacesRankAndRefusesUnknownSkills(t *testing.T) {
 	api, authority := newTestAPI(t)
 	api.benchmarkFixtureControl = true
-	api.skillGroup = testSkillGroups
+	api.skill = testSkills
 	api.levelCap = testLevelCap
 	handler := authenticatedHandler(t, api, testAccount)
 	postJSON(t, handler, "/character/create", createBody("FixtureHero"))
@@ -351,7 +448,7 @@ func TestBenchmarkFixtureLoadoutReplacesRankAndRefusesUnknownSkills(t *testing.T
 	if recorder, _ := postBenchmarkFixtureReset(t, handler, body); recorder.Code != http.StatusBadRequest {
 		t.Fatalf("unknown skill = %d, want 400", recorder.Code)
 	}
-	api.skillGroup = nil
+	api.skill = nil
 	body["loadout"] = map[string]any{"level": 90, "intellect": 109, "skills": []uint32{19639}}
 	if recorder, _ := postBenchmarkFixtureReset(t, handler, body); recorder.Code != http.StatusBadRequest {
 		t.Fatalf("skills without a resolver = %d, want 400", recorder.Code)

@@ -24,6 +24,30 @@ settle
 */
 export const settle = () => new Promise( resolve => setImmediate( resolve ) );
 
+// The event-loop turns settleUntil waits before it fails the test.
+const SETTLE_UNTIL_TURNS = 1000;
+
+/*
+================
+settleUntil
+
+Settle turn by turn until reached() holds, failing the test with what it
+waited for after SETTLE_UNTIL_TURNS. A packed member's first request
+follows the manifest, the pack index read and their response bodies.
+Nothing promises that chain fits one turn: it measured one turn locally,
+even beside a busy threadpool, yet one settle() missed it once on a CI
+runner (#4614, run 45939540710). Wait for the state, not a turn count.
+Mocked time never moves here; only real turns pass.
+================
+*/
+export async function settleUntil( reached, what ) {
+	for ( let turn = 0; turn < SETTLE_UNTIL_TURNS; turn++ ) {
+		if ( reached() ) return;
+		await settle();
+	}
+	assert.fail( `never reached: ${what}` );
+}
+
 /*
 ================
 fixture

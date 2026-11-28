@@ -52,7 +52,7 @@ CHARACTER_SHARD = "characterdata_310000.txt"
 SKILL_SHARD = "skilldata_310000.txt"
 TEXT_ROOT = Path("Media_extracted") / tables.TEXTDATA
 FORMAT = "opensro-cap110-quest-monsters-v1"
-SKILL_COLUMNS = 118
+SKILL_COLUMNS = monsters.SKILL_COLUMNS
 FIRST_DEFAULT_SKILL = 89
 END_DEFAULT_SKILL = 99
 NAME_SYMBOL_COLUMN = 5
@@ -141,16 +141,14 @@ def add_quest_monsters(vsro_root, native, output):
 		# ================
 		read = later_tables.Archive.media(media, index)
 		later = later_tables.characters(read)
-		characters_native = [row for path in text_root.glob("characterdata_*.txt") if path.name != CHARACTER_SHARD
-			for row in tables.table_rows(path.read_bytes())]
+		characters_native = monsters.tree_characters(text_root, CHARACTER_SHARD)
 		refs = select_monsters(later, {row[2] for row in characters_native})
 		# Items, characters and teleport buildings share one reference space.
 		occupied = rewards.occupied_identities(text_root, [], CHARACTER_SHARD)
 		allocated = monsters.allocate_identities(occupied, sorted(refs), prior.get("characters", {}))
 		for code, row in sorted(refs.items()):
 			row[1] = str(allocated[code])
-		native_skills = [row for path in text_root.glob("skilldata_*.txt") if path.name != SKILL_SHARD
-			for row in tables.table_rows(path.read_bytes()) if len(row) == SKILL_COLUMNS]
+		native_skills = monsters.tree_skills(text_root, SKILL_SHARD)
 		needed = needed_skills(refs)
 
 		# ================

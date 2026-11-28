@@ -152,12 +152,7 @@ def add_reset_scrolls(native, output, v1696_root=None):
 	root = later_world_import.client_root(v1696_root, ROOT_ENV)
 	jupiter.require_v1696_pin(root, tuple(shared.FOLDERS))
 	codes = [code for _, code, _, _ in scrolls]
-	for path in sorted(text_root.glob("itemdata*.txt")):
-		if sro_pk2.fold_ascii(path.name) in (ITEM_SHARD, "itemdata.txt"):
-			continue
-		for row in tables.table_rows(path.read_bytes()):
-			if len(row) > items.CODENAME and row[items.SERVICE] == "1" and row[items.CODENAME] in codes:
-				raise ValueError(f"reset scroll {row[items.CODENAME]} already stands in the item tables")
+	shared.refuse_standing_items(text_root, ITEM_SHARD, codes, "reset scroll")
 	with ExitStack() as stack:
 		archives, identities = avatars.open_archives(stack, root, avatars.V1696_SOURCE)
 		media, index = archives["Media"]

@@ -11,6 +11,7 @@ row the later client lacks refuses.
 ===========================================================================
 """
 import script_paths  # noqa: F401  (puts scripts/ and its build folders on sys.path, #3410)
+import later_fixtures  # noqa: E402
 import json
 import os
 import tempfile
@@ -80,13 +81,11 @@ class ResetScrollImportTest(unittest.TestCase):
 		if drop != SKILL:
 			rows.append(later_row(SKILL, 40002, "5", SKILL_WINDOW))
 		self.media = archive_bytes({
-			"itemdata.txt": utf16([["itemdata_40000.txt"]]),
-			"itemdata_40000.txt": utf16(rows),
+			**later_fixtures.sharded("itemdata.txt", {"itemdata_40000.txt": rows}),
 		})
 		native_row = ["0"] * items.ITEM_COLUMNS
 		native_row[0], native_row[1], native_row[2] = "1", str(NATIVE_ID), "ITEM_NATIVE_THING"
-		(text_root / "itemdata.txt").write_bytes(utf16([["itemdata_5000.txt"]]))
-		(text_root / "itemdata_5000.txt").write_bytes(utf16([native_row]))
+		later_fixtures.write_sharded(text_root, "itemdata.txt", {"itemdata_5000.txt": [native_row]})
 		(text_root / resets.NAME_TABLE).write_bytes(utf16([["1", "SN_NATIVE_A", "", "", "", "", "", "", "Native A"]]))
 		return later, native, output, text_root
 
@@ -201,7 +200,7 @@ class ResetScrollImportTest(unittest.TestCase):
 			self.assertFalse((output / "Media_extracted/icon/item/etc/item_mall_skill_point_recall_a.ddj").exists())
 			manifest = (text_root / "itemdata.txt").read_bytes().decode("utf-16")
 			self.assertNotIn(resets.ITEM_SHARD, manifest)
-			self.assertIn("itemdata_5000.txt", manifest)
+			self.assertIn(later_fixtures.archive_case("itemdata_5000.txt"), manifest)
 			names = (text_root / resets.NAME_TABLE).read_bytes().decode("utf-16")
 			self.assertNotIn("RECALL", names)
 			self.assertIn("SN_NATIVE_A", names)

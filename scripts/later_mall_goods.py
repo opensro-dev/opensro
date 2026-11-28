@@ -73,7 +73,6 @@ from pathlib import Path
 import import_vsro_alexandria as tables
 import mall_avatar_import as avatars
 import mall_tables as mall
-import sro_pk2
 from prepare_client_resources import safe_target, write_atomically
 from sro_paths import trees_overlap
 import alexandria_npcs as text_tables
@@ -114,38 +113,18 @@ MALL_CURRENCIES = ("2", "4", "16")
 # ================
 # tree_reader
 #
-# The built tree's textdata as a later_tables.Archive: each table the
-# output's copy when a step before wrote one, else the native
-# extraction's. A shard index is followed, never read as rows.
+# The built tree's textdata as a later_tables.Archive (its overlay of
+# the output on the native extraction).
 # ================
 def tree_reader(native, output):
-	base = native / TEXT_ROOT
-	native_paths = {sro_pk2.fold_ascii(path.name): path for path in base.iterdir() if path.is_file()} if base.is_dir() else {}
-
-	# ================
-	# path_of
-	# ================
-	def path_of(name):
-		written = output / TEXT_ROOT / name
-		return written if written.is_file() else native_paths.get(name)
-
-	# ================
-	# read_file
-	# ================
-	def read_file(name):
-		path = path_of(name)
-		if path is None:
-			raise ValueError(f"the tree has no {name}")
-		return path.read_bytes()
-
-	return later_tables.Archive(read_file, lambda name: path_of(name) is not None, "the built tree")
+	return later_tables.Archive.overlay(native / TEXT_ROOT, output / TEXT_ROOT)
 
 
 # ================
 # sharded_rows
 #
 # The rows of one sharded table of the tree (itemdata, characterdata),
-# read the tree's later_tables.Archive (tree_reader). A tree without the
+# read through the tree's later_tables.Archive (tree_reader). A tree without the
 # table yields none; a listed shard the tree lacks is an error, never a
 # silent loss of its rows.
 # ================
@@ -547,7 +526,7 @@ def add_goods(later_root, native, output):
 		later = {name: source.rows(name, optional=True) for name, _ in mall.MALL_TABLES}
 		rent_rows = {row[RENT_CODE]: row for row in source.rows(RENT_TABLE, optional=True)
 			if row and row[0] == mall.SERVICE_ON and len(row) > RENT_CODE}
-		item_by_id = {row[1]: row[2] for row in source.rows("itemdata.txt", optional=True) if len(row) > 2}
+		item_by_id = {row[1]: row[2] for row in source.rows("itemdata.txt", optional=True, width=3) if len(row) > 2}
 		later_tabs = source.rows(SHOP_TAB_TABLE, optional=True)
 		label_texts = later_label_texts(source,
 			{row[TAB_LABEL] for row in later_tabs if len(row) > TAB_LABEL and row[SHOP_TAB_CODE] in NASRUN_TABS})

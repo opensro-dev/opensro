@@ -8,6 +8,7 @@ storage_test.go - warehouse admission, fees and transfers
 package action
 
 import (
+	"math"
 	"testing"
 
 	"opensro.online/server/internal/domain"
@@ -181,7 +182,7 @@ func TestStorageGoldZeroAmountRefuses(t *testing.T) {
 	if r.Frames[0].Payload[0] != 2 || r.Frames[0].Payload[1] != wire.ErrCodePositiveNumberOnly {
 		t.Fatalf("withdrawal of nothing = %v, want [02 29]", r.Frames[0].Payload)
 	}
-	r = trade(t, rt, c, wire.ItemMoveRequest{MovementType: wire.MoveTypeStorageGoldDeposit, GoldAmount: uint32(gold + 1)})
+	r = trade(t, rt, c, wire.ItemMoveRequest{MovementType: wire.MoveTypeStorageGoldDeposit, GoldAmount: uint64(gold + 1)})
 	if r.Frames[0].Payload[0] != 2 || r.Frames[0].Payload[1] != wire.ErrCodeNotEnoughGold {
 		t.Fatalf("deposit past the purse = %v, want [02 0f]", r.Frames[0].Payload)
 	}
@@ -210,13 +211,16 @@ func TestStorageGoldDepositCaps(t *testing.T) {
 		name     string
 		on       bool
 		limit    uint64
-		amount   uint32
+		amount   uint64
 		accepted bool
 	}{
 		{"off native ceiling", false, 0, 100_000_000, true},
 		{"off above native", false, 0, 100_000_001, false},
+		// A wide deposit a native client never sends meets the native cap.
+		{"off wide refused", false, 0, 5_000_000_000, false},
 		{"on one billion", true, 0, 1_000_000_000, true},
-		{"on above raised", true, 0, 1_000_000_001, false},
+		{"on wide ten billion", true, 0, 10_000_000_000, true},
+		{"on above raised", true, 0, 10_000_000_001, false},
 		{"configured two billion", false, 2_000_000_000, 2_000_000_000, true},
 		{"configured above refused", false, 2_000_000_000, 2_000_000_001, false},
 	} {
@@ -224,14 +228,10 @@ func TestStorageGoldDepositCaps(t *testing.T) {
 			rt, c, authority := storageFixture(t)
 			rt.RaisedGoldCaps = tc.on
 			rt.StorageGoldDepositLimit = tc.limit
-			setGold(c, 3_000_000_000)
-			// The test's encoder applies the native client's 100,000,000
-			// clamp, so the payload is written by hand: the server must
-			// refuse a larger amount on its own.
-			r := rt.HandleItemMove(testDivision, c, []byte{
-				wire.MoveTypeStorageGoldDeposit,
-				byte(tc.amount), byte(tc.amount >> 8), byte(tc.amount >> 16), byte(tc.amount >> 24),
-			})
+			setGold(c, 20_000_000_000)
+			// The payload is written by hand, native u32 or the wide u64
+			// above it, so the server must refuse a larger amount on its own.
+			r := rt.HandleItemMove(testDivision, c, goldDepositPayload(tc.amount))
 			accepted := r.Frames[0].Payload[0] == 1
 			if accepted != tc.accepted {
 				t.Fatalf("deposit %d answered % X, want accepted=%v", tc.amount, r.Frames[0].Payload, tc.accepted)
@@ -244,6 +244,26 @@ func TestStorageGoldDepositCaps(t *testing.T) {
 			}
 		})
 	}
+}
+
+/*
+================
+goldDepositPayload
+
+A 0x706D warehouse gold deposit: the native u32 amount, or the port's wide
+u64 (wire.WideGoldMove) when the amount does not fit.
+================
+*/
+func goldDepositPayload(amount uint64) []byte {
+	out := []byte{wire.MoveTypeStorageGoldDeposit}
+	width := 4
+	if amount > math.MaxUint32 {
+		width = 8
+	}
+	for i := 0; i < width; i++ {
+		out = append(out, byte(amount>>(8*i)))
+	}
+	return out
 }
 
 /*

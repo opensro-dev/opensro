@@ -171,7 +171,9 @@ func EncodeStorageMoveSuccess(q ItemMoveRequest) []byte {
 	case MoveTypeStorageDeposit, MoveTypeStorageWithdraw, MoveTypeGuildStorageDeposit, MoveTypeGuildStorageWithdraw:
 		w.U8(q.SourceSlot).U8(q.DestSlot)
 	default:
-		w.U32(q.GoldAmount)
+		// A wide deposit is echoed in its own width; any other amount was
+		// read from four bytes, so the narrow form is exact.
+		writeGoldAmount(w, q.MovementType, uint32(q.GoldAmount), q.GoldAmount)
 	}
 	return w.Payload()
 }

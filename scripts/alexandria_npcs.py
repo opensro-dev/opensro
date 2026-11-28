@@ -106,14 +106,26 @@ def is_placeholder_text(value):
 # ================
 # translation_rows
 #
-# A text table's records. VSRO's German Tausert cell holds a U+2028 line
-# separator; this used to join the pieces str.splitlines() cut there, and
-# it missed every in-cell LF (the v1.150 name table's 2470). table_rows
-# now ends a record only at CRLF, so the cell keeps its own character and
-# a rewrite gives back the bytes it read (#4608).
+# A text table's records. table_rows ends a record only at CRLF, so a
+# cell keeps its own LF or U+2028 (VSRO's German Tausert cell) and a
+# rewrite gives back the bytes it read (#4608). A row the archive wraps
+# over two CRLF records (later_fixtures.wrap_last) is still joined back:
+# a short name row whose next record does not open with a service digit.
+# The pinned VSRO client's text tables hold none (census on #4785); the
+# join keeps a client that does from losing the row's language cells.
 # ================
+WRAPPED_ROW_CELLS = 10
+
+
 def translation_rows(raw):
-	return stage1.table_rows(raw)
+	rows = []
+	for row in stage1.table_rows(raw):
+		if rows and 1 < len(rows[-1]) < WRAPPED_ROW_CELLS and rows[-1][1].startswith("SN_") and not row[0].isdigit():
+			rows[-1][-1] += " " + row[0].strip()
+			rows[-1].extend(row[1:])
+		else:
+			rows.append(row)
+	return rows
 
 
 # ================
@@ -449,9 +461,8 @@ def add_npcs(vsro_root, native, out, regions):
 	names = ("npcpos.txt", "npcchat.txt", "refshopgroup.txt", "refmappingshopgroup.txt", "refshop.txt", "skilleffect.txt")
 	tables = {name: (native / textdata / name).read_bytes() for name in names}
 	tables[CHARACTER_TARGET] = (native / textdata / CHARACTER_TARGET).read_bytes()
-	tables["characters"] = [
-		path.read_bytes() for path in sorted((native / textdata).glob("characterdata_*.txt"))
-	]
+	native_tree = later_tables.Archive.tree(native / textdata)
+	tables["characters"] = [native_tree.file(shard) for shard in native_tree.files("characterdata.txt")]
 	with later_tables.Archive.open(vsro_root) as source:
 		vsro = {name: source.file(name) for name in tuple(n for n in names if n != "refshop.txt") + ("textdata_object.txt",)}
 		# The characterdata index names the shards, as the client reads them.

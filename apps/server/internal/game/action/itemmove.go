@@ -113,7 +113,7 @@ func (rt *Runtime) HandleItemMove(
 		return rt.applyGroundDrop(divisionID, worldKey, character, request.SourceSlot)
 
 	case wire.MoveTypeGoldDrop:
-		return rt.applyGoldDrop(divisionID, worldKey, character, request.GoldAmount)
+		return rt.applyGoldDrop(divisionID, worldKey, character, uint32(request.GoldAmount))
 
 	case wire.MoveTypeStorage, wire.MoveTypeStorageDeposit, wire.MoveTypeStorageWithdraw,
 		wire.MoveTypeStorageGoldWithdraw, wire.MoveTypeStorageGoldDeposit:

@@ -4,6 +4,7 @@ test_constantinople_import.py - the Constantinople fortress import's rules.
 ===========================================================================
 """
 import script_paths  # noqa: F401  (puts scripts/ and its build folders on sys.path, #3410)
+import later_fixtures  # noqa: E402
 import json
 import os
 import struct
@@ -217,6 +218,7 @@ class FakeClosure:
 def build_trees(base):
 	native, output, source = base / "native", base / "output", base / "source"
 	text = ct.TEXT_ROOT
+	write_table(output / text, "characterdata.txt", [["characterdata_5000.txt"]])
 	write_table(output / text, "characterdata_5000.txt", [
 		native_character(100, "MOB_NATIVE_TEST"),
 		native_character(22462, "NPC_EU_FORTRESS_MANAGER"),
@@ -249,8 +251,7 @@ def build_trees(base):
 		character(22546, "STRUCTURE_HEADQUARTERS_00")]
 	names = ["SN_FORTRESS_CONSTANTINOPLE", "SN_STRUCTURE_FORT_STONE_CT_01", "SN_STRUCTURE_GATE_PULLEY_CT_01"]
 	media_files = {
-		"characterdata.txt": utf16([["characterdata_5000.txt"]]),
-		"characterdata_5000.txt": utf16(later_chars),
+		**later_fixtures.sharded("characterdata.txt", {"characterdata_5000.txt": later_chars}),
 		"eventzonedata.txt": utf16(zone_rows()),
 		"siegefortress.txt": utf16([
 			["1", "1", "FORTRESS_JANGAN", "Korean", "SN_FORTRESS_JANGAN", "GATE_CH", "0", "300",

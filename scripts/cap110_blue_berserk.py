@@ -287,7 +287,7 @@ def add_blue_berserk(vsro_root, native, output):
 		texts = {}
 		for name, source, symbols in TEXT_FILES:
 			path = safe_target(text_root, name)
-			by_key = {row[KEY_COLUMN]: row for row in read_later.rows(source) if len(row) > ENGLISH_COLUMN + 1}
+			by_key = {row[KEY_COLUMN]: row for row in read_later.rows(source, width=ENGLISH_COLUMN + 2) if len(row) > ENGLISH_COLUMN + 1}
 			raw, appended, replaced = fill_text(path.read_bytes(), by_key, symbols)
 			texts[name] = {"appended": appended, "replaced": replaced, "raw": raw}
 		later_shop = {name: read_later.rows(name) for name in SHOP_TABLES if name != "refshopgoods.txt"}

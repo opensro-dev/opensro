@@ -12,31 +12,13 @@ them.
 ===========================================================================
 */
 import assert from "node:assert/strict";
-import fs from "node:fs";
-import os from "node:os";
-import path from "node:path";
 import { test } from "node:test";
 import { computeResourceBuildFingerprint } from "../../build/shared/resourceBuildFingerprint.mjs";
 import { STUB_FINGERPRINT_KEYS } from "../helpers/fingerprintKeys.mjs";
+import { switchServerRoot, withEnv } from "../helpers/shardSwitchFixture.mjs";
 import { closedSkytempleIds, skytempleEnabled } from "../../build/shared/skytemple.mjs";
 
-/*
-================
-withEnv
-
-Set the switches for one test and restore the caller's values after.
-================
-*/
-function withEnv( t, values ) {
-	for ( const [name, value] of Object.entries( values ) ) {
-		const saved = process.env[name];
-		t.after( () => {
-			if ( saved === undefined ) delete process.env[name];
-			else process.env[name] = saved;
-		} );
-		process.env[name] = value;
-	}
-}
+const SKYTEMPLE_ROW = { env: "SRO_SKYTEMPLE", nomadVar: "skytemple", defaultValue: "off", catalogue: true };
 
 // Jangan's gate, a town gate, and two Sky Temple fields, as teleportdata rows.
 const ROWS = [
@@ -58,46 +40,15 @@ test("skytempleEnabled mirrors the server words", ( t ) => {
 	}
 });
 
-/*
-================
-fixtureServerRoot
-
-A server root whose profile and registry row for the switch are the
-test's, set as SRO_SERVER_SOURCE_ROOT for the test, so the checkout's own
-shard-settings.json (which turns the fields on) does not decide it.
-================
-*/
-function fixtureServerRoot( t, profileValue ) {
-	const root = fs.mkdtempSync( path.join( os.tmpdir(), "sro-skytemple-" ) );
-	const previous = process.env.SRO_SERVER_SOURCE_ROOT;
-	t.after( () => {
-		if ( previous === undefined ) delete process.env.SRO_SERVER_SOURCE_ROOT;
-		else process.env.SRO_SERVER_SOURCE_ROOT = previous;
-		fs.rmSync( root, { recursive: true, force: true } );
-	} );
-	fs.mkdirSync( path.join( root, "config" ), { recursive: true } );
-	fs.mkdirSync( path.join( root, "internal", "config", "shardsettings" ), { recursive: true } );
-	const profile = profileValue === undefined ? {} : { SRO_SKYTEMPLE: profileValue };
-	fs.writeFileSync( path.join( root, "config", "shard-settings.json" ), JSON.stringify( profile ) );
-	fs.writeFileSync(
-		path.join( root, "internal", "config", "shardsettings", "shardsettings.go" ),
-		`var Settings = []Setting{
-	{Env: "SRO_SKYTEMPLE", NomadVar: "skytemple", Default: "off", Catalogue: true},
-}
-`
-	);
-	process.env.SRO_SERVER_SOURCE_ROOT = root;
-}
-
 test("an unset switch takes the release profile's value, else the registry default", ( t ) => {
 	withEnv( t, { SRO_SKYTEMPLE: "" } );
-	fixtureServerRoot( t, undefined );
+	switchServerRoot( t, SKYTEMPLE_ROW, undefined );
 	assert.equal( skytempleEnabled(), false, "no profile entry: the registry default, closed" );
 });
 
 test("an unset switch follows a profile that opens the fields", ( t ) => {
 	withEnv( t, { SRO_SKYTEMPLE: "" } );
-	fixtureServerRoot( t, "on" );
+	switchServerRoot( t, SKYTEMPLE_ROW, "on" );
 	assert.equal( skytempleEnabled(), true );
 });
 

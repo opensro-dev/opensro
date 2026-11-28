@@ -33,7 +33,7 @@ def later_good(tables, tab, item, slot, silk, package_id, rent="xxx", payments=(
 	tables["refpackageitem.txt"].append(["1", "11", str(package_id), package, "0", "EXPAND_TERM_ALL", "SN_" + item, "SN_DESC", "icon.ddj"] + NONE)
 	tables["refscrapofpackageitem.txt"].append(["1", "11", package, item] + ["0"] * 16 + ["-1", rent] + ["-1", "xxx"] * 3 + ["9" + str(package_id)])
 	for payment in payments:
-		tables["refpricepolicyofitem.txt"].append(["1", "11", package, payment, "0", silk if payment == "2" else "0", "-1", "xxx"])
+		tables["refpricepolicyofitem.txt"].append(["1", "11", package, payment, "0", silk if payment == "2" else "0"] + NONE)
 	tables["refshopgoods.txt"].append(["1", "11", tab, package, str(slot)] + NONE)
 	return package
 
@@ -104,18 +104,18 @@ class LaterMallGoodsTest(unittest.TestCase):
 		current = empty()
 		later_good(current, "MALL_ARCHEMY_ATHANASIA", "ITEM_ETC_ARCHEMY_MAGICSTONE_ATHANASIA_09", 8, "51", 20112)
 		package = later_good(current, "STORE_SD_ACCESSORY_EU_TAB3", "ITEM_ETC_ARCHEMY_MAGICSTONE_ATHANASIA_10", 12, "0", 202517,
-			payments=("16",))
+			payments=("1",))
 		later = empty()
 		later_good(later, "MALL_ARCHEMY_ATHANASIA", "ITEM_ETC_ARCHEMY_MAGICSTONE_ATHANASIA_10", 9, "57", 20113,
 			payments=("2", "16"))
 		rows, summary = goods.goods_rows(later, tree_of({"ITEM_ETC_ARCHEMY_MAGICSTONE_ATHANASIA_10"}, current=current))
 		self.assertEqual(summary["listed"], 1)
 		self.assertEqual(summary["packages"], [])
-		self.assertEqual(summary["joined"], {package: ["2"]})
+		self.assertEqual(summary["joined"], {package: ["16", "2"]})
 		self.assertEqual(rows["refpackageitem.txt"], [])
 		self.assertEqual(rows["refscrapofpackageitem.txt"], [])
 		self.assertEqual([row[2:5] for row in rows["refshopgoods.txt"]], [["MALL_ARCHEMY_ATHANASIA", package, "9"]])
-		self.assertEqual([(row[3], row[4]) for row in rows["refpricepolicyofitem.txt"]], [("2", "57")])
+		self.assertEqual([(row[3], row[4]) for row in rows["refpricepolicyofitem.txt"]], [("2", "57"), ("16", "0")])
 
 	# ================
 	# test_a_package_no_shop_lists_stays_the_layouts

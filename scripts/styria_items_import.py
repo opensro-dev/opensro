@@ -180,12 +180,7 @@ def add_styria_items(native, output, v1696_root=None):
 
 		rows = select_rows(shared.read_item_tables(read_later))
 		codes = [row[items.CODENAME] for row in rows]
-		for path in sorted(text_root.glob("itemdata*.txt")):
-			if sro_pk2.fold_ascii(path.name) in (ITEM_SHARD, "itemdata.txt"):
-				continue
-			for row in tables.table_rows(path.read_bytes()):
-				if len(row) > items.CODENAME and row[items.SERVICE] == "1" and row[items.CODENAME] in codes:
-					raise ValueError(f"Styria reward row {row[items.CODENAME]} already stands in the item tables")
+		shared.refuse_standing_items(text_root, ITEM_SHARD, codes, "Styria reward row")
 		# Identities stand above every object row of the tree, items and
 		# characters alike (#3994).
 		occupied = published_ids.occupied_objects(text_root, (ITEM_SHARD,))

@@ -24,7 +24,7 @@ import {
 } from "../../../../../scripts/lib/probeSession.mjs";
 import { resetMissionMovementFixture } from "../../../../../scripts/lib/missionMovementFixture.mjs";
 import { assertCharacterAllowed } from "../../../../../scripts/lib/probeCharacter.mjs";
-import { parseActivity, startActivity, WALK_RADIUS } from "./crowd-activity.mjs";
+import { BUSY_LOADOUT, busyCreation, parseActivity, startActivity, WALK_RADIUS } from "./crowd-activity.mjs";
 
 // A crowd admitted here logs every peer in on every run, and the Agent
 // paces logins per client address (login_limiter.go: burst 10, then one per
@@ -397,19 +397,20 @@ export async function createCrowd(
 				heightIndex: 0,
 				volumeIndex: 0,
 				weaponIndex: 1,
-				protectorIndex: 0,
-				armorSelected: false,
-				weaponSelected: true
+				weaponSelected: true,
+				...busyCreation( activity )
 			} )
 		} );
+		// A scenario names each peer's loadout; a busy crowd without one is
+		// taught the imbue its script casts.
+		const loadout = loadoutFor ? loadoutFor( index ) : activity.busy > 0 ? BUSY_LOADOUT : null;
 		await resetMissionMovementFixture( {
 			session,
 			characterName: character,
 			timeoutMs: ADMISSION_TIMEOUT_MS,
 			fixture: {
 				...fixture,
-				// A load scenario gives each peer its own learned skills.
-				...(loadoutFor ? { loadout: loadoutFor( index ) } : {}),
+				...(loadout ? { loadout } : {}),
 				start: spots[index]
 			}
 		} );

@@ -119,6 +119,7 @@ import {
 	MARKET_CONTROL
 } from "@/engine/foundation/gameplay/commerce-controls";
 import { MAX_INVENTORY_SLOT_COUNT } from "@/engine/foundation/gameplay/quickslots";
+import { inventoryMoveRequest } from "@/engine/foundation/gameplay/inventory-move-request";
 import {
 	BUYBACK_REQUEST_OPCODE,
 	ITEM_MOVE_REQUEST_OPCODE,
@@ -205,6 +206,9 @@ export function createInventory(
 	// Port-only, not native: SRO_RAISED_GOLD_CAPS widens the stall offer
 	// price field to u64 (stall.ts); the world entry publishes it.
 	let raisedGoldCaps = false;
+	// Port-only, not native: SRO_WIDE_TRADE_GOLD lets the trade table's
+	// gold pass the u32 range (exchange.ts); the world entry publishes it.
+	let wideTradeGold = false;
 	// Set when a request went unanswered past its deadline; only a world
 	// bootstrap (a fresh entry, or a resumed transport's EnterWorld) clears it.
 	// timedOutRequest names that request for the incident report.
@@ -1017,6 +1021,7 @@ bootstrap
 		bootstrap( value: unknown, receivedAtMs = 0, continued = false ) {
 			bindingMoves = [];
 			raisedGoldCaps = (value as { raisedGoldCaps?: unknown; } | null)?.raisedGoldCaps === true;
+			wideTradeGold = (value as { wideTradeGold?: unknown; } | null)?.wideTradeGold === true;
 			itemCooldowns = [];
 			presentations = new WeakMap();
 			gachaRows = null;
@@ -1352,7 +1357,7 @@ exchangeCommand
 ================
 		*/
 		exchangeCommand( command: ExchangeCommand ) {
-			const frame = exchangeRequest( exchange, command );
+			const frame = exchangeRequest( exchange, command, wideTradeGold );
 			if ( command.kind === "exchange-request" ) exchange = { ...exchange, requesting: true };
 			if ( command.kind === "exchange-confirm" ) {
 				const warning = exchangeConfirmWarning( exchange, exchangeConfirmPressed );
@@ -1960,11 +1965,7 @@ move
 			) {
 				throw new Error( "Inventory command unavailable" );
 			}
-			const p = new Uint8Array( 5 );
-			p[1] = source;
-			p[2] = destination;
-			new DataView( p.buffer ).setUint16( 3, quantity, true );
-			const frame = { opcode: ITEM_MOVE_REQUEST_OPCODE, payload: p };
+			const frame = inventoryMoveRequest( source, destination, quantity );
 			send( frame );
 			pending = {
 				opcode: ITEM_MOVE_RESPONSE_OPCODE,

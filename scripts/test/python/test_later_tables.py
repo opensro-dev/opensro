@@ -188,5 +188,117 @@ class SourceTests(unittest.TestCase):
 					pass
 
 
+# ================
+# BuiltTreeTests
+#
+# A built v1.150 tree (#4770): its characterdata, itemdata and skilldata
+# are indexes, the client loads only what an index lists, in its order,
+# and an importer leaves its own shard out by name.
+# ================
+class BuiltTreeTests(unittest.TestCase):
+	def write(self, folder, files):
+		folder.mkdir(parents=True, exist_ok=True)
+		for name, rows in files.items():
+			(folder / name).write_bytes(utf16(rows))
+
+	# ================
+	# test_a_tree_reads_its_index_not_every_shard_on_disk
+	#
+	# skilldata_virtual.txt sits beside the native shards but no index
+	# lists it; a glob read its rows, and in file-system order.
+	# ================
+	def test_a_tree_reads_its_index_not_every_shard_on_disk(self):
+		with tempfile.TemporaryDirectory() as temp:
+			folder = Path(temp)
+			self.write(folder, {
+				"skilldata.txt": [["SkillData_5000.txt"], ["skilldata_300.txt"], ["skilldata_120000.txt"]],
+				"skilldata_5000.txt": [["1", "5000"]],
+				"skilldata_300.txt": [["1", "300"]],
+				"skilldata_120000.txt": [["1", "120000"]],
+				"skilldata_virtual.txt": [["1", "999"]],
+			})
+			tree = later_tables.Archive.tree(folder)
+			self.assertEqual([row[1] for row in tree.rows("skilldata.txt")], ["5000", "300", "120000"])
+			self.assertEqual([row[1] for row in tree.rows("skilldata.txt", excluding=("SKILLDATA_120000.txt",))],
+				["5000", "300"])
+			self.assertEqual(tree.files("skilldata.txt", excluding=("skilldata_5000.txt",)),
+				["skilldata_300.txt", "skilldata_120000.txt"])
+
+	# ================
+	# test_an_overlay_reads_the_output_over_the_native_tree
+	#
+	# A step's output index names shards of both trees; each is read
+	# from the output when a step wrote it, else from the native tree,
+	# and the native index stands while no step rewrote it.
+	# ================
+	def test_an_overlay_reads_the_output_over_the_native_tree(self):
+		with tempfile.TemporaryDirectory() as temp:
+			native, output = Path(temp) / "native", Path(temp) / "output"
+			self.write(native, {
+				"itemdata.txt": [["itemdata_5000.txt"]],
+				"itemdata_5000.txt": [["1", "1", "ITEM_NATIVE"]],
+			})
+			output.mkdir()
+			tree = later_tables.Archive.overlay(native, output)
+			self.assertEqual([row[2] for row in tree.rows("itemdata.txt")], ["ITEM_NATIVE"])
+			self.write(output, {
+				"itemdata.txt": [["itemdata_5000.txt"], ["itemdata_330000.txt"]],
+				"itemdata_5000.txt": [["1", "1", "ITEM_PATCHED"]],
+				"itemdata_330000.txt": [["1", "2", "ITEM_LATER"]],
+			})
+			self.assertEqual([row[2] for row in tree.rows("itemdata.txt")], ["ITEM_PATCHED", "ITEM_LATER"])
+			self.assertEqual([row[2] for row in tree.rows("itemdata.txt", excluding=("itemdata_330000.txt",))],
+				["ITEM_PATCHED"])
+			self.write(output, {"itemdata.txt": [["itemdata_5000.txt"], ["itemdata_missing.txt"]]})
+			with self.assertRaisesRegex(ValueError, "the tree has no itemdata_missing.txt"):
+				tree.rows("itemdata.txt")
+
+
+# ================
+# ShapeTests
+#
+# A wrong-shaped table raises instead of filtering down to nothing
+# (#4762): an index listing an index, and a file none of whose rows
+# reaches the width its caller needs. An empty shard is no error.
+# ================
+class ShapeTests(unittest.TestCase):
+	def test_a_listed_shard_that_is_itself_an_index_refuses(self):
+		source = later_tables.Archive.of({
+			"itemdata.txt": utf16([["itemdata_5000.txt"]]),
+			"itemdata_5000.txt": utf16([["itemdata_inner.txt"]]),
+			"itemdata_inner.txt": utf16([["1", "2", "ITEM_A"]]),
+		})
+		with self.assertRaisesRegex(ValueError, "itemdata_5000.txt, which itemdata.txt lists, is itself a shard index"):
+			source.rows("itemdata.txt")
+		with self.assertRaisesRegex(ValueError, "is itself a shard index"):
+			source.rows_of(["itemdata.txt"])
+
+	def test_a_file_short_of_the_callers_width_refuses(self):
+		source = later_tables.Archive.of({
+			"characterdata.txt": utf16([["characterdata_5000.txt"], ["characterdata_virtual.txt"]]),
+			"characterdata_5000.txt": utf16([["1", "100", "MOB_A"], ["0"]]),
+			"characterdata_virtual.txt": utf16([]),
+		})
+		self.assertEqual(len(source.rows("characterdata.txt", width=3)), 2)
+		with self.assertRaisesRegex(ValueError, r"no row of characterdata_5000.txt \(characterdata.txt\) has 4 cells"):
+			source.rows("characterdata.txt", width=4)
+		flat = later_tables.Archive.of({"characterdata.txt": utf16([["1", "100"]])})
+		with self.assertRaisesRegex(ValueError, "wrong-shaped table"):
+			later_tables.characters(flat)
+
+	def test_the_head_alone_settles_a_large_table(self):
+		row = ["1"] + ["x" * 40] * 200
+		self.assertFalse(later_tables.is_index(utf16([row] * 50)))
+		self.assertTrue(later_tables.is_index(utf16([["SkillData_5000.txt"], ["SkillData_10000.txt"]])))
+
+	def test_the_census_names_every_index_a_source_holds(self):
+		source = later_tables.Archive.of({
+			"skilldata.txt": utf16([["SkillData_5000.txt"]]),
+			"skilldata_5000.txt": utf16([["1", "5000"]]),
+			"textuisystem.txt": utf16([["1", "UIIT_A", "a"]]),
+		})
+		self.assertEqual(later_tables.index_matrix(source), {"skilldata.txt": ["skilldata_5000.txt"]})
+
+
 if __name__ == "__main__":
 	unittest.main()

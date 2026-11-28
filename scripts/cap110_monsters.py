@@ -60,6 +60,8 @@ SOURCE_ENV = "SRO_CAP110_MONSTER_DATABASE"
 MARKER = ".opensro-cap110-monsters.json"
 CHARACTER_SHARD = "characterdata_120000.txt"
 SKILL_SHARD = "skilldata_120000.txt"
+# A full v1.150 skilldata row; a narrower row is not a skill.
+SKILL_COLUMNS = 118
 POPULATION_FILE = "cap110-monsters.txt"
 TEXT_ROOT = Path("Media_extracted") / tables.TEXTDATA
 MAX_LEVEL = 110
@@ -463,8 +465,19 @@ allocate_identities = published_ids.allocate_identities
 # never stages one of their codenames again (one codename, one row).
 # ================
 def tree_characters(text_root, own):
-	return [row for path in Path(text_root).glob("characterdata_*.txt") if path.name != own
-		for row in tables.table_rows(path.read_bytes())]
+	return later_tables.Archive.tree(text_root).rows("characterdata.txt", excluding=(own,))
+
+
+# ================
+# tree_skills
+#
+# Every full-width skill row the tree's skilldata index lists but own's,
+# the same rule for skills: the rows an import's skill merge numbers
+# above and never restages.
+# ================
+def tree_skills(text_root, own):
+	return [row for row in later_tables.Archive.tree(text_root).rows("skilldata.txt", excluding=(own,), width=SKILL_COLUMNS)
+		if len(row) == SKILL_COLUMNS]
 
 
 # ================
@@ -634,7 +647,7 @@ def add_monsters(vsro_root, native, output, source_root=None):
 		allocated = allocate_characters(occupied, sorted(refs), prior.get("characters", {}))
 		for code, row in sorted(refs.items()):
 			row[1] = str(allocated[code])
-		native_skills = [r for p in text_root.glob("skilldata_*.txt") if p.name != SKILL_SHARD for r in tables.table_rows(p.read_bytes()) if len(r) == 118]
+		native_skills = tree_skills(text_root, SKILL_SHARD)
 		needed = {int(s) for r in refs.values() for s in r[89:99] if int(s)}
 		# ================
 		# load_client_skills
@@ -690,7 +703,7 @@ def add_monsters(vsro_root, native, output, source_root=None):
 		base_text = (text_root / "textdataname.txt").read_bytes()
 		known = {r[1] for r in characters.translation_rows(base_text) if len(r) > 1}
 		wanted = {r[5] for r in refs.values()} - known
-		texts = [[r[0], r[1], r[2], "", "", r[5], r[4], r[7], r[8], r[9], ""] for r in read.rows("textdata_object.txt", characters.translation_rows) if len(r) >= 10 and r[1] in wanted]
+		texts = [[r[0], r[1], r[2], "", "", r[5], r[4], r[7], r[8], r[9], ""] for r in read.rows("textdata_object.txt", characters.translation_rows, width=10) if len(r) >= 10 and r[1] in wanted]
 		if wanted - {r[1] for r in texts}:
 			raise ValueError("missing field monster names")
 		# Name rows a family that is off this build owned leave with it: the

@@ -39,6 +39,16 @@ type Unique struct {
 	Alive     bool      `json:"alive"`
 	SpawnedAt *string   `json:"spawnedAt"`
 	LastKill  *LastKill `json:"lastKill"`
+	// Copies lists every living copy, oldest first: a Ch'in Tomb Sarin
+	// general stands on its Floor 3 nest and in the Floor 6 South stage
+	// at once. SpawnedAt and RegionID are the oldest copy's.
+	Copies []UniqueCopy `json:"copies"`
+}
+
+// UniqueCopy is one living copy of a unique in a P1 row.
+type UniqueCopy struct {
+	RegionID  uint16 `json:"regionId"`
+	SpawnedAt string `json:"spawnedAt"`
 }
 
 // UniquesResponse is P1 GET /public/v1/uniques.

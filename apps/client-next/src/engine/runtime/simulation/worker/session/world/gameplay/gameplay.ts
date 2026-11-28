@@ -39,7 +39,12 @@ import {
 import { ARENA_CHEST_OPCODE, ARENA_DECISION_OPCODE } from "@/engine/foundation/gameplay/arena-chest";
 import { createParamJobs } from "@/engine/foundation/gameplay/param-job";
 import { createCountJobs, countJobUseRequest } from "@/engine/foundation/gameplay/count-job";
-import { createStorageRoom, isWarehouseTicket, STORAGE_MOVE_ROOM } from "@/engine/foundation/gameplay/storage-room";
+import {
+	createStorageRoom,
+	isWarehouseTicket,
+	publishedStorageGoldDepositLimit as acceptedStorageGoldDepositLimit,
+	STORAGE_MOVE_ROOM
+} from "@/engine/foundation/gameplay/storage-room";
 import type { PlayerModel } from "@/engine/foundation/gameplay/skin-change";
 import {
 	jobAliasRequest,
@@ -773,6 +778,7 @@ export function createGameplay(
 	// window may use the published wider overview and town pages.
 	let alexandria = false;
 	let raisedGoldCaps = false; // Port-only SRO_RAISED_GOLD_CAPS: the raised stall and warehouse caps.
+	let wideTradeGold = false; // Port-only SRO_WIDE_TRADE_GOLD: trade gold past the u32 range (#4264).
 	// Port-only SRO_RAISED_GOLD_CAPS: the shard's chosen warehouse deposit cap, when published.
 	let publishedStorageGoldDepositLimit: number | undefined;
 	let inventorySortRule = false; // Port-only SRO_INVENTORY_SORT: the containers' sort button.
@@ -2503,13 +2509,10 @@ next 0x3AC5 status-5 row throw "Unknown academy member status" (#2876).
 			moonlitThiefSuit = (value as { moonlitThiefSuit?: unknown; } | null)?.moonlitThiefSuit === true;
 			alexandria = (value as { alexandria?: unknown; } | null)?.alexandria === true;
 			raisedGoldCaps = (value as { raisedGoldCaps?: unknown; } | null)?.raisedGoldCaps === true;
-			const publishedDepositLimit = (value as { storageGoldDepositLimit?: unknown; } | null)
-				?.storageGoldDepositLimit;
-			publishedStorageGoldDepositLimit = typeof publishedDepositLimit === "number" &&
-					Number.isInteger( publishedDepositLimit ) && publishedDepositLimit >= 1 &&
-					publishedDepositLimit <= 0xffffffff ?
-				publishedDepositLimit :
-				undefined;
+			wideTradeGold = (value as { wideTradeGold?: unknown; } | null)?.wideTradeGold === true;
+			publishedStorageGoldDepositLimit = acceptedStorageGoldDepositLimit(
+				(value as { storageGoldDepositLimit?: unknown; } | null)?.storageGoldDepositLimit
+			);
 			inventorySortRule = (value as { inventorySort?: unknown; } | null)?.inventorySort === true;
 			reverseMapPoints = decodeReverseMapPoints(
 				(value as { reverseMapPoints?: unknown; } | null)?.reverseMapPoints
@@ -7281,6 +7284,7 @@ The published plane when something changed since the last take, else null.
 				...(moonlitThiefSuit ? { moonlitThiefSuit } : {}),
 				...(alexandria ? { alexandria } : {}),
 				...(raisedGoldCaps ? { raisedGoldCaps } : {}),
+				...(wideTradeGold ? { wideTradeGold } : {}),
 				...(publishedStorageGoldDepositLimit !== undefined ?
 					{ storageGoldDepositLimit: publishedStorageGoldDepositLimit } :
 					{}),

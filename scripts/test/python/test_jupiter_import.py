@@ -8,6 +8,7 @@ marker enrolled.
 ===========================================================================
 """
 import script_paths  # noqa: F401  (puts scripts/ and its build folders on sys.path, #3410)
+import later_fixtures  # noqa: E402
 import later_tables  # noqa: E402
 import hashlib
 import json
@@ -120,9 +121,8 @@ class JupiterImportTest(unittest.TestCase):
 		source.mkdir()
 		native_char = ["0"] * 104
 		native_char[1], native_char[2] = "100", "MOB_NATIVE"
-		(text_root / "characterdata_5000.txt").write_bytes(utf16([native_char]))
-		(text_root / "skilldata.txt").write_bytes(utf16([["skilldata_5000.txt"]]))
-		(text_root / "skilldata_5000.txt").write_bytes(utf16([]))
+		later_fixtures.write_sharded(text_root, "characterdata.txt", {"characterdata_5000.txt": [native_char]})
+		later_fixtures.write_sharded(text_root, "skilldata.txt", {"skilldata_5000.txt": []})
 		(text_root / "textdataname.txt").write_bytes(utf16([["1", "UIO_OBJ_MOB_NATIVE", "Native"]]))
 		(text_root / "skilleffect.txt").write_bytes(utf16([
 			["#section", "characterinfo"], ["MOB_NATIVE"] + ["0"] * 12, ["#section", "skillaniset"]]))
@@ -131,10 +131,8 @@ class JupiterImportTest(unittest.TestCase):
 		temple = later_row("MOB_JUPITER_TEMPLEKIND", "UIO_OBJ_MOB_JUPITER_TEMPLEKIND", 118, grade=3)
 		extra = list(extra_rows)
 		media = {
-			"characterdata.txt": utf16([["characterdata_6000.txt"]]),
-			"characterdata_6000.txt": utf16([field, temple] + extra),
-			"skilldata.txt": utf16([["skilldata_6000.txt"]]),
-			"skilldata_6000.txt": utf16([skill_row(7001, "MSKILL_JUPITER_TEST")]),
+			**later_fixtures.sharded("characterdata.txt", {"characterdata_6000.txt": [field, temple] + extra}),
+			**later_fixtures.sharded("skilldata.txt", {"skilldata_6000.txt": [skill_row(7001, "MSKILL_JUPITER_TEST")]}),
 			"textdata_object.txt": utf16([
 				["1", "UIO_OBJ_MOB_JUPITER_FIELDKIND", "x", "x", "Field kind", "f", "x", "a", "b", "c"],
 				["2", "UIO_OBJ_MOB_JUPITER_TEMPLEKIND", "x", "x", "Temple kind", "t", "x", "a", "b", "c"]]

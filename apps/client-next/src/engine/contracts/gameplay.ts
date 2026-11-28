@@ -1030,6 +1030,9 @@ export interface GameplayState extends MoverPublication {
 	readonly alexandria?: boolean;
 	// Port-only SRO_RAISED_GOLD_CAPS: the stall and warehouse deposit caps are raised.
 	readonly raisedGoldCaps?: boolean;
+	// Port-only SRO_WIDE_TRADE_GOLD (#4264): the trade window's gold may pass
+	// 4,294,967,295; absent keeps the native u32 bound.
+	readonly wideTradeGold?: boolean;
 	// Port-only SRO_RAISED_GOLD_CAPS: the shard's chosen warehouse deposit
 	// cap, published at world entry; absent keeps the native deposit cap.
 	readonly storageGoldDepositLimit?: number;

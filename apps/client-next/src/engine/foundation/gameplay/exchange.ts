@@ -44,6 +44,25 @@ const MOVE_EXCHANGE_PUT = 4;
 const MOVE_EXCHANGE_TAKE = 5;
 const MOVE_EXCHANGE_GOLD = 0x0d;
 const PARTNER_GOLD_KIND = 2;
+// The native table's gold is a u32. Port-only, not native: on a
+// SRO_WIDE_TRADE_GOLD shard (#4264) an amount above it travels as a u64,
+// told apart by length (server item/wire WideGoldMove).
+const NATIVE_GOLD_MOVE_MAX = 0xffffffff;
+
+/*
+================
+readTableGold
+
+The gold of a 0x30BB or 0x0D echo at offset: four bytes native, or the
+wide eight. Any other length is malformed (null).
+================
+*/
+function readTableGold( v: DataView, offset: number ): number | null {
+	const rest = v.byteLength - offset;
+	if ( rest === 4 ) return v.getUint32( offset, true );
+	if ( rest === 8 ) return Number( v.getBigUint64( offset, true ) );
+	return null;
+}
 // CGInterface_ShowSystemNotification category of the exchange refusals.
 export const EXCHANGE_NOTICE_CATEGORY = 1;
 
@@ -144,8 +163,11 @@ export function exchangeFrame(
 			return { state: mine ? { ...state, own: rows } : { ...state, theirs: rows } };
 		}
 		case OP_EXCHANGE_PARTNER_GOLD:
-			if ( p[0] !== PARTNER_GOLD_KIND || p.length !== 5 ) return null;
-			return { state: { ...state, theirGold: v.getUint32( 1, true ) } };
+			if ( p[0] !== PARTNER_GOLD_KIND ) return null;
+			{
+				const theirGold = readTableGold( v, 1 );
+				return theirGold === null ? null : { state: { ...state, theirGold } };
+			}
 		case OP_EXCHANGE_PARTNER_LOCKED:
 			return { state: { ...state, theirLocked: true } };
 		// The refusals of these three are the social lane's category-1
@@ -179,8 +201,9 @@ export function exchangeFrame(
 			if ( !state.open || p[0] !== 1 ) return null;
 			if ( p[1] === MOVE_EXCHANGE_PUT || p[1] === MOVE_EXCHANGE_TAKE ) return { state };
 			if ( p[1] === MOVE_EXCHANGE_GOLD ) {
-				if ( p.length !== 6 ) throw Error( "Invalid exchange gold" );
-				return { state: { ...state, ownGold: v.getUint32( 2, true ) } };
+				const ownGold = readTableGold( v, 2 );
+				if ( ownGold === null ) throw Error( "Invalid exchange gold" );
+				return { state: { ...state, ownGold } };
 			}
 			return null;
 	}
@@ -205,10 +228,12 @@ export type ExchangeCommand =
 exchangeRequest
 
 The frame a command sends. The confirm button locks first and approves
-once both sides locked (6B2280).
+once both sides locked (6B2280). wideTradeGold is the shard's published
+SRO_WIDE_TRADE_GOLD rule: only with it may the table's gold pass the u32
+range, in the wide form.
 ================
 */
-export function exchangeRequest( state: ExchangeState, command: ExchangeCommand ): WireFrame {
+export function exchangeRequest( state: ExchangeState, command: ExchangeCommand, wideTradeGold = false ): WireFrame {
 	const frame = ( opcode: number, ...bytes: number[] ) => ({ opcode, payload: Uint8Array.from( bytes ) });
 	switch ( command.kind ) {
 		case "exchange-request": {
@@ -231,9 +256,16 @@ export function exchangeRequest( state: ExchangeState, command: ExchangeCommand 
 			if ( !state.open || state.ownLocked || !Number.isInteger( command.amount ) || command.amount < 0 ) {
 				throw Error( "Offer is locked" );
 			}
+			if ( command.amount > NATIVE_GOLD_MOVE_MAX ) {
+				if ( !wideTradeGold || !Number.isSafeInteger( command.amount ) ) throw Error( "Gold amount too large" );
+				const wide = new Uint8Array( 9 );
+				wide[0] = MOVE_EXCHANGE_GOLD;
+				new DataView( wide.buffer ).setBigUint64( 1, BigInt( command.amount ), true );
+				return { opcode: OP_ITEM_MOVE, payload: wide };
+			}
 			const payload = new Uint8Array( 5 );
 			payload[0] = MOVE_EXCHANGE_GOLD;
-			new DataView( payload.buffer ).setUint32( 1, Math.min( command.amount, 0xffffffff ), true );
+			new DataView( payload.buffer ).setUint32( 1, command.amount, true );
 			return { opcode: OP_ITEM_MOVE, payload };
 		}
 		case "exchange-confirm":

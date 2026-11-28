@@ -226,12 +226,9 @@ def key_items(source_links, source_items, variant_items):
 # variant refuses by name instead of standing two objects on one id.
 # ================
 def taken_building_ids(text_root, building_ids):
-	used = {}
-	for pattern in ("characterdata_*.txt", "itemdata_*.txt", "teleportbuilding.txt"):
-		for path in text_root.glob(pattern):
-			for row in tables.table_rows(path.read_bytes()):
-				if len(row) > 2:
-					used[row[1]] = row[2]
+	# Every object file on disk, listed in an index or not: a reservation
+	# that reads too much only refuses more, never stacks two objects.
+	used = {row[1]: row[2] for _, row in published_ids.object_rows(text_root) if len(row) > 2}
 	return sorted(f"{identity} ({used[identity]})" for identity in building_ids if identity in used)
 
 
@@ -371,7 +368,7 @@ def without_quests(text_root, codes):
 # ================
 def add_quests(read, text_root, prior):
 	native = without_quests(text_root, set(prior.get("quests", [])))
-	source = {row[2]: row for row in read.rows(QUEST_TABLE) if len(row) > 2}
+	source = {row[2]: row for row in read.rows(QUEST_TABLE, width=3) if len(row) > 2}
 	taken_ids = {row[1] for row in native if len(row) > 1}
 	taken_codes = {row[2] for row in native if len(row) > 2}
 	added = []

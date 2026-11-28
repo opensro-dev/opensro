@@ -46,7 +46,7 @@ type TextdataItems struct {
 	byCodename             map[string]*ItemRef
 	byID                   map[uint32]*ItemRef
 	charactersByCodename   map[string]*CharacterRef
-	characterIDsByCodename map[string]uint32 // every service row (characterids.go)
+	characterIDsByCodename map[string]characterIdentity // every service row (characterids.go)
 	summonableCharacters   []CharacterRef
 	// refusedSummonRows names service characterdata rows a summon item
 	// reaches that buildCharacterRef refused: authored data the port cannot
@@ -199,7 +199,7 @@ func (t *TextdataItems) parse() {
 		t.markRentItems()
 	}()
 	t.charactersByCodename = map[string]*CharacterRef{}
-	t.characterIDsByCodename = map[string]uint32{}
+	t.characterIDsByCodename = map[string]characterIdentity{}
 	entries, err := os.ReadDir(t.dir)
 	if err != nil {
 		log.Warnf("bootstrap: textdata not found in verified projection at %s; item reference lookups will be empty", t.dir)
@@ -240,7 +240,7 @@ func (t *TextdataItems) parse() {
 			continue
 		}
 		for _, fields := range readTextdataFile(filepath.Join(t.dir, entry.Name())) {
-			t.indexCharacterID(fields)
+			t.indexCharacterID(fields, names)
 			ref := buildCharacterRef(fields, names)
 			if ref == nil {
 				if len(fields) > 2 && strings.TrimSpace(fields[0]) == "1" && strings.TrimSpace(fields[2]) != "" {

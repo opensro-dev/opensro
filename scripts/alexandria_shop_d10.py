@@ -64,6 +64,37 @@ NAME_COLUMN = 5
 DESCRIPTION_COLUMN = 6
 ITEM_ID_COLUMN = 1
 
+
+# The price row's PaymentDevice for gold (refpricepolicyofitem column 3).
+GOLD_DEVICE = "1"
+
+
+# ================
+# minted_rows
+#
+# The package, scrap and price rows minting package code for item (an
+# itemdata row) from a template package's rows: the template's package
+# row, one scrap row and every price row it has. The price is the item's
+# gold price (column PRICE_COLUMN) on the template's gold row; a
+# template with none (a mall-only degree 9 package, priced in silk only)
+# lends its first row's layout, re-keyed to gold. A shop sells the
+# minted good for gold: the native server's load check names a non-mall
+# package without a gold row ("(%s) register gold price.", the v1.188
+# server's package price check), and the mall catalogue
+# refuses a silk device carrying an amount on a gold good (#4702).
+# ================
+def minted_rows(template, code, item, package_id, scrap_index):
+	package_row, scrap_row, price_rows = template
+	package = list(package_row)
+	package[2], package[3] = package_id, code
+	icon = next((v for v in item if v.lower().endswith(ICON_SUFFIX)), package_row[8])
+	package[6], package[7], package[8] = item[NAME_COLUMN], item[DESCRIPTION_COLUMN], icon
+	scrap = list(scrap_row)
+	scrap[2], scrap[3], scrap[-1] = code, item[2], scrap_index
+	price = list(next((row for row in price_rows if row[3] == GOLD_DEVICE), price_rows[0]))
+	price[2], price[3], price[4] = code, GOLD_DEVICE, item[PRICE_COLUMN]
+	return package, scrap, price
+
 # new store -> (the store it is copied from, the shop groups that move to it)
 CLONED_STORES = {
 	"STORE_SD_SMITH": ("STORE_KT_SMITH", ("GROUP_STORE_SD_M_SMITH", "GROUP_STORE_SD_T_SMITH")),
@@ -158,7 +189,10 @@ def merge_d10_stock(raw, items, port_stock=False):
 			goods_by_tab[row[2]].append(row)
 	packages = {r[3]: r for r in rows["refpackageitem.txt"] if len(r) > 3}
 	scraps = {r[2]: r for r in rows["refscrapofpackageitem.txt"] if len(r) > 3}
-	prices = {r[2]: r for r in rows["refpricepolicyofitem.txt"] if len(r) > 2}
+	prices = defaultdict(list)
+	for row in rows["refpricepolicyofitem.txt"]:
+		if len(row) > 4:
+			prices[row[2]].append(row)
 	tabs_of_group = defaultdict(list)
 	for row in rows["refshoptab.txt"]:
 		if len(row) >= 6:
@@ -185,19 +219,13 @@ def merge_d10_stock(raw, items, port_stock=False):
 		source = with_degree(code, SOURCE_DEGREE)
 		item_code = code.replace("PACKAGE_ITEM_", "ITEM_", 1)
 		item = items.get(item_code)
-		if source not in packages or source not in scraps or source not in prices or item is None:
+		if source not in packages or source not in scraps or not prices.get(source) or item is None:
 			missing.add(code)
 			return False
-		icon = next((v for v in item if v.lower().endswith(ICON_SUFFIX)), packages[source][8])
-		package = list(packages[source])
-		package[2], package[3] = new_id("refpackageitem.txt"), code
-		package[6], package[7], package[8] = item[NAME_COLUMN], item[DESCRIPTION_COLUMN], icon
-		scrap = list(scraps[source])
-		scrap[2], scrap[3], scrap[-1] = code, item_code, str(next_scrap)
+		package, scrap, price = minted_rows((packages[source], scraps[source], prices[source]), code, item,
+			new_id("refpackageitem.txt"), str(next_scrap))
 		next_scrap += 1
-		price = list(prices[source])
-		price[2], price[4] = code, item[PRICE_COLUMN]
-		packages[code] = package
+		packages[code], scraps[code], prices[code] = package, scrap, [price]
 		new_packages.append(package)
 		new_scraps.append(scrap)
 		new_prices.append(price)

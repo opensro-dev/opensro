@@ -124,7 +124,8 @@ test("the warehouse deposit dialog caps at 100m without a published cap and at t
 	assert.equal( storage.storageGoldDepositLimit( 4294967295 ), 4294967295n );
 	assert.equal( storage.storageGoldDepositLimit( 0 ), 100000000n );
 	assert.equal( storage.storageGoldDepositLimit( 1.5 ), 100000000n );
-	assert.equal( storage.storageGoldDepositLimit( 0x100000000 ), 100000000n );
+	assert.equal( storage.storageGoldDepositLimit( 10000000000 ), 10000000000n );
+	assert.equal( storage.storageGoldDepositLimit( Number.MAX_SAFE_INTEGER + 1 ), 100000000n );
 	for (
 		const [published, limit] of /** @type {[number | undefined, number][]} */ ([
 			[ undefined, 100000000 ],
@@ -408,4 +409,42 @@ test("the price edit control publishes the raised digit width and accepts eleven
 			f.dispose();
 		}
 	}
+});
+
+test("a warehouse deposit above the u32 range travels wide; every other gold move stays native", () => {
+	const move = ( type, gold ) =>
+		storage.storageMoveRequest( 17, { type, source: 0, destination: 0, quantity: 0, gold } );
+	// The native four bytes up to 4,294,967,295.
+	const narrow = move( storage.STORAGE_GOLD_DEPOSIT, 4294967295 );
+	assert.equal( narrow.payload.length, 5 );
+	assert.equal( new DataView( narrow.payload.buffer ).getUint32( 1, true ), 4294967295 );
+	// Above it, a deposit carries a u64 (server item/wire WideGoldDeposit).
+	const wide = move( storage.STORAGE_GOLD_DEPOSIT, 10000000000 );
+	assert.equal( wide.payload.length, 9 );
+	assert.equal( wide.payload[0], storage.STORAGE_GOLD_DEPOSIT );
+	assert.equal( new DataView( wide.payload.buffer ).getBigUint64( 1, true ), 10000000000n );
+	// The guild warehouse's deposit takes the same wide form.
+	const guild = storage.storageMoveRequest( 17, {
+		type: storage.STORAGE_GOLD_DEPOSIT,
+		source: 0,
+		destination: 0,
+		quantity: 0,
+		gold: 10000000000
+	}, true );
+	assert.equal( guild.payload.length, 9 );
+	assert.equal( guild.payload[0], 0x20 );
+	// A withdraw has no wide form: the server never reads one.
+	assert.throws( () => move( storage.STORAGE_GOLD_WITHDRAW, 10000000000 ), /Invalid storage gold/ );
+});
+
+test("the world entry's deposit cap above the u32 range reaches the dialog", () => {
+	// The worker reads the published value through this rule; a u32-only
+	// check dropped 10,000,000,000 and kept the native 100,000,000.
+	assert.equal( storage.publishedStorageGoldDepositLimit( 10000000000 ), 10000000000 );
+	assert.equal( storage.publishedStorageGoldDepositLimit( 1000000000 ), 1000000000 );
+	assert.equal( storage.publishedStorageGoldDepositLimit( 0 ), undefined );
+	assert.equal( storage.publishedStorageGoldDepositLimit( 2 ** 53 ), undefined );
+	assert.equal( storage.publishedStorageGoldDepositLimit( "10000000000" ), undefined );
+	assert.equal( storage.publishedStorageGoldDepositLimit( undefined ), undefined );
+	assert.equal( storage.storageGoldDepositLimit( 10000000000 ), 10000000000n );
 });

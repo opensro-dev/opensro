@@ -203,6 +203,23 @@ class MergeTests(unittest.TestCase):
 		])
 		self.assertEqual([r[4] for r in eleven], ["0", "1", "2"])
 
+	# ================
+	# test_a_package_minted_from_a_mall_only_template_is_priced_in_gold
+	#
+	# #4702's repro: the degree 9 stone is a mall package (2 51, 4 0,
+	# 16 0). Its minted degree 10 and 11 twins get one gold row at the
+	# item's price, never "16 224000" (the mall catalogue's fatal shape).
+	# ================
+	def test_a_package_minted_from_a_mall_only_template_is_priced_in_gold(self):
+		raw = tables()
+		template = "PACKAGE_ITEM_ETC_ARCHEMY_MAGICSTONE_LUCK_09"
+		prices = [r for r in table_rows(raw["refpricepolicyofitem.txt"]) if r[2] != template]
+		prices += [["1", "11", template, device, amount, *FILLER] for device, amount in (("2", "51"), ("4", "0"), ("16", "0"))]
+		raw["refpricepolicyofitem.txt"] = utf16(prices)
+		merged, _ = supplies.merge_supplies(raw, ITEMS, port_stock=True)
+		minted = [r[2:5] for r in table_rows(merged["refpricepolicyofitem.txt"]) if r[2].startswith(template[:-2]) and r[2] != template]
+		self.assertEqual(sorted(minted), [[template[:-2] + "10", "1", "224000"], [template[:-2] + "11", "1", "224000"]])
+
 	def test_a_good_already_stocked_is_not_stocked_twice(self):
 		merged, _ = self.merge(alchemy_goods=ALCHEMY_GOODS + ["PACKAGE_ITEM_ETC_ARCHEMY_MAGICSTONE_LUCK_10"])
 		ten = [r[3] for r in goods_of(merged, "STORE_SD_ACCESSORY_TAB3")]

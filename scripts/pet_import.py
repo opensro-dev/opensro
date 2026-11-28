@@ -44,6 +44,13 @@ every known identity, remembered in the marker so a rebuild never moves
 a pet. Each source owns one character shard, one item shard and one
 marker, so a source's off path removes only its own rows.
 
+Two passes close what no source fills (owner 2026-11-28: every pet is in
+the game). The VSRO pass also lists the native kinds whose scroll no
+package sells (native_scrolls), on their lane's tab. A fourth source,
+INFERRED_SOURCE, runs pet_inference.py's rows for the COS models every
+client ships without a row (gorilla, frilled lizard, the fourth dragon
+horse tier) through the same selection, after every real source.
+
 ===========================================================================
 """
 import argparse
@@ -64,6 +71,7 @@ import published_ids
 import later_world_import
 import mall_avatar_import as mall_authoring
 import mall_tables as mall
+import pet_inference
 import skilldata_enc as skill_tables
 from pin_file import read_pin_field
 from prepare_client_resources import safe_target, write_atomically
@@ -107,9 +115,17 @@ V1696_SOURCE = {"name": "v1696", "char_shard": "characterdata_140000.txt", "item
 	"skill_shard": "skilldata_140000.txt", "report": ".opensro-pets-v1696.json", "pins": V1696_PIN_FILE}
 ARCHIVE_SOURCE = {"name": "archive", "char_shard": "characterdata_150000.txt", "item_shard": "itemdata_150000.txt",
 	"skill_shard": "skilldata_150000.txt", "report": ".opensro-pets-archive.json", "pins": AVATARS_PIN_FILE}
-SOURCES = (VSRO_SOURCE, V1696_SOURCE, ARCHIVE_SOURCE)
+# The kinds no source has a row for (pet_inference.py), inferred from the
+# VSRO client's template rows and run as the last source, so a kind any
+# real source carries always wins.
+INFERRED_SOURCE = {"name": "inferred", "char_shard": "characterdata_340000.txt", "item_shard": "itemdata_340000.txt",
+	"skill_shard": "skilldata_340000.txt", "report": ".opensro-pets-inferred.json", "pins": None, "infer": True}
+SOURCES = (VSRO_SOURCE, V1696_SOURCE, ARCHIVE_SOURCE, INFERRED_SOURCE)
 
 EXCLUDED_PREFIXES = ("COS_GUARD_", "COS_GUILD_")
+# A developer's test row (v1.696 COS_T_BEHEMOTH_TEST: no scroll, a copy
+# of the Behemoth) is no kind at all (mall_avatar_import's _TEST rule).
+EXCLUDED_SUFFIXES = ("_TEST",)
 # The Item Mall tab each lane's summon scrolls list on: v1.150's own pet
 # tabs (refshoptab). Fellows fight like attack pets and share their tab.
 # Owner 2026-11-27: every new pet sells, native or not.
@@ -162,7 +178,7 @@ def family_of(codename):
 
 
 def kind_of(family, rows):
-	if family.startswith(EXCLUDED_PREFIXES):
+	if family.startswith(EXCLUDED_PREFIXES) or family.endswith(EXCLUDED_SUFFIXES):
 		return "excluded"
 	if family.startswith("COS_P_"):
 		levels = {row[CHAR_LEVEL] for row in rows if len(row) > CHAR_LEVEL}
@@ -342,15 +358,9 @@ def native_tables(native, exclude_shards=()):
 	# output share a tree, so a rebuild still sees its kinds as fresh
 	# and can restage their skills (later_world_import's tree_characters
 	# rule).
-	excluded = {name.lower() for name in exclude_shards}
-	text_root = Path(native) / TEXT_ROOT
-	chars = [row for path in sorted(text_root.glob("characterdata_*.txt"))
-		if path.name.lower() not in excluded
-		for row in tables.table_rows(path.read_bytes())]
-	item_rows = [row for path in sorted(text_root.glob("itemdata_*.txt"))
-		if path.name.lower() not in excluded
-		for row in tables.table_rows(path.read_bytes())]
-	return chars, item_rows
+	tree = later_tables.Archive.tree(Path(native) / TEXT_ROOT)
+	return (tree.rows("characterdata.txt", excluding=exclude_shards),
+		tree.rows("itemdata.txt", excluding=exclude_shards))
 
 
 # ================
@@ -372,10 +382,7 @@ def stage_pet_skills(read, text_root, skill_shard, char_rows, previous_skills=No
 	if not needed:
 		_drop_skill_shard(text_root, skill_shard)
 		return char_rows, {}
-	native_skills = [
-		row for path in text_root.glob("skilldata_*.txt") if path.name.lower() != skill_shard.lower()
-		for row in tables.table_rows(path.read_bytes()) if len(row) == 118
-	]
+	native_skills = cap110_monsters.tree_skills(text_root, skill_shard)
 	client_skills = [row for row in skill_tables.client_skill_rows(read) if len(row) > 3 and row[1].isdigit()]
 	added, skill_map = cap110_monsters.merge_skills(native_skills, client_skills, needed, previous_skills or {})
 	for row in char_rows:
@@ -561,7 +568,7 @@ def tab_price(current, tab):
 # (its marker's mall packages). A scroll some package already sells, an
 # event copy, a full tab or a tab without a price is reported unlisted.
 # ================
-def _list_in_mall(output, native, item_rows, report, prior, source):
+def _list_in_mall(output, native, item_rows, report, prior, source, native_goods=()):
 	output = Path(output)
 	mall.strip_mall(output, set(prior.get("mall", {}).get("packages", [])))
 	files = {name: safe_target(output / TEXT_ROOT, name) for name, _ in mall.MALL_TABLES}
@@ -585,7 +592,19 @@ def _list_in_mall(output, native, item_rows, report, prior, source):
 		stale |= set(read_marker(output, later).get("mall", {}).get("packages", []))
 	current = mall.without_packages(current, stale)
 	kind_of_scroll = {code: added["kind"] for added in report.get("added", []) for code in added.get("scrolls", [])}
+	kind_of_scroll.update({row[items.CODENAME]: kind for row, kind, _ in native_goods})
 	sold = {row[3] for row in current["refscrapofpackageitem.txt"] if len(row) > 3}
+	# A native kind some scroll of it already sells (the flute's silk copy,
+	# the rabbit's gold one) needs no second listing; only kinds nobody can
+	# get list.
+	sold_families = {family for row, _, family in native_goods if row[items.CODENAME] in sold}
+	item_rows = list(item_rows)
+	unlisted = []
+	for row, _, family in native_goods:
+		if family in sold_families and row[items.CODENAME] not in sold:
+			unlisted.append({"code": row[items.CODENAME], "reason": "kind already sold"})
+		else:
+			item_rows.append(row)
 	slots = collections.defaultdict(lambda: -1)
 	for row in current["refshopgoods.txt"]:
 		if len(row) > 4 and row[4].lstrip("-").isdigit():
@@ -594,7 +613,7 @@ def _list_in_mall(output, native, item_rows, report, prior, source):
 	ids = mall_authoring.AuthoredIds(
 		{name: [] for name, _ in mall.MALL_TABLES}, current,
 		{int(row[2]) for row in current["refpackageitem.txt"] if len(row) > 2 and row[2].isdigit()})
-	packages, unlisted = [], []
+	packages = []
 	for row in sorted(item_rows, key=lambda row: row[items.CODENAME]):
 		code = row[items.CODENAME]
 		tab = MALL_TAB.get(kind_of_scroll.get(code, ""))
@@ -616,6 +635,55 @@ def _list_in_mall(output, native, item_rows, report, prior, source):
 		if rows[name]:
 			write_atomically(files[name], characters.append_rows(raw(name), rows[name]))
 	report["mall"] = {"packages": packages, "listed": len(packages), "unlisted": unlisted}
+
+
+# ================
+# native_scrolls
+#
+# The v1.150 summon scrolls of every native kind on a COS lane, as
+# (scroll row, kind, family) triples for _list_in_mall. Nine native kinds (Rudolph,
+# Unicorn, Wild Boar, Glider, Jinn, Raccoon Dog, Behemoth, Donkey, Lizard)
+# have a scroll no shop or mall package sells, so no player could get one
+# (owner 2026-11-28: every pet is in the game); _list_in_mall skips the
+# ones some package already sells, the other scrolls of a kind one of them
+# sells, and the event copies.
+# ================
+def native_scrolls(native_chars, native_items):
+	families = collections.defaultdict(list)
+	for row in native_chars:
+		if len(row) > CHAR_LEVEL and row[CHAR_CODE].startswith("COS_"):
+			families[family_of(row[CHAR_CODE])].append(row)
+	kind_of_code = {}
+	for family, rows in families.items():
+		kind = kind_of(family, rows)
+		if kind in LANE_KINDS:
+			kind_of_code[family] = (kind, family)
+			kind_of_code.update({row[CHAR_CODE]: (kind, family) for row in rows})
+	return [
+		(row,) + kind_of_code[row[ITEM_ASSOCIATED_CHAR].strip()] for row in native_items
+		if len(row) > ITEM_ASSOCIATED_CHAR and row[items.SERVICE] == SERVICE_ON
+		and row[ITEM_ASSOCIATED_CHAR].strip() in kind_of_code
+	]
+
+
+# ================
+# inferred_tables
+#
+# The inferred source's tables: pet_inference's rows for the COS models
+# no source has a row for, built on this client's template rows, with
+# their object text encoded as a later object table. An inferred icon
+# neither the native tree nor this client's Media holds takes the
+# template's.
+# ================
+def inferred_tables(later_chars, later_items, later_text, native, media_index):
+	icon_root = Path(native) / ICON_ROOT
+
+	def has_icon(name):
+		return (icon_root / name).is_file() or ("icon/" + name) in media_index
+
+	texts = {row[1]: row for row in characters.translation_rows(later_text) if len(row) > 1}
+	chars, scrolls, text_rows = pet_inference.infer_kinds(later_chars, later_items, texts, has_icon)
+	return chars, scrolls, _encode(text_rows)
 
 
 def _write_pass(output, source, char_rows, item_rows, report):
@@ -673,6 +741,8 @@ def add_pets(root, native, output, source=VSRO_SOURCE, earlier_codes=(), env=os.
 			open(Path(root) / "Data.pk2", "rb") as handle, mmap.mmap(handle.fileno(), 0, access=mmap.ACCESS_READ) as data:
 		media_index = tables.archive_index(media)
 		data_index = tables.archive_index(data)
+		if source.get("infer"):
+			later_chars, later_items, later_text = inferred_tables(later_chars, later_items, later_text, native, media_index)
 
 		def missing(family, rows):
 			for row in rows:
@@ -696,7 +766,8 @@ def add_pets(root, native, output, source=VSRO_SOURCE, earlier_codes=(), env=os.
 		_merge_name_text(output, char_rows, item_rows, later_text, report)
 	report["_prior"] = prior
 	_copy_icons(root, native, output, char_rows + item_rows, report)
-	_list_in_mall(output, native, item_rows, report, prior, source)
+	native_goods = native_scrolls(native_chars, native_items) if source is VSRO_SOURCE else ()
+	_list_in_mall(output, native, item_rows, report, prior, source, native_goods)
 	return _write_pass(output, source, char_rows, item_rows, report)
 
 
@@ -763,7 +834,7 @@ def add_archive_pets(native, output, earlier_codes=(), env=os.environ):
 # ================
 # v1696_root / add_all_sources
 #
-# The three passes in order over the variant staging tree, each seeing
+# The four passes in order over the variant staging tree, each seeing
 # the row codenames the earlier ones imported.
 # ================
 def v1696_root(env=os.environ):
@@ -777,7 +848,9 @@ def add_all_sources(vsro_root, native, output, env=os.environ):
 	v1696 = add_pets(v1696_root(env), native, output, V1696_SOURCE, earlier_codes=codes, env=env)
 	codes |= set(read_marker(output, V1696_SOURCE).get("idMap", {}))
 	archive = add_archive_pets(native, output, earlier_codes=codes, env=env)
-	return {"pets": vsro, "petsV1696": v1696, "petsArchive": archive}
+	codes |= set(read_marker(output, ARCHIVE_SOURCE).get("idMap", {}))
+	inferred = add_pets(vsro_root, native, output, INFERRED_SOURCE, earlier_codes=codes, env=env)
+	return {"pets": vsro, "petsV1696": v1696, "petsArchive": archive, "petsInferred": inferred}
 
 
 # ================

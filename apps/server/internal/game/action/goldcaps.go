@@ -7,13 +7,21 @@ Port-only, not native. The v1.150 client caps a stall's unit price at
 1,000,000,000 (CIFStall's price editor, client 5A1D85 -> 5203B0) and a
 warehouse gold deposit at 100,000,000 (client 59A430). With
 SRO_RAISED_GOLD_CAPS on, this shard admits a 10,000,000,000 stall price
-and a 1,000,000,000 deposit instead. Off is native: both caps and the
-native u32 stall-offer wire are unchanged.
+and a 10,000,000,000 deposit instead (owner, 2026-11-28; the deposit was
+1,000,000,000). Off is native: both caps and the native u32 stall-offer
+and gold-move wire are unchanged.
+
+A deposit above 4,294,967,295 does not fit the native u32 gold move, so
+it travels in the port's wide form (item/wire WideGoldMove), as the
+raised stall price does.
+
+SRO_WIDE_TRADE_GOLD (owner, 2026-11-26, #4264) lets the exchange window's
+gold travel in the same wide form, so one trade can carry more than
+4,294,967,295. Off is native: an amount above the u32 range is refused.
 
 The switch also takes a value: a bare number names the warehouse deposit
-cap itself, clamped to the u32 a gold move carries (item/wire
-GoldAmount), so a shard can admit one deposit of 4,294,967,295 without
-touching the stall cap. The stall cap follows the switch alone.
+cap itself, up to MaxStorageGoldDepositLimit, without touching the stall
+cap. The stall cap follows the switch alone.
 
 The browser learns both at world entry (enterworld Deps RaisedGoldCaps
 and StorageGoldDepositLimit), so its price editor and deposit dialog
@@ -42,12 +50,13 @@ const (
 	RaisedStallPriceLimit uint64 = 10_000_000_000
 	// NativeStorageGoldDepositLimit is client 59A430's warehouse deposit cap.
 	NativeStorageGoldDepositLimit uint64 = 100_000_000
-	// RaisedStorageGoldDepositLimit is the port-only deposit cap; it still
-	// fits the native u32 amount on the wire.
-	RaisedStorageGoldDepositLimit uint64 = 1_000_000_000
-	// MaxStorageGoldDepositLimit is the most one deposit can ever name:
-	// the u32 amount on the gold-move wire (item/wire GoldAmount).
-	MaxStorageGoldDepositLimit uint64 = 4_294_967_295
+	// RaisedStorageGoldDepositLimit is the port-only deposit cap (owner,
+	// 2026-11-28: ten billion, the raised stall price's bound).
+	RaisedStorageGoldDepositLimit uint64 = 10_000_000_000
+	// MaxStorageGoldDepositLimit is the most one deposit can ever name: the
+	// largest integer the browser's dialog holds exactly (2^53 - 1), well
+	// inside the wide gold move's u64 and the warehouse's int64 balance.
+	MaxStorageGoldDepositLimit uint64 = 9_007_199_254_740_991
 )
 
 /*
@@ -71,8 +80,8 @@ func RaisedGoldCapsFromEnv() bool {
 StorageGoldDepositLimitFromEnv
 
 The warehouse deposit cap the environment selects. "on", "1" and "true"
-keep the raised billion; a bare number names the cap itself, clamped to
-the u32 a gold move carries; unset, "off", junk and any number at or
+keep the raised ten billion; a bare number names the cap itself, clamped
+to MaxStorageGoldDepositLimit; unset, "off", junk and any number at or
 below the native cap keep the native cap: the switch only raises (owner
 2026-10-31), and a lower cap would refuse deposits the original admits.
 ================
@@ -145,4 +154,23 @@ func (rt *Runtime) storageGoldDepositLimit() uint64 {
 		return RaisedStorageGoldDepositLimit
 	}
 	return NativeStorageGoldDepositLimit
+}
+
+// EnvWideTradeGold turns the wide exchange-window gold on (#4264).
+const EnvWideTradeGold = "SRO_WIDE_TRADE_GOLD"
+
+/*
+================
+WideTradeGoldFromEnv
+
+Port-only, not native: true when SRO_WIDE_TRADE_GOLD is on, so one trade
+table may hold more than 4,294,967,295 gold. Anything else is native.
+================
+*/
+func WideTradeGoldFromEnv() bool {
+	switch strings.ToLower(strings.TrimSpace(os.Getenv(EnvWideTradeGold))) {
+	case "on", "1", "true":
+		return true
+	}
+	return false
 }

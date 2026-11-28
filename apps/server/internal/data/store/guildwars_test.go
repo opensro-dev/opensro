@@ -65,8 +65,13 @@ func TestGuildWarAtomicLifecycle(t *testing.T) {
 	if _, code, err := a.Begin(start); code != 0x3a || err != nil {
 		t.Fatalf("duplicate %d %v", code, err)
 	}
-	if _, refusal := s.Guilds().DissolveGuildAs(testDivision, masters[0].ID); refusal != domain.GuildRefusalWarActive {
+	if _, refusal := s.Guilds().DissolveGuildAs(testDivision, masters[0].ID, false); refusal != domain.GuildRefusalWarActive {
 		t.Fatalf("disband %d", refusal)
+	}
+	// #4710: the war test comes before the warehouse holder's, so a held
+	// guild at war hears the war, not the holder.
+	if _, refusal := s.Guilds().DissolveGuildAs(testDivision, masters[0].ID, true); refusal != domain.GuildRefusalWarActive {
+		t.Fatalf("held disband at war %d, want the war refusal", refusal)
 	}
 	if len(a.Expired(2000)) != 0 {
 		t.Fatal("expired tied war must remain active")

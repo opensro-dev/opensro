@@ -17,6 +17,8 @@ const ACTION_EXCHANGE = 1006;
 // CIFJobAlias_OpenSubmitConfirm (646470): changing an alias costs the
 // character's level (player +0x820) times this much gold.
 const JOB_ALIAS_MODIFY_GOLD_PER_LEVEL = 50000;
+// The native trade table holds a u32 of gold (0x706D move 0x0D).
+const NATIVE_TRADE_GOLD_MAX = 0xffffffffn;
 // GDR_COS_INFO_NAME_BTN in ifcosinfo.txt: the pet's Name button.
 const COS_INFO_NAME_BUTTON = 26;
 // The Friends list (iffriend.txt id 30, 328 x 256): eleven 23-pixel
@@ -6638,7 +6640,8 @@ export function createUi( ports: UiPorts ) {
 			} else if (
 				!view.gameplay.inventoryPending && view.gameplay.exchange?.open &&
 				!view.gameplay.exchange.ownLocked && Number.isSafeInteger( amount ) &&
-				amount > 0 && amount <= 0xffffffff && balance !== undefined && BigInt( amount ) <= BigInt( balance )
+				amount > 0 && (amount <= 0xffffffff || view.gameplay.wideTradeGold === true) &&
+				balance !== undefined && BigInt( amount ) <= BigInt( balance )
 			) {
 				sendGameplay( { kind: "exchange-gold", amount } );
 				goldDialog = false;
@@ -6647,7 +6650,7 @@ export function createUi( ports: UiPorts ) {
 			}
 		} else if ( id === "drop-gold" && view.gameplay && (goldDialog === "deposit" || goldDialog === "withdraw") ) {
 			// 59A430 caps warehouse deposits at min(carriedGold, 100_000_000);
-			// SRO_RAISED_GOLD_CAPS raises the deposit cap, to 1,000,000,000
+			// SRO_RAISED_GOLD_CAPS raises the deposit cap, to 10,000,000,000
 			// or the shard's published value.
 			// 59C510 closes the modal without sending when amount <= 0, as the
 			// exchange branch above does: an unsendable amount used to leave
@@ -10490,7 +10493,8 @@ export function createUi( ports: UiPorts ) {
 					// room's gold; the drop, exchange and deposit spend the bag's
 					// (BR-261010-1655-2B68: an empty bag zeroed every withdrawal),
 					// and 59A430 caps a warehouse deposit at 100,000,000
-					// (0x5f5e100). SRO_RAISED_GOLD_CAPS raises that cap.
+					// (0x5f5e100). SRO_RAISED_GOLD_CAPS raises that cap. The trade
+					// table holds a u32 unless SRO_WIDE_TRADE_GOLD is on (#4264).
 					const raw = event.value.replace( /[^0-9]/g, "" ).slice( 0, 20 ),
 						carried = BigInt( view?.gameplay?.progression?.gold ?? 0 ),
 						depositCap = storageGoldDepositLimit( view?.gameplay?.storageGoldDepositLimit ),
@@ -10498,6 +10502,9 @@ export function createUi( ports: UiPorts ) {
 							BigInt( view?.gameplay?.storage?.gold ?? 0 ) :
 							goldDialog === "deposit" && carried > depositCap ?
 							depositCap :
+							goldDialog === "exchange" && view?.gameplay?.wideTradeGold !== true &&
+								carried > NATIVE_TRADE_GOLD_MAX ?
+							NATIVE_TRADE_GOLD_MAX :
 							carried;
 					goldAmount = raw ? String( BigInt( raw ) > limit ? limit : BigInt( raw ) ) : "";
 					confirmDrop = "";
