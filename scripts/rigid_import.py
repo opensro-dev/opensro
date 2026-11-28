@@ -65,6 +65,7 @@ import jupiter_import as jupiter
 import later_world_import
 import winter_event_import as winter
 import sro_pk2
+import later_tables
 from prepare_client_resources import safe_target, write_atomically
 
 ROOT_ENV = "SRO_V1696_ROOT"
@@ -240,23 +241,17 @@ def add_rigid(native, out, env=os.environ):
 		# ================
 		# read
 		# ================
-		def read(name):
-			return tables.table_text(media, index, name.lower())
+		read = later_tables.Archive.media(media, index)
 
-		# ================
-		# has
-		# ================
-		def has(name):
-			return tables.TEXTDATA + name.lower() in index
 
-		later = tables.later_characters(read)
+		later = later_tables.characters(read)
 		refs = {}
 		for code in KINDS:
 			row = later.get(code)
 			if row is None:
 				raise ValueError(f"the v1.696 client carries no character row {code}")
 			refs[code] = characters.convert_character(row)
-		kinds = later_world_import.stage_kinds(SPEC.label, read, has, refs, text_root, prior, CHARACTER_SHARD, SKILL_SHARD,
+		kinds = later_world_import.stage_kinds(SPEC.label, read, refs, text_root, prior, CHARACTER_SHARD, SKILL_SHARD,
 			lambda code: code in refs, english=KIND_NAMES)
 		staged = add_items(native, output, archives, prior)
 	summary = {"enabled": True, **kinds, **staged}

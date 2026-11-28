@@ -46,6 +46,7 @@ import jupiter_import as jupiter
 import later_world_import
 import mall_avatar_import as avatars
 import nasrun_import as nasrun
+import later_tables
 from prepare_client_resources import safe_target, write_atomically
 from sro_paths import trees_overlap
 
@@ -156,11 +157,10 @@ def add_stones(native, output, v1696_root=None):
 		# ================
 		# read
 		# ================
-		def read(name):
-			return tables.table_text(media, index, name.lower())
+		read = later_tables.Archive.media(media, index)
 
-		later_rows = tables.later_table_rows(read, "itemdata.txt")
-		later_texts = [row for name in nasrun.LATER_TEXT_TABLES for row in avatars.later_text_rows(media, index, name)]
+		later_rows = read.rows("itemdata.txt")
+		later_texts = [row for name in nasrun.LATER_TEXT_TABLES for row in avatars.later_text_rows(read, name)]
 	stones = select_stones(later_rows)
 	stone_codes = {stone[2] for stone in stones}
 	for path in sorted(text_root.glob("itemdata*.txt")):

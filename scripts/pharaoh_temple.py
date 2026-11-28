@@ -39,6 +39,7 @@ region ids and gate codes, kept in step by a test on each side.
 from pathlib import Path
 
 import import_vsro_alexandria as stage1
+import later_tables
 import variant_files
 
 FLAG = "SRO_PHARAOH_TEMPLE"
@@ -205,9 +206,8 @@ def add_temple(vsro_root, native, out):
 	native_zones = (native / event_zones).read_bytes()
 	if enabled:
 		wanted_info = merge_dungeon_info(native_info)
-		wanted_zones = merge_event_zones(
-			native_zones, variant_files.read_vsro_file(vsro_root, "Media", variant_files.TEXTDATA + "eventzonedata.txt")
-		)
+		with later_tables.Archive.open(vsro_root) as source:
+			wanted_zones = merge_event_zones(native_zones, source.file("eventzonedata.txt"))
 	else:
 		wanted_info, wanted_zones = native_info, native_zones
 	for relative, content in ((dungeon_info, wanted_info), (event_zones, wanted_zones)):

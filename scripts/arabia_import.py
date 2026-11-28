@@ -107,6 +107,7 @@ from arabia_map_tiles import (  # noqa: E402
 )
 import arabia_quest_items  # noqa: E402
 import arabia_quest_tables  # noqa: E402
+import later_tables  # noqa: E402
 from arabia_gates import prepare_gates  # noqa: E402
 from arabia_people import SPEECH_ENGLISH, later_speech_texts, npc_placements, speech_english  # noqa: E402
 from prepare_client_resources import write_atomically  # noqa: E402
@@ -447,10 +448,9 @@ def add_arabia(native, output, source=None, nests=None, closure=arabia_resource_
 		# ================
 		# read
 		# ================
-		def read(name):
-			return tables.table_text(media, media_index, name.lower())
+		read = later_tables.Archive.media(media, media_index)
 
-		later = tables.later_characters(read)
+		later = later_tables.characters(read)
 		codename_by_id = {row[1]: row[2] for row in later.values()}
 		regions = continent_regions(tables.table_rows(read("regioncode.txt")))
 		extraction = load_nests(nests, regions)
@@ -511,7 +511,7 @@ def add_arabia(native, output, source=None, nests=None, closure=arabia_resource_
 		# The client's skills as the client reads them: its encrypted
 		# skilldataenc set when it ships one, else the plain manifest
 		# (skilldata_enc.py, #3374).
-		source_skills = [r for r in skill_tables.client_skill_rows(read, lambda name: tables.TEXTDATA + name.lower() in media_index)
+		source_skills = [r for r in skill_tables.client_skill_rows(read)
 			if len(r) > 3 and r[1].isdigit()]
 
 		# ================

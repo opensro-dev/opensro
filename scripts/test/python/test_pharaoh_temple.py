@@ -14,6 +14,9 @@ the gates' world column flattened.
 ===========================================================================
 """
 import script_paths  # noqa: F401  (puts scripts/ and its build folders on sys.path, #3410)
+import contextlib
+from unittest import mock
+import later_tables  # noqa: E402
 import sys
 import tempfile
 import unittest
@@ -264,7 +267,7 @@ class AddGatesTempleTests(unittest.TestCase):
 			variant.TEXTDATA + "teleportlink.txt": vsro_tables["teleportlink.txt"],
 			variant.TEXTDATA + "textdata_object.txt": vsro_tables["text"]
 		}
-		saved_read, saved_codes = variant_gates.read_vsro_file, variant_gates.GATE_CODES
+		saved_codes = variant_gates.GATE_CODES
 		saved_env = {
 			name: variant.os.environ.get(name)
 			for name in (temple.FLAG, variant_gates.LEVEL_CAP_FLAG, "SRO_PHARAOH_TOMB")
@@ -279,13 +282,16 @@ class AddGatesTempleTests(unittest.TestCase):
 			for name in ("teleportdata.txt", "teleportbuilding.txt", "teleportlink.txt"):
 				(textdata / name).write_bytes(native_tables[name])
 			(textdata / "textdataname.txt").write_bytes(native_tables["text"])
-			variant_gates.read_vsro_file = lambda root, archive, name: vsro_files[name]
+			opener = mock.patch.object(later_tables.Archive, "open", lambda root, archive="Media": contextlib.nullcontext(
+				later_tables.Archive.of({name[len(variant.TEXTDATA):]: raw for name, raw in vsro_files.items()})))
+			opener.start()
 			variant_gates.GATE_CODES = ()
 			try:
 				summary, merged = variant_gates.add_gates(Path(scratch) / "vsro", native, out)
 				written = (out / "Media_extracted" / variant.TEXTDATA / "teleportbuilding.txt").read_bytes()
 			finally:
-				variant_gates.read_vsro_file, variant_gates.GATE_CODES = saved_read, saved_codes
+				opener.stop()
+				variant_gates.GATE_CODES = saved_codes
 				for name, value in saved_env.items():
 					if value is None:
 						variant.os.environ.pop(name, None)
@@ -317,8 +323,10 @@ class AddTempleTests(unittest.TestCase):
 
 	def run_add_temple(self, flag, prior=None):
 		"""Runs add_temple with the flag at flag; prior is the on call to run first, if any."""
-		original_read, original_flag = variant.read_vsro_file, variant.os.environ.get(temple.FLAG)
-		variant.read_vsro_file = lambda root, archive, name: VSRO_ZONES
+		original_flag = variant.os.environ.get(temple.FLAG)
+		opener = mock.patch.object(later_tables.Archive, "open", lambda root, archive="Media": contextlib.nullcontext(
+			later_tables.Archive.of({"eventzonedata.txt": VSRO_ZONES})))
+		opener.start()
 		with tempfile.TemporaryDirectory() as scratch:
 			native, out = Path(scratch) / "native", Path(scratch) / "out"
 			info = native / "Data_extracted" / "dungeon" / "dungeoninfo.txt"
@@ -343,7 +351,7 @@ class AddTempleTests(unittest.TestCase):
 				result = (summary, (out / "Data_extracted" / "dungeon" / "dungeoninfo.txt").read_bytes(),
 					(out / "Media_extracted" / variant.TEXTDATA / "eventzonedata.txt").read_bytes())
 			finally:
-				variant.read_vsro_file = original_read
+				opener.stop()
 				if original_flag is None:
 					variant.os.environ.pop(temple.FLAG, None)
 				else:

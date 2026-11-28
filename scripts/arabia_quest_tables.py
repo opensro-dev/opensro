@@ -47,6 +47,7 @@ import alexandria_map_tables as map_tables
 import alexandria_npcs as characters
 import cap110_blue_berserk as blue
 import import_vsro_alexandria as tables
+import later_tables
 from prepare_client_resources import safe_target, write_atomically
 from sro_paths import MAIN_CHECKOUT_ROOT
 
@@ -241,7 +242,7 @@ def head_help_rows(read, guide):
 		for column in (GUIDE_CONTENT_COLUMN, GUIDE_TITLE_COLUMN)}
 	if not keys:
 		return []
-	rows = (map_tables.later_text_row(row) for row in tables.later_table_rows(read, HELP_TABLE))
+	rows = (map_tables.later_text_row(row) for row in read.rows(HELP_TABLE))
 	return [row for row in rows if len(row) > blue.ENGLISH_COLUMN and row[blue.KEY_COLUMN] in keys]
 
 
@@ -366,7 +367,7 @@ def project_later_row(row):
 # from the later 17-column layout into the layout fill_text reads.
 # ================
 def later_text_rows(read):
-	return [[project_later_row(row) for row in tables.later_table_rows(read, family + ".txt")]
+	return [[project_later_row(row) for row in read.rows(family + ".txt")]
 		for family in TEXT_FAMILIES]
 
 
@@ -478,11 +479,11 @@ def add_quest_tables(read, archive_sha, output):
 	if marker.exists():
 		remove_owned(text_root, prior)
 		marker.unlink()
-	quests = tables.later_table_rows(read, QUEST_TABLE)
+	quests = read.rows(QUEST_TABLE)
 	later_texts = [complete_english(rows) for rows in later_text_rows(read)]
 	known = {row[blue.KEY_COLUMN] for rows in later_texts for row in rows if len(row) > blue.KEY_COLUMN}
 	later = {QUEST_TABLE: quests, CONTENTS_TABLE: tables.table_rows(read(CONTENTS_TABLE)),
-		GUIDE_TABLE: guide_rows(tables.later_table_rows(read, GUIDE_TABLE), quests, known)}
+		GUIDE_TABLE: guide_rows(read.rows(GUIDE_TABLE), quests, known)}
 	variant = {name: tables.table_rows(safe_target(text_root, name).read_bytes()) for name in KEYS}
 	new_rows = quest_rows(later, variant)
 	later_texts.append(composed_guide_bodies(new_rows[GUIDE_TABLE], later_texts))
@@ -530,8 +531,7 @@ def main():
 	with open(root / "Media.pk2", "rb") as handle, mmap.mmap(handle.fileno(), 0, access=mmap.ACCESS_READ) as media:
 		index = tables.archive_index(media)
 
-		def read(name):
-			return tables.table_text(media, index, name.lower())
+		read = later_tables.Archive.media(media, index)
 
 		summary = add_quest_tables(read, tables.sha256_of(media), output)
 	print(json.dumps({key: value for key, value in summary.items() if key not in ("rows", "text", "quests", "ended")}, indent=2))

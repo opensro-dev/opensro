@@ -9,6 +9,7 @@ precedence, the service-column offset and the unknown-animation-state refusal.
 ===========================================================================
 """
 import script_paths  # noqa: F401  (puts scripts/ and its build folders on sys.path, #3410)
+import later_tables  # noqa: E402
 import sys
 import tempfile
 import unittest
@@ -155,7 +156,7 @@ class LaterTextTests(unittest.TestCase):
 			"skilleffectset.txt": utf16([["1", "77", "x", "STAGE_A", "READY", "q", "FLASE"],
 				["0", "78", "x", "STAGE_OFF", "READY", "q", "0"]]),
 		}
-		text = effects.later_skill_effect_text(lambda name: files[name.lower()])
+		text = effects.later_skill_effect_text(later_tables.Archive.of(files))
 		rows = {section: [line.split("\t") for s, line in effects.data_lines(text) if s == section]
 			for section in ("characterinfo", "skillaniset2", "skilleffectset")}
 		self.assertEqual(rows["characterinfo"][0][:3], ["MOB_NEW", "MOB_NEW", "3.5"])
@@ -171,7 +172,7 @@ class LaterTextTests(unittest.TestCase):
 	# ================
 	def test_a_table_with_its_sections_is_read_as_it_is(self):
 		raw = b"\xff\xfe" + LATER_TEXT.encode("utf-16-le")
-		self.assertEqual(effects.later_skill_effect_text({"skilleffect.txt": raw}.__getitem__), LATER_TEXT)
+		self.assertEqual(effects.later_skill_effect_text(later_tables.Archive.of({"skilleffect.txt": raw})), LATER_TEXT)
 
 
 # ================

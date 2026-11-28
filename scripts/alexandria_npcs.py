@@ -37,9 +37,10 @@ from collections import Counter
 import re
 
 import import_vsro_alexandria as stage1
+import later_tables
 from pathlib import Path
 
-from variant_files import TEXTDATA, read_vsro_file, replace_file
+from variant_files import TEXTDATA, replace_file
 
 SERVICE_COLUMN = 0
 ID_COLUMN = 1
@@ -441,9 +442,6 @@ def merge_npc_tables(native, vsro, regions, native_text):
 #============================================================================
 
 
-# The VSRO characterdata files (characterdata.txt lists them).
-VSRO_CHARACTER_FILES = (5000, 10000, 15000, 20000, 25000, 30000, 35000, 40000, 45000)
-
 
 # ================
 # add_npcs
@@ -461,12 +459,10 @@ def add_npcs(vsro_root, native, out, regions):
 	tables["characters"] = [
 		path.read_bytes() for path in sorted((native / textdata).glob("characterdata_*.txt"))
 	]
-	vsro = {name: read_vsro_file(vsro_root, "Media", TEXTDATA + name) for name in tuple(n for n in names if n != "refshop.txt")}
-	vsro["textdata_object.txt"] = read_vsro_file(vsro_root, "Media", TEXTDATA + "textdata_object.txt")
-	vsro["characters"] = [
-		read_vsro_file(vsro_root, "Media", TEXTDATA + f"characterdata_{start}.txt")
-		for start in VSRO_CHARACTER_FILES
-	]
+	with later_tables.Archive.open(vsro_root) as source:
+		vsro = {name: source.file(name) for name in tuple(n for n in names if n != "refshop.txt") + ("textdata_object.txt",)}
+		# The characterdata index names the shards, as the client reads them.
+		vsro["characters"] = [source.file(shard) for shard in source.files("characterdata.txt")]
 	base_text = (out / textdata / "textdataname.txt").read_bytes()
 	merged, summary = merge_npc_tables(tables, vsro, regions, base_text)
 	for name, content in merged.items():

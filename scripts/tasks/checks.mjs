@@ -124,6 +124,17 @@ export const CHECK_TASKS = [
 		args: [ "scripts/checks/check_generated_root.mjs" ]
 	} ),
 	commandTask( {
+		name: "check:later-table-reads",
+		description:
+			"Refuse later-client textdata reads outside scripts/later_tables.py (an index read as rows drops them)",
+		kind: "check",
+		ci: true,
+		requires: [],
+		timeoutClass: "short",
+		command: "node",
+		args: [ "scripts/checks/check_later_table_reads.mjs" ]
+	} ),
+	commandTask( {
 		name: "check:world-space",
 		description: "Refuse open-coded * 1920 sector math and raw 0x8000 region-bit tests outside world-space.ts",
 		kind: "check",
@@ -318,6 +329,7 @@ const sourceTasks = [
 	"check:source-encoding",
 	"check:doc-links",
 	"check:generated-root",
+	"check:later-table-reads",
 	"check:world-space",
 	"check:plane-branches",
 	"check:server-citations",
@@ -365,6 +377,7 @@ export const CHECK_PIPELINES = Object.freeze( {
 		{ id: "source-encoding", task: "check:source-encoding", after: [] },
 		{ id: "doc-links", task: "check:doc-links", after: [] },
 		{ id: "generated-root", task: "check:generated-root", after: [] },
+		{ id: "later-table-reads", task: "check:later-table-reads", after: [] },
 		{ id: "world-space", task: "check:world-space", after: [] },
 		{ id: "plane-branches", task: "check:plane-branches", after: [] },
 		{ id: "server-citations", task: "check:server-citations", after: [] },

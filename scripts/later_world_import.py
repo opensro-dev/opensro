@@ -63,6 +63,7 @@ import later_world_population
 import published_ids
 import skilldata_enc as skill_tables
 import sro_pk2
+import later_tables
 from pin_file import read_pin_field
 from prepare_client_resources import file_digest, write_atomically
 from sro_paths import trees_overlap
@@ -223,10 +224,10 @@ def require_pairing(spec, env=os.environ):
 #
 # The later client's name table as one text: v1.696's shard index
 # followed, a VSRO flat table read as itself (the shard owner,
-# import_vsro_alexandria.later_table_text).
+# later_tables.Archive.text).
 # ================
 def later_object_text(read):
-	return tables.later_table_text(read, "textdata_object.txt")
+	return read.text("textdata_object.txt")
 
 
 #============================================================================
@@ -296,16 +297,10 @@ def add_monsters(spec, v1696_root, native, output, source_root, enabled, sub_ena
 		# ================
 		# read
 		# ================
-		def read(name):
-			return tables.table_text(media, index, name.lower())
+		read = later_tables.Archive.media(media, index)
 
-		# ================
-		# has
-		# ================
-		def has(name):
-			return tables.TEXTDATA + name.lower() in index
 
-		later = tables.later_characters(read)
+		later = later_tables.characters(read)
 		claims = {}
 		for family, codes in claimed.items():
 			for code in codes:
@@ -320,7 +315,7 @@ def add_monsters(spec, v1696_root, native, output, source_root, enabled, sub_ena
 			missing = sorted(codes - set(refs))
 			if missing:
 				raise ValueError(f"{spec.label} {family} nests name unadmitted monsters: {missing}")
-		staged = stage_kinds(spec.label, read, has, later_world_population.staged_refs(spec, text_root, refs), text_root, prior,
+		staged = stage_kinds(spec.label, read, later_world_population.staged_refs(spec, text_root, refs), text_root, prior,
 			spec.character_shard, spec.skill_shard,
 			lambda code: code.startswith(spec.info_prefixes))
 		populations = spec.build_populations(rows, sub_enabled)
@@ -379,14 +374,14 @@ def fill_layer_english(texts, english):
 # for it (fill_layer_english). A kind the tree already holds (native,
 # or an earlier layer's) refuses by name: one codename stands in one
 # row, so an import places such a kind on its own row instead of
-# staging it (hunting2). has(name)
-# says whether the later archive holds a
-# textdata file: the client's skills are read the way the client reads
-# them (skilldata_enc.client_skill_rows), its encrypted set when it ships
-# one, else the plain manifest. Returns the summary keys every later-world marker
-# records, so the reap finds exactly what this build owned.
+# staging it (hunting2). read is the later client's later_tables.Archive:
+# the client's skills are read the way the client reads them
+# (skilldata_enc.client_skill_rows), its encrypted set when it ships
+# one, else the plain manifest. Returns the summary keys every
+# later-world marker records, so the reap finds exactly what this build
+# owned.
 # ================
-def stage_kinds(label, read, has, refs, text_root, prior, character_shard, skill_shard, info_owned, extra_skills=(),
+def stage_kinds(label, read, refs, text_root, prior, character_shard, skill_shard, info_owned, extra_skills=(),
 		unnamed=frozenset(), english=None):
 	native_chars = cap110.tree_characters(text_root, character_shard)
 	standing = sorted(set(refs) & {r[2] for r in native_chars if len(r) > 2})
@@ -398,7 +393,7 @@ def stage_kinds(label, read, has, refs, text_root, prior, character_shard, skill
 		row[1] = str(allocated[code])
 	native_skills = [r for p in text_root.glob("skilldata_*.txt") if p.name != skill_shard for r in tables.table_rows(p.read_bytes()) if len(r) == 118]
 	needed = {int(s) for r in refs.values() for s in r[89:99] if int(s)}
-	client_skills = [r for r in skill_tables.client_skill_rows(read, has) if len(r) > 3 and r[1].isdigit()]
+	client_skills = [r for r in skill_tables.client_skill_rows(read) if len(r) > 3 and r[1].isdigit()]
 	# Skills no staged kind names in its skill columns (a Muhan change
 	# form's BUFF01, cast by its NPC) are staged by codename.
 	extra = {r[3]: int(r[1]) for r in client_skills if r[3] in set(extra_skills)}
@@ -461,13 +456,15 @@ def stage_kinds(label, read, has, refs, text_root, prior, character_shard, skill
 # native placeholder of its id, and each region's zone names join by
 # id and by code prefix, as the Alexandria map merge does. The code
 # prefixes ride along for the reap, which must find the zone rows
-# again in a tree it did not merge.
+# again in a tree it did not merge. later is {file name: bytes}, each
+# table's shard index with its shards (Archive.snapshot).
 # ================
 def merge_region_tables_record(native, later, region_ids):
 	id_strings = {str(region_id) for region_id in region_ids}
 	native_regions = {row[1]: row for row in tables.table_rows(native["regioncode.txt"]) if len(row) >= 4}
+	source = later_tables.Archive.of(later)
 	code_rows = [
-		row for row in tables.table_rows(later["regioncode.txt"])
+		row for row in source.rows("regioncode.txt")
 		if len(row) >= 4 and row[1] in id_strings and row[2] != "xxx"
 		and native_regions.get(row[1], [0, 0, "xxx"])[2] == "xxx"
 	]
@@ -482,7 +479,7 @@ def merge_region_tables_record(native, later, region_ids):
 	prefixes = tuple(sorted({row[2] + "_" for row in code_rows}))
 	native_zone_keys = {row[1] for row in tables.table_rows(native["textzonename.txt"]) if len(row) > 1}
 	zone_rows = [
-		native_text_row(row) for row in later_zone_rows(lambda name: later[name.lower()])
+		native_text_row(row) for row in later_zone_rows(source)
 		if len(row) >= 10 and (row[1] in id_strings or row[1].startswith(prefixes))
 		and row[1] not in native_zone_keys
 	]
@@ -677,22 +674,14 @@ def merge_world(spec, native, out, v1696_root, regions, build_monsters):
 				written.add(target.relative_to(out).as_posix().lower())
 				minimaps += 1
 
-		def media_table(name):
-			entry = media_index.get((tables.TEXTDATA + name).lower())
-			if entry is None:
-				raise SystemExit(f"Media.pk2 has no {tables.TEXTDATA}{name}")
-			return sro_pk2.payload(media_data, entry)
-
-		later_tables = {name: media_table(name) for name in ("regioncode.txt", "textzonename.txt")}
 		# v1.696 keeps its zone names in shards the index names; they
 		# ride along so the merge reads the rows, not the index.
-		for shard in tables.later_shard_files(media_table, "textzonename.txt"):
-			later_tables[shard] = media_table(shard)
+		later_files = later_tables.Archive.media(media_data, media_index).snapshot(("regioncode.txt", "textzonename.txt"))
 	finally:
 		media_data.close()
 		media_handle.close()
 	current_tables = {name: (out / textdata / name).read_bytes() for name in ("regioncode.txt", "textzonename.txt")}
-	merged_tables, table_summary, prefixes = merge_region_tables_record(current_tables, later_tables, regions)
+	merged_tables, table_summary, prefixes = merge_region_tables_record(current_tables, later_files, regions)
 	for name, content in merged_tables.items():
 		variant.replace_file(out / textdata / name, content)
 
@@ -906,8 +895,7 @@ def add_map_world(spec, native, out, v1696_root, regions_of, pins_for=None):
 	require_pin(spec, v1696_root, MERGE_ARCHIVES, pins_for or (lambda: archive_pins(spec)))
 	_, handle, media = tables.open_archive(v1696_root, "Media")
 	try:
-		index = tables.archive_index(media)
-		regions = regions_of(lambda name: tables.table_rows(tables.table_text(media, index, name)))
+		regions = regions_of(later_tables.Archive.media(media, tables.archive_index(media)).rows)
 	finally:
 		media.close()
 		handle.close()

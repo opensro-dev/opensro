@@ -17,6 +17,7 @@ leaves them again.
 """
 
 import script_paths  # noqa: F401  (puts scripts/ and its build folders on sys.path, #3410)
+import later_tables  # noqa: E402
 import dataclasses
 import re
 import tempfile
@@ -129,7 +130,7 @@ class EngineTest(unittest.TestCase):
 			"textdata_equip&skill.txt": table(*wrapped),
 			"textdata_new.txt": table(),
 		}
-		rows = fortress.vsro_object_texts(lambda name: texts[name])
+		rows = fortress.vsro_object_texts(later_tables.Archive.of(texts))
 		self.assertEqual(rows, [["1", "SN_FORTRESS_HOTAN", "kr", "", "", "", "", "", "Hotan Fortress", ""],
 			["1", "SN_SKILL_FORT_BUFF", "kr", "", "", "", "", "", "Fortress Buff", ""]])
 
@@ -208,7 +209,7 @@ class MapPageTest(unittest.TestCase):
 			"worldmap_mapinfo.txt": monsters.encode_rows(pages),
 			"worldmap_localinfo.txt": monsters.encode_rows(pins),
 		}
-		return lambda name: sources[name]
+		return later_tables.Archive.of(sources)
 
 	def page_sources(self):
 		pages = [vsro_mapinfo_row("1001", r"interface\worldmap\map\map_fort_jangan.ddj", "INS_FORT_JA"),

@@ -116,16 +116,13 @@ def decode(raw):
 #
 # Every skill row a later client carries, read the way the client reads
 # them: the encrypted manifest and its shards when the archive has one,
-# else the plain manifest. read(name) returns a textdata payload by
-# lower-case name. has(name) says whether the archive holds it. Manifest
-# entries are validated basenames, never arbitrary paths.
+# else the plain manifest. source is a later_tables.Archive, which
+# follows the manifest (and refuses a path or a repeated entry); its
+# entries must also be skill shard names, so a manifest that is a plain
+# table or names another family is refused, never read as skills.
 # ================
-def client_skill_rows(read, has):
-	manifest = ENC_MANIFEST if has(ENC_MANIFEST) else PLAIN_MANIFEST
-	names = [row[0].strip() for row in tables.table_rows(read(manifest)) if row and row[0].strip()]
-	if not names or any(not SHARD_NAME.fullmatch(name) for name in names):
+def client_skill_rows(source):
+	manifest = ENC_MANIFEST if source.has(ENC_MANIFEST) else PLAIN_MANIFEST
+	if any(not SHARD_NAME.fullmatch(name) for name in source.files(manifest)):
 		raise ValueError(f"invalid skill manifest {manifest}")
-	shards = [name.lower() for name in names]
-	if len(set(shards)) != len(shards):
-		raise ValueError(f"duplicate entry in skill manifest {manifest}")
-	return [row for shard in shards for row in tables.table_rows(decode(read(shard)))]
+	return source.rows(manifest, parse=lambda raw: tables.table_rows(decode(raw)))

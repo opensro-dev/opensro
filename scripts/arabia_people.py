@@ -21,7 +21,6 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 sys.path.insert(0, str(Path(__file__).resolve().parent / "build"))
 import alexandria_npcs as characters  # noqa: E402
-import import_vsro_alexandria as tables  # noqa: E402
 
 
 # ================
@@ -130,7 +129,7 @@ def speech_english(key, korean, english):
 # ================
 def later_speech_texts(read):
 	rows = []
-	for row in tables.later_table_rows(read, "textquest_speech&name.txt", characters.translation_rows, indexed_only=True):
+	for row in read.rows("textquest_speech&name.txt", characters.translation_rows, indexed_only=True):
 		# An untranslated row keeps only its first cells (the table
 		# reader trims the empty tail); it still rides, with no
 		# English, like the names that lack one.

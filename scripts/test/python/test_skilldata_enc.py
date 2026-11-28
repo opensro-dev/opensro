@@ -17,6 +17,7 @@ import sys
 import unittest
 from pathlib import Path
 
+import later_tables  # noqa: E402
 import skilldata_enc as enc  # noqa: E402
 
 # The pinned VSRO Media.pk2's SkillData_5000ENC.txt opens with these bytes;
@@ -68,37 +69,37 @@ class Decode(unittest.TestCase):
 
 class ClientSkillRows(unittest.TestCase):
 	def archive(self, files):
-		return (lambda name: files[name.lower()]), (lambda name: name.lower() in files)
+		return later_tables.Archive.of(files)
 
 	def test_the_encrypted_manifest_wins(self):
-		read, has = self.archive({
+		source = self.archive({
 			"skilldataenc.txt": utf16([["SkillData_5000ENC.txt"]]),
 			"skilldata_5000enc.txt": encode(utf16([["1", "31659", "0", "MSKILL_NEW"]])),
 			"skilldata.txt": utf16([["SkillData_5000.txt"]]),
 			"skilldata_5000.txt": utf16([["1", "1", "0", "SKILL_OLD"]]),
 		})
-		self.assertEqual([row[3] for row in enc.client_skill_rows(read, has)], ["MSKILL_NEW"])
+		self.assertEqual([row[3] for row in enc.client_skill_rows(source)], ["MSKILL_NEW"])
 
 	def test_without_one_the_plain_manifest_is_read(self):
-		read, has = self.archive({
+		source = self.archive({
 			"skilldata.txt": utf16([["SkillData_5000.txt"]]),
 			"skilldata_5000.txt": utf16([["1", "1", "0", "SKILL_OLD"]]),
 		})
-		self.assertEqual([row[3] for row in enc.client_skill_rows(read, has)], ["SKILL_OLD"])
+		self.assertEqual([row[3] for row in enc.client_skill_rows(source)], ["SKILL_OLD"])
 
 	def test_a_manifest_entry_must_be_a_shard_basename(self):
 		for name in ("../skilldata_5000.txt", "server_dep/skilldata_5000enc.txt", "characterdata_5000.txt"):
-			read, has = self.archive({"skilldataenc.txt": utf16([[name]])})
+			source = self.archive({"skilldataenc.txt": utf16([[name]])})
 			with self.subTest(name=name), self.assertRaises(ValueError):
-				enc.client_skill_rows(read, has)
+				enc.client_skill_rows(source)
 
 	def test_a_shard_named_twice_is_refused(self):
-		read, has = self.archive({
+		source = self.archive({
 			"skilldata.txt": utf16([["SkillData_5000.txt"], ["skilldata_5000.TXT"]]),
 			"skilldata_5000.txt": utf16([["1", "1", "0", "SKILL_OLD"]]),
 		})
 		with self.assertRaises(ValueError):
-			enc.client_skill_rows(read, has)
+			enc.client_skill_rows(source)
 
 
 if __name__ == "__main__":
