@@ -22,7 +22,7 @@ byte-identical:
                                     verbatim
 
 and stages every prize item the tree lacks in its own shard
-(itemdata_340000.txt) under fresh, marker-kept identities. Every such item
+(itemdata_190004.txt) under fresh, marker-kept identities. Every such item
 is v1.696 event Seal gear (ITEM_EVENT_*_RARE, degrees 1 to 10): the native
 rare row with one cell more, the "maximum sockets" parameter, which the
 v1.150 layout has no reader for and which this import resets to its
@@ -71,8 +71,9 @@ FLAG = "SRO_MAGIC_POP_V1696"
 ROOT_ENV = "SRO_V1696_ROOT"
 MARKER = ".opensro-magic-pop.json"
 FORMAT = "opensro-magic-pop-v1"
-# Every band from 100000 to 330000 is taken; 190002 is already used twice.
-ITEM_SHARD = "itemdata_340000.txt"
+# The mall bands run gears 190000, Nasrun 190001, honor goods 190002 and
+# the Magic Cubes 190003; 340000 is the pet import's item shard.
+ITEM_SHARD = "itemdata_190004.txt"
 NAME_TABLE = "textdataname.txt"
 UI_TABLE = "textuisystem.txt"
 TEXT_ROOT = Path("Media_extracted") / tables.TEXTDATA

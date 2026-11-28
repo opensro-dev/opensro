@@ -48,9 +48,10 @@ from sro_paths import trees_overlap
 FLAG = "SRO_MAGIC_CUBE"
 ROOT_ENV = "SRO_V1696_ROOT"
 MARKER = ".opensro-magic-cubes.json"
-# The 190002 shard sits beside gears (190000) and Nasrun (190001); one
-# importer owns one shard file (a layer's off path unlinks its shard).
-ITEM_SHARD = "itemdata_190002.txt"
+# The 190003 shard sits beside gears (190000), Nasrun (190001) and the
+# honor goods (190002); one importer owns one shard file (a layer's off
+# path unlinks its shard).
+ITEM_SHARD = "itemdata_190003.txt"
 NAME_TABLE = "textdataname.txt"
 TEXT_ROOT = Path("Media_extracted") / tables.TEXTDATA
 CUBE_TYPE = ["3", "2", "3", "1"]

@@ -82,7 +82,7 @@ LATER_LAYERS = (
 	# layout that lists them.
 	("gearsStones", gears_stone_import.add_stones),
 	# The mall Magic Cubes (port-only, #3906): SRO_MAGIC_CUBE stages the
-	# sixteen v1.696 rows in their own shard (190002).
+	# sixteen v1.696 rows in their own shard (190003).
 	("magicCubes", magic_cube_import.add_magic_cubes),
 	# The Ch'in Tomb treasure boxes' guards (#4810): SRO_TOMB_TREASURE_BOXES
 	# (the server's own switch) stages the two kinds the open event
@@ -107,7 +107,7 @@ LATER_LAYERS = (
 	("rigidScrolls", rigid_import.add_rigid),
 	# The v1.696 Magic POP pool (later-native, the port's default;
 	# SRO_MAGIC_POP_V1696 off restores v1.150's): its prize gear in its
-	# own shard (340000) and the three gacha tables the server reads.
+	# own shard (190004) and the three gacha tables the server reads.
 	# Before the later mall items, after every other item layer.
 	("magicPop", magic_pop_import.add_magic_pop),
 	# The v1.696 Item Mall items the later goods sell (#4240 part 3):
