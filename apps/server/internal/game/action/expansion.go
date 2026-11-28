@@ -23,9 +23,12 @@ the door but spends after it: the growth commits first and the item
 is spent only when it did, so a refused or failed growth leaves the
 item in the bag.
 
-Refusals (already used, no room left, no authority) spend nothing. The
-refusal byte is the generic invalid-request: the later server's own
-byte for an exhausted addition is not evidenced.
+Refusals (already used, no room left, no authority) spend nothing. A
+limit refusal (the bag addition already spent or nothing left to add,
+the warehouse addition past its two uses or the room's ceiling)
+answers the later client's limit code (wire.ErrCodeStorageAdditionLimit,
+"Limit is reached, unable to use it."); every other refusal keeps the
+silent generic invalid-request.
 
 ===========================================================================
 */
@@ -82,14 +85,18 @@ so a second item finds the mark and refuses.
 */
 func (rt *Runtime) useInventoryAddition(use skillItemUse, character *enterworld.Character, slots int64, result *OpResult) bool {
 	if character.InventoryAdditionUsed {
-		*result = itemUseFailure(wire.ErrCodeInvalidRequest)
+		*result = itemUseFailure(wire.ErrCodeStorageAdditionLimit)
 		return false
 	}
 	room := int64(domain.MaxInventorySize) - int64(character.InventoryCapacity()) - int64(character.InventoryExpansion)
 	if slots > room {
 		slots = room
 	}
-	if slots <= 0 || !character.GrantInventoryExpansion(uint8(slots)) {
+	if slots <= 0 {
+		*result = itemUseFailure(wire.ErrCodeStorageAdditionLimit)
+		return false
+	}
+	if !character.GrantInventoryExpansion(uint8(slots)) {
 		*result = itemUseFailure(wire.ErrCodeInvalidRequest)
 		return false
 	}
@@ -175,7 +182,7 @@ func (rt *Runtime) finishWarehouseAddition(divisionID string, character *enterwo
 		return
 	}
 	if !grew {
-		*result = itemUseFailure(wire.ErrCodeInvalidRequest)
+		*result = itemUseFailure(wire.ErrCodeStorageAdditionLimit)
 		return
 	}
 	consumed := rt.deps.Update(character, "item-use-expansion", func() bool {

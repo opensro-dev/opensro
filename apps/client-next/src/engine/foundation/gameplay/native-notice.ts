@@ -35,6 +35,13 @@ export function resolveNativeNotice(
 			route.banner || (category === 1 && code === 7 && context.itemMallOpen === true)
 		);
 	}
+	// Later-client storage addition limit (#3904): the v1.696 category-01
+	// jump sends index 0xEF (01:FE) to the same printer as the Magic Cube
+	// rows. The v1.150 table leaves 01:FE silent, so this row is read
+	// before the silent return.
+	if ( category === 1 && code === 0xFE ) {
+		return notice( "UIIT_STT_STORAGE_EXPANSION_USE_ERORR", 5, false );
+	}
 	if ( route.kind === "silent" ) return route;
 	if ( category === 1 && code === 50 ) {
 		if ( context.country === undefined ) return route;
