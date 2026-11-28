@@ -469,7 +469,8 @@ Resets the scratch character to fixture, boots the client at 1600x900,
 revives the character if it died and lets the world settle. Returns the
 browser and page; close the browser when done. counts and spans are
 instrument's options. lineInfo launches V8 with detailed line positions,
-for CPU profiles that attribute time to source lines.
+for CPU profiles that attribute time to source lines. gpuTiming opens the
+page with the renderer's GPU pass timestamps on (gpu-timing=1).
 ================
 */
 export async function openClient(
@@ -485,7 +486,8 @@ export async function openClient(
 		headed = false,
 		backgroundThrottling = false,
 		beforeLogin = undefined,
-		lineInfo = false
+		lineInfo = false,
+		gpuTiming = false
 	} = {}
 ) {
 	process.env.SRO_PROBE_UNLOCK_FPS = uncapped ? "1" : "0";
@@ -509,7 +511,7 @@ export async function openClient(
 			}
 		);
 		await page.addInitScript( instrument, { counts, spans } );
-		await bootPlayableSession( page, CHARACTER, beforeLogin );
+		await bootPlayableSession( page, CHARACTER, beforeLogin, { search: gpuTiming ? "?gpu-timing=1" : "" } );
 		await page.evaluate( () => globalThis.__benchRuntime = globalThis.__playableRuntime );
 		await page.setViewportSize( VIEWPORT );
 		await revive( page );

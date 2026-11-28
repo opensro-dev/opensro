@@ -6,7 +6,7 @@ fps-bench.mjs - frame rate of the real client in the scenarios that matter
 Usage:
   node tools/perf/bench/fps-bench.mjs [--seconds N] [--at a,b] [--only a,b]
        [--counts] [--spans] [--cpu] [--heap] [--out DIR] [--trace] [--gpu-process] [--json FILE]
-       [--screenshot] [--snow] [--frames N] [--frame-ms MS] [--memory]
+       [--screenshot] [--snow] [--frames N] [--frame-ms MS] [--memory] [--gpu-time]
        [--paced] [--cpu-rate N] [--frame-limit 0|60|120|240] [--shadow-detail 0|1|2]
 
 For each location (--at) resets the scratch character there, boots the dev
@@ -70,9 +70,17 @@ main thread's frame and world-preparation time per frame. Options add:
             timed window, a second, traced window of the same scenario
             (reduced as it arrives; no trace file); the row gains the
             GPU main thread's CPU and wall ms per frame, every GPU-process
-            thread above 2% busy and the frames they divide by. Tracing
+            thread above 2% busy and the frames they divide by, and the
+            CPU ms per frame of every page thread above 2% busy: its main
+            thread, the simulation, asset and particle workers and the
+            compositor, so no thread's cost goes unread. Tracing
             slows frames, so this never touches the timed numbers. The
             cross and combat scenarios run once and get no traced window.
+  --gpu-time  the GPU's own time per frame: the page opens with the
+            renderer's pass timestamps on (gpu-timing=1) and each row gains
+            the frames' GPU ms (mean, p50, p99) and the costliest passes
+            (core/gpu-time.mjs). The timestamps ride the measured frames, so
+            compare a --gpu-time run only with another.
   --paced   retain display pacing; the default remains uncapped throughput.
   --cpu-rate N  apply Chrome CPU throttling after warm-up (for example 4).
   --frame-limit N  use the player's presentation limit; default 0 preserves
@@ -107,6 +115,7 @@ import { buildIdentity, verifyMeasuredIdentity } from "../core/build-identity.mj
 import { keepGoing, drag, walk, approach, fight, cross, loadCombat, combat, strike, localAlive } from "./scenarios.mjs";
 import { CROWD_HOST_URL, DEFAULT_ACTIVITY_SEED, obtainCrowd } from "../core/crowd.mjs";
 import { BUSY_IMBUE_SKILL, parseActivity } from "../core/crowd-activity.mjs";
+import { gpuTimeRow, gpuTimingCursor, gpuTimingSince, summarizeGpuTiming } from "../core/gpu-time.mjs";
 import { captureFrames, holdSnow, judgeFrames } from "../core/scene-evidence.mjs";
 import { cleanupCombat, combatResidue } from "../core/combat-cleanup.mjs";
 import { processCosts } from "../core/trace.mjs";
@@ -187,7 +196,7 @@ const USAGE = "fps-bench.mjs [--seconds N] [--at a,b] [--only a,b] [--counts] [-
 	"[--trace] [--screenshot] [--gpu-process] [--json FILE] [--paced] [--cpu-rate N] [--frame-limit 0|60|120|240] [--shadow-detail 0|1|2] " +
 	"[--combat codename:count:CHAMP|GIANT|NORMAL] [--vulnerable] [--crowd N] [--crowd-fixture FILE.json] " +
 	"[--crowd-host URL] [--act walk=SHARE,chat=SHARE,roam=SHARE,busy=SHARE] [--seed N] [--provisioning URL] " +
-	"[--token FILE] [--snow] [--frames N] [--frame-ms MS] [--memory]";
+	"[--token FILE] [--snow] [--frames N] [--frame-ms MS] [--memory] [--gpu-time]";
 // --gpu-process trace categories, the fewest that serve processCosts:
 // toplevel gives every thread's top-level tasks as complete events with
 // their thread time (tdur); blink.user_timing carries the window marks.
@@ -195,6 +204,8 @@ const USAGE = "fps-bench.mjs [--seconds N] [--at a,b] [--only a,b] [--counts] [-
 const GPU_PROCESS_TRACE_CATEGORIES = [ "toplevel", "blink.user_timing" ];
 const GPU_WINDOW_START = "fps-bench gpu-process window start";
 const GPU_WINDOW_END = "fps-bench gpu-process window end";
+// --gpu-time: how long after a window its last timestamp queries resolve.
+const GPU_TIMING_SETTLE_MS = 500;
 // A GPU-process thread busier than this share of the window is reported.
 const GPU_THREAD_BUSY_SHARE = 0.02;
 // Scenarios whose input can run a second window: cross ends at its
@@ -402,7 +413,7 @@ function row( result ) {
 		result.p50.toFixed( 2 )
 	} p99 ${result.p99.toFixed( 2 )} max ${result.max.toFixed( 1 )} ms  main ${result.main.toFixed( 2 )} world ${
 		result.world.toFixed( 2 )
-	} ms/f${allocated}${counts ? "  | " + counts : ""}${gpuRow( result.gpuProcess )}`;
+	} ms/f${allocated}${counts ? "  | " + counts : ""}${gpuRow( result.gpuProcess )}${gpuTimeRow( result.gpuTime )}`;
 }
 
 /*
@@ -418,7 +429,23 @@ function gpuRow( gpu ) {
 		ms( gpu.main?.cpuMsPerFrame )
 	} wall ${ms( gpu.main?.wallMsPerFrame )} ms/f over ${gpu.frames} traced frames (${
 		gpu.fps.toFixed( 0 )
-	} fps)  | ${threads}`;
+	} fps)  | ${threads}${pageRow( gpu.pageThreads )}`;
+}
+
+/*
+================
+pageRow
+
+The page's own threads (main, workers, compositor) past the busy share,
+so a worker's cost is read beside the main thread's.
+================
+*/
+function pageRow( threads ) {
+	if ( !threads?.length ) return "";
+	const ms = value => value === null || value === undefined ? "?" : value.toFixed( 2 );
+	return `\n${"".padEnd( 13 )} page threads cpu ms/f: ${
+		threads.map( t => `${t.name} ${ms( t.cpuMsPerFrame )}` ).join( ", " )
+	}`;
 }
 
 /*
@@ -574,7 +601,8 @@ async function gpuProcessPass( page, name, location, options, scene ) {
 		spanMs: costs.spanMs,
 		main: pick( costs.gpuMain ),
 		threads: costs.gpu.filter( row => row.busy > GPU_THREAD_BUSY_SHARE ).map( pick ),
-		renderer: pick( costs.renderer )
+		renderer: pick( costs.renderer ),
+		pageThreads: costs.rendererThreads.filter( row => row.busy > GPU_THREAD_BUSY_SHARE ).map( pick )
 	};
 }
 
@@ -596,7 +624,8 @@ async function session( options, location, results ) {
 		frameLimit: options.frameLimit,
 		shadowDetail: options.shadowDetail,
 		// A profile is attribution: line positions matter, its timing is perturbed anyway.
-		lineInfo: options.cpu
+		lineInfo: options.cpu,
+		gpuTiming: options.gpuTime
 	} );
 	try {
 		// A stale or replaced session can boot outside the scene; every
@@ -658,10 +687,22 @@ async function session( options, location, results ) {
 				`  measuring ${identity.build} ${identity.entry ?? identity.origin}, replay ${identity.replay}; ` +
 					`harness ${identity.harnessCommit}, served commit ${identity.servedCommit}`
 			);
+			const gpuCursor = options.gpuTime ? await gpuTimingCursor( client.page ) : null;
 			await captures.start();
 			capturing = true;
 			const started = Date.now();
 			const result = await measure( client.page, `${location.name}/${name}`, ms, input );
+			if ( gpuCursor !== null ) {
+				// Late samples resolve a few frames after the window: wait for them.
+				await client.page.waitForTimeout( GPU_TIMING_SETTLE_MS );
+				const timed = await gpuTimingSince( client.page, gpuCursor );
+				result.gpuTime = summarizeGpuTiming( timed.samples );
+				result.gpuTimeFailures = {
+					failed: timed.failed,
+					skipped: timed.skipped,
+					omittedPasses: timed.omittedPasses
+				};
+			}
 			if ( options.screenshot ) {
 				await mkdir( options.out, { recursive: true } );
 				await client.page.screenshot( { path: `${options.out}/${location.name}-${name}.png` } );
@@ -854,6 +895,7 @@ const options = parseOptions( process.argv.slice( 2 ), {
 	frameMs: 500,
 	memory: false,
 	gpuProcess: false,
+	gpuTime: false,
 	combat: "MOB_CH_TIGER:10:GIANT",
 	vulnerable: false,
 	crowd: 32,

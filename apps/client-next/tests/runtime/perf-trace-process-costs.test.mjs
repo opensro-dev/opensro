@@ -5,7 +5,8 @@ perf-trace-process-costs.test.mjs - GPU-process time per frame in a trace
 
 processCosts (tools/perf/core/trace.mjs) is what fps-bench --gpu-process
 reports: wall and CPU time per frame of each GPU-process thread and of
-the renderer main thread inside a measured window. Processes and threads
+every thread of the page's renderer process (main, workers, compositor)
+inside a measured window. Processes and threads
 are found by their metadata names, nested slices count once, and a task
 that straddles the window edge counts only its part inside.
 
@@ -77,6 +78,29 @@ test("nested slices count once, a straddling task counts its inside part, thread
 	assert.deepEqual( costs.gpu.map( row => row.name ), [ "CrGpuMain", "VizCompositorThread" ], "busiest first" );
 	assert.equal( costs.renderer.name, "CrRendererMain" );
 	close( costs.renderer.cpuMsPerFrame, 1.8 / 4 );
+	// Every thread of the page's renderer counts, busiest first; the browser's never.
+	assert.deepEqual( costs.rendererThreads.map( row => row.name ), [ "Compositor", "CrRendererMain" ] );
+});
+
+test("the page's workers are read beside its main thread; another renderer process is not the page", () => {
+	const OTHER = 11;
+	const events = [
+		...metadata(),
+		{ ph: "M", name: "thread_name", pid: RENDERER, tid: 6, args: { name: "DedicatedWorker thread" } },
+		{ ph: "M", name: "process_name", pid: OTHER, tid: 0, args: { name: "Renderer" } },
+		{ ph: "M", name: "thread_name", pid: OTHER, tid: 1, args: { name: "CrRendererMain" } },
+		{ ph: "M", name: "thread_name", pid: OTHER, tid: 6, args: { name: "DedicatedWorker thread" } },
+		task( RENDERER, 1, 0, 3000, 2500 ),
+		task( RENDERER, 6, 0, 1000, 900 ),
+		task( OTHER, 1, 0, 500, 500 ),
+		task( OTHER, 6, 0, 2000, 2000 )
+	];
+	const costs = processCosts( events, { start: 0, end: 4000 }, 2 );
+	assert.equal( costs.renderer.pid, RENDERER );
+	const worker = costs.rendererThreads.find( row => row.name === "DedicatedWorker thread" );
+	assert.equal( worker.pid, RENDERER );
+	close( worker.cpuMsPerFrame, .9 / 2 );
+	assert.ok( costs.rendererThreads.every( row => row.pid === RENDERER ) );
 });
 
 test("a slice that outlasts its enclosing task adds only its overhang", () => {
