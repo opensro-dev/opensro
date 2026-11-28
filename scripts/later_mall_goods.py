@@ -76,6 +76,7 @@ import mall_tables as mall
 from prepare_client_resources import safe_target, write_atomically
 from sro_paths import trees_overlap
 import alexandria_npcs as text_tables
+import gears_stone_import as gears
 import later_tables
 
 MARKER = ".opensro-later-mall.json"
@@ -234,6 +235,12 @@ def unlisted_reason(tab, package, later_index, tree):
 		if reason is not None:
 			return reason
 	held = [row[SCRAP_ITEM] for row in rows]
+	# The owner's 2026-11-28 decision (#4836): no gears stone sells for
+	# silk. v1.696 lists none today, so this pins the rule for a later
+	# client that does, before the tree is even asked for the item.
+	stones = [code for code in held if gears.is_gears_stone(code)]
+	if stones:
+		return "gears stone, never sold for silk: " + ", ".join(stones)
 	absent = [code for code in held if code not in tree.item_ids]
 	if absent:
 		return "item not in the tree: " + ", ".join(absent)

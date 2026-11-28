@@ -92,6 +92,19 @@ def stone_codenames():
 
 
 # ================
+# is_gears_stone
+#
+# True for a gears magic stone's codename, whatever its kind or
+# degree. The owner's 2026-11-28 decision (#4836) keeps every one of
+# them out of the silk mall: a stat stone for silk is pay to win, and
+# the native tablets and alchemy craft them. later_mall_goods asks
+# here, so the one prefix stays this module's.
+# ================
+def is_gears_stone(code):
+	return code.startswith(PREFIX)
+
+
+# ================
 # select_stones
 #
 # The admitted rows of the later item tables: exactly the 112 gears

@@ -33,7 +33,9 @@ The gears magic stones were dropped from the listing (owner decision
 2026-11-28, #3257): the v1.696 client has no shop, package or price
 row for them. The import keeps their item rows so stones
 already bought stay valid on the alchemy path. Premium's Gears tab
-stays for nasrunGoods below. The sixteen weapon model switchers stand
+stays for nasrunGoods below, and like every layout tab it is written
+only when a good lands in it (dropEmptyLayoutTabs). The sixteen
+weapon model switchers stand
 in HOT shop > Halloween Models at the later mall's 600 silk, badged
 hot; their use is action/modelswitcher.go. Their rows ride the optional
 later-client import, so a catalogue built without it lists none of
@@ -456,7 +458,75 @@ func addMallCategoryRows(tables map[string][][]string, refs enterworld.ItemRefSo
 		next[good.Tab]++
 		listed[good.Package] = true
 	}
+	dropEmptyLayoutTabs(tables, newShop)
 	return badges, nil
+}
+
+/*
+================
+dropEmptyLayoutTabs
+
+Takes back every layout tab no good landed in, and every shop the layout
+added whose tabs all went with them (#4846). Its goods are gated
+(Imported, Nasrun), so a tab can end with nothing to sell: Premium >
+Gears holds only the Devil's Spirit goods, so SRO_NASRUN off left it an
+empty tab, and a build without the later-client import empties the HOT
+shop the same way. The client would draw it all the same: the v1.150
+mall makes one tab button per tab row and never counts the goods
+(client CIFItemMallShop_CreateTabs 0x6c76f0, its count read by
+client ItemMallShopData_GetTabList 0x817630), so the shipped data,
+which has no empty tab, is the only thing that kept the native mall
+from showing one. The layout is ours,
+so it writes no empty tab. Shipped tabs and shops are never touched,
+and every shipped address keeps its number, since only appended rows
+can go.
+================
+*/
+func dropEmptyLayoutTabs(tables map[string][][]string, newShop map[string]bool) {
+	filled := map[string]bool{}
+	for _, row := range tables["refshopgoods"] {
+		if len(row) > 2 {
+			filled[row[2]] = true
+		}
+	}
+	empty := map[string]bool{}
+	kept := map[string]bool{}
+	for _, tab := range mallCategoryTabs {
+		if filled[tab.Code] {
+			kept[tab.Shop] = true
+		} else {
+			empty[tab.Code] = true
+		}
+	}
+	tabs := tables["refshoptab"][:0]
+	for _, row := range tables["refshoptab"] {
+		if len(row) > 3 && empty[row[3]] {
+			continue
+		}
+		tabs = append(tabs, row)
+	}
+	tables["refshoptab"] = tabs
+	for shop := range newShop {
+		if kept[shop] {
+			continue
+		}
+		groups := tables["refmappingshopgroup"][:0]
+		for _, row := range tables["refmappingshopgroup"] {
+			if len(row) >= 4 && row[2] == mallGroupCode && row[3] == shop {
+				continue
+			}
+			groups = append(groups, row)
+		}
+		tables["refmappingshopgroup"] = groups
+		withTab := tables["refmappingshopwithtab"][:0]
+		for _, row := range tables["refmappingshopwithtab"] {
+			if len(row) >= 4 && row[2] == shop {
+				continue
+			}
+			withTab = append(withTab, row)
+		}
+		tables["refmappingshopwithtab"] = withTab
+	}
 }
 
 /*
