@@ -1,7 +1,7 @@
 /*
 ===========================================================================
 
-cosdebuff_test.go - Vital Spot on a companion: the COS recipient arm
+coswords_test.go - Vital Spot on a companion: the COS recipient arm
 
 The cast deals no damage and attributes no kill: the word installs on
 the pet, judged through its owner, lowers the pet's hit rate at both
@@ -41,16 +41,16 @@ func teachVitalSpot(t *testing.T, rt *Runtime, c *enterworld.Character, code str
 
 /*
 ================
-TestCosDebuffVitalSpotInstallsAndLowersHitRate
+TestCosWordVitalSpotInstallsAndLowersHitRate
 ================
 */
-func TestCosDebuffVitalSpotInstallsAndLowersHitRate(t *testing.T) {
+func TestCosWordVitalSpotInstallsAndLowersHitRate(t *testing.T) {
 	rt, clock, attacker, owner := newPvpPair(t)
 	ref := equipStrikeTestCOS(t, rt, owner)
 	skill := teachVitalSpot(t, rt, attacker, "SKILL_CH_WATER_CANCEL_B_01")
 	pet := owner.ActiveCOS
 	now := clock.NowMs()
-	words := func() []monster.SelfEffect { return rt.cosDebuffWords(testDivision, owner.Name, pet.GID, now) }
+	words := func() []monster.SelfEffect { return rt.cosWordsHeld(testDivision, owner.Name, pet.GID, now) }
 	hitRate := func() float64 {
 		stats, err := cosCombatStats(ref, pet, nil, words())
 		if err != nil {
@@ -95,58 +95,58 @@ func TestCosDebuffVitalSpotInstallsAndLowersHitRate(t *testing.T) {
 
 /*
 ================
-TestCosDebuffWordStoreReplacesByTagAndCaps
+TestCosWordWordStoreReplacesByTagAndCaps
 ================
 */
-func TestCosDebuffWordStoreReplacesByTagAndCaps(t *testing.T) {
+func TestCosWordWordStoreReplacesByTagAndCaps(t *testing.T) {
 	rt, _, _, _ := newCombatTestRuntime(t, 1000)
 	word := func(skill, token, tag, first uint32) monster.SelfEffect {
 		return monster.SelfEffect{SkillID: skill, Token: token, Tag: tag, First: first, StartedAtMs: 0, UntilMs: 1000}
 	}
-	if _, ok := rt.installCosDebuffWord(testDivision, "owner", 7, word(1, 10, cosDebuffHitRateTag, 5), 0); !ok {
+	if _, ok := rt.installCosWord(testDivision, "owner", 7, word(1, 10, cosWordHitRateTag, 5), 0); !ok {
 		t.Fatal("first install refused")
 	}
-	replaced, ok := rt.installCosDebuffWord(testDivision, "owner", 7, word(1, 11, cosDebuffHitRateTag, 6), 0)
+	replaced, ok := rt.installCosWord(testDivision, "owner", 7, word(1, 11, cosWordHitRateTag, 6), 0)
 	if !ok || replaced != 10 {
 		t.Fatalf("same-tag recast replaced %d ok %v", replaced, ok)
 	}
-	if _, ok := rt.installCosDebuffWord(testDivision, "owner", 7, word(2, 12, cosDebuffEvasionTag, 7), 0); !ok {
+	if _, ok := rt.installCosWord(testDivision, "owner", 7, word(2, 12, cosWordEvasionTag, 7), 0); !ok {
 		t.Fatal("distinct tag refused")
 	}
-	if held := rt.cosDebuffWords(testDivision, "owner", 7, 0); len(held) != 2 {
+	if held := rt.cosWordsHeld(testDivision, "owner", 7, 0); len(held) != 2 {
 		t.Fatalf("held %+v", held)
 	}
-	for token := uint32(20); token < 20+cosDebuffWordCap; token++ {
-		rt.installCosDebuffWord(testDivision, "owner", 7, word(3, token, 1000+token, 1), 0)
+	for token := uint32(20); token < 20+cosWordCap; token++ {
+		rt.installCosWord(testDivision, "owner", 7, word(3, token, 1000+token, 1), 0)
 	}
-	if _, ok := rt.installCosDebuffWord(testDivision, "owner", 7, word(3, 99, 9999, 1), 0); ok {
+	if _, ok := rt.installCosWord(testDivision, "owner", 7, word(3, 99, 9999, 1), 0); ok {
 		t.Fatal("ninth distinct word admitted past the cap")
 	}
-	if tokens := rt.expireCosDebuffWords(testDivision, "owner", 7, 1001); len(tokens) == 0 {
+	if tokens := rt.expireCosWords(testDivision, "owner", 7, 1001); len(tokens) == 0 {
 		t.Fatal("expiry retired nothing")
 	}
-	if held := rt.cosDebuffWords(testDivision, "owner", 7, 1001); len(held) != 0 {
+	if held := rt.cosWordsHeld(testDivision, "owner", 7, 1001); len(held) != 0 {
 		t.Fatalf("held after expiry %+v", held)
 	}
 }
 
 /*
 ================
-TestCosDebuffWordsLeaveWithThePetsDeath
+TestCosWordWordsLeaveWithThePetsDeath
 ================
 */
-func TestCosDebuffWordsLeaveWithThePetsDeath(t *testing.T) {
+func TestCosWordWordsLeaveWithThePetsDeath(t *testing.T) {
 	rt, clock, _, owner := newPvpPair(t)
 	equipStrikeTestCOS(t, rt, owner)
 	pet := owner.ActiveCOS
-	word := monster.SelfEffect{SkillID: 1, Token: 42, Tag: cosDebuffEvasionTag, First: 5,
+	word := monster.SelfEffect{SkillID: 1, Token: 42, Tag: cosWordEvasionTag, First: 5,
 		StartedAtMs: clock.NowMs(), UntilMs: clock.NowMs() + 60000}
-	if _, ok := rt.installCosDebuffWord(testDivision, owner.Name, pet.GID, word, clock.NowMs()); !ok {
+	if _, ok := rt.installCosWord(testDivision, owner.Name, pet.GID, word, clock.NowMs()); !ok {
 		t.Fatal("install refused")
 	}
 	pet.CurrentHP = 0
 	frames := rt.advanceCosAbnormals(clock.NowMs())
-	if held := rt.cosDebuffWords(testDivision, owner.Name, pet.GID, clock.NowMs()); len(held) != 0 {
+	if held := rt.cosWordsHeld(testDivision, owner.Name, pet.GID, clock.NowMs()); len(held) != 0 {
 		t.Fatalf("word survived the pet's death: %+v", held)
 	}
 	retired := false
@@ -168,23 +168,23 @@ func TestCosDebuffWordsLeaveWithThePetsDeath(t *testing.T) {
 
 /*
 ================
-TestCosDebuffCastAcceptedWhenWordCapReached
+TestCosWordCastAcceptedWhenWordCapReached
 
 The install door failing (here: the word cap) does not refuse a cast
 whose cost is already committed: the cast lands, no effect frame and
 no word are added, exactly as the monster and player arms accept.
 ================
 */
-func TestCosDebuffCastAcceptedWhenWordCapReached(t *testing.T) {
+func TestCosWordCastAcceptedWhenWordCapReached(t *testing.T) {
 	rt, clock, attacker, owner := newPvpPair(t)
 	equipStrikeTestCOS(t, rt, owner)
 	skill := teachVitalSpot(t, rt, attacker, "SKILL_CH_WATER_CANCEL_B_01")
 	pet := owner.ActiveCOS
 	now := clock.NowMs()
-	for token := uint32(20); token < 20+cosDebuffWordCap; token++ {
+	for token := uint32(20); token < 20+cosWordCap; token++ {
 		word := monster.SelfEffect{SkillID: 3, Token: token, Tag: 1000 + token, First: 1,
 			StartedAtMs: now, UntilMs: now + 60000}
-		if _, ok := rt.installCosDebuffWord(testDivision, owner.Name, pet.GID, word, now); !ok {
+		if _, ok := rt.installCosWord(testDivision, owner.Name, pet.GID, word, now); !ok {
 			t.Fatal("cap fill refused")
 		}
 	}
@@ -195,8 +195,8 @@ func TestCosDebuffCastAcceptedWhenWordCapReached(t *testing.T) {
 	if _, ok := findFrame(out.Frames, wire.OpAttachedEffect); ok {
 		t.Fatal("cap-blocked cast still attached an effect", out.Frames)
 	}
-	held := rt.cosDebuffWords(testDivision, owner.Name, pet.GID, now)
-	if len(held) != cosDebuffWordCap {
+	held := rt.cosWordsHeld(testDivision, owner.Name, pet.GID, now)
+	if len(held) != cosWordCap {
 		t.Fatalf("held words changed: %+v", held)
 	}
 	for _, word := range held {
@@ -208,14 +208,14 @@ func TestCosDebuffCastAcceptedWhenWordCapReached(t *testing.T) {
 
 /*
 ================
-TestCosDebuffAdmissionKeepsTheTauntRefusal
+TestCosWordAdmissionKeepsTheTauntRefusal
 
 Through the real cast door: a taunt row aimed at the companion still
 refuses 0x3006 and installs nothing, while the Vital Spot debuff the
 same caster then casts is accepted and installs its word.
 ================
 */
-func TestCosDebuffAdmissionKeepsTheTauntRefusal(t *testing.T) {
+func TestCosWordAdmissionKeepsTheTauntRefusal(t *testing.T) {
 	rt, clock, attacker, owner := newPvpPair(t)
 	equipStrikeTestCOS(t, rt, owner)
 	skill := teachVitalSpot(t, rt, attacker, "SKILL_CH_WATER_CANCEL_B_01")
@@ -235,14 +235,14 @@ func TestCosDebuffAdmissionKeepsTheTauntRefusal(t *testing.T) {
 	if !refusalSeen {
 		t.Fatalf("taunt on the COS not refused 0x3006: %+v (%s)", refused, refused.DiagnosticRefusal)
 	}
-	if held := rt.cosDebuffWords(testDivision, owner.Name, pet.GID, now); len(held) != 0 {
+	if held := rt.cosWordsHeld(testDivision, owner.Name, pet.GID, now); len(held) != 0 {
 		t.Fatalf("a refused taunt installed words: %+v", held)
 	}
 	out := rt.HandleTargetInteract(testDivision, attacker, wire.SkillAction{ActionId: skill.ID, HasTarget: true, TargetGid: pet.GID}.Encode())
 	if _, ok := findFrame(out.Frames, wire.OpSkillCastResult); !ok {
 		t.Fatalf("Vital Spot on the COS refused: %+v (%s)", out, out.DiagnosticRefusal)
 	}
-	if held := rt.cosDebuffWords(testDivision, owner.Name, pet.GID, now); len(held) != 1 {
+	if held := rt.cosWordsHeld(testDivision, owner.Name, pet.GID, now); len(held) != 1 {
 		t.Fatalf("accepted debuff held words %+v", held)
 	}
 }
