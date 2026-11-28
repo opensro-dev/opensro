@@ -224,6 +224,9 @@ test("a refused prediction blends out and leaves no action", () => {
 // ============================================================================
 // gameplay.ts: when a press predicts
 
+const { experimentalGameplay, experimentalOptions } = await import(
+	"../../src/engine/foundation/ui/experimental-options.ts"
+);
 const { createGameplay } = await import(
 	"../../src/engine/runtime/simulation/worker/session/world/gameplay/gameplay.ts"
 );
@@ -544,7 +547,8 @@ function buildCastClosePayload( token ) {
  *   spellB?: ReturnType<typeof queuedChainSkillRef>,
  *   extraSkills?: ReturnType<typeof queuedChainSkillRef>[],
  *   actorOverrides?: Partial<import("../../src/engine/contracts/world").EntityState>,
- *   mobOverrides?: Partial<import("../../src/engine/contracts/world").EntityState>
+ *   mobOverrides?: Partial<import("../../src/engine/contracts/world").EntityState>,
+ *   predictedQueuedCast?: boolean
  * }} [opts]
  */
 function createQueuedChainGame( {
@@ -602,7 +606,7 @@ function createQueuedChainGame( {
 		},
 		refSkillSnapshot: skills
 	} );
-	game.experimental( { predictedQueuedCast } );
+	game.experimental( experimentalGameplay( experimentalOptions( { predictedQueuedCast } ) ) );
 	game.worldReady();
 	game.seed( actor );
 	game.step( 0, actor );
