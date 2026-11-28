@@ -4,14 +4,21 @@
 perf-build-identity.test.mjs - identify the served page, not the harness tree
 
 Execute the real page callback in an isolated browser-like context. The
-fixture controls script URLs and capture state without rewriting sources.
+fixture controls script URLs, capture state and the served asset manifest
+without rewriting sources. Two machines serving one commit can serve
+different generated assets (2026-11-28), so the manifest is identity too.
 
 ===========================================================================
 */
 import assert from "node:assert/strict";
 import test from "node:test";
 import { createContext, runInContext } from "node:vm";
-import { buildIdentity, verifyMeasuredIdentity } from "../../tools/perf/core/build-identity.mjs";
+import {
+	buildIdentity,
+	verifyMeasuredIdentity,
+	verifyServedAssets,
+	verifyServedCommit
+} from "../../tools/perf/core/build-identity.mjs";
 
 /*
 ================
@@ -19,7 +26,13 @@ fixture
 ================
 */
 function fixture( scripts = [ "/assets/index-old-build.js" ], video = /** @type {any} */ (null) ) {
-	const state = { scripts, video, timeOrigin: 1000, preference: null };
+	const state = {
+		scripts,
+		video,
+		timeOrigin: 1000,
+		preference: null,
+		manifest: /** @type {any} */ ({ manifestHash: "f0cd9a737c2a45ec", generatedAt: "2026-11-26T06:41:59Z" })
+	};
 	const context = createContext( {
 		URL,
 		location: { origin: "http://other-checkout.test", href: "http://other-checkout.test/play" },
@@ -29,6 +42,10 @@ function fixture( scripts = [ "/assets/index-old-build.js" ], video = /** @type 
 			}
 		},
 		localStorage: { getItem: () => state.preference },
+		fetch: async url =>
+			url === "/assets/manifest.json" && state.manifest ?
+				{ ok: true, json: async () => state.manifest } :
+				{ ok: false, json: async () => null },
 		document: {
 			querySelectorAll: () => state.scripts.map( src => ({ getAttribute: () => src }) ),
 			querySelector: selector => selector === "video.sro-replay-source" ? state.video : { srcObject: {} }
@@ -124,4 +141,19 @@ test("late recorder startup, reload and changed entry invalidate a measurement",
 	f.state.scripts = [ "/assets/index-new-build.js" ];
 	const after = await f.read();
 	assert.throws( () => verifyMeasuredIdentity( before, after ), /entry/ );
+});
+
+test("the served asset manifest is part of the identity, and an expected one is enforced", async () => {
+	const f = fixture(), identity = await f.read();
+	// The page realm's object: compare its fields, not its prototype.
+	assert.equal( identity.servedAssets.manifestHash, "f0cd9a737c2a45ec" );
+	assert.equal( identity.servedAssets.generatedAt, "2026-11-26T06:41:59Z" );
+	verifyServedAssets( identity, "" );
+	verifyServedAssets( identity, "f0cd9a737c" );
+	assert.throws( () => verifyServedAssets( identity, "b449d34ad8" ), /Served assets f0cd9a737c2a45ec are not/ );
+	f.state.manifest = null;
+	const none = await f.read();
+	assert.equal( none.servedAssets, null );
+	assert.throws( () => verifyServedAssets( none, "f0cd" ), /Served assets none/ );
+	assert.throws( () => verifyServedCommit( identity, "497d468" ), /unknown/ );
 });

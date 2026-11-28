@@ -8,6 +8,8 @@ geometry-instances.ts - validated GPU instance packing with reusable CPU storage
 // A row state's floats (Geometry.rowStates): the equipment glow colour
 // (r, g, b, 0) and UV (u, v, 0, 0) of one instance row, two vec4.
 export const ROW_STATE_FLOATS = 8;
+// The packed bytes of one instance row (packInstances: 40 floats).
+export const INSTANCE_ROW_BYTES = 160;
 /*
 ================
 instanceCapacity

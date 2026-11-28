@@ -6,8 +6,10 @@ fps-bench.mjs - frame rate of the real client in the scenarios that matter
 Usage:
   node tools/perf/bench/fps-bench.mjs [--seconds N] [--at a,b] [--only a,b]
        [--counts] [--spans] [--cpu] [--heap] [--out DIR] [--trace] [--gpu-process] [--json FILE]
-       [--screenshot] [--snow] [--frames N] [--frame-ms MS] [--memory]
+       [--screenshot] [--snow] [--frames N] [--frame-ms MS] [--memory] [--gpu-time]
+       [--hide ground,sky,objects,characters] [--render-scale 100|75|50]
        [--paced] [--cpu-rate N] [--frame-limit 0|60|120|240] [--shadow-detail 0|1|2]
+       [--expect-commit SHA]
 
 For each location (--at) resets the scratch character there, boots the dev
 client uncapped at 1600x900 (core/client.mjs) and runs the location's
@@ -55,6 +57,7 @@ main thread's frame and world-preparation time per frame. Options add:
   --snow    holds the client's weather at full snow for the whole run
             (core/scene-evidence.mjs holdSnow; the observer must be a GM,
             SRO_GM_CHARACTERS on the scratch stack).
+  --rain    holds full rain instead (weather mode 2), the same way.
   --frames N  after each timed window, a verify window of N frames (one
             every --frame-ms, default 500) with the scenario's input still
             running: OUT/<location>-<scenario>-NN.png beside a record of
@@ -70,13 +73,35 @@ main thread's frame and world-preparation time per frame. Options add:
             timed window, a second, traced window of the same scenario
             (reduced as it arrives; no trace file); the row gains the
             GPU main thread's CPU and wall ms per frame, every GPU-process
-            thread above 2% busy and the frames they divide by. Tracing
+            thread above 2% busy and the frames they divide by, and the
+            CPU ms per frame of every page thread above 2% busy: its main
+            thread, the simulation, asset and particle workers and the
+            compositor, so no thread's cost goes unread. Tracing
             slows frames, so this never touches the timed numbers. The
             cross and combat scenarios run once and get no traced window.
+  --hide    switch native graphic options off (ground, sky, objects,
+            characters) before measuring: with --gpu-time, what each costs.
+  --render-scale  the Experimental render scale (port-only): the scene at
+            75% or 50% resolution; with --gpu-time, whether the pass is fill-bound.
+  --gpu-time  the GPU's own time per frame: the page opens with the
+            renderer's pass timestamps on (gpu-timing=1) and each row gains
+            the frames' GPU ms (mean, p50, p99) and the costliest passes
+            (core/gpu-time.mjs). The timestamps ride the measured frames, so
+            compare a --gpu-time run only with another.
   --paced   retain display pacing; the default remains uncapped throughput.
   --cpu-rate N  apply Chrome CPU throttling after warm-up (for example 4).
   --frame-limit N  use the player's presentation limit; default 0 preserves
                   the uncapped throughput benchmark.
+  --expect-commit SHA  fail the run unless the served bundle's stamped
+            revision is this commit (core/build-identity.mjs): an A/B side
+            served by a stale preview is refused, not measured.
+  --expect-assets HASH  fail the run unless the served /assets/manifest.json
+            manifestHash starts with HASH: one machine's stale generated
+            tree is refused, not measured.
+A busy crowd (--act busy=...) is a combat window: the run fails unless at
+least COMBAT_FRAME_SHARE of its frames drew effect actors and particles
+(core/client.mjs verifyCombatWorkload). Every row records the per-second
+workload timeline (workload in --json).
 
 Read the captures with tools/perf/analyze (profile.mjs, trace.mjs).
 
@@ -102,12 +127,19 @@ import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { MISSION_MOVEMENT_FIXTURES } from "../../../../../scripts/lib/missionMovementFixture.mjs";
 import { parseOptions } from "../core/report.mjs";
 import { frameLimits } from "../../../src/engine/foundation/rendering/video-options.ts";
-import { openClient, closeClient, createCaptures, measure, revive } from "../core/client.mjs";
-import { buildIdentity, verifyMeasuredIdentity } from "../core/build-identity.mjs";
+import { openClient, closeClient, createCaptures, measure, revive, verifyCombatWorkload } from "../core/client.mjs";
+import {
+	buildIdentity,
+	verifyMeasuredIdentity,
+	verifyServedAssets,
+	verifyServedCommit
+} from "../core/build-identity.mjs";
 import { keepGoing, drag, walk, approach, fight, cross, loadCombat, combat, strike, localAlive } from "./scenarios.mjs";
 import { CROWD_HOST_URL, DEFAULT_ACTIVITY_SEED, obtainCrowd } from "../core/crowd.mjs";
 import { BUSY_IMBUE_SKILL, parseActivity } from "../core/crowd-activity.mjs";
-import { captureFrames, holdSnow, judgeFrames } from "../core/scene-evidence.mjs";
+import { gpuTimingCursor, gpuTimingSince, summarizeGpuTiming } from "../core/gpu-time.mjs";
+import { fpsRow } from "./fps-rows.mjs";
+import { assertDrawn, captureFrames, holdSnow, judgeFrames, RAIN_MODE, SNOW_MODE } from "../core/scene-evidence.mjs";
 import { cleanupCombat, combatResidue } from "../core/combat-cleanup.mjs";
 import { processCosts } from "../core/trace.mjs";
 
@@ -118,6 +150,9 @@ const SCENARIOS = [ "still", "drag", "move", "skill", "cross", "combat" ];
 // A quiet Europe field with a measured region crossing, the water ghost
 // field outside Jangan (a busier scene), and a field with a live monster:
 // the scratch character's skills all need a target.
+// --hide names: the native graphic options a bench may switch off
+// (foundation/rendering/graphic-options.ts GRAPHIC_OPTION_*).
+const HIDE_MODES = Object.freeze( { ground: 0x13, sky: 0x14, objects: 0x15, characters: 0x16 } );
 const LOCATIONS = [ {
 	name: "field",
 	fixture: MISSION_MOVEMENT_FIXTURES.region_cross,
@@ -187,7 +222,7 @@ const USAGE = "fps-bench.mjs [--seconds N] [--at a,b] [--only a,b] [--counts] [-
 	"[--trace] [--screenshot] [--gpu-process] [--json FILE] [--paced] [--cpu-rate N] [--frame-limit 0|60|120|240] [--shadow-detail 0|1|2] " +
 	"[--combat codename:count:CHAMP|GIANT|NORMAL] [--vulnerable] [--crowd N] [--crowd-fixture FILE.json] " +
 	"[--crowd-host URL] [--act walk=SHARE,chat=SHARE,roam=SHARE,busy=SHARE] [--seed N] [--provisioning URL] " +
-	"[--token FILE] [--snow] [--frames N] [--frame-ms MS] [--memory]";
+	"[--token FILE] [--snow] [--rain] [--frames N] [--frame-ms MS] [--memory] [--gpu-time] [--expect-commit SHA] [--expect-assets HASH]";
 // --gpu-process trace categories, the fewest that serve processCosts:
 // toplevel gives every thread's top-level tasks as complete events with
 // their thread time (tdur); blink.user_timing carries the window marks.
@@ -195,6 +230,8 @@ const USAGE = "fps-bench.mjs [--seconds N] [--at a,b] [--only a,b] [--counts] [-
 const GPU_PROCESS_TRACE_CATEGORIES = [ "toplevel", "blink.user_timing" ];
 const GPU_WINDOW_START = "fps-bench gpu-process window start";
 const GPU_WINDOW_END = "fps-bench gpu-process window end";
+// --gpu-time: how long after a window its last timestamp queries resolve.
+const GPU_TIMING_SETTLE_MS = 500;
 // A GPU-process thread busier than this share of the window is reported.
 const GPU_THREAD_BUSY_SHARE = 0.02;
 // Scenarios whose input can run a second window: cross ends at its
@@ -388,41 +425,6 @@ async function crowdInView( page, peers ) {
 
 /*
 ================
-row
-================
-*/
-function row( result ) {
-	const counts = Object.entries( result.counts ).map( ( [k, v] ) => `${k} ${v}` ).join( ", " );
-	const allocated = result.allocatedMBs === null ?
-		"" :
-		`  alloc ${result.allocatedMBs.toFixed( 1 )} MB/s ${
-			(result.allocatedMBs * 1024 / result.fps).toFixed( 0 )
-		} KB/f`;
-	return `${result.name.padEnd( 13 )} ${result.fps.toFixed( 0 ).padStart( 5 )} fps  frame p50 ${
-		result.p50.toFixed( 2 )
-	} p99 ${result.p99.toFixed( 2 )} max ${result.max.toFixed( 1 )} ms  main ${result.main.toFixed( 2 )} world ${
-		result.world.toFixed( 2 )
-	} ms/f${allocated}${counts ? "  | " + counts : ""}${gpuRow( result.gpuProcess )}`;
-}
-
-/*
-================
-gpuRow
-================
-*/
-function gpuRow( gpu ) {
-	if ( !gpu ) return "";
-	const ms = value => value === null || value === undefined ? "?" : value.toFixed( 2 );
-	const threads = gpu.threads.map( t => `${t.name} ${(t.busy * 100).toFixed( 0 )}%` ).join( ", " );
-	return `\n${"".padEnd( 13 )} gpu process ${gpu.main?.name ?? "(no main thread)"} cpu ${
-		ms( gpu.main?.cpuMsPerFrame )
-	} wall ${ms( gpu.main?.wallMsPerFrame )} ms/f over ${gpu.frames} traced frames (${
-		gpu.fps.toFixed( 0 )
-	} fps)  | ${threads}`;
-}
-
-/*
-================
 markWindow
 
 The trace µs of the window marks gpuProcessPass placed.
@@ -574,7 +576,8 @@ async function gpuProcessPass( page, name, location, options, scene ) {
 		spanMs: costs.spanMs,
 		main: pick( costs.gpuMain ),
 		threads: costs.gpu.filter( row => row.busy > GPU_THREAD_BUSY_SHARE ).map( pick ),
-		renderer: pick( costs.renderer )
+		renderer: pick( costs.renderer ),
+		pageThreads: costs.rendererThreads.filter( row => row.busy > GPU_THREAD_BUSY_SHARE ).map( pick )
 	};
 }
 
@@ -596,7 +599,9 @@ async function session( options, location, results ) {
 		frameLimit: options.frameLimit,
 		shadowDetail: options.shadowDetail,
 		// A profile is attribution: line positions matter, its timing is perturbed anyway.
-		lineInfo: options.cpu
+		lineInfo: options.cpu,
+		gpuTiming: options.gpuTime,
+		experimental: options.renderScale === 100 ? undefined : { renderScale: options.renderScale }
 	} );
 	try {
 		// A stale or replaced session can boot outside the scene; every
@@ -633,7 +638,16 @@ async function session( options, location, results ) {
 			} );
 			await crowdInView( client.page, crowd.peers );
 		}
-		if ( options.snow ) await holdSnow( client.page );
+		if ( options.snow || options.rain ) await holdSnow( client.page, options.rain ? RAIN_MODE : SNOW_MODE );
+		if ( options.hide.length ) {
+			// An ablation: the native graphic options' switches turned off
+			// (GRAPHIC_OPTION_*), so --gpu-time weighs what they draw.
+			await client.page.evaluate( modes => {
+				for ( const mode of modes ) globalThis.__benchRuntime.setRenderMode( mode, false );
+			}, options.hide.map( name => HIDE_MODES[name] ) );
+		}
+		// Before any window: a page that presents nothing measures nothing.
+		await assertDrawn( client.page, location.name );
 		captures = await createCaptures( client.page, {
 			dir: options.out,
 			cpu: options.cpu,
@@ -656,12 +670,28 @@ async function session( options, location, results ) {
 			const identity = await buildIdentity( client.page );
 			console.log(
 				`  measuring ${identity.build} ${identity.entry ?? identity.origin}, replay ${identity.replay}; ` +
-					`harness ${identity.harnessCommit}, served commit ${identity.servedCommit}`
+					`harness ${identity.harnessCommit}, served commit ${identity.servedCommit}, ` +
+					`assets ${identity.servedAssets?.manifestHash.slice( 0, 12 ) ?? "none"} ` +
+					`(${identity.servedAssets?.generatedAt ?? "unknown"})`
 			);
+			verifyServedCommit( identity, options.expectCommit );
+			verifyServedAssets( identity, options.expectAssets );
+			const gpuCursor = options.gpuTime ? await gpuTimingCursor( client.page ) : null;
 			await captures.start();
 			capturing = true;
 			const started = Date.now();
 			const result = await measure( client.page, `${location.name}/${name}`, ms, input );
+			if ( gpuCursor !== null ) {
+				// Late samples resolve a few frames after the window: wait for them.
+				await client.page.waitForTimeout( GPU_TIMING_SETTLE_MS );
+				const timed = await gpuTimingSince( client.page, gpuCursor );
+				result.gpuTime = summarizeGpuTiming( timed.samples );
+				result.gpuTimeFailures = {
+					failed: timed.failed,
+					skipped: timed.skipped,
+					omittedPasses: timed.omittedPasses
+				};
+			}
 			if ( options.screenshot ) {
 				await mkdir( options.out, { recursive: true } );
 				await client.page.screenshot( { path: `${options.out}/${location.name}-${name}.png` } );
@@ -671,6 +701,13 @@ async function session( options, location, results ) {
 			if ( result.frames < 2 ) {
 				throw Error(
 					`${location.name}/${name}: no frame samples; benchmark the dev server or a bench bundle (pnpm build:bench)`
+				);
+			}
+			if ( options.counts ) {
+				// Which poses ran on the CPU as the window ended, and why: the
+				// skeleton work the GPU path did not take (characters.ts stats).
+				result.poseEligibility = await client.page.evaluate( () =>
+					globalThis.__benchRuntime.characterStats().poseEligibility ?? null
 				);
 			}
 			result.frameLimit = options.frameLimit;
@@ -732,7 +769,38 @@ async function session( options, location, results ) {
 			}
 			results.push( result );
 			if ( options.json ) await writeFile( options.json, JSON.stringify( results, null, 2 ) );
-			console.log( row( result ) );
+			console.log( fpsRow( result ) );
+			// A busy crowd is a combat window: it fails unless its frames drew
+			// the effects (the row and JSON above keep the evidence).
+			if ( crowd && parseActivity( options.act ).busy > 0 ) {
+				verifyCombatWorkload( result.workload, `${location.name}/${name}` );
+			}
+			// The world's resident and visible counts after the window (#4692):
+			// static groups (GPU-culled, never walked), walked and walk-visible
+			// groups, and the frame's bundle recordings so far. A bundle without
+			// the stats prints null.
+			const world = await client.page.evaluate( () => {
+				const stats = globalThis.__benchRuntime.worldStats?.();
+				return stats ?
+					{
+						residentGroups: stats.residentGroups,
+						staticGroups: stats.staticGroups,
+						walkedGroups: stats.walkedGroups,
+						visibleGroups: stats.visibleGroups,
+						bundleRecords: stats.bundleRecords
+					} :
+					null;
+			} );
+			console.log( `  verify world ${name}: ${JSON.stringify( world )}` );
+			if ( options.snow || options.rain ) {
+				// The held mode and the weather owner's drop counters after
+				// the window: an A/B's two sides must hold the same weather.
+				const held = await client.page.evaluate( () => ({
+					mode: globalThis.__benchRuntime.gameplay()?.weather?.mode ?? null,
+					drops: globalThis.__benchRuntime.worldStats?.()?.weather ?? null
+				}) );
+				console.log( `  verify weather ${name}: ${JSON.stringify( held )}` );
+			}
 		}
 	} finally {
 		// Rejected windows keep their profiles too. Cleanup is outside every
@@ -850,10 +918,14 @@ const options = parseOptions( process.argv.slice( 2 ), {
 	trace: false,
 	screenshot: false,
 	snow: false,
+	rain: false,
 	frames: 0,
 	frameMs: 500,
 	memory: false,
 	gpuProcess: false,
+	gpuTime: false,
+	hide: [],
+	renderScale: 100,
 	combat: "MOB_CH_TIGER:10:GIANT",
 	vulnerable: false,
 	crowd: 32,
@@ -864,10 +936,16 @@ const options = parseOptions( process.argv.slice( 2 ), {
 	provisioning: "http://127.0.0.1:8789",
 	token: path.join( REPO_ROOT, "apps/server/.state/cluster/agent-provisioning-token" ),
 	out: "temp/artifacts/fps-bench",
+	// The commit the served bundle must name (build-identity.mjs verifyServedCommit).
+	expectCommit: "",
+	// The asset manifest hash the page must serve (verifyServedAssets).
+	expectAssets: "",
 	json: ""
 }, USAGE );
 if ( !frameLimits().includes( options.frameLimit ) ) throw Error( `unsupported frame limit ${options.frameLimit}` );
 for ( const name of options.only ) if ( !SCENARIOS.includes( name ) ) throw Error( `unknown scenario ${name}` );
+if ( ![ 100, 75, 50 ].includes( options.renderScale ) ) throw Error( "--render-scale must be 100, 75 or 50" );
+for ( const name of options.hide ) if ( !(name in HIDE_MODES) ) throw Error( `unknown --hide ${name}` );
 // Chrome runs one trace at a time.
 if ( options.trace && options.gpuProcess ) {
 	throw Error( "choose --trace or --gpu-process per run; each records a trace" );

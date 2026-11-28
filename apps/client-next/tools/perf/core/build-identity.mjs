@@ -7,6 +7,11 @@ The harness checkout is not the served build. Keep its revision separate
 from the loaded entry URL, and reject changed or unproven capture state.
 These observations do not identify a server commit or prove encoder output.
 Bundle detection expects the release entry naming: /assets/index-<hash>.js.
+servedCommit is the revision the served build was stamped with
+(SRO_CLIENT_REVISION, exported by the bench entry and captured by
+playable-session.mjs), never the harness checkout's. servedAssets is the
+asset tree the page loads from (/assets/manifest.json): two machines serving
+the same commit can still serve different generated assets.
 
 ===========================================================================
 */
@@ -64,7 +69,77 @@ export async function buildIdentity( page, harnessCommit = harnessRevision() ) {
 			replayPreference: localStorage.getItem( "sro:bug-report:replay:1" )
 		};
 	} );
-	return { ...observed, harnessCommit, servedCommit: "unknown" };
+	return {
+		...observed,
+		harnessCommit,
+		servedCommit: await servedRevision( page ),
+		servedAssets: await servedAssets( page )
+	};
+}
+
+/*
+================
+servedAssets
+
+The served asset manifest's own hash and generation time, or null when the
+page serves none. A stale generated tree on one machine (2026-11-28: the
+laptop served the 11-17 tree, without the per-effect programs of asset
+schema 5) is otherwise invisible: the client skips assets it cannot load.
+================
+*/
+async function servedAssets( page ) {
+	return page.evaluate( async () => {
+		const response = await fetch( "/assets/manifest.json", { cache: "no-store" } ).catch( () => null );
+		if ( !response?.ok ) return null;
+		const manifest = await response.json().catch( () => null );
+		return typeof manifest?.manifestHash === "string" ?
+			{ manifestHash: manifest.manifestHash, generatedAt: manifest.generatedAt ?? null } :
+			null;
+	} );
+}
+
+/*
+================
+servedRevision
+
+The stamped revision the served build's runtime entry exported, or
+"unknown" before the session captured it or for a build stamped with none.
+================
+*/
+async function servedRevision( page ) {
+	const revision = await page.evaluate( () => globalThis.__playableRevision ?? "" );
+	return /^[0-9a-f]{7,40}$/.test( revision ) ? revision : "unknown";
+}
+
+/*
+================
+verifyServedCommit
+
+Refuses a measurement of a build other than the one the run was asked to
+measure: an A/B side served by a stale preview is a wrong reading, not a
+noisy one. Both sides compare as prefixes, so a short SHA names it.
+================
+*/
+export function verifyServedCommit( identity, expected ) {
+	if ( !expected ) return;
+	const served = identity.servedCommit;
+	if ( served === "unknown" || !(served.startsWith( expected ) || expected.startsWith( served )) ) {
+		throw Error( `Served commit ${served} is not the expected ${expected}` );
+	}
+}
+
+/*
+================
+verifyServedAssets
+
+Refuses a measurement against an asset tree other than the expected one (a
+manifestHash prefix), as verifyServedCommit refuses another build.
+================
+*/
+export function verifyServedAssets( identity, expected ) {
+	if ( !expected ) return;
+	const served = identity.servedAssets?.manifestHash ?? "none";
+	if ( !served.startsWith( expected ) ) throw Error( `Served assets ${served} are not the expected ${expected}` );
 }
 
 /*

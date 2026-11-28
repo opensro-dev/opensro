@@ -18,6 +18,7 @@ import { createPresentationRandom } from "./random/random";
 import { worldCursor } from "@/engine/foundation/ui/world-cursor";
 import { experimentalGameplay, experimentalVideo } from "@/engine/foundation/ui/experimental-options";
 import { blindableCharacter, blindableCompanion } from "@/engine/foundation/ui/name-visibility";
+import { createNativeCadence } from "@/engine/foundation/rendering/native-cadence";
 import { sampleWorldClock } from "@/engine/foundation/gameplay/world-clock";
 import { createWorldDoubleClick } from "@/engine/foundation/gameplay/world-double-click";
 import type { UniqueNotifySettings } from "@/engine/foundation/gameplay/unique-status";
@@ -133,6 +134,11 @@ export function startRuntime(
 		if ( errors.length ) throw new AggregateError( errors, "Runtime cleanup failed" );
 	}
 	try {
+		// The interface steps at the native frame rate, or at once after an
+		// interface event or a viewport or phase change (native-cadence.ts).
+		// Declared first: an interface event may arrive during setup.
+		const uiCadence = createNativeCadence();
+		let uiStepKey = "";
 		const random = createPresentationRandom( presentationSeed );
 		// Fetch-shaped failures of the last second, for the offline
 		// burst rule in reportRuntimeIncident (#2559), and when the
@@ -505,6 +511,7 @@ export function startRuntime(
 				}
 			}
 			ui.event( event );
+			uiCadence.reset();
 		}
 		// Hosted deployments route /api to Agent. A build-time override supports a
 		// separate same-site API origin; query overrides are restricted to development.
@@ -808,7 +815,10 @@ export function startRuntime(
 			// selecting it reopens confirmation type 3 without a gameplay packet.
 			if ( local?.appearanceState?.[0] === 2 ) {
 				const corpse = renderer.pickEntity( x, y, 0, input.blindHeld(), true );
-				if ( corpse === game.localGid ) ui.event( { kind: "world-select", gid: corpse } );
+				if ( corpse === game.localGid ) {
+					ui.event( { kind: "world-select", gid: corpse } );
+					uiCadence.reset();
+				}
 				return;
 			}
 			// 698740: SHIFT sets 692680's filter flag, which also takes dead
@@ -825,6 +835,7 @@ export function startRuntime(
 				// 698924 retains VK_SHIFT; 698BFD gates whisper prefill after selection.
 				if ( shift && !doubleClick && entity.kind === "player" ) {
 					ui.event( { kind: "whisper-target", gid: entity.gid } );
+					uiCadence.reset();
 				}
 				// 698740 -> 693E50: a press on another player may attack it; the
 				// worker decides against the selection this press is about to
@@ -889,6 +900,7 @@ export function startRuntime(
 			}
 		}
 		let worldPointer: readonly [number, number] | null = null, hoveredEntity: number | null = null;
+		const hoverCadence = createNativeCadence();
 		let readySent = false;
 		// The display stopped asking for frames while the document stays visible.
 		let starved = false;
@@ -1474,7 +1486,12 @@ export function startRuntime(
 					(Number( localReady ) + Number( navReady ) + world.progress() + Number( audio.ready() ) +
 						Number( baselineReady )) / 5;
 				markStage( "world-stream" );
-				const semantics = ui.step(
+				const viewport = platform.readUiViewport(),
+					stepKey = frontendState.phase + ":" + (sessionState?.phase ?? "") + ":" + viewport.width + "x" +
+						viewport.height + ":" + visibleAgain;
+				if ( stepKey !== uiStepKey ) uiCadence.reset();
+				uiStepKey = stepKey;
+				const semantics = !uiCadence.due( now ) ? null : ui.step(
 					{
 						worldError: world.error() ?? navigation.error(),
 						worldRetrying: world.error() ? world.reconnecting() : navigation.reconnecting(),
@@ -1565,15 +1582,26 @@ export function startRuntime(
 				markStage( "render-preparation-submit" );
 				renderer.setTeleportGates( worldPresented ? presentation.entities() : [] );
 				const hoverLocal = presentation.gameplay()?.localGid,
-					hoverGid = visible && diagnostics.hoverPicking !== false && worldPointer &&
-							frontendState.phase === "world" &&
-							hoverLocal &&
-							!ui.blocks(
-								worldPointer[0] * platform.readUiViewport().width,
-								worldPointer[1] * platform.readUiViewport().height
-							) ?
-						renderer.pickEntity( worldPointer[0], worldPointer[1], hoverLocal, input.blindHeld() ) :
-						null;
+					hoverAllowed = visible && diagnostics.hoverPicking !== false && worldPointer &&
+						frontendState.phase === "world" &&
+						hoverLocal &&
+						// 67CCA0: the camera-drag press clears the hover window and
+						// resets the cursor mode (case WM_RBUTTONDOWN, SetCursorMode -1),
+						// and the orbit pins the cursor (SetCursorPos to the press
+						// point); no hover target is shown until the button is released,
+						// so an orbit picks nothing (#4692).
+						!input.orbiting() &&
+						!ui.blocks(
+							worldPointer[0] * platform.readUiViewport().width,
+							worldPointer[1] * platform.readUiViewport().height
+						);
+				if ( !hoverAllowed ) hoverCadence.reset();
+				// native-cadence.ts: picked at the native 60 Hz, not every frame.
+				const hoverGid = !hoverAllowed ?
+					null :
+					hoverCadence.due( now ) ?
+					renderer.pickEntity( worldPointer![0], worldPointer![1], hoverLocal!, input.blindHeld() ) :
+					hoveredEntity;
 				hoveredEntity = hoverGid;
 				platform.presentWorldCursor(
 					ui.cursor() ?? worldCursor(
@@ -1778,6 +1806,10 @@ World admission: ${renderer.worldStats().sceneId ?? "none"}; ${renderer.worldSta
 			berserkGauge: () => characters.orbGauge(),
 			characterActors: () => renderer.characterActors(),
 			characterStats: () => renderer.characterStats( true ),
+			worldStats: () => renderer.worldStats(),
+			// The native graphic options' draw switches (graphic-options.ts), for
+			// a bench that weighs what each category costs the GPU (--hide).
+			setRenderMode: ( mode: number, enabled: boolean ) => renderer.setWorldRenderMode( mode, enabled ),
 			characterCullCensus: () => renderer.characterStats( true, true ),
 			camera: () => input.camera(),
 			worldView: () => renderer.worldView(),

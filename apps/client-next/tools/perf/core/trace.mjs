@@ -310,12 +310,16 @@ function threadTime( events, start, end ) {
 ================
 processCosts
 
-Per frame cost of the GPU process's threads and of the renderer main
-thread inside window ({ start, end } in trace µs), over frames presented
-frames: for each thread its name, wall and CPU (thread time) ms per frame
-and its busy share of the window. GPU threads come busiest first; gpuMain
-is its CrGpuMain and renderer the busiest renderer main thread. Only
-complete ("X") events count: Chrome's toplevel tasks are complete events.
+Per frame cost of every thread of the GPU process and of the page's
+renderer process inside window ({ start, end } in trace µs), over frames
+presented frames: for each thread its name, wall and CPU (thread time) ms
+per frame and its busy share of the window. GPU threads come busiest
+first; gpuMain is its CrGpuMain and renderer the busiest renderer main
+thread. rendererThreads are every thread of that renderer's process -
+its main thread, the page's workers (simulation, assets, particles), the
+compositor and raster threads - busiest first, so no thread's cost is
+left out of a reading. Only complete ("X") events count: Chrome's
+toplevel tasks are complete events.
 ================
 */
 export function processCosts( events, window, frames ) {
@@ -328,13 +332,12 @@ export function processCosts( events, window, frames ) {
 		const process = processes.get( e.pid );
 		if ( process !== GPU_PROCESS && process !== RENDERER_PROCESS ) continue;
 		const key = `${e.pid}/${e.tid}`;
-		if ( process === RENDERER_PROCESS && threads.get( key ) !== RENDERER_MAIN_THREAD ) continue;
 		let list = byThread.get( key );
 		if ( !list ) byThread.set( key, list = [] );
 		list.push( e );
 	}
 	const span = window.end - window.start;
-	const gpu = [], renderers = [];
+	const gpu = [], rendererRows = [];
 	for ( const [key, list] of byThread ) {
 		const { wall, cpu } = threadTime( list, window.start, window.end );
 		const row = {
@@ -345,15 +348,19 @@ export function processCosts( events, window, frames ) {
 			cpuMsPerFrame: cpu === null ? null : cpu / US_PER_MS / frames,
 			busy: wall / span
 		};
-		(processes.get( row.pid ) === GPU_PROCESS ? gpu : renderers).push( row );
+		(processes.get( row.pid ) === GPU_PROCESS ? gpu : rendererRows).push( row );
 	}
 	gpu.sort( ( a, b ) => b.busy - a.busy );
-	renderers.sort( ( a, b ) => b.busy - a.busy );
+	rendererRows.sort( ( a, b ) => b.busy - a.busy );
+	// The page's process is the one whose main thread is busiest; other
+	// renderers (extensions, spare processes) are not the client's cost.
+	const renderer = rendererRows.find( row => row.name === RENDERER_MAIN_THREAD ) ?? null;
 	return {
 		frames,
 		spanMs: span / US_PER_MS,
 		gpuMain: gpu.find( row => row.name === GPU_MAIN_THREAD ) ?? null,
 		gpu,
-		renderer: renderers[0] ?? null
+		renderer,
+		rendererThreads: renderer ? rendererRows.filter( row => row.pid === renderer.pid ) : []
 	};
 }

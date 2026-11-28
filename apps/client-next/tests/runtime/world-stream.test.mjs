@@ -10,6 +10,7 @@ modules the client ships, not a per-test bundle.
 ===========================================================================
 */
 import "../helpers/native-source-loader.mjs";
+import { OBJECT_CULL_COMMANDS } from "../helpers/cull-commands.mjs";
 import { pathToFileURL as sourceFileUrl } from "node:url";
 import { test } from "node:test";
 import assert from "node:assert/strict";
@@ -201,7 +202,10 @@ function fixture( options = {} ) {
 	*/
 	function step( region, controls ) {
 		stream.step( { regionId: region, x: 0, y: 0, z: 0, angle: 0 }, controls );
-		world.prepare( { upload: data => ({ data }), release() {} }, { upload: () => ({}), release() {} }, 1 );
+		world.prepare( { ...OBJECT_CULL_COMMANDS, upload: data => ({ data }), release() {} }, {
+			upload: () => ({}),
+			release() {}
+		}, 1 );
 		assert.equal( stream.error(), null );
 	}
 	return { stream, world, step, requests, cancelled, ready, textures, admissions, camera: () => camera };
@@ -211,7 +215,9 @@ test("stream revisits an evicted region and finishes its texture transaction", (
 	for ( const region of [ 1, 2, 1 ] ) for ( let i = 0; i < 5; i++ ) f.step( region );
 	assert.equal( f.requests.filter( r => r.url.endsWith( "/1.png" ) ).length, 2 );
 	assert.equal( f.world.stats().pendingTextures, 0 );
-	assert.equal( f.world.stats().visibleGroups, 1 );
+	const stats = f.world.stats();
+	// The region's one group: walked, or static (GPU-culled, never walked).
+	assert.equal( stats.visibleGroups + (stats.staticGroups ?? 0), 1 );
 });
 test("published block textures decode to native GPU resources through the stream", () => {
 	const f = fixture( { blockTextures: true } );
@@ -668,7 +674,10 @@ test("leaving for the dock pauses the retained scene's stream (#1975)", () => {
 	// every frame leaves it none until the whole queue drains (#1975).
 	for ( let i = 0; i < 4; i++ ) {
 		f.stream.step( null );
-		f.world.prepare( { upload: data => ({ data }), release() {} }, { upload: () => ({}), release() {} }, 1 );
+		f.world.prepare( { ...OBJECT_CULL_COMMANDS, upload: data => ({ data }), release() {} }, {
+			upload: () => ({}),
+			release() {}
+		}, 1 );
 		assert.equal( f.stream.error(), null );
 	}
 	assert.equal( f.requests.length, issued, "the retained scene issued new work while the player is away" );

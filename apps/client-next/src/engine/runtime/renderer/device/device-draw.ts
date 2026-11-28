@@ -34,6 +34,8 @@ export class DeviceDraw implements GeometryDraw {
 	#instanceCapacity: number;
 	#indexCount: number;
 	#instanceCount: number;
+	#indirect: GPUBuffer | null = null;
+	#indirectOffset = 0;
 
 	constructor(
 		fixed: Pick<
@@ -86,6 +88,58 @@ export class DeviceDraw implements GeometryDraw {
 		return this.#instanceCount;
 	}
 
+	get indirect() {
+		return this.#indirect;
+	}
+
+	get indirectOffset() {
+		return this.#indirectOffset;
+	}
+
+	// The watched draws (the static world runs, object-cull.ts) and a count
+	// bumped by each change of a watched draw's binding, pipeline or
+	// arguments buffer (not its counts): a recording of watched indirect
+	// draws stays valid while it holds (frame.ts recordPersistent). A
+	// character, particle or UI draw changing never touches it.
+	static #watched = new WeakSet<DeviceDraw>();
+	static #revision = 0;
+
+	static get revision() {
+		return DeviceDraw.#revision;
+	}
+
+	/*
+	================
+	watch / unwatch
+	================
+	*/
+	static watch( draw: DeviceDraw ) {
+		DeviceDraw.#watched.add( draw );
+		DeviceDraw.#changed( draw );
+	}
+
+	static unwatch( draw: DeviceDraw ) {
+		if ( DeviceDraw.#watched.delete( draw ) ) DeviceDraw.#revision++;
+	}
+
+	static #changed( draw: DeviceDraw ) {
+		if ( DeviceDraw.#watched.has( draw ) ) DeviceDraw.#revision++;
+	}
+
+	/*
+	================
+	indirect
+
+	The arguments a GPU-culled draw submits (index-cull.ts), or null to
+	submit its counts again. Only the geometry owner calls it.
+	================
+	*/
+	static drawIndirect( draw: DeviceDraw, buffer: GPUBuffer | null, offset = 0 ) {
+		draw.#indirect = buffer;
+		draw.#indirectOffset = offset;
+		DeviceDraw.#changed( draw );
+	}
+
 	/*
 	================
 	select
@@ -108,6 +162,7 @@ export class DeviceDraw implements GeometryDraw {
 	static rebind( draw: DeviceDraw, binding: GPUBindGroup, instanceCapacity = draw.#instanceCapacity ) {
 		draw.#binding = binding;
 		draw.#instanceCapacity = instanceCapacity;
+		DeviceDraw.#changed( draw );
 	}
 
 	/*
@@ -122,5 +177,6 @@ export class DeviceDraw implements GeometryDraw {
 	static repipeline( draw: DeviceDraw, pipeline: GPURenderPipeline, binding: GPUBindGroup ) {
 		draw.#pipeline = pipeline;
 		draw.#binding = binding;
+		DeviceDraw.#changed( draw );
 	}
 }

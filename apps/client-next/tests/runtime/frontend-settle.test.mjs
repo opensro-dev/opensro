@@ -15,6 +15,7 @@ import "../helpers/native-source-loader.mjs";
 import { pathToFileURL as sourceFileUrl } from "node:url";
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import { CULL_COMMANDS } from "../helpers/cull-commands.mjs";
 import path from "node:path";
 import { root } from "../../tools/project.mjs";
 
@@ -163,6 +164,7 @@ test("the renderer settles only the drawn frontend scene at full detail, and a l
 		release() {},
 		updateInstances: draw => draw,
 		updateIndices() {},
+		...CULL_COMMANDS,
 		streamVertices() {},
 		dropMirror() {}
 	};
@@ -242,6 +244,7 @@ test("a hidden tab releases a superseded pending scene's draws without a frame (
 		release: draw => released.push( draw ),
 		updateInstances: draw => draw,
 		updateIndices() {},
+		...CULL_COMMANDS,
 		streamVertices() {},
 		dropMirror() {}
 	};

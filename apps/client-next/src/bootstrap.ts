@@ -72,3 +72,8 @@ function startViewer() {
 }
 
 export const runtime = document.documentElement.dataset.page === "viewer" ? startViewer() : startGame();
+
+// The build's stamped revision (vite.config.mjs clientBuildDefinitions). The
+// bench entry exports it so a measurement names the commit it measured
+// (tools/perf/core/build-identity.mjs), not the harness checkout's.
+export const revision: string = String( import.meta.env.SRO_CLIENT_REVISION ?? "" );

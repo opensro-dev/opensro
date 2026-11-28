@@ -281,6 +281,8 @@ FrameOwner
 ================
 */
 export interface FrameOwner {
+	// Bundles recorded so far (frame.ts): walked runs and static block.
+	stats?(): { readonly geometryRecords: number; readonly persistentRecords: number; };
 	draw(
 		view: GPUTextureView,
 		image?: ImageDraw,
@@ -311,8 +313,38 @@ export interface FrameOwner {
 		bloom?: BloomDraw,
 		reflection?: { encode( encoder: GPUCommandEncoder ): void; },
 		experimental?: ExperimentalFrame,
-		presentation?: SurfaceOwner
+		presentation?: SurfaceOwner,
+		persistent?: PersistentWorld
 	): void | Promise<void>;
+}
+
+/*
+================
+PersistentWorld
+
+Port-only, not native (#4692): the static object runs (world.ts
+staticObjectGroup), the same GPU-culled draws every frame. Run k draws
+before the world list's draw at[k], its native place in the draw order.
+The recordings are kept while revision (the runs) and drawRevision
+(DeviceDraw.revision: bindings, pipelines, arguments buffers) hold, so a
+frame touches none of their draws.
+================
+*/
+export interface PersistentWorld extends WorldPersistent {
+	readonly drawRevision: number;
+}
+
+/*
+================
+WorldPersistent
+
+The world's side of PersistentWorld, whose at indexes the world's draws.
+================
+*/
+export interface WorldPersistent {
+	readonly blocks: readonly (readonly GeometryDraw[])[];
+	readonly at: readonly number[];
+	readonly revision: number;
 }
 
 /*
@@ -358,6 +390,12 @@ export interface GeometryDraw {
 	readonly indexCount: number;
 	readonly instanceCount: number;
 	readonly instanceCapacity: number;
+	// A GPU-culled draw (index-cull.ts) takes its counts from these five
+	// words (drawIndexedIndirect) instead of indexCount and instanceCount;
+	// its indexCount stays the capacity, so a bundle that records it never
+	// re-records for a culling change. Null for a direct draw.
+	readonly indirect: GPUBuffer | null;
+	readonly indirectOffset: number;
 }
 // Indexed palettes share the exact source storage supplied at upload. Offsets
 // are matrix indices, one per instance; updateBones requires a monotonic revision
@@ -422,6 +460,11 @@ export interface DrawRelease {
 GeometryCommands
 ================
 */
+// A coalesced range of instance rows, [first, end).
+export interface InstanceRows {
+	first: number;
+	end: number;
+}
 export interface GeometryCommands {
 	// Port-only, not native: coverage-alpha siblings for the fullscreen HDR
 	// scratch target consumed by HdrDraw.encodePreview. Portraits use the
@@ -442,10 +485,7 @@ export interface GeometryCommands {
 		source: Float32Array,
 		model: import("@/engine/contracts/character").CharacterModel,
 		primitive: import("@/engine/contracts/character").CharacterPrimitive,
-		samples: readonly (
-			| { readonly clip: import("@/engine/contracts/character").CharacterClip; readonly time: number; }
-			| null
-		)[],
+		samples: readonly (import("@/engine/contracts/character").CharacterGpuSample | null)[],
 		revision: number
 	): boolean;
 	gpuAnimationStats?(): {
@@ -478,6 +518,21 @@ export interface GeometryCommands {
 	// frame; the draw has one instance and one joint a slot.
 	presentParticles( draw: GeometryDraw, particles: ParticlePresentation ): void;
 	updateIndices( draw: GeometryDraw, indices: Uint32Array ): void;
+	// GPU-driven terrain culling (index-cull.ts), port-only, not native.
+	// cullDraw makes a draw GPU-culled with room for capacity source indices;
+	// cullSource writes source indices (already offset by their vertex slot)
+	// at index at; cullRanges replaces its candidate ranges (RANGE_WORDS a
+	// range: centre xyz and radius as float bits, source start, count);
+	// cullView gives the frame's frustum and the water mirror's
+	// (prepareViewFrustum planes).
+	cullDraw( draw: GeometryDraw, capacity: number ): void;
+	cullSource( draw: GeometryDraw, at: number, indices: Uint32Array ): void;
+	cullRanges( draw: GeometryDraw, table: Uint32Array, count: number ): void;
+	cullView( main: Float64Array, mirror: Float64Array | null ): void;
+	// An opaque world object draw the GPU culls against sphere (object-cull.ts).
+	cullObject( draw: GeometryDraw, sphere: readonly number[] ): void;
+	// DeviceDraw.revision (PersistentWorld.drawRevision).
+	drawRevision(): number;
 	// ranges are vertex start/count pairs within positions. Without a slot the
 	// positions cover the whole draw; with one (0 included) they are a terrain
 	// layer member's vertices at that vertex offset of the draw.
@@ -501,15 +556,26 @@ export interface GeometryCommands {
 	// Forgets a dynamicVertices draw's CPU mirror once its positions are final
 	// (a settled frontend scene); a later position or vertex write throws.
 	dropMirror( draw: GeometryDraw ): void;
+	// rows, when given, names the only rows whose values changed since the
+	// last update (a coalesced range); the other rows keep their packed bytes.
 	updateInstances(
 		draw: GeometryDraw,
 		instances: Float32Array,
 		opacity?: Float32Array,
 		appearance?: Float32Array,
 		pointLights?: Float32Array,
-		paletteOffsets?: Uint32Array
+		paletteOffsets?: Uint32Array,
+		rows?: InstanceRows
 	): GeometryDraw;
 	updateTransform( draw: GeometryDraw, transform: Float32Array ): void;
+	// The resident weather drops (weather-particles.ts): records of new drops
+	// at a region's slots, a region's billboard corners (written only when
+	// they change) and the frame's one simulation step.
+	weatherSpawn( region: number, slot: number, records: Uint32Array ): void;
+	weatherCorners( region: number, corners: Float32Array ): void;
+	// false: the step was refused (too many unsubmitted), and the caller
+	// must forget its drops (weather-particles.ts step).
+	weatherStep( step: WeatherStep ): boolean;
 	upload(
 		data: Geometry,
 		texture?: ImageDraw,
@@ -518,6 +584,30 @@ export interface GeometryCommands {
 	): GeometryDraw;
 	release( draw: GeometryDraw ): void;
 }
+/*
+================
+WeatherStep
+
+One weather simulation step (weather.ts, device/weather-particles.ts):
+the view (the native visibility test), the reference and the eye's death
+height, dt with the region rebase (x, z), elapsed whole ms, the fixed
+ticks the drops' frame counters advance, the drift hash seed, the step's
+serial (the birth stamp of the drops spawned for it) and each region's
+live window: its oldest live slot and how many slots from there may hold
+a live drop.
+================
+*/
+export interface WeatherStep {
+	readonly matrix: Float32Array;
+	readonly reference: readonly [number, number, number, number];
+	readonly motion: readonly [number, number, number];
+	readonly elapsedMs: number;
+	readonly ticks: number;
+	readonly seed: number;
+	readonly serial: number;
+	readonly windows: readonly { readonly tail: number; readonly live: number; }[];
+}
+
 /*
 ================
 PreparedWorld
@@ -540,6 +630,8 @@ export interface PreparedWorld {
 	readonly originRegion: number;
 	readonly matrix: Float32Array;
 	readonly draws: readonly GeometryDraw[];
+	// Port-only (#4692): the static object runs (WorldPersistent), not among draws.
+	readonly persistent?: WorldPersistent;
 	readonly environment: Float32Array;
 	readonly sky: boolean;
 }

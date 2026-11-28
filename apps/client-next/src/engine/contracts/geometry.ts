@@ -44,6 +44,11 @@ export interface Geometry {
 	// one draw while each keeps its own glow phase. Gain, alpha test and the
 	// enabled bit stay in the material uniform (updateEquipmentGlow).
 	readonly rowStates?: boolean;
+	// A weather draw (weather-particles.ts): its vertex stage reads region's
+	// visible drops from the resident pool, one billboard corner a vertex
+	// with the corner's uv (three u, v pairs); its counts are the region's
+	// indirect arguments. Its own streams are placeholders.
+	readonly weather?: { readonly region: number; readonly uvs: readonly number[]; };
 	// A skinned cloth mesh's stream slots: the vertex each entry of its cloth
 	// stream holds, in index order (cloth-stream.ts clothStreamSlots). Its
 	// skin table carries a slot map of one entry a vertex and the stream,

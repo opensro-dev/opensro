@@ -9,6 +9,7 @@ one cell, terrain replacement, empty demand and device recovery.
 ===========================================================================
 */
 import "../helpers/native-source-loader.mjs";
+import { OBJECT_CULL_COMMANDS } from "../helpers/cull-commands.mjs";
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { defined } from "../helpers/defined.mjs";
@@ -72,6 +73,7 @@ test("receivers follow movement, terrain replacement, stitched seams and device 
 	const geometry =
 		/** @type {import("../../src/engine/runtime/renderer/internal/gpu-contract.ts").GeometryCommands} */ (
 			/** @type {unknown} */ ({
+				...OBJECT_CULL_COMMANDS,
 				upload: data => ({ data }),
 				release() {},
 				updateIndices() {},

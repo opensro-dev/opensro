@@ -124,6 +124,16 @@ export function copyMaterial( material: WorldMaterial ): WorldMaterial {
 
 /*
 ================
+validWeatherDraw
+================
+*/
+function validWeatherDraw( weather: NonNullable<Geometry["weather"]> ) {
+	return Number.isInteger( weather.region ) && weather.region >= 0 && weather.region < 3 &&
+		weather.uvs.length === 6 && weather.uvs.every( Number.isFinite );
+}
+
+/*
+================
 validateGeometry
 
 Admission completes before the caller replaces any live GPU resource.
@@ -138,7 +148,11 @@ export function validateGeometry(
 	if (
 		!(data.positions instanceof Float32Array) || !vertices || !Number.isInteger( vertices ) ||
 		!(data.indices instanceof Uint32Array) || !data.indices.length || data.indices.length % 3 ||
-		!geometryIndicesInRange( data.indices, vertices ) ||
+		// A weather draw's vertex stage reads the drop pool, not its stream:
+		// its indices number the region's corners (weather-particles.ts).
+		(data.weather ?
+			!validWeatherDraw( data.weather ) || data.dynamicVertices || data.joints !== undefined :
+			!geometryIndicesInRange( data.indices, vertices )) ||
 		!(data.transform instanceof Float32Array) || data.transform.length !== 16 ||
 		data.world !== undefined && typeof data.world !== "boolean" ||
 		// A cloth stream rides a skinned mesh's own skin table, never a dynamic one.
@@ -228,6 +242,7 @@ export function copyGeometry( data: Geometry, byteLimit = 64 << 20, instanceLimi
 		dynamicVertices: data.dynamicVertices,
 		dynamicMaterial: data.dynamicMaterial,
 		rowStates: data.rowStates,
+		weather: data.weather && { region: data.weather.region, uvs: data.weather.uvs.slice() },
 		clothStream: data.clothStream?.slice(),
 		vertices: data.vertices?.slice()
 	} satisfies Record<keyof Geometry, unknown>;

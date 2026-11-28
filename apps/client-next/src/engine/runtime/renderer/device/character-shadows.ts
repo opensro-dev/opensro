@@ -337,7 +337,9 @@ struct Out {@builtin(position) p:vec4f,@location(0) uv:vec2f};
 					count: indices.length,
 					indexCount: indices.length,
 					instanceCount: 1,
-					instanceCapacity: 1
+					instanceCapacity: 1,
+					indirect: null,
+					indirectOffset: 0
 				};
 				draws.push( s.draw );
 			}

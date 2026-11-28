@@ -82,7 +82,7 @@ import {
 	characterRowGlow,
 	createCharacterPlanCaches
 } from "@/engine/foundation/animation/character-budget";
-import { ROW_STATE_FLOATS } from "@/engine/foundation/rendering/geometry-instances";
+import { INSTANCE_ROW_BYTES, ROW_STATE_FLOATS } from "@/engine/foundation/rendering/geometry-instances";
 import { multiply } from "@/engine/foundation/math/pose-math";
 import { createCharacterPose } from "./animation/animation";
 import {
@@ -95,9 +95,27 @@ import {
 import type { ActorClocks, CharacterActor, CharacterModel, CharacterNode } from "@/engine/contracts/character";
 import type { DungeonBlockLight } from "@/engine/contracts/scene";
 import { dungeonPointLight } from "@/engine/foundation/rendering/dungeon-lights";
-import type { GeometryCommands, GeometryDraw, ImageCommands, ImageDraw } from "../internal/gpu-contract";
+import type { GeometryCommands, GeometryDraw, ImageCommands, ImageDraw, InstanceRows } from "../internal/gpu-contract";
 import { hypot3 } from "@/engine/foundation/math/hypot";
 import { isEffectProgramModel } from "@/engine/foundation/assets/effect-programs";
+
+/*
+================
+cpuPoseReason
+
+The first primitive that keeps a model off the GPU palette path
+(characterSharedPalette), named for the diagnostics.
+================
+*/
+function cpuPoseReason( model: CharacterModel ): string {
+	for ( const primitive of model.primitives ) {
+		if ( primitive.emission ) return "emitter";
+		if ( primitive.ribbon ) return "ribbon";
+		if ( primitive.billboard ) return "billboard";
+		if ( !primitive.geometry.joints || !primitive.geometry.weights ) return "unskinned primitive";
+	}
+	return "unknown";
+}
 
 /*
 ================
@@ -297,6 +315,13 @@ interface RibbonBuffers {
 	stripCount: number;
 }
 const MAX_ATTACHMENT_DEPTH = 8;
+// A batch keeps its storage for rows down to 1 / BATCH_HELD_BANDS of its
+// capacity, and without rows for BATCH_IDLE_SECONDS of the frame clock and
+// at most BATCH_IDLE_PREPARES prepares (a clock that stands still, as a
+// paused preview's, still lets it go); heldCapacity, idleBatch. The plan
+// charges both to the render budget.
+const BATCH_HELD_BANDS = 2;
+export const BATCH_IDLE_SECONDS = 2, BATCH_IDLE_PREPARES = 1024;
 // An equipment socket's name (equipment-sockets.ts) and an effect actor's
 // model, which names its program in the effect bundle.
 const EQUIPMENT_SOCKET_PREFIX = "equipment:";
@@ -551,12 +576,24 @@ export function createCharacters( random?: import("@/engine/contracts/presentati
 		// palette when the cloth starts again (keptClothPalette).
 		clothInputs?: Map<number, CharacterPoseInputs>;
 		poseKey?: string;
+		// The frame clock when the plan last left the batch without rows (NaN:
+		// it has rows; idleBatch).
+		idleSince: number;
+		idlePrepares: number;
+		// Its model and the bytes its capacity costs (the plan charges an
+		// idle batch these).
+		model: string;
+		bytes: number;
 	}>();
 	// ownedModels counts the owned entries of models (decoded sources); the
 	// rest are borrowed or assembled views, so their count is the difference.
 	// deferredActors: visible actors the render budget kept from drawing;
 	// deferredBodies: those of them without emission.
 	let residentBytes = 0, ownedModels = 0, renderBytes = 0, deferredActors = 0, deferredBodies = 0;
+	// The frame plan's retained storage, charged to renderBytes: the larger
+	// capacity a batch with rows keeps (key -> capacity), and the batches
+	// without rows kept for their key's next rows.
+	const holds = new Map<string, number>(), idles = new Set<string>();
 	let retained: Set<string> | null = null;
 	// Residency depends on model membership, not interpolated poses or clocks.
 	// Snapshot the model ids: actor snapshots are mutated by the next publication.
@@ -1284,6 +1321,10 @@ export function createCharacters( random?: import("@/engine/contracts/presentati
 		readonly batch: CharacterBatch;
 		readonly capacity: number;
 		instancesChanged: boolean;
+		// The rows whose instance matrices writeBatchRows changed, one
+		// coalesced range [dirtyFirst, dirtyEnd); empty when first >= end.
+		dirtyFirst: number;
+		dirtyEnd: number;
 		// Borrow the renderer's scratch for this synchronous group only.
 		// Undefined when the group never fades / carries no lights.
 		streamsPrepared: boolean;
@@ -1765,6 +1806,19 @@ the next full prepare pass, so this may run between frames.
 	}
 	/*
 	================
+	simulateEmitters
+
+	Advance the plan's admitted emitters, in admission order: the plan
+	decides who draws, this is the particle simulation. Nothing the plan
+	reads depends on it (planDeferred places light effects on its own
+	transforms), so the order of the random table's draws is unchanged.
+	================
+	*/
+	function simulateEmitters( frame: PrepareFrame, simulated: readonly CharacterActor[] ) {
+		for ( const actor of simulated ) advanceEmitter( frame, actor, models.get( actor.model )! );
+	}
+	/*
+	================
 	selectBodies
 
 	The actors without emission, with any opacity, whose culling sphere meets
@@ -1997,9 +2051,14 @@ the next full prepare pass, so this may run between frames.
 		const needed = new Set<number>(), particleNeeded = new Set<number>(), emitters = new Set<number>();
 		const refused = new Set<number>(), keys = new Map<CharacterActor, string>(), rows = new Map<string, number>();
 		const charged = new Map<Float32Array, (readonly unknown[])[]>();
+		// The admitted emitters in admission order: simulateEmitters advances
+		// them after the plan, in this order (it is the random table's).
+		const simulated: CharacterActor[] = [];
 		renderBytes = materialClocks.bytes() + retainedBytes( frame );
 		deferredActors = deferredBodies = 0;
 		// A refused actor leaves capacity for cheaper actors that follow it.
+		// Admission charges planned storage only: what batches keep beyond it
+		// (retainBatches) takes what is left after every actor.
 		const admit = ( actor: CharacterActor, cost: { key: string | undefined; bytes: number; } ) => {
 			if ( !Number.isSafeInteger( cost.bytes ) || cost.bytes < 0 ) return false;
 			if ( renderBytes + cost.bytes > CHARACTER_RENDER_BYTES ) return false;
@@ -2032,7 +2091,7 @@ the next full prepare pass, so this may run between frames.
 			}
 			emitters.add( actor.gid );
 			for ( const value of chain ) particleNeeded.add( value.gid );
-			advanceEmitter( frame, actor, resource );
+			simulated.push( actor );
 		};
 		for ( const actor of frame.frameActors ) {
 			if ( emitterCandidate( frame, actor ) ) admitEmitter( actor );
@@ -2064,7 +2123,114 @@ the next full prepare pass, so this may run between frames.
 			if ( group ) group.push( actor );
 			else grouped.set( key, [ actor ] );
 		}
-		return { grouped, needed, visible, particleNeeded };
+		retainBatches( frame, grouped, charged );
+		return { grouped, needed, visible, particleNeeded, simulated };
+	}
+	/*
+	================
+	retainBatches
+
+	Spend what the admitted actors left of the render budget on storage the
+	batches already hold: first a batch's larger capacity (heldCapacity),
+	then the batches without rows (idleBatch), each while it fits. Runs
+	after admission, so keeping storage never refuses an actor.
+	================
+	*/
+	function retainBatches(
+		frame: PrepareFrame,
+		grouped: ReadonlyMap<string, CharacterActor[]>,
+		charged: Map<Float32Array, (readonly unknown[])[]>
+	) {
+		holds.clear();
+		idles.clear();
+		for ( const [key, rows] of grouped ) {
+			const plan = models.get( rows[0]!.model )!.plan, hold = heldCapacity( frame, key, plan, rows.length );
+			if ( !hold ) continue;
+			const bytes = plan.batchBytes( hold ) - plan.batchBytes( rows.length );
+			if ( renderBytes + bytes > CHARACTER_RENDER_BYTES ) continue;
+			renderBytes += bytes;
+			holds.set( key, hold );
+		}
+		for ( const [key, batch] of batches ) {
+			if ( grouped.has( key ) || !idleEligible( frame, batch ) ) continue;
+			const plan = models.get( batch.model )?.plan;
+			if ( !plan ) continue;
+			const bytes = batch.bytes + meshCharge( charged, plan.meshes, false );
+			if ( renderBytes + bytes > CHARACTER_RENDER_BYTES ) continue;
+			meshCharge( charged, plan.meshes, true );
+			renderBytes += bytes;
+			idles.add( key );
+		}
+	}
+	/*
+	================
+	keptBatch
+
+	Whether batch can carry rows as it is. A batch keeps its storage and
+	draws while its rows still fit: the same capacity, or one power-of-two
+	band larger (a crowd's effects start and end every second; shrinking
+	re-uploaded every draw of the batch). Exact-capacity batches (ribbons)
+	and a frame under budget pressure keep the planned capacity only.
+	================
+	*/
+	function keptBatch( frame: PrepareFrame, id: string, batch: CharacterBatch, rows: readonly CharacterActor[] ) {
+		if ( !batch.signature.startsWith( String( frame.preview ) + ":" ) ) return false;
+		const capacity = models.get( rows[0]!.model )!.plan.capacity( rows.length );
+		return batch.capacity === capacity || holds.get( id ) === batch.capacity;
+	}
+	/*
+	================
+	heldCapacity
+
+	The larger capacity key's batch may keep for count rows (0: none): one
+	band above the planned capacity, never an exact-capacity batch, and
+	never a one-row glow batch, whose glow is the material uniform (a
+	larger batch would draw it through the row states).
+	================
+	*/
+	function heldCapacity( frame: PrepareFrame, key: string, plan: ModelResource["plan"], count: number ) {
+		const batch = batches.get( key );
+		if ( !batch || plan.exactCapacity || !batch.signature.startsWith( String( frame.preview ) + ":" ) ) return 0;
+		const capacity = plan.capacity( count );
+		if ( batch.capacity <= capacity || batch.capacity > capacity * BATCH_HELD_BANDS ) return 0;
+		return capacity === 1 && plan.rowGlow ? 0 : batch.capacity;
+	}
+	/*
+	================
+	idleEligible
+
+	Whether a batch without rows may stay: the same preview, and at most
+	BATCH_IDLE_SECONDS of the frame clock since it lost its rows (a clock
+	that went back starts over).
+	================
+	*/
+	function idleEligible( frame: PrepareFrame, batch: CharacterBatch ) {
+		if ( !batch.signature.startsWith( String( frame.preview ) + ":" ) ) return false;
+		if ( !Number.isFinite( batch.idleSince ) || frame.seconds < batch.idleSince ) return true;
+		return frame.seconds - batch.idleSince <= BATCH_IDLE_SECONDS && batch.idlePrepares < BATCH_IDLE_PREPARES;
+	}
+	/*
+	================
+	idleBatch
+
+	Whether a batch the plan left without rows stays for its key's next
+	rows (the next cast of the same effect) instead of releasing its draws:
+	the plan charged it (idles). An idle batch names no actor, so picking
+	and shadows skip it, and it draws nothing (prepare submits planned
+	groups only).
+	================
+	*/
+	function idleBatch( frame: PrepareFrame, id: string, batch: CharacterBatch ) {
+		if ( !idles.has( id ) ) return false;
+		if ( !Number.isFinite( batch.idleSince ) || frame.seconds < batch.idleSince ) {
+			batch.idleSince = frame.seconds;
+			batch.idlePrepares = 0;
+			batch.signature = String( frame.preview ) + ":";
+			batch.gids = [];
+			batch.poseKey = undefined;
+		}
+		batch.idlePrepares++;
+		return true;
 	}
 	/*
 	================
@@ -2081,15 +2247,12 @@ the next full prepare pass, so this may run between frames.
 	) {
 		for ( const [id, batch] of batches ) {
 			const rows = grouped.get( id );
-			const capacity = rows ? models.get( rows[0]!.model )!.plan.capacity( rows.length ) : 0;
-			if (
-				!rows || batch.capacity !== capacity || !batch.signature.startsWith( String( frame.preview ) + ":" )
-			) {
-				for ( const draw of batch.draws ) {
-					frame.geometry.release( draw );
-				}
-				batches.delete( id );
+			if ( rows ? keptBatch( frame, id, batch, rows ) : idleBatch( frame, id, batch ) ) continue;
+			for ( const draw of batch.draws ) {
+				frame.geometry.release( draw );
 			}
+			batches.delete( id );
+			probe?.characterCount( "batch-releases" );
 		}
 		for ( const gid of poses.keys() ) {
 			if ( !needed.has( gid ) ) {
@@ -2174,23 +2337,6 @@ the next full prepare pass, so this may run between frames.
 			}
 		}
 		return matrix;
-	}
-	/*
-	================
-	releaseUngrouped
-
-	Release batches the plan left without rows.
-	================
-	*/
-	function releaseUngrouped( frame: PrepareFrame, grouped: ReadonlyMap<string, CharacterActor[]> ) {
-		for ( const [id, batch] of batches ) {
-			if ( !grouped.has( id ) ) {
-				for ( const draw of batch.draws ) {
-					frame.geometry.release( draw );
-				}
-				batches.delete( id );
-			}
-		}
 	}
 	// ============================================================================
 	//
@@ -2335,9 +2481,7 @@ the next full prepare pass, so this may run between frames.
 		const capacity = plan.capacity( rows.length );
 		let batch = batches.get( id );
 		const membershipChanged = batch?.signature !== signature;
-		if (
-			!batch || batch.capacity !== capacity || !batch.signature.startsWith( String( frame.preview ) + ":" )
-		) {
+		if ( !batch || !keptBatch( frame, id, batch, rows ) ) {
 			if ( batch ) {
 				for ( const draw of batch.draws ) {
 					frame.geometry.release( draw );
@@ -2370,16 +2514,35 @@ the next full prepare pass, so this may run between frames.
 						new Float32Array( capacity * 8 ) :
 						undefined
 				),
-				ribbons: []
+				ribbons: [],
+				idleSince: NaN,
+				idlePrepares: 0,
+				model: rows[0]!.model,
+				bytes: plan.batchBytes( capacity )
 			};
 			batches.set( id, batch );
+			probe?.characterCount( "batch-creations" );
 		}
+		// A kept batch starts its cloth afresh where a batch used to be made
+		// anew: back from idle, or at a row count whose planned capacity
+		// differs. Its solvers' state (clothStreams, cloth, clothInputs) is
+		// the last wearer's, which a new wearer must not inherit.
+		const revived = Number.isFinite( batch.idleSince ) ||
+			plan.capacity( Math.max( batch.gids.length, 1 ) ) !== capacity;
+		if ( revived ) {
+			batch.clothStreams = undefined;
+			batch.cloth = undefined;
+			batch.clothInputs = undefined;
+		}
+		batch.idleSince = NaN;
+		const countChanged = batch.gids.length !== rows.length;
 		if ( membershipChanged ) {
 			batch.signature = signature;
 			batch.gids = rows.map( row => row.gid );
 			batch.poseKey = undefined;
 		}
-		return { batch, capacity, membershipChanged };
+		// A kept batch may hold a band more than the rows plan (keptBatch).
+		return { batch, capacity: batch.capacity, countChanged };
 	}
 	/*
 	================
@@ -2432,6 +2595,66 @@ the next full prepare pass, so this may run between frames.
 	}
 	/*
 	================
+	markDirty
+
+	Row i's instance matrix changed: widen the group's dirty range.
+	================
+	*/
+	function markDirty( group: GroupFrame, i: number ) {
+		group.instancesChanged = true;
+		if ( i < group.dirtyFirst ) group.dirtyFirst = i;
+		if ( i + 1 > group.dirtyEnd ) group.dirtyEnd = i + 1;
+	}
+	/*
+	================
+	stableSlots
+
+	Order rows by the rows the batch drew last frame: each staying actor
+	keeps its row, arrivals take the rows of departures in gid order, a
+	departure's row left over takes the last row (so one row moves, not
+	every row after it), and other arrivals append. Only the changed rows'
+	instances upload (dirty ranges).
+	================
+	*/
+	function stableSlots( previous: readonly number[], rows: CharacterActor[] ) {
+		const byGid = new Map<number, CharacterActor>();
+		for ( const actor of rows ) byGid.set( actor.gid, actor );
+		const slots: (CharacterActor | null)[] = previous.map( gid => {
+			const actor = byGid.get( gid ) ?? null;
+			if ( actor ) byGid.delete( gid );
+			return actor;
+		} );
+		const arrivals = [ ...byGid.values() ].sort( ( a, b ) => a.gid - b.gid );
+		let next = 0;
+		for ( let i = 0; i < slots.length && next < arrivals.length; i++ ) {
+			if ( !slots[i] ) slots[i] = arrivals[next++]!;
+		}
+		for ( let i = 0; i < slots.length; i++ ) {
+			if ( slots[i] ) continue;
+			while ( slots.length > i && !slots[slots.length - 1] ) slots.pop();
+			if ( slots.length > i ) slots[i] = slots.pop()!;
+		}
+		rows.length = 0;
+		for ( const actor of slots ) rows.push( actor! );
+		for ( ; next < arrivals.length; next++ ) rows.push( arrivals[next]! );
+	}
+	/*
+	================
+	instanceRows
+
+	The rows primitive draws must upload when only matrices changed: the
+	coalesced dirty range, or every row otherwise. Counts the upload.
+	================
+	*/
+	function instanceRows( group: GroupFrame, full: boolean ): InstanceRows | undefined {
+		const rows = full ? undefined : { first: Math.min( group.dirtyFirst, group.rows.length ), end: group.dirtyEnd };
+		const uploaded = rows ? Math.max( 0, rows.end - rows.first ) : group.rows.length;
+		probe?.characterCount( "instance-uploads" );
+		probe?.characterCount( "instance-upload-bytes", uploaded * INSTANCE_ROW_BYTES );
+		return rows;
+	}
+	/*
+	================
 	writeBatchRows
 
 	Publish the rows' poses: shared palette streams, then each row's instance
@@ -2461,7 +2684,7 @@ the next full prepare pass, so this may run between frames.
 			const transform = actorTransform( frame, actor );
 			if ( !transform ) {
 				batch.instances.fill( 0, i * 16, i * 16 + 16 );
-				group.instancesChanged = true;
+				markDirty( group, i );
 				continue;
 			}
 			let moved = false;
@@ -2473,7 +2696,7 @@ the next full prepare pass, so this may run between frames.
 			}
 			if ( moved ) {
 				batch.instances.set( transform, i * 16 );
-				group.instancesChanged = true;
+				markDirty( group, i );
 			}
 			for ( let p = 0; p < model.primitives.length; p++ ) {
 				const primitive = model.primitives[p]!, offset = i * primitive.joints.length * 16;
@@ -2941,18 +3164,18 @@ the next full prepare pass, so this may run between frames.
 			(batch.clothStreams ??= new Map()).set( p, cloth );
 		}
 		let draw = batch.draws[p];
-		const placementChanged = !draw || group.instancesChanged || fading || appearance || pointLights ||
-			stream?.mappingChanged;
+		const full = !draw || fading || !!appearance || !!pointLights || !!stream?.mappingChanged;
 		if ( !draw ) draw = uploadPrimitive( frame, group, p, batch.instances, stream?.offsets );
 		// Cloth draws never enter the particle compute writer.
-		if ( placementChanged ) {
+		if ( group.instancesChanged || full ) {
 			draw = geometry.updateInstances(
 				draw,
 				instances,
 				group.opacities,
 				appearance?.subarray( 0, instances.length / 2 ),
 				pointLights,
-				stream?.offsets.subarray( 0, rows.length )
+				stream?.offsets.subarray( 0, rows.length ),
+				instanceRows( group, full )
 			);
 		}
 		batch.draws[p] = draw;
@@ -3019,21 +3242,22 @@ the next full prepare pass, so this may run between frames.
 					group.opacities,
 					appearance?.subarray( 0, instances.length / 2 ),
 					pointLights,
-					paletteOffsets
+					paletteOffsets,
+					instanceRows( group, true )
 				);
 				batch.draws[p] = draw;
 			}
 		} else {
-			if (
-				group.instancesChanged || fading || appearance || pointLights || stream?.mappingChanged
-			) {
+			const full = fading || !!appearance || !!pointLights || !!stream?.mappingChanged;
+			if ( group.instancesChanged || full ) {
 				draw = geometry.updateInstances(
 					draw,
 					instances,
 					group.opacities,
 					appearance?.subarray( 0, instances.length / 2 ),
 					pointLights,
-					paletteOffsets
+					paletteOffsets,
+					instanceRows( group, full )
 				);
 			}
 			batch.draws[p] = draw;
@@ -3098,11 +3322,15 @@ the next full prepare pass, so this may run between frames.
 		// Glow wearers drew a batch each, in frame order, before the row
 		// states merged them: their rows keep frame order, so actors stacked
 		// on one spot overlap as before. Every other batch keeps gid order.
+		// A translucent batch (blended, fading or an effect) keeps gid order,
+		// its overlap order. An opaque batch keeps each actor's row (stableSlots).
 		if ( !(resource.plan.equipmentGlow && hasMaterialClocks && materialClocks.get( rows[0]! )) ) {
-			rows.sort( ( a, b ) => a.gid - b.gid );
+			if ( frame.opacity( rows[0]! ) < 1 || resource.effect || resource.plan.blended ) {
+				rows.sort( ( a, b ) => a.gid - b.gid );
+			} else stableSlots( batches.get( id )?.gids ?? [], rows );
 		}
 		residentTextures( resource, frame.images );
-		const { batch, capacity, membershipChanged } = admitBatch( frame, id, rows, resource );
+		const { batch, capacity, countChanged } = admitBatch( frame, id, rows, resource );
 		const fading = frame.opacity( rows[0]! ) < 1;
 		const group: GroupFrame = {
 			id,
@@ -3114,7 +3342,11 @@ the next full prepare pass, so this may run between frames.
 			modifierClocks: hasMaterialClocks ? materialClocks.get( rows[0]! ) : undefined,
 			batch,
 			capacity,
-			instancesChanged: membershipChanged,
+			// A row's new actor changes its matrix (writeBatchRows); a new
+			// count changes the drawn instances.
+			instancesChanged: countChanged,
+			dirtyFirst: rows.length,
+			dirtyEnd: 0,
 			streamsPrepared: false,
 			opacities: undefined,
 			pointLights: undefined
@@ -3607,11 +3839,26 @@ the next full prepare pass, so this may run between frames.
 					sharedPaletteSamples = 0,
 					clothSamples = 0,
 					gpuPaletteSamples = 0;
+				// Why a pose stays on the CPU: its model's first primitive the
+				// GPU palette path cannot take (characterSharedPalette).
+				const cpuModels = new Map<string, { actors: number; reason: string; }>();
+				// Why the GPU sampler refused each pose it did not take (gpuRefusal).
+				const cpuSampleReasons: Record<string, number> = {};
 				for ( const state of poses.values() ) {
 					if ( unique.has( state.pose ) ) continue;
 					unique.add( state.pose );
+					const resource = models.get( state.model );
+					if ( resource && !resource.plan.sharedPalette ) {
+						const row = cpuModels.get( state.model );
+						if ( row ) row.actors++;
+						else cpuModels.set( state.model, { actors: 1, reason: cpuPoseReason( resource.model ) } );
+					}
 					const sample = state.pose.gpuSample();
-					if ( !sample ) continue;
+					if ( !sample ) {
+						const reason = state.pose.gpuRefusal() ?? "unknown";
+						cpuSampleReasons[reason] = (cpuSampleReasons[reason] ?? 0) + 1;
+						continue;
+					}
 					gpuSamples++;
 					if ( sample.clip.channels.every( channel => channel.interpolation === "LINEAR" ) ) linearSamples++;
 					const plan = models.get( state.model )?.plan;
@@ -3632,7 +3879,11 @@ the next full prepare pass, so this may run between frames.
 					linearSamples,
 					sharedPaletteSamples,
 					clothSamples,
-					gpuPaletteSamples
+					gpuPaletteSamples,
+					cpuSampleReasons,
+					cpuModels: [ ...cpuModels ]
+						.map( ( [model, row] ) => ({ model, ...row }) )
+						.sort( ( a, b ) => b.actors - a.actors )
 				};
 			}
 			let liveOwnedCpuEvaluations = 0;
@@ -4063,12 +4314,15 @@ the next full prepare pass, so this may run between frames.
 				prepareViewFrustum
 			);
 			testHeld( frame, frusta );
-			const { grouped, needed, visible, particleNeeded } = planBatches( frame, selectBodies( frame, frusta ) );
+			const { grouped, needed, visible, particleNeeded, simulated } = planBatches(
+				frame,
+				selectBodies( frame, frusta )
+			);
+			simulateEmitters( frame, simulated );
 			recordVisible( frame, frusta, visible );
 			retireUnplanned( frame, grouped, needed );
 			countPlan( frame, visible, needed, particleNeeded );
 			evaluateNeededPoses( frameActors, needed );
-			releaseUngrouped( frame, grouped );
 			const orderedGroups = [ ...grouped.entries() ];
 			if ( frame.view && !frame.preview && orderedGroups.length > 1 ) {
 				const m = frame.view;

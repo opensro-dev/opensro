@@ -47,6 +47,26 @@ CharacterClip
 A named set of channels sharing the authored clip duration.
 ================
 */
+/*
+================
+CharacterGpuSample
+
+One pose as the GPU skeleton pass samples it (CharacterPose.gpuSample): a
+clip at a time, and optionally a second clip mixed in by share. Per node
+and path the pass takes the first clip's value, mixed toward the second by
+share where both animate it, the one that animates it alone, or the rest
+pose: the CPU mixer's result for two layers (animation-pose.ts
+sampleLayers), with the event layer first.
+================
+*/
+export interface CharacterGpuSample {
+	readonly clip: CharacterClip;
+	readonly time: number;
+	readonly next: CharacterClip | null;
+	readonly nextTime: number;
+	readonly share: number;
+}
+
 export interface CharacterClip {
 	readonly name: string;
 	readonly duration: number;

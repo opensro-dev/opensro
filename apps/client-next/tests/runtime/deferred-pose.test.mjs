@@ -55,6 +55,9 @@ function model() {
 		primitives: [ { joints: [ 0, 1 ], inverseBind: Float32Array.from( [ ...I(), ...I() ] ) } ]
 	};
 }
+// A third layer: past the two the GPU skeleton pass mixes (MAX_GPU_LAYERS).
+const THIRD_LAYER = Object.freeze( { clip: "move", time: .6, weight: .25, lane: "timed", loop: true } );
+
 test("deferred poses preserve seeks, long clocks, CPU sockets, layers and failed-request isolation", () => {
 	const m = model(),
 		a = createCharacterPose( m ),
@@ -82,7 +85,21 @@ test("deferred poses preserve seeks, long clocks, CPU sockets, layers and failed
 	} ];
 	a.evaluate( "", 0, false, layers );
 	b.evaluate( "", 0, false, layers, true );
+	// A crossfade's two layers are one GPU sample: the event layer first,
+	// the timed one mixed in by the headroom it gets (sampleLayers).
+	const crossfade = b.gpuSample();
+	assert.deepEqual( [ crossfade.time, crossfade.next, crossfade.nextTime, crossfade.share ], [
+		.8,
+		m.clips[0],
+		.2,
+		.5
+	] );
+	assert.deepEqual( b.socket( "socket" ), a.socket( "socket" ) );
+	// Past the GPU's two layers the CPU mixes.
+	a.evaluate( "", 0, false, [ ...layers, THIRD_LAYER ] );
+	b.evaluate( "", 0, false, [ ...layers, THIRD_LAYER ], true );
 	assert.equal( b.gpuSample(), null );
+	assert.equal( b.gpuRefusal(), "layers" );
 	assert.deepEqual( b.socket( "socket" ), a.socket( "socket" ) );
 	const revision = b.revision();
 	// A rejected request (an invalid layer weight) must not poison the
@@ -208,7 +225,7 @@ test("models that share clips share one clip plan; a skeleton is per model", () 
 	assert.ok( a.data.length < clips.data.length + a.data.length, "skeleton holds no keyframes" );
 });
 
-test("one layered pose cannot force eligible siblings onto CPU", () => {
+test("one pose past the GPU layers cannot force eligible siblings onto CPU", () => {
 	const m = model(), a = createCharacterPose( m ), b = createCharacterPose( m ), bank = createPaletteStreams( m, 2 );
 	a.evaluate( "move", .2, true, undefined, true );
 	b.evaluate( "", 0, true, [ { clip: "move", time: .5, weight: .5, lane: "event", loop: true }, {
@@ -217,7 +234,7 @@ test("one layered pose cannot force eligible siblings onto CPU", () => {
 		weight: .5,
 		lane: "timed",
 		loop: true
-	} ], true );
+	}, THIRD_LAYER ], true );
 	bank.update( [ b, a ], ( source, model, primitive, samples ) => {
 		assert.equal( samples[0], null );
 		assert.equal( samples[1].clip, m.clips[0] );
@@ -246,9 +263,9 @@ test("a pose deferred to its consumers builds no skeleton until one asks, then t
 		lane: "timed",
 		loop: true
 	} ];
-	// Blended layers: the GPU cannot sample them, so deferral true builds at once.
+	// More layers than the GPU mixes: deferral true builds at once.
 	const hybrid = createCharacterPose( m );
-	hybrid.evaluate( "", 0, true, layers, true );
+	hybrid.evaluate( "", 0, true, [ ...layers, THIRD_LAYER ], true );
 	assert.equal( hybrid.cpuEvaluations(), 1 );
 	const out = new Float32Array( 32 ), expected = new Float32Array( 32 );
 	for ( const time of [ .1, .4, .9 ] ) {
@@ -264,4 +281,68 @@ test("a pose deferred to its consumers builds no skeleton until one asks, then t
 	eager.palette( m.primitives[0], expected );
 	assert.deepEqual( out, expected );
 	assert.equal( lazy.cpuEvaluations(), 1, "the palette reuses the socket's evaluation" );
+});
+
+/*
+================
+branchedModel
+
+A root with two children: the socket's chain (root, socket) and a side
+branch (arm) a socket request never needs. Two clips animate all three.
+================
+*/
+function branchedModel() {
+	const node = ( name, parent, y ) => ({
+		name,
+		parent,
+		translation: [ 0, y, 0 ],
+		rotation: [ 0, 0, 0, 1 ],
+		scale: [ 1, 1, 1 ]
+	});
+	const turn = ( n, z ) => ({
+		node: n,
+		path: "rotation",
+		interpolation: "LINEAR",
+		times: Float32Array.of( 0, 1 ),
+		values: Float32Array.of( 0, 0, 0, 1, 0, 0, Math.sin( z ), Math.cos( z ) )
+	});
+	const slide = ( n, x ) => ({
+		node: n,
+		path: "translation",
+		interpolation: "LINEAR",
+		times: Float32Array.of( 0, 1 ),
+		values: Float32Array.of( 0, 0, 0, x, 1, 0 )
+	});
+	return {
+		nodes: [ node( "root", -1, 0 ), node( "socket", 0, 3 ), node( "arm", 0, 2 ) ],
+		clips: [
+			{ name: "cast", duration: 1, channels: [ slide( 0, 4 ), turn( 1, .7 ), turn( 2, -1.1 ), slide( 2, 2 ) ] },
+			{ name: "walk", duration: 1, channels: [ turn( 0, .3 ), slide( 1, -3 ), turn( 2, .9 ) ] }
+		],
+		primitives: [ { joints: [ 0, 1, 2 ], inverseBind: Float32Array.from( [ ...I(), ...I(), ...I() ] ) } ]
+	};
+}
+
+test("a blended pose sampled by its socket chain first, then the rest, gives the bytes of one whole pass", () => {
+	const m = branchedModel();
+	const layers = [
+		{ clip: "cast", time: .35, weight: .3, lane: "event", loop: true },
+		{ clip: "walk", time: .6, weight: .4, lane: "timed", loop: true },
+		{ clip: "cast", time: .9, weight: .5, lane: "timed", loop: true }
+	];
+	for ( const order of [ "socket-first", "palette-first" ] ) {
+		const eager = createCharacterPose( m ), lazy = createCharacterPose( m );
+		eager.evaluate( "", 0, false, layers );
+		lazy.evaluate( "", 0, false, layers, true );
+		const expected = new Float32Array( 48 ), out = new Float32Array( 48 );
+		eager.palette( m.primitives[0], expected );
+		if ( order === "socket-first" ) {
+			assert.deepEqual( lazy.socket( "socket" ), eager.socket( "socket" ), order );
+			lazy.palette( m.primitives[0], out );
+		} else {
+			lazy.palette( m.primitives[0], out );
+			assert.deepEqual( lazy.socket( "socket" ), eager.socket( "socket" ), order );
+		}
+		assert.deepEqual( out, expected, order );
+	}
 });

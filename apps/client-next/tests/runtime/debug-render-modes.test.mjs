@@ -13,6 +13,7 @@ live in debug-camera.test.mjs.
 ===========================================================================
 */
 import "../helpers/native-source-loader.mjs";
+import { OBJECT_CULL_COMMANDS, visibleDraws } from "../helpers/cull-commands.mjs";
 import { test } from "node:test";
 import assert from "node:assert/strict";
 const { createWorldRenderer } = await import( "../../src/engine/runtime/renderer/world/world.ts" );
@@ -140,6 +141,7 @@ camera, with the index uploads recorded per terrain re-choice.
 function worldFixture() {
 	const indexUploads = [];
 	const geometry = /** @type {any} */ ({
+		...OBJECT_CULL_COMMANDS,
 		upload: () => ({}),
 		release() {},
 		/*
@@ -188,31 +190,31 @@ function worldFixture() {
 test("ground, sky and mobj keep their groups out of the frame until they stand again", () => {
 	const f = worldFixture();
 	let frame = f.prepare();
-	assert.equal( frame.draws.length, 3, "sky, terrain and prop all draw" );
+	assert.equal( visibleDraws( frame ).length, 3, "sky, terrain and prop all draw" );
 	assert.equal( frame.sky, true );
 	assert.deepEqual( f.indexUploads, [ 6 ], "both terrain ranges chosen at their distance bands" );
 	// A stationary camera between flips: the early-out must not serve
 	// the frame composed under the old options.
 	f.world.setRenderMode( GRAPHIC_OPTION_GROUND, false );
 	frame = f.prepare();
-	assert.equal( frame.draws.length, 2, "the terrain draw is gone, sky and prop stay" );
+	assert.equal( visibleDraws( frame ).length, 2, "the terrain draw is gone, sky and prop stay" );
 	f.world.setRenderMode( GRAPHIC_OPTION_SKY, false );
 	frame = f.prepare();
-	assert.equal( frame.draws.length, 1, "only the prop stays" );
+	assert.equal( visibleDraws( frame ).length, 1, "only the prop stays" );
 	assert.equal( frame.sky, false, "the device sky goes with the sky pass" );
 	f.world.setRenderMode( GRAPHIC_OPTION_MAP_OBJECTS, false );
 	frame = f.prepare();
-	assert.equal( frame.draws.length, 0 );
+	assert.equal( visibleDraws( frame ).length, 0 );
 	// Options this renderer does not own are ignored whole.
 	f.world.setRenderMode( GRAPHIC_OPTION_WIRE_FRAME, true );
 	f.world.setRenderMode( GRAPHIC_OPTION_CHARACTERS, false );
 	frame = f.prepare();
-	assert.equal( frame.draws.length, 0, "wireframe and characters changed nothing here" );
+	assert.equal( visibleDraws( frame ).length, 0, "wireframe and characters changed nothing here" );
 	f.world.setRenderMode( GRAPHIC_OPTION_GROUND, true );
 	f.world.setRenderMode( GRAPHIC_OPTION_SKY, true );
 	f.world.setRenderMode( GRAPHIC_OPTION_MAP_OBJECTS, true );
 	frame = f.prepare();
-	assert.equal( frame.draws.length, 3, "standing the options again restores every draw" );
+	assert.equal( visibleDraws( frame ).length, 3, "standing the options again restores every draw" );
 	assert.equal( frame.sky, true );
 });
 
@@ -231,6 +233,7 @@ test("/lod forces every terrain cell to LOD 0 until it stands again", () => {
 test("/char submits no character draws while its option stands clear", () => {
 	const owner = createCharacters();
 	const geometry = /** @type {any} */ ({
+		...OBJECT_CULL_COMMANDS,
 		upload: () => ({}),
 		release() {},
 		updatePositions() {},

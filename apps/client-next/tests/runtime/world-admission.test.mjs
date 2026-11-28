@@ -13,6 +13,18 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { build } from "esbuild";
 import { root } from "../../tools/project.mjs";
+
+// The GPU cull commands a world calls on its geometry owner, as no-ops. This
+// file bundles the renderer with esbuild, so it cannot load the shared
+// helper (tests/helpers/cull-commands.mjs), which imports source directly.
+const CULL_COMMANDS = Object.freeze( {
+	cullDraw() {},
+	cullSource() {},
+	cullRanges() {},
+	cullView() {},
+	cullObject() {},
+	drawRevision: () => 0
+} );
 // How long a worker answer may take on a loaded machine before the test
 // calls it stranded. Generous: a correct loader answers in milliseconds.
 const ANSWER_TIMEOUT_MS = 10000;
@@ -106,6 +118,7 @@ test("terrain seam plans are rebuilt at admission and transferred with exclusive
 	assert.deepEqual( [ ...received.scene.groups[0].ranges[0].seamVertices ], [ 0, 33, 2, 36 ] );
 	const world = createWorldRenderer(),
 		geometry = {
+			...CULL_COMMANDS,
 			/*
 			================
 			upload
@@ -221,6 +234,7 @@ test("adoption consumes one private lease and reuses those exact arrays across G
 	const received = transfer( scene() ), positions = received.scene.groups[0].geometry.positions;
 	const lease = createWorldLease( received ), world = createWorldRenderer(), uploads = [];
 	const geometry = {
+			...CULL_COMMANDS,
 			/*
 			================
 			upload
@@ -262,7 +276,8 @@ test("shared mutable geometry retains per-group isolation while immutable stream
 
 test("admission past the residency budget consumes the lease and stages the replacement", () => {
 	const value = scene(), bytes = worldSceneBytes( value ), world = createWorldRenderer( bytes + 16 );
-	const geometry = { upload: () => ({}), release() {} }, textures = { upload: () => ({}), release() {} };
+	const geometry = { ...CULL_COMMANDS, upload: () => ({}), release() {} },
+		textures = { upload: () => ({}), release() {} };
 	world.adopt( createWorldLease( transfer( value ) ) );
 	world.prepare( geometry, textures, 1 );
 	const next = scene();
@@ -282,7 +297,8 @@ test("admission past the residency budget consumes the lease and stages the repl
 test("copied and transferred worlds retain the same application-owned star RNG through replacement", () => {
 	const copied = createWorldRenderer( undefined, undefined, createPresentationRandom( 42 ) ),
 		adopted = createWorldRenderer( undefined, undefined, createPresentationRandom( 42 ) );
-	const geometry = { upload: data => ({ data }), release() {} }, textures = { upload: () => ({}), release() {} };
+	const geometry = { ...CULL_COMMANDS, upload: data => ({ data }), release() {} },
+		textures = { upload: () => ({}), release() {} };
 	const source = scene();
 	source.groups[0].material.sky = 2;
 	source.environment = { startTimeOfDay: 0, ratePerSecond: 0, tracks: { starAlpha: [ { t: 0, value: 1 } ] } };

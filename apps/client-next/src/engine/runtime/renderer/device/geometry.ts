@@ -32,10 +32,14 @@ binding 16.
 import {
 	createInstancePacking,
 	instanceCapacity,
+	INSTANCE_ROW_BYTES,
 	ROW_STATE_FLOATS
 } from "@/engine/foundation/rendering/geometry-instances";
 import { CLOTH_NO_SLOT, CLOTH_STREAM_WORDS, validClothStreamSlots } from "@/engine/foundation/animation/cloth-stream";
 import { createWaterReflection } from "./water-reflection";
+import { createIndexCull } from "./index-cull";
+import { createWeatherParticles } from "./weather-particles";
+import { createObjectCull } from "./object-cull";
 import { packTextureStage } from "@/engine/foundation/rendering/texture-stage";
 import type { GpuWork } from "@/engine/foundation/rendering/gpu-work";
 import { packMultiTexture } from "@/engine/foundation/rendering/multi-texture";
@@ -54,7 +58,12 @@ import { DEFAULT_BLEND, type GeometryPipelineState, type SceneSurface } from "./
 import { D3DBLEND_SRCCOLOR, D3DBLEND_ZERO, type BlendPair } from "@/engine/foundation/rendering/blend-state";
 import type { Geometry } from "@/engine/contracts/geometry";
 import { meshArrays, packGeometryVertices, sameMesh } from "@/engine/foundation/rendering/geometry-vertices";
-import type { GeometryCommands, GeometryDraw, ImageDraw } from "@/engine/runtime/renderer/internal/gpu-contract";
+import type {
+	GeometryCommands,
+	GeometryDraw,
+	ImageDraw,
+	InstanceRows
+} from "@/engine/runtime/renderer/internal/gpu-contract";
 import type { ImageLeases } from "./images";
 
 // A bound slab range: buffer, offset and size are all set.
@@ -137,8 +146,12 @@ export function createGeometryResources(
 	// The geometry pipeline for state on a scene surface: the HDR stage's
 	// rgba16float intermediate, the MSAA stage's 4x sibling, or the
 	// preview pass's coverage sibling.
-	// rowStates selects the variant a draw with row states needs (Geometry.rowStates).
-	pipelines: ( state: GeometryPipelineState, surface?: SceneSurface, rowStates?: boolean ) => GPURenderPipeline,
+	// variant selects the shader a draw with row states or a weather draw needs.
+	pipelines: (
+		state: GeometryPipelineState,
+		surface?: SceneSurface,
+		variant?: import("./pipelines").GeometryVariant
+	) => GPURenderPipeline,
 	// Each draw holds a lease on its images for as long as it binds them.
 	images: ImageLeases,
 	worldSampler: GPUSampler,
@@ -163,6 +176,12 @@ export function createGeometryResources(
 	// count; sceneBindings swaps every draw over to the current pair.
 	let floatScene = false, msaaScene = false, shadowEnabled = false;
 	const waterReflection = createWaterReflection( created, format, retire );
+	// GPU-culled terrain layer draws (index-cull.ts).
+	const indexCull = createIndexCull( created, retire );
+	// The resident rain and snow drops weather draws read (weather-particles.ts).
+	const weatherParticles = createWeatherParticles( created, retire );
+	// GPU-culled world object draws (object-cull.ts).
+	const objectCull = createObjectCull( created, retire );
 	// 8BA130 fixes water MIN/MAG to linear independently of the video filter.
 	const waterSampler = worldSampler;
 	const reflectedBindings = new WeakMap<GeometryDraw, { source: GPUBindGroup; draw: GeometryDraw; }>();
@@ -316,10 +335,12 @@ export function createGeometryResources(
 			retire,
 			VERTEX_BYTES
 		),
+		// STORAGE too: the index cull pass packs a culled draw's indices into
+		// its own range of these buffers (index-cull.ts).
 		indexSlabs = createBufferSlabs(
 			created,
 			"geometry-indices",
-			GPUBufferUsage.INDEX | GPUBufferUsage.COPY_DST,
+			GPUBufferUsage.INDEX | GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST,
 			retire,
 			INDEX_BYTES
 		);
@@ -446,8 +467,9 @@ export function createGeometryResources(
 		uniform: Binding,
 		storage: Binding,
 		material: Binding,
-		// Binding 16, only for a draw with row states (its pipeline's variant).
-		rowStates: Binding | undefined,
+		// The variant's own binding: 16, a draw's row states; 17, a weather
+		// draw's drop region (its pipeline's variant).
+		variantBinding: GPUBindGroupEntry | undefined,
 		pipeline: GPURenderPipeline,
 		clampedSampling: boolean,
 		image?: ImageDraw,
@@ -470,7 +492,7 @@ export function createGeometryResources(
 				{ binding: 0, resource: uniform },
 				{ binding: 1, resource: storage },
 				{ binding: 2, resource: material },
-				...(rowStates ? [ { binding: 16, resource: rowStates } ] : []),
+				...(variantBinding ? [ variantBinding ] : []),
 				{
 					binding: 3,
 					resource: clampedSampling ? lightmapSampler : worldSampler
@@ -499,6 +521,8 @@ export function createGeometryResources(
 		instances: Binding;
 		// Binding 16: the row-state table of a rowStates draw.
 		rowStates?: Binding;
+		// A weather draw's region of the drop pool (binding 17).
+		weather?: GPUBufferBinding;
 		// The slab ranges behind the three bindings (no transform for a world
 		// draw); owned marks an instance table with a buffer of its own.
 		stores: {
@@ -552,6 +576,20 @@ export function createGeometryResources(
 	type DrawMeta = typeof metadata extends Map<GeometryDraw, infer Meta> ? Meta : never;
 	/*
 	================
+	variantOf
+
+	The shader variant a draw's metadata needs, and that variant's binding.
+	================
+	*/
+	function variantOf( meta: Pick<DrawMeta, "rowStates" | "weather"> ) {
+		return meta.rowStates ? "rows" as const : meta.weather ? "weather" as const : undefined;
+	}
+	function variantBinding( meta: Pick<DrawMeta, "rowStates" | "weather"> ): GPUBindGroupEntry | undefined {
+		if ( meta.rowStates ) return { binding: 16, resource: meta.rowStates };
+		return meta.weather ? { binding: 17, resource: meta.weather } : undefined;
+	}
+	/*
+	================
 	drawBinding
 
 	A draw's bind group against pipeline, from what it draws (meta.drawn):
@@ -563,7 +601,7 @@ export function createGeometryResources(
 			meta.uniform,
 			meta.drawn.instances,
 			meta.material,
-			meta.rowStates,
+			variantBinding( meta ),
 			pipeline,
 			meta.clampedSampling,
 			meta.image,
@@ -631,7 +669,7 @@ export function createGeometryResources(
 			const pipeline = pipelines(
 				meta.state,
 				{ sceneFloat: floatScene, fullscreenPreview: previewCoverage },
-				!!meta.rowStates
+				variantOf( meta )
 			);
 			cached = {
 				source: draw.binding,
@@ -647,8 +685,21 @@ export function createGeometryResources(
 			...cached.draw,
 			indexCount: draw.indexCount,
 			instanceCount: draw.instanceCount,
-			instanceCapacity: draw.instanceCapacity
+			instanceCapacity: draw.instanceCapacity,
+			indirect: draw.indirect,
+			indirectOffset: draw.indirectOffset
 		};
+	}
+	/*
+	================
+	liveDeviceDraw
+
+	draw as this owner's handle, refused once released or foreign.
+	================
+	*/
+	function liveDeviceDraw( draw: GeometryDraw ): DeviceDraw {
+		if ( !(draw instanceof DeviceDraw) || !metadata.has( draw ) ) throw new Error( "Unknown geometry draw" );
+		return draw;
 	}
 	const commands: GeometryCommands = Object.freeze( {
 		/*
@@ -709,7 +760,7 @@ export function createGeometryResources(
 					const pipeline = pipelines(
 						meta.state,
 						{ sceneFloat: floatScene, msaa: msaaScene },
-						!!meta.rowStates
+						variantOf( meta )
 					);
 					const binding = drawBinding( meta, pipeline, true );
 					cached = {
@@ -723,12 +774,22 @@ export function createGeometryResources(
 							count: draw.count,
 							indexCount: draw.indexCount,
 							instanceCount: draw.instanceCount,
-							instanceCapacity: draw.instanceCapacity
+							instanceCapacity: draw.instanceCapacity,
+							indirect: draw.indirect,
+							indirectOffset: draw.indirectOffset
 						}
 					};
 					reflectedBindings.set( draw, cached );
 				}
-				reflected.push( { ...cached.draw, indexCount: draw.indexCount, instanceCount: draw.instanceCount } );
+				// The live counts and arguments: a culled draw's arguments buffer
+				// may have been regrown since the copy was made.
+				reflected.push( {
+					...cached.draw,
+					indexCount: draw.indexCount,
+					instanceCount: draw.instanceCount,
+					indirect: draw.indirect,
+					indirectOffset: draw.indirectOffset
+				} );
 			}
 			return {
 				encode( encoder: GPUCommandEncoder ) {
@@ -776,10 +837,7 @@ export function createGeometryResources(
 					source: Float32Array,
 					model: import("@/engine/contracts/character").CharacterModel,
 					primitive: import("@/engine/contracts/character").CharacterPrimitive,
-					samples: readonly ({
-						readonly clip: import("@/engine/contracts/character").CharacterClip;
-						readonly time: number;
-					} | null)[],
+					samples: readonly (import("@/engine/contracts/character").CharacterGpuSample | null)[],
 					revision: number
 				) => {
 					current();
@@ -861,10 +919,64 @@ export function createGeometryResources(
 		},
 		/*
 		================
+		cullDraw
+
+		The GPU-culled draws (index-cull.ts): cullDraw adopts a live draw with
+		room for capacity source indices, cullSource and cullRanges fill it,
+		cullView sets the frame's frusta. A culled draw's indices are the
+		pass's, never updateIndices'.
+		================
+		*/
+		cullDraw( draw: GeometryDraw, capacity: number ) {
+			indexCull.adopt( liveDeviceDraw( draw ), capacity );
+		},
+		cullSource( draw: GeometryDraw, at: number, indices: Uint32Array ) {
+			indexCull.source( liveDeviceDraw( draw ), at, indices );
+		},
+		cullRanges( draw: GeometryDraw, table: Uint32Array, count: number ) {
+			indexCull.ranges( liveDeviceDraw( draw ), table, count );
+		},
+		cullView( main: Float64Array, mirror: Float64Array | null ) {
+			indexCull.view( main, mirror );
+			objectCull.view( main, mirror );
+		},
+		/*
+		================
+		cullObject
+
+		Makes an opaque world object draw GPU-culled against sphere (centre xyz,
+		radius; object-cull.ts): it stays in the frame's list while resident.
+		================
+		*/
+		cullObject( draw: GeometryDraw, sphere: readonly number[] ) {
+			objectCull.adopt( liveDeviceDraw( draw ), sphere );
+		},
+		drawRevision: () => DeviceDraw.revision,
+		/*
+		================
+		weatherSpawn / weatherCorners / weatherStep
+
+		The resident weather drops (weather-particles.ts): new drops' records
+		into a region's slots, a region's billboard corners, and the frame's
+		one step, which the next prepare encodes.
+		================
+		*/
+		weatherSpawn( region: number, slot: number, records: Uint32Array ) {
+			weatherParticles.spawn( region, slot, records );
+		},
+		weatherCorners( region: number, corners: Float32Array ) {
+			weatherParticles.corners( region, corners );
+		},
+		weatherStep( step: import("../internal/gpu-contract").WeatherStep ) {
+			return weatherParticles.step( step );
+		},
+		/*
+		================
 		updateIndices
 		================
 		*/
 		updateIndices( draw: GeometryDraw, indices: Uint32Array ) {
+			if ( draw.indirect ) throw new Error( "A culled draw's indices are the cull pass's" );
 			const gpu = current(), buffers = geometryBuffers.get( draw ), meta = metadata.get( draw );
 			// Other draws read a shared mesh's indices.
 			if ( drawMeshes.has( draw ) ) throw new Error( "A shared mesh's indices do not change" );
@@ -881,6 +993,7 @@ export function createGeometryResources(
 				);
 			}
 			DeviceDraw.select( meta.selection, indices.length, 1 );
+			objectCull.refresh( meta.selection );
 		},
 		/*
 		================
@@ -1041,7 +1154,8 @@ export function createGeometryResources(
 			opacity?: Float32Array,
 			appearance?: Float32Array,
 			pointLights?: Float32Array,
-			paletteOffsets?: Uint32Array
+			paletteOffsets?: Uint32Array,
+			rows?: InstanceRows
 		): GeometryDraw {
 			const gpu = current(), buffers = geometryBuffers.get( draw );
 			if ( !buffers ) {
@@ -1050,11 +1164,38 @@ export function createGeometryResources(
 			const meta = metadata.get( draw )!;
 			if ( meta.palette ) validatePaletteOffsets( paletteOffsets, meta.boneBytes, meta.jointMaximum );
 			else if ( paletteOffsets ) throw Error( "Palette offsets require shared bone storage" );
-			const count = instances.length / 16,
-				packed = markCloth(
-					packInstances( instances, opacity, appearance, pointLights, paletteOffsets ),
-					meta.clothBase
-				);
+			const count = instances.length / 16;
+			if ( rows && count <= draw.instanceCapacity ) {
+				const { first, end } = rows;
+				if ( !Number.isInteger( first ) || !Number.isInteger( end ) || first < 0 || end > count ) {
+					throw Error( "Invalid instance rows" );
+				}
+				if ( end > first ) {
+					const range = markCloth(
+						packInstances(
+							instances.subarray( first * 16, end * 16 ),
+							opacity?.subarray( first, end ),
+							appearance?.subarray( first * 8, end * 8 ),
+							pointLights?.subarray( first * 12, end * 12 ),
+							paletteOffsets?.subarray( first, end )
+						),
+						meta.clothBase
+					);
+					writeStream(
+						meta.instances.buffer,
+						meta.instances.offset + first * INSTANCE_ROW_BYTES,
+						range,
+						meta.cpuUploads
+					);
+				}
+				DeviceDraw.select( meta.selection, draw.count, count );
+				objectCull.refresh( meta.selection );
+				return draw;
+			}
+			const packed = markCloth(
+				packInstances( instances, opacity, appearance, pointLights, paletteOffsets ),
+				meta.clothBase
+			);
 			if ( count <= draw.instanceCapacity ) {
 				// As with position/index/bone writes, the device's uncaptured
 				// error listener owns write failures. Scopes are for allocation.
@@ -1062,6 +1203,7 @@ export function createGeometryResources(
 					writeStream( meta.instances.buffer, meta.instances.offset, packed, meta.cpuUploads );
 				}
 				DeviceDraw.select( meta.selection, draw.count, count );
+				objectCull.refresh( meta.selection );
 				return draw;
 			}
 			gpu.pushErrorScope( "validation" );
@@ -1106,6 +1248,7 @@ export function createGeometryResources(
 					}
 				}
 				DeviceDraw.select( meta.selection, draw.count, count );
+				objectCull.refresh( meta.selection );
 				return draw;
 			} finally {
 				gpu.popErrorScope().then( error => {
@@ -1315,6 +1458,7 @@ export function createGeometryResources(
 				slices.push( storage );
 				const rowStates = data.rowStates ? rowStateStore( capacity ) : undefined;
 				if ( rowStates ) slices.push( rowStates );
+				const weather = data.weather ? weatherParticles.binding( data.weather.region ) : undefined;
 				if ( instances.byteLength ) {
 					gpu.queue.writeBuffer(
 						storage.binding.buffer,
@@ -1483,7 +1627,7 @@ export function createGeometryResources(
 				const selected = pipelines(
 						geometryPipelineState( mat ),
 						{ sceneFloat: floatScene, msaa: msaaScene },
-						!!data.rowStates
+						variantOf( { rowStates: rowStates?.binding, weather } )
 					),
 					clampedSampling = !!(mat?.lightmap || mat?.decal) && !mat?.groundDecal;
 				const bonesBinding: GPUBufferBinding = boneBuffer === defaultBones ?
@@ -1493,7 +1637,7 @@ export function createGeometryResources(
 					uniform,
 					storage.binding,
 					material.binding,
-					rowStates?.binding,
+					variantBinding( { rowStates: rowStates?.binding, weather } ),
 					selected,
 					clampedSampling,
 					image,
@@ -1516,6 +1660,9 @@ export function createGeometryResources(
 					capacity,
 					count
 				);
+				if ( data.weather ) {
+					weatherParticles.attach( data.weather.region, draw, Float32Array.from( data.weather.uvs ) );
+				}
 				// The draw binds its images until release; a released image is
 				// refused here, before the draw is recorded.
 				if ( image ) images.acquire( image );
@@ -1536,6 +1683,7 @@ export function createGeometryResources(
 					material: material.binding,
 					instances: storage.binding,
 					rowStates: rowStates?.binding,
+					weather,
 					stores: {
 						transform,
 						material,
@@ -1609,6 +1757,11 @@ export function createGeometryResources(
 			}
 			shadows?.forget( draw );
 			sunShadows?.forget( draw );
+			if ( draw instanceof DeviceDraw ) {
+				indexCull.forget( draw );
+				objectCull.forget( draw );
+				weatherParticles.detach( draw );
+			}
 			for ( const buffer of geometryBuffers.get( draw ) ?? [] ) {
 				retire( buffer );
 			}
@@ -1682,13 +1835,22 @@ export function createGeometryResources(
 			}
 		},
 		commands,
-		ready: Promise.all( [ animation?.ready, particles?.ready ] ),
+		ready: Promise.all( [
+			animation?.ready,
+			particles?.ready,
+			indexCull.ready,
+			weatherParticles.ready,
+			objectCull.ready
+		] ),
 		/*
 		================
 		prepare
 		================
 		*/
 		prepare( encoder: GPUCommandEncoder, timing?: import("../internal/gpu-contract").GpuTimingFrame ) {
+			indexCull.encode( encoder, timing );
+			weatherParticles.encode( encoder, timing );
+			objectCull.encode( encoder, timing );
 			animation?.encode( encoder, timing );
 			particles?.encode( encoder, timing );
 			shadows?.encode( encoder, timing );
@@ -1751,7 +1913,7 @@ export function createGeometryResources(
 			msaaScene = sceneMsaa;
 			waterReflection.reformat( sceneFloat ? "rgba16float" : format, sceneMsaa ? MSAA_SAMPLE_COUNT : 1 );
 			for ( const [draw, meta] of metadata ) {
-				const pipeline = pipelines( meta.state, { sceneFloat, msaa: sceneMsaa }, !!meta.rowStates );
+				const pipeline = pipelines( meta.state, { sceneFloat, msaa: sceneMsaa }, variantOf( meta ) );
 				DeviceDraw.repipeline(
 					meta.selection,
 					pipeline,
@@ -1830,6 +1992,9 @@ export function createGeometryResources(
 			instanceSlabs.dispose();
 			vertexSlabs.dispose();
 			indexSlabs.dispose();
+			indexCull.dispose();
+			weatherParticles.dispose();
+			objectCull.dispose();
 			for ( const buffer of ownedInstances ) buffer.destroy();
 			ownedInstances.clear();
 			geometryBuffers.clear();
