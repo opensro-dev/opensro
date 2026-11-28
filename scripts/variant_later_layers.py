@@ -78,8 +78,8 @@ LATER_LAYERS = (
 	# dungeons' own summary is the manifest's "pharaohTemple".
 	("pharaohTempleMonsters", pharaoh_temple_import.add_pharaoh_temple_monsters),
 	# The gears magic stones ride the mall's own switch
-	# (SRO_MALL_CATEGORIES): on stages their item shard beside the mall
-	# layout that lists them.
+	# (SRO_MALL_CATEGORIES): keep their item shard so bought stones
+	# stay valid, even though the mall no longer lists them.
 	("gearsStones", gears_stone_import.add_stones),
 	# The mall Magic Cubes (port-only, #3906): SRO_MAGIC_CUBE stages the
 	# sixteen v1.696 rows in their own shard (190003).
