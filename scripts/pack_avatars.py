@@ -66,7 +66,7 @@ PET_SKILL_SHARD = "skilldata_150001.txt"
 # tracks (Draco, the balloons) are walked as Data resources and its
 # ambient particle sets (the Circus Bear, the Ghost) as Particles, as the
 # Sky Temple monsters' are; without it the audit refuses the model.
-PET_POSTURE = {"sounds": "data", "particles": "all"}
+PET_POSTURE = shared.WALK_EVERYTHING
 
 
 # ================
