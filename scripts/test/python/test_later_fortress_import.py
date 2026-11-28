@@ -122,8 +122,9 @@ class EngineTest(unittest.TestCase):
 		row = ["1", "SN_FORTRESS_HOTAN", "kr", "", "tw", "cn", "de", "jp", "Hotan Fortress", "vn"]
 		short = ["1", "SN_SHORT", "kr"]
 		blank = ["1", "", "kr", "", "", "", "", "", "Nameless", ""]
-		# A name the archive wraps over two lines, last in its file.
-		wrapped = [["1", "SN_SKILL_FORT_BUFF", "kr", "", "tw", "cn", "de", "jp", "Fortress"], [" Buff", "vn"]]
+		# A name whose cell holds a line separator, as VSRO's Tausert does,
+		# last in its file: the record stays one and the cell keeps it.
+		wrapped = [["1", "SN_SKILL_FORT_BUFF", "kr", "", "tw", "cn", "de", "jp", "Fortress\u2028 Buff", "vn"]]
 		texts = {
 			"textdataname.txt": table(["TextData_Equip&Skill.txt"], ["TextData_Object.txt"], ["TextData_New.txt"]),
 			"textdata_object.txt": table(row, short, blank),
@@ -132,7 +133,7 @@ class EngineTest(unittest.TestCase):
 		}
 		rows = fortress.vsro_object_texts(later_tables.Archive.of(texts))
 		self.assertEqual(rows, [["1", "SN_FORTRESS_HOTAN", "kr", "", "", "", "", "", "Hotan Fortress", ""],
-			["1", "SN_SKILL_FORT_BUFF", "kr", "", "", "", "", "", "Fortress Buff", ""]])
+			["1", "SN_SKILL_FORT_BUFF", "kr", "", "", "", "", "", "Fortress\u2028 Buff", ""]])
 
 	def test_staff_standings_take_the_native_id(self):
 		spec = dataclasses.replace(hotan.SPEC, staff_codes=("NPC_KT_FORTRESS_OFFICIAL",))

@@ -157,9 +157,13 @@ def is_placeholder_text(value):
 # ================
 # translation_rows
 #
-# The supplied object's German Tausert cell contains an unquoted newline.
-# Join only a short translation record and its non-record continuation;
-# preserve the following language cells rather than discarding the name.
+# A text table's records. table_rows ends a record only at CRLF, so a
+# cell keeps its own LF or U+2028 (VSRO's German Tausert cell) and a
+# rewrite gives back the bytes it read (#4608). A row the archive wraps
+# over two CRLF records (later_fixtures.wrap_last) is still joined back:
+# a short name row whose next record does not open with a service digit.
+# The pinned VSRO client's text tables hold none (census on #4785); the
+# join keeps a client that does from losing the row's language cells.
 # ================
 def translation_rows(raw):
 	rows = []
@@ -314,9 +318,7 @@ def append_rows(raw, rows):
 	"""The UTF-16 table with rows appended; the original bytes stay first."""
 	if not rows:
 		return raw
-	text = stage1.decode_table(raw)
-	if not text.endswith("\n"):
-		text += "\r\n"
+	text = stage1.end_last_record(stage1.decode_table(raw))
 	return b"\xff\xfe" + (text.lstrip("\ufeff") + table_text(rows)).encode("utf-16-le")
 
 

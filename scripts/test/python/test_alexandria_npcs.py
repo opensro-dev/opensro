@@ -222,12 +222,31 @@ def rows_of(merged, name):
 class MergeTests(unittest.TestCase):
 	# ================
 	# test_unquoted_translation_continuation_preserves_the_english_name
+	#
+	# VSRO's Tausert record as the archive holds it: a U+2028 inside the
+	# German cell. The record stays one, every cell keeps its own text,
+	# and a rewrite gives the bytes back (#4608).
 	# ================
 	def test_unquoted_translation_continuation_preserves_the_english_name(self):
-		raw = utf16([["1", "SN_NPC_SD_T_AREA_THIEF", "ko", "", "tw", "cn", "German"], [" Tausert", "ja", "Thief Union President Tausert", "vi", "pt", "ru", "tr", "es", "ar"]])
+		record = ["1", "SN_NPC_SD_T_AREA_THIEF", "ko", "", "tw", "cn", "Pr\u00e4sident der Diebe\u2028 Tausert", "ja",
+			"Thief Union President Tausert", "Tausert"]
+		raw = utf16([record, ["1", "SN_NEXT", "ko"]])
 		rows = npcs.translation_rows(raw)
-		self.assertEqual(len(rows), 1)
-		self.assertEqual(rows[0][8], "Thief Union President Tausert")
+		self.assertEqual(rows, [record, ["1", "SN_NEXT", "ko"]])
+		self.assertEqual(b"\xff\xfe" + npcs.table_text(rows).encode("utf-16-le"), raw)
+
+	# ================
+	# test_a_rewrite_keeps_an_in_cell_lf
+	#
+	# The v1.150 name table holds 2470 LFs inside cells; read and written
+	# back, each record stays one record (the old line split made it two:
+	# 11428 records became 12420).
+	# ================
+	def test_a_rewrite_keeps_an_in_cell_lf(self):
+		raw = b"\xff\xfe" + "1\tSN_A\tline one\nline two\tEnglish\r\n1\tSN_B\tko\tB\r\n".encode("utf-16-le")
+		rows = npcs.translation_rows(raw)
+		self.assertEqual([row[1] for row in rows], ["SN_A", "SN_B"])
+		self.assertEqual(b"\xff\xfe" + npcs.table_text(rows).encode("utf-16-le"), raw)
 
 	# ================
 	# test_missing_armor_placement_uses_the_authored_region_only

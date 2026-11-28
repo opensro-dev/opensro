@@ -40,8 +40,9 @@ class QuestTextEvidenceTests(unittest.TestCase):
 	# ================
 	def test_multiline_records_preserve_boundaries_and_reward_paragraph(self):
 		text = (
-			"1\tSN_PAYCON_FIXTURE\t<font>Quest title\r\n"
-			"\r\n보상\r\n인벤토리 2칸</font>\tEND\r\n"
+			# A body's own breaks are bare LFs; a record ends at CRLF (#4608).
+			"1\tSN_PAYCON_FIXTURE\t<font>Quest title\n"
+			"\n보상\n인벤토리 2칸</font>\tEND\r\n"
 			"1\tSN_CON_NEXT\tCollect 20개\r\n"
 			"0\tSN_DISABLED\tDisabled body"
 		)

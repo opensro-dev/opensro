@@ -356,7 +356,7 @@ def strip_tabs(output, codes):
 	path = safe_target(output / TEXT_ROOT, SHOP_TAB_TABLE)
 	if not path.exists():
 		return
-	lines = tables.decode_table(path.read_bytes()).splitlines()
+	lines = tables.records(tables.decode_table(path.read_bytes()))
 	kept = [line for line in lines if not (len(line.split("\t")) > SHOP_TAB_CODE and line.split("\t")[SHOP_TAB_CODE] in codes)]
 	if len(kept) != len(lines):
 		write_atomically(path, b"\xff\xfe" + ("\r\n".join(kept) + "\r\n").encode("utf-16-le"))

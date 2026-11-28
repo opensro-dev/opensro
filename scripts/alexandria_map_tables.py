@@ -59,9 +59,7 @@ def append_rows(native_raw, rows):
 	"""The native UTF-16 table with rows appended; the native bytes stay first."""
 	if not rows:
 		return native_raw
-	text = stage1.decode_table(native_raw)
-	if not text.endswith("\n"):
-		text += "\r\n"
+	text = stage1.end_last_record(stage1.decode_table(native_raw))
 	return b"\xff\xfe" + (text.lstrip("﻿") + table_text(rows)).encode("utf-16-le")
 
 
