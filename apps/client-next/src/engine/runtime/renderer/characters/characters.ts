@@ -280,7 +280,10 @@ export function createPoseOrder() {
 ================
 RibbonBuffers
 
-One ribbon primitive's vertex streams, sized for its batch's capacity.
+One ribbon primitive's vertex streams, sized for its batch's capacity, and
+the layout of the indices its draw holds: the points of each strip, in
+order (strips[0..stripCount)). Strips are packed end to end, so the indices
+are a function of that list alone; stripCount -1 is a draw never indexed.
 ================
 */
 interface RibbonBuffers {
@@ -290,6 +293,8 @@ interface RibbonBuffers {
 	readonly colors: Float32Array;
 	readonly uvs: Float32Array;
 	readonly indices: Uint32Array;
+	readonly strips: Int32Array;
+	stripCount: number;
 }
 const MAX_ATTACHMENT_DEPTH = 8;
 // An equipment socket's name (equipment-sockets.ts) and an effect actor's
@@ -2590,12 +2595,15 @@ the next full prepare pass, so this may run between frames.
 				positions: new Float32Array( capacity * 3 ),
 				colors: new Float32Array( capacity * 4 ),
 				uvs: new Float32Array( capacity * 2 ),
-				indices: new Uint32Array( capacity * 3 )
+				indices: new Uint32Array( capacity * 3 ),
+				// A strip is two vertices a point, and has a point at least.
+				strips: new Int32Array( capacity / 2 ),
+				stripCount: -1
 			};
 			batch.ribbons[p] = ribbon;
 		}
-		const { positions, colors, uvs, indices } = ribbon;
-		let vertex = 0, index = 0;
+		const { positions, colors, uvs, indices, strips } = ribbon;
+		let vertex = 0, index = 0, strip = 0, relaid = false;
 		for ( const actor of rows ) {
 			collectRibbonGroups( frame, group, p, actor );
 			for ( const points of ribbonGroups ) {
@@ -2603,10 +2611,21 @@ the next full prepare pass, so this may run between frames.
 				else ribbonPolyline( points, ribbonDrawn );
 				if ( !ribbonDrawn.count ) continue;
 				ribbonStrip( ribbonDrawn, view!, ribbon, vertex, index, ribbonWork );
+				if ( strips[strip] !== ribbonDrawn.count ) {
+					strips[strip] = ribbonDrawn.count;
+					relaid = true;
+				}
+				strip++;
 				vertex += ribbonDrawn.count * 2;
 				index += (ribbonDrawn.count - 1) * 6;
 			}
 		}
+		// The strips move every frame; their indices change only when an
+		// element is born or expires (a tick), so most frames upload none.
+		// Uploading them every frame was 42 queue writes a frame at 120
+		// effects (#4692).
+		if ( strip !== ribbon.stripCount ) relaid = true;
+		ribbon.stripCount = strip;
 		// The stream is reused: clear what the last frame wrote past this one.
 		// Only vertices either frame wrote can differ from the uploaded stream.
 		const touched = Math.max( vertex, ribbon.used );
@@ -2639,7 +2658,7 @@ the next full prepare pass, so this may run between frames.
 			geometry.updatePositions( draw, positions, colors, uvs, touched ? ribbonRange : [] );
 			if ( preview ) geometry.updateTransform( draw, view! );
 		}
-		geometry.updateIndices( draw, indices.subarray( 0, index ) );
+		if ( relaid ) geometry.updateIndices( draw, indices.subarray( 0, index ) );
 		probe?.characterCount( "ribbon-vertices", vertex );
 		return draw;
 	}
