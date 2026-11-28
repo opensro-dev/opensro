@@ -273,6 +273,8 @@ export interface WorldRenderStats {
 	readonly triangles: number;
 	readonly pendingTextures: number;
 	readonly bundleRebuilds: number;
+	// The weather owner's counters (weather.ts stats), for the frame benchmark.
+	readonly weather?: Readonly<Record<string, number | readonly number[]>>;
 }
 
 /*
