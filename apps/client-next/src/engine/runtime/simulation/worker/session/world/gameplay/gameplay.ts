@@ -39,7 +39,12 @@ import {
 import { ARENA_CHEST_OPCODE, ARENA_DECISION_OPCODE } from "@/engine/foundation/gameplay/arena-chest";
 import { createParamJobs } from "@/engine/foundation/gameplay/param-job";
 import { createCountJobs, countJobUseRequest } from "@/engine/foundation/gameplay/count-job";
-import { createStorageRoom, isWarehouseTicket, STORAGE_MOVE_ROOM } from "@/engine/foundation/gameplay/storage-room";
+import {
+	createStorageRoom,
+	isWarehouseTicket,
+	publishedStorageGoldDepositLimit as acceptedStorageGoldDepositLimit,
+	STORAGE_MOVE_ROOM
+} from "@/engine/foundation/gameplay/storage-room";
 import type { PlayerModel } from "@/engine/foundation/gameplay/skin-change";
 import {
 	jobAliasRequest,
@@ -2503,13 +2508,9 @@ next 0x3AC5 status-5 row throw "Unknown academy member status" (#2876).
 			moonlitThiefSuit = (value as { moonlitThiefSuit?: unknown; } | null)?.moonlitThiefSuit === true;
 			alexandria = (value as { alexandria?: unknown; } | null)?.alexandria === true;
 			raisedGoldCaps = (value as { raisedGoldCaps?: unknown; } | null)?.raisedGoldCaps === true;
-			const publishedDepositLimit = (value as { storageGoldDepositLimit?: unknown; } | null)
-				?.storageGoldDepositLimit;
-			publishedStorageGoldDepositLimit = typeof publishedDepositLimit === "number" &&
-					Number.isInteger( publishedDepositLimit ) && publishedDepositLimit >= 1 &&
-					publishedDepositLimit <= 0xffffffff ?
-				publishedDepositLimit :
-				undefined;
+			publishedStorageGoldDepositLimit = acceptedStorageGoldDepositLimit(
+				(value as { storageGoldDepositLimit?: unknown; } | null)?.storageGoldDepositLimit
+			);
 			inventorySortRule = (value as { inventorySort?: unknown; } | null)?.inventorySort === true;
 			reverseMapPoints = decodeReverseMapPoints(
 				(value as { reverseMapPoints?: unknown; } | null)?.reverseMapPoints

@@ -315,7 +315,7 @@ func TestItemMoveRequestEncodings(t *testing.T) {
 // is ever written, so an over-ceiling request goes out clamped rather
 // than truncated.
 func TestGoldDropRequestClampsAtTheNativeCeiling(t *testing.T) {
-	request := ItemMoveRequest{MovementType: MoveTypeGoldDrop, GoldAmount: MaxGold + 1000}
+	request := ItemMoveRequest{MovementType: MoveTypeGoldDrop, GoldAmount: uint64(MaxGold) + 1000}
 
 	got, err := request.Encode()
 	if err != nil {
@@ -430,5 +430,42 @@ func TestGoldHeapExcludesShopTokens(t *testing.T) {
 	}
 	if !IsGoldHeap(gold) || IsGoldHeap(sdToken) {
 		t.Fatalf("gold heap: gold %v, token %v; want true, false", IsGoldHeap(gold), IsGoldHeap(sdToken))
+	}
+}
+
+/*
+================
+TestWideGoldDepositRoundTrip
+
+A warehouse deposit above the u32 range travels as a u64 and decodes back
+whole; below it, and for every other gold move, the native four bytes
+stay (port-only wide form, WideGoldDeposit).
+================
+*/
+func TestWideGoldDepositRoundTrip(t *testing.T) {
+	for _, tc := range []struct {
+		move   uint8
+		amount uint64
+		size   int
+	}{
+		// The narrow form keeps the native client's 100,000,000 pre-clamp.
+		{MoveTypeStorageGoldDeposit, 100_000_000, 5},
+		{MoveTypeStorageGoldDeposit, 10_000_000_000, 9},
+		{MoveTypeGuildStorageGoldDeposit, 10_000_000_000, 9},
+		{MoveTypeStorageGoldWithdraw, 100_000_000, 5},
+	} {
+		payload, err := ItemMoveRequest{MovementType: tc.move, GoldAmount: tc.amount}.Encode()
+		if err != nil || len(payload) != tc.size {
+			t.Fatalf("type 0x%02X %d: % X, %v, want %d bytes", tc.move, tc.amount, payload, err, tc.size)
+		}
+		back, err := DecodeItemMoveRequest(payload)
+		if err != nil || back.GoldAmount != tc.amount {
+			t.Fatalf("type 0x%02X %d decoded %d, %v", tc.move, tc.amount, back.GoldAmount, err)
+		}
+	}
+	// A withdraw never reads the wide form: eight bytes is a trailing-byte
+	// refusal, as before.
+	if _, err := DecodeItemMoveRequest([]byte{MoveTypeStorageGoldWithdraw, 0, 0, 0, 0, 1, 0, 0, 0}); err == nil {
+		t.Fatal("a withdraw decoded a u64 amount")
 	}
 }

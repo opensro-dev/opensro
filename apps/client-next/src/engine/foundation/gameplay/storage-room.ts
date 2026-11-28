@@ -66,8 +66,26 @@ export const STORAGE_GOLD_DEPOSIT = 0x0c;
 
 // 59A430 caps one warehouse gold deposit at 100,000,000 natively;
 // SRO_RAISED_GOLD_CAPS raises both the dialog and the server check, to
-// 1,000,000,000 or to the shard's chosen value (port-only, not native).
+// 10,000,000,000 or to the shard's chosen value (port-only, not native).
 export const STORAGE_GOLD_DEPOSIT_LIMIT = 100000000n;
+// The native gold move carries a u32. A deposit above it travels in the
+// port's wide form, a u64 told apart by length (server item/wire
+// WideGoldDeposit); a native server never publishes a cap that needs it.
+const NATIVE_GOLD_MOVE_MAX = 0xffffffff;
+
+/*
+================
+publishedStorageGoldDepositLimit
+
+The world entry's storageGoldDepositLimit as a cap, or undefined when it is
+absent or not a whole number the dialog holds exactly (a safe integer of at
+least 1). The worker and the dialog read the published value through this
+one rule, so a cap above the u32 range reaches the dialog.
+================
+*/
+export function publishedStorageGoldDepositLimit( published: unknown ): number | undefined {
+	return typeof published === "number" && Number.isSafeInteger( published ) && published >= 1 ? published : undefined;
+}
 
 /*
 ================
@@ -76,14 +94,12 @@ storageGoldDepositLimit
 The highest amount one deposit dialog accepts: the shard's published cap
 (enterworld storageGoldDepositLimit, beside raisedGoldCaps), or the
 native 59A430 cap when the server published none. A published value
-counts only as a whole u32, the most one gold move carries.
+counts only as a whole number the dialog holds exactly (a safe integer).
 ================
 */
 export function storageGoldDepositLimit( published?: number ): bigint {
-	if ( published !== undefined && Number.isInteger( published ) && published >= 1 && published <= 0xffffffff ) {
-		return BigInt( published );
-	}
-	return STORAGE_GOLD_DEPOSIT_LIMIT;
+	const cap = publishedStorageGoldDepositLimit( published );
+	return cap === undefined ? STORAGE_GOLD_DEPOSIT_LIMIT : BigInt( cap );
 }
 
 // The guild warehouse's function mask and requests.
@@ -196,12 +212,17 @@ storageMoveRequest
 */
 export function storageMoveRequest( npc: number, move: StorageMove, guild?: boolean ): WireFrame {
 	if ( move.type === STORAGE_GOLD_WITHDRAW || move.type === STORAGE_GOLD_DEPOSIT ) {
-		if ( !Number.isInteger( move.gold ) || move.gold < 1 || move.gold > 0xffffffff ) {
+		const wide = move.type === STORAGE_GOLD_DEPOSIT && move.gold > NATIVE_GOLD_MOVE_MAX;
+		if ( !Number.isSafeInteger( move.gold ) || move.gold < 1 || (!wide && move.gold > NATIVE_GOLD_MOVE_MAX) ) {
 			throw Error( "Invalid storage gold" );
 		}
-		const payload = new Uint8Array( 5 );
+		const payload = new Uint8Array( wide ? 9 : 5 ), v = new DataView( payload.buffer );
 		payload[0] = storageWireType( move.type, guild );
-		new DataView( payload.buffer ).setUint32( 1, move.gold, true );
+		if ( wide ) {
+			v.setBigUint64( 1, BigInt( move.gold ), true );
+		} else {
+			v.setUint32( 1, move.gold, true );
+		}
 		return { opcode: OP_ITEM_MOVE, payload };
 	}
 	if ( ![ move.source, move.destination ].every( slot => Number.isInteger( slot ) && slot >= 0 && slot <= 255 ) ) {

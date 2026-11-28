@@ -165,7 +165,7 @@ type Deps struct {
 	// StorageGoldDepositLimit publishes the rule's effective warehouse
 	// deposit cap beside RaisedGoldCaps (action/goldcaps.go); zero
 	// (unset) omits it and the client keeps the native cap.
-	StorageGoldDepositLimit uint32
+	StorageGoldDepositLimit uint64
 	// StarterRefills are the beta's HP/MP potion refills (starterrefill.go);
 	// empty when the kit is disabled.
 	StarterRefills []StarterRefill

@@ -30,7 +30,7 @@ One gold deposit's answer byte: 1 accepted, 2 refused.
 */
 func goldDeposit(t *testing.T, rt *Runtime, c *enterworld.Character, amount uint32) byte {
 	t.Helper()
-	return trade(t, rt, c, wire.ItemMoveRequest{MovementType: wire.MoveTypeStorageGoldDeposit, GoldAmount: amount}).Frames[0].Payload[0]
+	return trade(t, rt, c, wire.ItemMoveRequest{MovementType: wire.MoveTypeStorageGoldDeposit, GoldAmount: uint64(amount)}).Frames[0].Payload[0]
 }
 
 /*

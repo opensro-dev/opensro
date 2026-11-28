@@ -81,7 +81,9 @@ func TestStorageGoldDepositLimitFromEnv(t *testing.T) {
 		{"1", RaisedStorageGoldDepositLimit},
 		{"true", RaisedStorageGoldDepositLimit},
 		{"500000000", 500_000_000},
-		{"4294967295", MaxStorageGoldDepositLimit},
+		{"4294967295", 4_294_967_295},
+		{"10000000000", 10_000_000_000},
+		{"9007199254740992", MaxStorageGoldDepositLimit},
 		{"99999999999999999999", MaxStorageGoldDepositLimit},
 	} {
 		t.Setenv(EnvRaisedGoldCaps, tc.value)

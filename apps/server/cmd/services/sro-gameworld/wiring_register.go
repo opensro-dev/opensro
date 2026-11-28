@@ -113,7 +113,7 @@ func (game *gameplayPlane) register(hub *transport.Hub, loadQuests questDefiniti
 	game.items.RaisedGoldCaps = action.RaisedGoldCapsFromEnv()
 	game.items.StorageGoldDepositLimit = action.StorageGoldDepositLimitFromEnv()
 	game.deps.RaisedGoldCaps = game.items.RaisedGoldCaps
-	game.deps.StorageGoldDepositLimit = uint32(game.items.StorageGoldDepositLimit)
+	game.deps.StorageGoldDepositLimit = game.items.StorageGoldDepositLimit
 	if game.items.RaisedGoldCaps || game.items.StorageGoldDepositLimit != action.NativeStorageGoldDepositLimit {
 		log.Infof("trade: stall prices to %d and warehouse deposits to %d ON (%s)",
 			action.StallPriceLimitFromEnv(), game.items.StorageGoldDepositLimit, action.EnvRaisedGoldCaps)
