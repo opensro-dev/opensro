@@ -217,6 +217,7 @@ class FakeClosure:
 def build_trees(base):
 	native, output, source = base / "native", base / "output", base / "source"
 	text = ct.TEXT_ROOT
+	write_table(output / text, "characterdata.txt", [["characterdata_5000.txt"]])
 	write_table(output / text, "characterdata_5000.txt", [
 		native_character(100, "MOB_NATIVE_TEST"),
 		native_character(22462, "NPC_EU_FORTRESS_MANAGER"),
