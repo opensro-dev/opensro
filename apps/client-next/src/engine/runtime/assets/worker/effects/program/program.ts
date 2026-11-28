@@ -186,7 +186,10 @@ export function parseEffectProgram( bytes: Uint8Array ): EffectProgramFile {
 		const archiveProof = typeof archiveSha256 === "string" && /^[a-f0-9]{64}$/.test( archiveSha256 );
 		const gapProof = Array.isArray( closureGaps ) && closureGaps.length > 0 &&
 			closureGaps.every( name => typeof name === "string" && name.length > 0 && !name.includes( ".." ) );
-		if ( value.effect || archiveProof === gapProof ) {
+		// Exactly one proof key, and that one valid: a malformed second key
+		// beside a valid first is refused too.
+		const hasArchive = archiveSha256 !== undefined, hasGaps = closureGaps !== undefined;
+		if ( value.effect || hasArchive === hasGaps || hasArchive && !archiveProof || hasGaps && !gapProof ) {
 			throw Error( "Invalid native unavailable EFP evidence" );
 		}
 		return { unavailable: value.unavailable, meshes: [], textures: {} };
