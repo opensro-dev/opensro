@@ -716,7 +716,7 @@ func (s *MonsterState) spawnChainInstanceLocked(state *divisionMonsterState, nes
 	armLifetimeLocked(state, instance, nowMs)
 	if instance.IsUnique() {
 		state.uniqueNotices = append(state.uniqueNotices, uniqueNotice(5, ref.RefObjID, ""))
-		state.markUniqueSpawn(ref.RefObjID, nest.RegionID, nowMs)
+		state.markUniqueSpawn(ref.RefObjID, gid, nest.RegionID, nowMs)
 	}
 	if state.movers == nil {
 		state.movers = newMoverStorage(nil)

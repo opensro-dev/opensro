@@ -187,6 +187,7 @@ func (s *MonsterState) DevelopmentRemoveFamily(division string, leader uint32) {
 	}
 	for _, gid := range family {
 		instance := state.instances.get(gid)
+		state.markUniqueDeath(instance.Ref.RefObjID, gid)
 		state.instances.remove(gid)
 		delete(state.contributions, gid)
 		state.releaseApproachActor(gid)
@@ -209,6 +210,7 @@ func (s *MonsterState) DevelopmentRemoveLeader(division string, leader uint32) {
 	defer s.mu.Unlock()
 	state := s.division(division)
 	if instance, ok := state.instances.lookup(leader); ok {
+		state.markUniqueDeath(instance.Ref.RefObjID, leader)
 		state.instances.remove(leader)
 		delete(state.contributions, leader)
 		state.releaseApproachActor(leader)
