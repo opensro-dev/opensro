@@ -78,6 +78,7 @@ export function createInput(
 		},
 		blindHeld: () => blindHeld,
 		altHeld: () => altLeft || altRight,
+		orbiting: () => pointer !== null && (buttons & cameraDragButtons( mouseMode )) !== 0,
 		/*
 		================
 		mouseMode

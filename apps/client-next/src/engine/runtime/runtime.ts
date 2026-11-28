@@ -1570,6 +1570,12 @@ export function startRuntime(
 					hoverAllowed = visible && diagnostics.hoverPicking !== false && worldPointer &&
 						frontendState.phase === "world" &&
 						hoverLocal &&
+						// 67CCA0: the camera-drag press clears the hover window and
+						// resets the cursor mode (case WM_RBUTTONDOWN, SetCursorMode -1),
+						// and the orbit pins the cursor (SetCursorPos to the press
+						// point); no hover target is shown until the button is released,
+						// so an orbit picks nothing (#4692).
+						!input.orbiting() &&
 						!ui.blocks(
 							worldPointer[0] * platform.readUiViewport().width,
 							worldPointer[1] * platform.readUiViewport().height
