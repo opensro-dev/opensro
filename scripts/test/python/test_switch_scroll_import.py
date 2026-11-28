@@ -10,6 +10,7 @@ reaps exactly what that scroll added; a missing donor refuses.
 ===========================================================================
 """
 import script_paths  # noqa: F401  (puts scripts/ and its build folders on sys.path, #3410)
+import later_fixtures  # noqa: E402
 import json
 import os
 import tempfile
@@ -71,8 +72,7 @@ class SwitchScrollImportTest(unittest.TestCase):
 		for identity, (_, _, donor, _, _) in enumerate(switch.SCROLLS, start=3790):
 			if donor != drop:
 				rows.append(item_row(donor, identity, "item\\etc\\" + donor.lower() + ".ddj"))
-		(text_root / "itemdata.txt").write_bytes(utf16([["itemdata_5000.txt"]]))
-		(text_root / "itemdata_5000.txt").write_bytes(utf16(rows))
+		later_fixtures.write_sharded(text_root, "itemdata.txt", {"itemdata_5000.txt": rows})
 		(native / switch.TEXT_ROOT / switch.NAME_TABLE).write_bytes(
 			utf16([name_row("SN_ITEM_NATIVE_THING", "Native thing")]))
 		return native, output, text_root
@@ -104,7 +104,7 @@ class SwitchScrollImportTest(unittest.TestCase):
 			self.assertEqual(int(weapon[1]), summary["items"]["ITEM_MALL_WEAPON_SWITCH_SCROLL"])
 			manifest = (text_root / "itemdata.txt").read_bytes().decode("utf-16")
 			self.assertIn(switch.ITEM_SHARD, manifest)
-			self.assertIn("itemdata_5000.txt", manifest)
+			self.assertIn(later_fixtures.archive_case("itemdata_5000.txt"), manifest)
 			names = [line.split("\t") for line in (text_root / switch.NAME_TABLE).read_bytes().decode("utf-16").splitlines()]
 			by_key = {row[1]: row for row in names if len(row) > 8}
 			self.assertEqual(by_key["SN_ITEM_MALL_ARMOR_SWITCH_SCROLL"][8], "Armor Switch Scroll")
@@ -148,7 +148,7 @@ class SwitchScrollImportTest(unittest.TestCase):
 			self.assertFalse((output / switch.MARKER).exists())
 			manifest = (text_root / "itemdata.txt").read_bytes().decode("utf-16")
 			self.assertNotIn(switch.ITEM_SHARD, manifest)
-			self.assertIn("itemdata_5000.txt", manifest)
+			self.assertIn(later_fixtures.archive_case("itemdata_5000.txt"), manifest)
 			names = (text_root / switch.NAME_TABLE).read_bytes().decode("utf-16")
 			self.assertNotIn("SWITCH_SCROLL", names)
 			self.assertIn("SN_ITEM_NATIVE_THING", names)

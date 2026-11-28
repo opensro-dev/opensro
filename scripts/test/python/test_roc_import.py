@@ -25,6 +25,7 @@ two lists, and their trophies' drops join the rewards file's fixed rules.
 ===========================================================================
 """
 import script_paths  # noqa: F401  (puts scripts/ and its build folders on sys.path, #3410)
+import later_fixtures  # noqa: E402
 import hashlib
 import json
 import os
@@ -166,18 +167,15 @@ class RocImportTest(unittest.TestCase):
 			row = ["0"] * 104
 			row[1], row[2] = str(5871 + n), "MOB_QT_%02d_ROCKY_CLON2" % n
 			guardians.append(row)
-		(text_root / "characterdata.txt").write_bytes(utf16([["characterdata_5000.txt"]]))
-		(text_root / "characterdata_5000.txt").write_bytes(utf16([native_char] + guardians))
-		(text_root / "skilldata.txt").write_bytes(utf16([["skilldata_5000.txt"]]))
-		(text_root / "skilldata_5000.txt").write_bytes(utf16([]))
+		later_fixtures.write_sharded(text_root, "characterdata.txt", {"characterdata_5000.txt": [native_char] + guardians})
+		later_fixtures.write_sharded(text_root, "skilldata.txt", {"skilldata_5000.txt": []})
 		(text_root / "textdataname.txt").write_bytes(utf16([["1", NATIVE_TAHOMET_SYMBOL, "Tahomet"]]))
 		(text_root / "skilleffect.txt").write_bytes(utf16([
 			["#section", "characterinfo"], ["MOB_RM_TAHOMET"] + ["0"] * 12, ["#section", "skillaniset"]]))
 		(text_root / "teleportdata.txt").write_bytes(utf16([gate_row("1", "GATE_CH", "2094", "1")]))
 		(text_root / "teleportbuilding.txt").write_bytes(utf16([]))
 		(text_root / "teleportlink.txt").write_bytes(utf16([]))
-		(text_root / "itemdata.txt").write_bytes(utf16([["itemdata_5000.txt"]]))
-		(text_root / "itemdata_5000.txt").write_bytes(utf16([["1", "7", "ITEM_ETC_NATIVE"]]))
+		later_fixtures.write_sharded(text_root, "itemdata.txt", {"itemdata_5000.txt": [["1", "7", "ITEM_ETC_NATIVE"]]})
 		(text_root / roc.QUEST_TABLE).write_bytes(utf16([NATIVE_QUEST]))
 		(text_root / roc.CONTENTS_TABLE).write_bytes(utf16(NATIVE_CONTENTS))
 		rows = []
@@ -187,8 +185,7 @@ class RocImportTest(unittest.TestCase):
 		for code, row in (overrides or {}).items():
 			rows = [row if old[2] == code else old for old in rows]
 		media = {
-			"characterdata.txt": utf16([["characterdata_6000.txt"]]),
-			"characterdata_6000.txt": utf16(rows),
+			**later_fixtures.sharded("characterdata.txt", {"characterdata_6000.txt": rows}),
 			"skilldata.txt": utf16([["skilldata_6000.txt"]]),
 			"skilldata_6000.txt": utf16([skill_row(ROC_SKILL, "MSKILL_RM_ROC_TEST"),
 				skill_row(ROC_ENRAGE_SKILL, "MSKILL_RM_ROC_ATTACK10")]),
@@ -199,8 +196,7 @@ class RocImportTest(unittest.TestCase):
 			"teleportbuilding.txt": utf16([building_row(MOUNTAIN_BUILDING, "STORE_RC_TAHOMET_GATE"),
 				building_row("24297", "STORE_ROC_FRONT_GATE")]),
 			"teleportlink.txt": utf16(SOURCE_LINKS),
-			"itemdata.txt": utf16([["itemdata_20000.txt"]]),
-			"itemdata_20000.txt": utf16([["1", SOURCE_KEY_ID, KEY_ITEM]]),
+			**later_fixtures.sharded("itemdata.txt", {"itemdata_20000.txt": [["1", SOURCE_KEY_ID, KEY_ITEM]]}),
 			"questdata.txt": utf16(SOURCE_QUESTS if quests is None else quests),
 			"questcontentsdata.txt": utf16(SOURCE_CONTENTS if contents is None else contents),
 			roc.UI_TABLE: utf16(SOURCE_UI if ui is None else ui),

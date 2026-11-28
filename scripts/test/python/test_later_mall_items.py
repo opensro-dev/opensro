@@ -13,6 +13,7 @@ gets its own back on the off path (#4690).
 ===========================================================================
 """
 import script_paths  # noqa: F401  (puts scripts/ and its build folders on sys.path, #3410)
+import later_fixtures  # noqa: E402
 import json
 import os
 import tempfile
@@ -112,16 +113,13 @@ class LaterMallItemsTest(unittest.TestCase):
 		symbols = ["SN_" + code for code in ITEM_CODES + list(mall_items.SKILL_CODES)]
 		symbols += [symbol + "_TT_DESC" for symbol in symbols]
 		self.media = archive_bytes({
-			"itemdata.txt": utf16([["itemdata_40000.txt"]]),
-			"itemdata_40000.txt": utf16(item_rows),
-			"skilldata.txt": utf16([["skilldata_31000.txt"]]),
-			"skilldata_31000.txt": utf16(skill_rows),
+			**later_fixtures.sharded("itemdata.txt", {"itemdata_40000.txt": item_rows}),
+			**later_fixtures.sharded("skilldata.txt", {"skilldata_31000.txt": skill_rows}),
 			"textdata_equip&skill.txt": utf16([later_text_row(symbol, "Text of " + symbol) for symbol in symbols]),
 		})
 		native_item = ["0"] * items.ITEM_COLUMNS
 		native_item[0], native_item[1], native_item[2] = "1", str(NATIVE_ID), "ITEM_NATIVE_THING"
-		(text_root / "itemdata.txt").write_bytes(utf16([["itemdata_5000.txt"]]))
-		(text_root / "itemdata_5000.txt").write_bytes(utf16([native_item]))
+		later_fixtures.write_sharded(text_root, "itemdata.txt", {"itemdata_5000.txt": [native_item]})
 		native_skill = ["0"] * mall_items.SKILL_COLUMNS
 		native_skill[0], native_skill[1], native_skill[3] = "1", str(NATIVE_ID), "SKILL_NATIVE"
 		# The tree's index lists the scroll's shard wherever it lives.

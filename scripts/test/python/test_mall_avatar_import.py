@@ -10,6 +10,7 @@ import, the on/off/on rebuild and the absent-client skip.
 ===========================================================================
 """
 import script_paths  # noqa: F401  (puts scripts/ and its build folders on sys.path, #3410)
+import later_fixtures  # noqa: E402
 import json
 import os
 from pathlib import Path
@@ -583,8 +584,7 @@ class BuildTests(unittest.TestCase):
 		manifest = utf16([["itemdata_100001.txt"]])
 		files = {
 			"itemdata.txt": manifest, "itemdata_100001.txt": utf16(rows),
-			"textdata_equip&skill.txt": utf16([["textdata_equip&skill_1.txt"]]),
-			"textdata_equip&skill_1.txt": utf16(texts),
+			**later_fixtures.sharded("textdata_equip&skill.txt", {"textdata_equip&skill_1.txt": texts}),
 			"textdata_object.txt": utf16([]),
 		}
 		if mall:
@@ -714,8 +714,7 @@ class ArchiveTests(unittest.TestCase):
 		base = native / importer.TEXT_ROOT
 		base.mkdir(parents=True)
 		(output / importer.TEXT_ROOT).mkdir(parents=True)
-		(base / "itemdata.txt").write_bytes(utf16([["itemdata_5000.txt"]]))
-		(base / "itemdata_5000.txt").write_bytes(utf16([native_row(10)]))
+		later_fixtures.write_sharded(base, "itemdata.txt", {"itemdata_5000.txt": [native_row(10)]})
 		(base / "textdataname.txt").write_bytes(utf16([]))
 		for name, _ in importer.MALL_TABLES:
 			(base / name).write_bytes(utf16([]))

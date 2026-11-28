@@ -13,6 +13,7 @@ test_roc_rewards.py - the Roc kinds' database rewards joined to a variant (#3399
 ===========================================================================
 """
 import script_paths  # noqa: F401  (puts scripts/ and its build folders on sys.path, #3410)
+import later_fixtures  # noqa: E402
 import copy
 import json
 import tempfile
@@ -192,8 +193,7 @@ class RocRewardsTest(unittest.TestCase):
 		with tempfile.TemporaryDirectory() as root:
 			text_root = Path(root)
 			trophies = [item_row(20 + n, f"ITEM_QNO_RM_ARCHEMY_{n}", ("3", "3", "13", "1")) for n in range(1, 9)]
-			(text_root / "itemdata.txt").write_bytes(utf16([["itemdata_25000.txt"]]))
-			(text_root / "itemdata_25000.txt").write_bytes(utf16(trophies))
+			later_fixtures.write_sharded(text_root, "itemdata.txt", {"itemdata_25000.txt": trophies})
 			summary = rewards.add_rewards(text_root)
 			self.assertEqual((summary["trophies"], summary["waitingTrophies"]), (8, []))
 			written = json.loads((text_root / rewards.REWARDS_FILE).read_text(encoding="utf-8"))

@@ -11,6 +11,7 @@ source carries), and the item shard's stage/reap round trip.
 ===========================================================================
 """
 import script_paths  # noqa: F401  (puts scripts/ and its build folders on sys.path, #3410)
+import later_fixtures  # noqa: E402
 import json
 import tempfile
 import unittest
@@ -193,8 +194,7 @@ class RigidItemStagingTest(unittest.TestCase):
 		native, out = base / "native", base / "out"
 		native_text = native / rigid.later_world_import.TEXT_ROOT
 		native_text.mkdir(parents=True)
-		(native_text / "itemdata.txt").write_bytes(utf16([["itemdata_5000.txt"]]))
-		(native_text / "itemdata_5000.txt").write_bytes(utf16([]))
+		later_fixtures.write_sharded(native_text, "itemdata.txt", {"itemdata_5000.txt": []})
 		model = native / "Data_extracted" / "res" / "item" / "etc" / "drop_scroll.bsr"
 		model.parent.mkdir(parents=True)
 		model.write_bytes(b"JMXVRES 0109" + bytes(256))

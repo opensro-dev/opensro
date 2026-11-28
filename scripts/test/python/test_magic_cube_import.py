@@ -10,6 +10,7 @@ the marker; a native collision or a miscast row refuses.
 ===========================================================================
 """
 import script_paths  # noqa: F401  (puts scripts/ and its build folders on sys.path, #3410)
+import later_fixtures  # noqa: E402
 import json
 import os
 import tempfile
@@ -86,14 +87,12 @@ class MagicCubeImportTest(unittest.TestCase):
 		decoy[items.TYPE_FIRST:items.TYPE_FOURTH + 1] = ["3", "3", "1", "1"]
 		names = [text_row("SN_" + row[items.CODENAME], "Cube " + row[items.CODENAME]) for row in rows]
 		self.media = archive_bytes({
-			"itemdata.txt": utf16([["itemdata_40000.txt"]]),
-			"itemdata_40000.txt": utf16(rows + [decoy]),
+			**later_fixtures.sharded("itemdata.txt", {"itemdata_40000.txt": rows + [decoy]}),
 			"textdata_equip&skill.txt": utf16(names),
 		})
 		native_row = ["0"] * items.ITEM_COLUMNS
 		native_row[0], native_row[1], native_row[2] = "1", str(NATIVE_ID), "ITEM_NATIVE_THING"
-		(text_root / "itemdata.txt").write_bytes(utf16([["itemdata_5000.txt"]]))
-		(text_root / "itemdata_5000.txt").write_bytes(utf16([native_row]))
+		later_fixtures.write_sharded(text_root, "itemdata.txt", {"itemdata_5000.txt": [native_row]})
 		(text_root / cubes.NAME_TABLE).write_bytes(utf16([text_row("SN_ITEM_NATIVE_THING", "Native thing")]))
 		(native / cubes.TEXT_ROOT).mkdir(parents=True)
 		(native / cubes.TEXT_ROOT / cubes.NAME_TABLE).write_bytes(utf16([text_row("SN_ITEM_NATIVE_THING", "Native thing")]))

@@ -10,6 +10,7 @@ or a jewel that would reinforce a v1.150 item class, refuses.
 ===========================================================================
 """
 import script_paths  # noqa: F401  (puts scripts/ and its build folders on sys.path, #3410)
+import later_fixtures  # noqa: E402
 import json
 import os
 import tempfile
@@ -116,15 +117,13 @@ class NasrunImportTest(unittest.TestCase):
 			texts += [text_row(row[items.NAME_KEY]), text_row(row[items.DESCRIPTION_KEY])]
 		decoy = item_row("ITEM_EVENT_AVATAR_M_NASRUN", 24413, nasrun.WEARABLE_TYPE)
 		media = {
-			"itemdata.txt": utf16([["itemdata_25000.txt"]]),
-			"itemdata_25000.txt": utf16(rows + [decoy]),
+			**later_fixtures.sharded("itemdata.txt", {"itemdata_25000.txt": rows + [decoy]}),
 			"textdata_object.txt": utf16(texts),
 		}
 		self.media = archive_bytes(media)
 		native_row = ["0"] * items.ITEM_COLUMNS
 		native_row[0], native_row[1], native_row[2] = "1", str(NATIVE_ID), "ITEM_NATIVE_THING"
-		(text_root / "itemdata.txt").write_bytes(utf16([["itemdata_5000.txt"]]))
-		(text_root / "itemdata_5000.txt").write_bytes(utf16([native_row]))
+		later_fixtures.write_sharded(text_root, "itemdata.txt", {"itemdata_5000.txt": [native_row]})
 		names = utf16([["1", "SN_NATIVE_A", "", "", "", "", "", "", "Native A"]]) + utf16(
 			[["1", "SN_NATIVE_B", "", "", "", "", "", "", "Native B"]], newline="\n")[2:]
 		(text_root / nasrun.NAME_TABLE).write_bytes(names)
@@ -312,8 +311,7 @@ class NasrunSkillImportTest(unittest.TestCase):
 			texts |= {row[nasrun.SKILL_NAME_KEY], row[nasrun.SKILL_DESCRIPTION_KEY]}
 		decoy = skill_row("SKILL_EVENT_NASRUN_ECCENTRICDEMON_01", 31141)
 		self.media = archive_bytes({
-			"skilldata.txt": utf16([["skilldata_35000.txt"]]),
-			"skilldata_35000.txt": utf16([decoy] + rows),
+			**later_fixtures.sharded("skilldata.txt", {"skilldata_35000.txt": [decoy] + rows}),
 			"textdata_equip&skill.txt": utf16([text_row(key) for key in sorted(texts)]),
 		})
 		native_skill = ["0"] * nasrun.SKILL_COLUMNS
