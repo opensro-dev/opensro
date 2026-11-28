@@ -1730,7 +1730,7 @@
 					"writes": 0
 				},
 				"event": {
-					"reads": 19,
+					"reads": 20,
 					"writes": 0
 				},
 				"exchangeWindow": {
@@ -2457,7 +2457,7 @@
 				},
 				"event": {
 					"reads": 0,
-					"writes": 82
+					"writes": 83
 				},
 				"executeAction": {
 					"reads": 0,
@@ -2693,7 +2693,7 @@
 				},
 				"reverse": {
 					"reads": 0,
-					"writes": 11
+					"writes": 10
 				},
 				"runtimeError": {
 					"reads": 0,
@@ -3181,7 +3181,7 @@
 					"reads": 6,
 					"writes": 4
 				},
-				"event#anon99": {
+				"event#anon100": {
 					"reads": 1,
 					"writes": 0
 				},
@@ -7677,7 +7677,7 @@
 					"reads": 54,
 					"writes": 0
 				},
-				"event#anon34": {
+				"event#anon35": {
 					"reads": 3,
 					"writes": 0
 				},
@@ -11833,12 +11833,6 @@
 			"fn": "activate",
 			"kind": "prefix",
 			"ordinal": 1,
-			"pattern": "reverse-map-point:"
-		},
-		{
-			"fn": "activate",
-			"kind": "prefix",
-			"ordinal": 1,
 			"pattern": "reverse-party:"
 		},
 		{
@@ -13189,12 +13183,6 @@
 			"fn": "event",
 			"kind": "prefix",
 			"ordinal": 1,
-			"pattern": "reverse-map-point:"
-		},
-		{
-			"fn": "event",
-			"kind": "prefix",
-			"ordinal": 1,
 			"pattern": "server:"
 		},
 		{
@@ -13381,7 +13369,7 @@
 	"source": "src/engine/runtime/ui/ui.ts",
 	"summary": {
 		"fields": 309,
-		"routes": 874,
+		"routes": 872,
 		"sharedFields": 252
 	}
 }

@@ -702,15 +702,15 @@ test("reverse return points are xy_returnicon buttons, the old sign without that
 		rect: /** @type {import("../../src/engine/contracts/ui").UiRect} */ ([ 100, 200, 16, 16 ])
 	} ];
 	const clip = /** @type {import("../../src/engine/contracts/ui").UiRect} */ ([ 0, 0, 800, 600 ]);
-	const art = reverseMapButtons( { points, clip, hover: null, has: () => true } );
+	const art = reverseMapButtons( { points, clip, screen: clip, hover: null, has: () => true } );
 	assert.deepEqual( art.images[0].rect, [ 92, 192, 32, 32 ], "centred on the point" );
 	assert.deepEqual( art.images[0].uv, [ 0, 0, .5, 1 ], "the strip's left half" );
 	assert.ok( art.images[0].texture.endsWith( "/worldmap/map/xy_returnicon.png" ) );
 	assert.deepEqual( art.hits.map( hit => [ hit.id, hit.rect ] ), [ [ "reverse-map-point:4", [ 92, 192, 32, 32 ] ] ] );
-	const hovered = reverseMapButtons( { points, clip, hover: "reverse-map-point:4", has: () => true } );
+	const hovered = reverseMapButtons( { points, clip, screen: clip, hover: "reverse-map-point:4", has: () => true } );
 	assert.ok( hovered.images[0].texture.endsWith( "xy_returnicon_focus.png" ) );
 	assert.deepEqual( hovered.images[0].uv, [ 0, 0, 1, 1 ] );
-	const bare = reverseMapButtons( { points, clip, hover: null, has: () => false } );
+	const bare = reverseMapButtons( { points, clip, screen: clip, hover: null, has: () => false } );
 	assert.ok( bare.images[0].texture.endsWith( "wmap_sign_huntingpoint.png" ) );
 	assert.deepEqual( bare.hits[0].rect, [ 100, 200, 16, 16 ] );
 	assert.ok( bare.paths.some( path => path.endsWith( "xy_returnicon.png" ) ), "the art is still asked for" );
@@ -725,38 +725,84 @@ test("an open dungeon flag's menu hangs its floors below the icon, 155 x 22 each
 		rect: /** @type {import("../../src/engine/contracts/ui").UiRect} */ ([ 300, 200, 16, 16 ])
 	} ];
 	const floors = [ { id: 6, name: "Tomb of Qin-Shi Emperor lv.2" }, { id: 7, name: "Tomb of Qin-Shi Emperor lv.3" } ];
-	const shut = reverseMapButtons( { points, clip, hover: null, has: () => true } );
-	assert.deepEqual( shut.labels, [], "no menu until the flag is clicked" );
+	const shut = reverseMapButtons( { points, clip, screen: clip, hover: null, has: () => true } );
+	assert.deepEqual( shut.menu.labels, [], "no menu until the flag is clicked" );
 	const open = reverseMapButtons( {
 		points,
 		menu: { group: 2, floors },
 		clip,
+		screen: clip,
 		hover: "reverse-map-floor:7",
 		has: () => true
 	} );
 	// The flag's icon is [292, 192, 32, 32]: the menu starts 4 px below its
 	// bottom-left corner, its first entry 1 px into it (v1.188 0x6973a5, 0x631d60).
-	assert.deepEqual( open.hits.slice( 2 ).map( hit => [ hit.id, hit.rect ] ), [
+	assert.deepEqual( open.menu.hits.map( hit => [ hit.id, hit.rect ] ), [
 		[ "reverse-map-floor:6", [ 292, 229, 155, 22 ] ],
 		[ "reverse-map-floor:7", [ 292, 251, 155, 22 ] ]
 	] );
-	assert.deepEqual( open.labels.map( label => label.value ), floors.map( floor => floor.name ) );
-	assert.ok( open.images[2].texture.endsWith( "/worldmap/map/map_return.png" ) );
+	assert.deepEqual( open.menu.labels.map( label => label.value ), floors.map( floor => floor.name ) );
+	assert.ok( open.menu.images[0].texture.endsWith( "/worldmap/map/map_return.png" ) );
 	assert.ok(
-		open.images[3].texture.endsWith( "/worldmap/map/map_return_focus.png" ),
+		open.menu.images[1].texture.endsWith( "/worldmap/map/map_return_focus.png" ),
 		"the hovered entry's focus face"
 	);
-	const bare = reverseMapButtons( { points, menu: { group: 2, floors }, clip, hover: null, has: () => false } );
-	assert.equal( bare.images[2].texture, "", "a plain plate without the later client's art" );
-	assert.deepEqual( bare.hits[2].rect, [ 300, 221, 155, 22 ], "below the old sign's own rect" );
+	const bare = reverseMapButtons( {
+		points,
+		menu: { group: 2, floors },
+		clip,
+		screen: clip,
+		hover: null,
+		has: () => false
+	} );
+	assert.equal( bare.menu.images[0].texture, "", "a plain plate without the later client's art" );
+	assert.deepEqual( bare.menu.hits[0].rect, [ 300, 221, 155, 22 ], "below the old sign's own rect" );
 	const elsewhere = reverseMapButtons( {
 		points: points.slice( 0, 1 ),
 		menu: { group: 2, floors },
 		clip,
+		screen: clip,
 		hover: null,
 		has: () => true
 	} );
-	assert.deepEqual( elsewhere.labels, [], "a flag off the page shows no menu" );
+	assert.deepEqual( elsewhere.menu.labels, [], "a flag off the page shows no menu" );
+});
+
+test("a floor menu past the map's edge is seen whole and answers only where it is seen", async () => {
+	const { reverseMapButtons } = await import( "../../src/engine/runtime/ui/hud/reverse-map-buttons.ts" );
+	const ui =
+		/** @type {(rect: [number, number, number, number]) => import("../../src/engine/contracts/ui").UiRect} */ (
+			rect => rect
+		);
+	// The flag sits near the map pane's bottom edge (the pane ends at y 260),
+	// with a second point half outside its right edge (it ends at x 400).
+	const points = [
+		{ point: { id: 5, name: "Tomb-King Shi", group: 2 }, rect: ui( [ 300, 200, 16, 16 ] ) },
+		{ point: { id: 9, name: "Edge" }, rect: ui( [ 392, 100, 16, 16 ] ) }
+	];
+	const floors = [ { id: 6, name: "B1" }, { id: 7, name: "B2" }, { id: 8, name: "B3" } ];
+	const open = reverseMapButtons( {
+		points,
+		menu: { group: 2, floors },
+		clip: ui( [ 0, 0, 400, 260 ] ),
+		screen: ui( [ 0, 0, 800, 600 ] ),
+		hover: null,
+		has: () => true
+	} );
+	// The v1.188 popup is its own window: every entry is drawn on the
+	// screen's clip, not the pane's, and each one answers where it stands.
+	assert.deepEqual( open.menu.hits.map( hit => hit.rect[1] ), [ 229, 251, 273 ] );
+	assert.ok( open.menu.images.every( quad => quad.clip?.[3] === 600 ), "drawn past the pane" );
+	// The half-hidden icon answers only over its visible half.
+	assert.deepEqual( open.hits.find( hit => hit.id === "reverse-map-point:9" )?.rect, [ 384, 92, 16, 32 ] );
+	const gone = reverseMapButtons( {
+		points: [ { point: { id: 9, name: "Edge" }, rect: ui( [ 440, 100, 16, 16 ] ) } ],
+		clip: ui( [ 0, 0, 400, 260 ] ),
+		screen: ui( [ 0, 0, 800, 600 ] ),
+		hover: null,
+		has: () => true
+	} );
+	assert.deepEqual( gone.hits, [], "an icon wholly outside the pane takes no click" );
 });
 
 test("a long row name ends in an ellipsis with the whole name on hover, and gives up the badge first", () => {
