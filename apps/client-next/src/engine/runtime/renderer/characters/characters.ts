@@ -866,7 +866,9 @@ export function createCharacters( random?: import("@/engine/contracts/presentati
 				actor.time,
 				actor.loop,
 				actor.layers,
-				deferPoses && resource!.plan.sharedPalette
+				// An emitter's skeleton waits for a consumer: graph-drawn
+				// particles and ribbons never read it (PoseDeferral).
+				resource!.plan.emission ? "consumer" : deferPoses && resource!.plan.sharedPalette
 			)
 		) poseEvaluations++;
 		// A clip the model lacks played the rest pose (animation-pose.ts):

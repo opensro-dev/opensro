@@ -236,3 +236,32 @@ test("one layered pose cannot force eligible siblings onto CPU", () => {
 	b.palette( m.primitives[0], expected, 32 );
 	assert.deepEqual( bank.streams[0].data, expected );
 });
+
+test("a pose deferred to its consumers builds no skeleton until one asks, then the eager one's bytes", () => {
+	const m = model(), eager = createCharacterPose( m ), lazy = createCharacterPose( m );
+	const layers = [ { clip: "move", time: .5, weight: .5, lane: "event", loop: true }, {
+		clip: "move",
+		time: .3,
+		weight: .5,
+		lane: "timed",
+		loop: true
+	} ];
+	// Blended layers: the GPU cannot sample them, so deferral true builds at once.
+	const hybrid = createCharacterPose( m );
+	hybrid.evaluate( "", 0, true, layers, true );
+	assert.equal( hybrid.cpuEvaluations(), 1 );
+	const out = new Float32Array( 32 ), expected = new Float32Array( 32 );
+	for ( const time of [ .1, .4, .9 ] ) {
+		const request = layers.map( layer => ({ ...layer, time: layer.time + time }) );
+		eager.evaluate( "", 0, true, request );
+		assert.equal( lazy.evaluate( "", 0, true, request, "consumer" ), true );
+		assert.equal( lazy.evaluate( "", 0, true, request, "consumer" ), false, "the same inputs are no change" );
+	}
+	assert.equal( lazy.cpuEvaluations(), 0, "three frames without a consumer build nothing" );
+	assert.deepEqual( lazy.socket( "socket" ), eager.socket( "socket" ) );
+	assert.equal( lazy.cpuEvaluations(), 1 );
+	lazy.palette( m.primitives[0], out );
+	eager.palette( m.primitives[0], expected );
+	assert.deepEqual( out, expected );
+	assert.equal( lazy.cpuEvaluations(), 1, "the palette reuses the socket's evaluation" );
+});

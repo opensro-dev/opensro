@@ -217,3 +217,24 @@ test("a frame without a view holds nothing out of view", () => {
 		shown.dispose();
 	}
 });
+
+// ============================================================================
+
+test("an emitter drawn from its particle graph builds no CPU skeleton; one with a mesh builds its own", () => {
+	const drawn = renderer();
+	try {
+		let particles = 0;
+		for ( const time of [ 0, .051, .101, .151, .201 ] ) {
+			particles += drawn.frame( scenery( time, true ), time ).length;
+		}
+		assert.ok( particles > 0, "the graph's particles draw" );
+		assert.equal( drawn.owner.stats().cpuEvaluations, 0 );
+		// The same graph beside a mesh of the effect: the mesh's palette is a consumer.
+		drawn.owner.model( "meshed", { ...EFFECT, primitives: [ ...EFFECT.primitives, BODY.primitives[0] ] }, [] );
+		const meshed = scenery( .251, true ).map( actor => ({ ...actor, gid: 3, model: "meshed" }) );
+		drawn.frame( meshed, .251 );
+		assert.equal( drawn.owner.stats().cpuEvaluations, 1 );
+	} finally {
+		drawn.dispose();
+	}
+});
