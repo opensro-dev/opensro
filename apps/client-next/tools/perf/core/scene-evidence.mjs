@@ -23,6 +23,12 @@ import { mkdir, writeFile } from "node:fs/promises";
 // Debug console weather (gameplay.ts debug-weather, event-environment.ts
 // debugWeather): mode 3 is snow and holds until mode 1; 255 is the most.
 export const SNOW_MODE = 3, SNOW_AMOUNT = 255;
+// A drawn scene's luma spread (standard deviation, 0..255) is tens; a page
+// whose canvas never presented (a blank white or black frame: a browser in
+// a session with no display, a lost device) is under this.
+export const DRAWN_LUMA_SPREAD = 8;
+// Every PICTURE_STRIDE-th pixel of each axis is read: plenty for a spread.
+const PICTURE_STRIDE = 4;
 const SNOW_WAIT_MS = 10000, SNOW_POLL_MS = 200;
 // The chest socket a busy peer dresses (crowd-activity.mjs) and its imbue.
 const CHEST_SOCKET = 1;
@@ -98,6 +104,56 @@ export function readFrameEvidence( { imbue, chest } ) {
 
 /*
 ================
+pictureSpread
+
+The luma spread of a screenshot, decoded by the page itself (the bench has
+no image decoder): what tells a drawn scene from a frame that never
+presented. The client's state can be all there while nothing is drawn, so
+the verdict reads the picture too.
+================
+*/
+export async function pictureSpread( page, png ) {
+	return page.evaluate( async ( [base64, stride] ) => {
+		const bytes = Uint8Array.from( atob( base64 ), c => c.charCodeAt( 0 ) );
+		const bitmap = await createImageBitmap( new Blob( [ bytes ], { type: "image/png" } ) );
+		const canvas = new OffscreenCanvas( bitmap.width, bitmap.height ), context = canvas.getContext( "2d" );
+		context.drawImage( bitmap, 0, 0 );
+		const { data, width, height } = context.getImageData( 0, 0, bitmap.width, bitmap.height );
+		let n = 0, sum = 0, squares = 0;
+		for ( let y = 0; y < height; y += stride ) {
+			for ( let x = 0; x < width; x += stride ) {
+				const at = (y * width + x) * 4, luma = .299 * data[at] + .587 * data[at + 1] + .114 * data[at + 2];
+				n++;
+				sum += luma;
+				squares += luma * luma;
+			}
+		}
+		const mean = sum / n;
+		return { lumaMean: mean, lumaSpread: Math.sqrt( Math.max( 0, squares / n - mean * mean ) ) };
+	}, [ png.toString( "base64" ), PICTURE_STRIDE ] );
+}
+
+/*
+================
+assertDrawn
+
+Refuses a page whose picture is blank, before any window measures it: fps
+of a client that presents nothing is not a reading.
+================
+*/
+export async function assertDrawn( page, label ) {
+	const picture = await pictureSpread( page, await page.screenshot() );
+	if ( picture.lumaSpread < DRAWN_LUMA_SPREAD ) {
+		throw Error(
+			`${label}: the page shows no drawn scene (luma spread ${picture.lumaSpread.toFixed( 1 )}); ` +
+				"a browser without a display (an SSH session) renders nothing - run in the desktop session"
+		);
+	}
+	return picture;
+}
+
+/*
+================
 captureFrames
 
 The verify window: input( more ) is the scenario's own driver, run until
@@ -115,8 +171,8 @@ export async function captureFrames( { page, input, count, intervalMs, dir, pref
 			const started = Date.now();
 			const file = `${prefix}-${String( index ).padStart( 2, "0" )}.png`;
 			const evidence = await page.evaluate( readFrameEvidence, { imbue, chest: CHEST_SOCKET } );
-			await page.screenshot( { path: `${dir}/${file}` } );
-			frames.push( { index, file, ...evidence } );
+			const png = await page.screenshot( { path: `${dir}/${file}` } );
+			frames.push( { index, file, ...evidence, picture: await pictureSpread( page, png ) } );
 			await page.waitForTimeout( Math.max( 0, intervalMs - (Date.now() - started) ) );
 		}
 	} finally {
@@ -168,6 +224,7 @@ export function judgeFrames( frames, want ) {
 		dressChanged: [ ...dressed.values() ].filter( chests => chests.size > 1 && chests.has( 0 ) ).length,
 		imbuedPeers: imbued.size,
 		snowFrames: frames.filter( frame => frame.weather?.mode === SNOW_MODE ).length,
+		drawnFrames: frames.filter( frame => (frame.picture?.lumaSpread ?? 0) >= DRAWN_LUMA_SPREAD ).length,
 		heapMB: frames.length ?
 			{
 				min: Math.min( ...frames.map( frame => frame.heapMB ) ),
@@ -176,6 +233,9 @@ export function judgeFrames( frames, want ) {
 			null
 	};
 	const failed = [];
+	// Whatever the scenario promises, every frame must show a drawn scene:
+	// the client's state alone passed a page that presented nothing.
+	if ( verdict.drawnFrames !== frames.length ) failed.push( "a frame shows no drawn scene" );
 	if ( want.camera && !cameraTurns ) failed.push( "camera never moved" );
 	if ( want.actors && !peerMoves ) failed.push( "no actor moved" );
 	if ( want.dress && !verdict.dressChanged ) failed.push( "no actor changed clothes" );

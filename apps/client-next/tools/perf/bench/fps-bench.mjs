@@ -116,7 +116,7 @@ import { keepGoing, drag, walk, approach, fight, cross, loadCombat, combat, stri
 import { CROWD_HOST_URL, DEFAULT_ACTIVITY_SEED, obtainCrowd } from "../core/crowd.mjs";
 import { BUSY_IMBUE_SKILL, parseActivity } from "../core/crowd-activity.mjs";
 import { gpuTimeRow, gpuTimingCursor, gpuTimingSince, summarizeGpuTiming } from "../core/gpu-time.mjs";
-import { captureFrames, holdSnow, judgeFrames } from "../core/scene-evidence.mjs";
+import { assertDrawn, captureFrames, holdSnow, judgeFrames } from "../core/scene-evidence.mjs";
 import { cleanupCombat, combatResidue } from "../core/combat-cleanup.mjs";
 import { processCosts } from "../core/trace.mjs";
 
@@ -663,6 +663,8 @@ async function session( options, location, results ) {
 			await crowdInView( client.page, crowd.peers );
 		}
 		if ( options.snow ) await holdSnow( client.page );
+		// Before any window: a page that presents nothing measures nothing.
+		await assertDrawn( client.page, location.name );
 		captures = await createCaptures( client.page, {
 			dir: options.out,
 			cpu: options.cpu,
