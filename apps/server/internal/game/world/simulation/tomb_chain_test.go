@@ -631,3 +631,61 @@ func TestTombChainFloor6StagesArmFireAndRearm(t *testing.T) {
 		}
 	}
 }
+
+/*
+================
+TestTombWaveSpawnTakesItsCodenamesTactics
+
+A Floor 6 stage codename nested only on another floor spawns at the
+stage point with that nest's tactics (the server picks a wave
+monster's tactics by its ref, #4817); one with no tomb nest at all
+keeps the pinned wander contract.
+================
+*/
+func TestTombWaveSpawnTakesItsCodenamesTactics(t *testing.T) {
+	const general, floor3 = "MOB_TQ_SNAKEGENERAL_CLON", uint16(0x8005)
+	ids := tombFloor6Refs()
+	refs := map[uint32]monster.MonsterRef{
+		tombRefEast:  tombChainRef(tombRefEast, "MOB_TQ_EASTGUARDIAN"),
+		tombRefSouth: tombChainRef(tombRefSouth, "MOB_TQ_SOUTHGUARDIAN"),
+		tombRefWest:  tombChainRef(tombRefWest, "MOB_TQ_WESTGUARDIAN"),
+		tombRefNorth: tombChainRef(tombRefNorth, "MOB_TQ_NORTHGUARDIAN"),
+		tombRefFlame: tombChainRef(tombRefFlame, "MOB_TQ_FLAMEMASTER"),
+	}
+	for codename, id := range ids {
+		refs[id] = tombChainRef(id, codename)
+	}
+	elsewhere := tombChainNest(ids[general], 900)
+	elsewhere.RegionID = floor3
+	elsewhere.Aggressive, elsewhere.SightRange = true, 200
+	nests := []monster.NestRow{
+		tombChainNest(tombRefEast, 100), tombChainNest(tombRefSouth, 200), tombChainNest(tombRefWest, 300),
+		tombChainNest(tombRefNorth, 400), tombChainNest(tombRefFlame, 500), elsewhere,
+	}
+	s := NewMonsterState(monster.TemplateFromParts(refs, nests))
+	s.SetTimeSource(func() time.Time { return tombChainBase })
+	s.SetRandomSource(constantWord(16384))
+	if err := s.InstallTombChain(); err != nil {
+		t.Fatalf("InstallTombChain: %v", err)
+	}
+	s.StartDivision("division")
+	tombAdvance(s, 1000)
+	var found, bare bool
+	for _, in := range s.InstancesInRegions("division", []uint16{0x8002}) {
+		switch in.Ref.Codename {
+		case general:
+			found = true
+			if !in.Nest.Aggressive || in.Nest.SightRange != 200 || in.Nest.RegionID != 0x8002 || in.Nest.X != -17 {
+				t.Fatalf("%s spawned with nest %+v, want the floor 3 tactics at the South point", general, in.Nest.SpawnPoint)
+			}
+		case "MOB_TQ_SNAKEGENERAL_CLON2":
+			bare = true
+			if in.Nest.Aggressive || !in.Nest.PolicyPinned {
+				t.Fatal("a codename with no tomb nest took tactics from nowhere")
+			}
+		}
+	}
+	if !found || !bare {
+		t.Fatalf("South stage not spawned (general %v, clone 2 %v)", found, bare)
+	}
+}
