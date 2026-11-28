@@ -282,3 +282,67 @@ test("a pose deferred to its consumers builds no skeleton until one asks, then t
 	assert.deepEqual( out, expected );
 	assert.equal( lazy.cpuEvaluations(), 1, "the palette reuses the socket's evaluation" );
 });
+
+/*
+================
+branchedModel
+
+A root with two children: the socket's chain (root, socket) and a side
+branch (arm) a socket request never needs. Two clips animate all three.
+================
+*/
+function branchedModel() {
+	const node = ( name, parent, y ) => ({
+		name,
+		parent,
+		translation: [ 0, y, 0 ],
+		rotation: [ 0, 0, 0, 1 ],
+		scale: [ 1, 1, 1 ]
+	});
+	const turn = ( n, z ) => ({
+		node: n,
+		path: "rotation",
+		interpolation: "LINEAR",
+		times: Float32Array.of( 0, 1 ),
+		values: Float32Array.of( 0, 0, 0, 1, 0, 0, Math.sin( z ), Math.cos( z ) )
+	});
+	const slide = ( n, x ) => ({
+		node: n,
+		path: "translation",
+		interpolation: "LINEAR",
+		times: Float32Array.of( 0, 1 ),
+		values: Float32Array.of( 0, 0, 0, x, 1, 0 )
+	});
+	return {
+		nodes: [ node( "root", -1, 0 ), node( "socket", 0, 3 ), node( "arm", 0, 2 ) ],
+		clips: [
+			{ name: "cast", duration: 1, channels: [ slide( 0, 4 ), turn( 1, .7 ), turn( 2, -1.1 ), slide( 2, 2 ) ] },
+			{ name: "walk", duration: 1, channels: [ turn( 0, .3 ), slide( 1, -3 ), turn( 2, .9 ) ] }
+		],
+		primitives: [ { joints: [ 0, 1, 2 ], inverseBind: Float32Array.from( [ ...I(), ...I(), ...I() ] ) } ]
+	};
+}
+
+test("a blended pose sampled by its socket chain first, then the rest, gives the bytes of one whole pass", () => {
+	const m = branchedModel();
+	const layers = [
+		{ clip: "cast", time: .35, weight: .3, lane: "event", loop: true },
+		{ clip: "walk", time: .6, weight: .4, lane: "timed", loop: true },
+		{ clip: "cast", time: .9, weight: .5, lane: "timed", loop: true }
+	];
+	for ( const order of [ "socket-first", "palette-first" ] ) {
+		const eager = createCharacterPose( m ), lazy = createCharacterPose( m );
+		eager.evaluate( "", 0, false, layers );
+		lazy.evaluate( "", 0, false, layers, true );
+		const expected = new Float32Array( 48 ), out = new Float32Array( 48 );
+		eager.palette( m.primitives[0], expected );
+		if ( order === "socket-first" ) {
+			assert.deepEqual( lazy.socket( "socket" ), eager.socket( "socket" ), order );
+			lazy.palette( m.primitives[0], out );
+		} else {
+			lazy.palette( m.primitives[0], out );
+			assert.deepEqual( lazy.socket( "socket" ), eager.socket( "socket" ), order );
+		}
+		assert.deepEqual( out, expected, order );
+	}
+});
