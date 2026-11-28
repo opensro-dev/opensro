@@ -128,6 +128,59 @@ func TestQuestKillCreditsTheFatalHitPlayer(t *testing.T) {
 	}
 }
 
+/*
+================
+TestSoloKillSkipsAContributorWhoDiedOrLeft
+
+A player hit a monster, died and went back to town; another player killed
+it and the first still earned experience (the v1.188 server pays every solo
+damage row). Port-only, owner 2026-11-28: a solo contributor must
+be alive and within share range of the kill, as a party member must.
+================
+*/
+func TestSoloKillSkipsAContributorWhoDiedOrLeft(t *testing.T) {
+	for _, tc := range []struct {
+		name  string
+		leave func(c *enterworld.Character)
+	}{
+		{"dead", func(c *enterworld.Character) { c.CurrentHP = testInt64(0) }},
+		{"back in town", func(c *enterworld.Character) {
+			spawn := *c.World.Spawn
+			spawn.RegionID = testInt64(*spawn.RegionID + 10) // ten sectors east
+			c.World = &enterworld.CharacterWorld{Spawn: &spawn, SpawnSet: true}
+		}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			rt, _, actor, target := newCombatTestRuntime(t, 100)
+			peer := *actor
+			peer.ID, peer.Name = 4, "contributor"
+			deps := rt.deps.(*enterworld.Deps)
+			source := fixtureCharacters(deps.Characters)
+			source[testDivision] = append(source[testDivision], &peer)
+			gid := enterworld.ObjectIDForCharacter(&peer)
+			if hits := rt.Monsters.ApplyDamageSequence(testDivision, target.Gid, 100,
+				[]simulation.MonsterDamagePlan{{GID: target.Gid, Damage: 99, CreditGID: gid}}); len(hits) != 1 || hits[0].Fatal {
+				t.Fatal("preparation failed")
+			}
+			tc.leave(&peer)
+			installSmallGoldRef(rt)
+			rt.DropRoll = goldOnlyMonsterDropRoll(0, 0)
+			rewards := map[int64]int64{}
+			rt.UpdateExperience = func(c *enterworld.Character, exp, sexp int64, _ uint32) ([]wire.Frame, bool) {
+				rewards[c.ID] += exp
+				return []wire.Frame{{Opcode: wire.OpExpUpdate}}, true
+			}
+			rt.HandleTargetInteract(testDivision, actor, wire.SkillAction{ActionId: 2, HasTarget: true, TargetGid: target.Gid}.Encode())
+			if rewards[peer.ID] != 0 {
+				t.Fatalf("the absent contributor earned %d experience", rewards[peer.ID])
+			}
+			if rewards[actor.ID] == 0 {
+				t.Fatalf("the killer lost its own share: %v", rewards)
+			}
+		})
+	}
+}
+
 func TestPartyKillPaysNearbyIdleMemberButExcludesDeadAndOffline(t *testing.T) {
 	rt, _, actor, target := newCombatTestRuntime(t, 1)
 	deps := rt.deps.(*enterworld.Deps)

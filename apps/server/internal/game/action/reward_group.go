@@ -206,6 +206,19 @@ func withinPartyRewardRange(a, b simulation.Spawn) bool {
 
 /*
 ================
+rewardRecipientPresent
+
+Whether an actor may take a kill's experience: alive, in the kill's world and
+within the party share range of the spot it is measured from (the winner for
+a party, the killer for a solo contributor).
+================
+*/
+func (rt *Runtime) rewardRecipientPresent(division string, a rewardActor, world uint32, spot simulation.Spawn, now int64) bool {
+	return a.world == world && enterworld.CharacterAlive(a.character) && withinPartyRewardRange(spot, rt.rewardActorPose(division, a, now))
+}
+
+/*
+================
 isPartyMonster
 
 The reference server's party-monster test: the rarity byte's high nibble is exactly
@@ -449,6 +462,18 @@ func (rt *Runtime) settleMonsterInsideDoorCounted(division string, actor *enterw
 		var factors []float32
 		if g.party == nil {
 			a := roster.actors[g.representative]
+			// Port-only, not native (owner 2026-11-28; native defects are
+			// fixed): the v1.188 server pays a solo damage row with no
+			// presence test (its kill walk checks only that the
+			// attacker is a logged-in player, and the rows are cleared only
+			// when the monster is released), so a player who died and went
+			// back to town still earned the kill. A solo contributor other
+			// than the killer now has to be alive, in the killer's world and
+			// within share range of it, as a party member has to be.
+			if actor != nil && a.character != actor && !rt.rewardRecipientPresent(division, a,
+				domain.CharacterWorldInstance(actor), rt.rewardActorPose(division, rewardActor{character: actor}, now), now) {
+				continue
+			}
 			members = []rewardActor{a}
 			factor := float32(1)
 			if a.party != nil {
@@ -460,7 +485,7 @@ func (rt *Runtime) settleMonsterInsideDoorCounted(division string, actor *enterw
 			factors = []float32{factor}
 		} else {
 			for _, gid := range g.party.Members {
-				if a, ok := roster.actors[gid]; ok && a.world == originWorld && enterworld.CharacterAlive(a.character) && withinPartyRewardRange(origin, rt.rewardActorPose(division, a, now)) {
+				if a, ok := roster.actors[gid]; ok && rt.rewardRecipientPresent(division, a, originWorld, origin, now) {
 					members = append(members, a)
 				}
 			}
