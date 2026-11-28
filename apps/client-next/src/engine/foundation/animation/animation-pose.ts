@@ -30,6 +30,7 @@ import type {
 import { compose, multiplyDisjoint as multiply, multiplyQuaternion, slerp } from "@/engine/foundation/math/pose-math";
 import { paletteBindings } from "./palette-bindings";
 import { bodyBoneScale } from "./body-shape";
+import { gpuPoseRefusal, gpuPoseSample, type PoseLayer } from "./gpu-pose-layers";
 
 const DEFAULT_BODY_VOLUME = 2;
 // A node's materialization state in one evaluation (createCharacterPose ready).
@@ -39,9 +40,8 @@ const RADIAL_WORDS = [ 4, 5, 6, 8, 9, 10 ] as const;
 // Distinct missing clip names one evaluator records: a model is one
 // catalogue row, so a handful of names says everything about it.
 export const MAX_MISSING_CLIPS = 8;
-// The layers the GPU skeleton pass mixes (CharacterGpuSample): a
-// crossfade's two. More fall back to the CPU mixer.
-export const MAX_GPU_LAYERS = 2;
+// The layers the GPU skeleton pass mixes, re-exported for its readers.
+export { MAX_GPU_LAYERS } from "./gpu-pose-layers";
 /*
 ================
 PoseDeferral
@@ -203,7 +203,7 @@ without changing skeleton storage, the selected layers or their revision.
     Validated sampling identity retained between frames.
     ================
     */
-	type ResolvedLayer = { clip: CharacterClip | undefined; time: number; weight: number; lane: "event" | "timed"; };
+	type ResolvedLayer = PoseLayer;
 	let resolved: ResolvedLayer[] = [], pendingLayers: ResolvedLayer[] = [], hasPose = false;
 	// One CCompChar bone rotator (spine-aim.ts): its node, rotation and whether
 	// it changed since the last evaluation. A released node recomposes once.
@@ -213,62 +213,16 @@ without changing skeleton storage, the selected layers or their revision.
 	const sampleRequest = { clip: model.clips[0]!, time: 0, next: null as CharacterClip | null, nextTime: 0, share: 0 };
 	/*
 ================
-gpuRefusal
+gpuRefusal / gpuSample
 
-Why the GPU sampler cannot take this pose (null when it can): it samples
-one clip at full weight on the default body with no rotated bone.
+The GPU skeleton pass's view of this pose (gpu-pose-layers.ts).
 ================
 	*/
 	function gpuRefusal(): string | null {
-		if ( volume !== DEFAULT_BODY_VOLUME ) return "body volume";
-		if ( rotatedNode >= 0 ) return "bone rotation";
-		// The mixer skips a layer without a clip or weight (sampleLayers):
-		// only the layers that contribute count.
-		let live = 0;
-		for ( const layer of resolved ) {
-			if ( !layer.clip || layer.weight === 0 ) continue;
-			if ( ++live > MAX_GPU_LAYERS ) return "layers";
-			if ( !gpuClips.has( layer.clip ) ) return "clip not on gpu";
-		}
-		return live ? null : "no clip";
+		return gpuPoseRefusal( resolved, gpuClips, volume === DEFAULT_BODY_VOLUME, rotatedNode );
 	}
-	/*
-================
-gpuSample
-================
-	*/
 	function gpuSample(): CharacterGpuSample | null {
-		if ( gpuRefusal() ) return null;
-		let first: ResolvedLayer | undefined, second: ResolvedLayer | undefined;
-		for ( const layer of resolved ) {
-			if ( !layer.clip || layer.weight === 0 ) continue;
-			if ( first ) second = layer;
-			else first = layer;
-		}
-		// Event tracks commit before timed ones (sampleLayers): the event
-		// layer of a split pair goes first.
-		if ( second && first!.lane === "timed" && second.lane === "event" ) [first, second] = [ second, first ];
-		sampleRequest.clip = first!.clip!;
-		sampleRequest.time = first!.time;
-		sampleRequest.next = second?.clip ?? null;
-		sampleRequest.nextTime = second?.time ?? 0;
-		sampleRequest.share = second ? mixShare( first!, second ) : 0;
-		return sampleRequest;
-	}
-	/*
-================
-mixShare
-
-How far toward the second layer a node both animate is mixed, as the CPU
-mixer computes it: one lane accumulates by w/(sum+w); across lanes the
-event layer commits min(w, 1) first and the timed one gets only the
-remaining headroom.
-================
-	*/
-	function mixShare( first: ResolvedLayer, second: ResolvedLayer ): number {
-		if ( first.lane === second.lane ) return second.weight / (first.weight + second.weight);
-		const committed = Math.min( first.weight, 1 ), weight = Math.min( second.weight, 1 - committed );
-		return weight > 0 ? weight / (committed + weight) : 0;
+		return gpuRefusal() ? null : gpuPoseSample( resolved, sampleRequest );
 	}
 	/*
 ================
