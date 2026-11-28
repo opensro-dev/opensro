@@ -204,13 +204,7 @@ but an off value is a boot error naming the setting.
 ================
 */
 func JanganAlchemyShopFromEnv() (bool, error) {
-	switch strings.ToLower(strings.TrimSpace(os.Getenv(EnvJanganAlchemyShop))) {
-	case "", "1", "on", "true":
-		return true, nil
-	case "0", "off", "false":
-		return false, nil
-	}
-	return false, fmt.Errorf("%s=%q: want on or off", EnvJanganAlchemyShop, os.Getenv(EnvJanganAlchemyShop))
+	return switchFromEnv(EnvJanganAlchemyShop, true)
 }
 
 /*

@@ -709,7 +709,7 @@ import { wearerSex } from "@/engine/foundation/ui/item-equipment-overlay";
 import { itemTooltipSet, tooltipSetViewer } from "@/engine/foundation/ui/item-tooltip-set";
 import { isWeaponSwitchScroll, weaponRaceName } from "@/engine/foundation/gameplay/weapon-switch";
 import { raceSwitchKindOf } from "@/engine/foundation/gameplay/race-switch";
-import { commerceTooltip, mallTooltipRows } from "@/engine/foundation/ui/commerce-tooltip";
+import { commerceTooltip, mallTitle, mallTooltipRows } from "@/engine/foundation/ui/commerce-tooltip";
 import { effectivePartyOptions } from "@/engine/foundation/ui/party-options";
 import { monsterPartyNameplate } from "@/engine/foundation/ui/monster-nameplate";
 import { skillTooltip } from "@/engine/foundation/ui/skill-tooltip";
@@ -29922,7 +29922,7 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 							] );
 						} else if ( state.selected && game.itemMall ) {
 							const offer = state.selected;
-							mallText( hudCopy( offer.name ), [ dx, dy, dw, 32 ] );
+							mallText( mallTitle( hudCopy( offer.name ), offer ), [ dx, dy, dw, 32 ] );
 							const price = mallCurrencyRows( offer, state.quantity, state.points ).rows.map( row =>
 								`${hudCopy( row.label )}: ${row.amount}`
 							).join( "   " );
@@ -29983,7 +29983,7 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 							mallText( hudCopy( quote.caption ), [ dx, dy, dw, 32 ] );
 							mallText(
 								question.offers.length === 1 ?
-									hudCopy( question.offers[0]!.name ) :
+									mallTitle( hudCopy( question.offers[0]!.name ), question.offers[0]! ) :
 									`${question.offers.length} items`,
 								[ dx, dy + 36, dw, 32 ]
 							);
@@ -30220,11 +30220,16 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 								}
 								controls.push( {
 									id: "item-mall-offer:" + offer.packageId,
-									label: hudCopy( offer.name ),
+									label: mallTitle( hudCopy( offer.name ), offer ),
 									kind: "button",
 									rect: [ x + 4, y + 4, 32, 32 ]
 								} );
-								mallText( hudCopy( offer.name ), [ x + 40, y + 4, cardWidth - 44, 36 ] );
+								mallText( mallTitle( hudCopy( offer.name ), offer ), [
+									x + 40,
+									y + 4,
+									cardWidth - 44,
+									36
+								] );
 								mallText( `Silk ${offer.silk}   Gift ${offer.giftSilk}`, [
 									x + 4,
 									y + 40,
@@ -30922,7 +30927,12 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 										continue;
 									}
 									nativePage( row, rx, ry, [ 8, 10, 11 ] );
-									authoredText( mallControl( row, 11 ), rx, ry, hudCopy( offer.name ) );
+									authoredText(
+										mallControl( row, 11 ),
+										rx,
+										ry,
+										mallTitle( hudCopy( offer.name ), offer )
+									);
 									authoredText( mallControl( row, 10 ), rx, ry, String( offer.silk ) );
 									authoredText( mallControl( row, 8 ), rx, ry, hudCopy( "UIIT_STT_SILKMALL_SILK" ) );
 									const icon = iconPath( offer.icon );
@@ -30947,7 +30957,7 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 									}
 									controls.push( {
 										id: "item-mall-offer:" + offer.packageId,
-										label: hudCopy( offer.name ),
+										label: mallTitle( hudCopy( offer.name ), offer ),
 										rect: authoredRect( mallControl( row, 1 ), rx, ry ),
 										kind: "button"
 									} );
@@ -31017,7 +31027,12 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 							authoredChrome( node, mx, my );
 							if ( node.text ) authoredText( node, mx, my, hudCopy( node.text ) );
 						}
-						authoredText( mallControl( page, 40 ), mx, my, hudCopy( state.selected.name ) );
+						authoredText(
+							mallControl( page, 40 ),
+							mx,
+							my,
+							mallTitle( hudCopy( state.selected.name ), state.selected )
+						);
 						authoredText( mallControl( page, 42 ), mx, my, String( state.quantity ) );
 						const icon = iconPath( state.selected.icon );
 						if ( icon ) authoredImage( { ...mallControl( page, 11 ), texture: icon }, mx, my );
@@ -31141,7 +31156,7 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 							const offer = question.offers[0]!;
 							authoredImage( mallControl( store, 10 ), mx, my );
 							authoredImage( mallControl( store, 1 ), mx, my );
-							authoredText( mallControl( store, 1 ), mx, my, hudCopy( offer.name ) );
+							authoredText( mallControl( store, 1 ), mx, my, mallTitle( hudCopy( offer.name ), offer ) );
 							const icon = iconPath( offer.icon );
 							if ( icon ) authoredImage( { ...mallControl( store, 12 ), texture: icon }, mx, my );
 						} else {
@@ -31155,7 +31170,7 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 										{ ...template, rect: [ 70, y, 100, 16 ], hAlign: 2 },
 										mx,
 										my,
-										hudCopy( offer.name )
+										mallTitle( hudCopy( offer.name ), offer )
 									);
 									authoredText(
 										{ ...template, rect: [ 165, y, 40, 16 ], hAlign: 2 },
@@ -31773,7 +31788,7 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 							itemMall.read( game.itemMall ).offers[Number( id.slice( "item-mall-popup:".length ) )];
 						if ( offer ) {
 							tooltip = [
-								{ value: lookup( offer.name ), color: 0xffffffff, heading: true },
+								{ value: mallTitle( lookup( offer.name ), offer ), color: 0xffffffff, heading: true },
 								...tooltipDescription( lookup( offer.description ) ),
 								...mallTooltipRows( offer, {
 									rollOfCloth: lookup( "UIIT_STT_ROLL_OF_CLOTH" ),

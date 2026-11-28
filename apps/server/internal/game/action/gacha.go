@@ -745,7 +745,9 @@ sends once 642270 found a voucher in the bag. Per the reference server's exchang
 every win or loss voucher in the bag is redeemed in one request, walking the
 bag in slot order (redeemGachaVoucher pays each). A card the exchange cannot
 pay (a stacked row, a pair that is not an enabled prize row, so the exchange
-can only hand out what a roll could have written) is passed by; a reward that
+can only hand out what a roll could have written, or a reward that cannot
+be made: ground-only, or an option its spec cannot resolve) is passed by,
+and the first one passed by names the refusal; a reward that
 cannot be granted (a full bag) stops the walk, keeps the vouchers already
 redeemed and answers 5. Evidence: ../research/findings/magic-pop-biiv-server-v1188.md
 ("Gori's exchange takes every result card in one talk").
@@ -783,7 +785,7 @@ func (rt *Runtime) HandleGachaExchange(
 
 	failure := "no exchangeable voucher"
 	var frames []wire.Frame
-	stopped := false
+	stopped, passedBy := false, false
 	committed := rt.deps.Update(character, "gacha-exchange", func() bool {
 		if character.DeletePending || rt.deps.ItemReferences() == nil {
 			return false
@@ -792,8 +794,11 @@ func (rt *Runtime) HandleGachaExchange(
 			redeemed, skip, err := rt.redeemGachaVoucher(character, slot)
 			if err != nil && skip {
 				// Not an exchangeable card (stacked, an invalid pair, an
-				// unresolved reward): the native loop passes the slot by.
-				failure = err.Error()
+				// unresolved or unpayable reward): the native loop passes
+				// the slot by. The first card passed by names the refusal.
+				if !passedBy {
+					failure, passedBy = err.Error(), true
+				}
 				continue
 			}
 			if err != nil {
@@ -827,7 +832,9 @@ slot order: the native exchange walks the bag from slot 13 upward.
 func (rt *Runtime) gachaVoucherSlots(character *enterworld.Character) []uint8 {
 	var slots []uint8
 	for _, row := range character.MissionInventory {
-		if row.Slot < int64(inventory.EquipmentSlotEnd) || !inventory.IsBagSlot(uint8(row.Slot), inventory.BagEnd(character)) ||
+		// The stored slot is an int64: InBag range-checks it before any
+		// narrowing, so a slot of 256 or more never aliases a low bag slot.
+		if !inventory.InBag(character, row.Slot) ||
 			!rt.GachaCatalog.IsResultCard(row.RefObjID) || len(row.MagicOptions) != 2 {
 			continue
 		}
@@ -867,6 +874,11 @@ func (rt *Runtime) redeemGachaVoucher(character *enterworld.Character, slot uint
 		return nil, true, fmt.Errorf("voucher at slot %d is gone", slot)
 	}
 	row := character.MissionInventory[index]
+	// The walk listed this slot for a result card with its pair; the row
+	// found here must still be that card before its pair is read.
+	if !rt.GachaCatalog.IsResultCard(row.RefObjID) || len(row.MagicOptions) != 2 {
+		return nil, true, fmt.Errorf("slot %d no longer holds a result card", slot)
+	}
 	if row.StackCount != 1 {
 		return nil, true, fmt.Errorf("voucher row at slot %d is stacked (%d)", row.Slot, row.StackCount)
 	}
@@ -886,7 +898,10 @@ func (rt *Runtime) redeemGachaVoucher(character *enterworld.Character, slot uint
 	}
 	rewardItem, err := rt.prepareGachaRewardItem(reward, quantity, rt.GachaCatalog.SpecForPair(rewardRef, quantity))
 	if err != nil {
-		return nil, false, err
+		// A fault of this card's reward (ground-only, an option its spec
+		// cannot resolve), not of the bag: pass the card by, or it would
+		// block every card after it on every talk.
+		return nil, true, err
 	}
 	rows, planned, err := rt.planInventoryItemsGrant(
 		character,

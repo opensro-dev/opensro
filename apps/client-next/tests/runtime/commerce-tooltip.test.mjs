@@ -12,7 +12,9 @@ gold from an item's reference fields or losing precision through Number.
 import "../helpers/native-source-loader.mjs";
 import assert from "node:assert/strict";
 import test from "node:test";
-const { commerceTooltip, mallTooltipRows } = await import( "../../src/engine/foundation/ui/commerce-tooltip.ts" );
+const { commerceTooltip, mallTitle, mallTooltipRows } = await import(
+	"../../src/engine/foundation/ui/commerce-tooltip.ts"
+);
 
 // Independent translated labels catch accidental raw-symbol output.
 const mallCopy = { rollOfCloth: "ROLL", silk: "SILK", giftSilk: "GIFT" };
@@ -192,4 +194,9 @@ test("a token offer prints its token price and the balance it is paid from", () 
 			"You hold : 130"
 		]
 	);
+});
+
+test("a pack's title names the count it delivers; a single's title is its name", () => {
+	assert.equal( mallTitle( "10% damage increase scroll", { count: 11 } ), "10% damage increase scroll (x11)" );
+	assert.equal( mallTitle( "10% damage increase scroll", {} ), "10% damage increase scroll" );
 });

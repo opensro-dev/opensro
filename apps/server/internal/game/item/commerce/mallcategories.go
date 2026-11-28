@@ -312,13 +312,7 @@ MallCategoriesFromEnv
 ================
 */
 func MallCategoriesFromEnv() (bool, error) {
-	switch strings.ToLower(strings.TrimSpace(os.Getenv(EnvMallCategories))) {
-	case "1", "on", "true":
-		return true, nil
-	case "", "0", "off", "false":
-		return false, nil
-	}
-	return false, fmt.Errorf("%s=%q: want on or off", EnvMallCategories, os.Getenv(EnvMallCategories))
+	return switchFromEnv(EnvMallCategories, false)
 }
 
 /*
