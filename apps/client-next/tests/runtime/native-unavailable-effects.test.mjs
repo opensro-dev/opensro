@@ -81,7 +81,10 @@ test("a variant's closure-gap effect draws nothing, and its gap list is validate
 			c => c.unavailable.closureGaps = [ "../escape.ddj" ],
 			c => c.unavailable.closureGaps = [ 7 ],
 			// One file cannot claim both proofs.
-			c => c.unavailable.archiveSha256 = evidence.sha256
+			c => c.unavailable.archiveSha256 = evidence.sha256,
+			// Nor carry a malformed gap list beside a valid archive proof.
+			c => Object.assign( c.unavailable, { archiveSha256: evidence.sha256, closureGaps: [] } ),
+			c => Object.assign( c.unavailable, { archiveSha256: evidence.sha256, closureGaps: "x" } )
 		]
 	) {
 		const c = gapFile();
