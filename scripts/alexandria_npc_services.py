@@ -16,6 +16,7 @@ import honor_shops
 import alexandria_shop_supplies as supplies
 import import_vsro_alexandria as tables
 import later_tables
+import shop_layout
 
 SHOP_TABLES = (
 	"refshopgroup.txt", "refmappingshopgroup.txt", "refshop.txt",
@@ -27,6 +28,10 @@ IDENTITY_TABLES = {"refshopgroup.txt", "refshop.txt", "refshoptabgroup.txt", "re
 RESTORED_STORE_NPCS = {"NPC_SD_M_AREA_ACCESSORY", "NPC_SD_T_AREA_ACCESSORY"}
 GOODS_TAB = 2
 GOODS_SLOT = 4
+# Items the port has no use for yet, by code prefix, with the issue that
+# brings the use: a package of nothing else waits instead of selling a
+# dead item (the VSRO accessory stores' Socket Stones: socket alchemy).
+PENDING_USE = {"ITEM_ETC_SOCKET_STONE_": "#3911 socket alchemy"}
 
 
 # ================
@@ -64,7 +69,17 @@ def unique_slots(goods):
 # ================
 def merge_shops(native, later, item_codes, npc_codes):
 	base = {name: tables.table_rows(raw) for name, raw in native.items()}
-	source = {name: tables.table_rows(raw) for name, raw in later.items()}
+	# Every later row takes v1.150's layout first, every column accounted
+	# for (shop_layout.native_row), so no rule below reads a shifted cell.
+	source = {name: [shop_layout.native_row(name, r) for r in tables.table_rows(raw) if r] for name, raw in later.items()}
+	# A price the v1.150 client holds no slot for (a coin or Arena Coin
+	# device) is another way to pay, not the price: the package keeps its
+	# client-held alternatives, and the dropped ones are reported.
+	unpayable = defaultdict(list)
+	for row in source["refpricepolicyofitem.txt"]:
+		if row[0] == "1" and not shop_layout.client_payment_device(row):
+			unpayable[row[2]].append(row[3])
+	source["refpricepolicyofitem.txt"] = [r for r in source["refpricepolicyofitem.txt"] if shop_layout.client_payment_device(r)]
 	selected = {name: [] for name in SHOP_TABLES}
 	groups = {r[3] for r in source["refshopgroup.txt"] if len(r) >= 5 and r[0] == "1" and r[4] in npc_codes}
 	selected["refshopgroup.txt"] = [r for r in source["refshopgroup.txt"] if len(r) >= 5 and r[3] in groups]
@@ -85,7 +100,9 @@ def merge_shops(native, later, item_codes, npc_codes):
 			scraps[row[2]].append(row)
 	packages = {r[3] for r in goods}
 	missing = {code: sorted({r[3] for r in scraps[code]} - item_codes) for code in packages}
-	allowed = {code for code in packages if scraps[code] and not missing[code]}
+	pending = {code: reason for code in packages for prefix, reason in PENDING_USE.items()
+		if scraps[code] and all(r[3].startswith(prefix) for r in scraps[code])}
+	allowed = {code for code in packages if scraps[code] and not missing[code] and code not in pending}
 	native_packages = {r[3] for r in base["refpackageitem.txt"] if len(r) > 3}
 	selected["refshopgoods.txt"], slots = unique_slots([r for r in goods if r[3] in allowed])
 	for name in ("refpackageitem.txt", "refscrapofpackageitem.txt", "refpricepolicyofitem.txt", "refconditiontosellpackageitem.txt", "refrewardpolicytosellpackageitem.txt"):
@@ -115,7 +132,11 @@ def merge_shops(native, later, item_codes, npc_codes):
 			added.append(converted)
 		merged[name] = npcs.append_rows(native[name], added)
 		counts[name] = len(added)
-	return merged, {"added": counts, "deferredPackages": {k: v for k, v in sorted(missing.items()) if v}, "packages": len(allowed), "goodsSlots": slots}
+	return merged, {
+		"added": counts, "deferredPackages": {k: v for k, v in sorted(missing.items()) if v}, "packages": len(allowed), "goodsSlots": slots,
+		"pendingUse": dict(sorted(pending.items())),
+		"unpayablePrices": {code: sorted(devices) for code, devices in sorted(unpayable.items()) if code in packages},
+	}
 
 
 # ================

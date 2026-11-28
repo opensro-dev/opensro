@@ -15,6 +15,7 @@ copy_later_package, so the layout conversion lives in one place.
 import cap110_item_import as shared
 import cap110_items as items
 import import_vsro_alexandria as tables
+import shop_layout
 from prepare_client_resources import safe_target, write_atomically
 
 TEXT_ROOT = shared.TEXT_ROOT
@@ -108,12 +109,13 @@ def goods_row(tab, package, slot):
 # ================
 # converted_price
 #
-# A later refpricepolicyofitem row in v1.150's layout: the native source
-# id, and the amount one column to the left. silk, when given, replaces
-# a silk row's amount.
+# A later refpricepolicyofitem row in v1.150's layout (shop_layout's
+# column map, PreviousCost dropped) with the native source id. silk,
+# when given, replaces a silk row's amount.
 # ================
 def converted_price(price, silk=None):
-	converted = price[:1] + [NATIVE_SOURCE] + price[2:MALL_PRICE_AMOUNT - 1] + price[MALL_PRICE_AMOUNT:]
+	converted = shop_layout.native_row("refpricepolicyofitem.txt", price)
+	converted[1] = NATIVE_SOURCE
 	if silk is not None and converted[3] == SILK_CURRENCY:
 		converted[4] = silk
 	return converted

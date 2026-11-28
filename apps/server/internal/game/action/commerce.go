@@ -14,6 +14,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	log "github.com/sirupsen/logrus"
 	"math"
 	"opensro.online/server/internal/domain"
 	"opensro.online/server/internal/game/enterworld"
@@ -47,6 +48,11 @@ func (rt *Runtime) ConfigureCommerce(dir string, extra []commerce.ExtraGood) err
 	c, e := commerce.LoadWithExtraGoods(dir, rt.deps.ItemReferences(), extra)
 	if e != nil {
 		return e
+	}
+	// The native load check's report (the v1.188 server's package
+	// price check): a listed package with no price the shop can take.
+	for _, code := range c.Unpriced {
+		log.Warnf("commerce: (%s) register gold price.", code)
 	}
 	// Port-only, not native, and permanent (owner 2026-10-20): no NPC
 	// sells degree-9 Sun gear, whatever SRO_SUN_EVENT_ONLY says. That

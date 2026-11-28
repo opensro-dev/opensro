@@ -137,6 +137,24 @@ class MergeTests(unittest.TestCase):
 		scrap = next(r for r in table_rows(merged["refscrapofpackageitem.txt"]) if r[2] == "PACKAGE_ITEM_CH_BLADE_10_A")
 		self.assertEqual(scrap[3], "ITEM_CH_BLADE_10_A")
 
+	# ================
+	# test_a_minted_package_is_priced_in_gold_whatever_its_template_holds
+	#
+	# #4702: a template priced in gold and silk (its silk row last) or in
+	# silk only (a mall degree 9 package) still mints one gold row with
+	# the item's price, never a silk device carrying a gold amount.
+	# ================
+	def test_a_minted_package_is_priced_in_gold_whatever_its_template_holds(self):
+		raw = {name: table_rows(tables(GOODS)[name]) for name in d10.NAMES}
+		prices = raw["refpricepolicyofitem.txt"]
+		prices.append(["1", "11", "PACKAGE_ITEM_CH_BLADE_09_A", "16", "300", *FILLER])
+		for row in prices:
+			if row[2] == "PACKAGE_ITEM_CH_BOW_09_A":
+				row[3], row[4] = "2", "250"
+		merged, _ = d10.merge_d10_stock({name: utf16(r) for name, r in raw.items()}, ITEMS, port_stock=True)
+		minted = {r[2]: r[3:5] for r in table_rows(merged["refpricepolicyofitem.txt"]) if "_10_" in r[2]}
+		self.assertEqual(minted, {"PACKAGE_ITEM_CH_BLADE_10_A": ["1", "6492000"], "PACKAGE_ITEM_CH_BOW_10_A": ["1", "5000000"]})
+
 	def test_reentry_stocks_nothing_twice(self):
 		raw = {name: table_rows(tables(GOODS)[name]) for name in d10.NAMES}
 		# The city's own accessory store, restocked in place by the pass:
