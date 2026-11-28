@@ -267,10 +267,9 @@ func refusedBreak(reason string) BreakOutcome {
 // (msgbox kind 0x13, CIFNpcTalk_ExecuteMenuAction case 0x14) from
 // leadership arms only - a non-leader break is refused silently. While
 // any member HOLDS the guild warehouse (storageHolder) the guild
-// cannot be dissolved: the reference server answers the leader 0x48.
-// Its war test runs first there; here the war answer still comes from
-// the door whenever nobody holds the room, so a guild both at war and
-// held hears the holder's text - same refusal, different wording.
+// cannot be dissolved: the leader hears 0x48. The door tests the
+// leader, the war (0x46) and then the holder, the v1.188 disband job's
+// order, so a guild both at war and held hears the war text (#4710).
 /*
 ================
 HandleBreak
@@ -294,14 +293,12 @@ func HandleBreak(deps Dependencies, divisionID string, actor *enterworld.Charact
 	if err != nil {
 		return refusedBreak(err.Error())
 	}
-	if storageHolder != "" {
-		if row, ok := actorMemberRow(deps, divisionID, actor); ok && row.Grade == domain.GuildLeaderGrade {
-			return BreakOutcome{AckPayload: EncodeGuildErrorResult(GuildErrStorageHeld), Refusal: "member holds the guild storage"}
-		}
-	}
-	dissolved, refusal := deps.GuildAuthority().DissolveGuildAs(divisionID, actor.ID)
+	dissolved, refusal := deps.GuildAuthority().DissolveGuildAs(divisionID, actor.ID, storageHolder != "")
 	if refusal == domain.GuildRefusalWarActive {
 		return BreakOutcome{Refusal: "guild war active", AckPayload: []byte{2, 0x46}}
+	}
+	if refusal == domain.GuildRefusalStorageHeld {
+		return BreakOutcome{AckPayload: EncodeGuildErrorResult(GuildErrStorageHeld), Refusal: "member holds the guild storage"}
 	}
 	if refusal.Refused() {
 		if refusal == enterworld.GuildRefusalLeaderRequired {

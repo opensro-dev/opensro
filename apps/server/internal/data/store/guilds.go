@@ -524,6 +524,7 @@ DissolveGuildAs
 func (door storeGuildDoor) DissolveGuildAs(
 	divisionID string,
 	actorID int64,
+	storageHeld bool,
 ) (domain.GuildSnapshot, domain.GuildRefusal) {
 	var refused domain.GuildSnapshot
 	s := door.s
@@ -547,6 +548,12 @@ func (door storeGuildDoor) DissolveGuildAs(
 	}
 	if warCount != 0 {
 		return refused, domain.GuildRefusalWarActive
+	}
+	// Then the storage-user test: the disband job checks the warehouse
+	// holder after the master and war arms, so a guild at war with its
+	// room held hears the war answer (#4710).
+	if storageHeld {
+		return refused, domain.GuildRefusalStorageHeld
 	}
 	memberCharacters := make([]*domain.Character, 0, len(members))
 	for _, member := range members {

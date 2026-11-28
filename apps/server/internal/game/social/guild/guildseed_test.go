@@ -98,7 +98,7 @@ func (s staticGuildStore) LeaveGuild(string, int64) (enterworld.GuildRemovalResu
 // DissolveGuildAs completes the enterworld.GuildStore contract the break
 // door added. DECISION: inert false, matching this fake's other write
 // doors (the seed tests read, never mutate).
-func (s staticGuildStore) DissolveGuildAs(string, int64) (enterworld.GuildSnapshot, enterworld.GuildRefusal) {
+func (s staticGuildStore) DissolveGuildAs(string, int64, bool) (enterworld.GuildSnapshot, enterworld.GuildRefusal) {
 	return enterworld.GuildSnapshot{}, enterworld.GuildRefusalUpdateRejected
 }
 
