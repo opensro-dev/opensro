@@ -113,6 +113,7 @@ func (rt *Runtime) ConfigureMall(dir string, authority domain.MallAuthority, ext
 		return err
 	}
 	rt.withholdUniqueOnlyGoods(catalog)
+	rt.withholdP2WScrolls(catalog)
 	rt.mallCatalog, rt.mallAuthority = catalog, authority
 	return nil
 }
@@ -161,6 +162,24 @@ func (rt *Runtime) withholdUniqueOnlyGoods(catalog *commerce.MallCatalog) {
 		log.Infof("mall: %d unique-only offer(s) withheld (Magic Pop card %t, Devil's Spirit %t; port-only)",
 			removed, card != 0, spirits)
 	}
+}
+
+/*
+================
+withholdP2WScrolls
+
+Port-only, not native (owner 2026-11-28): with MallP2WScrollsOff the mall
+stops selling every package holding a damage, resurrection or instant
+return scroll (commerce.P2WScrollItems). Owned scrolls keep their use.
+================
+*/
+func (rt *Runtime) withholdP2WScrolls(catalog *commerce.MallCatalog) {
+	refs := rt.deps.ItemReferences()
+	if !rt.MallP2WScrollsOff || refs == nil {
+		return
+	}
+	removed := catalog.WithholdItemsNamed(refs, commerce.P2WScrollItems)
+	log.Infof("mall: %d pay-to-win scroll offer(s) withheld (%s, port-only)", removed, commerce.EnvMallP2WScrollsOff)
 }
 
 /*
