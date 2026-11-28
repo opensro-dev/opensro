@@ -13,6 +13,7 @@ carries the row's CanSell and SellPrice.
 import "../helpers/native-source-loader.mjs";
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import { defined } from "../helpers/defined.mjs";
 
 const sale = await import( "../../src/engine/foundation/ui/cos-sale.ts" );
 const cos = await import( "../../src/engine/foundation/ui/cos-command.ts" );
@@ -80,8 +81,8 @@ test("the catalog's sale map sets sellPrice only on the rows that can be sold", 
 		rows: { 3910: [ "", 100, true, 0, 0, 0, 0, [] ], 2191: [ "", 983, true, 0, 0, 0, 0, [] ] },
 		sale: { 3910: 240 }
 	} );
-	assert.equal( references.get( 3910 ).sellPrice, 240 );
-	assert.equal( "sellPrice" in references.get( 2191 ), false );
+	assert.equal( defined( references.get( 3910 ) ).sellPrice, 240 );
+	assert.equal( "sellPrice" in defined( references.get( 2191 ) ), false );
 	assert.throws( () =>
 		cos.decodeCosReferences( {
 			format: "sro-cos-presentation",
@@ -89,4 +90,43 @@ test("the catalog's sale map sets sellPrice only on the rows that can be sold", 
 			sale: { 3910: -1 }
 		} )
 	);
+});
+
+const { createGameplay } = await import(
+	"../../src/engine/runtime/simulation/worker/session/world/gameplay/gameplay.ts"
+);
+
+/*
+================
+saleWorld
+
+The worker's gameplay owner with no references: the sale lane needs none.
+================
+*/
+function saleWorld() {
+	const sent = [], game = createGameplay( f => sent.push( f ), () => {}, () => {} );
+	game.bootstrap( {
+		inventorySlotCount: 45,
+		equipmentSlotCount: 13,
+		refObjSnapshot: [],
+		refItemSnapshot: [],
+		equipItems: []
+	} );
+	game.seed( { gid: 1, refObjId: 1, kind: "player", regionId: 1, x: 0, y: 0, z: 0, heading: 0, name: "" } );
+	game.take();
+	return { game, sent };
+}
+
+test("the worker sends cos-sell as 0x71DC and shows a 0xB1DC refusal in category 12", () => {
+	const { game, sent } = saleWorld();
+	game.command( { kind: "cos-sell", npc: 0x01020304 }, 1, undefined );
+	const frame = sent.at( -1 );
+	assert.equal( frame?.opcode, 0x71dc );
+	assert.deepEqual( [ ...frame.payload ], [ 4, 3, 2, 1, 3 ] );
+	game.receive( { opcode: 0xb1dc, payload: Uint8Array.of( 1, 3 ) }, 2 );
+	assert.deepEqual( game.take()?.notices ?? [], [] );
+	game.receive( { opcode: 0xb1dc, payload: Uint8Array.of( 2, 0xb ) }, 3 );
+	const notices = game.take()?.notices ?? [];
+	assert.equal( notices.length, 1 );
+	assert.ok( notices[0].key, "the refusal names its category-12 text" );
 });
