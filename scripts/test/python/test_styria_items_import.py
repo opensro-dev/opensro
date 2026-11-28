@@ -13,6 +13,7 @@ missing or miscast row, or a codename already in the tree, refuses.
 ===========================================================================
 """
 import script_paths  # noqa: F401  (puts scripts/ and its build folders on sys.path, #3410)
+import later_fixtures  # noqa: E402
 import json
 import os
 import tempfile
@@ -95,14 +96,12 @@ class StyriaItemsImportTest(unittest.TestCase):
 				texts.append(text_row(row[items.DESCRIPTION_KEY]))
 		rows.append(later_row("ITEM_EVENT_TRADE_DECOY", 35999, styria_items.STONE_TYPE, "decoy.ddj"))
 		self.media = archive_bytes({
-			"itemdata.txt": utf16([["itemdata_35000.txt"]]),
-			"itemdata_35000.txt": utf16(rows),
+			**later_fixtures.sharded("itemdata.txt", {"itemdata_35000.txt": rows}),
 			"textdata_object.txt": utf16(texts),
 		})
 		native_row = ["0"] * items.ITEM_COLUMNS
 		native_row[0], native_row[1], native_row[2] = "1", str(NATIVE_ID), "ITEM_NATIVE_THING"
-		(text_root / "itemdata.txt").write_bytes(utf16([["itemdata_5000.txt"]]))
-		(text_root / "itemdata_5000.txt").write_bytes(utf16([native_row]))
+		later_fixtures.write_sharded(text_root, "itemdata.txt", {"itemdata_5000.txt": [native_row]})
 		(text_root / styria_items.NAME_TABLE).write_bytes(
 			utf16([["1", "SN_NATIVE_A", "", "", "", "", "", "", "Native A"]]))
 		return later, native, output, text_root
@@ -222,7 +221,7 @@ class StyriaItemsImportTest(unittest.TestCase):
 			self.assertFalse(icon.exists())
 			self.assertEqual((text_root / styria_items.NAME_TABLE).read_bytes(), native_names)
 			# The native item stands untouched beside the reap.
-			self.assertIn("itemdata_5000.txt", self.manifest(text_root))
+			self.assertIn(later_fixtures.archive_case("itemdata_5000.txt"), self.manifest(text_root))
 
 	# ================
 	# test_off_without_a_prior_import_changes_nothing

@@ -59,6 +59,12 @@ NEXT_FORM_COLUMN = 6
 CHAR_BIT_COLUMN = 8
 TID_COLUMNS = (9, 10, 11)
 TID4_COLUMN = 12
+# The body: walk and run speeds, scale (percent) and collision radius.
+WALK_SPEED_COLUMN = 46
+RUN_SPEED_COLUMN = 47
+SCALE_COLUMN = 48
+BODY_RADIUS_COLUMN = 50
+BODY_COLUMNS = (WALK_SPEED_COLUMN, RUN_SPEED_COLUMN, SCALE_COLUMN, BODY_RADIUS_COLUMN)
 MODEL_COLUMN = 52
 ICON_COLUMN = 54
 LEVEL_COLUMN = 57
@@ -96,7 +102,7 @@ TEXT_FIRST_LANGUAGE_COLUMN = 2
 TEXT_ENGLISH_COLUMN = 8
 # translation_rows joins a wrapped line onto a row of fewer cells than
 # this whose key is a name symbol.
-TEXT_ROW_CELLS = 10
+WRAPPED_ROW_CELLS = 10
 NAME_SYMBOL_PREFIX = "SN_"
 
 SKILL_EFFECT_COLUMNS = 13
@@ -147,7 +153,7 @@ def translation_rows(raw):
 	rows = []
 	for row in stage1.table_rows(raw):
 		last = rows[-1] if rows else None
-		if last and TEXT_KEY_COLUMN < len(last) < TEXT_ROW_CELLS and last[TEXT_KEY_COLUMN].startswith(NAME_SYMBOL_PREFIX) and not row[0].isdigit():
+		if last and TEXT_KEY_COLUMN < len(last) < WRAPPED_ROW_CELLS and last[TEXT_KEY_COLUMN].startswith(NAME_SYMBOL_PREFIX) and not row[0].isdigit():
 			rows[-1][-1] += " " + row[0].strip()
 			rows[-1].extend(row[1:])
 		else:

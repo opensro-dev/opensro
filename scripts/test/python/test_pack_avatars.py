@@ -11,6 +11,7 @@ seams; the real ones run against the real export in the pack report.
 ===========================================================================
 """
 import script_paths  # noqa: F401  (puts scripts/ and its build folders on sys.path, #3410)
+import later_fixtures  # noqa: E402
 import json
 from pathlib import Path
 import sys
@@ -109,8 +110,7 @@ class PackTests(unittest.TestCase):
 			avatar(NATIVE_CODE, FIRST_ID + 3),
 			avatar("ITEM_CREDDY_AVATAR_M_WIDE", FIRST_ID + 4) + ["", "junk"],
 		]
-		(text_root / "itemdata.txt").write_bytes(utf16([["ItemData_5000.txt"]]))
-		(text_root / "ItemData_5000.txt").write_bytes(utf16(rows))
+		later_fixtures.write_sharded(text_root, "itemdata.txt", {"ItemData_5000.txt": rows})
 		texts = [export_text(key, "Suit") for code in (GOOD, SCREENED, NATIVE_CODE, "ITEM_CREDDY_AVATAR_M_WIDE")
 			for key in ("SN_" + code, "SN_" + code + "_TT_DESC")]
 		(text_root / "textdata_object.txt").write_bytes(utf16(texts))
@@ -119,8 +119,7 @@ class PackTests(unittest.TestCase):
 		base.mkdir(parents=True)
 		for folder in packer.shared.FOLDERS.values():
 			(native / folder).mkdir(parents=True, exist_ok=True)
-		(base / "itemdata.txt").write_bytes(utf16([["itemdata_5000.txt"]]))
-		(base / "itemdata_5000.txt").write_bytes(utf16([native_row(10), avatar(NATIVE_CODE, 99)]))
+		later_fixtures.write_sharded(base, "itemdata.txt", {"itemdata_5000.txt": [native_row(10), avatar(NATIVE_CODE, 99)]})
 		return export, native
 
 	# ================
@@ -285,8 +284,7 @@ class PetPackTests(unittest.TestCase):
 		]
 		scrolls = [scroll("ITEM_PET_DOG", 9002, "COS_P_DOG"), scroll("ITEM_PET_CAT", 9004, "COS_P_CAT"),
 			scroll("ITEM_PET_BIRD", 9006, "COS_P_BIRD"), scroll("ITEM_PET_WOLF", 3000, "COS_P_WOLF")]
-		(text_root / "characterdata.txt").write_bytes(utf16([["CharacterData_5000.txt"]]))
-		(text_root / "CharacterData_5000.txt").write_bytes(utf16(chars))
+		later_fixtures.write_sharded(text_root, "characterdata.txt", {"CharacterData_5000.txt": chars})
 		(text_root / "itemdata.txt").write_bytes(utf16([["ItemData_5000.txt"], ["ItemData_9000.txt"]]))
 		(text_root / "ItemData_9000.txt").write_bytes(utf16(scrolls))
 		texts = importer.tables.table_rows((text_root / "textdata_object.txt").read_bytes())
@@ -294,8 +292,7 @@ class PetPackTests(unittest.TestCase):
 		(text_root / "textdata_object.txt").write_bytes(utf16(texts))
 		wolf_chars, wolf_items = native_wolf()
 		base = native / importer.TEXT_ROOT
-		(base / "characterdata.txt").write_bytes(utf16([["characterdata_5000.txt"]]))
-		(base / "characterdata_5000.txt").write_bytes(utf16(wolf_chars))
+		later_fixtures.write_sharded(base, "characterdata.txt", {"characterdata_5000.txt": wolf_chars})
 		rows = importer.tables.table_rows((base / "itemdata_5000.txt").read_bytes())
 		(base / "itemdata_5000.txt").write_bytes(utf16(rows + wolf_items))
 		return export, native

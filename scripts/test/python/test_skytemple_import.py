@@ -4,6 +4,7 @@ test_skytemple_import.py - the Sky Temple import's admission and build rules.
 ===========================================================================
 """
 import script_paths  # noqa: F401  (puts scripts/ and its build folders on sys.path, #3410)
+import later_fixtures  # noqa: E402
 import json
 import os
 import struct
@@ -446,10 +447,8 @@ def build_trees(base):
 	data_rows, building_rows, link_rows = gate_tables()
 	monster = character(40001, "MOB_SKYTEMPLE_A_TEST", skill=700)
 	media_files = {
-		"characterdata.txt": utf16([["characterdata_5000.txt"]]),
-		"characterdata_5000.txt": utf16([monster]),
-		"skilldata.txt": utf16([["skilldata_5000.txt"]]),
-		"skilldata_5000.txt": utf16([skill(700, "MSKILL_SKYTEMPLE_TEST")]),
+		**later_fixtures.sharded("characterdata.txt", {"characterdata_5000.txt": [monster]}),
+		**later_fixtures.sharded("skilldata.txt", {"skilldata_5000.txt": [skill(700, "MSKILL_SKYTEMPLE_TEST")]}),
 		"npcpos.txt": utf16([["40001", "21209", "10", "1", "20"], ["40001", "21209", "10", "1", "20"],
 			["40001", str(region_id(225, 92)), "30", "2", "40"], ["40001", "25000", "1", "1", "1"]]),
 		"regioncode.txt": utf16([["1", str(region_id(x, y)), f"RN_OTHER_SKYTEMPLE_{letter}_01", ""]
