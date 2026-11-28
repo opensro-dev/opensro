@@ -679,8 +679,7 @@ def add_avatars(vsro_root, native, output, source=VSRO_SOURCE):
 		native_rows = shared.read_item_tables(later_tables.Archive.tree(base))
 		later_rows = shared.read_item_tables(read_later)
 		reserved = {
-			int(row[1]) for path in (output / TEXT_ROOT).glob("characterdata_*.txt")
-			for row in tables.table_rows(path.read_bytes()) if len(row) > 1
+			int(row[1]) for name, row in published_ids.object_rows(output / TEXT_ROOT) if name.startswith("characterdata_")
 		}
 		# The cap-110 shard's identities sit above every later row and below
 		# FRESH_ID_BASE; they are reserved anyway so a clash cannot happen.

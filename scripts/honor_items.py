@@ -53,6 +53,7 @@ import re
 import alexandria_npcs as text_tables
 import cap110_item_import as shared
 import cap110_items as items
+import later_tables
 import cap110_monsters as cap110
 import published_ids
 import import_vsro_alexandria as tables
@@ -363,12 +364,9 @@ def add_honor_items(native, output):
 	if not enabled():
 		return {"enabled": False}
 	rows = {}
-	for path in sorted(text_root.glob("itemdata*.txt")):
-		if sro_pk2.fold_ascii(path.name) == MANIFEST:
-			continue
-		for row in tables.table_rows(path.read_bytes()):
-			if len(row) > items.CODENAME and row[items.SERVICE] == "1":
-				rows[row[items.CODENAME]] = row
+	for row in later_tables.Archive.tree(text_root).rows(MANIFEST):
+		if len(row) > items.CODENAME and row[items.SERVICE] == "1":
+			rows[row[items.CODENAME]] = row
 	occupied = published_ids.occupied_objects(text_root, (ITEM_SHARD,))
 	paths = resinfo_paths(native, output)
 	glow_text = paths[shared.GLOW_TABLE][1].read_bytes().decode("latin1")

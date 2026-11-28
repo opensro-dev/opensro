@@ -391,7 +391,7 @@ def stage_kinds(label, read, refs, text_root, prior, character_shard, skill_shar
 	allocated = cap110.allocate_characters(occupied, sorted(refs), prior.get("characters", {}))
 	for code, row in refs.items():
 		row[1] = str(allocated[code])
-	native_skills = [r for p in text_root.glob("skilldata_*.txt") if p.name != skill_shard for r in tables.table_rows(p.read_bytes()) if len(r) == 118]
+	native_skills = cap110.tree_skills(text_root, skill_shard)
 	needed = {int(s) for r in refs.values() for s in r[89:99] if int(s)}
 	client_skills = [r for r in skill_tables.client_skill_rows(read) if len(r) > 3 and r[1].isdigit()]
 	# Skills no staged kind names in its skill columns (a Muhan change

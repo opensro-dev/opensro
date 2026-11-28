@@ -645,6 +645,7 @@ class LaterWorldStagedRefsTest(unittest.TestCase):
 	def test_a_placing_spec_leaves_a_standing_kind_on_its_row(self):
 		with tempfile.TemporaryDirectory() as temp:
 			text_root = Path(temp)
+			(text_root / "characterdata.txt").write_bytes(utf16([["characterdata_120000.txt"]]))
 			(text_root / "characterdata_120000.txt").write_bytes(utf16([
 				["1", "38210", "MOB_SD_OSIRIS_3"] + ["0"] * 10,
 				["1", "38211", "MOB_SD_OTHER"] + ["0"] * 10]))

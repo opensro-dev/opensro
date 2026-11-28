@@ -60,6 +60,8 @@ SOURCE_ENV = "SRO_CAP110_MONSTER_DATABASE"
 MARKER = ".opensro-cap110-monsters.json"
 CHARACTER_SHARD = "characterdata_120000.txt"
 SKILL_SHARD = "skilldata_120000.txt"
+# A full v1.150 skilldata row; a narrower row is not a skill.
+SKILL_COLUMNS = 118
 POPULATION_FILE = "cap110-monsters.txt"
 TEXT_ROOT = Path("Media_extracted") / tables.TEXTDATA
 MAX_LEVEL = 110
@@ -463,8 +465,19 @@ allocate_identities = published_ids.allocate_identities
 # never stages one of their codenames again (one codename, one row).
 # ================
 def tree_characters(text_root, own):
-	return [row for path in Path(text_root).glob("characterdata_*.txt") if path.name != own
-		for row in tables.table_rows(path.read_bytes())]
+	return later_tables.Archive.tree(text_root).rows("characterdata.txt", excluding=(own,))
+
+
+# ================
+# tree_skills
+#
+# Every full-width skill row the tree's skilldata index lists but own's,
+# the same rule for skills: the rows an import's skill merge numbers
+# above and never restages.
+# ================
+def tree_skills(text_root, own):
+	return [row for row in later_tables.Archive.tree(text_root).rows("skilldata.txt", excluding=(own,))
+		if len(row) == SKILL_COLUMNS]
 
 
 # ================
@@ -634,7 +647,7 @@ def add_monsters(vsro_root, native, output, source_root=None):
 		allocated = allocate_characters(occupied, sorted(refs), prior.get("characters", {}))
 		for code, row in sorted(refs.items()):
 			row[1] = str(allocated[code])
-		native_skills = [r for p in text_root.glob("skilldata_*.txt") if p.name != SKILL_SHARD for r in tables.table_rows(p.read_bytes()) if len(r) == 118]
+		native_skills = tree_skills(text_root, SKILL_SHARD)
 		needed = {int(s) for r in refs.values() for s in r[89:99] if int(s)}
 		# ================
 		# load_client_skills

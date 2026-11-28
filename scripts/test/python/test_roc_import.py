@@ -166,6 +166,7 @@ class RocImportTest(unittest.TestCase):
 			row = ["0"] * 104
 			row[1], row[2] = str(5871 + n), "MOB_QT_%02d_ROCKY_CLON2" % n
 			guardians.append(row)
+		(text_root / "characterdata.txt").write_bytes(utf16([["characterdata_5000.txt"]]))
 		(text_root / "characterdata_5000.txt").write_bytes(utf16([native_char] + guardians))
 		(text_root / "skilldata.txt").write_bytes(utf16([["skilldata_5000.txt"]]))
 		(text_root / "skilldata_5000.txt").write_bytes(utf16([]))
@@ -524,6 +525,7 @@ class RocImportTest(unittest.TestCase):
 			vsro, native, output, text_root, pins = self.fixture(Path(root))
 			row = ["0"] * 120
 			row[1], row[2] = "200", "MOB_RM_ROC"
+			(text_root / "characterdata.txt").write_bytes(utf16([["characterdata_5000.txt"], ["characterdata_7000.txt"]]))
 			(text_root / "characterdata_7000.txt").write_bytes(utf16([row]))
 			with self.assertRaisesRegex(ValueError, "already stands"):
 				self.run_import(vsro, native, output, pins, "on")

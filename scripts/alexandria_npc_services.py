@@ -155,9 +155,9 @@ def add_services(vsro_root, native, output, port_stock=False, honor_goods=False)
 	from variant_files import TEXTDATA, replace_file
 	root = output / "Media_extracted" / TEXTDATA
 	native_root = native / "Media_extracted" / TEXTDATA
-	characters = [r for p in root.glob("characterdata_*.txt") for r in tables.table_rows(p.read_bytes())]
-	codes = {r[2] for r in characters if len(r) > 5 and r[2] in RESTORED_STORE_NPCS}
-	items = {r[2] for p in root.glob("itemdata_*.txt") for r in tables.table_rows(p.read_bytes()) if len(r) > 2 and r[0] == "1"}
+	tree = later_tables.Archive.tree(root)
+	codes = {r[2] for r in tree.rows("characterdata.txt") if len(r) > 5 and r[2] in RESTORED_STORE_NPCS}
+	items = {r[2] for r in tree.rows("itemdata.txt") if len(r) > 2 and r[0] == "1"}
 	base = {name: (root / name).read_bytes() if (root / name).exists() else (native_root / name).read_bytes() for name in SHOP_TABLES}
 	with later_tables.Archive.open(vsro_root) as source:
 		later = {name: source.file(name) for name in SHOP_TABLES}
@@ -165,7 +165,7 @@ def add_services(vsro_root, native, output, port_stock=False, honor_goods=False)
 	for name, raw in merged.items():
 		replace_file(root / name, raw)
 	# Ordinary degree 10 goods, on stores of the city's own (a no-op without the degree 10 items).
-	item_rows = {r[2]: r for p in root.glob("itemdata_*.txt") for r in tables.table_rows(p.read_bytes()) if len(r) > d10.PRICE_COLUMN and r[0] == "1"}
+	item_rows = {r[2]: r for r in tree.rows("itemdata.txt") if len(r) > d10.PRICE_COLUMN and r[0] == "1"}
 	stock, stock_summary = d10.merge_d10_stock({name: (root / name).read_bytes() for name in d10.NAMES}, item_rows, port_stock=port_stock)
 	for name, raw in stock.items():
 		replace_file(root / name, raw)

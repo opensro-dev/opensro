@@ -428,6 +428,7 @@ class Cap110MonstersTest(unittest.TestCase):
 
 		native_char = ["0"] * 104
 		native_char[1], native_char[2] = "100", "MOB_NATIVE"
+		(text_root / "characterdata.txt").write_bytes(utf16([["characterdata_5000.txt"]]))
 		(text_root / "characterdata_5000.txt").write_bytes(utf16([native_char]))
 		(text_root / "skilldata.txt").write_bytes(utf16([["skilldata_5000.txt"]]))
 		(text_root / "skilldata_5000.txt").write_bytes(utf16([]))
@@ -651,6 +652,8 @@ class Cap110MonstersTest(unittest.TestCase):
 			text_root, source = Path(temporary) / "text", Path(temporary) / "source"
 			text_root.mkdir()
 			source.mkdir()
+			# A tree whose item index lists no shard.
+			(text_root / "itemdata.txt").write_bytes(utf16([]))
 			self.assertFalse(loot.has_assignments(source))
 			with mock.patch.object(loot, "compile_catalogs", return_value=copy.deepcopy(base)):
 				self.assertEqual(loot.stage_field_equipment(text_root, source), 1)
@@ -845,6 +848,7 @@ class Cap110MonstersTest(unittest.TestCase):
 
 		native_char = ["0"] * 104
 		native_char[1], native_char[2] = "100", "MOB_NATIVE"
+		(text_root / "characterdata.txt").write_bytes(utf16([["characterdata_5000.txt"]]))
 		(text_root / "characterdata_5000.txt").write_bytes(utf16([native_char]))
 		(text_root / "skilldata.txt").write_bytes(utf16([["skilldata_5000.txt"]]))
 		(text_root / "skilldata_5000.txt").write_bytes(utf16([]))

@@ -115,6 +115,21 @@ def tolerant_dependencies(requests):
 
 
 # ================
+# refuse_standing_items
+#
+# Refuses an import whose items already stand in the tree at text_root
+# (its itemdata index, own's shard left out): one codename is one row,
+# and another step owning the code means two importers claim it. what
+# names the import's goods in the message.
+# ================
+def refuse_standing_items(text_root, own, codes, what):
+	codes = set(codes)
+	for row in later_tables.Archive.tree(text_root).rows("itemdata.txt", excluding=(own,)):
+		if len(row) > items.CODENAME and row[items.SERVICE] == "1" and row[items.CODENAME] in codes:
+			raise ValueError(f"{what} {row[items.CODENAME]} already stands in the item tables")
+
+
+# ================
 # copy_asset_closure
 #
 # Parser subprocesses receive data through stdin with no shell. Unknown

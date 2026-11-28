@@ -124,7 +124,8 @@ class LaterMallItemsTest(unittest.TestCase):
 		(text_root / "itemdata_5000.txt").write_bytes(utf16([native_item]))
 		native_skill = ["0"] * mall_items.SKILL_COLUMNS
 		native_skill[0], native_skill[1], native_skill[3] = "1", str(NATIVE_ID), "SKILL_NATIVE"
-		(text_root / "skilldata.txt").write_bytes(utf16([["skilldata_5000.txt"]]))
+		# The tree's index lists the scroll's shard wherever it lives.
+		(text_root / "skilldata.txt").write_bytes(utf16([["skilldata_5000.txt"], [SCROLL_SHARD]]))
 		(text_root / "skilldata_5000.txt").write_bytes(utf16([native_skill]))
 		# The native 20% scroll, in a shard of the native tree (or, with
 		# scroll_in_output, of an earlier layer's output).

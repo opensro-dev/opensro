@@ -242,12 +242,7 @@ def add_nasrun(vsro_root, native, output):
 
 		rows = select_rows(shared.read_item_tables(read_later))
 		codes = [row[items.CODENAME] for row in rows]
-		for path in sorted(text_root.glob("itemdata*.txt")):
-			if sro_pk2.fold_ascii(path.name) in (ITEM_SHARD, "itemdata.txt"):
-				continue
-			for row in tables.table_rows(path.read_bytes()):
-				if len(row) > items.CODENAME and row[items.SERVICE] == "1" and row[items.CODENAME] in codes:
-					raise ValueError(f"Nasrun row {row[items.CODENAME]} already stands in the item tables")
+		shared.refuse_standing_items(text_root, ITEM_SHARD, codes, "Nasrun row")
 		# Identities stand above every object row of the tree, items and
 		# characters alike (#3994).
 		occupied = published_ids.occupied_objects(text_root, (ITEM_SHARD,))
@@ -607,14 +602,12 @@ def add_nasrun_skills(vsro_root, native, output):
 		# Ids stand above every skill of the native tables and of each
 		# shard an earlier pass wrote into the output.
 		occupied = set()
-		for path in sorted({*text_root.glob("skilldata_*.txt"), *(native / TEXT_ROOT).glob("skilldata_*.txt")}):
-			if sro_pk2.fold_ascii(path.name) == SKILL_SHARD:
-				continue
-			for row in tables.table_rows(path.read_bytes()):
-				if len(row) > SKILL_CODENAME and row[SKILL_ID].strip().isdigit():
-					occupied.add(int(row[SKILL_ID]))
-					if row[SKILL_CODENAME] in SKILL_CODES:
-						raise ValueError(f"Nasrun skill {row[SKILL_CODENAME]} already stands in the skill tables")
+		tree = later_tables.Archive.overlay(native / TEXT_ROOT, text_root)
+		for row in tree.rows("skilldata.txt", excluding=(SKILL_SHARD,)):
+			if len(row) > SKILL_CODENAME and row[SKILL_ID].strip().isdigit():
+				occupied.add(int(row[SKILL_ID]))
+				if row[SKILL_CODENAME] in SKILL_CODES:
+					raise ValueError(f"Nasrun skill {row[SKILL_CODENAME]} already stands in the skill tables")
 		allocated = published_ids.allocate(published_ids.SKILLS, occupied, list(SKILL_CODES), prior.get("skills", {}))
 		staged = []
 		for row in rows:
