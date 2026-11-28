@@ -15,7 +15,7 @@ import type { UiQuad, UiRect } from "@/engine/contracts/ui";
 import { planeKindOf } from "@/engine/foundation/world/plane";
 import { REGION_SIZE } from "@/engine/foundation/world/world-space";
 import { minimapRotation } from "./hud-readouts";
-import { MAP_LOCAL_MARKER, TOMB_FIRST_DUNGEON, worldMapDungeonOf } from "./world-map";
+import { betaPlayerSign, MAP_LOCAL_MARKER, TOMB_FIRST_DUNGEON, worldMapDungeonOf } from "./world-map";
 
 const CATALOG_FORMAT = "sro-later-dungeon-map";
 const CATALOG_VERSION = 2;
@@ -27,7 +27,6 @@ const COLOR_RANGE = 255;
 // sign the hunting guide uses outdoors.
 const CAVE_MONSTER_MARKER = "/assets/images/Media_extracted/interface/minimap/mm_sign_monster.png";
 // The beta roster's sign for another player, as the world page draws it.
-const CAVE_PLAYER_MARKER = "/assets/images/Media_extracted/interface/minimap/mm_sign_otherplayer.png";
 
 export interface CaveMapLabel {
 	readonly text: string;
@@ -252,21 +251,25 @@ export function cavePageLocal(
 cavePlayerSigns
 
 Port-only, not native: the beta roster's other players (beta-map.ts,
-SRO_BETA_PLAYER_MAP) on a dungeon page, as the world page draws them.
-The roster carries no height, so a player stands on the page of their
-own region. In the Tomb every floor is its own region, so that is their
-floor; in Donwhang's one shared region each floor's page shows the
-whole cave's players. The local player has their own sign.
+SRO_BETA_PLAYER_MAP) on a dungeon page, with the world page's signs
+(betaPlayerSign). The roster carries no height, so a player stands on
+the page of their own region. In the Tomb every floor is its own
+region, so that is their floor; in Donwhang's one shared region each
+floor's page shows the whole cave's players. The local player has their
+own sign, and so does a player the page's party and academy pass
+already draws (drawn names those rows): the world page skips its party
+members the same way, so no one wears two signs (#4846).
 ================
 */
 export function cavePlayerSigns(
 	page: CaveMapPage,
 	players: readonly BetaMapPlayer[],
-	localGid: number | undefined
+	localGid: number | undefined,
+	drawn: ReadonlySet<string>
 ): readonly { readonly x: number; readonly z: number; readonly path: string; }[] {
 	return players
-		.filter( player => player.gid !== localGid && player.regionId === page.regionId )
-		.map( player => ({ x: player.x, z: player.z, path: CAVE_PLAYER_MARKER }) );
+		.filter( player => player.gid !== localGid && player.regionId === page.regionId && !drawn.has( player.name ) )
+		.map( player => ({ x: player.x, z: player.z, path: betaPlayerSign( player.name ).path }) );
 }
 
 /*

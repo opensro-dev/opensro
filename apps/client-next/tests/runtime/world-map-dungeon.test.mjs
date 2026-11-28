@@ -16,6 +16,7 @@ clamped the view onto the Europe edge.
 import "../helpers/native-source-loader.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
+const { minimapPoseKey } = await import( "../../src/engine/foundation/gameplay/minimap-floor-key.ts" );
 const { experimentalOptions } = await import( "../../src/engine/foundation/ui/experimental-options.ts" );
 const { createWorldMapHud } = await import( "../../src/engine/runtime/ui/hud/world-map.ts" );
 const { worldMapDungeonPose } = await import( "../../src/engine/foundation/ui/world-map.ts" );
@@ -166,22 +167,33 @@ const TOMB_CATALOG = {
 	imageRoot: "/fixture/dungeon/",
 	signIcon: "sign",
 	monsterLevelNote: "Fixture note",
-	maps: [ TOMB_PAGE ]
+	// B2, region 0x8006, so a party member can stand off the player's floor.
+	maps: [ TOMB_PAGE, {
+		...TOMB_PAGE,
+		regionId: 0x8006,
+		floorLabel: "QT_A01_FLOOR02",
+		caption: "Underground Level 2 of Tomb of Qin-Shi",
+		image: "map_world_jinf02"
+	} ]
 };
 
 /*
 ================
 caveTextures
 
-The quad textures of one open M map on the Tomb B1 page, the player
-standing on that floor with the given beta roster (beta-map.ts).
+The quad textures of one open M map, the player standing on Tomb B1
+with the given beta roster (beta-map.ts) and party members. floor picks
+another floor's page ("map-floor:<region>:<index>"); the B1 page shows
+without it. floors are the worker's resolved floor indices by pose key,
+which the party pass needs to place a member on the player's floor.
 ================
 */
 /**
  * @param {readonly object[]} betaPlayers
+ * @param {{ members?: readonly object[], floors?: Record<string, number>, floor?: string }} [options]
  * @returns {string[]}
  */
-function caveTextures( betaPlayers ) {
+function caveTextures( betaPlayers, options = {} ) {
 	const hud = createWorldMapHud( {
 		assets: { available: () => 0, request: () => 0, take: () => null, cancel: () => {} },
 		base: "http://fixture.invalid",
@@ -196,8 +208,9 @@ function caveTextures( betaPlayers ) {
 			pose: CAVE_POSE,
 			localGid: 1,
 			navigationFloor: 0,
+			minimapFloors: options.floors ?? {},
 			betaPlayers,
-			social: { self: 1, localName: "Me", members: [] }
+			social: { self: 1, localName: "Me", members: options.members ?? [] }
 		},
 		pose: CAVE_POSE,
 		panel: "Map",
@@ -230,6 +243,12 @@ function caveTextures( betaPlayers ) {
 		image: () => {}
 	};
 	try {
+		// A floor is picked on a shown map, as a click on its row is.
+		if ( options.floor ) {
+			hud.present( input );
+			quads.length = 0;
+			hud.activate( options.floor, CAVE_POSE );
+		}
 		hud.present( input );
 		return quads.map( q => q.texture );
 	} finally {
@@ -250,4 +269,28 @@ test("the Tomb page shows the beta roster's other players on its floor", () => {
 	// The peer on B1 only: B2's player and the local player have no sign here.
 	assert.equal( count( textures ), 1 );
 	assert.equal( count( caveTextures( [] ) ), 0 );
+});
+
+test("a party member on the dungeon page wears one sign: the party's on their floor, the beta's elsewhere (#4846)", () => {
+	const count = ( /** @type {string[]} */ textures, /** @type {string} */ sign ) =>
+		textures.filter( t => t.endsWith( sign ) ).length;
+	const at = { x: CAVE_POSE.x + 40, z: CAVE_POSE.z };
+	const member = ( /** @type {number} */ region ) => ({ id: 2, name: "Partner", war: 0x10001, region, ...at, y: 0 });
+	// On the player's floor the party pass draws the partner (the worker
+	// resolved them to B1's floor), so the beta pass leaves them out.
+	const here = caveTextures( [ { gid: 2, regionId: 0x8007, ...at, name: "Partner" } ], {
+		members: [ member( 0x8007 ) ],
+		floors: { [minimapPoseKey( { regionId: 0x8007, ...at, y: 0 } )]: 0 }
+	} );
+	assert.equal( count( here, "wmap_sign_party.png" ), 1, "the party sign" );
+	assert.equal( count( here, "mm_sign_otherplayer.png" ), 0, "no stranger's sign under it" );
+	// On B2's page (not the player's floor) no party pass runs, so the beta
+	// sign is the partner's one sign there.
+	const below = caveTextures( [ { gid: 2, regionId: 0x8006, ...at, name: "Partner" } ], {
+		members: [ member( 0x8006 ) ],
+		floor: "map-floor:" + 0x8006 + ":0"
+	} );
+	assert.ok( below.some( t => t.endsWith( "map_world_jinf02.png" ) ), "the B2 page is shown" );
+	assert.equal( count( below, "mm_sign_otherplayer.png" ), 1, "the beta sign" );
+	assert.equal( count( below, "wmap_sign_party.png" ), 0, "no party sign off the player's floor" );
 });
