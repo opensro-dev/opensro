@@ -471,3 +471,126 @@ test("an entry for an actor that is not the row's last source does not skip its 
 	assert.equal( row.pose.x, 40, "a new actor object is compared and copied" );
 	assert.equal( row.time, 9 );
 });
+
+/*
+================
+everyField
+
+Two frozen actors that differ in every field. Typed Required, so the test
+types gate fails when CharacterActor gains a field this list lacks; the
+clock fields are the entry's and are left out.
+================
+*/
+/** @returns {[ Required<Omit<import("../../src/engine/contracts/character").CharacterActor, "layers" | "modelAnimation">>, any ] } */
+function everyField() {
+	/** @type {Required<Omit<import("../../src/engine/contracts/character").CharacterActor, "layers" | "modelAnimation">>} */
+	const a = {
+		shadowSize: 1,
+		shadowAttachment: false,
+		modifierId: 1,
+		animationLod: { fraction: 1, crowded: false, optional: false },
+		holderVisible: true,
+		deferredParticle: { offset: 0, nightOnly: false, lodHidden: false },
+		blindable: false,
+		blindableCompanion: false,
+		groundItem: false,
+		pointLight: {
+			pose: { regionId: 25000, x: 0, y: 0, z: 0 },
+			ambient: [ 0, 0, 0 ],
+			diffuse: [ 1, 1, 1 ],
+			attenuation: 1,
+			attenuationConstant: 0,
+			range: 10
+		},
+		bloodEffects: [ "a", null ],
+		previewClip: "stand",
+		effectBasis: [ 1, 0, 0, 0, 1, 0, 0, 0, 1 ],
+		drawGeometry: true,
+		materialTint: [ 1, 1, 1 ],
+		heightFactor: 1,
+		effectBaseScale: 1,
+		absoluteEffectScale: false,
+		emissionEnd: 5,
+		effectRotation: { axis: "x", angle: 0 },
+		effectAnchor: { bone: "b", offset: [ 0, 0, 0 ] },
+		height: 2,
+		pickable: true,
+		pickWhenFiltered: false,
+		pickOwner: 7,
+		dungeonBlock: 1,
+		bodyVolume: { index: 0, female: false },
+		opacity: 1,
+		effectEntity: false,
+		boneRotation: { bone: "spine", rotation: [ 0, 0, 0, 1 ] },
+		attachment: { gid: 42, bone: "hand", offset: [ 0, 0, 0 ] },
+		mountedOn: 9,
+		gid: 3,
+		model: "m0",
+		pose: /** @type {any} */ ({ regionId: 25000, x: 0, y: 0, z: 0, yaw: 0 }),
+		clip: "run",
+		time: 1,
+		loop: true,
+		scale: 1
+	};
+	const b = {
+		shadowSize: 2,
+		shadowAttachment: true,
+		modifierId: 2,
+		animationLod: { fraction: .5, crowded: true, optional: true },
+		holderVisible: false,
+		deferredParticle: { offset: 1, nightOnly: true, lodHidden: true },
+		blindable: true,
+		blindableCompanion: true,
+		groundItem: true,
+		pointLight: { ...a.pointLight, range: 20 },
+		bloodEffects: [ "b", "c" ],
+		previewClip: "run",
+		effectBasis: [ 0, 1, 0, 1, 0, 0, 0, 0, 1 ],
+		drawGeometry: false,
+		materialTint: [ 1, .5, .5 ],
+		heightFactor: 2,
+		effectBaseScale: 2,
+		absoluteEffectScale: true,
+		emissionEnd: 6,
+		effectRotation: { axis: "y", angle: 1 },
+		effectAnchor: { bone: "c", offset: [ 1, 0, 0 ] },
+		height: 3,
+		pickable: false,
+		pickWhenFiltered: true,
+		pickOwner: 8,
+		dungeonBlock: 2,
+		bodyVolume: { index: 1, female: true },
+		opacity: .5,
+		effectEntity: true,
+		boneRotation: { bone: "spine", rotation: [ 0, .1, 0, .99 ] },
+		attachment: { gid: 42, bone: "foot", offset: [ 1, 0, 0 ] },
+		mountedOn: 10,
+		model: "m1",
+		pose: { regionId: 25000, x: 1, y: 0, z: 0, yaw: 0 },
+		clip: "walk",
+		loop: false,
+		scale: 2
+	};
+	return [ a, b ];
+}
+
+test("a frozen republication that changes any one non-clock field is copied in full", () => {
+	const [a, b] = everyField();
+	for ( const key of Object.keys( b ) ) {
+		const owner = createActorSnapshots(), first = Object.freeze( { ...a } );
+		owner.update( [ first ] );
+		const changed = Object.freeze( { ...a, [key]: b[key], time: 2 } );
+		const row = owner.update( [ changed ], new Map( [ [ first, { time: 2 } ] ] ) )[0];
+		assert.deepEqual( json( row[key] ), json( b[key] ), key );
+	}
+});
+
+test("a spine aim held by value keeps the clock path; one turned or released reaches the row", () => {
+	const owner = createActorSnapshots(), base = Object.freeze( actor( 6, 2 ) );
+	const aim = rotation => Object.freeze( { ...base, boneRotation: { bone: "spine", rotation } } );
+	owner.update( [ aim( [ 0, 0, 0, 1 ] ) ] );
+	owner.update( [ aim( [ 0, 0, 0, 1 ] ) ] );
+	assert.equal( owner.stats().clockCopies, 1, "an equal aim in a new object is clocks only" );
+	assert.deepEqual( owner.update( [ aim( [ 0, .1, 0, .99 ] ) ] )[0].boneRotation.rotation, [ 0, .1, 0, .99 ] );
+	assert.equal( owner.update( [ base ] )[0].boneRotation, undefined, "a released aim clears the row" );
+});

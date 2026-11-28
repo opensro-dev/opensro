@@ -250,7 +250,22 @@ export function createActorSnapshots( reuse = true ) {
 			source.materialTint === previous.materialTint && source.heightFactor === previous.heightFactor &&
 			source.effectBaseScale === previous.effectBaseScale &&
 			source.absoluteEffectScale === previous.absoluteEffectScale &&
-			source.effectAnchor === previous.effectAnchor;
+			source.effectAnchor === previous.effectAnchor &&
+			sameBoneRotation( source.boneRotation, previous.boneRotation );
+	}
+	/*
+	================
+	sameBoneRotation
+
+	A spine aim is a new object on every rebuild (spine-aim.ts), so it is
+	compared by value: the same bone at the same four rotation components.
+	================
+	*/
+	function sameBoneRotation( a: CharacterActor["boneRotation"], b: CharacterActor["boneRotation"] ) {
+		if ( a === b ) return true;
+		if ( !a || !b || a.bone !== b.bone ) return false;
+		const x = a.rotation, y = b.rotation;
+		return x[0] === y[0] && x[1] === y[1] && x[2] === y[2] && x[3] === y[3];
 	}
 	/*
 	================
