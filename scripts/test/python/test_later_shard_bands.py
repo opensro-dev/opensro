@@ -6,7 +6,9 @@ Every optional layer writes its kinds into a shard of its own and, on
 its off path, unlinks that shard whether or not it ever wrote it. Two
 layers naming one shard file therefore delete each other's rows: a
 build with the first on and the second off loses the first. These
-tests pin the band rule the importers' headers state.
+tests pin the band rule the importers' headers state. Discovery reads
+both declaration shapes: a module-level shard assignment, and a source
+profile's shard entries (the pet import's per-source dicts).
 ===========================================================================
 """
 import script_paths  # noqa: F401  (puts scripts/ and its build folders on sys.path, #3410)
@@ -27,6 +29,7 @@ import god_import as god  # noqa: E402
 import hunting2_import as hunting2  # noqa: E402
 import jupiter_import as jupiter  # noqa: E402
 import muhan_import as muhan  # noqa: E402
+import pet_import as pets  # noqa: E402
 import pharaoh_temple_import as pharaoh_temple  # noqa: E402
 import roc_import as roc  # noqa: E402
 import skytemple_import as skytemple  # noqa: E402
@@ -34,8 +37,12 @@ import styria_import as styria  # noqa: E402
 import winter_event_import as winter  # noqa: E402
 
 SCRIPTS = Path(__file__).resolve().parents[2]
-# A module-level shard assignment, the shape every importer's header uses.
+# A module-level shard assignment, the shape most importers' headers use.
 SHARD_ASSIGNMENT = re.compile(r"^(CHARACTER|SKILL)_SHARD = ", re.MULTILINE)
+# A source profile's shard entries (pet_import's per-source dicts): the
+# other shape a staged shard is declared in.
+PROFILE_SHARD_KEYS = ("char_shard", "skill_shard")
+PROFILE_ASSIGNMENT = re.compile(r'"(?:char_shard|skill_shard)"\s*:')
 
 
 # ================
@@ -49,7 +56,8 @@ SHARD_ASSIGNMENT = re.compile(r"^(CHARACTER|SKILL)_SHARD = ", re.MULTILINE)
 def shard_owners():
 	owners = []
 	for path in sorted(SCRIPTS.glob("*.py")):
-		if not SHARD_ASSIGNMENT.search(path.read_text(encoding="utf-8")):
+		source = path.read_text(encoding="utf-8")
+		if not SHARD_ASSIGNMENT.search(source) and not PROFILE_ASSIGNMENT.search(source):
 			continue
 		module = importlib.import_module(path.stem)
 		if shard_names(module):
@@ -64,7 +72,11 @@ LAYER_FLAGS = (arabia.FLAG, muhan.FLAG, winter.FLAG)
 # shard_names
 # ================
 def shard_names(module):
-	return [getattr(module, name) for name in ("CHARACTER_SHARD", "SKILL_SHARD") if hasattr(module, name)]
+	names = [getattr(module, name) for name in ("CHARACTER_SHARD", "SKILL_SHARD") if hasattr(module, name)]
+	for value in vars(module).values():
+		if isinstance(value, dict):
+			names += [value[key] for key in PROFILE_SHARD_KEYS if key in value]
+	return names
 
 
 SHARD_OWNERS = shard_owners()
@@ -77,7 +89,7 @@ class TestShardBands(unittest.TestCase):
 	def test_the_owners_include_every_known_importer(self):
 		# The discovery itself: the importers the band rule was written for.
 		for module in (arabia, cap110, colosseum, constantinople, export_world, god, hunting2, jupiter, muhan,
-			pharaoh_temple, roc, skytemple, styria, winter):
+			pets, pharaoh_temple, roc, skytemple, styria, winter):
 			self.assertIn(module, SHARD_OWNERS)
 
 	def test_every_shard_has_one_owner(self):
