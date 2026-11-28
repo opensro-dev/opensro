@@ -118,6 +118,13 @@ func (game *gameplayPlane) register(hub *transport.Hub, loadQuests questDefiniti
 		log.Infof("trade: stall prices to %d and warehouse deposits to %d ON (%s)",
 			action.StallPriceLimitFromEnv(), game.items.StorageGoldDepositLimit, action.EnvRaisedGoldCaps)
 	}
+	// Port-only, not native: one trade table may hold more than the u32
+	// range (#4264).
+	game.items.WideTradeGold = action.WideTradeGoldFromEnv()
+	game.deps.WideTradeGold = game.items.WideTradeGold
+	if game.items.WideTradeGold {
+		log.Infof("trade: exchange gold above 4,294,967,295 ON (%s)", action.EnvWideTradeGold)
+	}
 	// Port-only, not native: caravans rated by cargo gold, Jangan route profit.
 	game.deps.TradeTiers = game.items.TradeTiers
 	// SRO_TELEPORT_GRACE (port-only, not native): teleport arrivals get the

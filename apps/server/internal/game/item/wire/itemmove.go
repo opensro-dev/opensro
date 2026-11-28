@@ -451,7 +451,7 @@ type ItemMoveRequest struct {
 	DestSlot     uint8
 	Quantity     uint16
 	// GoldAmount is the gold a gold move names: a u32 on the native wire,
-	// or a u64 on a warehouse deposit above the u32 range (WideGoldDeposit).
+	// or a u64 on a warehouse deposit above the u32 range (WideGoldMove).
 	GoldAmount uint64
 	SubMoves   []SubMove
 }
@@ -528,6 +528,9 @@ func (q ItemMoveRequest) Encode() ([]byte, error) {
 		// client ItemMoveRequest_Serialize @0x006984cb, amount
 		// pre-clamped at client 0x00697eb5
 		writeGoldAmount(w, q.MovementType, ClampGold(q.GoldAmount), q.GoldAmount)
+	case MoveTypeExchangeGold:
+		// Case 0xD: the native client sends the table's gold unclamped.
+		writeGoldAmount(w, q.MovementType, uint32(q.GoldAmount), q.GoldAmount)
 	case MoveTypeStorage, MoveTypeGuildStorage:
 		// ItemMoveRequest_Serialize case 1: [src][dst][u16 count][u32 npc].
 		w.U8(q.SourceSlot).U8(q.DestSlot).U16(q.Quantity).U32(q.NpcGID)
@@ -619,12 +622,12 @@ func DecodeItemMoveRequest(payload []byte) (ItemMoveRequest, error) {
 			return out, err
 		}
 	case MoveTypeExchangeGold:
-		// Client ItemMoveRequest_Serialize case 0xD: the gold on the table.
-		var amount uint32
-		if amount, err = r.U32(); err != nil {
+		// Client ItemMoveRequest_Serialize case 0xD: the gold on the table,
+		// or the port's wide u64 (WideGoldMove; the action refuses it while
+		// SRO_WIDE_TRADE_GOLD is off).
+		if out.GoldAmount, err = readGoldAmount(r, movementType); err != nil {
 			return out, err
 		}
-		out.GoldAmount = uint64(amount)
 	case MoveTypeCosInventory:
 		if out.CosGID, err = r.U32(); err != nil {
 			return out, err

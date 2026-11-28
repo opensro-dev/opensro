@@ -439,7 +439,7 @@ TestWideGoldDepositRoundTrip
 
 A warehouse deposit above the u32 range travels as a u64 and decodes back
 whole; below it, and for every other gold move, the native four bytes
-stay (port-only wide form, WideGoldDeposit).
+stay (port-only wide form, WideGoldMove).
 ================
 */
 func TestWideGoldDepositRoundTrip(t *testing.T) {

@@ -251,7 +251,7 @@ func TestStorageGoldDepositCaps(t *testing.T) {
 goldDepositPayload
 
 A 0x706D warehouse gold deposit: the native u32 amount, or the port's wide
-u64 (wire.WideGoldDeposit) when the amount does not fit.
+u64 (wire.WideGoldMove) when the amount does not fit.
 ================
 */
 func goldDepositPayload(amount uint64) []byte {
