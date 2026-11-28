@@ -201,6 +201,12 @@ export const EXPERIMENTAL_TABS: readonly ExperimentalTab[] = [
 						description: "Richer glow and sparks on reinforced gear."
 					},
 					{
+						key: "staffNameplateFx",
+						id: "experimental-staff-nameplate-fx",
+						label: "Staff nameplates",
+						description: "GM names glow, with sparks rising off them."
+					},
+					{
 						key: "compressedTextures",
 						id: "experimental-compressed-textures",
 						label: "Compressed textures",

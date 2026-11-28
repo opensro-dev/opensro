@@ -99,6 +99,7 @@ function copyUiProduct( scene: UiScene, previous: UiScene | undefined, validated
 			quad.uvTurn !== undefined && ![ 0, 1, 2, 3 ].includes( quad.uvTurn ) ||
 			quad.tiled !== undefined && typeof quad.tiled !== "boolean" ||
 			quad.additive !== undefined && typeof quad.additive !== "boolean" ||
+			quad.fx !== undefined && quad.fx !== "staff-aura" && quad.fx !== "staff-spark" ||
 			quad.alphaCutoff !== undefined &&
 				(!Number.isFinite( quad.alphaCutoff ) || quad.alphaCutoff < 0 || quad.alphaCutoff > 1)
 		) throw Error( "Invalid UI sampling" );
@@ -158,6 +159,8 @@ function copyUiProduct( scene: UiScene, previous: UiScene | undefined, validated
 			// effect sheet (Magic POP's deco, the alchemy result) blended, its
 			// black square and all (#3446).
 			...(quad.additive ? { additive: true } : {}),
+			// The staff nameplate's layer travels with the quad too.
+			...(quad.fx ? { fx: quad.fx } : {}),
 			...(quad.alphaCutoff !== undefined ? { alphaCutoff: quad.alphaCutoff } : {}),
 			...(quad.characterAnchor !== undefined ? { characterAnchor: quad.characterAnchor } : {}),
 			...(quad.layer ? { layer: quad.layer } : {}),

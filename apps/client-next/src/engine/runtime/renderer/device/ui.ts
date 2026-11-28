@@ -28,6 +28,15 @@ const BLOCK_SIDE = 4;
 const NEAREST_FLAG = 4;
 // Added to the same slot when the quad's texture repeats (UiQuad.tiled).
 const TILED_FLAG = 8;
+// The staff nameplate layer (UiQuad.fx, staff-nameplate.ts) rides the same
+// slot as its code times this unit; the shader animates it from viewport.w.
+const STAFF_FX_UNIT = 16;
+const STAFF_FX_CODE: Readonly<Record<NonNullable<UiQuad["fx"]>, number>> = {
+	"staff-aura": 1,
+	"staff-spark": 2
+};
+// The clock the shader reads wraps here, so an f32 keeps its fraction.
+const FX_CLOCK_WRAP_SECONDS = 3600;
 // Resident UI texture bytes the slots may hold together.
 const UI_TEXTURE_BUDGET_BYTES = 64 << 20;
 // One instance record: 28 floats (the shader's Quad).
@@ -96,8 +105,23 @@ struct Out {
 	@location(8) @interpolate(flat) rotated: f32,
 	@location(9) @interpolate(flat) rect: vec4f,
 	@location(10) @interpolate(flat) tiled: f32,
-	@location(11) @interpolate(flat) padded: f32
+	@location(11) @interpolate(flat) padded: f32,
+	// The staff nameplate layer (0 none, 1 aura, 2 spark) and the
+	// device clock in seconds; the fragment stage has no viewport binding.
+	@location(12) @interpolate(flat) fx: vec2f
 };
+
+/*
+================
+staffHue
+
+Port-only (staff-nameplate.ts): a spark's saturated colour on the hue wheel,
+h in [0, 1).
+================
+*/
+fn staffHue( h: f32 ) -> vec3f {
+	return clamp( abs( fract( h + vec3f( 0, 2.0 / 3.0, 1.0 / 3.0 ) ) * 6 - 3 ) - 1, vec3f( 0 ), vec3f( 1 ) );
+}
 
 /*
 ================
@@ -197,8 +221,26 @@ vs
 	);
 	let q = quads[i];
 	let angle = q.effects.z;
-	// effects.x packs the uv turn (0-3), NEAREST_FLAG (4) and TILED_FLAG (8).
+	// effects.x packs the uv turn (0-3), NEAREST_FLAG (4), TILED_FLAG (8)
+	// and the staff nameplate layer times STAFF_FX_UNIT (16): 1 aura,
+	// 2 spark. viewport.w is the device clock in seconds.
 	let flags = u32( q.effects.x );
+	let fx = ( flags / 16 ) % 4;
+	let clock = viewport.w;
+	// A spark moves its whole quad (rect), so the edge pad and its discard
+	// below follow it instead of clipping it.
+	var rect = q.rect;
+	var sparkLife = 1.0;
+	if ( fx == 2 ) {
+		// A spark rises 16 units over its life and swells then shrinks,
+		// swaying as it goes; its phase comes from where it stands.
+		let phase = fract( q.rect.x * 0.137 + q.rect.y * 0.071 );
+		let rise = fract( clock * 0.7 + phase );
+		sparkLife = sin( rise * 3.14159265 );
+		let size = q.rect.zw * ( 0.5 + sparkLife );
+		let centre = q.rect.xy + q.rect.zw * 0.5 + vec2f( sin( clock * 3 + phase * 6.2831853 ) * 3, -rise * 16 );
+		rect = vec4f( centre - size * 0.5, size );
+	}
 	// An unrotated quad grows by EDGE_PAD UI units on each side, its uv with
 	// it: a fractional scale's edge texels cover pixels whose centres lie
 	// outside the rect. fs discards the pad unless it takes the area average.
@@ -210,15 +252,15 @@ vs
 	if ( flags % 2 == 1 ) {
 		texels = texels.yx;
 	}
-	let pixelsPerTexel = viewport.z * q.rect.zw / max( texels, vec2f( 1e-6 ) );
+	let pixelsPerTexel = viewport.z * rect.zw / max( texels, vec2f( 1e-6 ) );
 	let onGrid = viewport.z > 0 &&
 		all( abs( pixelsPerTexel - round( pixelsPerTexel ) ) < vec2f( SCALE_EPSILON ) ) &&
 		all( pixelsPerTexel > vec2f( 0.5 ) );
-	let padded = angle == 0 && all( q.rect.zw > vec2f( 0 ) ) && !onGrid;
-	let pad = select( vec2f( 0 ), vec2f( EDGE_PAD ) / q.rect.zw, padded );
+	let padded = angle == 0 && all( rect.zw > vec2f( 0 ) ) && !onGrid;
+	let pad = select( vec2f( 0 ), vec2f( EDGE_PAD ) / rect.zw, padded );
 	let c = corners[v] * ( 1 + 2 * pad ) - pad;
-	let local = ( c - 0.5 ) * q.rect.zw;
-	let p = q.rect.xy + q.rect.zw * 0.5 + vec2f(
+	let local = ( c - 0.5 ) * rect.zw;
+	let p = rect.xy + rect.zw * 0.5 + vec2f(
 		local.x * cos( angle ) - local.y * sin( angle ),
 		local.x * sin( angle ) + local.y * cos( angle )
 	);
@@ -236,6 +278,10 @@ vs
 	o.uv = q.uv.xy + uv * q.uv.zw;
 	o.cutoff = q.effects.y;
 	o.color = mix( q.color, q.rightColor, clamp( c.x, 0.0, 1.0 ) );
+	if ( fx == 2 ) {
+		o.color = vec4f( mix( staffHue( fract( q.rect.x * 0.05 + clock * 0.5 ) ), vec3f( 1 ), 0.4 ), o.color.a * sparkLife );
+	}
+	o.fx = vec2f( f32( fx ), clock );
 	o.point = p;
 	o.clip = q.clip;
 	o.maskUv = ( p - q.maskRect.xy ) / q.maskRect.zw;
@@ -244,7 +290,7 @@ vs
 	o.tiled = select( 0.0, 1.0, ( flags / 8 ) % 2 == 1 );
 	o.padded = select( 0.0, 1.0, padded );
 	o.rotated = select( 0.0, 1.0, angle != 0 );
-	o.rect = q.rect;
+	o.rect = rect;
 	return o;
 }
 
@@ -298,7 +344,16 @@ fs
 	if ( color.a < i.cutoff ) {
 		discard;
 	}
-	return vec4f( color.rgb, color.a * textureSample( maskTex, samp, i.maskUv ).a );
+	var shaded = vec4f( color.rgb, color.a * textureSample( maskTex, samp, i.maskUv ).a );
+	if ( i.fx.x > 0 ) {
+		// The halo and the sparks are soft round glows, not squares; the
+		// halo, a steady gold, breathes.
+		let r = length( ( i.uv - 0.5 ) * 2 );
+		let inner = select( 0.2, 0.35, i.fx.x == 1 );
+		let pulse = select( 1.0, 0.6 + 0.4 * sin( i.fx.y * 3 ), i.fx.x == 1 );
+		shaded = vec4f( shaded.rgb, shaded.a * ( 1 - smoothstep( inner, 1.0, r ) ) * pulse );
+	}
+	return shaded;
 }
 `
 	} );
@@ -399,6 +454,29 @@ fs
 	const packedGlyph: number[] = [];
 	let values = new Float32Array( 0 ), uploaded = new Float32Array( 0 );
 	const viewportValues = new Float32Array( 4 ), noMask = [ 0, 0, 1, 1 ] as const;
+	// Whether the packed scene holds a staff nameplate layer: only then does
+	// the clock move, so a scene without one writes no uniform per frame.
+	let animated = false;
+	/*
+	================
+	writeViewport
+
+	The scene's size, the output pixels per UI unit and, while a staff
+	layer is packed, the clock; written only when one of them changed.
+	================
+	*/
+	function writeViewport( scene: UiScene, pixelScale: number ) {
+		const clock = animated ? (performance.now() / 1000) % FX_CLOCK_WRAP_SECONDS : 0;
+		if (
+			viewportValues[0] === scene.width && viewportValues[1] === scene.height &&
+			viewportValues[2] === pixelScale && viewportValues[3] === Math.fround( clock )
+		) return;
+		viewportValues[0] = scene.width;
+		viewportValues[1] = scene.height;
+		viewportValues[2] = pixelScale;
+		viewportValues[3] = clock;
+		device.queue.writeBuffer( viewport, 0, viewportValues );
+	}
 	let last: UiScene | null = null, draws: readonly UiDraw[] = [], resourceRevision = 0, recordedResources = -1;
 	/*
 	================
@@ -572,20 +650,14 @@ fs
 		*/
 		prepare( scene: UiScene | null, targetWidth = 0 ): readonly UiDraw[] {
 			if ( !pipeline || !scene ) return [];
-			// Before the cache return: a density change can keep the same scene.
-			// Output pixels per UI unit; 0 when the caller does not say (the
+			// The cache return writes the viewport too: a density change, and the
+			// staff layers' clock, keep the same scene. Output pixels per UI unit; 0 when the caller does not say (the
 			// shader then pads every quad, which is correct, only slower).
 			const pixelScale = targetWidth > 0 ? targetWidth / scene.width : 0;
-			if (
-				viewportValues[0] !== scene.width || viewportValues[1] !== scene.height ||
-				viewportValues[2] !== pixelScale
-			) {
-				viewportValues[0] = scene.width;
-				viewportValues[1] = scene.height;
-				viewportValues[2] = pixelScale;
-				device.queue.writeBuffer( viewport, 0, viewportValues );
+			if ( last === scene && recordedResources === resourceRevision ) {
+				writeViewport( scene, pixelScale );
+				return draws;
 			}
-			if ( last === scene && recordedResources === resourceRevision ) return draws;
 			// One GPU record per plain quad and per glyph of a text run.
 			const records = uiRecordCount( scene.quads );
 			if ( scene.quads.length > UI_RECORD_LIMIT || records > UI_RECORD_LIMIT ) {
@@ -616,7 +688,9 @@ fs
 			let first = needed, lastChanged = -1;
 			let previous: GPUBindGroup | null = null;
 			let record = 0;
+			animated = false;
 			for ( const quad of scene.quads ) {
+				if ( quad.fx ) animated = true;
 				const run = quad.run, count = run ? run.glyphs.length : 1;
 				if ( count === 0 ) continue;
 				// An absent image is not a solid-color primitive. Keep its draw absent until
@@ -681,7 +755,7 @@ fs
 					// Nearest quads carry NEAREST_FLAG in the turn slot (the shader's
 					// area sampling at fractional UI sizes reads it).
 					values[at + 20] = (quad.uvTurn ?? 0) + (quad.sampling === "nearest" ? NEAREST_FLAG : 0) +
-						(quad.tiled ? TILED_FLAG : 0);
+						(quad.tiled ? TILED_FLAG : 0) + (quad.fx ? STAFF_FX_CODE[quad.fx] * STAFF_FX_UNIT : 0);
 					values[at + 21] = quad.alphaCutoff ?? 0;
 					values[at + 22] = quad.rotation ?? 0;
 					values[at + 23] = quad.depth ?? 0;
@@ -726,6 +800,9 @@ fs
 			) draws = next;
 			last = scene;
 			recordedResources = resourceRevision;
+			// After packing, so a scene that first shows a staff layer
+			// already reads the clock.
+			writeViewport( scene, pixelScale );
 			return draws;
 		},
 		/*

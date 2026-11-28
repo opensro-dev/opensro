@@ -177,3 +177,54 @@ func TestAllowsReadsTheProjectedBits(t *testing.T) {
 		t.Fatalf("a capability has no row: %b of %b", seen, All)
 	}
 }
+
+/*
+================
+TestNameplateSwitchSurvivesARestart
+
+/NAMEPLATE OFF is kept by name, for a granted GM and a host-allowlist GM
+alike, and comes back on the next boot; ON clears it. A repeated switch
+reports no change, and a failed save leaves the switch as it was.
+================
+*/
+func TestNameplateSwitchSurvivesARestart(t *testing.T) {
+	dir := t.TempDir()
+	book := openTestBook(t, dir)
+	grant := Request{Division: "d", Character: "Numz", Role: GMRole, Capabilities: []string{"nameplate"}, Operator: "op"}
+	if _, _, err := book.Grant(grant); err != nil {
+		t.Fatal(err)
+	}
+	for _, name := range []string{"numz", "Host"} {
+		if changed, err := book.SetNameplate("d", name, false); err != nil || !changed {
+			t.Fatalf("%s off: changed %v, %v", name, changed, err)
+		}
+	}
+	if changed, err := book.SetNameplate("d", "Numz", false); err != nil || changed {
+		t.Fatalf("a repeated off: changed %v, %v", changed, err)
+	}
+	roster := openTestBook(t, dir).Roster("d", []string{"Host", "Other"})
+	off := map[string]bool{}
+	for _, entry := range roster {
+		off[entry.Character] = entry.NameplateOff
+	}
+	if !off["Numz"] || !off["Host"] || off["Other"] || len(roster) != 3 {
+		t.Fatalf("roster after a restart = %+v", roster)
+	}
+	if changed, err := book.SetNameplate("d", "Numz", true); err != nil || !changed {
+		t.Fatalf("on: changed %v, %v", changed, err)
+	}
+	if roster := openTestBook(t, dir).Roster("d", nil); len(roster) != 1 || roster[0].NameplateOff {
+		t.Fatalf("roster after ON = %+v", roster)
+	}
+
+	failing, err := OpenBook(filepath.Join(dir, FileName), time.Now, func(string, []byte) error { return os.ErrPermission })
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := failing.SetNameplate("d", "Numz", false); err == nil {
+		t.Fatal("a failed save was reported as saved")
+	}
+	if roster := failing.Roster("d", nil); roster[0].NameplateOff {
+		t.Fatal("a failed save still switched the nameplate off")
+	}
+}

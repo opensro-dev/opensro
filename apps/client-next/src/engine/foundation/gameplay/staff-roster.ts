@@ -1,7 +1,7 @@
 /*
 ===========================================================================
 
-staff-roster.ts - staff state and the staff roster (port-only 0x3FCC/0x3FCD)
+staff-roster.ts - staff state, roster and nameplates (port-only 0x3FCC/0x3FCD/0x3FD3)
 
 Port-only, not native; the default by owner decision 2026-11-23. The
 server's staff book (apps/server/internal/game/staff) decides who is
@@ -14,6 +14,8 @@ change, so nothing waits for a relog:
 	0x3FCD staff roster, every player:
 	       u16 count, then per entry: u16 len + UTF-8 name,
 	       u16 len + UTF-8 tag, u32 name ARGB, u32 chat ARGB
+	0x3FD3 staff nameplates off, every player:
+	       u16 count, then per entry: u16 len + UTF-8 name
 
 The original draws a name gold only when the name itself starts with
 "[GM]" (858810), and paints a GM's All line pink as chat type 3; the
@@ -23,6 +25,12 @@ the role's chat colour. The native "[GM]" name rule stays the fallback.
 A shard with no staff sends neither frame; a client that predates them
 drops the unknown opcodes.
 
+0x3FD3 (owner 2026-11-28) names the staff who turned their nameplate glow
+off with /NAMEPLATE OFF (staff-nameplate.ts); the worker folds it into the
+roster entries (withNameplates), so every player sees each staff
+member's choice. It comes with every roster push, and at entry only while
+someone is off.
+
 This file holds the decoders and the lookups both the worker and the UI
 use; it imports nothing, so Node tests load it as it ships.
 
@@ -31,6 +39,7 @@ use; it imports nothing, so Node tests load it as it ships.
 
 export const OP_STAFF_STATE = 0x3fcc;
 export const OP_STAFF_ROSTER = 0x3fcd;
+export const OP_STAFF_NAMEPLATES = 0x3fd3;
 // The global chat type: public chat on this shard, staff-coloured too.
 const GLOBAL_CHAT_CHANNEL = 6;
 // Mirrors the server's bound on roles and grants: staff are few.
@@ -48,6 +57,8 @@ export interface StaffRosterEntry {
 	// ARGB, as the entity name colours are kept (name-color.ts).
 	readonly nameColor: number;
 	readonly chatColor: number;
+	// The staff member turned the nameplate glow off (0x3FD3).
+	readonly nameplateOff?: boolean;
 }
 
 /*
@@ -157,4 +168,53 @@ export function staffChatColor(
 	if ( !entry ) return undefined;
 	const argb = entry.chatColor;
 	return [ ((argb >>> 16) & 255) / 255, ((argb >>> 8) & 255) / 255, (argb & 255) / 255, 1 ];
+}
+
+/*
+================
+decodeStaffNameplates
+
+The 0x3FD3 names whose nameplate glow is off, whole or not at all.
+================
+*/
+export function decodeStaffNameplates( payload: Uint8Array ): readonly string[] {
+	const view = new DataView( payload.buffer, payload.byteOffset, payload.byteLength );
+	if ( payload.length < 2 ) throw Error( "Invalid staff nameplates" );
+	const count = view.getUint16( 0, true );
+	if ( count > MAX_STAFF ) throw Error( "Invalid staff nameplates count" );
+	const utf8 = new TextDecoder( "utf-8", { fatal: true } );
+	const names: string[] = [];
+	let offset = 2;
+	for ( let i = 0; i < count; i++ ) {
+		if ( offset + 2 > payload.length ) throw Error( "Invalid staff nameplates" );
+		const length = view.getUint16( offset, true );
+		offset += 2;
+		if ( offset + length > payload.length ) throw Error( "Invalid staff nameplates" );
+		names.push( utf8.decode( payload.subarray( offset, offset + length ) ) );
+		offset += length;
+	}
+	if ( offset !== payload.length ) throw Error( "Invalid staff nameplates" );
+	return names;
+}
+
+/*
+================
+withNameplates
+
+The roster with each entry's nameplate switch from the 0x3FD3 names
+(compared as logins are, ASCII case ignored). The roster and the names
+arrive in separate frames, so the worker keeps both and merges here.
+================
+*/
+export function withNameplates(
+	roster: readonly StaffRosterEntry[],
+	off: readonly string[]
+): readonly StaffRosterEntry[] {
+	const names = new Set( off.map( name => name.toLowerCase() ) );
+	return roster.map( entry => {
+		const nameplateOff = names.has( entry.name.toLowerCase() );
+		if ( !!entry.nameplateOff === nameplateOff ) return entry;
+		const { nameplateOff: _, ...rest } = entry;
+		return nameplateOff ? { ...rest, nameplateOff } : rest;
+	} );
 }

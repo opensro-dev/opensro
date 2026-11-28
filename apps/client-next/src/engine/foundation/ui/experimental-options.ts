@@ -272,6 +272,11 @@ export interface ExperimentalOptions {
 	// SetMusicMode (8FC550, vtable slot 0x58), which no v1.150 code calls,
 	// so the native event plays the region music. Off unless turned on.
 	readonly christmasCarols: boolean;
+	// Port-only, not native (owner 2026-11-28): a rostered staff member's
+	// name board (a name that only starts with [GM] does not count) wears
+	// a pulsing gold halo and rising sparks; the name itself is unchanged
+	// (staff-nameplate.ts). On unless turned off; off is the native board.
+	readonly staffNameplateFx: boolean;
 	// Port-only, not native (#2496): a rare item's seal line sits under the
 	// item name. 558FF0 appends it after the requirement rows (the 56B099
 	// call in FormatWeapon, after 568500). Off unless turned on; off is the
@@ -476,7 +481,7 @@ Only an explicit true enables a toggle, except smoothCamera, enchantSparks,
 compressedTextures, jobKillNotices, dropPlusNotices,
 breakNotices, highlightEventNotices, exchangeClickShortcuts, noticeLinks, chatItemLinks, shortNotices,
 petClickOpensWindow, touchInspect, uniqueSpawnPoints, phoneRenderCap, webTransport, eventChatTab, transportAutoPotion,
-christmasCarols and sroMacro (owners, 2026-11-15 and 2026-11-21: on by default, off by the player's choice), which only an explicit false turns off.
+christmasCarols, staffNameplateFx and sroMacro (owners, 2026-11-15, 2026-11-28 and 2026-11-21: on by default, off by the player's choice), which only an explicit false turns off.
 The pickup filter's kinds (petFilterGold and its siblings) also only turn off
 explicitly, and are read only while petPickupFilter is on.
 Missing or invalid render scales restore full resolution and missing or
@@ -550,6 +555,7 @@ export function experimentalOptions( value: unknown = null ): ExperimentalOption
 		sunDropMarker: enabled( "sunDropMarker" ),
 		warpArrivalSound: enabled( "warpArrivalSound" ),
 		christmasCarols: record.christmasCarols !== false,
+		staffNameplateFx: record.staffNameplateFx !== false,
 		sealUnderHeading: enabled( "sealUnderHeading" ),
 		setBonusTooltip: enabled( "setBonusTooltip" ),
 		silkHistory: enabled( "silkHistory" ),

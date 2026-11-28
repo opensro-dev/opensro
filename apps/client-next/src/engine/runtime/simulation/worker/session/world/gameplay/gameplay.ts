@@ -461,11 +461,14 @@ import {
 	reverseReturnFailureKey
 } from "@/engine/foundation/gameplay/reverse-user-point";
 import {
+	decodeStaffNameplates,
 	decodeStaffRoster,
 	decodeStaffState,
+	OP_STAFF_NAMEPLATES,
 	OP_STAFF_ROSTER,
 	OP_STAFF_STATE,
-	type StaffRosterEntry
+	type StaffRosterEntry,
+	withNameplates
 } from "@/engine/foundation/gameplay/staff-roster";
 import { createMostWanted } from "./most-wanted/most-wanted";
 import { createPetTraining } from "./pet-training/pet-training";
@@ -794,6 +797,9 @@ export function createGameplay(
 	// Port-only (staff-roster.ts): the staff roster, and this character's
 	// capability bits; 0x3FCC flips eligibility.gm live.
 	let staffRoster: readonly StaffRosterEntry[] = [], staffCapabilities = 0;
+	// The 0x3FCD roster as sent and the 0x3FD3 names with the glow off;
+	// staffRoster is the two merged (staff-roster.ts withNameplates).
+	let staffRosterSent: readonly StaffRosterEntry[] = [], staffNameplatesOff: readonly string[] = [];
 	let autoPotionInputBlocked = false, autoPotionItemMallOpen = false;
 	let autoPotion = autoPotionBootstrap( {} );
 	let potionFacts: AutoPotionFacts = { alive: false, hp: 0, mp: 0, maxHp: 0, maxMp: 0, abnormal: 0 };
@@ -2273,6 +2279,8 @@ clears it when another character enters.
 		warnings = [ false, false ];
 		eligibility = { gm: false, pcRoomEvent: false };
 		staffRoster = [];
+		staffRosterSent = [];
+		staffNameplatesOff = [];
 		staffCapabilities = 0;
 		autoPotion = autoPotionBootstrap( {} );
 		potionFacts = { alive: false, hp: 0, mp: 0, maxHp: 0, maxMp: 0, abnormal: 0 };
@@ -5183,7 +5191,14 @@ Packet handling must not depend on which HUD panel is currently open.
 					return true;
 				}
 				if ( frame.opcode === OP_STAFF_ROSTER ) {
-					staffRoster = decodeStaffRoster( frame.payload );
+					staffRosterSent = decodeStaffRoster( frame.payload );
+					staffRoster = withNameplates( staffRosterSent, staffNameplatesOff );
+					dirty = true;
+					return true;
+				}
+				if ( frame.opcode === OP_STAFF_NAMEPLATES ) {
+					staffNameplatesOff = decodeStaffNameplates( frame.payload );
+					staffRoster = withNameplates( staffRosterSent, staffNameplatesOff );
 					dirty = true;
 					return true;
 				}

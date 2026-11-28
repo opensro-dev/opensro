@@ -64,6 +64,9 @@ const (
 	HoldLogout
 	// Notice is the in-game /NOTICE banner (gmcommand/notice.go).
 	Notice
+	// Nameplate is /NAMEPLATE ON and OFF, the staff member's own
+	// nameplate glow (gmcommand/nameplate.go).
+	Nameplate
 	capabilityEnd
 )
 
@@ -97,6 +100,7 @@ var Rows = []Row{
 	{Speed, "speed", "Set speed", "Movement", false},
 	{Invisible, "invisible", "Invisible", "Visibility", false},
 	{Invincible, "invincible", "Invincible", "Visibility", false},
+	{Nameplate, "nameplate", "Switch own nameplate glow", "Visibility", false},
 	{WorldControl, "world", "World status, time, flags, instances", "World", false},
 	{Notice, "notice", "Send a notice to every player", "World", false},
 	{MakeItem, "make_item", "Make item", "Economy", true},

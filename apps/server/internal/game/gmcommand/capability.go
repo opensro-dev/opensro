@@ -73,7 +73,8 @@ var subcommandCapability = map[uint8]staff.Capability{
 	SubBlockLogout:  staff.HoldLogout,
 	SubAllowLogout:  staff.HoldLogout,
 
-	SubNotice: staff.Notice,
+	SubNotice:    staff.Notice,
+	SubNameplate: staff.Nameplate,
 }
 
 /*
