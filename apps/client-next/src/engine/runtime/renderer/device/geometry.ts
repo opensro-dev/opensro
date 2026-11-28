@@ -106,7 +106,7 @@ export function geometryPipelineState( mat: Geometry["material"] ): GeometryPipe
 	const writes = mat?.depthWrite ?? ((!blend || fade || !!mat?.decal) && !mat?.sky && !mat?.lightmap);
 	if ( mat?.deferredParticle ) return { blend, cull, depthWrite: false, depthCompare: "always" };
 	const untested = !!mat?.sky && !(mat.sky === 2 && cull);
-	return { blend, cull, depthWrite: writes, depthCompare: untested ? "always" : "less-equal" };
+	return { blend, cull, depthWrite: writes, depthCompare: untested ? "always" : "less-equal", lean: !!mat?.terrain && !mat.water && !mat.lightmap };
 }
 
 /*

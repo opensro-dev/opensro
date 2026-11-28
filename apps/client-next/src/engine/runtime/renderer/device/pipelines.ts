@@ -196,6 +196,7 @@ export interface GeometryPipelineState {
 	readonly cull: boolean;
 	readonly depthWrite: boolean;
 	readonly depthCompare: "less-equal" | "always";
+	readonly lean?: boolean;
 }
 
 /*
@@ -205,7 +206,7 @@ geometryPipelineKey
 */
 export function geometryPipelineKey( state: GeometryPipelineState ): string {
 	const blend = state.blend ? `${state.blend.source}/${state.blend.destination}` : "opaque";
-	return `${blend}|${state.cull ? "cull" : "none"}|${state.depthWrite ? "write" : "keep"}|${state.depthCompare}`;
+	return `${blend}|${state.cull ? "cull" : "none"}|${state.depthWrite ? "write" : "keep"}|${state.depthCompare}${state.lean ? "|lean" : ""}`;
 }
 
 // The states every scene draws with, compiled before the device runs:
@@ -763,6 +764,13 @@ if(env.stages2.w>0.5&&material.reflection.z>0.5&&material.skin.z==0.0&&material.
  return vec4f(mix(lit*select(vec3f(1),waterShading,animated),select(fogColor,terrainFogColor,material.options.z>0.5),fog),select(surfaceAlpha,1.0,material.stagePolicy.y>0.5));
 }
 @fragment fn fs(input:Out,@builtin(front_facing) frontFacing:bool)->@location(0) vec4f {return shadeGeometry(input,frontFacing);}
+@fragment fn fsTerrainProbe(input:Out)->@location(0) vec4f {
+ _=sphereMap;_=waterMirror;_=waterPass;_=waterBumpSampler;_=waterMirrorSampler;_=sunShadowMap;_=sunShadowSampler;_=ambientOcclusionMap;
+ let tex=textureSample(albedo,textureSampler,input.uv,0);
+ let mask=mix(mix(input.color.x,input.color.y,input.maskUV.x),mix(input.color.z,input.color.w,input.maskUV.x),input.maskUV.y);
+ let fog=clamp((input.viewZ-env.fog.w)/max(0.001,env.settings.x-env.fog.w),0,1);
+ return vec4f(mix(tex.rgb*material.color.rgb,env.terrainFog.rgb,fog),select(mask,1.0,material.policy.z>0.5));
+}
 // Port-only, not native: an accepted unblended/cutout fragment covers the
 // scratch target fully. Alpha tests still discard inside shadeGeometry.
 @fragment fn fsPreviewOpaque(input:Out,@builtin(front_facing) frontFacing:bool)->@location(0) vec4f {
@@ -817,7 +825,7 @@ if(env.stages2.w>0.5&&material.reflection.z>0.5&&material.skin.z==0.0&&material.
 			},
 			fragment: {
 				module,
-				entryPoint: previewCoverage && (!blend || overwrite) ? "fsPreviewOpaque" : "fs",
+				entryPoint: state.lean ? "fsTerrainProbe" : previewCoverage && (!blend || overwrite) ? "fsPreviewOpaque" : "fs",
 				targets: [ { format: target, ...(blend ? { blend } : {}) } ]
 			},
 			primitive: {
