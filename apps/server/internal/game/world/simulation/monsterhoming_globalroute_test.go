@@ -208,3 +208,55 @@ func TestHomingWalksHomeOnGlobalRoute(t *testing.T) {
 		t.Fatal("the walk home detached the nest; the stuck policy answered a walkable route")
 	}
 }
+
+// A sliced homing search answers pending until it settles: the mover
+// waits one tick at a time, records no move stop (ten would latch the
+// native stuck event long before an unreachable home's 64 slices end),
+// and walks the route once the search settles on it.
+func TestSegmentWaitsOnAPendingHomingSearchWithoutStops(t *testing.T) {
+	ops, instance, mover := routedFixture(t, monster.MoverReturning)
+	ops.PlanPathFrom = nil
+	ops.PlanRoute = func(_ monster.Pose, _ NavOwner, to monster.Pose) *monster.NavigationRoute {
+		return exhaustedRoute(to)
+	}
+	ops.PlanPath = gorgePath(mover.Pose.X+45, mover.Pose.X+85, mover.Pose.Z)
+	const slices = 30
+	globalCalls := 0
+	ops.PlanGlobalRoute = func(_ monster.Pose, _ NavOwner, to monster.Pose) *monster.NavigationRoute {
+		globalCalls++
+		if globalCalls <= slices {
+			return monster.UnresolvedNavigationRoute(to, monster.NavigationSearchPending)
+		}
+		around := to
+		around.X -= 85
+		around.Z += 55
+		return monster.NewNavigationRoute(to, []monster.Pose{around, to})
+	}
+	goal := mover.Pose
+	goal.X += 120
+	now := int64(10000)
+	for i := 0; i < slices; i++ {
+		next, frames := ops.planSegment(&instance, mover, goal, 20, wire.MoveStateRun, now)
+		if len(frames) != 0 || next.InFlight(now) {
+			t.Fatalf("slice %d: a pending search moved the mover or sent %d frames", i, len(frames))
+		}
+		if !next.NavigationWaiting(now+monsterHomingPendingRetryMs-1) || next.NavigationWaiting(now+monsterHomingPendingRetryMs) {
+			t.Fatalf("slice %d: the pending wait does not end one tick later", i)
+		}
+		if next.Stuck() {
+			t.Fatalf("slice %d: a pending search latched the stuck event", i)
+		}
+		if _, _, _, failed := next.RouteFailure(); failed {
+			t.Fatalf("slice %d: a pending search was memoised as a failure", i)
+		}
+		mover = next
+		now += monsterHomingPendingRetryMs
+	}
+	next, frames := ops.planSegment(&instance, mover, goal, 20, wire.MoveStateRun, now)
+	if globalCalls != slices+1 {
+		t.Fatalf("global search consulted %d times, want %d", globalCalls, slices+1)
+	}
+	if len(frames) == 0 || !next.InFlight(now) {
+		t.Fatal("the settled homing route parked the mover instead of walking it")
+	}
+}
