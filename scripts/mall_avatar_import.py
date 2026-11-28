@@ -97,15 +97,6 @@ EXCLUDED_WORDS = ("_TEST",)
 AVATAR_TYPES = ["3", "1", "13"]
 FRESH_ID_BASE = 50000
 HAT_SUFFIX = "_HAT"
-# Rows whose model the v1.150 item-model builder refuses: their material has an
-# animated or material-scoped environment map (characterMaterialState.mjs
-# "needs runtime ownership"), and one such model aborts the whole asset
-# build. Found by screening every imported avatar model's environment
-# modifiers; revisit if that builder learns the modifier.
-RENDER_UNSUPPORTED = {
-	"ITEM_MALL_AVATAR_M_EARTHSPIRIT_HAT": "environment-mapped material",
-	"ITEM_MALL_AVATAR_W_EARTHSPIRIT_HAT": "environment-mapped material",
-}
 # Attachments take the later clients' own attachment tab (owner 2026-11-12,
 # replacing the 2026-10-13 hat-tab rule once the hats and attachments
 # together passed a tab's 256 slots). v1.150 ships the tab's label
@@ -208,8 +199,6 @@ def select_avatars(native_rows, later_rows, reserved_ids=(), previous=None, miss
 			existing.append(code)
 			continue
 		absent = missing(row)
-		if code in RENDER_UNSUPPORTED:
-			absent = absent + [RENDER_UNSUPPORTED[code]]
 		if texts is not None and row[items.NAME_KEY] not in texts:
 			absent = absent + ["name text"]
 		if absent:
