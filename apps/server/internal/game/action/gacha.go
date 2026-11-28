@@ -832,9 +832,9 @@ slot order: the native exchange walks the bag from slot 13 upward.
 func (rt *Runtime) gachaVoucherSlots(character *enterworld.Character) []uint8 {
 	var slots []uint8
 	for _, row := range character.MissionInventory {
-		// The stored slot is an int64: range-check it before narrowing, so a
-		// slot of 256 or more never aliases a low bag slot.
-		if row.Slot < int64(inventory.EquipmentSlotEnd) || row.Slot >= int64(inventory.BagEnd(character)) ||
+		// The stored slot is an int64: InBag range-checks it before any
+		// narrowing, so a slot of 256 or more never aliases a low bag slot.
+		if !inventory.InBag(character, row.Slot) ||
 			!rt.GachaCatalog.IsResultCard(row.RefObjID) || len(row.MagicOptions) != 2 {
 			continue
 		}
