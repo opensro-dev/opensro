@@ -106,7 +106,7 @@ struct Out {
 	@location(9) @interpolate(flat) rect: vec4f,
 	@location(10) @interpolate(flat) tiled: f32,
 	@location(11) @interpolate(flat) padded: f32,
-	// The staff nameplate layer (0 none, 1 name, 2 aura, 4 spark) and the
+	// The staff nameplate layer (0 none, 1 aura, 2 spark) and the
 	// device clock in seconds; the fragment stage has no viewport binding.
 	@location(12) @interpolate(flat) fx: vec2f
 };

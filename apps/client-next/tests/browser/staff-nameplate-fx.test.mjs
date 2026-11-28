@@ -98,7 +98,12 @@ test( "the halo keeps its gold, a spark rises and a plain quad stays still", { t
 			The mean RGB and the summed brightness inside a rect.
 			================
 			*/
-			function average( rgba, [x, y, w, h] ) {
+			/**
+			 * @param {Uint8Array} rgba
+			 * @param {readonly number[]} rect
+			 */
+			function average( rgba, rect ) {
+				const [x, y, w, h] = rect;
 				const sum = [ 0, 0, 0 ];
 				let n = 0;
 				for ( let j = y; j < y + h; j++ ) {

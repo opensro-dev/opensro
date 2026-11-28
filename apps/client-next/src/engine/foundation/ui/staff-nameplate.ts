@@ -40,7 +40,7 @@ const AURA_COLOR = [ 1, 0.85, 0.45, 0.55 ] as const;
 const SPARK_COUNT = 9;
 const SPARK_SIZE = 3;
 const SPARK_COLOR = [ 1, 1, 1, 1 ] as const;
-const FULL_UV: UiRect = [ 0, 0, 1, 1 ];
+const FULL_UV = [ 0, 0, 1, 1 ] as const;
 
 /*
 ================

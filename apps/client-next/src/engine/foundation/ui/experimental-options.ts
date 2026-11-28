@@ -272,9 +272,9 @@ export interface ExperimentalOptions {
 	// SetMusicMode (8FC550, vtable slot 0x58), which no v1.150 code calls,
 	// so the native event plays the region music. Off unless turned on.
 	readonly christmasCarols: boolean;
-	// Port-only, not native (owner 2026-11-28): a staff member's name board
-	// (the staff roster, or the native [GM] prefix) wears an animated halo,
-	// a steady gold halo and rising sparks; the name itself is unchanged
+	// Port-only, not native (owner 2026-11-28): a rostered staff member's
+	// name board (a name that only starts with [GM] does not count) wears
+	// a pulsing gold halo and rising sparks; the name itself is unchanged
 	// (staff-nameplate.ts). On unless turned off; off is the native board.
 	readonly staffNameplateFx: boolean;
 	// Port-only, not native (#2496): a rare item's seal line sits under the

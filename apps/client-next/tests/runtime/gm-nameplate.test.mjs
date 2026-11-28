@@ -35,9 +35,9 @@ function sized( text ) {
 
 test("/NAMEPLATE ON and OFF send the switch in any case", () => {
 	assert.equal( gmRequest( "/NAMEPLATE ON" )?.opcode, 0x75b6 );
-	assert.deepEqual( [ ...gmRequest( "/NAMEPLATE ON" ).payload ], [ 0xfd, 1 ] );
-	assert.deepEqual( [ ...gmRequest( "/nameplate off" ).payload ], [ 0xfd, 0 ] );
-	assert.deepEqual( [ ...gmRequest( "/Nameplate   Off  " ).payload ], [ 0xfd, 0 ] );
+	assert.deepEqual( [ ...(gmRequest( "/NAMEPLATE ON" )?.payload ?? []) ], [ 0xfd, 1 ] );
+	assert.deepEqual( [ ...(gmRequest( "/nameplate off" )?.payload ?? []) ], [ 0xfd, 0 ] );
+	assert.deepEqual( [ ...(gmRequest( "/Nameplate   Off  " )?.payload ?? []) ], [ 0xfd, 0 ] );
 });
 
 test("/NAMEPLATE without ON or OFF sends nothing", () => {

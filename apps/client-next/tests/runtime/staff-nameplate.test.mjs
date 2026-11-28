@@ -22,7 +22,9 @@ const { sameUiQuad } = await import( "../../src/engine/foundation/ui/ui-equality
 const { experimentalOptions } = await import( "../../src/engine/foundation/ui/experimental-options.ts" );
 
 const ROSTER = [ { name: "Harry", tag: "[MOD]", nameColor: 0xff40c0ff, chatColor: 0xff40c0ff } ];
+/** @type {[number, number, number, number]} */
 const BOARD = [ -30, -8, 60, 16 ];
+/** @type {[number, number, number, number]} */
 const FULL = [ 0, 0, 800, 600 ];
 
 /*
@@ -82,7 +84,7 @@ test("the UI admission copy keeps fx, equality tells layers apart, a bad fx is r
 	assert.equal( copyUi( scene ).quads[0].fx, "staff-aura" );
 	assert.equal( sameUiQuad( aura, { ...aura, fx: "staff-spark" } ), false );
 	assert.equal( sameUiQuad( aura, { ...aura } ), true );
-	assert.throws( () => copyUi( { ...scene, quads: [ { ...aura, fx: "rainbow" } ] } ) );
+	assert.throws( () => copyUi( { ...scene, quads: [ { ...aura, fx: /** @type {any} */ ("rainbow") } ] } ) );
 });
 
 /*
