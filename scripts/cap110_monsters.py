@@ -51,6 +51,7 @@ import import_vsro_alexandria as tables
 import published_ids
 import skilldata_enc as skill_tables
 import sro_pk2
+import later_tables
 from prepare_client_resources import write_atomically
 from sro_paths import trees_overlap
 
@@ -436,10 +437,9 @@ def client_field_population(placements, refs):
 # ================
 def client_outdoor_regions(vsro_root):
 	with open(Path(vsro_root) / "Media.pk2", "rb") as handle, mmap.mmap(handle.fileno(), 0, access=mmap.ACCESS_READ) as media:
-		index = tables.archive_index(media)
-		later = {row[2]: row for row in tables.later_table_rows(lambda name: tables.table_text(media, index, name),
-			"characterdata.txt")}
-		placements = npcpos_placements(tables.table_text(media, index, "npcpos.txt"), later)
+		source = later_tables.Archive.media(media, tables.archive_index(media))
+		later = later_tables.characters(source)
+		placements = npcpos_placements(source.file("npcpos.txt"), later)
 	admitted = select_references(later, {code: [FIELD_FAMILY] for code in client_claimed_codes(placements)})
 	return {(region & 255, region >> 8) for code, region, x, y, z in placements
 		if code in admitted and not region & 0x8000}
@@ -614,9 +614,8 @@ def add_monsters(vsro_root, native, output, source_root=None):
 		# ================
 		# read
 		# ================
-		def read(name):
-			return tables.table_text(media, index, name.lower())
-		later = tables.later_characters(read)
+		read = later_tables.Archive.media(media, index)
+		later = later_tables.characters(read)
 		claims = {}
 		claimed = {}
 		if source_root is not None:
@@ -645,7 +644,7 @@ def add_monsters(vsro_root, native, output, source_root=None):
 		# copy that lacks the Egypt field monsters' own skills.
 		# ================
 		def load_client_skills():
-			rows = skill_tables.client_skill_rows(read, lambda name: tables.TEXTDATA + name.lower() in index)
+			rows = skill_tables.client_skill_rows(read)
 			return {int(r[1]): r for r in rows if len(r) > 3 and r[1].isdigit()}
 		if source_root is None:
 			# The client is its own skill source: its monsters name its
@@ -691,7 +690,7 @@ def add_monsters(vsro_root, native, output, source_root=None):
 		base_text = (text_root / "textdataname.txt").read_bytes()
 		known = {r[1] for r in characters.translation_rows(base_text) if len(r) > 1}
 		wanted = {r[5] for r in refs.values()} - known
-		texts = [[r[0], r[1], r[2], "", "", r[5], r[4], r[7], r[8], r[9], ""] for r in tables.later_table_rows(read, "textdata_object.txt", characters.translation_rows) if len(r) >= 10 and r[1] in wanted]
+		texts = [[r[0], r[1], r[2], "", "", r[5], r[4], r[7], r[8], r[9], ""] for r in read.rows("textdata_object.txt", characters.translation_rows) if len(r) >= 10 and r[1] in wanted]
 		if wanted - {r[1] for r in texts}:
 			raise ValueError("missing field monster names")
 		# Name rows a family that is off this build owned leave with it: the

@@ -20,9 +20,10 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import variant_files as variant  # noqa: E402
+import later_tables  # noqa: E402
 import sro_pk2  # noqa: E402
 from alexandria_map_tables import LOCALINFO_COLUMNS, MAPINFO_COLUMNS, append_rows, overview_tiles  # noqa: E402
-from import_vsro_alexandria import TEXTDATA, decode_table, table_rows  # noqa: E402
+from import_vsro_alexandria import decode_table, table_rows  # noqa: E402
 from prepare_client_resources import safe_target, write_atomically  # noqa: E402
 
 # The native map art a tile import replaced, kept so the off path puts it
@@ -123,7 +124,7 @@ NATIVE_DESTINATION = DESTINATION - 1
 # v1.696 textdata_object_*.txt rows: service, id, key, Korean, five
 # unused, English.
 LATER_TEXT_KEY, LATER_TEXT_KOREAN, LATER_TEXT_ENGLISH = 2, 3, 9
-LATER_TEXT_PREFIX = TEXTDATA + "textdata_object"
+LATER_TEXT_TABLE = "textdata_object.txt"
 # A v1.150 textdataname row: service, key, Korean, '', description,
 # zh-CN, zh-TW, ja, en, vi, ''.
 NATIVE_TEXT_COLUMNS, NATIVE_TEXT_ENGLISH = 11, 8
@@ -206,17 +207,17 @@ def map_page_rows(later_pages, later_pins, regions, pages):
 # label_texts
 #
 # The v1.150 textdataname rows for the label keys the variant lacks,
-# from the v1.696 textdata_object shards. A key no shard names stays
-# out, and import_map_labels drops its label.
+# from the v1.696 textdata_object shards, in the order its index lists
+# them. A key no shard names stays out, and import_map_labels drops its
+# label.
 # ================
 def label_texts(media, media_index, keys):
 	texts = {}
-	for name in sorted(n for n in media_index if n.startswith(LATER_TEXT_PREFIX) and n.endswith(".txt")):
-		for row in later_rows(sro_pk2.payload(media, media_index[name])):
-			if len(row) > LATER_TEXT_ENGLISH and row[LATER_TEXT_KEY] in keys:
-				native = ["1", row[LATER_TEXT_KEY], row[LATER_TEXT_KOREAN]] + [""] * (NATIVE_TEXT_COLUMNS - 3)
-				native[NATIVE_TEXT_ENGLISH] = row[LATER_TEXT_ENGLISH]
-				texts.setdefault(row[LATER_TEXT_KEY], native)
+	for row in later_tables.Archive.media(media, media_index).rows(LATER_TEXT_TABLE, later_rows):
+		if len(row) > LATER_TEXT_ENGLISH and row[LATER_TEXT_KEY] in keys:
+			native = ["1", row[LATER_TEXT_KEY], row[LATER_TEXT_KOREAN]] + [""] * (NATIVE_TEXT_COLUMNS - 3)
+			native[NATIVE_TEXT_ENGLISH] = row[LATER_TEXT_ENGLISH]
+			texts.setdefault(row[LATER_TEXT_KEY], native)
 	return [texts[key] for key in sorted(texts)]
 
 
@@ -239,15 +240,14 @@ def label_texts(media, media_index, keys):
 def import_map_labels(media, media_index, text_root, regions):
 	local_path, names_path = text_root / LOCALINFO, text_root / TEXT_NAMES
 	tables = (local_path, names_path, text_root / MAPINFO)
-	if not all(path.exists() for path in tables) or TEXTDATA + LOCALINFO not in media_index:
+	source = later_tables.Archive.media(media, media_index)
+	if not all(path.exists() for path in tables) or not source.has(LOCALINFO):
 		return [], [], [], []
 	native = table_rows(local_path.read_bytes())
 	map_path = text_root / MAPINFO
 	pages = {row[0] for row in table_rows(map_path.read_bytes()) if row}
-	later = later_rows(sro_pk2.payload(media, media_index[TEXTDATA + LOCALINFO]))
-	later_pages = []
-	if TEXTDATA + LATER_MAPINFO in media_index:
-		later_pages = later_rows(sro_pk2.payload(media, media_index[TEXTDATA + LATER_MAPINFO]))
+	later = later_rows(source.file(LOCALINFO))
+	later_pages = later_rows(source.file(LATER_MAPINFO)) if source.has(LATER_MAPINFO) else []
 	page_rows = map_page_rows(later_pages, later, regions, pages)
 	if page_rows:
 		write_atomically(map_path, append_rows(map_path.read_bytes(), page_rows))

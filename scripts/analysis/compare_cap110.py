@@ -22,6 +22,7 @@ import sys
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import import_vsro_alexandria as archive  # noqa: E402
+import later_tables  # noqa: E402
 import sro_pk2  # noqa: E402
 from prepare_client_resources import write_atomically  # noqa: E402
 from sro_paths import GAME_ROOT, REPO_ROOT  # noqa: E402
@@ -40,16 +41,14 @@ FORMAT = "opensro-cap110-comparison-v1"
 #
 # Manifest entries are archive names, never filesystem paths or commands.
 # ================
-def read_tables(data, index, family):
-	names = [row[0].strip() for row in archive.table_rows(archive.table_text(data, index, family + ".txt"))]
+def read_tables(source, family):
+	names = source.files(family + ".txt")
 	pattern = re.compile(re.escape(family) + r"_\d+\.txt", re.IGNORECASE)
-	if not names or any(not pattern.fullmatch(name) for name in names):
+	if any(not pattern.fullmatch(name) for name in names):
 		raise ValueError(f"invalid {family} shard manifest")
-	if len({sro_pk2.fold_ascii(name) for name in names}) != len(names):
-		raise ValueError(f"duplicate {family} shard manifest entry")
 	rows, sources = [], []
 	for name in names:
-		raw = archive.table_text(data, index, sro_pk2.fold_ascii(name))
+		raw = source.file(name)
 		parsed = archive.table_rows(raw)
 		if any(len(row) <= TABLE_KEYS[family] or "\ufffd" in "".join(row) for row in parsed):
 			raise ValueError(f"malformed or undecodable {name}")
@@ -167,10 +166,11 @@ def compare_archives(native_root, later_root, executable):
 		try:
 			index = {sro_pk2.fold_ascii(entry.path): entry for entry in sro_pk2.read_directory(data)}
 			identity = {"archive": path.name, "bytes": len(data), "sha256": archive.sha256_of(data), "tables": {}}
+			source = later_tables.Archive.media(data, index)
 			tables = {}
 			for family in TABLE_KEYS:
-				tables[family], identity["tables"][family] = read_tables(data, index, family)
-			raw = archive.table_text(data, index, "leveldata.txt")
+				tables[family], identity["tables"][family] = read_tables(source, family)
+			raw = source.file("leveldata.txt")
 			identity["tables"]["leveldata"] = {"sha256": sro_pk2.digest(raw)}
 			levels.append(archive.table_rows(raw))
 			loaded.append(tables)

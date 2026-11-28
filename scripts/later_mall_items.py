@@ -80,6 +80,7 @@ import mall_avatar_import as avatars
 import nasrun_import as nasrun
 import published_ids
 import sro_pk2
+import later_tables
 from prepare_client_resources import safe_target, write_atomically
 from sro_paths import trees_overlap
 
@@ -344,9 +345,9 @@ def add_later_mall_items(native, output, v1696_root=None, env=os.environ):
 				raise ValueError(f"mall item {row[items.CODENAME]} already stands in the item tables")
 	with ExitStack() as stack:
 		archives, identities = avatars.open_archives(stack, root, avatars.V1696_SOURCE)
-		media, index = archives["Media"]
-		item_rows = select_item_rows(avatars.later_table_rows(media, index, "itemdata.txt"))
-		later_skills = avatars.later_table_rows(media, index, "skilldata.txt")
+		source = later_tables.Archive.media(*archives["Media"])
+		item_rows = select_item_rows(source.rows("itemdata.txt", optional=True))
+		later_skills = source.rows("skilldata.txt", optional=True)
 		skill_rows = select_skill_rows(later_skills)
 
 		occupied = published_ids.occupied_objects(text_root, (ITEM_SHARD,))
@@ -385,7 +386,7 @@ def add_later_mall_items(native, output, v1696_root=None, env=os.environ):
 			staged_skills.append(converted)
 
 		symbols = {row[column] for row in staged_skills for column in (SKILL_NAME_KEY, SKILL_DESCRIPTION_KEY)} - set(SKILL_UNUSED)
-		later_texts = [row for name in LATER_TEXT_TABLES for row in avatars.later_text_rows(media, index, name)]
+		later_texts = [row for name in LATER_TEXT_TABLES for row in avatars.later_text_rows(source, name)]
 		name_path = safe_target(text_root, NAME_TABLE)
 		base_names = name_path.read_bytes() if name_path.exists() else (native / TEXT_ROOT / NAME_TABLE).read_bytes()
 		merged_names, absent_descriptions = items.merge_texts(base_names, later_texts, staged_items, extra=sorted(symbols))

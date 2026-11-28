@@ -43,6 +43,7 @@ import cap110_skill_effects as effects
 import cap110_rewards as rewards
 import import_vsro_alexandria as tables
 import sro_pk2
+import later_tables
 from prepare_client_resources import write_atomically
 
 FLAG = "SRO_CAP110_QUESTS"
@@ -138,9 +139,8 @@ def add_quest_monsters(vsro_root, native, output):
 		# ================
 		# read
 		# ================
-		def read(name):
-			return tables.table_text(media, index, name.lower())
-		later = tables.later_characters(read)
+		read = later_tables.Archive.media(media, index)
+		later = later_tables.characters(read)
 		characters_native = [row for path in text_root.glob("characterdata_*.txt") if path.name != CHARACTER_SHARD
 			for row in tables.table_rows(path.read_bytes())]
 		refs = select_monsters(later, {row[2] for row in characters_native})
@@ -157,7 +157,7 @@ def add_quest_monsters(vsro_root, native, output):
 		# load_client_skills
 		# ================
 		def load_client_skills():
-			return {int(row[1]): row for row in tables.later_table_rows(read, "skilldata.txt")
+			return {int(row[1]): row for row in read.rows("skilldata.txt")
 				if len(row) > 3 and row[1].isdigit()}
 		client = load_client_skills()
 		source = monsters.add_native_client_skills([row for row in client.values() if len(row) == SKILL_COLUMNS],

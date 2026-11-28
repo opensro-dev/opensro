@@ -4,6 +4,7 @@ test_arabia_import.py - the Arabia import's admission and build rules.
 ===========================================================================
 """
 import script_paths  # noqa: F401  (puts scripts/ and its build folders on sys.path, #3410)
+import later_tables  # noqa: E402
 import json
 import os
 import tempfile
@@ -886,7 +887,7 @@ class ArabiaImportTest(unittest.TestCase):
 					"0", "0", "0", "Hello", "Hello", "Hello", "Hello"],
 			]),
 		}
-		rows = {row[1]: row for row in arabia.later_speech_texts(lambda name: files[name])}
+		rows = {row[1]: row for row in arabia.later_speech_texts(later_tables.Archive.of(files))}
 		self.assertEqual(rows["SN_NPC_SHORT"][8], "")
 		self.assertEqual(rows["SN_NPC_FULL"][8], "Hello")
 
@@ -904,11 +905,11 @@ class ArabiaImportTest(unittest.TestCase):
 			"textquest_speech&name.txt": utf16([["TextQuest_Speech&Name_100.txt"]]),
 			"textquest_speech&name_100.txt": utf16([["1", "502", key, korean]]),
 		}
-		rows = {row[1]: row for row in arabia.later_speech_texts(lambda name: files[name])}
+		rows = {row[1]: row for row in arabia.later_speech_texts(later_tables.Archive.of(files))}
 		self.assertEqual(rows[key][8], english)
 		files["textquest_speech&name_100.txt"] = utf16([["1", "502", key, "changed Korean"]])
 		with self.assertRaisesRegex(ValueError, "stale Arabia talk English"):
-			arabia.later_speech_texts(lambda name: files[name])
+			arabia.later_speech_texts(later_tables.Archive.of(files))
 
 	# ================
 	# test_authored_english_never_replaces_the_sources_own

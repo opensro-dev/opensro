@@ -40,6 +40,7 @@ import cap110_monsters as monsters
 import cap110_rewards as rewards
 import import_vsro_alexandria as tables
 import sro_pk2
+import later_tables
 from prepare_client_resources import safe_target, write_atomically
 
 MARKER = ".opensro-cap110-quest-items.json"
@@ -137,18 +138,17 @@ def add_quest_items(vsro_root, native, output):
 		# ================
 		# read_later
 		# ================
-		def read_later(name):
-			return tables.table_text(media, index, name)
+		read_later = later_tables.Archive.media(media, index)
 		later_rows = item_import.read_item_tables(read_later)
 		later = items.index_items(later_rows)
 		base = native / TEXT_ROOT
-		native_items = items.index_items(item_import.read_item_tables(lambda name: (base / name).read_bytes()))
+		native_items = items.index_items(item_import.read_item_tables(later_tables.Archive.tree(base)))
 		selected = select_quest_items(later, native_items)
 		converted = rewards.convert_rows(selected, rewards.occupied_identities(text_root, later_rows, OUTPUT_SHARD),
 			{code: entry["target"] for code, entry in prior.get("idMap", {}).items()})
 		text_path = safe_target(text_root, "textdataname.txt")
 		later_texts = [row for name in ("textdata_equip&skill.txt", "textdata_object.txt", "textdata_new.txt")
-			for row in tables.later_table_rows(read_later, name)]
+			for row in read_later.rows(name)]
 		base_text = text_path.read_bytes()
 		merged_text, missing_descriptions = items.merge_texts(base_text, later_texts, converted)
 		known = {row[1] for row in characters.translation_rows(base_text) if len(row) > 1}

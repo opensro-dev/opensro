@@ -49,13 +49,14 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
+import later_tables  # noqa: E402
 import sro_pk2  # noqa: E402
 from pin_file import require_pinned_archive  # noqa: E402
 from prepare_client_resources import write_atomically  # noqa: E402
 from sro_paths import MAIN_CHECKOUT_ROOT  # noqa: E402
 
-REF_TITLE_PATH = "server_dep/silkroad/textdata/RefTitle.txt"
-SPEECH_PREFIX = "server_dep/silkroad/textdata/textquest_speech&name"
+REF_TITLE_TABLE = "RefTitle.txt"
+SPEECH_TABLE = "textquest_speech&name.txt"
 FORMAT = "opensro-titles-v1"
 SOURCE_ENV = "SRO_V1696_ROOT"
 PIN_FILE = Path(__file__).with_name("v1696_archive_pins.json")
@@ -150,16 +151,13 @@ def render(rows):
 # ================
 def generate(media_path):
 	data = sro_pk2.map_archive(str(media_path))
-	entries = {entry.path: entry for entry in sro_pk2.read_directory(data)}
-	ref = entries.get(REF_TITLE_PATH)
-	if ref is None:
-		raise ValueError(f"{REF_TITLE_PATH} not in {media_path}")
-	speech = [
-		sro_pk2.payload(data, entry).decode("utf-16")
-		for path, entry in sorted(entries.items())
-		if path.lower().startswith(SPEECH_PREFIX)
-	]
-	rows, unresolved = build_rows(sro_pk2.payload(data, ref).decode("utf-16"), speech)
+	source = later_tables.Archive.media(data, later_tables.archive_index(data), str(media_path))
+	if not source.has(REF_TITLE_TABLE):
+		raise ValueError(f"{REF_TITLE_TABLE} not in {media_path}")
+	# The speech table is a shard index in v1.696: its shards, never the
+	# index's own file-name rows.
+	speech = [source.file(part).decode("utf-16") for part in source.files(SPEECH_TABLE)]
+	rows, unresolved = build_rows(source.file(REF_TITLE_TABLE).decode("utf-16"), speech)
 	return render(rows), len(rows), unresolved
 
 

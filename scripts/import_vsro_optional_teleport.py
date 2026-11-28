@@ -38,7 +38,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import import_vsro_alexandria as stage1  # noqa: E402
-import sro_pk2  # noqa: E402
+import later_tables  # noqa: E402
 from prepare_client_resources import file_digest, safe_target, write_atomically  # noqa: E402
 from sro_paths import EXTRACTED_ROOT  # noqa: E402
 
@@ -46,8 +46,10 @@ ROOT_ENV = "SRO_VSRO_ROOT"
 OUTPUT_FORMAT = "opensro-vsro-optional-teleport-v1"
 OUTPUT_FOLDER = "VsroOptionalTeleport_extracted"
 OUTPUT_NAME = "vsro-optional-teleport.json"
-TABLE_PATH = "server_dep/silkroad/textdata/refoptionalteleport.txt"
-NAMES_PATH = "server_dep/silkroad/textdata/textdata_object.txt"
+TABLE_NAME = "refoptionalteleport.txt"
+NAMES_NAME = "textdata_object.txt"
+TABLE_PATH = stage1.TEXTDATA + TABLE_NAME
+NAMES_PATH = stage1.TEXTDATA + NAMES_NAME
 # The VSRO Media.pk2 payloads this importer was checked against.
 PINNED = {
 	TABLE_PATH: "78191256af3c538a9ac5d53d8f732dc70c77d0490bb3bd01c37b96a32994cae8",
@@ -159,21 +161,15 @@ def check_pins(payloads, pins=PINNED):
 ================
 read_payloads
 
-The pinned files out of a Media.pk2, by folded path.
+The named textdata tables out of a Media.pk2, keyed by archive path as
+the pins are, through the table owner: each is a whole table, and one
+that is a shard index refuses rather than pins its file names.
 ================
 """
-def read_payloads(media, wanted):
-	found = {}
-	with open(media, "rb") as source:
-		data = mmap.mmap(source.fileno(), 0, access=mmap.ACCESS_READ)
-		try:
-			for entry in sro_pk2.read_directory(data):
-				key = sro_pk2.fold_ascii(entry.path).replace("\\", "/")
-				if key in wanted:
-					found[key] = bytes(sro_pk2.payload(data, entry))
-		finally:
-			data.close()
-	return found
+def read_payloads(media, names):
+	with open(media, "rb") as handle, mmap.mmap(handle.fileno(), 0, access=mmap.ACCESS_READ) as data:
+		source = later_tables.Archive.media(data, stage1.archive_index(data), str(media))
+		return {stage1.TEXTDATA + name: bytes(source.file(name)) for name in names if source.has(name)}
 
 
 """
@@ -182,7 +178,7 @@ import_optional_teleport
 ================
 """
 def import_optional_teleport(media, output):
-	payloads = read_payloads(media, set(PINNED))
+	payloads = read_payloads(media, (TABLE_NAME, NAMES_NAME))
 	check_pins(payloads)
 	rows = parse_optional_teleport(payloads[TABLE_PATH], payloads[NAMES_PATH])
 	document = {

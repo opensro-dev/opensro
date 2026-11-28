@@ -12,6 +12,7 @@ native table, and the switch off takes the rules away again.
 ===========================================================================
 """
 import script_paths  # noqa: F401  (puts scripts/ and its build folders on sys.path, #3410)
+import later_tables  # noqa: E402
 import tempfile
 import unittest
 from pathlib import Path
@@ -128,7 +129,7 @@ class WinterPresentationTest(unittest.TestCase):
 			effect = "#section\tcharacterInfo\r\nMOB_CH_TIGER\tMOB_CH_TIGER\t2\r\n#section\tskill\r\nSKILL_ROW\r\n"
 			(text_root / "skilleffect.txt").write_bytes(b"\xff\xfe" + effect.encode("utf-16-le"))
 
-			summary = winter.add_winter_presentation(out, later.__getitem__, {winter.PANDORA_BOX})
+			summary = winter.add_winter_presentation(out, later_tables.Archive.of(later), {winter.PANDORA_BOX})
 
 			self.assertIn(winter.PANDORA_BOX, summary["characterInfo"])
 			effect_text = (text_root / "skilleffect.txt").read_bytes().decode("utf-16")

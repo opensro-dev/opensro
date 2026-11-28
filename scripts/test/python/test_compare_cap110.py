@@ -69,9 +69,9 @@ class ComparisonTests(unittest.TestCase):
 	# ================
 	def test_manifest_cannot_escape_or_repeat_a_shard(self):
 		for text in ("../itemdata_1.txt", "itemdata_1.txt\nITEMDATA_1.TXT", ""):
-			with self.subTest(text=text), patch.object(comparison.archive, "table_text", return_value=text.encode("ascii")):
-				with self.assertRaises(ValueError):
-					comparison.read_tables(None, {}, "itemdata")
+			source = comparison.later_tables.Archive.of({"itemdata.txt": text.encode("ascii")})
+			with self.subTest(text=text), self.assertRaises(ValueError):
+				comparison.read_tables(source, "itemdata")
 
 
 class MainPinTests(unittest.TestCase):

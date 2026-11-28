@@ -14,8 +14,9 @@ import import_vsro_alexandria as stage1
 from pathlib import Path
 
 import sro_pk2
+import later_tables
 from prepare_client_resources import safe_target
-from variant_files import TEXTDATA, lower_paths, read_vsro_file, replace_file
+from variant_files import TEXTDATA, lower_paths, replace_file
 
 # World map and minimap (worldmap_mapinfo, worldmap_localinfo, regioncode).
 MAP_ALEXANDRIA_ID = "12"
@@ -109,7 +110,7 @@ def later_zone_rows(read):
 	name at all, so Arabia's 264 and Jupiter's 93 regions shipped with
 	an empty minimap title (2026-11-17).
 	"""
-	return [later_text_row(row) for row in stage1.later_table_rows(read, "textzonename.txt")]
+	return [later_text_row(row) for row in read.rows("textzonename.txt")]
 
 
 # ================
@@ -330,8 +331,8 @@ def add_map(vsro_root, native, out, regions, text_base):
 	)
 	tables = {name: (native / textdata / name).read_bytes() for name in names}
 	tables["textdataname.txt"] = text_base
-	vsro = {name: read_vsro_file(vsro_root, "Media", TEXTDATA + name) for name in names[:4]}
-	vsro["textdata_object.txt"] = read_vsro_file(vsro_root, "Media", TEXTDATA + "textdata_object.txt")
+	with later_tables.Archive.open(vsro_root) as source:
+		vsro = {name: source.file(name) for name in names[:4] + ("textdata_object.txt",)}
 	merged, summary = merge_map_tables(tables, vsro, regions)
 	for name, content in merged.items():
 		replace_file(out / textdata / name, content)

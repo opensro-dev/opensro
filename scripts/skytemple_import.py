@@ -69,6 +69,7 @@ import import_vsro_alexandria as tables  # noqa: E402
 import published_ids  # noqa: E402
 import skilldata_enc as skill_tables  # noqa: E402
 import sro_pk2  # noqa: E402
+import later_tables  # noqa: E402
 from alexandria_map_tables import later_zone_rows, native_text_row  # noqa: E402
 from prepare_client_resources import safe_target, write_atomically  # noqa: E402
 from skytemple_gates import FIELD_WORLD, d_arrival, prepare_gates  # noqa: E402
@@ -472,7 +473,7 @@ def merge_object_catalog_remap(current_raw, later_raw, used_ids):
 # ================
 def later_object_texts(read):
 	rows = []
-	for row in tables.later_table_rows(read, "textdata_object.txt", characters.translation_rows, indexed_only=True):
+	for row in read.rows("textdata_object.txt", characters.translation_rows, indexed_only=True):
 		if len(row) < 10 or not row[2]:
 			continue
 		english = next((row[at] for at in (9, 13, 14, 15, 16)
@@ -680,10 +681,9 @@ def add_skytemple(native, output, source=None, closure=copy_resource_closure):
 		# ================
 		# read
 		# ================
-		def read(name):
-			return tables.table_text(media, media_index, name.lower())
+		read = later_tables.Archive.media(media, media_index)
 
-		later = tables.later_characters(read)
+		later = later_tables.characters(read)
 		codename_by_id = {row[1]: row[2] for row in later.values()}
 		fields, _named = field_regions(tables.table_rows(read("regioncode.txt")))
 		if len(fields) != 288 or set(fields.values()) != {"A", "B", "C", "D"}:
@@ -704,7 +704,7 @@ def add_skytemple(native, output, source=None, closure=copy_resource_closure):
 		# The client's skills as the client reads them: its encrypted
 		# skilldataenc set when it ships one, else the plain manifest
 		# (skilldata_enc.py, #3374).
-		source_skills = [r for r in skill_tables.client_skill_rows(read, lambda name: tables.TEXTDATA + name.lower() in media_index)
+		source_skills = [r for r in skill_tables.client_skill_rows(read)
 			if len(r) > 3 and r[1].isdigit()]
 
 		# ================

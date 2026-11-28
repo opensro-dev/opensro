@@ -16,6 +16,7 @@ from unittest import mock
 import alexandria_npcs as characters  # noqa: E402
 import arabia_quest_tables as quest_tables  # noqa: E402
 import import_vsro_alexandria as tables  # noqa: E402
+import later_tables  # noqa: E402
 
 
 # ================
@@ -110,21 +111,6 @@ class ArabiaQuestTablesTest(unittest.TestCase):
 				{"questdata.txt": [], "questcontentsdata.txt": [], "gameguidedata.txt": []})
 
 	# ================
-	# test_later_table_rows_fans_out_an_index_and_keeps_a_table
-	# ================
-	def test_later_table_rows_fans_out_an_index_and_keeps_a_table(self):
-		files = {"questdata.txt": table("QuestData_250.txt", "QuestData_500.txt"),
-			"questdata_250.txt": table("1\t1448\tQNO_AR_001"), "questdata_500.txt": table("1\t1449\tQNO_AR_002"),
-			"plain.txt": table("1\t2\t3", "4\t5\t6")}
-
-		def read(name):
-			return files[name.lower()]
-
-		got = quest_tables.tables.later_table_rows(read, "questdata.txt")
-		self.assertEqual([row[2] for row in got], ["QNO_AR_001", "QNO_AR_002"])
-		self.assertEqual(quest_tables.tables.later_table_rows(read, "plain.txt"), [["1", "2", "3"], ["4", "5", "6"]])
-
-	# ================
 	# test_the_text_symbols_are_the_quests_keys
 	# ================
 	def test_the_text_symbols_are_the_quests_keys(self):
@@ -166,10 +152,7 @@ class ArabiaQuestTablesTest(unittest.TestCase):
 		families["textquest_queststring"] = table("1\t10843\tSN_TALK_QNO_AR_001_01\t한국어 원문",
 			"1\t2\tSN_TALK_QNO_OK_01\t짧은 행")
 
-		def read(name):
-			return families[name.removesuffix(".txt")]
-
-		rows = quest_tables.later_text_rows(read)
+		rows = quest_tables.later_text_rows(later_tables.Archive.of({name + ".txt": raw for name, raw in families.items()}))
 		stub = [row for row in rows[0] if len(row) > 1 and row[1] == "SN_TALK_QNO_AR_001_01"]
 		self.assertEqual(len(stub), 1)
 		self.assertEqual(stub[0][2], "한국어 원문")
@@ -309,7 +292,7 @@ class ArabiaQuestTablesTest(unittest.TestCase):
 			"0", "0", "0", "Baghdad", "Baghdad", "Baghdad", "Baghdad"]
 		unrelated = ["1", "272", "SRO_GGW_MENU_X", "x", "0", "0", "0", "0", "0", "X", "0", "0", "0", "X", "X", "X", "X"]
 		help_table = table("\t".join(raw), "\t".join(unrelated))
-		titles = quest_tables.head_help_rows(lambda name: help_table, chosen)
+		titles = quest_tables.head_help_rows(later_tables.Archive.of({quest_tables.HELP_TABLE: help_table}), chosen)
 		self.assertEqual([(row[1], row[8]) for row in titles], [("SRO_GGW_MENU_QSD_AR_01_MSG", "Baghdad")])
 
 	# ================

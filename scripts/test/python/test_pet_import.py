@@ -12,6 +12,7 @@ refusal and removal, all without a real client tree.
 ===========================================================================
 """
 import script_paths  # noqa: F401  (puts scripts/ and its build folders on sys.path, #3410)
+import later_tables  # noqa: E402
 import hashlib
 import json
 import os
@@ -501,16 +502,13 @@ class SkillStagingTests(unittest.TestCase):
 			char[importer.CHAR_DEFAULT_SKILL1] = "5001"
 			client = {5001: self._skill_row(5001, "PSKILL_P_FOX_01_ATTACK01")}
 
-			def read(name):
-				if name == "skilldata.txt":
-					return importer._encode([["skilldata_9000.txt"]])
-				if name == "skilldata_9000.txt":
-					return importer._encode([client[5001]])
-				raise KeyError(name)
+			read = later_tables.Archive.of({
+				"skilldata.txt": importer._encode([["skilldata_9000.txt"]]),
+				"skilldata_9000.txt": importer._encode([client[5001]]),
+			})
 
 			chars, skills = importer.stage_pet_skills(
-				read, lambda name: name in ("skilldata.txt", "skilldata_9000.txt"),
-				text_root, "skilldata_140000.txt", [char])
+				read, text_root, "skilldata_140000.txt", [char])
 			self.assertEqual(set(skills), {"PSKILL_P_FOX_01_ATTACK01"})
 			assigned = skills["PSKILL_P_FOX_01_ATTACK01"]
 			self.assertEqual(chars[0][importer.CHAR_DEFAULT_SKILL1], str(assigned))
@@ -529,7 +527,7 @@ class SkillStagingTests(unittest.TestCase):
 				self._skill_row(5001, "PSKILL_STALE")]))
 			char = ["0"] * characters.NATIVE_CHARACTER_COLUMNS
 			chars, skills = importer.stage_pet_skills(
-				lambda name: b"", lambda name: False, text_root, "skilldata_140000.txt", [char])
+				later_tables.Archive.of({}), text_root, "skilldata_140000.txt", [char])
 			self.assertEqual((skills, chars[0][importer.CHAR_DEFAULT_SKILL1]), ({}, "0"))
 			self.assertFalse((text_root / "skilldata_140000.txt").exists())
 			manifest = [row[0] for row in importer.tables.table_rows((text_root / "skilldata.txt").read_bytes()) if row]
