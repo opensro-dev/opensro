@@ -64,6 +64,7 @@ import jupiter_import as jupiter
 import later_world_import
 import later_world_population
 import sro_pk2
+import later_tables
 from prepare_client_resources import write_atomically
 from sro_paths import trees_overlap
 
@@ -378,16 +379,10 @@ def add_monsters(v1696_root, native, output, source_root=None):
 		# ================
 		# read
 		# ================
-		def read(name):
-			return tables.table_text(media, index, name.lower())
+		read = later_tables.Archive.media(media, index)
 
-		# ================
-		# has
-		# ================
-		def has(name):
-			return tables.TEXTDATA + name.lower() in index
 
-		later = later_world_import.later_characters(read)
+		later = later_tables.characters(read)
 		refs = {}
 		by_level = {}
 		for code in sorted(later):
@@ -424,7 +419,7 @@ def add_monsters(v1696_root, native, output, source_root=None):
 		# player's own transformed body, named by the player, so the
 		# client never looks the symbol up (an inference from the missing
 		# row, recorded as AGENTS.md asks). Staged as the client ships them.
-		staged = later_world_import.stage_kinds("muhan", read, has, refs, text_root, prior, CHARACTER_SHARD, SKILL_SHARD,
+		staged = later_world_import.stage_kinds("muhan", read, refs, text_root, prior, CHARACTER_SHARD, SKILL_SHARD,
 			lambda code: code in refs, sorted({row["SkillCodename"] for row in transforms["Rows"]}),
 			unnamed={row["MonsterCodename"] for row in transforms["Rows"]})
 		write_atomically(text_root / WAVES_FILE, (json.dumps(waves) + "\n").encode())
@@ -438,7 +433,7 @@ def add_monsters(v1696_root, native, output, source_root=None):
 			"npcRows": len(export.get("npcNests") or []),
 			"transMaskRows": len(export.get("transMask") or []),
 			"transforms": len(transforms["Rows"]),
-			"animationBases": staged["animationBases"], "characterInfo": staged["characterInfo"], "nameSymbols": staged["nameSymbols"],
+			"animationBases": staged["animationBases"], "effectBases": staged["effectBases"], "characterInfo": staged["characterInfo"], "nameSymbols": staged["nameSymbols"],
 			"sourcePopulationSha256": POPULATION_SOURCE_SHA256,
 			"populationFileSha256": sro_pk2.digest((source_root / POPULATION_NAME).read_bytes())}
 		write_atomically(marker, (json.dumps(summary, indent=2) + "\n").encode())

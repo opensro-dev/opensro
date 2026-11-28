@@ -48,6 +48,7 @@ import mall_avatar_import as importer
 import pet_import as pets
 import skilldata_enc as skill_tables
 import sro_pk2
+import later_tables
 from sro_paths import EXTRACTED_ROOT, REPO_ROOT
 
 SHARD_NAME = importer.AVATARS_SOURCE["shard"]
@@ -385,7 +386,7 @@ def pack_pets(archives, native, closure=None):
 	closure = closure or shared.copy_resource_closure
 	media, index = archives["Media"]
 	_data, data_index = archives["Data"]
-	if tables.TEXTDATA + "characterdata.txt" not in index:
+	if not later_tables.Archive.media(media, index).has("characterdata.txt"):
 		return [], [], [], {}, {"families": [], "excluded": []}
 	later_chars, later_items, _text = pets.later_tables_from_media(media, index, object_text_required=False)
 	native_chars, native_items = pets.native_tables(native)
@@ -430,12 +431,8 @@ def pack_pets(archives, native, closure=None):
 	}
 	skill_rows = []
 	if needed:
-		def read(name):
-			return tables.table_text(media, index, name.lower())
-
-		def has(name):
-			return tables.TEXTDATA + name.lower() in index
-		skill_rows = [row for row in skill_tables.client_skill_rows(read, has) if len(row) > 3 and row[1] in needed]
+		read = later_tables.Archive.media(media, index)
+		skill_rows = [row for row in skill_tables.client_skill_rows(read) if len(row) > 3 and row[1] in needed]
 	return char_rows, item_rows, skill_rows, entries, {"families": families, "excluded": excluded}
 
 
@@ -452,13 +449,13 @@ def pack(export_root, native, output, screen=screen_models, completeness=closure
 	media, index = archives["Media"]
 	natives = native_files(native)
 	base = native / importer.TEXT_ROOT
-	base_paths = {sro_pk2.fold_ascii(path.name): path for path in base.iterdir() if path.is_file()}
-	native_rows = shared.read_item_tables(lambda name: base_paths[name].read_bytes())
+	native_rows = shared.read_item_tables(later_tables.Archive.tree(base))
 	native_codes = {row[items.CODENAME] for row in native_rows}
-	later_rows = shared.read_item_tables(lambda name: tables.table_text(media, index, name))
+	source = later_tables.Archive.media(media, index)
+	later_rows = shared.read_item_tables(source)
 	texts = {}
 	for name in TEXT_TABLES:
-		for row in importer.later_table_rows(media, index, name):
+		for row in source.rows(name, optional=True):
 			converted = export_text_row(row)
 			if converted is not None and converted[1] not in texts:
 				texts[converted[1]] = (name, converted)

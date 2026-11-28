@@ -55,6 +55,7 @@ import import_vsro_alexandria as tables
 from pin_file import read_pin_field
 import published_ids
 import sro_pk2
+import later_tables
 from mall_tables import (  # noqa: F401  (re-exported: the tests and callers read them here)
 	MALL_PRICE_AMOUNT, MALL_SLOTS, MALL_TABLES, NATIVE_SOURCE, PACKAGE_FLAG_COLUMN, SERVICE_ON, SILK_CURRENCY,
 	LaterPackage, copy_later_package, in_packages, strip_mall, without_packages,
@@ -600,27 +601,8 @@ def resource_check(archives, native_paths):
 # itemdata.txt indexes its shards. A table the client does not ship
 # contributes no rows (v1.696 has no textdata_new.txt).
 # ================
-def later_text_rows(media, index, name):
-	return [vsro_text_row(row) for row in later_table_rows(media, index, name)]
-
-
-# ================
-# later_table_rows
-#
-# The rows of one later-client table, [] when the client lacks it. v1.696
-# shards its big tables: the named file then lists only `<stem>_<n>.txt`
-# names, and the rows are those files' rows in the listed order.
-# ================
-def later_table_rows(media, index, name):
-	if tables.TEXTDATA + name not in index:
-		return []
-	rows = tables.table_rows(tables.table_text(media, index, name))
-	stem = sro_pk2.fold_ascii(name)[:-len(".txt")]
-	shard = re.compile(re.escape(stem) + r"_\d+\.txt", re.IGNORECASE)
-	listed = [row[0].strip() for row in rows if row and row[0].strip()]
-	if not listed or not all(len(row) == 1 and shard.fullmatch(row[0].strip()) for row in rows if row and row[0].strip()):
-		return rows
-	return [row for part in listed for row in tables.table_rows(tables.table_text(media, index, sro_pk2.fold_ascii(part)))]
+def later_text_rows(source, name):
+	return [vsro_text_row(row) for row in source.rows(name, optional=True)]
 
 
 # The VSRO text layout: service, key, then 13 language cells; 8 is the
@@ -686,8 +668,7 @@ def add_avatars(vsro_root, native, output, source=VSRO_SOURCE):
 		# ================
 		# read_later
 		# ================
-		def read_later(name):
-			return tables.table_text(media, index, name)
+		read_later = later_tables.Archive.media(media, index)
 		base = native / TEXT_ROOT
 		base_paths = {sro_pk2.fold_ascii(path.name): path for path in base.iterdir() if path.is_file()}
 		# ================
@@ -695,7 +676,7 @@ def add_avatars(vsro_root, native, output, source=VSRO_SOURCE):
 		# ================
 		def read_native(name):
 			return base_paths[name].read_bytes()
-		native_rows = shared.read_item_tables(read_native)
+		native_rows = shared.read_item_tables(later_tables.Archive.tree(base))
 		later_rows = shared.read_item_tables(read_later)
 		reserved = {
 			int(row[1]) for path in (output / TEXT_ROOT).glob("characterdata_*.txt")
@@ -725,7 +706,7 @@ def add_avatars(vsro_root, native, output, source=VSRO_SOURCE):
 		}
 		later_texts = [
 			row for name in ("textdata_equip&skill.txt", "textdata_object.txt", "textdata_new.txt")
-			for row in later_text_rows(media, index, name)
+			for row in later_text_rows(read_later, name)
 		]
 		text_path = safe_target(output / TEXT_ROOT, "textdataname.txt")
 		base_text = text_path.read_bytes() if text_path.exists() else read_native("textdataname.txt")
@@ -739,7 +720,7 @@ def add_avatars(vsro_root, native, output, source=VSRO_SOURCE):
 		assets = shared.copy_asset_closure(avatars, native, output, archives)
 		# An earlier source's avatars take this client's auras too; native ones never do.
 		effects, refused_effects, effect_assets = avatar_effects.import_effects(
-			later_table_rows(media, index, avatar_effects.EFFECT_TABLE), imported_before + avatars,
+			read_later.rows(avatar_effects.EFFECT_TABLE, optional=True), imported_before + avatars,
 			native, output, archives, native_paths["Particles"],
 		)
 		assets += effect_assets
@@ -767,12 +748,12 @@ def add_avatars(vsro_root, native, output, source=VSRO_SOURCE):
 			ui_path = safe_target(output / TEXT_ROOT, "textuisystem.txt")
 			raw_ui = ui_path.read_bytes() if ui_path.exists() else read_native("textuisystem.txt")
 			write_atomically(ui_path, text_tables.append_rows(raw_ui, board_label_rows(boards)))
-		elif all(sro_pk2.fold_ascii(name) in base_paths and tables.TEXTDATA + name in index for name, _ in MALL_TABLES):
+		elif all(sro_pk2.fold_ascii(name) in base_paths and read_later.has(name) for name, _ in MALL_TABLES):
 			current = {
 				name: tables.table_rows(mall_files[name].read_bytes() if mall_files[name].exists() else read_native(name))
 				for name, _ in MALL_TABLES
 			}
-			later_mall = {name: later_table_rows(media, index, name) for name, _ in MALL_TABLES}
+			later_mall = {name: read_later.rows(name) for name, _ in MALL_TABLES}
 			# Goods a later source listed in a previous build are stale:
 			# that source strips and re-lists them after this pass. They
 			# leave the tables this pass reads, so neither the slots nor the
@@ -793,7 +774,7 @@ def add_avatars(vsro_root, native, output, source=VSRO_SOURCE):
 			if any(row[2] == ATTACH_TAB for row in mall["refshopgoods.txt"]):
 				tab_path = safe_target(output / TEXT_ROOT, SHOP_TAB_TABLE)
 				raw = tab_path.read_bytes() if tab_path.exists() else read_native(SHOP_TAB_TABLE)
-				row = attach_tab_row(tables.table_rows(raw), later_table_rows(media, index, SHOP_TAB_TABLE))
+				row = attach_tab_row(tables.table_rows(raw), read_later.rows(SHOP_TAB_TABLE, optional=True))
 				if row is not None:
 					write_atomically(tab_path, text_tables.append_rows(raw, [row]))
 					mall_summary["tabs"] = [ATTACH_TAB]

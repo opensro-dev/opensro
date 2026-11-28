@@ -46,6 +46,7 @@ import mall_avatar_import as avatars
 import nasrun_import as nasrun
 import published_ids
 import sro_pk2
+import later_tables
 from prepare_client_resources import safe_target, write_atomically
 from sro_paths import trees_overlap
 
@@ -164,8 +165,7 @@ def add_reset_scrolls(native, output, v1696_root=None):
 		# ================
 		# read_later
 		# ================
-		def read_later(name):
-			return tables.table_text(media, index, name)
+		read_later = later_tables.Archive.media(media, index)
 
 		later = {row[items.CODENAME]: row for row in shared.read_item_tables(read_later)
 			if len(row) == items.ITEM_COLUMNS and row[items.SERVICE] == "1"}

@@ -68,6 +68,7 @@ import skilldata_enc as skill_tables
 from pin_file import read_pin_field
 from prepare_client_resources import safe_target, write_atomically
 import sro_pk2
+import later_tables
 from sro_paths import EXTRACTED_ROOT, REPO_ROOT
 
 FLAG = "SRO_PETS"
@@ -309,20 +310,11 @@ def select_pets(native_chars, native_items, earlier_codes, later_chars, later_it
 # Every source's tables come off a Media (bytes, index) pair: a pk2
 # source mmaps its client archive, the pinned archive's Media comes
 # from avatar_archive. Both return (character rows, item rows, object
-# text table) with shards resolved through their manifests.
+# text table) with shards resolved by their owner,
+# later_tables.Archive.
 # ================
-def _shard_rows(read, manifest_name, prefix):
-	names = [row[0] for row in tables.table_rows(read(manifest_name)) if row and row[0]]
-	rows = []
-	for name in names:
-		if Path(name).name.lower().startswith(prefix):
-			rows.extend(tables.table_rows(read(name)))
-	return rows
-
-
 def later_tables_from_media(media, index, object_text_required=True):
-	def read(name):
-		return tables.table_text(media, index, name.lower())
+	read = later_tables.Archive.media(media, index)
 
 	# A client Media always carries the object text, so a pk2 read stops
 	# without it; the pinned archive may carry pet rows without it, and a
@@ -331,12 +323,12 @@ def later_tables_from_media(media, index, object_text_required=True):
 	# later_object_text, which follows it (and reads a flat VSRO table as
 	# itself). Read raw, every v1.696 pet's name went missing and the
 	# asset build refused the release (21 item titles, 2026-11-15).
-	if object_text_required or tables.TEXTDATA + "textdata_object.txt" in index:
+	if object_text_required or read.has("textdata_object.txt"):
 		object_text = b"\xff\xfe" + later_world_import.later_object_text(read).encode("utf-16-le")
 	else:
 		object_text = b""
-	return (_shard_rows(read, "characterdata.txt", "characterdata"),
-		_shard_rows(read, "itemdata.txt", "itemdata"),
+	return (read.rows("characterdata.txt"),
+		read.rows("itemdata.txt"),
 		object_text)
 
 
@@ -371,7 +363,7 @@ def native_tables(native, exclude_shards=()):
 # drops the shard so a rebuild that stages no fighters leaves no
 # orphan skill file. Returns (char_rows, skill code->id map).
 # ================
-def stage_pet_skills(read, has, text_root, skill_shard, char_rows, previous_skills=None):
+def stage_pet_skills(read, text_root, skill_shard, char_rows, previous_skills=None):
 	text_root = Path(text_root)
 	needed = {
 		int(value) for row in char_rows for value in row[CHAR_DEFAULT_SKILL1:CHAR_DEFAULT_SKILL_N + 1]
@@ -384,7 +376,7 @@ def stage_pet_skills(read, has, text_root, skill_shard, char_rows, previous_skil
 		row for path in text_root.glob("skilldata_*.txt") if path.name.lower() != skill_shard.lower()
 		for row in tables.table_rows(path.read_bytes()) if len(row) == 118
 	]
-	client_skills = [row for row in skill_tables.client_skill_rows(read, has) if len(row) > 3 and row[1].isdigit()]
+	client_skills = [row for row in skill_tables.client_skill_rows(read) if len(row) > 3 and row[1].isdigit()]
 	added, skill_map = cap110_monsters.merge_skills(native_skills, client_skills, needed, previous_skills or {})
 	for row in char_rows:
 		row[CHAR_DEFAULT_SKILL1:CHAR_DEFAULT_SKILL_N + 1] = [
@@ -689,8 +681,7 @@ def add_pets(root, native, output, source=VSRO_SOURCE, earlier_codes=(), env=os.
 					return ["model"]
 			return []
 
-		def read(name):
-			return tables.table_text(media, media_index, name.lower())
+		read = later_tables.Archive.media(media, media_index)
 
 		prior = read_marker(output, source)
 		char_rows, item_rows, report = select_pets(
@@ -699,8 +690,7 @@ def add_pets(root, native, output, source=VSRO_SOURCE, earlier_codes=(), env=os.
 			reserved_ids=published_ids.occupied_objects(Path(output) / TEXT_ROOT, (source["char_shard"], source["item_shard"])), pinned=published_ids.published(published_ids.OBJECTS))
 		if char_rows:
 			char_rows, skills = stage_pet_skills(
-				read, lambda name: tables.TEXTDATA + name.lower() in media_index,
-				Path(output) / TEXT_ROOT, source["skill_shard"], char_rows, prior.get("skills", {}))
+				read, Path(output) / TEXT_ROOT, source["skill_shard"], char_rows, prior.get("skills", {}))
 			report["skills"] = skills
 	if char_rows:
 		_merge_name_text(output, char_rows, item_rows, later_text, report)
@@ -730,8 +720,8 @@ def add_archive_pets(native, output, earlier_codes=(), env=os.environ):
 	archives, _identities = avatar_archive.open_archive(zip_path, AVATARS_PIN_FILE)
 	media, media_index = archives["Media"]
 	data, data_index = archives["Data"]
-	if (tables.TEXTDATA + "characterdata.txt" not in media_index
-			or tables.TEXTDATA + "itemdata.txt" not in media_index):
+	read = later_tables.Archive.media(media, media_index)
+	if not read.has("characterdata.txt") or not read.has("itemdata.txt"):
 		remove_import(output, ARCHIVE_SOURCE)
 		return _disabled(ARCHIVE_SOURCE, "archive carries no pet tables")
 	own_shards = (ARCHIVE_SOURCE["char_shard"], ARCHIVE_SOURCE["item_shard"], ARCHIVE_SOURCE["skill_shard"])
@@ -746,9 +736,6 @@ def add_archive_pets(native, output, earlier_codes=(), env=os.environ):
 				return ["model"]
 		return []
 
-	def read(name):
-		return tables.table_text(media, media_index, name.lower())
-
 	prior = read_marker(output, ARCHIVE_SOURCE)
 	char_rows, item_rows, report = select_pets(
 		native_chars, native_items, set(earlier_codes), later_chars, later_items,
@@ -758,10 +745,9 @@ def add_archive_pets(native, output, earlier_codes=(), env=os.environ):
 		# An archive that ships no skilldata cannot feed fighters; merge
 		# refuses a missing dependency. Pickup/vehicle kinds name no
 		# DefaultSkillIDs and stage an empty skill map.
-		if any(tables.TEXTDATA + name in media_index for name in ("skilldata.txt", "skilldataenc.txt")):
+		if any(read.has(name) for name in ("skilldata.txt", "skilldataenc.txt")):
 			char_rows, skills = stage_pet_skills(
-				read, lambda name: tables.TEXTDATA + name.lower() in media_index,
-				Path(output) / TEXT_ROOT, ARCHIVE_SOURCE["skill_shard"], char_rows, prior.get("skills", {}))
+				read, Path(output) / TEXT_ROOT, ARCHIVE_SOURCE["skill_shard"], char_rows, prior.get("skills", {}))
 			report["skills"] = skills
 		_merge_name_text(output, char_rows, item_rows, later_text, report)
 		# The archive's resources join the staging tree at their pk2

@@ -50,16 +50,17 @@ import re
 import shutil
 from pathlib import Path
 
-import alexandria_npcs as text_tables
 import avatar_effects as avatar_fx
 import cap110_item_import as shared
 import cap110_items as items
 import cap110_monsters as cap110
+import cap110_skill_effects as skill_effects
 import published_ids
 import import_vsro_alexandria as tables
 import mall_avatar_import as avatars
 import skilldata_enc as skill_tables
 import sro_pk2
+import later_tables
 from prepare_client_resources import safe_target, write_atomically
 from sro_paths import trees_overlap
 
@@ -237,8 +238,7 @@ def add_nasrun(vsro_root, native, output):
 		# ================
 		# read_later
 		# ================
-		def read_later(name):
-			return tables.table_text(media, index, name)
+		read_later = later_tables.Archive.media(media, index)
 
 		rows = select_rows(shared.read_item_tables(read_later))
 		codes = [row[items.CODENAME] for row in rows]
@@ -261,7 +261,7 @@ def add_nasrun(vsro_root, native, output):
 				for column in (CAN_TRADE, CAN_SELL, CAN_BORROW, CAN_DROP):
 					converted[column] = "0"
 			staged.append(converted)
-		later_texts = [row for name in LATER_TEXT_TABLES for row in avatars.later_text_rows(media, index, name)]
+		later_texts = [row for name in LATER_TEXT_TABLES for row in avatars.later_text_rows(read_later, name)]
 		name_path = safe_target(text_root, NAME_TABLE)
 		base_names = name_path.read_bytes() if name_path.exists() else (native / TEXT_ROOT / NAME_TABLE).read_bytes()
 		merged_names, absent_descriptions = items.merge_texts(base_names, later_texts, staged)
@@ -415,35 +415,20 @@ def effect_key(section, line):
 # merge_skill_effects
 #
 # The tree's skilleffect.txt with the previous pass's rows (by key) taken
-# out and later's rows of keys appended at the end of their sections.
+# out and later's rows of keys joined at the end of their sections, through
+# the one skill-effect owner (cap110_skill_effects, #4730). Returns the
+# text and the (archive, path) files the joined rows name.
 # ================
 def merge_skill_effects(tree_text, later_text, keys, previous):
-	header, sections = effect_sections(tree_text)
-	ending = "\r\n" if "\r\n" in tree_text else "\n"
-	_, later_sections = effect_sections(later_text)
-	added, efps = {name: [] for name in EFFECT_SECTIONS}, set()
-	for name, lines in later_sections:
-		if name not in EFFECT_SECTIONS:
-			continue
-		for line in lines[1:]:
-			if effect_key(name, line) not in keys:
-				continue
-			cells = line.rstrip("\r\n").split("\t")
-			if name == "skilleffectset":
-				efps.update(cell for cell in cells if cell.lower().endswith(".efp"))
-			added[name].append("\t".join(cells) + ending)
-	out = list(header)
-	for name, lines in sections:
-		kept = [line for line in lines if effect_key(name, line) not in previous]
-		if added.get(name):
-			if kept and not kept[-1].endswith(("\n", "\r")):
-				kept[-1] += ending
-			kept += added[name]
-		out += kept
-	missing = [name for name in EFFECT_SECTIONS if added[name] and name not in {n for n, _ in sections}]
+	kept = skill_effects.remove_presentation(tree_text, previous, previous)
+	selected = skill_effects.select_later_rows(later_text, keys)
+	sections = {skill_effects.section_name(line) for line in tree_text.splitlines()}
+	missing = sorted(name for name in selected if name not in sections)
 	if missing:
 		raise ValueError(f"the tree's skilleffect.txt has no {missing} section")
-	return "".join(out), sorted(efps)
+	merged, _ = skill_effects.merge_skill_effect_text(kept, selected)
+	rows = [(section, line.split("\t")) for section, lines in selected.items() for _, line in lines]
+	return merged, sorted(skill_effects.row_resources(rows))
 
 
 # ================
@@ -616,10 +601,9 @@ def add_nasrun_skills(vsro_root, native, output):
 		# ================
 		# read_later
 		# ================
-		def read_later(name):
-			return tables.table_text(media, index, name)
+		read_later = later_tables.Archive.media(media, index)
 
-		rows = select_skill_rows(skill_tables.client_skill_rows(read_later, lambda name: tables.TEXTDATA + name in index))
+		rows = select_skill_rows(skill_tables.client_skill_rows(read_later))
 		# Ids stand above every skill of the native tables and of each
 		# shard an earlier pass wrote into the output.
 		occupied = set()
@@ -640,7 +624,7 @@ def add_nasrun_skills(vsro_root, native, output):
 				converted[column] = value
 			staged.append(converted)
 		symbols = {row[column] for row in staged for column in (SKILL_NAME_KEY, SKILL_DESCRIPTION_KEY)} - set(SKILL_UNUSED)
-		later_texts = [row for name in LATER_TEXT_TABLES for row in avatars.later_text_rows(media, index, name)]
+		later_texts = [row for name in LATER_TEXT_TABLES for row in avatars.later_text_rows(read_later, name)]
 		name_path = safe_target(text_root, NAME_TABLE)
 		base_names = name_path.read_bytes() if name_path.exists() else (native / TEXT_ROOT / NAME_TABLE).read_bytes()
 		merged_names, absent = items.merge_texts(base_names, later_texts, [], extra=sorted(symbols))
@@ -654,8 +638,8 @@ def add_nasrun_skills(vsro_root, native, output):
 		# animate it over the Spirit's avatar socket (item-slot-effects.ts).
 		icons.add(("Media", SPIRIT_EDGE_SHEET))
 		# The lent skills' costume rows and the BSRs they name (#4407).
-		visual_text = read_later(VISUAL_CHANGE_TABLE) if tables.TEXTDATA + VISUAL_CHANGE_TABLE in index else b""
-		visual_rows = [row for row in tables.table_rows(visual_text)
+		visual_table = read_later.rows(VISUAL_CHANGE_TABLE) if read_later.has(VISUAL_CHANGE_TABLE) else []
+		visual_rows = [row for row in visual_table
 			if len(row) > VC_BSR_F and row[VC_SERVICE].strip() == "1" and row[VC_SKILL].strip() in SKILL_CODES]
 		for row in visual_rows:
 			for column in (VC_BSR_M, VC_BSR_F):
@@ -664,7 +648,7 @@ def add_nasrun_skills(vsro_root, native, output):
 		effect_keys = set(SKILL_CODES) | {row[VC_AVATAR_EFFECT].strip() for row in visual_rows} - {"xxx", ""}
 		# The Spirits' presentation records (equip, unequip, wake, lapse).
 		spirits = {code for code, kind in ROWS if kind is WEARABLE_TYPE}
-		spirit_effects = item_effects(tables.decode_table(read_later(ITEM_EFFECT_TABLE)), spirits) 			if tables.TEXTDATA + ITEM_EFFECT_TABLE in index else {}
+		spirit_effects = item_effects(tables.decode_table(read_later(ITEM_EFFECT_TABLE)), spirits) 			if read_later.has(ITEM_EFFECT_TABLE) else {}
 		effect_keys |= {key for rows in spirit_effects.values() for key in rows.values()}
 		# A tree or a later client without the table (the unit fixtures)
 		# stages no effect rows.
@@ -673,11 +657,10 @@ def add_nasrun_skills(vsro_root, native, output):
 		tree_effects = effect_path.read_bytes() if effect_path.exists() else (
 			native_effects.read_bytes() if native_effects.exists() else None)
 		merged_effects, efps = None, []
-		if tree_effects is not None and tables.TEXTDATA + SKILL_EFFECT_TABLE in index:
+		if tree_effects is not None and read_later.has(SKILL_EFFECT_TABLE):
 			merged_effects, efps = merge_skill_effects(tables.decode_table(tree_effects),
 				tables.decode_table(read_later(SKILL_EFFECT_TABLE)), effect_keys, set(prior.get("effectKeys", [])))
-		for efp in efps:
-			icons.add(("Particles", "system/" + shared.normalized_path(efp)))
+		icons.update(efps)
 		# The transformation's animation sets and clips.
 		bodies, clips = {}, set()
 		if merged_effects is not None and "Data" in archives:

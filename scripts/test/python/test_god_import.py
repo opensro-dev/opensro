@@ -9,6 +9,7 @@ switch off reaps exactly what the marker enrolled.
 ===========================================================================
 """
 import script_paths  # noqa: F401  (puts scripts/ and its build folders on sys.path, #3410)
+import later_tables  # noqa: E402
 import hashlib
 import json
 import os
@@ -205,11 +206,11 @@ class GodImportTest(unittest.TestCase):
 			"textdata_object_1000.txt": utf16([["1", "SN_ONE"]]),
 			"textdata_object_2000.txt": utf16([["2", "SN_TWO"]]),
 		}
-		text = god.later_object_text(lambda name: files[name.lower()])
+		text = god.later_object_text(later_tables.Archive.of(files))
 		self.assertIn("SN_ONE", text)
 		self.assertIn("SN_TWO", text)
 		flat = {"textdata_object.txt": utf16([["1", "SN_FLAT", "x"], ["2", "SN_FLAT2", "y"]])}
-		self.assertIn("SN_FLAT2", god.later_object_text(lambda name: flat[name.lower()]))
+		self.assertIn("SN_FLAT2", god.later_object_text(later_tables.Archive.of(flat)))
 
 	# ================
 	# test_later_text_row_maps_the_17_column_layout

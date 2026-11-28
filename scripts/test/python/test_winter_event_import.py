@@ -12,6 +12,7 @@ native table, and the switch off takes the rules away again.
 ===========================================================================
 """
 import script_paths  # noqa: F401  (puts scripts/ and its build folders on sys.path, #3410)
+import later_tables  # noqa: E402
 import tempfile
 import unittest
 from pathlib import Path
@@ -101,15 +102,19 @@ class WinterAdmitsTest(unittest.TestCase):
 # ================
 class WinterPresentationTest(unittest.TestCase):
 	# ================
-	# test_the_box_gets_its_profile_and_sounds_and_loses_the_sounds_off
+	# test_the_box_gets_its_profile_and_an_old_build_loses_its_sounds
 	#
 	# The box names itself as its characterinfo base, so its own row
-	# joins the native section (not the first profile's), and its rules
-	# join beside the native ones; the off reap drops only the rules
-	# the marker names.
+	# joins the native section (not the first profile's). Its sound
+	# rules are later_presentation's now: the import joins none, and
+	# the rules an older build joined (its marker's soundObjects) leave.
 	# ================
-	def test_the_box_gets_its_profile_and_sounds_and_loses_the_sounds_off(self):
+	def test_the_box_gets_its_profile_and_an_old_build_loses_its_sounds(self):
 		later = {
+			# v1.696 ships skilleffect.txt as a stub; the rows are in the shards.
+			"skilleffect.txt": utf16([["0"]]),
+			"Skillaniset.txt": utf16([]),
+			"Skilleffectset.txt": utf16([]),
 			"characterinfo.txt": utf16([info_row(winter.PANDORA_BOX), info_row("MOB_EV_SNOWMAN")]),
 			winter.SOUND_TABLE: "\r\n".join([sound_rule(winter.PANDORA_BOX, "SND_STAND", "obj_knock1.wav"),
 				sound_rule(winter.PANDORA_BOX, "VOC_SHOUT1", "obj_boxopen.wav"),
@@ -124,17 +129,19 @@ class WinterPresentationTest(unittest.TestCase):
 			effect = "#section\tcharacterInfo\r\nMOB_CH_TIGER\tMOB_CH_TIGER\t2\r\n#section\tskill\r\nSKILL_ROW\r\n"
 			(text_root / "skilleffect.txt").write_bytes(b"\xff\xfe" + effect.encode("utf-16-le"))
 
-			summary = winter.add_winter_presentation(native, out, later.__getitem__, {winter.PANDORA_BOX}, {})
+			summary = winter.add_winter_presentation(out, later_tables.Archive.of(later), {winter.PANDORA_BOX})
 
 			self.assertIn(winter.PANDORA_BOX, summary["characterInfo"])
 			effect_text = (text_root / "skilleffect.txt").read_bytes().decode("utf-16")
-			self.assertIn(winter.PANDORA_BOX, cap110.characterinfo_codenames(effect_text))
+			self.assertIn(winter.PANDORA_BOX, winter.effects.characterinfo_codenames(effect_text))
 			self.assertLess(effect_text.index(winter.PANDORA_BOX), effect_text.index("#section\tskill"))
-			sounds = (text_root / winter.SOUND_TABLE).read_bytes().decode(winter.SOUND_ENCODING)
-			self.assertIn("MOB_CH_TIGER", sounds)
-			self.assertIn("obj_boxopen.wav", sounds)
+			self.assertFalse((text_root / winter.SOUND_TABLE).exists())
 
-			winter.reap_sounds(out, summary)
+			# An older build joined the rule in the native layout (an empty first cell).
+			joined = sound_rule(winter.PANDORA_BOX, "VOC_SHOUT1", "obj_boxopen.wav").split("\t", 1)[1]
+			old = NATIVE_SOUND + "\t" + joined + "\r\n"
+			(text_root / winter.SOUND_TABLE).write_bytes(old.encode(winter.SOUND_ENCODING))
+			winter.reap_sounds(out, {"soundObjects": [winter.PANDORA_BOX]})
 			sounds = (text_root / winter.SOUND_TABLE).read_bytes().decode(winter.SOUND_ENCODING)
 			self.assertIn("MOB_CH_TIGER", sounds)
 			self.assertNotIn(winter.PANDORA_BOX, sounds)

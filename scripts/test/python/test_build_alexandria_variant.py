@@ -14,6 +14,9 @@ through to the native file.
 ===========================================================================
 """
 import script_paths  # noqa: F401  (puts scripts/ and its build folders on sys.path, #3410)
+import contextlib
+from unittest import mock
+import later_tables  # noqa: E402
 import struct
 import sys
 import tempfile
@@ -638,7 +641,7 @@ class AddGatesTests(unittest.TestCase):
 			variant_files.TEXTDATA + "teleportlink.txt": vsro_tables["teleportlink.txt"],
 			variant_files.TEXTDATA + "textdata_object.txt": vsro_tables["text"]
 		}
-		original_read, original_merge = variant_gates.read_vsro_file, variant_gates.merge_gate_tables
+		original_merge = variant_gates.merge_gate_tables
 		original_cap = variant.os.environ.get(variant_gates.LEVEL_CAP_FLAG)
 		with tempfile.TemporaryDirectory() as scratch:
 			native, out = Path(scratch) / "native", Path(scratch) / "out"
@@ -647,7 +650,9 @@ class AddGatesTests(unittest.TestCase):
 			for name in ("teleportdata.txt", "teleportbuilding.txt", "teleportlink.txt"):
 				(textdata / name).write_bytes(native_tables[name])
 			(textdata / "textdataname.txt").write_bytes(native_tables["text"])
-			variant_gates.read_vsro_file = lambda root, archive, name: vsro_files[name]
+			opener = mock.patch.object(later_tables.Archive, "open", lambda root, archive="Media": contextlib.nullcontext(
+				later_tables.Archive.of({name[len(variant_files.TEXTDATA):]: raw for name, raw in vsro_files.items()})))
+			opener.start()
 			# merge_gate_tables binds GATE_CODES at definition; route the synthetic gates in.
 			variant_gates.merge_gate_tables = lambda *a, **k: original_merge(*a, **{**k, "codes": SYNTHETIC_GATES})
 			variant.os.environ[variant_gates.LEVEL_CAP_FLAG] = cap
@@ -655,7 +660,8 @@ class AddGatesTests(unittest.TestCase):
 				summary, merged = variant_gates.add_gates(Path(scratch) / "vsro", native, out)
 				written = (out / "Media_extracted" / variant_files.TEXTDATA / "teleportlink.txt").read_bytes()
 			finally:
-				variant_gates.read_vsro_file, variant_gates.merge_gate_tables = original_read, original_merge
+				opener.stop()
+				variant_gates.merge_gate_tables = original_merge
 				if original_cap is None:
 					variant.os.environ.pop(variant_gates.LEVEL_CAP_FLAG, None)
 				else:

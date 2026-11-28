@@ -63,6 +63,7 @@ import jupiter_import as jupiter
 import later_world_import
 from prepare_client_resources import write_atomically
 import shard_switch
+import later_tables
 from sro_paths import trees_overlap
 
 FLAG = "SRO_HUNTING2"
@@ -266,19 +267,13 @@ def add_monsters(v1696_root, native, output):
 		# ================
 		# read
 		# ================
-		def read(name):
-			return tables.table_text(media, index, name.lower())
+		read = later_tables.Archive.media(media, index)
 
-		# ================
-		# has
-		# ================
-		def has(name):
-			return tables.TEXTDATA + name.lower() in index
 
 		regions = hunting_regions(tables.table_rows(read("regioncode.txt")))
 		if not regions:
 			raise ValueError(f"the v1.696 client has no {REGION_CODE} regions")
-		later = later_world_import.later_characters(read)
+		later = later_tables.characters(read)
 		placements = hunting_placements(read("npcpos.txt"), later, set(regions))
 		codes = sorted({code for code, region, x, y, z in placements})
 		# 49 of the 71 placed kinds already stand in the tree (native
@@ -304,7 +299,7 @@ def add_monsters(v1696_root, native, output):
 		missing = sorted(set(codes) - placed)
 		if missing:
 			raise ValueError(f"hunting ground placements name unadmitted monsters: {missing}")
-		staged = later_world_import.stage_kinds("hunting ground", read, has, refs, text_root, prior, CHARACTER_SHARD, SKILL_SHARD,
+		staged = later_world_import.stage_kinds("hunting ground", read, refs, text_root, prior, CHARACTER_SHARD, SKILL_SHARD,
 			lambda code: code in refs)
 		population = synthesize_population(placements, placed)
 		write_atomically(text_root / FIELD_FILE, (json.dumps(population) + "\n").encode())
@@ -312,7 +307,7 @@ def add_monsters(v1696_root, native, output):
 			"characters": staged["characters"], "skills": staged["skills"],
 			"families": {"field": {"nests": len(population["Rows"]),
 				"regions": sorted({r["RegionID"] for r in population["Rows"]})}},
-			"animationBases": staged["animationBases"], "characterInfo": staged["characterInfo"], "nameSymbols": staged["nameSymbols"],
+			"animationBases": staged["animationBases"], "effectBases": staged["effectBases"], "characterInfo": staged["characterInfo"], "nameSymbols": staged["nameSymbols"],
 			"sourceRegions": regions}
 		write_atomically(marker, (json.dumps(summary, indent=2) + "\n").encode())
 		return summary
@@ -342,8 +337,7 @@ def add_hunting2(native, out, v1696_root=None):
 	v1696_root = later_world_import.client_root(v1696_root, ROOT_ENV)
 	require_v1696_pin(v1696_root, later_world_import.MERGE_ARCHIVES)
 	with open(v1696_root / "Media.pk2", "rb") as handle, mmap.mmap(handle.fileno(), 0, access=mmap.ACCESS_READ) as media:
-		index = tables.archive_index(media)
-		regions = hunting_regions(tables.table_rows(tables.table_text(media, index, "regioncode.txt")))
+		regions = hunting_regions(later_tables.Archive.media(media, tables.archive_index(media)).rows("regioncode.txt"))
 	if not regions:
 		raise ValueError(f"the v1.696 client has no {REGION_CODE} regions")
 	return later_world_import.merge_world(SPEC, native, out, v1696_root, regions,

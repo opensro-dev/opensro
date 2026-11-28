@@ -15,7 +15,6 @@ import script_paths  # noqa: F401  (puts scripts/ and its build folders on sys.p
 import hashlib
 import os
 import struct
-import sys
 import tempfile
 import unittest
 from pathlib import Path

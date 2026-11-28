@@ -37,6 +37,7 @@ import cap110_monsters as monsters
 import cap110_rewards as rewards
 import import_vsro_alexandria as tables
 import sro_pk2
+import later_tables
 from prepare_client_resources import safe_target, write_atomically
 from sro_paths import MAIN_CHECKOUT_ROOT
 
@@ -173,21 +174,14 @@ def add_quest_items(read, root, native, output):
 		text_path = safe_target(text_root, "textdataname.txt")
 		# The later name files are sharded like questdata: the base
 		# file is a manifest of shard names. textdata_new.txt does not
-		# exist in the later client at all; the layer's reader reports
-		# a missing table by exiting, and an optional family must not
-		# kill the import, so an absent family is skipped (a missing
-		# NAME still refuses in merge_texts below).
-		later_name_rows = []
-		for name in ("textdata_equip&skill.txt", "textdata_object.txt", "textdata_new.txt"):
-			try:
-				rows = tables.table_rows(read(name))
-			except SystemExit:
-				continue
-			if rows and all(len(row) == 1 and row[0].strip().lower().endswith(".txt") for row in rows):
-				for shard_name in [row[0].strip() for row in rows]:
-					later_name_rows.extend(tables.table_rows(read(shard_name)))
-			else:
-				later_name_rows.extend(rows)
+		# exist in the later client at all, and an optional family must
+		# not kill the import, so an absent table reads as no rows (a
+		# listed shard the archive lacks still refuses, and a missing
+		# NAME refuses in merge_texts below).
+		later_name_rows = [
+			row for name in ("textdata_equip&skill.txt", "textdata_object.txt", "textdata_new.txt")
+			for row in read.rows(name, optional=True)
+		]
 		if not later_name_rows:
 			raise SystemExit("the later client has no item name text to import the quest items under")
 		later_texts = [map_tables.later_text_row(row) for row in later_name_rows]
@@ -235,8 +229,7 @@ def main():
 	with open(root / "Media.pk2", "rb") as handle, mmap.mmap(handle.fileno(), 0, access=mmap.ACCESS_READ) as media:
 		index = tables.archive_index(media)
 
-		def read(name):
-			return tables.table_text(media, index, name.lower())
+		read = later_tables.Archive.media(media, index)
 
 		summary = add_quest_items(read, root, native, output)
 	print(json.dumps({key: value for key, value in summary.items() if key not in ("assets", "idMap")}, indent=2))

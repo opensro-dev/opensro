@@ -539,20 +539,6 @@ def field_seed_regions(vsro_root):
 	return client_outdoor_regions(vsro_root)
 
 
-# ================
-# table_text
-#
-# One textdata table's bytes. archive_index keys are lower-case, and a
-# manifest names its shards in mixed case (CharacterData_5000.txt), so
-# the name is lowered here, once, for every caller.
-# ================
-def table_text(media, index, name):
-	entry = index.get(TEXTDATA + name.lower())
-	if entry is None:
-		raise SystemExit(f"Media.pk2 has no {TEXTDATA}{name}")
-	return sro_pk2.payload(media, entry)
-
-
 def table_json(raw, keep, key_column):
 	"""The rows of a table whose key column passes keep, as JSON-ready lists."""
 	return [row for row in table_rows(raw) if len(row) > key_column and keep(row[key_column].strip())]
@@ -656,14 +642,16 @@ def import_alexandria(vsro_root, extracted, native_mapinfo=None):
 		media_index = pinned_index(media_data, pins["Media"], cache)
 		data_index = pinned_index(data_data, pins["Data"], cache)
 
-		city = city_regions(table_text(media_data, media_index, "regioncode.txt"))
+		import later_tables
+		media_tables = later_tables.Archive.media(media_data, media_index, media_path.name)
+		city = city_regions(media_tables.file("regioncode.txt"))
 		if not city:
 			raise SystemExit(f"regioncode.txt has no {CITY_REGION_CODE} region; is this a VSRO client with Alexandria?")
 		# Port-only, not native: field regions are seeds for complete source
 		# terrain components, not an exhaustive list of regions worth importing.
 		# Empty connecting terrain and mountain sectors have no monster nests.
 		fields = field_seed_regions(vsro_root)
-		crossings = gate_seed_regions(table_text(media_data, media_index, "teleportdata.txt"))
+		crossings = gate_seed_regions(media_tables.file("teleportdata.txt"))
 		# Port-only, not native: the Blue Berserk trial arenas are two isolated regions
 		# only the later client has; the quest switch seeds them like the fields.
 		from cap110_quest_arenas import arena_seeds
@@ -763,19 +751,21 @@ def catalog_report(extracted, catalog_raw, tile_ids):
 
 def write_tables(output, media, index, regions):
 	"""The city's rows of the region, zone-name and gate tables, as JSON."""
+	import later_tables
 	region_ids = {(y << 8) | x for x, y in regions}
+	source = later_tables.Archive.media(media, index)
 	tables = {
 		"regioncode.txt": table_json(
-			table_text(media, index, "regioncode.txt"), lambda value: value == CITY_REGION_CODE, 2
+			source.file("regioncode.txt"), lambda value: value == CITY_REGION_CODE, 2
 		),
 		"textzonename.txt": table_json(
-			table_text(media, index, "textzonename.txt"),
+			source.file("textzonename.txt"),
 			lambda value: value.startswith(CITY_NAME_PREFIX),
 			1
 		),
 		"teleportdata.txt": [
 			row
-			for row in table_rows(table_text(media, index, "teleportdata.txt"))
+			for row in table_rows(source.file("teleportdata.txt"))
 			if len(row) > 5 and (row[2].startswith(CITY_GATE_PREFIX) or row[2] in CITY_GATE_EXTRA)
 			and row[5].strip().lstrip("-").isdigit() and int(row[5]) in region_ids
 		]

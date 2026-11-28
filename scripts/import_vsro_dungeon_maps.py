@@ -30,6 +30,7 @@ from pathlib import Path
 
 from PIL import Image
 
+import later_tables
 import sro_pk2
 from convert_images import save_image_payload
 from import_vsro_alexandria import verify_vsro_archive
@@ -41,12 +42,11 @@ CATALOG_VERSION = 2
 CATALOG_NAME = "later-dungeon-map.json"
 ARCHIVE_ROOT = "interface/worldmap/dungeon/"
 PUBLIC_IMAGE_ROOT = "/assets/images/Media_extracted/interface/worldmap/dungeon/"
-TEXT_ROOT = "server_dep/silkroad/textdata/"
-MAP_TABLE = TEXT_ROOT + "worldmap_mapinfo.txt"
-SIGN_TABLE = TEXT_ROOT + "worldmap_localinfo.txt"
-ZONE_TEXT = TEXT_ROOT + "textzonename.txt"
-OBJECT_TEXT = TEXT_ROOT + "textdata_object.txt"
-UI_TEXT = TEXT_ROOT + "textuisystem.txt"
+MAP_TABLE = "worldmap_mapinfo.txt"
+SIGN_TABLE = "worldmap_localinfo.txt"
+ZONE_TEXT = "textzonename.txt"
+OBJECT_TEXT = "textdata_object.txt"
+UI_TEXT = "textuisystem.txt"
 # The page foot's note: the later client's world map level filter.
 MONSTER_LEVEL_NOTE = "UIIT_STT_WORLDMAP_LEVEL_MONSTER_LIST"
 DUNGEON_SECTION = "#section\tDungeonmap"
@@ -221,13 +221,17 @@ def main():
 	def read(path):
 		return sro_pk2.payload(data, entries[path])
 
-	rows = map_rows(table_text(read(MAP_TABLE)))
-	zones = english_text(table_text(read(ZONE_TEXT)))
+	# The tables through their owner: a v1.696 archive, whose names are
+	# shard indexes, reads its shards instead of one-cell rows.
+	source = later_tables.Archive.media(data, later_tables.archive_index(data))
+	lines = lambda name: source.rows(name, parse=table_text)  # noqa: E731
+	rows = map_rows(lines(MAP_TABLE))
+	zones = english_text(lines(ZONE_TEXT))
 	add_captions(rows, zones)
-	note = required_text(english_text(table_text(read(UI_TEXT))), MONSTER_LEVEL_NOTE, UI_TEXT)
+	note = required_text(english_text(lines(UI_TEXT)), MONSTER_LEVEL_NOTE, UI_TEXT)
 	names = dict(zones)
-	names.update(english_text(table_text(read(OBJECT_TEXT))))
-	add_signs(rows, table_text(read(SIGN_TABLE)), names)
+	names.update(english_text(lines(OBJECT_TEXT)))
+	add_signs(rows, lines(SIGN_TABLE), names)
 
 	images = PUBLIC_ROOT / "assets" / "images" / "Media_extracted" / "interface" / "worldmap" / "dungeon"
 	images.mkdir(parents=True, exist_ok=True)

@@ -47,6 +47,7 @@ import alexandria_map_tables as map_tables
 import alexandria_npcs as characters
 import cap110_blue_berserk as blue
 import import_vsro_alexandria as tables
+import later_tables
 from prepare_client_resources import safe_target, write_atomically
 from sro_paths import MAIN_CHECKOUT_ROOT
 
@@ -76,7 +77,6 @@ GUIDE_DEPTH_COLUMN, GUIDE_PARENT_COLUMN, GUIDE_CONTENT_COLUMN, GUIDE_TITLE_COLUM
 # (SN_PAYCON_QNO_AR_001): the Korean column and every other language.
 GUIDE_HEAD = '<strong><font color="255,226,74,0">\u25c8 {}</font></strong><br>'
 GUIDE_HEADS = {"korean": ("\uc784\ubb34", "\ud615\uc2dd"), "other": ("Task", "Format")}
-SHARD_NAME = re.compile(r".*\.txt", re.IGNORECASE)
 
 
 # ================
@@ -189,21 +189,6 @@ def is_quest_row(name, row):
 
 
 # ================
-# sharded_rows
-#
-# One later table's rows: the v1.696 client keeps several of its textdata
-# tables as an index naming shard files (questdata.txt, the textquest
-# families); where the index is the table, its rows come back as they are.
-# ================
-def sharded_rows(read, name):
-	rows = tables.table_rows(read(name))
-	listed = [row[0].strip() for row in rows if row and row[0].strip()]
-	if listed and all(len(row) == 1 and SHARD_NAME.fullmatch(row[0].strip()) for row in rows if row and row[0].strip()):
-		return [row for shard in listed for row in tables.table_rows(read(shard.lower()))]
-	return rows
-
-
-# ================
 # quest_rows
 #
 # The rows of the three tables to append: the later client's quest rows whose
@@ -257,7 +242,7 @@ def head_help_rows(read, guide):
 		for column in (GUIDE_CONTENT_COLUMN, GUIDE_TITLE_COLUMN)}
 	if not keys:
 		return []
-	rows = (map_tables.later_text_row(row) for row in sharded_rows(read, HELP_TABLE))
+	rows = (map_tables.later_text_row(row) for row in read.rows(HELP_TABLE))
 	return [row for row in rows if len(row) > blue.ENGLISH_COLUMN and row[blue.KEY_COLUMN] in keys]
 
 
@@ -382,7 +367,7 @@ def project_later_row(row):
 # from the later 17-column layout into the layout fill_text reads.
 # ================
 def later_text_rows(read):
-	return [[project_later_row(row) for row in sharded_rows(read, family + ".txt")]
+	return [[project_later_row(row) for row in read.rows(family + ".txt")]
 		for family in TEXT_FAMILIES]
 
 
@@ -494,11 +479,11 @@ def add_quest_tables(read, archive_sha, output):
 	if marker.exists():
 		remove_owned(text_root, prior)
 		marker.unlink()
-	quests = sharded_rows(read, QUEST_TABLE)
+	quests = read.rows(QUEST_TABLE)
 	later_texts = [complete_english(rows) for rows in later_text_rows(read)]
 	known = {row[blue.KEY_COLUMN] for rows in later_texts for row in rows if len(row) > blue.KEY_COLUMN}
 	later = {QUEST_TABLE: quests, CONTENTS_TABLE: tables.table_rows(read(CONTENTS_TABLE)),
-		GUIDE_TABLE: guide_rows(sharded_rows(read, GUIDE_TABLE), quests, known)}
+		GUIDE_TABLE: guide_rows(read.rows(GUIDE_TABLE), quests, known)}
 	variant = {name: tables.table_rows(safe_target(text_root, name).read_bytes()) for name in KEYS}
 	new_rows = quest_rows(later, variant)
 	later_texts.append(composed_guide_bodies(new_rows[GUIDE_TABLE], later_texts))
@@ -546,8 +531,7 @@ def main():
 	with open(root / "Media.pk2", "rb") as handle, mmap.mmap(handle.fileno(), 0, access=mmap.ACCESS_READ) as media:
 		index = tables.archive_index(media)
 
-		def read(name):
-			return tables.table_text(media, index, name.lower())
+		read = later_tables.Archive.media(media, index)
 
 		summary = add_quest_tables(read, tables.sha256_of(media), output)
 	print(json.dumps({key: value for key, value in summary.items() if key not in ("rows", "text", "quests", "ended")}, indent=2))

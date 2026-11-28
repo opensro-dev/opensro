@@ -36,6 +36,7 @@ import cap110_monsters as monsters
 import published_ids
 import import_vsro_alexandria as tables
 import sro_pk2
+import later_tables
 from prepare_client_resources import safe_target, write_atomically
 from sro_paths import trees_overlap
 
@@ -279,19 +280,18 @@ def add_rewards(vsro_root, native, output, source_root=None):
 		# ================
 		# read_later
 		# ================
-		def read_later(name):
-			return tables.table_text(media, index, name)
+		read_later = later_tables.Archive.media(media, index)
 		later_rows = item_import.read_item_tables(read_later)
 		later = items.index_items(later_rows)
 		base = native / TEXT_ROOT
-		native_items = items.index_items(item_import.read_item_tables(lambda name: (base / name).read_bytes()))
+		native_items = items.index_items(item_import.read_item_tables(later_tables.Archive.tree(base)))
 		native_codes = set(native_items)
 		selected = select_imports(reward_items(rules), later, native_items)
 		converted = convert_rows(selected, occupied_identities(text_root, later_rows),
 			{code: entry["target"] for code, entry in prior.get("idMap", {}).items()})
 		text_path = safe_target(text_root, "textdataname.txt")
 		later_texts = [row for name in ("textdata_equip&skill.txt", "textdata_object.txt", "textdata_new.txt")
-			for row in tables.table_rows(read_later(name))]
+			for row in read_later.rows(name)]
 		base_text = text_path.read_bytes()
 		merged_text, missing_descriptions = items.merge_texts(base_text, later_texts, converted)
 		known = {row[1] for row in characters.translation_rows(base_text) if len(row) > 1}

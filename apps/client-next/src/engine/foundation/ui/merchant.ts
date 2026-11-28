@@ -15,6 +15,45 @@ import { SHOP_CURRENCY_HONOR, SHOP_CURRENCY_NASRUN_TOKEN } from "@/engine/founda
 import { isMagicCube } from "@/engine/foundation/gameplay/magic-cube";
 import type { AuthoredLayout } from "./authored-layout";
 
+// The worn slots that open the inventory (0-12); a bag sale starts after them.
+const MERCHANT_EQUIPMENT_SLOTS = 13;
+// CGInterface_ShowSystemNotification category 1 (storage) lines the store's
+// drop check prints: CANNOT_DEAL_AT_SHOP and CANT_SELL_EQUIPED_ITEM.
+export const MERCHANT_NOTICE_CATEGORY = 1;
+export const MERCHANT_BAG_BUSY_CODE = 0x3b;
+export const MERCHANT_EQUIPPED_CODE = 0x3f;
+
+/*
+================
+MerchantDrop
+
+An item offered to the store: whether it comes from the player's own
+inventory (bag or worn slots), its slot, and whether the store is trading
+a transport's goods (interaction lock 0x800, shop.cosGid set).
+================
+*/
+export interface MerchantDrop {
+	readonly fromInventory: boolean;
+	readonly slot: number;
+	readonly transportTrade: boolean;
+}
+
+/*
+================
+merchantDropRefusal
+
+CIFMerchant_ValidateSlotAction (5B2630) by source window: a worn item
+(message 0x47) is always refused with {1, 0x3F} (5B27B6); a bag item
+(0x46) while the store trades a transport's goods is refused with
+{1, 0x3B} (5B2720). Returns the native code, or null when the sale goes on.
+================
+*/
+export function merchantDropRefusal( drop: MerchantDrop ): number | null {
+	if ( !drop.fromInventory ) return null;
+	if ( drop.slot < MERCHANT_EQUIPMENT_SLOTS ) return MERCHANT_EQUIPPED_CODE;
+	return drop.transportTrade ? MERCHANT_BAG_BUSY_CODE : null;
+}
+
 /*
 ================
 merchantDialogPage
@@ -129,7 +168,7 @@ export function merchantSelection(
 	}
 	if ( kind === "sell" ) {
 		const item = inventory.find( i => i.slot === index );
-		return item && item.slot >= (shop.cosGid ? 0 : 13) ?
+		return item && item.slot >= (shop.cosGid ? 0 : MERCHANT_EQUIPMENT_SLOTS) ?
 			{
 				kind,
 				cosGid: shop.cosGid,

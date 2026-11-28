@@ -21,7 +21,6 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 sys.path.insert(0, str(Path(__file__).resolve().parent / "build"))
 import alexandria_npcs as characters  # noqa: E402
-import import_vsro_alexandria as tables  # noqa: E402
 
 
 # ================
@@ -129,22 +128,17 @@ def speech_english(key, korean, english):
 # rows in textquest.txt itself.
 # ================
 def later_speech_texts(read):
-	manifest = tables.table_rows(read("textquest_speech&name.txt"))
-	shards = [row[0].lower() for row in manifest if row and row[0].lower().endswith(".txt")]
-	if not shards:
-		raise ValueError("v1.696 textquest_speech&name.txt names no shards")
 	rows = []
-	for shard in shards:
-		for row in characters.translation_rows(read(shard)):
-			# An untranslated row keeps only its first cells (the
-			# table reader trims the empty tail); it still rides,
-			# with no English, like the names that lack one.
-			if len(row) < 3 or not row[2]:
-				continue
-			english = next((row[at] for at in (9, 13, 14, 15, 16)
-				if len(row) > at and row[at] not in ("0", "")), "")
-			korean = row[3] if len(row) > 3 else ""
-			rows.append([row[0], row[2], korean,
-				"", "", "", "", "", speech_english(row[2], korean, english), ""])
+	for row in read.rows("textquest_speech&name.txt", characters.translation_rows, indexed_only=True):
+		# An untranslated row keeps only its first cells (the table
+		# reader trims the empty tail); it still rides, with no
+		# English, like the names that lack one.
+		if len(row) < 3 or not row[2]:
+			continue
+		english = next((row[at] for at in (9, 13, 14, 15, 16)
+			if len(row) > at and row[at] not in ("0", "")), "")
+		korean = row[3] if len(row) > 3 else ""
+		rows.append([row[0], row[2], korean,
+			"", "", "", "", "", speech_english(row[2], korean, english), ""])
 	return rows
 

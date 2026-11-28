@@ -26,6 +26,7 @@ import import_vsro_alexandria as tables
 import published_ids
 import skilldata_enc as skill_tables
 import sro_pk2
+import later_tables
 from prepare_client_resources import safe_target, write_atomically
 from sro_paths import EXTRACTED_ROOT, REPO_ROOT, trees_overlap
 
@@ -37,6 +38,7 @@ FLAG = "SRO_CAP110_SKILLS"
 REPORT_NAME = ".opensro-cap110-skills.json"
 EFFECT_REPORT_NAME = ".opensro-cap110-skill-effects.json"
 TEXT_ROOT = Path("Media_extracted") / tables.TEXTDATA
+NAME_INDEX = "textdataname.txt"
 
 
 # ================
@@ -99,14 +101,13 @@ def add_skills(vsro_root, native, output, database_export=None):
 		# ================
 		# read_later
 		# ================
-		def read_later(name):
-			return tables.table_text(media, index, name)
+		read_later = later_tables.Archive.media(media, index)
 		# Both sides read the way their client does: the later client's
 		# encrypted skilldataenc set (skilldata_enc.py), whose plain twin is
 		# an older copy that lacks skills (#3374); the native extraction has
 		# only the plain manifest.
-		native_rows = skill_tables.client_skill_rows(read_native, lambda name: name in base_paths)
-		later_rows = skill_tables.client_skill_rows(read_later, lambda name: tables.TEXTDATA + name in index)
+		native_rows = skill_tables.client_skill_rows(later_tables.Archive(read_native, base_paths.__contains__, str(base)))
+		later_rows = skill_tables.client_skill_rows(read_later)
 		database_path = database_export or os.environ.get(database_skills.DATABASE_ENV)
 		database_rows, database_hash = database_skills.load_database_rows(database_path) if database_path else ([], None)
 		added, summary = database_skills.merge_database_tier(native_rows, later_rows, database_rows, prior,
@@ -118,15 +119,14 @@ def add_skills(vsro_root, native, output, database_export=None):
 		known_text = {r[1] for r in text_tables.translation_rows(base_text) if len(r) > 8 and not text_tables.is_placeholder_text(r[8])}
 		wanted_names = {r[62] for r in added if r[62] not in ("", "xxx")} - known_text
 		wanted_text = {r[column] for r in added for column in (62, 64, 65) if r[column] not in ("", "xxx")} - known_text
+		# The client's name tables are the ones its textdataname.txt index
+		# lists (VSRO: equip&skill, object, new), never every file that
+		# happens to share their prefix.
 		new_text = []
-		for key in sorted(index):
-			name = key.replace("\\", "/").rsplit("/", 1)[-1]
-			if not wanted_text or not name.startswith("textdata_") or not name.endswith(".txt"):
-				continue
-			for row in text_tables.translation_rows(read_later(name)):
-				if len(row) >= 10 and row[1] in wanted_text and not text_tables.is_placeholder_text(row[8]):
-					new_text.append([row[0], row[1], row[2], "", "", row[5], row[4], row[7], row[8], row[9], ""])
-					wanted_text.remove(row[1])
+		for row in read_later.rows(NAME_INDEX, text_tables.translation_rows) if wanted_text else []:
+			if len(row) >= 10 and row[1] in wanted_text and not text_tables.is_placeholder_text(row[8]):
+				new_text.append([row[0], row[1], row[2], "", "", row[5], row[4], row[7], row[8], row[9], ""])
+				wanted_text.remove(row[1])
 		if wanted_names & wanted_text:
 			raise ValueError(f"missing imported skill names: {sorted(wanted_names & wanted_text)}")
 		summary["textSymbolsAdded"] = sorted(set(prior.get("textSymbolsAdded", prior.get("nameSymbolsAdded", []))) | {r[1] for r in new_text})
@@ -177,7 +177,7 @@ def add_skill_effects(vsro_root, native, output):
 	if not enabled():
 		if target.exists() and prior:
 			text, utf16 = decode_skill_effect(target.read_bytes())
-			merged = skill_effects.remove_animation_bases(text, set(prior["bases"]))
+			merged = skill_effects.remove_presentation(text, set(prior["bases"]), set(prior.get("effectBases", [])))
 			encoded = b"\xff\xfe" + merged.encode("utf-16-le") if utf16 else merged.encode("latin1")
 			write_atomically(target, encoded)
 			marker.unlink()
@@ -197,20 +197,21 @@ def add_skill_effects(vsro_root, native, output):
 		handle = stack.enter_context(open(Path(vsro_root) / "Media.pk2", "rb"))
 		media = stack.enter_context(mmap.mmap(handle.fileno(), 0, access=mmap.ACCESS_READ))
 		index = {sro_pk2.fold_ascii(entry.path): entry for entry in sro_pk2.read_directory(media)}
-		later_raw = tables.table_text(media, index, "skilleffect.txt")
-	later_text, _later_utf16 = decode_skill_effect(later_raw)
+		later_text = skill_effects.later_skill_effect_text(later_tables.Archive.media(media, index))
 	selected = skill_effects.select_later_rows(later_text, wanted)
-	missing = skill_effects.missing_animation_states(
-		[line for rows in selected.values() for _base, line in rows], native_text
-	)
-	if missing:
-		raise ValueError(f"later animation sets use unknown native states: {sorted(missing)}")
+	unplayable = skill_effects.player_skill_faults(selected, skill_effects.client_effect_text(source.parent, native_text))
+	if unplayable:
+		raise ValueError(f"later skills the v1.150 client cannot play: {unplayable}")
+	# The stages of a base the tree presents natively stay native; the
+	# marker names only the stages this pass inserts, for the off path.
+	effect_bases = ({base for base, _line in selected.get(skill_effects.EFFECT_SET_SECTION, [])}
+		- skill_effects.native_bases(native_text) - skill_effects.effect_set_keys(native_text))
 	merged, inserted = skill_effects.merge_skill_effect_text(target_text, selected)
 	encoded = (b"\xff\xfe" + merged.encode("utf-16-le")) if utf16 else merged.encode("latin1")
 	if encoded != target_raw:
 		write_atomically(target, encoded)
 	owned_bases = sorted({base for rows in selected.values() for base, _line in rows})
-	write_atomically(marker, (json.dumps({"bases": owned_bases}, indent=2) + "\n").encode("utf-8"))
+	write_atomically(marker, (json.dumps({"bases": owned_bases, "effectBases": sorted(effect_bases)}, indent=2) + "\n").encode("utf-8"))
 	return {
 		"enabled": True, "inserted": inserted, "importedBases": len(imported_bases),
 		"missingBasesNeedingLaterRows": len(wanted),

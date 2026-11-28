@@ -49,6 +49,7 @@ import cap110_quest_items as quest_items
 import cap110_rewards as rewards
 import import_vsro_alexandria as tables
 import sro_pk2
+import later_tables
 from prepare_client_resources import safe_target, write_atomically
 
 MARKER = ".opensro-cap110-blue-berserk.json"
@@ -268,12 +269,11 @@ def add_blue_berserk(vsro_root, native, output):
 		# ================
 		# read_later
 		# ================
-		def read_later(name):
-			return tables.table_text(media, index, name)
+		read_later = later_tables.Archive.media(media, index)
 		later_rows = item_import.read_item_tables(read_later)
 		later = items.index_items(later_rows)
 		base = native / TEXT_ROOT
-		native_items = items.index_items(item_import.read_item_tables(lambda name: (base / name).read_bytes()))
+		native_items = items.index_items(item_import.read_item_tables(later_tables.Archive.tree(base)))
 		selected = select_items(later, native_items)
 		converted = rewards.convert_rows(selected, rewards.occupied_identities(text_root, later_rows, OUTPUT_SHARD),
 			{code: entry["target"] for code, entry in prior.get("idMap", {}).items()})
@@ -287,10 +287,10 @@ def add_blue_berserk(vsro_root, native, output):
 		texts = {}
 		for name, source, symbols in TEXT_FILES:
 			path = safe_target(text_root, name)
-			by_key = {row[KEY_COLUMN]: row for row in tables.table_rows(read_later(source)) if len(row) > ENGLISH_COLUMN + 1}
+			by_key = {row[KEY_COLUMN]: row for row in read_later.rows(source) if len(row) > ENGLISH_COLUMN + 1}
 			raw, appended, replaced = fill_text(path.read_bytes(), by_key, symbols)
 			texts[name] = {"appended": appended, "replaced": replaced, "raw": raw}
-		later_shop = {name: tables.table_rows(read_later(name)) for name in SHOP_TABLES if name != "refshopgoods.txt"}
+		later_shop = {name: read_later.rows(name) for name in SHOP_TABLES if name != "refshopgoods.txt"}
 		later_shop["refshopgoods.txt"] = []
 		variant_shop = {name: tables.table_rows(safe_target(text_root, name).read_bytes()) for name in SHOP_TABLES}
 		new_shop = shop_rows(later_shop, variant_shop)

@@ -312,7 +312,7 @@ class MergeWorldParticleTest(unittest.TestCase):
 
 	def test_a_merged_model_carries_its_effect_program_into_the_record(self):
 		import skytemple_import
-		textdata = "server_dep/silkroad/textdata/"
+		textdata = later.tables.TEXTDATA
 		# One native row each: the merges number new rows past the highest.
 		catalog = b'JMXV2DTI1001\r\n1\r\n00000 0x00000000 "ok" "native.ddj"\r\n'
 		with tempfile.TemporaryDirectory() as temp:
@@ -613,7 +613,7 @@ class MapWorldTest(unittest.TestCase):
 		with tempfile.TemporaryDirectory() as temp:
 			media, handle = mock.MagicMock(), mock.MagicMock()
 			with mock.patch.dict(os.environ, {self.SPEC.flag: "on"}), 				mock.patch.object(later, "require_pin", side_effect=lambda *a: order.append("pin")) as pin, 				mock.patch.object(later.tables, "open_archive",
-					side_effect=lambda *a: order.append("open") or (None, handle, media)), 				mock.patch.object(later.tables, "archive_index", return_value={}), 				mock.patch.object(later.tables, "table_text", return_value="text"), 				mock.patch.object(later.tables, "table_rows", side_effect=lambda text: [["row", text]]), 				mock.patch.object(later, "merge_world", return_value={"enabled": True}) as merge:
+					side_effect=lambda *a: order.append("open") or (None, handle, media)), 				mock.patch.object(later.tables, "archive_index", return_value={}), 				mock.patch.object(later.later_tables.Archive, "media", return_value=later.later_tables.Archive.of({"teleportdata.txt": utf16([["row", "text"]])})), 				mock.patch.object(later, "merge_world", return_value={"enabled": True}) as merge:
 				seen = []
 
 				def rule(rows_of):

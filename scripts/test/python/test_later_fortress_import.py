@@ -17,6 +17,7 @@ leaves them again.
 """
 
 import script_paths  # noqa: F401  (puts scripts/ and its build folders on sys.path, #3410)
+import later_tables  # noqa: E402
 import dataclasses
 import re
 import tempfile
@@ -28,7 +29,6 @@ import bandit_fortress_import as bandit  # noqa: E402
 import constantinople_import as constantinople  # noqa: E402
 import hotan_fortress_import as hotan  # noqa: E402
 import later_fortress_import as fortress  # noqa: E402
-import alexandria_npcs as characters  # noqa: E402
 import cap110_monsters as monsters  # noqa: E402
 import import_vsro_alexandria as tables  # noqa: E402
 
@@ -114,13 +114,25 @@ class EngineTest(unittest.TestCase):
 			"res/bldg/guild/hotang/big_gate_ht.bsr")
 
 	def test_vsro_name_rows_carry_english_in_the_shared_column(self):
+		def table(*rows):
+			return b"\xff\xfe" + "".join("\t".join(row) + "\r\n" for row in rows).encode("utf-16-le")
+
+		# VSRO's shape: textdataname.txt indexes the three name files,
+		# one of them textdata_object.txt, which the reader also names.
 		row = ["1", "SN_FORTRESS_HOTAN", "kr", "", "tw", "cn", "de", "jp", "Hotan Fortress", "vn"]
 		short = ["1", "SN_SHORT", "kr"]
 		blank = ["1", "", "kr", "", "", "", "", "", "Nameless", ""]
-		texts = {"textdata_object.txt": [row, short], "textdataname.txt": [blank]}
-		with mock.patch.object(characters, "translation_rows", side_effect=lambda rows: rows):
-			rows = fortress.vsro_object_texts(lambda table: texts[table])
-		self.assertEqual(rows, [["1", "SN_FORTRESS_HOTAN", "kr", "", "", "", "", "", "Hotan Fortress", ""]])
+		# A name the archive wraps over two lines, last in its file.
+		wrapped = [["1", "SN_SKILL_FORT_BUFF", "kr", "", "tw", "cn", "de", "jp", "Fortress"], [" Buff", "vn"]]
+		texts = {
+			"textdataname.txt": table(["TextData_Equip&Skill.txt"], ["TextData_Object.txt"], ["TextData_New.txt"]),
+			"textdata_object.txt": table(row, short, blank),
+			"textdata_equip&skill.txt": table(*wrapped),
+			"textdata_new.txt": table(),
+		}
+		rows = fortress.vsro_object_texts(later_tables.Archive.of(texts))
+		self.assertEqual(rows, [["1", "SN_FORTRESS_HOTAN", "kr", "", "", "", "", "", "Hotan Fortress", ""],
+			["1", "SN_SKILL_FORT_BUFF", "kr", "", "", "", "", "", "Fortress Buff", ""]])
 
 	def test_staff_standings_take_the_native_id(self):
 		spec = dataclasses.replace(hotan.SPEC, staff_codes=("NPC_KT_FORTRESS_OFFICIAL",))
@@ -197,7 +209,7 @@ class MapPageTest(unittest.TestCase):
 			"worldmap_mapinfo.txt": monsters.encode_rows(pages),
 			"worldmap_localinfo.txt": monsters.encode_rows(pins),
 		}
-		return lambda name: sources[name]
+		return later_tables.Archive.of(sources)
 
 	def page_sources(self):
 		pages = [vsro_mapinfo_row("1001", r"interface\worldmap\map\map_fort_jangan.ddj", "INS_FORT_JA"),

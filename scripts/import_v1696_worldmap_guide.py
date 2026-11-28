@@ -44,9 +44,10 @@ from pathlib import Path
 
 from PIL import Image
 
+import later_tables
 import sro_pk2
 from convert_images import save_image_payload
-from import_vsro_alexandria import archive_index, table_rows
+from import_vsro_alexandria import archive_index
 from import_vsro_tomb_minimap import ddj_payload
 from pin_file import require_pinned_archive
 from sro_paths import PUBLIC_ROOT
@@ -54,7 +55,6 @@ from sro_paths import PUBLIC_ROOT
 V1696_ENV = "SRO_V1696_ROOT"
 PIN_FILE = Path(__file__).with_name("v1696_archive_pins.json")
 PIN_FORMAT = "opensro-vsro-archive-pins-v1"
-TEXTDATA = "server_dep/silkroad/textdata/"
 CATALOG = PUBLIC_ROOT / "assets" / "data" / "worldmap-guide.json"
 IMAGES = PUBLIC_ROOT / "assets" / "images" / "Media_extracted" / "interface"
 MASK_DIR = "worldmap/guide-mask/"
@@ -124,6 +124,7 @@ class Archive:
 	def __init__(self, data):
 		self.data = data
 		self.index = archive_index(data)
+		self.tables = later_tables.Archive.media(data, self.index)
 
 	def has(self, path):
 		return path.lower() in self.index
@@ -135,14 +136,11 @@ class Archive:
 		return sro_pk2.payload(self.data, entry)
 
 	def table(self, name):
-		return table_rows(self.read(TEXTDATA + name))
+		return self.tables.rows(name)
 
 	def sharded(self, name):
 		"""A table that is an index of shards (v1.696 text and character data)."""
-		rows = self.table(name)
-		if rows and all(len(row) == 1 and row[0].strip().lower().endswith(".txt") for row in rows):
-			return [row for shard in rows for row in self.table(shard[0].strip())]
-		return rows
+		return self.tables.rows(name, indexed_only=True)
 
 
 #============================================================================

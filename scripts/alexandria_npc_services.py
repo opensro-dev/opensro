@@ -15,6 +15,7 @@ import alexandria_shop_d11 as d11
 import honor_shops
 import alexandria_shop_supplies as supplies
 import import_vsro_alexandria as tables
+import later_tables
 import shop_layout
 
 SHOP_TABLES = (
@@ -151,14 +152,15 @@ def merge_shops(native, later, item_codes, npc_codes):
 # honor_items.py derived.
 # ================
 def add_services(vsro_root, native, output, port_stock=False, honor_goods=False):
-	from variant_files import TEXTDATA, read_vsro_file, replace_file
+	from variant_files import TEXTDATA, replace_file
 	root = output / "Media_extracted" / TEXTDATA
 	native_root = native / "Media_extracted" / TEXTDATA
 	characters = [r for p in root.glob("characterdata_*.txt") for r in tables.table_rows(p.read_bytes())]
 	codes = {r[2] for r in characters if len(r) > 5 and r[2] in RESTORED_STORE_NPCS}
 	items = {r[2] for p in root.glob("itemdata_*.txt") for r in tables.table_rows(p.read_bytes()) if len(r) > 2 and r[0] == "1"}
 	base = {name: (root / name).read_bytes() if (root / name).exists() else (native_root / name).read_bytes() for name in SHOP_TABLES}
-	later = {name: read_vsro_file(vsro_root, "Media", TEXTDATA + name) for name in SHOP_TABLES}
+	with later_tables.Archive.open(vsro_root) as source:
+		later = {name: source.file(name) for name in SHOP_TABLES}
 	merged, summary = merge_shops(base, later, items, codes)
 	for name, raw in merged.items():
 		replace_file(root / name, raw)
