@@ -109,10 +109,7 @@ def select_quest_items(later, held):
 # ================
 def remove_owned(text_root, prior):
 	(text_root / OUTPUT_SHARD).unlink(missing_ok=True)
-	manifest = text_root / "itemdata.txt"
-	if manifest.exists():
-		lines = [row[0] for row in tables.table_rows(manifest.read_bytes()) if row and row[0].lower() != OUTPUT_SHARD]
-		write_atomically(manifest, b"\xff\xfe" + ("\r\n".join(lines) + "\r\n").encode("utf-16-le"))
+	monsters.unlist_shard(text_root, "itemdata.txt", OUTPUT_SHARD)
 	text_path = text_root / "textdataname.txt"
 	owned = set(prior.get("nameSymbols", []))
 	if owned and text_path.exists():
