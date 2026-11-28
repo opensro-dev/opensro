@@ -106,19 +106,14 @@ def is_placeholder_text(value):
 # ================
 # translation_rows
 #
-# The supplied object's German Tausert cell contains an unquoted newline.
-# Join only a short translation record and its non-record continuation;
-# preserve the following language cells rather than discarding the name.
+# A text table's records. VSRO's German Tausert cell holds a U+2028 line
+# separator; this used to join the pieces str.splitlines() cut there, and
+# it missed every in-cell LF (the v1.150 name table's 2470). table_rows
+# now ends a record only at CRLF, so the cell keeps its own character and
+# a rewrite gives back the bytes it read (#4608).
 # ================
 def translation_rows(raw):
-	rows = []
-	for row in stage1.table_rows(raw):
-		if rows and len(rows[-1]) < 10 and len(rows[-1]) > 1 and rows[-1][1].startswith("SN_") and not row[0].isdigit():
-			rows[-1][-1] += " " + row[0].strip()
-			rows[-1].extend(row[1:])
-		else:
-			rows.append(row)
-	return rows
+	return stage1.table_rows(raw)
 
 
 # ================
@@ -240,9 +235,7 @@ def append_rows(raw, rows):
 	"""The UTF-16 table with rows appended; the original bytes stay first."""
 	if not rows:
 		return raw
-	text = stage1.decode_table(raw)
-	if not text.endswith("\n"):
-		text += "\r\n"
+	text = stage1.end_last_record(stage1.decode_table(raw))
 	return b"\xff\xfe" + (text.lstrip("\ufeff") + table_text(rows)).encode("utf-16-le")
 
 

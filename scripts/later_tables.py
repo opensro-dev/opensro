@@ -167,9 +167,9 @@ class Archive:
 	# rows
 	#
 	# A table's rows through its index. parse reads one file's bytes into
-	# rows (table_rows; a text table passes alexandria_npcs.translation_rows,
-	# which joins a row the archive wraps over lines) and runs per file,
-	# so a join never crosses two shards. indexed_only refuses a whole
+	# rows (table_rows, which ends a record at CRLF so a cell's own line
+	# breaks stay in it, #4608) and runs per file, so a record never
+	# crosses two shards. indexed_only refuses a whole
 	# table: a reader of v1.696's layout (an id cell after the service
 	# cell) must not misread VSRO's. optional reads a table the client
 	# may not ship (v1.696 has no textdata_new.txt) as no rows.

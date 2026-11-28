@@ -32,8 +32,8 @@ NATIVE_ID = 5000
 # ================
 # utf16
 # ================
-def utf16(rows, newline="\r\n"):
-	return b"\xff\xfe" + "".join("\t".join(row) + newline for row in rows).encode("utf-16-le")
+def utf16(rows):
+	return b"\xff\xfe" + "".join("\t".join(row) + "\r\n" for row in rows).encode("utf-16-le")
 
 
 # ================
@@ -97,7 +97,8 @@ class NasrunImportTest(unittest.TestCase):
 	# A scratch world: a fake VSRO Media.pk2 whose itemdata carries the
 	# fifteen rows plus an event copy (a decoy), the matching name texts,
 	# and an output tree with one native item and a name table whose
-	# rows mix CRLF and LF endings as the shipped one does.
+	# last record holds an LF inside a cell, as 2470 of the shipped
+	# table's do: records end at CRLF (#4608).
 	# ================
 	def fixture(self, base, drop=None, mutate=None):
 		vsro, native, output = base / "vsro", base / "native", base / "output"
@@ -125,8 +126,8 @@ class NasrunImportTest(unittest.TestCase):
 		native_row[0], native_row[1], native_row[2] = "1", str(NATIVE_ID), "ITEM_NATIVE_THING"
 		(text_root / "itemdata.txt").write_bytes(utf16([["itemdata_5000.txt"]]))
 		(text_root / "itemdata_5000.txt").write_bytes(utf16([native_row]))
-		names = utf16([["1", "SN_NATIVE_A", "", "", "", "", "", "", "Native A"]]) + utf16(
-			[["1", "SN_NATIVE_B", "", "", "", "", "", "", "Native B"]], newline="\n")[2:]
+		names = utf16([["1", "SN_NATIVE_A", "", "", "", "", "", "", "Native A"],
+			["1", "SN_NATIVE_B", "", "", "", "", "", "", "Native\nB"]])
 		(text_root / nasrun.NAME_TABLE).write_bytes(names)
 		return vsro, native, output, text_root
 

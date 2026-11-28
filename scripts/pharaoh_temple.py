@@ -149,9 +149,7 @@ def merge_dungeon_info(native_raw):
 			raise ValueError(f"dungeoninfo.txt already has region id {dungeon_id}: {taken[dungeon_id]}")
 		if f'"{path}"'.lower() in taken.values():
 			raise ValueError(f"dungeoninfo.txt already names {path}")
-	if text and not text.endswith("\n"):
-		text += "\r\n"
-	return (text + "\r\n".join(rows) + "\r\n").encode("cp949")
+	return (stage1.end_last_record(text) + "\r\n".join(rows) + "\r\n").encode("cp949")
 
 
 # ================
@@ -179,9 +177,7 @@ def merge_event_zones(native_raw, vsro_raw):
 	for row in wanted:
 		if row[EVENT_ZONE_ID_COLUMN] in taken_ids or row[EVENT_ZONE_CODE_COLUMN] in taken_codes:
 			raise ValueError(f"eventzonedata.txt already has zone {row[EVENT_ZONE_ID_COLUMN]} {row[EVENT_ZONE_CODE_COLUMN]}")
-	text = stage1.decode_table(native_raw)
-	if not text.endswith("\n"):
-		text += "\r\n"
+	text = stage1.end_last_record(stage1.decode_table(native_raw))
 	added = "\r\n".join("\t".join(row) for row in wanted) + "\r\n"
 	return b"\xff\xfe" + (text.lstrip("﻿") + added).encode("utf-16-le")
 

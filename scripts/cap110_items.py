@@ -341,8 +341,7 @@ def glow_rows(native_text, later_text, codenames, native_groups):
 	added = sorted(code for code in codenames if code in later and code not in native and later[code] in native_groups)
 	if not added:
 		return native_text, []
-	tail = "" if native_text.endswith("\n") or not native_text else "\r\n"
-	return native_text + tail + "".join(f"{code}\t{later[code]}\r\n" for code in added), added
+	return tables.end_last_record(native_text) + "".join(f"{code}\t{later[code]}\r\n" for code in added), added
 
 
 # ================
@@ -388,8 +387,7 @@ def rare_rows(native_text, later_text, codenames):
 			added.append([code] + source[1:])
 	if not added:
 		return native_text, []
-	tail = "" if native_text.endswith("\n") or not native_text else "\r\n"
-	return native_text + tail + "".join("\t".join(row) + "\r\n" for row in added), [row[0] for row in added]
+	return tables.end_last_record(native_text) + "".join("\t".join(row) + "\r\n" for row in added), [row[0] for row in added]
 
 
 # ================

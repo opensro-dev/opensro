@@ -183,13 +183,31 @@ class ArabiaQuestTablesTest(unittest.TestCase):
 		self.assertEqual(quest_tables.project_later_row(plain), plain)
 
 	# ================
+	# test_a_record_with_in_cell_breaks_reads_whole
+	#
+	# SN_PAYCON_QNO_AR_071 as the v1.696 archive holds it: its English
+	# cells break over LFs, and the record ends at CRLF. Read through the
+	# later reader it is one 17-column row whose English is the whole
+	# text, markup closed (#4608).
+	# ================
+	def test_a_record_with_in_cell_breaks_reads_whole(self):
+		english = "<sml2><font color=\"1,2,3,4\">Long time no see\nadventurer. A favor?</font></sml2>"
+		record = ["1", "4617", "SN_PAYCON_QNO_AR_071", "<sml2>원문</sml2>"] + ["0"] * 5 + [english] + ["0"] * 3 + [english] * 4
+		self.assertEqual(len(record), quest_tables.LATER_TEXT_COLUMNS)
+		raw = b"\xff\xfe" + ("\t".join(record) + "\r\n").encode("utf-16-le")
+		files = {family + ".txt": raw for family in quest_tables.TEXT_FAMILIES}
+		families = quest_tables.later_text_rows(later_tables.Archive.of(files))
+		for rows in families:
+			self.assertEqual(len(rows), 1)
+			self.assertEqual(rows[0][quest_tables.blue.KEY_COLUMN], "SN_PAYCON_QNO_AR_071")
+			self.assertEqual(rows[0][quest_tables.blue.ENGLISH_COLUMN], english)
+
+	# ================
 	# test_a_row_broken_over_lines_is_not_padded
 	#
-	# SN_PAYCON_QNO_AR_071's English holds raw newlines, so the archive's
-	# first line of it is 10 columns ending mid-sentence with its markup
-	# open. Padded to 17 it shipped as a quest text that every guide
-	# layout refused (r204n). It keeps the old path: a fragment, as it
-	# came.
+	# A row far short of 17 columns is a fragment, not a row a cell or two
+	# off, and keeps the old path rather than being padded into a text
+	# with its markup open (r204n).
 	# ================
 	def test_a_row_broken_over_lines_is_not_padded(self):
 		fragment = ["1", "1460", "SN_PAYCON_QNO_AR_071", "<sml2><font color=\"1,2,3,4\">원문</font></sml2>"] + \

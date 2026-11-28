@@ -42,6 +42,72 @@ def terrain(texture_ids):
 	return bytes(data)
 
 
+# ================
+# RecordTests
+#
+# A textdata record ends at CRLF; a bare LF or a U+2028 inside it is cell
+# text, as the clients ship it (#4608).
+# ================
+class RecordTests(unittest.TestCase):
+	# ================
+	# test_an_in_cell_break_stays_in_its_cell
+	#
+	# The v1.696 SN_PAYCON_QNO_AR_071 shape: the English cell breaks over
+	# LFs, and the record ends at the CRLF after its last cell.
+	# ================
+	def test_an_in_cell_break_stays_in_its_cell(self):
+		text = "1\t4617\tSN_A\tKor\tLong time no see\nadventurer.\tlast\r\n1\t4618\tSN_B\tKor\tx\ty\r\n"
+		rows = alex.table_rows(b"\xff\xfe" + text.encode("utf-16-le"))
+		self.assertEqual([row[2] for row in rows], ["SN_A", "SN_B"])
+		self.assertEqual(rows[0][4], "Long time no see\nadventurer.")
+		self.assertEqual(rows[0][5], "last")
+
+	# ================
+	# test_other_line_separators_are_cell_text
+	#
+	# str.splitlines() also splits at U+2028, \x85, \x0b, \x0c and
+	# \x1c-\x1e; a record holds them.
+	# ================
+	def test_other_line_separators_are_cell_text(self):
+		for separator in ("\u2028", "\u2029", "\x85", "\x0b", "\x0c", "\x1c", "\x1d", "\x1e"):
+			text = f"1\tSN_A\tGerman{separator} Tausert\tEnglish\r\n"
+			rows = alex.table_rows(b"\xff\xfe" + text.encode("utf-16-le"))
+			self.assertEqual(rows, [["1", "SN_A", f"German{separator} Tausert", "English"]], ascii(separator))
+
+	# ================
+	# test_comments_blanks_and_a_lone_cr
+	#
+	# A lone CR ends a record as CRLF does (the asset build's /\r\n?/);
+	# comment and blank records are dropped; a file with no CR at all
+	# keeps LF as its record end.
+	# ================
+	def test_comments_blanks_and_a_lone_cr(self):
+		text = "// head\r\n\r\n1\tSN_A\rx\tSN_B\r\n   \r\n"
+		self.assertEqual(alex.table_rows(text.encode("cp949")), [["1", "SN_A"], ["x", "SN_B"]])
+		self.assertEqual(alex.table_rows(b"1\tSN_A\n2\tSN_B\n"), [["1", "SN_A"], ["2", "SN_B"]])
+
+	# ================
+	# test_appended_rows_start_a_record_of_their_own
+	#
+	# end_last_record, the appenders' one rule: a CRLF table whose last
+	# record ends in an in-cell LF gets its CRLF, so a row appended after
+	# it is a record, not more of that cell.
+	# ================
+	def test_appended_rows_start_a_record_of_their_own(self):
+		cases = {
+			"": "",
+			"1\tA\r\n": "1\tA\r\n",
+			"1\tA\r": "1\tA\r",
+			"1\tA": "1\tA\r\n",
+			"1\tA\r\n1\tline\n": "1\tA\r\n1\tline\n\r\n",
+			"1\tA\n": "1\tA\n",
+		}
+		for text, want in cases.items():
+			self.assertEqual(alex.end_last_record(text), want, ascii(text))
+		table = alex.end_last_record("1\tA\r\n1\tB\tline\n") + "1\tC\r\n"
+		self.assertEqual([row[1] for row in alex.table_rows(table.encode("cp949"))], ["A", "B", "C"])
+
+
 class FlagTests(unittest.TestCase):
 	def test_unset_and_off_values_are_native(self):
 		for env in ({}, {alex.FLAG_ENV: ""}, {alex.FLAG_ENV: "0"}, {alex.FLAG_ENV: "off"}, {alex.FLAG_ENV: "no"}):

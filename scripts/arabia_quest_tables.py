@@ -337,13 +337,14 @@ def check_guide_text(guide, texts, variant_text):
 # English cell lands where the projection reads it. Any other short
 # row keeps today's path, untouched.
 #
-# Only that slip, never more: SN_PAYCON_QNO_AR_071 is broken over
-# three physical lines by raw newlines in its English text, so its
-# first line is 10 columns ending mid-sentence ("Long time no see").
-# Padded to 17 it shipped that cut text with its <font> and <sml2>
-# left open, and every window that lays out quest guide text threw
-# "Unbalanced guide markup" (r204n's client check, 88 tests). A row
-# that far off is a fragment, not a row a cell short.
+# Only that slip, never more: a row far short of 17 is a fragment, not
+# a row a cell short. SN_PAYCON_QNO_AR_071 once reached here as one:
+# its English cells hold LFs, and a line split cut its first piece at
+# 10 columns mid-sentence. Padded to 17 it shipped with its <font> and
+# <sml2> left open, and every window that lays out quest guide text
+# threw "Unbalanced guide markup" (r204n). The reader now ends a record
+# only at CRLF (import_vsro_alexandria.table_rows), so 071 arrives whole
+# (#4608); the guard stays for a fragment of any other cause.
 # ================
 LATER_TEXT_COLUMNS = 17
 MAX_COLUMN_SLIP = 2

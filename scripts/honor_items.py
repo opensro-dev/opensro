@@ -275,8 +275,7 @@ def resinfo_rows(glow_text, rare_text, codes, effects):
 def append_lines(text, rows):
 	if not rows:
 		return text
-	tail = "" if text.endswith("\n") or not text else "\r\n"
-	return text + tail + "".join("\t".join(row) + "\r\n" for row in rows)
+	return tables.end_last_record(text) + "".join("\t".join(row) + "\r\n" for row in rows)
 
 
 def strip_lines(text, codes):
