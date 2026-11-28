@@ -316,3 +316,47 @@ func TestCosWordRetireBySkillDropsOnlyThatSkill(t *testing.T) {
 		t.Fatalf("held after retire: %+v", held)
 	}
 }
+
+/*
+================
+TestCosWordFriendlyWordsStackAcrossSkills
+
+A pet standing in an aggressive flag's area (20516, dru) and a
+defensive position's (20521, dru and odar) holds both skills' dru, as
+its owner holds both instances: a friendly word replaces only its own
+skill's word of that tag, so neither hold evicts the other's and the
+scans do not trade the word back and forth. A hostile word still
+replaces any word of its tag.
+================
+*/
+func TestCosWordFriendlyWordsStackAcrossSkills(t *testing.T) {
+	rt, _, _, _ := newCombatTestRuntime(t, 1000)
+	word := func(skill, token, tag uint32) monster.SelfEffect {
+		return monster.SelfEffect{SkillID: skill, Token: token, Tag: tag, First: 10, StartedAtMs: 0, UntilMs: 10_000}
+	}
+	install := func(w monster.SelfEffect) uint32 {
+		replaced, ok := rt.installCosWord(testDivision, "owner", 7, w, 0)
+		if !ok {
+			t.Fatalf("install %+v refused", w)
+		}
+		return replaced
+	}
+	if replaced := install(word(20516, 21, cosWordDamageTag)); replaced != 0 {
+		t.Fatalf("first flag word replaced %d", replaced)
+	}
+	if replaced := install(word(20521, 22, cosWordDamageTag)); replaced != 0 {
+		t.Fatalf("the position's dru replaced the flag's word %d", replaced)
+	}
+	if replaced := install(word(20516, 23, cosWordDamageTag)); replaced != 21 {
+		t.Fatalf("the flag's re-install replaced %d, want its own word 21", replaced)
+	}
+	stats := combat.Stats{}
+	applyCosBuffWords(&stats, rt.cosWordsHeld(testDivision, "owner", 7, 1000))
+	if stats.PhysicalBasicRate != 20 {
+		t.Fatalf("damage rate with both auras = %v, want 20", stats.PhysicalBasicRate)
+	}
+	install(word(30, 31, cosWordHitRateTag))
+	if replaced := install(word(31, 32, cosWordHitRateTag)); replaced != 31 {
+		t.Fatalf("a hostile word of another skill replaced %d, want 31", replaced)
+	}
+}

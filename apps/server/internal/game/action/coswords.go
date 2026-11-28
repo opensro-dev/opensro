@@ -115,8 +115,14 @@ func (rt *Runtime) cosWordsHeld(division, name string, gid uint32, now int64) []
 ================
 installCosWord
 
-Install one word on the pet: the same-tag word is replaced and its
-token returned for the wire, a ninth distinct word refuses.
+Install one word on the pet: the word it supersedes is replaced and its
+token returned for the wire, a ninth distinct word refuses. A hostile
+word supersedes any word of its tag, as the monster's target-effect
+slots replace one; a friendly word (dru, odar, irgc) supersedes only
+its own skill's word of that tag. The owner holds one instance per
+structure skill, so an aggressive flag (dru) and a defensive position
+(dru, odar) overlapping both lift the pet, as they lift the owner;
+replacing by tag alone would evict each other's word on every scan.
 ================
 */
 func (rt *Runtime) installCosWord(division, name string, gid uint32, word monster.SelfEffect, now int64) (uint32, bool) {
@@ -135,7 +141,7 @@ func (rt *Runtime) installCosWord(division, name string, gid uint32, word monste
 		rt.cosWords.entries[key] = entry
 	}
 	for i, active := range entry.words {
-		if active.Token != 0 && active.Tag == word.Tag {
+		if active.Token != 0 && active.Tag == word.Tag && (!cosWordFriendly(word.Tag) || active.SkillID == word.SkillID) {
 			replaced := active.Token
 			entry.words[i] = word
 			return replaced, true
@@ -296,6 +302,18 @@ func (rt *Runtime) cosBuffRecoveryRates(division, name string, gid uint32, now i
 // The dru, odar and irgc program tags a friendly word carries
 // (enterworld's itemEffectDamage / itemEffectAbsorb / itemEffectRecovery;
 // the character installer's words ride the same tags).
+/*
+================
+cosWordFriendly
+
+Whether a word tag is one of the friendly program words, which stack
+across skills (installCosWord).
+================
+*/
+func cosWordFriendly(tag uint32) bool {
+	return tag == cosWordDamageTag || tag == cosWordAbsorbTag || tag == cosWordRecoveryTag
+}
+
 const (
 	cosWordDamageTag   = 0x647275
 	cosWordAbsorbTag   = 0x6f646172
