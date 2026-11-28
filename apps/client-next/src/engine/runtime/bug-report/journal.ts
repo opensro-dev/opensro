@@ -47,6 +47,9 @@ const STACK_FRAME_LOCATION = /^\s+at\s(?:.*\()?(\S+):(\d{1,7}):(\d{1,7})\)?$|^[^
 const SCRIPT_PATH = /\.(?:[cm]?js|jsx|tsx?)$/;
 // The page's script paths kept for frame checks; a page loads far fewer.
 const MAX_SCRIPT_PATHS = 4096;
+// The location class of a frame on the page's own origin whose script the
+// list never saw load (frameClass): possibly ours, never proof of foreign.
+const SAME_ORIGIN_CLASS = "same-origin";
 // The verified frames an error event keeps, the throw site first.
 export const MAX_ERROR_FRAMES = 12;
 // The frames V8 records per error (default 10). A stack overflow inside code
@@ -156,7 +159,8 @@ a shared report carries.
 function errorEventFields(
 	error: unknown,
 	fallback: string,
-	scripts: ReadonlySet<string>
+	scripts: ReadonlySet<string>,
+	source?: ErrorSource
 ): { message: string; stack?: string; frames?: string[]; foreign?: string[]; } {
 	const thrown = error instanceof Error ? error : null,
 		message = (thrown?.message || fallback || String( error )).slice( 0, MAX_ERROR_MESSAGE ),
@@ -165,11 +169,28 @@ function errorEventFields(
 		stack = typeof rawStack === "string" && rawStack ?
 			(origin ? rawStack.replaceAll( origin, "" ) : rawStack).slice( 0, MAX_ERROR_STACK ) :
 			undefined;
-	if ( !stack ) return { message };
+	if ( !stack ) return { message, ...sourceFields( source, scripts ) };
 	const frames = stackFrames( String( rawStack ), scripts );
 	return frames.length ?
 		{ message, stack, frames } :
 		{ message, stack, foreign: foreignFrames( String( rawStack ), scripts ) };
+}
+
+/*
+================
+errorSignature
+
+What makes two uncaught failures the same one: the message and the
+stack's first frame. A stackless failure has no stack frame, so its
+filed source frame stands in (sourceFields): without it every stackless
+"Maximum call stack size exceeded" of a session shares one signature,
+and an extension's that filed first would swallow a later one of ours
+(#4752 review). A true repeat from one source still counts up.
+================
+*/
+function errorSignature( fields: ReturnType<typeof errorEventFields> ): string {
+	const where = fields.stack ? fields.stack.split( "\n" )[1] : (fields.frames ?? fields.foreign)?.[0];
+	return fields.message + "\n" + (where ?? "");
 }
 
 /*
@@ -203,22 +224,10 @@ function foreignFrames( rawStack: string, scripts: ReadonlySet<string> ): string
 	const classes: string[] = [];
 	for ( const line of rawStack.split( "\n" ) ) {
 		const match = STACK_FRAME_LOCATION.exec( line );
-		let kind: string;
-		if ( match ) {
-			const url = match[1] ?? match[4] ?? "", path = pagePath( url );
-			if ( path !== undefined && scripts.has( path ) ) continue;
-			kind = EXTENSION_SCHEME.test( url ) ?
-				"extension" :
-				url.startsWith( "blob:" ) ?
-				"blob" :
-				url.startsWith( "file:" ) ?
-				"file" :
-				/^[a-z][a-z0-9+.-]*:\/\//i.test( url ) ?
-				"other-origin" :
-				"anonymous";
-		} else if ( /^\s+at\s/.test( line ) ) kind = "native";
-		else continue;
-		classes.push( kind );
+		let kind: string | undefined;
+		if ( match ) kind = frameClass( match[1] ?? match[4] ?? "", scripts );
+		else if ( /^\s+at\s/.test( line ) ) kind = "native";
+		if ( kind ) classes.push( kind );
 	}
 	const folded: string[] = [];
 	for ( let i = 0; i < classes.length && folded.length < MAX_ERROR_FRAMES; ) {
@@ -228,6 +237,67 @@ function foreignFrames( rawStack: string, scripts: ReadonlySet<string> ): string
 		i += run;
 	}
 	return folded;
+}
+
+/*
+================
+frameClass
+
+The location class of one frame URL that names no listed page script
+(undefined for one that does). A URL on the page's own origin that the
+script list never saw load is "same-origin", never "other-origin": it may
+be our own code (a chunk the Resource Timing buffer dropped, an inline
+script), so it can never prove a failure foreign (uncaughtFailure).
+================
+*/
+function frameClass( url: string, scripts: ReadonlySet<string> ): string | undefined {
+	// Schemes first: a blob: URL's origin is its creator's, so the origin
+	// test alone would read a page-made blob as the page's own script.
+	if ( EXTENSION_SCHEME.test( url ) ) return "extension";
+	if ( url.startsWith( "blob:" ) ) return "blob";
+	const path = pagePath( url );
+	if ( path !== undefined ) return scripts.has( path ) ? undefined : SAME_ORIGIN_CLASS;
+	return url.startsWith( "file:" ) ?
+		"file" :
+		/^[a-z][a-z0-9+.-]*:\/\//i.test( url ) ?
+		"other-origin" :
+		"anonymous";
+}
+
+/*
+================
+ErrorSource
+
+Where the window's error event says an uncaught error was thrown
+(ErrorEvent filename, lineno, colno). A rejection carries none.
+================
+*/
+interface ErrorSource {
+	readonly filename: string;
+	readonly lineno: number;
+	readonly colno: number;
+}
+
+/*
+================
+sourceFields
+
+The frame a stackless error still has: the error event's own source. The
+live overflows of 2026-11-28 were 58 of 91 stackless, filed with nothing
+that said whose code threw. A listed page script keeps its path and
+numbers, as a stack frame would (stackFrames); any other source keeps its
+location class alone (frameClass), as foreignFrames keeps a frame.
+================
+*/
+function sourceFields(
+	source: ErrorSource | undefined,
+	scripts: ReadonlySet<string>
+): { frames?: string[]; foreign?: string[]; } {
+	if ( !source?.filename ) return {};
+	const kind = frameClass( source.filename, scripts );
+	if ( kind ) return { foreign: [ `    at <${kind}>` ] };
+	const line = Math.trunc( source.lineno ), column = Math.trunc( source.colno );
+	return { frames: [ `    at ${pagePath( source.filename )}:${line}:${column}` ] };
 }
 
 /*
@@ -395,10 +465,13 @@ function uncaughtFailure(
 		// The page's own frames name the failure; with none, the classes of
 		// the frames that ran say whose code it was (foreignFrames).
 		frames: frames?.length ? frames : foreign ?? [],
-		// Foreign only on proof: no page frame, and at least one frame that
-		// is not a bare native one (a native-only stack says nothing of whose
-		// code called it, and a stackless rejection says nothing at all).
-		foreign: !frames?.length && (foreign ?? []).some( frame => !frame.startsWith( "    at <native>" ) )
+		// Foreign only on proof: no page frame, at least one frame that is
+		// not a bare native one (a native-only stack says nothing of whose
+		// code called it, and a stackless rejection says nothing at all),
+		// and no same-origin frame the script list missed (frameClass): that
+		// one may be ours, and a foreign filing would hide it from triage.
+		foreign: !frames?.length && (foreign ?? []).some( frame => !frame.startsWith( "    at <native>" ) ) &&
+			!(foreign ?? []).some( frame => frame.startsWith( `    at <${SAME_ORIGIN_CLASS}>` ) )
 	};
 }
 
@@ -485,9 +558,9 @@ export function createJournal( canvas: HTMLCanvasElement, options: JournalOption
 	(#3684).
 	================
 	*/
-	function recordError( error: unknown, fallback: string ) {
-		const fields = errorEventFields( error, fallback, scriptPaths() ),
-			signature = fields.message + "\n" + (fields.stack?.split( "\n" )[1] ?? ""),
+	function recordError( error: unknown, fallback: string, source?: ErrorSource ) {
+		const fields = errorEventFields( error, fallback, scriptPaths(), source ),
+			signature = errorSignature( fields ),
 			atMs = performance.now(),
 			kept = keptErrors.get( signature );
 		if ( kept ) {
@@ -524,7 +597,16 @@ export function createJournal( canvas: HTMLCanvasElement, options: JournalOption
 		errorTimes.push( atMs );
 		record( "error", recorded( fields ) );
 	}
-	window.addEventListener( "error", event => recordError( event.error, event.message ), { signal } );
+	window.addEventListener(
+		"error",
+		event =>
+			recordError( event.error, event.message, {
+				filename: typeof event.filename === "string" ? event.filename : "",
+				lineno: Number( event.lineno ) || 0,
+				colno: Number( event.colno ) || 0
+			} ),
+		{ signal }
+	);
 	window.addEventListener(
 		"unhandledrejection",
 		event => recordError( event.reason, "Unhandled rejection: " + String( event.reason ) ),
